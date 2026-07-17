@@ -14,6 +14,7 @@ use serde::Serialize;
 use serde_json::json;
 use video_editor::{
     Category, Diagnostic, load_and_validate,
+    plan::{CompileOptions, compile},
     project::{LoadError, ValidationOptions},
     render::{RenderEvent, RenderOptions, render},
 };
@@ -200,18 +201,21 @@ fn render_command(
             event.progress * 100.0
         ),
     };
+    let plan = match compile(&validated, CompileOptions { preview }) {
+        Ok(plan) => plan,
+        Err(error) => return print_failure("render", format, vec![error], validated.warnings),
+    };
     match render(
-        &validated,
+        &plan,
         &RenderOptions {
             output_override: output,
             overwrite,
-            preview,
             cancelled,
         },
         &mut emit,
     ) {
         Ok(summary) => {
-            let data = json!({ "editor_version": env!("CARGO_PKG_VERSION"), "project_format_version": validated.project.format_version, "project": project, "output": summary.output_path, "width": summary.width, "height": summary.height, "frame_rate": validated.project.output.frame_rate.display(), "duration": summary.duration, "total_frames": summary.frame_count, "visual_clip_count": validated.project.visual.clips.len(), "audio_present": summary.audio_present, "preview": summary.preview, "elapsed_ms": summary.elapsed_ms, "backend": "ffmpeg", "warnings": validated.warnings });
+            let data = json!({ "editor_version": env!("CARGO_PKG_VERSION"), "project_format_version": validated.project.format_version, "project": project, "output": summary.output_path, "width": summary.width, "height": summary.height, "frame_rate": validated.project.output.frame_rate.display(), "duration": summary.duration, "total_frames": summary.frame_count, "visual_clip_count": validated.project.visual.clips.len(), "audio_present": summary.audio_present, "preview": summary.preview, "elapsed_ms": summary.elapsed_ms, "timings": summary.timings, "performance": summary.performance, "backend": "ffmpeg", "warnings": validated.warnings });
             if let Some(path) = report.as_deref()
                 && let Err(error) = fs::write(
                     path,

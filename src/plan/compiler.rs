@@ -138,6 +138,7 @@ pub fn compile(
         .collect::<Result<Vec<_>, _>>()?;
     let audio = compile_audio(validated)?;
     Ok(RenderPlan {
+        configured_output: resolved_output_path(validated),
         canvas: Canvas {
             width,
             height,
@@ -155,6 +156,19 @@ pub fn compile(
         audio,
         warnings: validated.warnings.clone(),
     })
+}
+
+fn resolved_output_path(validated: &ValidatedProject) -> std::path::PathBuf {
+    let configured = std::path::PathBuf::from(&validated.project.output.path);
+    if configured.is_absolute() {
+        configured
+    } else {
+        validated
+            .project_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(configured)
+    }
 }
 
 fn compile_animations(

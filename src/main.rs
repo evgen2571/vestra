@@ -215,12 +215,7 @@ fn render_command(
             if let Some(path) = report.as_deref()
                 && let Err(error) = fs::write(
                     path,
-                    serde_json::to_vec_pretty(&ResultEnvelope {
-                        result_schema_version: 1,
-                        status: "success",
-                        command: "render",
-                        data: data.clone(),
-                    })
+                    serde_json::to_vec_pretty(&json!({ "report_schema_version": 1, "status": "success", "command": "render", "result": data.clone() }))
                     .expect("report serializes"),
                 )
             {
@@ -255,7 +250,7 @@ fn render_command(
                 });
             }
             if let Some(path) = report.as_deref() {
-                let report = json!({ "report_schema_version": 1, "status": "failure", "command": "render", "errors": [error.diagnostic], "temporary_removed": error.temporary_removed, "elapsed_ms": began.elapsed().as_millis() });
+                let report = json!({ "report_schema_version": 1, "status": "failure", "command": "render", "errors": [error.diagnostic], "progress": 0.99, "temporary_removed": error.temporary_removed, "elapsed_ms": began.elapsed().as_millis() });
                 if let Err(report_error) = fs::write(
                     path,
                     serde_json::to_vec_pretty(&report).expect("report serializes"),
@@ -369,7 +364,7 @@ fn write_failure_report(
     elapsed_ms: u128,
 ) -> Result<(), String> {
     if let Some(path) = path {
-        let report = json!({ "report_schema_version": 1, "status": "failure", "command": command, "errors": errors, "elapsed_ms": elapsed_ms });
+        let report = json!({ "report_schema_version": 1, "status": "failure", "command": command, "errors": errors, "progress": 0.0, "elapsed_ms": elapsed_ms });
         fs::write(
             path,
             serde_json::to_vec_pretty(&report).expect("report serializes"),

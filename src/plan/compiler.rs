@@ -108,10 +108,8 @@ pub fn compile(
             id: clip.id.clone(),
             asset_index,
             start_nanos,
-            end_nanos,
             start_frame,
             end_frame: end_frame.min(validated.frame_count),
-            layer: clip.layer,
             draw_key: DrawKey {
                 layer: clip.layer,
                 start_nanos,
@@ -175,6 +173,10 @@ pub fn compile(
             }
         }
     }
+    for clip in &mut clips {
+        clip.transitions
+            .sort_by_key(|transition| transition.curve().start_nanos);
+    }
     let flashes = validated
         .project
         .visual
@@ -193,7 +195,6 @@ pub fn compile(
             preview: options.preview,
         },
         duration: validated.duration,
-        duration_nanos: validated.duration_nanos,
         frame_rate: validated.frame_rate,
         frame_count: validated.frame_count,
         encoder: EncoderSettings {
@@ -322,12 +323,10 @@ fn compile_flash(
         )
     })?;
     Ok(CompiledFlash {
-        id: flash.id.clone(),
         start_nanos,
         end_nanos,
         start_frame: first_frame_at_or_after(start_nanos, rate)?,
         end_frame: first_frame_at_or_after(end_nanos, rate)?.min(frame_count),
-        layer: flash.layer,
         draw_key: DrawKey {
             layer: flash.layer,
             start_nanos,

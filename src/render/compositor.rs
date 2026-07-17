@@ -129,12 +129,10 @@ mod tests {
     fn direct_flash_overlay_matches_source_over() {
         let mut canvas = RgbaImage::from_pixel(2, 2, Rgba([0, 0, 255, 255]));
         let flash = crate::plan::CompiledFlash {
-            id: "flash".to_owned(),
             start_nanos: 0,
             end_nanos: 2,
             start_frame: 0,
             end_frame: 1,
-            layer: 0,
             draw_key: crate::plan::DrawKey {
                 layer: 0,
                 start_nanos: 0,

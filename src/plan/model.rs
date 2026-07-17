@@ -7,68 +7,65 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct RenderPlan {
-    pub configured_output: PathBuf,
-    pub canvas: Canvas,
-    pub duration: f64,
-    pub duration_nanos: u128,
-    pub frame_rate: (u64, u64),
-    pub frame_count: u64,
-    pub encoder: EncoderSettings,
-    pub images: Vec<ImageAsset>,
-    pub clips: Vec<CompiledClip>,
-    pub flashes: Vec<CompiledFlash>,
-    pub compilation: CompilationStats,
-    pub warnings: Vec<crate::Diagnostic>,
+    pub(crate) configured_output: PathBuf,
+    pub(crate) canvas: Canvas,
+    pub(crate) duration: f64,
+    pub(crate) frame_rate: (u64, u64),
+    pub(crate) frame_count: u64,
+    pub(crate) encoder: EncoderSettings,
+    pub(crate) images: Vec<ImageAsset>,
+    pub(crate) clips: Vec<CompiledClip>,
+    pub(crate) flashes: Vec<CompiledFlash>,
+    pub(crate) compilation: CompilationStats,
+    pub(crate) warnings: Vec<crate::Diagnostic>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct CompilationStats {
-    pub animation_value_parse_count: u64,
-    pub animation_sort_count: u64,
-    pub compiled_transition_association_count: u64,
-    pub parsed_colour_count: u64,
+    pub(crate) animation_value_parse_count: u64,
+    pub(crate) animation_sort_count: u64,
+    pub(crate) compiled_transition_association_count: u64,
+    pub(crate) parsed_colour_count: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Canvas {
-    pub width: u32,
-    pub height: u32,
-    pub background: [u8; 4],
-    pub preview: bool,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) background: [u8; 4],
+    pub(crate) preview: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct ImageAsset {
-    pub id: String,
-    pub path: PathBuf,
+    pub(crate) id: String,
+    pub(crate) path: PathBuf,
 }
 
 #[derive(Clone, Debug)]
 pub struct CompiledClip {
-    pub id: String,
-    pub asset_index: usize,
-    pub start_nanos: u128,
-    pub end_nanos: u128,
-    pub start_frame: u64,
-    pub end_frame: u64,
-    pub layer: i32,
-    pub draw_key: DrawKey,
-    pub position: Point,
-    pub anchor: Point,
-    pub crop: Crop,
-    pub sizing: CompiledSizing,
-    pub opacity: f64,
-    pub animations: CompiledAnimations,
-    pub transitions: Vec<CompiledTransition>,
-    pub preparation: PreparationClass,
+    pub(crate) id: String,
+    pub(crate) asset_index: usize,
+    pub(crate) start_nanos: u128,
+    pub(crate) start_frame: u64,
+    pub(crate) end_frame: u64,
+    pub(crate) draw_key: DrawKey,
+    pub(crate) position: Point,
+    pub(crate) anchor: Point,
+    pub(crate) crop: Crop,
+    pub(crate) sizing: CompiledSizing,
+    pub(crate) opacity: f64,
+    pub(crate) animations: CompiledAnimations,
+    pub(crate) transitions: Vec<CompiledTransition>,
+    pub(crate) preparation: PreparationClass,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DrawKey {
-    pub layer: i32,
-    pub start_nanos: u128,
-    pub id: String,
-    pub kind: ItemKind,
+    pub(crate) layer: i32,
+    pub(crate) start_nanos: u128,
+    pub(crate) id: String,
+    pub(crate) kind: ItemKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -88,19 +85,19 @@ pub enum CompiledSizing {
 
 #[derive(Clone, Debug, Default)]
 pub struct CompiledAnimations {
-    pub position: Vec<Curve<Point>>,
-    pub scale: Vec<Curve<f64>>,
-    pub opacity: Vec<Curve<f64>>,
-    pub crop: Vec<Curve<Crop>>,
+    pub(crate) position: Vec<Curve<Point>>,
+    pub(crate) scale: Vec<Curve<f64>>,
+    pub(crate) opacity: Vec<Curve<f64>>,
+    pub(crate) crop: Vec<Curve<Crop>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Curve<T> {
-    pub start_nanos: u128,
-    pub end_nanos: u128,
-    pub easing: Easing,
-    pub start: T,
-    pub end: T,
+    pub(crate) start_nanos: u128,
+    pub(crate) end_nanos: u128,
+    pub(crate) easing: Easing,
+    pub(crate) start: T,
+    pub(crate) end: T,
 }
 
 #[derive(Clone, Debug)]
@@ -109,19 +106,26 @@ pub enum CompiledTransition {
     Incoming(Curve<()>),
 }
 
+impl CompiledTransition {
+    #[must_use]
+    pub const fn curve(&self) -> &Curve<()> {
+        match self {
+            Self::Outgoing(curve) | Self::Incoming(curve) => curve,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CompiledFlash {
-    pub id: String,
-    pub start_nanos: u128,
-    pub end_nanos: u128,
-    pub start_frame: u64,
-    pub end_frame: u64,
-    pub layer: i32,
-    pub draw_key: DrawKey,
-    pub colour: [u8; 4],
-    pub opacity: f64,
-    pub fade_in_nanos: u128,
-    pub fade_out_nanos: u128,
+    pub(crate) start_nanos: u128,
+    pub(crate) end_nanos: u128,
+    pub(crate) start_frame: u64,
+    pub(crate) end_frame: u64,
+    pub(crate) draw_key: DrawKey,
+    pub(crate) colour: [u8; 4],
+    pub(crate) opacity: f64,
+    pub(crate) fade_in_nanos: u128,
+    pub(crate) fade_out_nanos: u128,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,7 +138,7 @@ pub enum PreparationClass {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ScheduledItem {
+pub(crate) enum ScheduledItem {
     Clip(usize),
     Flash(usize),
 }

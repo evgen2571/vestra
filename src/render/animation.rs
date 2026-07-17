@@ -22,12 +22,34 @@ pub fn properties(
 
 #[must_use]
 pub fn transition_opacity(transitions: &[CompiledTransition], time: f64) -> f64 {
-    transitions
-        .first()
-        .map_or(1.0, |transition| match transition {
-            CompiledTransition::Outgoing(curve) => 1.0 - curve_progress(curve, time),
-            CompiledTransition::Incoming(curve) => curve_progress(curve, time),
-        })
+    let [first, ..] = transitions else {
+        return 1.0;
+    };
+
+    let mut opacity = endpoint_before(first);
+    for transition in transitions {
+        let curve = transition.curve();
+        let start = curve.start_nanos as f64 / 1_000_000_000.0;
+        if time < start {
+            break;
+        }
+        let progress = curve_progress(curve, time);
+        opacity = match transition {
+            CompiledTransition::Outgoing(_) => 1.0 - progress,
+            CompiledTransition::Incoming(_) => progress,
+        };
+        if progress < 1.0 {
+            break;
+        }
+    }
+    opacity.clamp(0.0, 1.0)
+}
+
+fn endpoint_before(transition: &CompiledTransition) -> f64 {
+    match transition {
+        CompiledTransition::Outgoing(_) => 1.0,
+        CompiledTransition::Incoming(_) => 0.0,
+    }
 }
 
 fn evaluate<T: Copy>(
@@ -75,7 +97,10 @@ fn interpolate_scalar(start: f64, end: f64, t: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{domain::Easing, plan::Curve};
+    use crate::{
+        domain::Easing,
+        plan::{CompiledTransition, Curve},
+    };
 
     #[test]
     fn scalar_curve_has_exact_endpoints() {
@@ -107,6 +132,93 @@ mod tests {
         assert_eq!(
             evaluate(5.0, &[curve], 0.000000020, interpolate_scalar),
             1.0
+        );
+    }
+
+    #[test]
+    fn transition_envelope_keeps_full_opacity_between_incoming_and_outgoing() {
+        let incoming = CompiledTransition::Incoming(Curve {
+            start_nanos: 1_000_000_000,
+            end_nanos: 2_000_000_000,
+            easing: Easing::Linear,
+            start: (),
+            end: (),
+        });
+        let outgoing = CompiledTransition::Outgoing(Curve {
+            start_nanos: 4_000_000_000,
+            end_nanos: 5_000_000_000,
+            easing: Easing::Linear,
+            start: (),
+            end: (),
+        });
+        let transitions = [incoming, outgoing];
+        assert_eq!(transition_opacity(&transitions, 0.0), 0.0);
+        assert_eq!(transition_opacity(&transitions, 1.0), 0.0);
+        assert_eq!(transition_opacity(&transitions, 1.5), 0.5);
+        assert_eq!(transition_opacity(&transitions, 2.0), 1.0);
+        assert_eq!(transition_opacity(&transitions, 3.0), 1.0);
+        assert_eq!(transition_opacity(&transitions, 4.0), 1.0);
+        assert_eq!(transition_opacity(&transitions, 4.5), 0.5);
+        assert_eq!(transition_opacity(&transitions, 5.0), 0.0);
+    }
+
+    #[test]
+    fn touching_transition_ranges_have_exact_shared_endpoint() {
+        let transitions = [
+            CompiledTransition::Incoming(Curve {
+                start_nanos: 0,
+                end_nanos: 1_000_000_000,
+                easing: Easing::Linear,
+                start: (),
+                end: (),
+            }),
+            CompiledTransition::Outgoing(Curve {
+                start_nanos: 1_000_000_000,
+                end_nanos: 2_000_000_000,
+                easing: Easing::Linear,
+                start: (),
+                end: (),
+            }),
+        ];
+        assert_eq!(transition_opacity(&transitions, 1.0), 1.0);
+    }
+
+    #[test]
+    fn transition_opacity_multiplies_with_animated_clip_opacity() {
+        let animations = CompiledAnimations {
+            opacity: vec![Curve {
+                start_nanos: 0,
+                end_nanos: 1_000_000_000,
+                easing: Easing::Linear,
+                start: 1.0,
+                end: 0.5,
+            }],
+            ..CompiledAnimations::default()
+        };
+        let (_, _, animated_opacity, _) = properties(
+            &animations,
+            Point { x: 0.0, y: 0.0 },
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            1.0,
+            0.5,
+        );
+        let transitions = [CompiledTransition::Incoming(Curve {
+            start_nanos: 0,
+            end_nanos: 1_000_000_000,
+            easing: Easing::Linear,
+            start: (),
+            end: (),
+        })];
+        assert_eq!(animated_opacity, 0.75);
+        assert_eq!(transition_opacity(&transitions, 0.5), 0.5);
+        assert_eq!(
+            animated_opacity * transition_opacity(&transitions, 0.5),
+            0.375
         );
     }
 }

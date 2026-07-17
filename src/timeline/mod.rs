@@ -1,4 +1,4 @@
-use crate::project::{Animation, AnimationTarget, Crop, Easing, Point};
+use crate::domain::{Crop, Easing, Point};
 
 pub const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
@@ -47,20 +47,6 @@ pub fn eased(easing: Easing, progress: f64) -> f64 {
 }
 
 #[must_use]
-pub fn animation_progress(animation: &Animation, relative_time: f64) -> Option<f64> {
-    if relative_time < animation.start {
-        return None;
-    }
-    if relative_time >= animation.start + animation.duration {
-        return Some(1.0);
-    }
-    Some(eased(
-        animation.easing,
-        (relative_time - animation.start) / animation.duration,
-    ))
-}
-
-#[must_use]
 pub fn interpolate_point(start: Point, end: Point, t: f64) -> Point {
     Point {
         x: start.x + (end.x - start.x) * t,
@@ -78,15 +64,10 @@ pub fn interpolate_crop(start: Crop, end: Crop, t: f64) -> Crop {
     }
 }
 
-#[must_use]
-pub fn targets(animation: &Animation, target: AnimationTarget) -> bool {
-    animation.target == target
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::Easing;
+    use crate::domain::Easing;
 
     #[test]
     fn frame_boundaries_are_half_open_and_not_accumulated() {

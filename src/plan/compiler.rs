@@ -9,13 +9,13 @@ use serde_json::from_value;
 
 use crate::{
     Category, Diagnostic,
+    domain::Crop,
+    media::{AudioSettings, EncoderSettings},
     plan::{
-        Canvas, CompiledAnimations, CompiledAudio, CompiledClip, CompiledFlash, CompiledSizing,
+        Canvas, CompiledAnimations, CompiledClip, CompiledFlash, CompiledSizing,
         CompiledTransition, Curve, DrawKey, ImageAsset, ItemKind, PreparationClass, RenderPlan,
     },
-    project::{
-        Animation, AnimationTarget, Crop, Sizing, Transition, ValidatedProject, parse_colour,
-    },
+    project::{Animation, AnimationTarget, Sizing, Transition, ValidatedProject, parse_colour},
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
 };
 
@@ -176,11 +176,18 @@ pub fn compile(
         duration_nanos: validated.duration_nanos,
         frame_rate: validated.frame_rate,
         frame_count: validated.frame_count,
-        quality_crf: validated.project.output.quality.crf(),
+        encoder: EncoderSettings {
+            width,
+            height,
+            frame_rate: validated.frame_rate,
+            frame_count: validated.frame_count,
+            duration: validated.duration,
+            quality_crf: validated.project.output.quality.crf(),
+            audio,
+        },
         images,
         clips,
         flashes,
-        audio,
         warnings: validated.warnings.clone(),
     })
 }
@@ -313,7 +320,7 @@ fn compile_flash(
     })
 }
 
-fn compile_audio(validated: &ValidatedProject) -> Result<Option<CompiledAudio>, Diagnostic> {
+fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, Diagnostic> {
     if !validated.project.output.audio
         || validated
             .project
@@ -340,7 +347,7 @@ fn compile_audio(validated: &ValidatedProject) -> Result<Option<CompiledAudio>, 
             "",
         )
     })?;
-    Ok(Some(CompiledAudio {
+    Ok(Some(AudioSettings {
         path: path.clone(),
         trim_start: audio.trim_start,
         selected_duration: audio.trim_end.unwrap_or(*source_duration) - audio.trim_start,

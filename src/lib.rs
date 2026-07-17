@@ -3,6 +3,7 @@
 pub mod application;
 pub mod cli;
 pub mod diagnostic;
+pub mod domain;
 pub mod media;
 pub mod output;
 pub mod plan;

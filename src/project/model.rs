@@ -12,6 +12,8 @@ use crate::{
     timeline::{frame_count, seconds_to_nanos},
 };
 
+pub use crate::domain::{Crop, Easing, Point};
+
 pub const FORMAT_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -180,22 +182,6 @@ const fn default_visible() -> bool {
     true
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Crop {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Sizing {
@@ -224,15 +210,6 @@ pub enum AnimationTarget {
     Scale,
     Opacity,
     Crop,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Easing {
-    Linear,
-    EaseIn,
-    EaseOut,
-    EaseInOut,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

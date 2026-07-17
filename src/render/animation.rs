@@ -1,6 +1,6 @@
 use crate::{
+    domain::{Crop, Point},
     plan::{CompiledAnimations, CompiledTransition, Curve},
-    project::{Crop, Point},
     timeline::{eased, interpolate_crop, interpolate_point},
 };
 
@@ -75,7 +75,7 @@ fn interpolate_scalar(start: f64, end: f64, t: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{plan::Curve, project::Easing};
+    use crate::{domain::Easing, plan::Curve};
 
     #[test]
     fn scalar_curve_has_exact_endpoints() {

@@ -149,8 +149,9 @@ fn real_render_has_h264_video_aac_audio_and_monotonic_events() {
     let report: Value =
         serde_json::from_slice(&fs::read(report).expect("read report")).expect("report JSON");
     assert_eq!(report["status"], "success");
-    assert_eq!(report["project_format_version"], 1);
-    assert_eq!(report["visual_clip_count"], 3);
+    assert_eq!(report["report_schema_version"], 1);
+    assert_eq!(report["result"]["project_format_version"], 1);
+    assert_eq!(report["result"]["visual_clip_count"], 3);
 }
 
 #[test]
@@ -174,6 +175,54 @@ fn render_protects_existing_output() {
     assert_eq!(
         fs::read(&output).expect("read sentinel"),
         b"existing output"
+    );
+}
+
+#[test]
+fn repeated_static_renders_have_equivalent_decoded_frames() {
+    let workspace = fixture_workspace();
+    let project = workspace.path().join("projects/static-image.json");
+    let first = workspace.path().join("first.mp4");
+    let second = workspace.path().join("second.mp4");
+    for output in [&first, &second] {
+        let result = command()
+            .args([
+                "render",
+                project.to_str().expect("UTF-8 path"),
+                "--output",
+                output.to_str().expect("UTF-8 path"),
+                "--progress",
+                "none",
+            ])
+            .output()
+            .expect("render runs");
+        assert!(result.status.success());
+    }
+    let first_frames = decoded_frame_md5(&first);
+    let second_frames = decoded_frame_md5(&second);
+    assert_eq!(first_frames, second_frames);
+    let pixels = Command::new("ffmpeg")
+        .args([
+            "-v",
+            "error",
+            "-i",
+            first.to_str().expect("UTF-8 path"),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
+        ])
+        .output()
+        .expect("decode first frame");
+    assert!(pixels.status.success());
+    let middle = (90 * 320 + 160) * 3;
+    assert!(
+        pixels.stdout[middle] > 180
+            && pixels.stdout[middle + 1] < 70
+            && pixels.stdout[middle + 2] < 70
     );
 }
 
@@ -282,4 +331,23 @@ fn fixture_workspace() -> TempDir {
         .expect("copy fixture project");
     }
     directory
+}
+
+fn decoded_frame_md5(path: &std::path::Path) -> Vec<u8> {
+    let output = Command::new("ffmpeg")
+        .args([
+            "-v",
+            "error",
+            "-i",
+            path.to_str().expect("UTF-8 path"),
+            "-map",
+            "0:v:0",
+            "-f",
+            "framemd5",
+            "-",
+        ])
+        .output()
+        .expect("decode frames");
+    assert!(output.status.success());
+    output.stdout
 }

@@ -80,6 +80,7 @@ fn invalid_examples_fail_with_project_exit_code() {
 fn real_render_has_h264_video_aac_audio_and_monotonic_events() {
     let workspace = fixture_workspace();
     let output = workspace.path().join("output.mp4");
+    let report = workspace.path().join("report.json");
     let project = workspace.path().join("projects/showcase.json");
     let result = command()
         .args([
@@ -91,6 +92,8 @@ fn real_render_has_h264_video_aac_audio_and_monotonic_events() {
             "json",
             "--format",
             "json",
+            "--report",
+            report.to_str().expect("UTF-8 path"),
         ])
         .output()
         .expect("render runs");
@@ -143,6 +146,11 @@ fn real_render_has_h264_video_aac_audio_and_monotonic_events() {
             .iter()
             .any(|stream| stream["codec_type"] == "audio" && stream["codec_name"] == "aac")
     );
+    let report: Value =
+        serde_json::from_slice(&fs::read(report).expect("read report")).expect("report JSON");
+    assert_eq!(report["status"], "success");
+    assert_eq!(report["project_format_version"], 1);
+    assert_eq!(report["visual_clip_count"], 3);
 }
 
 #[test]

@@ -211,7 +211,7 @@ fn render_command(
         &mut emit,
     ) {
         Ok(summary) => {
-            let data = json!({ "output": summary.output_path, "width": summary.width, "height": summary.height, "duration": summary.duration, "total_frames": summary.frame_count, "audio_present": summary.audio_present, "preview": summary.preview, "elapsed_ms": summary.elapsed_ms, "warnings": validated.warnings });
+            let data = json!({ "editor_version": env!("CARGO_PKG_VERSION"), "project_format_version": validated.project.format_version, "project": project, "output": summary.output_path, "width": summary.width, "height": summary.height, "frame_rate": validated.project.output.frame_rate.display(), "duration": summary.duration, "total_frames": summary.frame_count, "visual_clip_count": validated.project.visual.clips.len(), "audio_present": summary.audio_present, "preview": summary.preview, "elapsed_ms": summary.elapsed_ms, "backend": "ffmpeg", "warnings": validated.warnings });
             if let Some(path) = report.as_deref()
                 && let Err(error) = fs::write(
                     path,
@@ -251,6 +251,7 @@ fn render_command(
                     total_frames: validated.frame_count,
                     progress: 0.99,
                     output_path: None,
+                    warnings: Some(validated.warnings.clone()),
                 });
             }
             if let Some(path) = report.as_deref() {

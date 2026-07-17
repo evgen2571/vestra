@@ -203,6 +203,15 @@ pub fn render(
         output_path: Some(output.final_path.clone()),
         warnings: Some(plan.warnings.clone()),
     });
+    let preparation = prepared.stats();
+    performance.decoded_image_count = preparation.decoded_image_count;
+    performance.static_prepared_clip_count = preparation.static_prepared_clip_count;
+    performance.static_crop_count = preparation.static_crop_count;
+    performance.static_resize_count = preparation.static_resize_count;
+    performance.dynamic_clip_count = preparation.dynamic_clip_count;
+    performance.bitmap_cache_hits = preparation.bitmap_cache_hits;
+    performance.bitmap_cache_misses = preparation.bitmap_cache_misses;
+    performance.peak_cache_entries = preparation.peak_cache_entries;
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,

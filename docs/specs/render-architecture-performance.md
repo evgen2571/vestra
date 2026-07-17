@@ -27,6 +27,23 @@ keeps that design and fixes the gaps found during review.
   fixture. Golden values are source-controlled and updated only by an explicit
   maintenance command documented with the tests.
 
+The live code is organized around `application`, `project`, `plan`, `domain`,
+`timeline`, `render`, `media`, and `output`. The JSON model stays at the
+project boundary. The compiler converts it into a typed plan, then rendering
+uses plan and domain types only. FFmpeg receives `EncoderSettings`, not clips,
+animations, or the full plan. `main.rs` remains a small adapter to the CLI.
+
+`visible: false` is a validation and inspection concern, not a render item.
+Hidden clips may determine automatic duration, but they create no image assets,
+prepared bitmaps, cache accesses, or schedule events. A filename-only output
+such as `output.mp4` has `.` as its effective parent. This applies equally to
+temporary publication paths and CLI overrides.
+
+Reports serialize whole-millisecond values only after accumulating each stage
+as `Duration`. `project_load_and_validation_ms`, `plan_compile_ms`, asset
+decode and preparation, composition, encoder, publication, and total timings
+are available. Stage values need not sum exactly to the end-to-end total.
+
 ## Baseline
 
 The baseline was recorded on 2026-07-17 with the repository's supplied assets,

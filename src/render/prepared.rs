@@ -16,6 +16,10 @@ use crate::{
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct PreparationStats {
+    pub animation_value_parse_count: u64,
+    pub animation_sort_count: u64,
+    pub compiled_transition_association_count: u64,
+    pub parsed_colour_count: u64,
     pub decoded_image_count: usize,
     pub static_prepared_clip_count: usize,
     pub static_crop_count: usize,
@@ -24,6 +28,9 @@ pub struct PreparationStats {
     pub bitmap_cache_hits: u64,
     pub bitmap_cache_misses: u64,
     pub peak_cache_entries: usize,
+    pub schedule_event_count: usize,
+    pub active_item_consideration_count: u64,
+    pub rendered_frame_count: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

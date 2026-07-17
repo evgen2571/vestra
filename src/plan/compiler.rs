@@ -12,7 +12,7 @@ use crate::{
     domain::Crop,
     media::{AudioSettings, EncoderSettings},
     plan::{
-        Canvas, CompiledAnimations, CompiledClip, CompiledFlash, CompiledSizing,
+        Canvas, CompilationStats, CompiledAnimations, CompiledClip, CompiledFlash, CompiledSizing,
         CompiledTransition, Curve, DrawKey, ImageAsset, ItemKind, PreparationClass, RenderPlan,
     },
     project::{Animation, AnimationTarget, Sizing, Transition, ValidatedProject, parse_colour},
@@ -45,6 +45,10 @@ pub fn compile(
             "/output/background",
         )
     })?;
+    let mut compilation = CompilationStats {
+        parsed_colour_count: 1,
+        ..CompilationStats::default()
+    };
     let renderable_assets: BTreeSet<_> = validated
         .project
         .visual
@@ -86,7 +90,17 @@ pub fn compile(
         })?;
         let start_nanos = to_nanos(clip.start, &clip.id)?;
         let end_nanos = start_nanos.saturating_add(to_nanos(clip.duration, &clip.id)?);
+        compilation.animation_value_parse_count += clip.animations.len() as u64;
         let animations = compile_animations(&clip.animations, &clip.id)?;
+        compilation.animation_sort_count += [
+            !animations.position.is_empty(),
+            !animations.scale.is_empty(),
+            !animations.opacity.is_empty(),
+            !animations.crop.is_empty(),
+        ]
+        .into_iter()
+        .filter(|sorted| *sorted)
+        .count() as u64;
         let preparation = classify(&animations);
         clips.push(CompiledClip {
             id: clip.id.clone(),
@@ -133,11 +147,13 @@ pub fn compile(
                     clips[*index]
                         .transitions
                         .push(CompiledTransition::Outgoing(curve.clone()));
+                    compilation.compiled_transition_association_count += 1;
                 }
                 if let Some(index) = clip_indices.get(incoming) {
                     clips[*index]
                         .transitions
                         .push(CompiledTransition::Incoming(curve));
+                    compilation.compiled_transition_association_count += 1;
                 }
             }
             Transition::FadeToBackground { clip, .. } => {
@@ -145,6 +161,7 @@ pub fn compile(
                     clips[*index]
                         .transitions
                         .push(CompiledTransition::Outgoing(curve));
+                    compilation.compiled_transition_association_count += 1;
                 }
             }
             Transition::FadeFromBackground { clip, .. } => {
@@ -152,6 +169,7 @@ pub fn compile(
                     clips[*index]
                         .transitions
                         .push(CompiledTransition::Incoming(curve));
+                    compilation.compiled_transition_association_count += 1;
                 }
             }
         }
@@ -163,6 +181,7 @@ pub fn compile(
         .iter()
         .map(|flash| compile_flash(flash, validated.frame_rate, validated.frame_count))
         .collect::<Result<Vec<_>, _>>()?;
+    compilation.parsed_colour_count += flashes.len() as u64;
     let audio = compile_audio(validated)?;
     Ok(RenderPlan {
         configured_output: resolved_output_path(validated),
@@ -188,6 +207,7 @@ pub fn compile(
         images,
         clips,
         flashes,
+        compilation,
         warnings: validated.warnings.clone(),
     })
 }
@@ -436,6 +456,8 @@ mod tests {
         assert_eq!(plan.clips[1].animations.crop.len(), 1);
         assert!(!plan.clips[0].transitions.is_empty());
         assert_eq!(plan.flashes[0].colour, [255, 255, 255, 255]);
+        assert_eq!(plan.compilation.animation_value_parse_count, 6);
+        assert_eq!(plan.compilation.compiled_transition_association_count, 2);
     }
 
     #[test]

@@ -457,7 +457,7 @@ mod tests {
         assert!(!plan.clips[0].transitions.is_empty());
         assert_eq!(plan.flashes[0].colour, [255, 255, 255, 255]);
         assert_eq!(plan.compilation.animation_value_parse_count, 6);
-        assert_eq!(plan.compilation.compiled_transition_association_count, 2);
+        assert_eq!(plan.compilation.compiled_transition_association_count, 4);
     }
 
     #[test]

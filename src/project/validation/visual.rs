@@ -259,7 +259,7 @@ fn validate_transitions(transitions: &[Transition], clips: &[Clip], errors: &mut
     let clip_map: BTreeMap<&str, &Clip> =
         clips.iter().map(|clip| (clip.id.as_str(), clip)).collect();
     let mut ids = BTreeSet::new();
-    let mut affected: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::new();
+    let mut affected: BTreeMap<String, Vec<TransitionState>> = BTreeMap::new();
     for (index, transition) in transitions.iter().enumerate() {
         let path = format!("/visual/transitions/{index}");
         if transition.id().trim().is_empty() || !ids.insert(transition.id().to_owned()) {
@@ -299,6 +299,7 @@ fn validate_transitions(transitions: &[Transition], clips: &[Clip], errors: &mut
                     &path,
                     &clip_map,
                     &mut affected,
+                    TransitionDirection::Outgoing,
                     errors,
                 );
                 validate_transition_clip(
@@ -308,25 +309,36 @@ fn validate_transitions(transitions: &[Transition], clips: &[Clip], errors: &mut
                     &path,
                     &clip_map,
                     &mut affected,
+                    TransitionDirection::Incoming,
                     errors,
                 );
             }
-            Transition::FadeToBackground { clip, .. }
-            | Transition::FadeFromBackground { clip, .. } => validate_transition_clip(
+            Transition::FadeToBackground { clip, .. } => validate_transition_clip(
                 clip,
                 transition.start(),
                 end,
                 &path,
                 &clip_map,
                 &mut affected,
+                TransitionDirection::Outgoing,
+                errors,
+            ),
+            Transition::FadeFromBackground { clip, .. } => validate_transition_clip(
+                clip,
+                transition.start(),
+                end,
+                &path,
+                &clip_map,
+                &mut affected,
+                TransitionDirection::Incoming,
                 errors,
             ),
         }
     }
     for (clip, mut intervals) in affected {
-        intervals.sort_by(|left, right| left.0.total_cmp(&right.0));
+        intervals.sort_by(|left, right| left.start.total_cmp(&right.start));
         for pair in intervals.windows(2) {
-            if pair[1].0 < pair[0].1 {
+            if pair[1].start < pair[0].end {
                 errors.push(Diagnostic::error(
                     "MVP-TRANSITION-CONFLICT",
                     Category::Semantic,
@@ -334,8 +346,41 @@ fn validate_transitions(transitions: &[Transition], clips: &[Clip], errors: &mut
                     "/visual/transitions",
                 ));
             }
+            if pair[0].direction == pair[1].direction {
+                errors.push(Diagnostic::error(
+                    "MVP-TRANSITION-SEQUENCE",
+                    Category::Semantic,
+                    format!(
+                        "clip '{clip}' has consecutive {} transitions",
+                        pair[1].direction.name()
+                    ),
+                    pair[1].pointer.clone(),
+                ));
+            }
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransitionDirection {
+    Incoming,
+    Outgoing,
+}
+
+impl TransitionDirection {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Incoming => "incoming",
+            Self::Outgoing => "outgoing",
+        }
+    }
+}
+
+struct TransitionState {
+    start: f64,
+    end: f64,
+    direction: TransitionDirection,
+    pointer: String,
 }
 
 fn validate_transition_clip(
@@ -344,7 +389,8 @@ fn validate_transition_clip(
     end: f64,
     pointer: &str,
     clips: &BTreeMap<&str, &Clip>,
-    affected: &mut BTreeMap<String, Vec<(f64, f64)>>,
+    affected: &mut BTreeMap<String, Vec<TransitionState>>,
+    direction: TransitionDirection,
     errors: &mut Vec<Diagnostic>,
 ) {
     match clips.get(id) {
@@ -365,7 +411,12 @@ fn validate_transition_clip(
     affected
         .entry(id.to_owned())
         .or_default()
-        .push((start, end));
+        .push(TransitionState {
+            start,
+            end,
+            direction,
+            pointer: pointer.to_owned(),
+        });
 }
 
 fn validate_flash(
@@ -491,5 +542,30 @@ mod tests {
         let codes = codes(&errors);
         assert!(codes.contains(&"MVP-TRANSITION-CONFLICT"));
         assert!(codes.contains(&"MVP-FLASH-TIME"));
+    }
+
+    #[test]
+    fn accepts_incoming_then_outgoing_transition_sequences() {
+        let (project, assets) = fixture();
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+        validate(&project, &assets, &mut errors, &mut warnings);
+        assert!(!codes(&errors).contains(&"MVP-TRANSITION-SEQUENCE"));
+    }
+
+    #[test]
+    fn rejects_repeated_transition_directions_for_a_clip() {
+        let (mut project, assets) = fixture();
+        project.visual.transitions[1] = Transition::FadeFromBackground {
+            id: "blue-fade-again".to_owned(),
+            clip: "blue-cover".to_owned(),
+            start: 2.0,
+            duration: 0.3,
+            easing: Easing::Linear,
+        };
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+        validate(&project, &assets, &mut errors, &mut warnings);
+        assert!(codes(&errors).contains(&"MVP-TRANSITION-SEQUENCE"));
     }
 }

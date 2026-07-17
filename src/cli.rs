@@ -13,12 +13,13 @@ use crate::{
     application::{
         ApplicationRenderError, RenderRequest, inspect, render_project, validate_project,
     },
-    output::write_report,
+    output::{
+        ProgressFormat, ResultFormat, print_failure, print_success, write_progress, write_report,
+    },
     project::LoadError,
     render::RenderEvent,
 };
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
-use serde::Serialize;
 use serde_json::json;
 
 #[derive(Parser, Debug)]
@@ -39,15 +40,15 @@ struct Cli {
 enum Command {
     Validate {
         project: PathBuf,
-        #[arg(long, value_enum, default_value_t = ResultFormat::Human)]
-        format: ResultFormat,
+        #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
+        format: CliResultFormat,
     },
     Inspect {
         project: PathBuf,
         #[arg(long)]
         preview: bool,
-        #[arg(long, value_enum, default_value_t = ResultFormat::Human)]
-        format: ResultFormat,
+        #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
+        format: CliResultFormat,
     },
     Render {
         project: PathBuf,
@@ -57,10 +58,10 @@ enum Command {
         overwrite: bool,
         #[arg(long)]
         preview: bool,
-        #[arg(long, value_enum, default_value_t = ResultFormat::Human)]
-        format: ResultFormat,
-        #[arg(long, value_enum, default_value_t = ProgressFormat::Human)]
-        progress: ProgressFormat,
+        #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
+        format: CliResultFormat,
+        #[arg(long, value_enum, default_value_t = CliProgressFormat::Human)]
+        progress: CliProgressFormat,
         #[arg(long)]
         report: Option<PathBuf>,
     },
@@ -68,42 +69,46 @@ enum Command {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum ResultFormat {
+enum CliResultFormat {
     Human,
     Json,
 }
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum ProgressFormat {
+enum CliProgressFormat {
     Human,
     Json,
     None,
 }
 
-#[derive(Serialize)]
-struct ResultEnvelope<T: Serialize> {
-    result_schema_version: u8,
-    status: &'static str,
-    command: &'static str,
-    #[serde(flatten)]
-    data: T,
+impl From<CliResultFormat> for ResultFormat {
+    fn from(format: CliResultFormat) -> Self {
+        match format {
+            CliResultFormat::Human => Self::Human,
+            CliResultFormat::Json => Self::Json,
+        }
+    }
 }
 
-#[derive(Serialize)]
-struct FailureEnvelope {
-    errors: Vec<Diagnostic>,
-    warnings: Vec<Diagnostic>,
+impl From<CliProgressFormat> for ProgressFormat {
+    fn from(format: CliProgressFormat) -> Self {
+        match format {
+            CliProgressFormat::Human => Self::Human,
+            CliProgressFormat::Json => Self::Json,
+            CliProgressFormat::None => Self::None,
+        }
+    }
 }
 
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
     let _verbosity = cli.verbose;
     match cli.command {
-        Command::Validate { project, format } => validate_command(project, format),
+        Command::Validate { project, format } => validate_command(project, format.into()),
         Command::Inspect {
             project,
             preview,
             format,
-        } => inspect_command(project, preview, format),
+        } => inspect_command(project, preview, format.into()),
         Command::Render {
             project,
             output,
@@ -113,7 +118,13 @@ pub fn run() -> ExitCode {
             progress,
             report,
         } => render_command(
-            project, output, overwrite, preview, format, progress, report,
+            project,
+            output,
+            overwrite,
+            preview,
+            format.into(),
+            progress.into(),
+            report,
         ),
         Command::Version => {
             println!("video-editor {}", env!("CARGO_PKG_VERSION"));
@@ -164,20 +175,7 @@ fn render_command(
     {
         eprintln!("warning: interrupt handler unavailable: {error}");
     }
-    let mut emit = |event: RenderEvent| match progress {
-        ProgressFormat::None => {}
-        ProgressFormat::Json => println!(
-            "{}",
-            serde_json::to_string(&event).expect("event serializes")
-        ),
-        ProgressFormat::Human => eprintln!(
-            "{}: {}/{} ({:.0}%)",
-            event.kind,
-            event.frame,
-            event.total_frames,
-            event.progress * 100.0
-        ),
-    };
+    let mut emit = |event: RenderEvent| write_progress(progress, &event);
     match render_project(
         &project,
         RenderRequest {
@@ -218,13 +216,12 @@ fn render_command(
                 &errors,
                 began.elapsed().as_millis(),
             ) {
-                let mut all_errors = vec![Diagnostic::error(
+                let all_errors = vec![Diagnostic::error(
                     "MVP-REPORT-WRITE",
                     Category::Output,
                     message,
                     "",
                 )];
-                all_errors.extend(errors);
                 return print_failure("render", format, all_errors, Vec::new());
             }
             print_failure("render", format, errors, Vec::new())
@@ -272,60 +269,6 @@ fn render_command(
     }
 }
 
-fn print_success<T: Serialize>(command: &'static str, format: ResultFormat, data: T, human: &str) {
-    match format {
-        ResultFormat::Human => println!("{human}"),
-        ResultFormat::Json => println!(
-            "{}",
-            serde_json::to_string(&ResultEnvelope {
-                result_schema_version: 1,
-                status: "success",
-                command,
-                data
-            })
-            .expect("result serializes")
-        ),
-    }
-}
-
-fn print_failure(
-    command: &'static str,
-    format: ResultFormat,
-    errors: Vec<Diagnostic>,
-    warnings: Vec<Diagnostic>,
-) -> ExitCode {
-    let exit = exit_for(errors.first().map(|error| &error.category));
-    match format {
-        ResultFormat::Human => {
-            for error in &errors {
-                eprintln!("{}: {}", error.code, error.message);
-            }
-        }
-        ResultFormat::Json => println!(
-            "{}",
-            serde_json::to_string(&ResultEnvelope {
-                result_schema_version: 1,
-                status: "failure",
-                command,
-                data: FailureEnvelope { errors, warnings }
-            })
-            .expect("failure serializes")
-        ),
-    }
-    ExitCode::from(exit)
-}
-
-fn exit_for(category: Option<&Category>) -> u8 {
-    match category {
-        Some(Category::Asset | Category::Media) => 4,
-        Some(Category::Backend | Category::Render) => 5,
-        Some(Category::Output) => 6,
-        Some(Category::Usage) => 2,
-        Some(Category::Cancellation) => 130,
-        Some(Category::Internal) => 1,
-        _ => 3,
-    }
-}
 fn write_failure_report(
     path: Option<&std::path::Path>,
     command: &str,

@@ -153,6 +153,18 @@ fn real_render_has_h264_video_aac_audio_and_monotonic_events() {
     assert_eq!(report["report_schema_version"], 1);
     assert_eq!(report["result"]["project_format_version"], 1);
     assert_eq!(report["result"]["visual_clip_count"], 3);
+    assert_eq!(
+        report["result"]["performance"]["animation_value_parse_count"],
+        6
+    );
+    assert_eq!(report["result"]["performance"]["schedule_event_count"], 8);
+    assert_eq!(report["result"]["performance"]["rendered_frame_count"], 80);
+    assert!(
+        report["result"]["performance"]["bitmap_cache_misses"]
+            .as_u64()
+            .expect("cache misses")
+            > 0
+    );
     let timings = report["result"]["timings"].as_object().expect("timings");
     assert!(timings.contains_key("project_load_and_validation_ms"));
     assert!(timings.contains_key("plan_compile_ms"));

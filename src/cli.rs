@@ -1,5 +1,4 @@
 use std::{
-    fs,
     path::PathBuf,
     process::ExitCode,
     sync::{
@@ -11,11 +10,12 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    application::{inspect, validate_project},
-    load_and_validate,
-    plan::{CompileOptions, compile},
-    project::{LoadError, ValidationOptions},
-    render::{RenderEvent, RenderOptions, render},
+    application::{
+        ApplicationRenderError, RenderRequest, inspect, render_project, validate_project,
+    },
+    output::write_report,
+    project::LoadError,
+    render::RenderEvent,
 };
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
@@ -164,27 +164,6 @@ fn render_command(
     {
         eprintln!("warning: interrupt handler unavailable: {error}");
     }
-    let validated = match load_and_validate(&project, &ValidationOptions::default()) {
-        Ok(value) => value,
-        Err(LoadError::Diagnostics(errors)) => {
-            if let Err(message) = write_failure_report(
-                report.as_deref(),
-                "project",
-                &errors,
-                began.elapsed().as_millis(),
-            ) {
-                let mut all_errors = vec![Diagnostic::error(
-                    "MVP-REPORT-WRITE",
-                    Category::Output,
-                    message,
-                    "",
-                )];
-                all_errors.extend(errors);
-                return print_failure("render", format, all_errors, Vec::new());
-            }
-            return print_failure("render", format, errors, Vec::new());
-        }
-    };
     let mut emit = |event: RenderEvent| match progress {
         ProgressFormat::None => {}
         ProgressFormat::Json => println!(
@@ -199,26 +178,22 @@ fn render_command(
             event.progress * 100.0
         ),
     };
-    let plan = match compile(&validated, CompileOptions { preview }) {
-        Ok(plan) => plan,
-        Err(error) => return print_failure("render", format, vec![error], validated.warnings),
-    };
-    match render(
-        &plan,
-        &RenderOptions {
+    match render_project(
+        &project,
+        RenderRequest {
             output_override: output,
             overwrite,
+            preview,
             cancelled,
         },
         &mut emit,
     ) {
-        Ok(summary) => {
+        Ok((validated, summary)) => {
             let data = json!({ "editor_version": env!("CARGO_PKG_VERSION"), "project_format_version": validated.project.format_version, "project": project, "output": summary.output_path, "width": summary.width, "height": summary.height, "frame_rate": validated.project.output.frame_rate.display(), "duration": summary.duration, "total_frames": summary.frame_count, "visual_clip_count": validated.project.visual.clips.len(), "audio_present": summary.audio_present, "preview": summary.preview, "elapsed_ms": summary.elapsed_ms, "timings": summary.timings, "performance": summary.performance, "backend": "ffmpeg", "warnings": validated.warnings });
             if let Some(path) = report.as_deref()
-                && let Err(error) = fs::write(
+                && let Err(error) = write_report(
                     path,
-                    serde_json::to_vec_pretty(&json!({ "report_schema_version": 1, "status": "success", "command": "render", "result": data.clone() }))
-                    .expect("report serializes"),
+                    &json!({ "report_schema_version": 1, "status": "success", "command": "render", "result": data.clone() }),
                 )
             {
                 return print_failure(
@@ -236,7 +211,29 @@ fn render_command(
             print_success("render", format, data, "render completed");
             ExitCode::SUCCESS
         }
-        Err(error) => {
+        Err(ApplicationRenderError::Project(errors)) => {
+            if let Err(message) = write_failure_report(
+                report.as_deref(),
+                "project",
+                &errors,
+                began.elapsed().as_millis(),
+            ) {
+                let mut all_errors = vec![Diagnostic::error(
+                    "MVP-REPORT-WRITE",
+                    Category::Output,
+                    message,
+                    "",
+                )];
+                all_errors.extend(errors);
+                return print_failure("render", format, all_errors, Vec::new());
+            }
+            print_failure("render", format, errors, Vec::new())
+        }
+        Err(ApplicationRenderError::Plan {
+            validated,
+            diagnostic,
+        }) => print_failure("render", format, vec![diagnostic], validated.warnings),
+        Err(ApplicationRenderError::Render { validated, error }) => {
             if matches!(
                 error.diagnostic.category,
                 Category::Backend | Category::Render | Category::Cancellation
@@ -253,10 +250,7 @@ fn render_command(
             }
             if let Some(path) = report.as_deref() {
                 let report = json!({ "report_schema_version": 1, "status": "failure", "command": "render", "errors": [error.diagnostic], "progress": 0.99, "temporary_removed": error.temporary_removed, "elapsed_ms": began.elapsed().as_millis() });
-                if let Err(report_error) = fs::write(
-                    path,
-                    serde_json::to_vec_pretty(&report).expect("report serializes"),
-                ) {
+                if let Err(report_error) = write_report(path, &report) {
                     return print_failure(
                         "render",
                         format,
@@ -340,11 +334,7 @@ fn write_failure_report(
 ) -> Result<(), String> {
     if let Some(path) = path {
         let report = json!({ "report_schema_version": 1, "status": "failure", "command": command, "errors": errors, "progress": 0.0, "elapsed_ms": elapsed_ms });
-        fs::write(
-            path,
-            serde_json::to_vec_pretty(&report).expect("report serializes"),
-        )
-        .map_err(|error| format!("cannot write report: {error}"))?;
+        write_report(path, &report)?;
     }
     Ok(())
 }

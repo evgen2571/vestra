@@ -27,7 +27,7 @@ video-editor version
 
 `--format json` writes a versioned result envelope. `render --progress json` writes JSON Lines events, starting at zero and ending with `completed` at 1.0 only after publication. Exit statuses are 0 (success), 1 (internal), 2 (usage), 3 (project), 4 (asset/media), 5 (backend/render), 6 (output), and 130 (interrupt cancellation).
 
-See [the v1 specification](docs/specs/mvp-v1.md), [the staged render architecture and performance notes](docs/specs/render-architecture-performance.md), [the machine-readable schema](schemas/project-v1.schema.json), and the example projects for the complete contract. Run all checks with:
+See [the v1 specification](docs/specs/mvp-v1.md), [the machine-readable schema](schemas/project-v1.schema.json), and the example projects for the complete contract. Run all checks with:
 
 ```bash
 cargo fmt --check

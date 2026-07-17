@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/video-editor/project-v1.schema.json",
+  "title": "Declarative Video Renderer Project v1",
+  "type": "object",
+  "required": ["format_version", "output", "assets", "visual"],
+  "additionalProperties": false,
+  "properties": {
+    "format_version": { "const": 1 },
+    "name": { "type": "string" },
+    "metadata": { "type": "object" },
+    "output": { "$ref": "#/$defs/output" },
+    "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" } },
+    "visual": { "type": "object", "required": ["clips"], "additionalProperties": false, "properties": { "clips": { "type": "array", "items": { "$ref": "#/$defs/clip" } }, "transitions": { "type": "array", "items": { "$ref": "#/$defs/transition" } }, "flashes": { "type": "array", "items": { "$ref": "#/$defs/flash" } } } },
+    "audio": { "$ref": "#/$defs/audio" }
+  },
+  "$defs": {
+    "seconds": { "type": "number", "minimum": 0 },
+    "colour": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$" },
+    "point": { "type": "object", "required": ["x", "y"], "additionalProperties": false, "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+    "crop": { "type": "object", "required": ["x", "y", "width", "height"], "additionalProperties": false, "properties": { "x": { "type": "number", "minimum": 0, "maximum": 1 }, "y": { "type": "number", "minimum": 0, "maximum": 1 }, "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 } } },
+    "output": { "type": "object", "required": ["path", "width", "height", "frame_rate", "background", "quality", "audio", "duration_mode"], "additionalProperties": false, "properties": { "path": { "type": "string", "minLength": 1 }, "width": { "type": "integer", "minimum": 2 }, "height": { "type": "integer", "minimum": 2 }, "frame_rate": { "oneOf": [{ "type": "number", "exclusiveMinimum": 0 }, { "type": "string", "pattern": "^[1-9][0-9]*/[1-9][0-9]*$" }] }, "background": { "$ref": "#/$defs/colour" }, "quality": { "enum": ["preview", "balanced", "high"] }, "audio": { "type": "boolean" }, "duration_mode": { "enum": ["automatic", "explicit"] }, "duration": { "$ref": "#/$defs/seconds" } } },
+    "asset": { "type": "object", "required": ["id", "type", "source"], "additionalProperties": false, "properties": { "id": { "type": "string", "minLength": 1 }, "type": { "enum": ["image", "audio"] }, "source": { "type": "string", "minLength": 1 } } },
+    "clip": { "type": "object", "required": ["id", "asset", "start", "duration", "layer", "position", "anchor", "sizing", "opacity"], "additionalProperties": false, "properties": { "id": { "type": "string", "minLength": 1 }, "asset": { "type": "string", "minLength": 1 }, "start": { "$ref": "#/$defs/seconds" }, "duration": { "type": "number", "exclusiveMinimum": 0 }, "layer": { "type": "integer" }, "visible": { "type": "boolean", "default": true }, "position": { "$ref": "#/$defs/point" }, "anchor": { "$ref": "#/$defs/point" }, "sizing": { "type": "object" }, "crop": { "$ref": "#/$defs/crop" }, "opacity": { "type": "number", "minimum": 0, "maximum": 1 }, "animations": { "type": "array" } } },
+    "transition": { "type": "object" },
+    "flash": { "type": "object" },
+    "audio": { "type": "object" }
+  }
+}

@@ -45,6 +45,16 @@ fn valid_examples_validate_and_inspect_as_json() {
 }
 
 #[test]
+fn version_uses_the_command_result_path() {
+    let output = command().arg("version").output().expect("version runs");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("UTF-8 version"),
+        format!("video-editor {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn invalid_examples_fail_with_project_exit_code() {
     for project in [
         "undeclared-asset",
@@ -75,6 +85,36 @@ fn invalid_examples_fail_with_project_exit_code() {
         assert_eq!(value["status"], "failure");
         assert!(!value["errors"].as_array().expect("errors array").is_empty());
     }
+}
+
+#[test]
+fn invalid_render_writes_a_project_failure_report() {
+    let workspace = TempDir::new().expect("temporary directory");
+    let report = workspace.path().join("report.json");
+    let result = command()
+        .args([
+            "render",
+            "examples/invalid/invalid-crop.json",
+            "--progress",
+            "none",
+            "--report",
+            report.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("render runs");
+    assert_eq!(result.status.code(), Some(3));
+    let report: Value =
+        serde_json::from_slice(&fs::read(report).expect("read report")).expect("report JSON");
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["failure_category"], "project");
+    assert_eq!(report["failure_stage"], "project_load_or_validation");
+    assert!(report["project_path"].is_string());
+    assert!(
+        !report["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -255,15 +295,15 @@ fn supplied_projects_match_decoded_rgba_golden_hashes() {
     for (project_name, expected) in [
         (
             "static-image",
-            "ebf0e10f230c8045b034843570c541ea14a3ec077bd97217d8c2ff6890c520db",
+            "fc7569a6e6fee60f72ef9a75b7d105e9bd88d701a1bdb80cfea0dba13e35c68f",
         ),
         (
             "hard-cuts",
-            "a8037f31248bfdbbe624b7b45b0c0bbc4a3986bf9cc10842e5cd67abce3567e8",
+            "9e5c8ac6690da827a1df6c693a91208e4216591c701aec3250ae2add59df20ce",
         ),
         (
             "showcase",
-            "a033e25eea18932316d6e0b15ca9ec2d40ed94c41c611c0562b78a3ce9a7134a",
+            "121e830d20142bc3f6441b930a31cd63c29f028ffc3e94d82a8b7c7eab438237",
         ),
     ] {
         let project = workspace
@@ -288,6 +328,34 @@ fn supplied_projects_match_decoded_rgba_golden_hashes() {
         );
         assert_eq!(decoded_rgba_frame_hash(&output), expected, "{project_name}");
     }
+}
+
+#[test]
+fn showcase_preview_matches_the_normalized_decoded_frame_fixture() {
+    let workspace = fixture_workspace();
+    let project = workspace.path().join("projects/showcase.json");
+    let output = workspace.path().join("showcase-preview.mp4");
+    let result = command()
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--preview",
+            "--progress",
+            "none",
+        ])
+        .output()
+        .expect("preview render runs");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        decoded_rgba_frame_hash(&output),
+        "121e830d20142bc3f6441b930a31cd63c29f028ffc3e94d82a8b7c7eab438237"
+    );
 }
 
 #[test]
@@ -349,6 +417,10 @@ fn invisible_clip_does_not_affect_decoded_frame_or_preparation() {
     assert_eq!(result["performance"]["static_prepared_clip_count"], 1);
     assert_eq!(result["performance"]["bitmap_cache_misses"], 0);
     let pixels = decode_first_frame(&output);
+    assert_eq!(
+        decoded_rgba_frame_hash(&output),
+        "fc7569a6e6fee60f72ef9a75b7d105e9bd88d701a1bdb80cfea0dba13e35c68f"
+    );
     let middle = (90 * 320 + 160) * 3;
     assert!(pixels[middle] > 180 && pixels[middle + 1] < 70 && pixels[middle + 2] < 70);
 }
@@ -453,6 +525,7 @@ fn failed_backend_cleans_temporary_output() {
     fs::set_permissions(&failing_ffmpeg, fs::Permissions::from_mode(0o755))
         .expect("make backend executable");
     let output = workspace.path().join("failed.mp4");
+    let report = workspace.path().join("failed-report.json");
     let project = workspace.path().join("projects/static-image.json");
     let inherited_path = std::env::var("PATH").expect("PATH is set");
     let result = command()
@@ -464,10 +537,22 @@ fn failed_backend_cleans_temporary_output() {
             output.to_str().expect("UTF-8 path"),
             "--progress",
             "none",
+            "--report",
+            report.to_str().expect("UTF-8 path"),
         ])
         .output()
         .expect("render runs");
     assert_eq!(result.status.code(), Some(5));
+    let report: Value = serde_json::from_slice(&fs::read(report).expect("read report"))
+        .expect("failure report JSON");
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["failure_category"], "render");
+    assert_eq!(report["failure_stage"], "frame_write");
+    assert_eq!(report["total_frames"], 24);
+    assert!(report.get("progress").is_none());
+    assert!(report["project_path"].is_string());
+    assert!(report["requested_output_path"].is_string());
+    assert!(report["temporary_output_path"].is_string());
     assert!(!output.exists());
     assert!(
         fs::read_dir(workspace.path())
@@ -478,6 +563,59 @@ fn failed_backend_cleans_temporary_output() {
                 .to_string_lossy()
                 .contains(".tmp.mp4"))
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn report_write_failure_preserves_the_render_failure() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workspace = fixture_workspace();
+    let bin = workspace.path().join("bin");
+    fs::create_dir(&bin).expect("backend directory");
+    let failing_ffmpeg = bin.join("ffmpeg");
+    fs::write(
+        &failing_ffmpeg,
+        "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then exit 0; fi\nexit 1\n",
+    )
+    .expect("write failing backend");
+    fs::set_permissions(&failing_ffmpeg, fs::Permissions::from_mode(0o755))
+        .expect("make backend executable");
+    let inherited_path = std::env::var("PATH").expect("PATH is set");
+    let output = workspace.path().join("failed.mp4");
+    let report_directory = workspace.path().join("report-directory");
+    fs::create_dir(&report_directory).expect("report directory");
+    let project = workspace.path().join("projects/static-image.json");
+    let result = command()
+        .env("PATH", format!("{}:{inherited_path}", bin.display()))
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "none",
+            "--format",
+            "json",
+            "--report",
+            report_directory.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("render runs");
+    assert_eq!(result.status.code(), Some(5));
+    let result: Value = serde_json::from_slice(&result.stdout).expect("failure JSON");
+    let errors = result["errors"].as_array().expect("errors");
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "MVP-RENDER-WRITE")
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "MVP-REPORT-WRITE")
+    );
+    assert!(!output.exists());
 }
 
 fn fixture_workspace() -> TempDir {
@@ -517,7 +655,7 @@ fn decoded_frame_md5(path: &std::path::Path) -> Vec<u8> {
         .output()
         .expect("decode frames");
     assert!(output.status.success());
-    output.stdout
+    normalize_framemd5(&output.stdout).expect("framemd5 records")
 }
 
 fn decode_first_frame(path: &std::path::Path) -> Vec<u8> {
@@ -559,5 +697,51 @@ fn decoded_rgba_frame_hash(path: &std::path::Path) -> String {
         .output()
         .expect("decode frames");
     assert!(output.status.success());
-    format!("{:x}", Sha256::digest(output.stdout))
+    let normalized = normalize_framemd5(&output.stdout).expect("framemd5 records");
+    format!("{:x}", Sha256::digest(normalized))
+}
+
+/// Canonical frame records keep decoded-pixel fixtures portable across FFmpeg
+/// releases. `framemd5` comments include the FFmpeg/Lavf version and are not
+/// a property of the decoded frames.
+fn normalize_framemd5(input: &[u8]) -> Result<Vec<u8>, String> {
+    let text =
+        std::str::from_utf8(input).map_err(|error| format!("framemd5 is not UTF-8: {error}"))?;
+    let mut normalized = Vec::new();
+    for (line_number, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<_> = line.split(',').map(str::trim).collect();
+        if fields.len() != 6 || fields.iter().any(|field| field.is_empty()) {
+            return Err(format!(
+                "malformed framemd5 record at line {}: expected six non-empty fields",
+                line_number + 1
+            ));
+        }
+        normalized.extend_from_slice(fields.join(",").as_bytes());
+        normalized.push(b'\n');
+    }
+    if normalized.is_empty() {
+        return Err("framemd5 contains no frame records".to_owned());
+    }
+    Ok(normalized)
+}
+
+#[test]
+fn golden_hash_normalization_ignores_headers_and_line_endings() {
+    let linux = b"#format: frame checksums\n#software: Lavf61.7.100\n0, 0, 0, 1, 4, deadbeef\n";
+    let windows =
+        b"#format: frame checksums\r\n#software: Lavf62.1.0\r\n0, 0, 0, 1, 4, deadbeef\r\n";
+    assert_eq!(
+        normalize_framemd5(linux).expect("LF manifest"),
+        normalize_framemd5(windows).expect("CRLF manifest")
+    );
+}
+
+#[test]
+fn golden_hash_normalization_rejects_malformed_records() {
+    let error = normalize_framemd5(b"0, 0, missing-fields\n").expect_err("invalid record");
+    assert!(error.contains("line 1"), "{error}");
 }

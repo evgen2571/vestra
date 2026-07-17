@@ -27,8 +27,14 @@ pub struct RenderRequest {
 
 pub enum ApplicationRenderError {
     Project(Vec<Diagnostic>),
-    Plan(Diagnostic),
-    Render(RenderError),
+    Plan {
+        validated: crate::project::ValidatedProject,
+        diagnostic: Diagnostic,
+    },
+    Render {
+        validated: crate::project::ValidatedProject,
+        error: RenderError,
+    },
 }
 
 pub fn render_project(
@@ -45,7 +51,10 @@ pub fn render_project(
             preview: request.preview,
         },
     )
-    .map_err(ApplicationRenderError::Plan)?;
+    .map_err(|diagnostic| ApplicationRenderError::Plan {
+        validated: validated.clone(),
+        diagnostic,
+    })?;
     let summary = render(
         &plan,
         &RenderOptions {
@@ -55,6 +64,9 @@ pub fn render_project(
         },
         emit,
     )
-    .map_err(ApplicationRenderError::Render)?;
+    .map_err(|error| ApplicationRenderError::Render {
+        validated: validated.clone(),
+        error,
+    })?;
     Ok((validated, summary))
 }

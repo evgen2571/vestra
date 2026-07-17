@@ -5,5 +5,5 @@ mod render;
 mod validate;
 
 pub use inspect::{Inspection, inspect};
-pub use render::{RenderRequest, render_project};
+pub use render::{ApplicationRenderError, RenderRequest, render_project};
 pub use validate::validate_project;

@@ -2,6 +2,7 @@ use std::{fs, process::Command};
 
 use assert_cmd::prelude::*;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 fn command() -> Command {
@@ -234,6 +235,47 @@ fn repeated_static_renders_have_equivalent_decoded_frames() {
             && pixels.stdout[middle + 1] < 70
             && pixels.stdout[middle + 2] < 70
     );
+}
+
+#[test]
+fn supplied_projects_match_decoded_rgba_golden_hashes() {
+    let workspace = fixture_workspace();
+    for (project_name, expected) in [
+        (
+            "static-image",
+            "ebf0e10f230c8045b034843570c541ea14a3ec077bd97217d8c2ff6890c520db",
+        ),
+        (
+            "hard-cuts",
+            "a8037f31248bfdbbe624b7b45b0c0bbc4a3986bf9cc10842e5cd67abce3567e8",
+        ),
+        (
+            "showcase",
+            "a033e25eea18932316d6e0b15ca9ec2d40ed94c41c611c0562b78a3ce9a7134a",
+        ),
+    ] {
+        let project = workspace
+            .path()
+            .join(format!("projects/{project_name}.json"));
+        let output = workspace.path().join(format!("{project_name}.mp4"));
+        let result = command()
+            .args([
+                "render",
+                project.to_str().expect("UTF-8 path"),
+                "--output",
+                output.to_str().expect("UTF-8 path"),
+                "--progress",
+                "none",
+            ])
+            .output()
+            .expect("render runs");
+        assert!(
+            result.status.success(),
+            "{project_name}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(decoded_rgba_frame_hash(&output), expected, "{project_name}");
+    }
 }
 
 #[test]
@@ -485,4 +527,25 @@ fn decode_first_frame(path: &std::path::Path) -> Vec<u8> {
         .expect("decode first frame");
     assert!(output.status.success());
     output.stdout
+}
+
+fn decoded_rgba_frame_hash(path: &std::path::Path) -> String {
+    let output = Command::new("ffmpeg")
+        .args([
+            "-v",
+            "error",
+            "-i",
+            path.to_str().expect("UTF-8 path"),
+            "-map",
+            "0:v:0",
+            "-pix_fmt",
+            "rgba",
+            "-f",
+            "framemd5",
+            "-",
+        ])
+        .output()
+        .expect("decode frames");
+    assert!(output.status.success());
+    format!("{:x}", Sha256::digest(output.stdout))
 }

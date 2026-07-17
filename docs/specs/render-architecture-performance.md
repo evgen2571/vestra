@@ -122,6 +122,23 @@ Boundary tests cover validation, typed animation compilation, schedule
 boundaries and order, static preparation, direct flash blending, output
 publication, and decoded-frame equivalence for all supplied projects.
 
+## Golden decoded frames
+
+Integration tests render the supplied static-image, hard-cuts, and showcase
+projects, decode their video streams as RGBA with `ffmpeg -f framemd5`, and
+compare a SHA-256 hash of that decoded manifest. MP4 bytes are not compared
+because muxer metadata can change without changing pixels. The expected hashes
+are source code fixtures. Update them only after reviewing a deliberate visual
+change with a known-good renderer, then run the full integration suite.
+
+## Git and Syncthing
+
+Do not synchronize an actively edited `.git` directory with Syncthing. Use
+Git push and pull for repository history, or exclude `.git` when file
+synchronization is unavoidable. If Syncthing leaves `index.sync-conflict-*`
+copies behind, confirm `.git/index` is readable with `git status` and
+`git fsck --full`, remove only those named copies, then repeat both checks.
+
 ## Completion criteria
 
 The final report will include stage timings and stable counters for decoded

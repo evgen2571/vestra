@@ -293,44 +293,52 @@ fn validate_transitions(transitions: &[Transition], clips: &[Clip], errors: &mut
                     ));
                 }
                 validate_transition_clip(
-                    outgoing,
-                    transition.start(),
-                    end,
-                    &path,
+                    TransitionClip {
+                        id: outgoing,
+                        start: transition.start(),
+                        end,
+                        pointer: &path,
+                        direction: TransitionDirection::Outgoing,
+                    },
                     &clip_map,
                     &mut affected,
-                    TransitionDirection::Outgoing,
                     errors,
                 );
                 validate_transition_clip(
-                    incoming,
-                    transition.start(),
-                    end,
-                    &path,
+                    TransitionClip {
+                        id: incoming,
+                        start: transition.start(),
+                        end,
+                        pointer: &path,
+                        direction: TransitionDirection::Incoming,
+                    },
                     &clip_map,
                     &mut affected,
-                    TransitionDirection::Incoming,
                     errors,
                 );
             }
             Transition::FadeToBackground { clip, .. } => validate_transition_clip(
-                clip,
-                transition.start(),
-                end,
-                &path,
+                TransitionClip {
+                    id: clip,
+                    start: transition.start(),
+                    end,
+                    pointer: &path,
+                    direction: TransitionDirection::Outgoing,
+                },
                 &clip_map,
                 &mut affected,
-                TransitionDirection::Outgoing,
                 errors,
             ),
             Transition::FadeFromBackground { clip, .. } => validate_transition_clip(
-                clip,
-                transition.start(),
-                end,
-                &path,
+                TransitionClip {
+                    id: clip,
+                    start: transition.start(),
+                    end,
+                    pointer: &path,
+                    direction: TransitionDirection::Incoming,
+                },
                 &clip_map,
                 &mut affected,
-                TransitionDirection::Incoming,
                 errors,
             ),
         }
@@ -383,39 +391,44 @@ struct TransitionState {
     pointer: String,
 }
 
-fn validate_transition_clip(
-    id: &str,
+struct TransitionClip<'a> {
+    id: &'a str,
     start: f64,
     end: f64,
-    pointer: &str,
+    pointer: &'a str,
+    direction: TransitionDirection,
+}
+
+fn validate_transition_clip(
+    transition: TransitionClip<'_>,
     clips: &BTreeMap<&str, &Clip>,
     affected: &mut BTreeMap<String, Vec<TransitionState>>,
-    direction: TransitionDirection,
     errors: &mut Vec<Diagnostic>,
 ) {
-    match clips.get(id) {
-        Some(clip) if start >= clip.start && end <= clip.start + clip.duration => {}
+    match clips.get(transition.id) {
+        Some(clip)
+            if transition.start >= clip.start && transition.end <= clip.start + clip.duration => {}
         Some(_) => errors.push(Diagnostic::error(
             "MVP-TRANSITION-FIT",
             Category::Semantic,
-            format!("transition must fit inside clip '{id}'"),
-            pointer,
+            format!("transition must fit inside clip '{}'", transition.id),
+            transition.pointer,
         )),
         None => errors.push(Diagnostic::error(
             "MVP-TRANSITION-CLIP",
             Category::Semantic,
-            format!("unknown clip '{id}'"),
-            pointer,
+            format!("unknown clip '{}'", transition.id),
+            transition.pointer,
         )),
     }
     affected
-        .entry(id.to_owned())
+        .entry(transition.id.to_owned())
         .or_default()
         .push(TransitionState {
-            start,
-            end,
-            direction,
-            pointer: pointer.to_owned(),
+            start: transition.start,
+            end: transition.end,
+            direction: transition.direction,
+            pointer: transition.pointer.to_owned(),
         });
 }
 

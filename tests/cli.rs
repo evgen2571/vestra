@@ -227,6 +227,110 @@ fn repeated_static_renders_have_equivalent_decoded_frames() {
 }
 
 #[test]
+fn invisible_clip_does_not_affect_decoded_frame_or_preparation() {
+    let workspace = fixture_workspace();
+    let project = workspace.path().join("projects/hidden-layer.json");
+    let mut value: Value = serde_json::from_slice(
+        &fs::read(workspace.path().join("projects/static-image.json")).expect("project"),
+    )
+    .expect("project JSON");
+    value["assets"]
+        .as_array_mut()
+        .expect("assets")
+        .push(serde_json::json!({
+            "id": "green",
+            "type": "image",
+            "source": "../assets/green.png"
+        }));
+    value["visual"]["clips"]
+        .as_array_mut()
+        .expect("clips")
+        .push(serde_json::json!({
+            "id": "hidden-green",
+            "asset": "green",
+            "start": 0.0,
+            "duration": 1.0,
+            "layer": 1,
+            "visible": false,
+            "position": { "x": 0.5, "y": 0.5 },
+            "anchor": { "x": 0.5, "y": 0.5 },
+            "sizing": { "mode": "stretch", "width": 320, "height": 180 },
+            "opacity": 1.0
+        }));
+    fs::write(
+        &project,
+        serde_json::to_vec(&value).expect("project serializes"),
+    )
+    .expect("write project");
+    let output = workspace.path().join("hidden-layer.mp4");
+    let result = command()
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "none",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let result: Value = serde_json::from_slice(&result.stdout).expect("render JSON");
+    assert_eq!(result["performance"]["static_prepared_clip_count"], 1);
+    assert_eq!(result["performance"]["bitmap_cache_misses"], 0);
+    let pixels = decode_first_frame(&output);
+    let middle = (90 * 320 + 160) * 3;
+    assert!(pixels[middle] > 180 && pixels[middle + 1] < 70 && pixels[middle + 2] < 70);
+}
+
+#[test]
+fn filename_only_runtime_output_uses_current_directory() {
+    let workspace = TempDir::new().expect("temporary directory");
+    fs::create_dir(workspace.path().join("assets")).expect("assets directory");
+    for asset in ["red.png", "green.png", "blue.png", "tone.wav"] {
+        fs::copy(
+            format!("examples/assets/{asset}"),
+            workspace.path().join("assets").join(asset),
+        )
+        .expect("copy asset");
+    }
+    let mut project: Value =
+        serde_json::from_slice(&fs::read("examples/projects/static-image.json").expect("project"))
+            .expect("project JSON");
+    project["assets"][0]["source"] = Value::String("assets/red.png".to_owned());
+    project["output"]["path"] = Value::String("output.mp4".to_owned());
+    fs::write(
+        workspace.path().join("project.json"),
+        serde_json::to_vec(&project).expect("project serializes"),
+    )
+    .expect("write project");
+    let result = command()
+        .current_dir(workspace.path())
+        .args([
+            "render",
+            "project.json",
+            "--output",
+            "output.mp4",
+            "--progress",
+            "none",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(workspace.path().join("output.mp4").is_file());
+}
+
+#[test]
 fn schema_is_valid_json_and_overwrite_replaces_only_on_success() {
     let _: Value =
         serde_json::from_slice(&fs::read("schemas/project-v1.schema.json").expect("read schema"))
@@ -348,6 +452,27 @@ fn decoded_frame_md5(path: &std::path::Path) -> Vec<u8> {
         ])
         .output()
         .expect("decode frames");
+    assert!(output.status.success());
+    output.stdout
+}
+
+fn decode_first_frame(path: &std::path::Path) -> Vec<u8> {
+    let output = Command::new("ffmpeg")
+        .args([
+            "-v",
+            "error",
+            "-i",
+            path.to_str().expect("UTF-8 path"),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
+        ])
+        .output()
+        .expect("decode first frame");
     assert!(output.status.success());
     output.stdout
 }

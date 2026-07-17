@@ -1,0 +1,1 @@
+{"format_version":1,"output":{"path":"output.mp4","width":320,"height":180,"frame_rate":24,"background":"#000000","quality":"balanced","audio":false,"duration_mode":"automatic"},"assets":[{"id":"same","type":"image","source":"../assets/red.png"},{"id":"same","type":"image","source":"../assets/blue.png"}],"visual":{"clips":[]}}

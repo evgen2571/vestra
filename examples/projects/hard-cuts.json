@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "name": "Multiple images with hard cuts",
+  "output": {
+    "path": "../output/hard-cuts.mp4",
+    "width": 320,
+    "height": 180,
+    "frame_rate": 24,
+    "background": "#101010",
+    "quality": "balanced",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 2
+  },
+  "assets": [
+    { "id": "red", "type": "image", "source": "../assets/red.png" },
+    { "id": "blue", "type": "image", "source": "../assets/blue.png" }
+  ],
+  "visual": {
+    "clips": [
+      { "id": "red", "asset": "red", "start": 0, "duration": 1, "layer": 0, "position": { "x": 0.5, "y": 0.5 }, "anchor": { "x": 0.5, "y": 0.5 }, "sizing": { "mode": "scale", "scale": 1 }, "opacity": 1 },
+      { "id": "blue", "asset": "blue", "start": 1, "duration": 1, "layer": 0, "position": { "x": 0.5, "y": 0.5 }, "anchor": { "x": 0.5, "y": 0.5 }, "sizing": { "mode": "fit" }, "opacity": 1 }
+    ]
+  }
+}

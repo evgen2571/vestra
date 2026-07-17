@@ -50,3 +50,29 @@ impl ActiveSchedule {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        plan::{CompileOptions, compile},
+        project::{ValidationOptions, load_and_validate},
+    };
+
+    #[test]
+    fn activates_and_deactivates_half_open_clip_intervals() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/hard-cuts.json"),
+            &ValidationOptions {
+                check_backend: false,
+            },
+        )
+        .expect("valid project");
+        let plan = compile(&validated, CompileOptions::default()).expect("plan");
+        let schedule = ActiveSchedule::compile(&plan);
+        assert_eq!(schedule.at(0).1, &[ScheduledItem::Clip(0)]);
+        assert_eq!(schedule.at(24).0, &[ScheduledItem::Clip(0)]);
+        assert_eq!(schedule.at(24).1, &[ScheduledItem::Clip(1)]);
+        assert_eq!(schedule.at(48).0, &[ScheduledItem::Clip(1)]);
+    }
+}

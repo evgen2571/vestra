@@ -196,3 +196,29 @@ fn sizing_dimensions(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        plan::{CompileOptions, compile},
+        project::{ValidationOptions, load_and_validate},
+    };
+
+    #[test]
+    fn prepares_static_clip_once() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/static-image.json"),
+            &ValidationOptions {
+                check_backend: false,
+            },
+        )
+        .expect("valid project");
+        let plan = compile(&validated, CompileOptions::default()).expect("plan");
+        let prepared = PreparedAssets::build(&plan).expect("prepared assets");
+        assert_eq!(prepared.stats().decoded_image_count, 1);
+        assert_eq!(prepared.stats().static_prepared_clip_count, 1);
+        assert_eq!(prepared.stats().static_crop_count, 1);
+        assert_eq!(prepared.stats().static_resize_count, 1);
+    }
+}

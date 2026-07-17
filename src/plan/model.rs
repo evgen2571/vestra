@@ -17,7 +17,16 @@ pub struct RenderPlan {
     pub images: Vec<ImageAsset>,
     pub clips: Vec<CompiledClip>,
     pub flashes: Vec<CompiledFlash>,
+    pub compilation: CompilationStats,
     pub warnings: Vec<crate::Diagnostic>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CompilationStats {
+    pub animation_value_parse_count: u64,
+    pub animation_sort_count: u64,
+    pub compiled_transition_association_count: u64,
+    pub parsed_colour_count: u64,
 }
 
 #[derive(Clone, Copy, Debug)]

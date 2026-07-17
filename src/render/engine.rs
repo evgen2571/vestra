@@ -93,9 +93,16 @@ pub fn render(
         options.overwrite,
     )
     .map_err(render_error)?;
-    let mut prepared = PreparedAssets::build(plan).map_err(render_error)?;
     let schedule = ActiveSchedule::compile(plan);
     let mut schedule_cursor = schedule.cursor();
+    let mut prepared = PreparedAssets::build(plan).map_err(render_error)?;
+    let mut performance = prepared.stats().clone();
+    performance.animation_value_parse_count = plan.compilation.animation_value_parse_count;
+    performance.animation_sort_count = plan.compilation.animation_sort_count;
+    performance.compiled_transition_association_count =
+        plan.compilation.compiled_transition_association_count;
+    performance.parsed_colour_count = plan.compilation.parsed_colour_count;
+    performance.schedule_event_count = schedule.event_count();
     let mut timings = RenderTimings {
         asset_decode_ms: milliseconds(prepared.timings().decode),
         asset_prepare_ms: milliseconds(prepared.timings().static_prepare),
@@ -137,6 +144,7 @@ pub fn render(
             }
             active.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
         }
+        performance.active_item_consideration_count += active.len() as u64;
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
         let compose_started = Instant::now();
         let image = compositor::compose(plan, &mut prepared, &active, time);
@@ -153,6 +161,7 @@ pub fn render(
         }
         encoder_write += write_started.elapsed();
         let completed = frame + 1;
+        performance.rendered_frame_count = completed;
         emit(RenderEvent {
             event_schema_version: 1,
             kind: "progress".to_owned(),
@@ -204,7 +213,7 @@ pub fn render(
         preview: plan.canvas.preview,
         elapsed_ms: timings.total_ms,
         timings,
-        performance: prepared.stats().clone(),
+        performance,
     })
 }
 

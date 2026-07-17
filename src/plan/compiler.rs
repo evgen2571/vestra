@@ -102,14 +102,15 @@ pub fn compile(
         .filter(|sorted| *sorted)
         .count() as u64;
         let preparation = classify(&animations);
+        let start_frame = first_frame_at_or_after(start_nanos, validated.frame_rate)?;
+        let end_frame = first_frame_at_or_after(end_nanos, validated.frame_rate)?;
         clips.push(CompiledClip {
             id: clip.id.clone(),
             asset_index,
             start_nanos,
             end_nanos,
-            start_frame: first_frame_at_or_after(start_nanos, validated.frame_rate),
-            end_frame: first_frame_at_or_after(end_nanos, validated.frame_rate)
-                .min(validated.frame_count),
+            start_frame,
+            end_frame: end_frame.min(validated.frame_count),
             layer: clip.layer,
             draw_key: DrawKey {
                 layer: clip.layer,
@@ -324,8 +325,8 @@ fn compile_flash(
         id: flash.id.clone(),
         start_nanos,
         end_nanos,
-        start_frame: first_frame_at_or_after(start_nanos, rate),
-        end_frame: first_frame_at_or_after(end_nanos, rate).min(frame_count),
+        start_frame: first_frame_at_or_after(start_nanos, rate)?,
+        end_frame: first_frame_at_or_after(end_nanos, rate)?.min(frame_count),
         layer: flash.layer,
         draw_key: DrawKey {
             layer: flash.layer,
@@ -416,13 +417,17 @@ fn to_nanos(value: f64, id: &str) -> Result<u128, Diagnostic> {
     })
 }
 
-fn first_frame_at_or_after(nanos: u128, rate: (u64, u64)) -> u64 {
+fn first_frame_at_or_after(nanos: u128, rate: (u64, u64)) -> Result<u64, Diagnostic> {
     let numerator = nanos.saturating_mul(u128::from(rate.0));
     let denominator = NANOS_PER_SECOND.saturating_mul(u128::from(rate.1));
-    numerator
-        .div_ceil(denominator)
-        .try_into()
-        .unwrap_or(u64::MAX)
+    numerator.div_ceil(denominator).try_into().map_err(|_| {
+        Diagnostic::error(
+            "MVP-PLAN-FRAME-RANGE",
+            Category::Internal,
+            "validated timeline cannot be represented as a frame index",
+            "",
+        )
+    })
 }
 
 #[must_use]
@@ -464,9 +469,15 @@ mod tests {
 
     #[test]
     fn frame_intervals_are_half_open() {
-        assert_eq!(first_frame_at_or_after(0, (24, 1)), 0);
-        assert_eq!(first_frame_at_or_after(1_000_000_000, (24, 1)), 24);
-        assert_eq!(first_frame_at_or_after(1_000_000_001, (24, 1)), 25);
+        assert_eq!(first_frame_at_or_after(0, (24, 1)).expect("frame"), 0);
+        assert_eq!(
+            first_frame_at_or_after(1_000_000_000, (24, 1)).expect("frame"),
+            24
+        );
+        assert_eq!(
+            first_frame_at_or_after(1_000_000_001, (24, 1)).expect("frame"),
+            25
+        );
     }
 
     #[test]

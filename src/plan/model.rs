@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::project::{Crop, Easing, Point};
+use crate::{
+    domain::{Crop, Easing, Point},
+    media::EncoderSettings,
+};
 
 #[derive(Clone, Debug)]
 pub struct RenderPlan {
@@ -10,11 +13,10 @@ pub struct RenderPlan {
     pub duration_nanos: u128,
     pub frame_rate: (u64, u64),
     pub frame_count: u64,
-    pub quality_crf: u8,
+    pub encoder: EncoderSettings,
     pub images: Vec<ImageAsset>,
     pub clips: Vec<CompiledClip>,
     pub flashes: Vec<CompiledFlash>,
-    pub audio: Option<CompiledAudio>,
     pub warnings: Vec<crate::Diagnostic>,
 }
 
@@ -111,17 +113,6 @@ pub struct CompiledFlash {
     pub opacity: f64,
     pub fade_in_nanos: u128,
     pub fade_out_nanos: u128,
-}
-
-#[derive(Clone, Debug)]
-pub struct CompiledAudio {
-    pub path: PathBuf,
-    pub trim_start: f64,
-    pub selected_duration: f64,
-    pub timeline_start: f64,
-    pub volume: f64,
-    pub fade_in: f64,
-    pub fade_out: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

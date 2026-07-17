@@ -10,8 +10,8 @@ use image::{RgbaImage, imageops::FilterType};
 
 use crate::{
     Category, Diagnostic,
+    domain::Crop,
     plan::{CompiledClip, CompiledSizing, PreparationClass, RenderPlan},
-    project::Crop,
 };
 
 #[derive(Clone, Debug, Default, serde::Serialize)]

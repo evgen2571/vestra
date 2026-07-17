@@ -108,9 +108,10 @@ pub fn render(
         output_path: Some(output.final_path.clone()),
         warnings: None,
     });
-    let mut encoder = FfmpegEncoder::start(plan, &output.temporary_path).map_err(|message| {
-        cleanup_error(&output, "MVP-BACKEND-START", Category::Backend, message)
-    })?;
+    let mut encoder =
+        FfmpegEncoder::start(&plan.encoder, &output.temporary_path).map_err(|message| {
+            cleanup_error(&output, "MVP-BACKEND-START", Category::Backend, message)
+        })?;
     let mut active = Vec::new();
     for frame in 0..plan.frame_count {
         if options.cancelled.load(Ordering::Relaxed) {
@@ -193,7 +194,7 @@ pub fn render(
         height: plan.canvas.height,
         duration: plan.duration,
         frame_count: plan.frame_count,
-        audio_present: plan.audio.is_some(),
+        audio_present: plan.encoder.audio.is_some(),
         preview: plan.canvas.preview,
         elapsed_ms: timings.total_ms,
         timings,

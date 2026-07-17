@@ -4,7 +4,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
 };
 
-use crate::plan::{CompiledAudio, RenderPlan};
+use crate::media::{AudioSettings, EncoderSettings};
 
 pub struct FfmpegEncoder {
     child: Child,
@@ -12,7 +12,7 @@ pub struct FfmpegEncoder {
 }
 
 impl FfmpegEncoder {
-    pub fn start(plan: &RenderPlan, output: &Path) -> Result<Self, String> {
+    pub fn start(settings: &EncoderSettings, output: &Path) -> Result<Self, String> {
         let mut command = Command::new("ffmpeg");
         command
             .args([
@@ -26,26 +26,29 @@ impl FfmpegEncoder {
                 "rgba",
                 "-video_size",
             ])
-            .arg(format!("{}x{}", plan.canvas.width, plan.canvas.height))
+            .arg(format!("{}x{}", settings.width, settings.height))
             .arg("-framerate")
-            .arg(format!("{}/{}", plan.frame_rate.0, plan.frame_rate.1))
+            .arg(format!(
+                "{}/{}",
+                settings.frame_rate.0, settings.frame_rate.1
+            ))
             .args(["-i", "pipe:0"]);
-        if let Some(audio) = &plan.audio {
-            add_audio(&mut command, audio, plan.duration);
+        if let Some(audio) = &settings.audio {
+            add_audio(&mut command, audio, settings.duration);
         } else {
             command.args(["-map", "0:v:0"]);
         }
         command.args([
             "-frames:v",
-            &plan.frame_count.to_string(),
+            &settings.frame_count.to_string(),
             "-c:v",
             "libx264",
             "-crf",
-            &plan.quality_crf.to_string(),
+            &settings.quality_crf.to_string(),
             "-pix_fmt",
             "yuv420p",
         ]);
-        if plan.audio.is_some() {
+        if settings.audio.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
         let mut child = command
@@ -97,7 +100,7 @@ impl FfmpegEncoder {
     }
 }
 
-fn add_audio(command: &mut Command, audio: &CompiledAudio, project_duration: f64) {
+fn add_audio(command: &mut Command, audio: &AudioSettings, project_duration: f64) {
     command
         .arg("-ss")
         .arg(seconds(audio.trim_start))
@@ -115,7 +118,7 @@ fn add_audio(command: &mut Command, audio: &CompiledAudio, project_duration: f64
         ]);
 }
 
-fn audio_filter(audio: &CompiledAudio, project_duration: f64) -> String {
+fn audio_filter(audio: &AudioSettings, project_duration: f64) -> String {
     let mut filters = vec![
         "[1:a]asetpts=PTS-STARTPTS".to_owned(),
         format!("volume={}", seconds(audio.volume)),

@@ -31,6 +31,8 @@ pub enum ApplicationRenderError {
     Plan {
         validated: crate::project::ValidatedProject,
         diagnostic: Diagnostic,
+        validation_elapsed_ms: u128,
+        plan_compile_elapsed_ms: u128,
     },
     Render {
         validated: crate::project::ValidatedProject,
@@ -59,6 +61,8 @@ pub fn render_project(
     .map_err(|diagnostic| ApplicationRenderError::Plan {
         validated: validated.clone(),
         diagnostic,
+        validation_elapsed_ms: validation_elapsed.as_millis(),
+        plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let compilation_elapsed = compilation_started.elapsed();
     let mut summary = render(

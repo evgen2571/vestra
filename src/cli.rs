@@ -11,16 +11,18 @@ use std::{
 use crate::{
     Category, Diagnostic,
     application::{
-        ApplicationRenderError, RenderRequest, inspect, render_project, validate_project,
+        ApplicationRenderError, RenderRequest, inspect, inspect_result, render_project,
+        render_result, validate_result, version_result,
     },
     output::{
-        ProgressFormat, ResultFormat, print_failure, print_success, write_progress, write_report,
+        ProgressFormat, ResultFormat, print_failure, print_success, write_command_failure_report,
+        write_plan_failure_report, write_progress, write_render_failure_report,
+        write_success_report,
     },
     project::LoadError,
     render::RenderEvent,
 };
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
-use serde_json::json;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -127,17 +129,21 @@ pub fn run() -> ExitCode {
             report,
         ),
         Command::Version => {
-            println!("video-editor {}", env!("CARGO_PKG_VERSION"));
+            print_success(
+                "version",
+                ResultFormat::Human,
+                version_result(),
+                &format!("video-editor {}", env!("CARGO_PKG_VERSION")),
+            );
             ExitCode::SUCCESS
         }
     }
 }
 
 fn validate_command(project: PathBuf, format: ResultFormat) -> ExitCode {
-    match validate_project(&project) {
-        Ok(validated) => {
-            let data = json!({ "project": project, "format_version": validated.project.format_version, "warnings": validated.warnings });
-            print_success("validate", format, data, "project is valid");
+    match validate_result(&project) {
+        Ok(result) => {
+            print_success("validate", format, result, "project is valid");
             ExitCode::SUCCESS
         }
         Err(LoadError::Diagnostics(errors)) => {
@@ -149,10 +155,12 @@ fn validate_command(project: PathBuf, format: ResultFormat) -> ExitCode {
 fn inspect_command(project: PathBuf, preview: bool, format: ResultFormat) -> ExitCode {
     match inspect(&project, preview) {
         Ok(inspection) => {
-            let validated = inspection.validated;
-            let audio = validated.project.audio.as_ref().filter(|track| validated.project.output.audio && !track.mute).map(|track| json!({ "asset": track.asset, "start": track.timeline_start, "end": inspection.audio_end }));
-            let data = json!({ "project": project, "format_version": validated.project.format_version, "name": validated.project.name, "output": { "path": inspection.output_path, "width": inspection.width, "height": inspection.height, "frame_rate": validated.project.output.frame_rate.display(), "duration_mode": validated.project.output.duration_mode, "duration": validated.duration, "total_frames": validated.frame_count, "preview": inspection.preview }, "assets": { "images": inspection.image_count, "audio": inspection.audio_count }, "visual_clips": validated.project.visual.clips.len(), "flashes": validated.project.visual.flashes.len(), "transitions": validated.project.visual.transitions.len(), "audio": audio, "warnings": validated.warnings });
-            print_success("inspect", format, data, "project inspection complete");
+            print_success(
+                "inspect",
+                format,
+                inspect_result(&project, inspection),
+                "project inspection complete",
+            );
             ExitCode::SUCCESS
         }
         Err(LoadError::Diagnostics(errors)) => print_failure("inspect", format, errors, Vec::new()),
@@ -187,12 +195,10 @@ fn render_command(
         &mut emit,
     ) {
         Ok((validated, summary)) => {
-            let data = json!({ "editor_version": env!("CARGO_PKG_VERSION"), "project_format_version": validated.project.format_version, "project": project, "output": summary.output_path, "width": summary.width, "height": summary.height, "frame_rate": validated.project.output.frame_rate.display(), "duration": summary.duration, "total_frames": summary.frame_count, "visual_clip_count": validated.project.visual.clips.len(), "audio_present": summary.audio_present, "preview": summary.preview, "elapsed_ms": summary.elapsed_ms, "timings": summary.timings, "performance": summary.performance, "backend": "ffmpeg", "warnings": validated.warnings });
+            let data = render_result(&project, validated, summary);
+            let warnings = data.warnings.clone();
             if let Some(path) = report.as_deref()
-                && let Err(error) = write_report(
-                    path,
-                    &json!({ "report_schema_version": 1, "status": "success", "command": "render", "result": data.clone() }),
-                )
+                && let Err(error) = write_success_report(path, "render", &data)
             {
                 return print_failure(
                     "render",
@@ -203,7 +209,7 @@ fn render_command(
                         format!("cannot write report: {error}"),
                         "",
                     )],
-                    validated.warnings,
+                    warnings,
                 );
             }
             print_success("render", format, data, "render completed");
@@ -215,13 +221,15 @@ fn render_command(
                 "project",
                 &errors,
                 began.elapsed().as_millis(),
+                Some(&project),
             ) {
-                let all_errors = vec![Diagnostic::error(
+                let mut all_errors = errors.clone();
+                all_errors.push(Diagnostic::error(
                     "MVP-REPORT-WRITE",
                     Category::Output,
                     message,
                     "",
-                )];
+                ));
                 return print_failure("render", format, all_errors, Vec::new());
             }
             print_failure("render", format, errors, Vec::new())
@@ -229,7 +237,37 @@ fn render_command(
         Err(ApplicationRenderError::Plan {
             validated,
             diagnostic,
-        }) => print_failure("render", format, vec![diagnostic], validated.warnings),
+            validation_elapsed_ms,
+            plan_compile_elapsed_ms,
+        }) => {
+            let warnings = validated.warnings.clone();
+            if let Some(path) = report.as_deref()
+                && let Err(report_error) = write_plan_failure_report(
+                    path,
+                    &project,
+                    &diagnostic,
+                    &warnings,
+                    validation_elapsed_ms,
+                    plan_compile_elapsed_ms,
+                )
+            {
+                return print_failure(
+                    "render",
+                    format,
+                    vec![
+                        diagnostic.clone(),
+                        Diagnostic::error(
+                            "MVP-REPORT-WRITE",
+                            Category::Output,
+                            format!("cannot write report: {report_error}"),
+                            "",
+                        ),
+                    ],
+                    warnings,
+                );
+            }
+            print_failure("render", format, vec![diagnostic], warnings)
+        }
         Err(ApplicationRenderError::Render { validated, error }) => {
             if matches!(
                 error.diagnostic.category,
@@ -238,31 +276,38 @@ fn render_command(
                 emit(RenderEvent {
                     event_schema_version: 1,
                     kind: "failed".to_owned(),
-                    frame: validated.frame_count,
-                    total_frames: validated.frame_count,
-                    progress: 0.99,
-                    output_path: None,
+                    frame: error.context.last_completed_frame.unwrap_or(0),
+                    total_frames: error.context.total_frames,
+                    progress: error.context.progress,
+                    output_path: error.context.output_path.clone(),
                     warnings: Some(validated.warnings.clone()),
                 });
             }
-            if let Some(path) = report.as_deref() {
-                let report = json!({ "report_schema_version": 1, "status": "failure", "command": "render", "errors": [error.diagnostic], "progress": 0.99, "temporary_removed": error.temporary_removed, "elapsed_ms": began.elapsed().as_millis() });
-                if let Err(report_error) = write_report(path, &report) {
-                    return print_failure(
-                        "render",
-                        format,
-                        vec![
-                            Diagnostic::error(
-                                "MVP-REPORT-WRITE",
-                                Category::Output,
-                                format!("cannot write report: {report_error}"),
-                                "",
-                            ),
-                            error.diagnostic,
-                        ],
-                        validated.warnings,
-                    );
-                }
+            if let Some(path) = report.as_deref()
+                && let Err(report_error) = write_render_failure_report(
+                    path,
+                    &project,
+                    &error.diagnostic,
+                    &error.context,
+                    &validated.warnings,
+                    error.temporary_removed,
+                    began.elapsed().as_millis(),
+                )
+            {
+                return print_failure(
+                    "render",
+                    format,
+                    vec![
+                        error.diagnostic,
+                        Diagnostic::error(
+                            "MVP-REPORT-WRITE",
+                            Category::Output,
+                            format!("cannot write report: {report_error}"),
+                            "",
+                        ),
+                    ],
+                    validated.warnings,
+                );
             }
             print_failure("render", format, vec![error.diagnostic], validated.warnings)
         }
@@ -274,10 +319,18 @@ fn write_failure_report(
     command: &str,
     errors: &[Diagnostic],
     elapsed_ms: u128,
+    project_path: Option<&std::path::Path>,
 ) -> Result<(), String> {
     if let Some(path) = path {
-        let report = json!({ "report_schema_version": 1, "status": "failure", "command": command, "errors": errors, "progress": 0.0, "elapsed_ms": elapsed_ms });
-        write_report(path, &report)?;
+        write_command_failure_report(
+            path,
+            command,
+            command,
+            "project_load_or_validation",
+            errors,
+            project_path,
+            elapsed_ms,
+        )?;
     }
     Ok(())
 }

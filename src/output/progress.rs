@@ -14,12 +14,15 @@ pub fn write_progress(format: ProgressFormat, event: &RenderEvent) {
             Ok(value) => println!("{value}"),
             Err(error) => eprintln!("warning: cannot serialize progress event: {error}"),
         },
-        ProgressFormat::Human => eprintln!(
-            "{}: {}/{} ({:.0}%)",
-            event.kind,
-            event.frame,
-            event.total_frames,
-            event.progress * 100.0
-        ),
+        ProgressFormat::Human => match event.progress {
+            Some(progress) => eprintln!(
+                "{}: {}/{} ({:.0}%)",
+                event.kind,
+                event.frame,
+                event.total_frames,
+                progress * 100.0
+            ),
+            None => eprintln!("{}: {}/{}", event.kind, event.frame, event.total_frames),
+        },
     }
 }

@@ -62,7 +62,8 @@ pub struct RenderEvent {
     pub kind: String,
     pub frame: u64,
     pub total_frames: u64,
-    pub progress: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_path: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,6 +74,38 @@ pub struct RenderEvent {
 pub struct RenderError {
     pub diagnostic: Diagnostic,
     pub temporary_removed: bool,
+    pub context: RenderFailureContext,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RenderFailureContext {
+    pub stage: RenderFailureStage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_completed_frame: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempted_frame: Option<u64>,
+    pub total_frames: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeline_position: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temporary_output_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderFailureStage {
+    OutputPreparation,
+    AssetPreparation,
+    EncoderStartup,
+    FrameComposition,
+    FrameWrite,
+    EncoderFinalization,
+    OutputPublication,
+    Cancellation,
 }
 
 #[allow(
@@ -92,10 +125,23 @@ pub fn render(
             .unwrap_or_else(|| plan.configured_output.clone()),
         options.overwrite,
     )
-    .map_err(render_error)?;
+    .map_err(|diagnostic| RenderError {
+        diagnostic,
+        temporary_removed: false,
+        context: RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, plan),
+    })?;
     let schedule = ActiveSchedule::compile(plan);
     let mut schedule_cursor = schedule.cursor();
-    let mut prepared = PreparedAssets::build(plan).map_err(render_error)?;
+    let mut prepared = PreparedAssets::build(plan).map_err(|diagnostic| {
+        cleanup_error(
+            &output,
+            plan,
+            RenderFailureStage::AssetPreparation,
+            None,
+            None,
+            diagnostic,
+        )
+    })?;
     let mut performance = prepared.stats().clone();
     performance.animation_value_parse_count = plan.compilation.animation_value_parse_count;
     performance.animation_sort_count = plan.compilation.animation_sort_count;
@@ -113,13 +159,20 @@ pub fn render(
         kind: "started".to_owned(),
         frame: 0,
         total_frames: plan.frame_count,
-        progress: 0.0,
+        progress: Some(0.0),
         output_path: Some(output.final_path.clone()),
         warnings: None,
     });
     let mut encoder =
         FfmpegEncoder::start(&plan.encoder, &output.temporary_path).map_err(|message| {
-            cleanup_error(&output, "MVP-BACKEND-START", Category::Backend, message)
+            cleanup_error(
+                &output,
+                plan,
+                RenderFailureStage::EncoderStartup,
+                None,
+                None,
+                Diagnostic::error("MVP-BACKEND-START", Category::Backend, message, ""),
+            )
         })?;
     let mut active = Vec::new();
     let mut frame_composition = Duration::ZERO;
@@ -129,9 +182,16 @@ pub fn render(
             encoder.cancel();
             return Err(cleanup_error(
                 &output,
-                "MVP-CANCELLED",
-                Category::Cancellation,
-                "render cancelled".to_owned(),
+                plan,
+                RenderFailureStage::Cancellation,
+                completed_frame(frame),
+                Some(frame),
+                Diagnostic::error(
+                    "MVP-CANCELLED",
+                    Category::Cancellation,
+                    "render cancelled",
+                    "",
+                ),
             ));
         }
         let events = schedule_cursor.events_at(frame);
@@ -154,31 +214,37 @@ pub fn render(
             encoder.cancel();
             return Err(cleanup_error(
                 &output,
-                "MVP-RENDER-WRITE",
-                Category::Render,
-                message,
+                plan,
+                RenderFailureStage::FrameWrite,
+                completed_frame(frame),
+                Some(frame),
+                Diagnostic::error("MVP-RENDER-WRITE", Category::Render, message, ""),
             ));
         }
         encoder_write += write_started.elapsed();
         let completed = frame + 1;
         performance.rendered_frame_count = completed;
-        emit(RenderEvent {
-            event_schema_version: 1,
-            kind: "progress".to_owned(),
-            frame: completed,
-            total_frames: plan.frame_count,
-            progress: (completed as f64 / plan.frame_count as f64 * 0.99).min(0.99),
-            output_path: None,
-            warnings: None,
-        });
+        if completed < plan.frame_count {
+            emit(RenderEvent {
+                event_schema_version: 1,
+                kind: "progress".to_owned(),
+                frame: completed,
+                total_frames: plan.frame_count,
+                progress: Some(completed as f64 / plan.frame_count as f64),
+                output_path: None,
+                warnings: None,
+            });
+        }
     }
     let finish_started = Instant::now();
     if let Err(message) = encoder.finish() {
         return Err(cleanup_error(
             &output,
-            "MVP-ENCODE",
-            Category::Render,
-            message,
+            plan,
+            RenderFailureStage::EncoderFinalization,
+            Some(plan.frame_count),
+            None,
+            Diagnostic::error("MVP-ENCODE", Category::Render, message, ""),
         ));
     }
     timings.encoder_finalize_ms = milliseconds(finish_started.elapsed());
@@ -188,6 +254,13 @@ pub fn render(
         RenderError {
             diagnostic,
             temporary_removed: removed,
+            context: RenderFailureContext::at_output(
+                RenderFailureStage::OutputPublication,
+                plan,
+                Some(plan.frame_count),
+                None,
+                &output,
+            ),
         }
     })?;
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
@@ -199,7 +272,7 @@ pub fn render(
         kind: "completed".to_owned(),
         frame: plan.frame_count,
         total_frames: plan.frame_count,
-        progress: 1.0,
+        progress: Some(1.0),
         output_path: Some(output.final_path.clone()),
         warnings: Some(plan.warnings.clone()),
     });
@@ -236,32 +309,93 @@ fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
         ScheduledItem::Flash(index) => &plan.flashes[index].draw_key,
     }
 }
-fn render_error(diagnostic: Diagnostic) -> RenderError {
-    RenderError {
-        diagnostic,
-        temporary_removed: false,
-    }
-}
 fn cleanup_error(
     output: &OutputTarget,
-    code: &str,
-    category: Category,
-    message: String,
+    plan: &RenderPlan,
+    stage: RenderFailureStage,
+    last_completed_frame: Option<u64>,
+    attempted_frame: Option<u64>,
+    diagnostic: Diagnostic,
 ) -> RenderError {
     RenderError {
-        diagnostic: Diagnostic::error(code, category, message, ""),
+        diagnostic,
         temporary_removed: output.cleanup(),
+        context: RenderFailureContext::at_output(
+            stage,
+            plan,
+            last_completed_frame,
+            attempted_frame,
+            output,
+        ),
+    }
+}
+
+const fn completed_frame(attempted_frame: u64) -> Option<u64> {
+    attempted_frame.checked_sub(1)
+}
+
+impl RenderFailureContext {
+    fn before_render(stage: RenderFailureStage, plan: &RenderPlan) -> Self {
+        Self {
+            stage,
+            last_completed_frame: None,
+            attempted_frame: None,
+            total_frames: plan.frame_count,
+            timeline_position: None,
+            progress: Some(0.0),
+            output_path: None,
+            temporary_output_path: None,
+        }
+    }
+
+    fn at_output(
+        stage: RenderFailureStage,
+        plan: &RenderPlan,
+        last_completed_frame: Option<u64>,
+        attempted_frame: Option<u64>,
+        output: &OutputTarget,
+    ) -> Self {
+        let progress = last_completed_frame.and_then(|completed| {
+            (completed < plan.frame_count).then(|| completed as f64 / plan.frame_count as f64)
+        });
+        Self {
+            stage,
+            last_completed_frame,
+            attempted_frame,
+            total_frames: plan.frame_count,
+            timeline_position: attempted_frame
+                .map(|frame| frame as f64 * plan.frame_rate.1 as f64 / plan.frame_rate.0 as f64),
+            progress,
+            output_path: Some(output.final_path.clone()),
+            temporary_output_path: Some(output.temporary_path.clone()),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::milliseconds;
+    use super::{RenderFailureContext, RenderFailureStage, milliseconds};
     use std::time::Duration;
 
     #[test]
     fn timing_converts_after_submillisecond_samples_accumulate() {
         let accumulated = Duration::from_micros(800) * 100;
         assert_eq!(milliseconds(accumulated), 80);
+    }
+
+    #[test]
+    fn completed_frame_failure_has_no_false_success_progress() {
+        let context = RenderFailureContext {
+            stage: RenderFailureStage::EncoderFinalization,
+            last_completed_frame: Some(24),
+            attempted_frame: None,
+            total_frames: 24,
+            timeline_position: None,
+            progress: None,
+            output_path: None,
+            temporary_output_path: None,
+        };
+        assert_eq!(context.last_completed_frame, Some(context.total_frames));
+        assert_eq!(context.progress, None);
     }
 }

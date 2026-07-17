@@ -109,6 +109,30 @@ sorting, and scheduled-item consideration. These prove the structural changes
 without brittle time limits. The same representative projects will be decoded
 and compared to the baseline hashes above.
 
+## Final measurements
+
+The final measurements were collected on the same machine after the migration.
+`total_ms` below is the renderer timing from the report, not the outer `cargo
+run` time. Millisecond fields can read zero for very small stages.
+
+| Project | Final renderer time | Decode | Static preparation | Composition | FFmpeg write/finalize | Structural evidence |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `static-image.json` | 198 ms | 1 ms | 0 ms | 100 ms | 61 / 12 ms | 1 decode, 1 static crop, 1 static resize |
+| `hard-cuts.json` | 506 ms | 58 ms | 0 ms | 338 ms | 59 / 12 ms | 2 decodes, 2 static crops, 2 static resizes |
+| `showcase.json` | 3044 ms | 72 ms | 0 ms | 2830 ms | 68 / 19 ms | 3 decodes, 2 static preparations, 28 dynamic misses, 7 hits, peak 28 entries |
+
+All three final decoded-frame hashes match the baseline exactly. This is the
+strong compatibility check. The wall-clock comparison is intentionally not a
+claim of speedup because the old baseline included `cargo run` overhead and
+host load varies. The operation counters establish the avoided work: static
+clips crop and resize once, images decode once, animated bitmaps use a bounded
+128-entry cache, and the active schedule admits only current timeline items.
+
+Composition remains the dominant stage for the animated showcase. The next
+useful performance step is profile-guided work on dynamic Lanczos resizing,
+then a carefully bounded ordered composition/encoder queue if measurements
+justify it.
+
 ## Non-goals and future work
 
 This change adds no effects, formats, video inputs, extra audio tracks,

@@ -360,6 +360,101 @@ fn showcase_preview_matches_the_normalized_decoded_frame_fixture() {
 }
 
 #[test]
+fn preview_downscales_portrait_output_without_changing_timeline_data() {
+    let workspace = fixture_workspace();
+    let project = workspace.path().join("projects/portrait-showcase.json");
+    let mut value: Value = serde_json::from_slice(
+        &fs::read(workspace.path().join("projects/showcase.json")).expect("project"),
+    )
+    .expect("project JSON");
+    value["output"]["width"] = Value::from(1080);
+    value["output"]["height"] = Value::from(1920);
+    fs::write(
+        &project,
+        serde_json::to_vec(&value).expect("project serializes"),
+    )
+    .expect("write project");
+
+    let inspect = |preview: bool| {
+        let mut command = command();
+        command
+            .arg("inspect")
+            .arg(&project)
+            .args(["--format", "json"]);
+        if preview {
+            command.arg("--preview");
+        }
+        let result = command.output().expect("inspect runs");
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        serde_json::from_slice::<Value>(&result.stdout).expect("inspect JSON")
+    };
+    let full = inspect(false);
+    let preview = inspect(true);
+    assert_eq!(full["output"]["width"], 1080);
+    assert_eq!(full["output"]["height"], 1920);
+    assert_eq!(preview["output"]["width"], 360);
+    assert_eq!(preview["output"]["height"], 640);
+    for field in ["frame_rate", "total_frames", "duration"] {
+        assert_eq!(preview["output"][field], full["output"][field], "{field}");
+    }
+    assert_eq!(preview["visual_clips"], full["visual_clips"]);
+    assert_eq!(preview["transitions"], full["transitions"]);
+
+    let output = workspace.path().join("portrait-preview.mp4");
+    let render = command()
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--preview",
+            "--progress",
+            "none",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("preview render runs");
+    assert!(
+        render.status.success(),
+        "{}",
+        String::from_utf8_lossy(&render.stderr)
+    );
+    let render: Value = serde_json::from_slice(&render.stdout).expect("render JSON");
+    assert_eq!(render["width"], 360);
+    assert_eq!(render["height"], 640);
+    assert_eq!(render["frame_rate"], full["output"]["frame_rate"]);
+    assert_eq!(render["total_frames"], full["output"]["total_frames"]);
+    assert_eq!(render["duration"], full["output"]["duration"]);
+
+    let probe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,r_frame_rate,nb_frames:format=duration",
+            "-of",
+            "json",
+        ])
+        .arg(&output)
+        .output()
+        .expect("ffprobe runs");
+    assert!(probe.status.success());
+    let probe: Value = serde_json::from_slice(&probe.stdout).expect("probe JSON");
+    let stream = &probe["streams"][0];
+    assert_eq!(stream["width"], 360);
+    assert_eq!(stream["height"], 640);
+    assert_eq!(stream["r_frame_rate"], "24/1");
+    assert_eq!(stream["nb_frames"], "80");
+}
+
+#[test]
 fn invisible_clip_does_not_affect_decoded_frame_or_preparation() {
     let workspace = fixture_workspace();
     let project = workspace.path().join("projects/hidden-layer.json");

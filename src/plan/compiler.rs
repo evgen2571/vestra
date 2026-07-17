@@ -513,4 +513,98 @@ mod tests {
         assert!(plan.clips.is_empty());
         assert!(plan.images.is_empty());
     }
+
+    #[test]
+    fn preview_only_changes_canvas_dimensions() {
+        let mut validated = load_and_validate(
+            std::path::Path::new("examples/projects/showcase.json"),
+            &ValidationOptions {
+                check_backend: false,
+            },
+        )
+        .expect("valid project");
+        validated.project.output.width = 1080;
+        validated.project.output.height = 1920;
+        let full = compile(&validated, CompileOptions::default()).expect("full plan");
+        let preview = compile(&validated, CompileOptions { preview: true }).expect("preview plan");
+
+        assert_eq!((full.canvas.width, full.canvas.height), (1080, 1920));
+        assert_eq!((preview.canvas.width, preview.canvas.height), (360, 640));
+        assert_eq!(preview.frame_rate, full.frame_rate);
+        assert_eq!(preview.frame_count, full.frame_count);
+        assert_eq!(preview.duration, full.duration);
+        assert_eq!(preview.clips.len(), full.clips.len());
+        assert_eq!(preview.flashes.len(), full.flashes.len());
+        for (preview_clip, full_clip) in preview.clips.iter().zip(&full.clips) {
+            assert_eq!(preview_clip.start_frame, full_clip.start_frame);
+            assert_eq!(preview_clip.end_frame, full_clip.end_frame);
+            assert_eq!(preview_clip.start_nanos, full_clip.start_nanos);
+            assert_eq!(preview_clip.transitions.len(), full_clip.transitions.len());
+            for (preview_transition, full_transition) in
+                preview_clip.transitions.iter().zip(&full_clip.transitions)
+            {
+                assert_eq!(
+                    preview_transition.curve().start_nanos,
+                    full_transition.curve().start_nanos
+                );
+                assert_eq!(
+                    preview_transition.curve().end_nanos,
+                    full_transition.curve().end_nanos
+                );
+            }
+            let preview_animation_times = [
+                preview_clip
+                    .animations
+                    .position
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+                preview_clip
+                    .animations
+                    .scale
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+                preview_clip
+                    .animations
+                    .opacity
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+                preview_clip
+                    .animations
+                    .crop
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+            ];
+            let full_animation_times = [
+                full_clip
+                    .animations
+                    .position
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+                full_clip
+                    .animations
+                    .scale
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+                full_clip
+                    .animations
+                    .opacity
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+                full_clip
+                    .animations
+                    .crop
+                    .iter()
+                    .map(|curve| (curve.start_nanos, curve.end_nanos))
+                    .collect::<Vec<_>>(),
+            ];
+            assert_eq!(preview_animation_times, full_animation_times);
+        }
+    }
 }

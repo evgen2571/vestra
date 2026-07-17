@@ -211,6 +211,50 @@ fn schema_is_valid_json_and_overwrite_replaces_only_on_success() {
     assert!(String::from_utf8_lossy(&probe.stdout).contains("mov"));
 }
 
+#[cfg(unix)]
+#[test]
+fn failed_backend_cleans_temporary_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workspace = fixture_workspace();
+    let bin = workspace.path().join("bin");
+    fs::create_dir(&bin).expect("backend directory");
+    let failing_ffmpeg = bin.join("ffmpeg");
+    fs::write(
+        &failing_ffmpeg,
+        "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then exit 0; fi\nexit 1\n",
+    )
+    .expect("write failing backend");
+    fs::set_permissions(&failing_ffmpeg, fs::Permissions::from_mode(0o755))
+        .expect("make backend executable");
+    let output = workspace.path().join("failed.mp4");
+    let project = workspace.path().join("projects/static-image.json");
+    let inherited_path = std::env::var("PATH").expect("PATH is set");
+    let result = command()
+        .env("PATH", format!("{}:{inherited_path}", bin.display()))
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "none",
+        ])
+        .output()
+        .expect("render runs");
+    assert_eq!(result.status.code(), Some(5));
+    assert!(!output.exists());
+    assert!(
+        fs::read_dir(workspace.path())
+            .expect("read temporary directory")
+            .all(|entry| !entry
+                .expect("directory entry")
+                .file_name()
+                .to_string_lossy()
+                .contains(".tmp.mp4"))
+    );
+}
+
 fn fixture_workspace() -> TempDir {
     let directory = TempDir::new().expect("temporary directory");
     fs::create_dir_all(directory.path().join("assets")).expect("asset directory");

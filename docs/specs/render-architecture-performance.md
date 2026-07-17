@@ -51,11 +51,11 @@ FFmpeg 7.1.5, and a debug `cargo run -- render` invocation. The elapsed figure
 includes compilation/process startup, project loading, composition, and
 encoding, so it is useful for comparison but not a benchmark.
 
-| Project | Input images | Clips, animated clips | Output | Frames | Decoded frame SHA-256 | Total elapsed |
+| Project | Input images | Clips, animated clips | Output | Frames | Normalized decoded frame SHA-256 | Total elapsed |
 | --- | --- | --- | --- | ---: | --- | ---: |
-| `static-image.json` | 320x180 | 1, 0 | 320x180, 24/1 | 24 | `a42b131016c921e35e0a882ed4253c294ec422c45151d126467e5b79680199eb` | 436 ms |
-| `hard-cuts.json` | 320x180 | 2, 0 | 320x180, 24/1 | 48 | `989edadfcc09021aed5633beb2364ef096766086c7cd7957f7eb397c23339585` | 1934 ms |
-| `showcase.json` | 320x180 | 3, 3 | 320x180, 24/1 | 80 | `0fbc36457d1c9aba47377627d7718d37d55ac3dc51f1806055f87109ba5e9e3a` | 6323 ms |
+| `static-image.json` | 320x180 | 1, 0 | 320x180, 24/1 | 24 | `fc7569a6e6fee60f72ef9a75b7d105e9bd88d701a1bdb80cfea0dba13e35c68f` | 436 ms |
+| `hard-cuts.json` | 320x180 | 2, 0 | 320x180, 24/1 | 48 | `9e5c8ac6690da827a1df6c693a91208e4216591c701aec3250ae2add59df20ce` | 1934 ms |
+| `showcase.json` | 320x180 | 3, 3 | 320x180, 24/1 | 80 | `121e830d20142bc3f6441b930a31cd63c29f028ffc3e94d82a8b7c7eab438237` | 6323 ms |
 
 The old renderer does not expose per-stage timings. Image decoding happens
 before the frame loop, and crop, resize, animation sorting and JSON decoding
@@ -142,11 +142,56 @@ publication, and decoded-frame equivalence for all supplied projects.
 ## Golden decoded frames
 
 Integration tests render the supplied static-image, hard-cuts, and showcase
-projects, decode their video streams as RGBA with `ffmpeg -f framemd5`, and
-compare a SHA-256 hash of that decoded manifest. MP4 bytes are not compared
-because muxer metadata can change without changing pixels. The expected hashes
-are source code fixtures. Update them only after reviewing a deliberate visual
-change with a known-good renderer, then run the full integration suite.
+projects, decode their video streams as RGBA with `ffmpeg -map 0:v:0 -pix_fmt
+rgba -f framemd5 -`, discard every `#` comment line, canonicalize each remaining
+six-field frame record as comma-separated LF-terminated text, and compare the
+SHA-256 hash of those bytes. MP4 bytes and FFmpeg/Lavf header versions are not
+compared because neither identifies decoded pixels. The expected hashes live in
+`tests/cli.rs`, which is the fixture source of truth.
+
+The suite checks static-image, hard-cuts, showcase, preview, and hidden-clip
+paths. The preview fixture uses the showcase hash because its canvas is already
+below the preview size bound. The hidden-clip fixture uses the static-image hash
+because invisible clips never enter preparation or composition.
+
+Golden fixtures never update during ordinary tests. To update one, render the
+project deliberately, run its golden test to print the normalized value, inspect
+frames before accepting the change, then update the constant and this document.
+The command uses the exact FFmpeg arguments above and hashes the complete frame
+sequence. Update a hash only for a reviewed visual correction or an intentional
+fixture change.
+
+## Final stabilization guarantees
+
+Each compiled clip owns a start-sorted transition opacity envelope. An incoming
+segment holds opacity at zero before its start and reaches one at its end. An
+outgoing segment starts at one and reaches zero at its end. Between sequential
+segments the previous endpoint remains in force, so a fade-in followed by a
+later fade-out stays fully visible in the middle. Clip animation opacity and
+transition opacity multiply, then the compositor clamps the result to zero
+through one.
+
+The portable normalized RGBA hashes are `static-image`
+`fc7569a6e6fee60f72ef9a75b7d105e9bd88d701a1bdb80cfea0dba13e35c68f`,
+`hard-cuts` `9e5c8ac6690da827a1df6c693a91208e4216591c701aec3250ae2add59df20ce`,
+and `showcase` `121e830d20142bc3f6441b930a31cd63c29f028ffc3e94d82a8b7c7eab438237`.
+These intentionally differ from the older manifest hashes because comments are
+no longer included. The showcase value also reflects correct evaluation of its
+later transition.
+
+Commands follow a typed path: Clap parses arguments, application services build
+serializable command results, and output modules present human text, JSON
+envelopes, progress lines, and reports. The CLI does not assemble application
+JSON or report documents. Validated projects and compiled render plans expose
+no public mutable invariant fields. Validation and compilation remain the only
+normal construction paths.
+
+Render failures retain the stage, completed and attempted frame numbers, total
+frames, timeline position where applicable, output paths, and cleanup result.
+Reports carry that context instead of assigning a guessed completion value.
+Requested reports cover project, plan, rendering, cancellation, and output
+failures. If report writing fails, output keeps the original diagnostic and
+adds the report-write diagnostic.
 
 ## Git and Syncthing
 
@@ -156,13 +201,17 @@ synchronization is unavoidable. If Syncthing leaves `index.sync-conflict-*`
 copies behind, confirm `.git/index` is readable with `git status` and
 `git fsck --full`, remove only those named copies, then repeat both checks.
 
+Share source-only snapshots with `git archive --format=tar HEAD | gzip >
+video-editor-source.tar.gz`. `git archive` reads tracked files, so ignored
+render outputs, local reports, and benchmark products never enter the archive.
+
 ## Completion criteria
 
 The final report will include stage timings and stable counters for decoded
 images, static preparations, dynamic cache activity, animation parsing and
 sorting, and scheduled-item consideration. These prove the structural changes
 without brittle time limits. The same representative projects will be decoded
-and compared to the baseline hashes above.
+and compared to the normalized fixture hashes above.
 
 ## Final measurements
 
@@ -176,12 +225,14 @@ run` time. Millisecond fields can read zero for very small stages.
 | `hard-cuts.json` | 505 ms | 2 ms | 52 ms | 341 ms | 60 / 12 ms | 2 decodes, 2 static crops, 2 static resizes |
 | `showcase.json` | 3034 ms | 4 ms | 69 ms | 2827 ms | 70 / 17 ms | 3 decodes, 2 static preparations, 28 dynamic misses, 7 hits, peak 28 entries |
 
-All three final decoded-frame hashes match the baseline exactly. This is the
-strong compatibility check. The wall-clock comparison is intentionally not a
-claim of speedup because the old baseline included `cargo run` overhead and
-host load varies. The operation counters establish the avoided work: static
-clips crop and resize once, images decode once, animated bitmaps use a bounded
-128-entry cache, and the active schedule admits only current timeline items.
+The initial final hashes matched the pre-stabilization renderer. The current
+fixtures use normalized `framemd5` records instead, so their values are listed
+in the golden-hash section above and are portable across FFmpeg header changes.
+The wall-clock comparison is intentionally not a claim of speedup because the
+old baseline included `cargo run` overhead and host load varies. The operation
+counters establish the avoided work: static clips crop and resize once, images
+decode once, animated bitmaps use a bounded 128-entry cache, and the active
+schedule admits only current timeline items.
 
 Composition remains the dominant stage for the animated showcase. The next
 useful performance step is profile-guided work on dynamic Lanczos resizing,

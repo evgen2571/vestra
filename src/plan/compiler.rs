@@ -350,7 +350,9 @@ fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, 
     {
         return Ok(None);
     }
-    let audio = validated.project.audio.as_ref().expect("checked above");
+    let Some(audio) = validated.project.audio.as_ref() else {
+        return Ok(None);
+    };
     let source_duration = validated.audio_durations.get(&audio.asset).ok_or_else(|| {
         Diagnostic::error(
             "MVP-PLAN-AUDIO",

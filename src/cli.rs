@@ -218,7 +218,9 @@ fn render_command(
         Err(ApplicationRenderError::Project(errors)) => {
             if let Err(message) = write_failure_report(
                 report.as_deref(),
+                "render",
                 "project",
+                "project_load_or_validation",
                 &errors,
                 began.elapsed().as_millis(),
                 Some(&project),
@@ -276,7 +278,7 @@ fn render_command(
                 emit(RenderEvent {
                     event_schema_version: 1,
                     kind: "failed".to_owned(),
-                    frame: error.context.last_completed_frame.unwrap_or(0),
+                    frame: error.context.completed_frames,
                     total_frames: error.context.total_frames,
                     progress: error.context.progress,
                     output_path: error.context.output_path.clone(),
@@ -317,6 +319,8 @@ fn render_command(
 fn write_failure_report(
     path: Option<&std::path::Path>,
     command: &str,
+    category: &str,
+    stage: &str,
     errors: &[Diagnostic],
     elapsed_ms: u128,
     project_path: Option<&std::path::Path>,
@@ -325,8 +329,8 @@ fn write_failure_report(
         write_command_failure_report(
             path,
             command,
-            command,
-            "project_load_or_validation",
+            category,
+            stage,
             errors,
             project_path,
             elapsed_ms,

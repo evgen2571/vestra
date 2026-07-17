@@ -106,6 +106,7 @@ fn invalid_render_writes_a_project_failure_report() {
     let report: Value =
         serde_json::from_slice(&fs::read(report).expect("read report")).expect("report JSON");
     assert_eq!(report["status"], "failure");
+    assert_eq!(report["command"], "render");
     assert_eq!(report["failure_category"], "project");
     assert_eq!(report["failure_stage"], "project_load_or_validation");
     assert!(report["project_path"].is_string());

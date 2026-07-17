@@ -2,6 +2,8 @@ use crate::{Category, Diagnostic, timeline::seconds_to_nanos};
 
 use crate::project::{DurationMode, Output, Project, parse_colour};
 
+pub(super) mod assets;
+
 pub(super) fn output(output: &Output, errors: &mut Vec<Diagnostic>) {
     if output.path.trim().is_empty() {
         errors.push(Diagnostic::error(

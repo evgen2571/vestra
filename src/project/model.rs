@@ -322,82 +322,13 @@ pub(crate) fn validate(
         }
     };
     let root = project_path.parent().unwrap_or_else(|| Path::new("."));
-    let mut asset_paths = BTreeMap::new();
-    let mut asset_kinds = BTreeMap::new();
-    let mut asset_ids = BTreeSet::new();
-    let mut audio_durations = BTreeMap::new();
-    for (index, asset) in project.assets.iter().enumerate() {
-        let pointer = format!("/assets/{index}");
-        if asset.id.trim().is_empty() {
-            errors.push(Diagnostic::error(
-                "MVP-ASSET-ID",
-                Category::Semantic,
-                "asset id must not be empty",
-                format!("{pointer}/id"),
-            ));
-        }
-        if !asset_ids.insert(asset.id.clone()) {
-            errors.push(
-                Diagnostic::error(
-                    "MVP-ASSET-DUPLICATE",
-                    Category::Semantic,
-                    format!("duplicate asset id '{}'", asset.id),
-                    format!("{pointer}/id"),
-                )
-                .with_related_id(&asset.id),
-            );
-        }
-        match super::paths::resolve_regular_file(root, &asset.source) {
-            Ok(resolved) => {
-                match asset.kind {
-                    AssetType::Image => {
-                        if let Err(error) = image::image_dimensions(&resolved) {
-                            errors.push(
-                                Diagnostic::error(
-                                    "MVP-ASSET-IMAGE",
-                                    Category::Media,
-                                    format!("invalid image asset '{}': {error}", asset.id),
-                                    format!("{pointer}/source"),
-                                )
-                                .with_related_id(&asset.id),
-                            );
-                        }
-                    }
-                    AssetType::Audio => match media::probe_audio_duration(&resolved) {
-                        Ok(duration) => {
-                            audio_durations.insert(asset.id.clone(), duration);
-                        }
-                        Err(error) => errors.push(
-                            Diagnostic::error(
-                                "MVP-ASSET-AUDIO",
-                                Category::Media,
-                                format!("invalid audio asset '{}': {error}", asset.id),
-                                format!("{pointer}/source"),
-                            )
-                            .with_related_id(&asset.id),
-                        ),
-                    },
-                }
-                asset_paths.insert(asset.id.clone(), resolved);
-            }
-            Err(error) => errors.push(
-                Diagnostic::error(
-                    "MVP-ASSET-PATH",
-                    Category::Asset,
-                    error,
-                    format!("{pointer}/source"),
-                )
-                .with_related_id(&asset.id),
-            ),
-        }
-        asset_kinds.insert(asset.id.clone(), asset.kind);
-    }
+    let assets = validation::assets::validate(&project.assets, root, &mut errors);
     let mut clip_ids = BTreeSet::new();
     for (index, clip) in project.visual.clips.iter().enumerate() {
         validate_clip(
             clip,
             index,
-            &asset_kinds,
+            &assets.kinds,
             &mut clip_ids,
             &mut errors,
             &mut warnings,
@@ -415,8 +346,8 @@ pub(crate) fn validate(
     let audio_end = validate_audio(
         project.audio.as_ref(),
         project.output.audio,
-        &asset_kinds,
-        &audio_durations,
+        &assets.kinds,
+        &assets.audio_durations,
         &mut errors,
     );
     let duration =
@@ -456,8 +387,8 @@ pub(crate) fn validate(
         Ok(ValidatedProject {
             project,
             project_path: project_path.to_path_buf(),
-            asset_paths,
-            audio_durations,
+            asset_paths: assets.paths,
+            audio_durations: assets.audio_durations,
             duration,
             duration_nanos,
             frame_rate,

@@ -4,6 +4,7 @@
 )]
 
 use std::collections::{BTreeMap, VecDeque};
+use std::time::{Duration, Instant};
 
 use image::{RgbaImage, imageops::FilterType};
 
@@ -25,12 +26,19 @@ pub struct PreparationStats {
     pub peak_cache_entries: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PreparationTimings {
+    pub decode: Duration,
+    pub static_prepare: Duration,
+}
+
 pub struct PreparedAssets {
     decoded: Vec<RgbaImage>,
     static_clips: Vec<Option<RgbaImage>>,
     dynamic_cache: BTreeMap<BitmapKey, RgbaImage>,
     cache_order: VecDeque<BitmapKey>,
     stats: PreparationStats,
+    timings: PreparationTimings,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -46,6 +54,7 @@ struct BitmapKey {
 
 impl PreparedAssets {
     pub fn build(plan: &RenderPlan) -> Result<Self, Diagnostic> {
+        let decode_started = Instant::now();
         let mut decoded = Vec::with_capacity(plan.images.len());
         for image_asset in &plan.images {
             let image = image::open(&image_asset.path).map_err(|error| {
@@ -58,12 +67,18 @@ impl PreparedAssets {
             })?;
             decoded.push(image.to_rgba8());
         }
+        let decode = decode_started.elapsed();
+        let prepare_started = Instant::now();
         let mut prepared = Self {
             static_clips: vec![None; plan.clips.len()],
             decoded,
             dynamic_cache: BTreeMap::new(),
             cache_order: VecDeque::new(),
             stats: PreparationStats::default(),
+            timings: PreparationTimings {
+                decode,
+                static_prepare: Duration::ZERO,
+            },
         };
         prepared.stats.decoded_image_count = prepared.decoded.len();
         for (index, clip) in plan.clips.iter().enumerate() {
@@ -86,6 +101,7 @@ impl PreparedAssets {
                 prepared.stats.dynamic_clip_count += 1;
             }
         }
+        prepared.timings.static_prepare = prepare_started.elapsed();
         Ok(prepared)
     }
 
@@ -140,6 +156,11 @@ impl PreparedAssets {
     #[must_use]
     pub fn stats(&self) -> &PreparationStats {
         &self.stats
+    }
+
+    #[must_use]
+    pub fn timings(&self) -> PreparationTimings {
+        self.timings
     }
 }
 

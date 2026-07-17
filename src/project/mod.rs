@@ -3,6 +3,8 @@
 mod loader;
 mod model;
 mod paths;
+mod validated;
 
 pub use loader::load_and_validate;
 pub use model::*;
+pub use validated::{LoadError, ValidatedProject, ValidationOptions};

@@ -1,9 +1,98 @@
-use crate::{Category, Diagnostic, timeline::seconds_to_nanos};
+use std::{collections::BTreeSet, path::Path};
 
-use crate::project::{DurationMode, Output, Project, parse_colour};
+use crate::{
+    Category, Diagnostic, media,
+    timeline::{frame_count, seconds_to_nanos},
+};
+
+use crate::project::{
+    DurationMode, LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
+};
 
 pub(super) mod assets;
 pub(super) mod audio;
+pub(super) mod visual;
+
+pub(crate) fn validate(
+    project: Project,
+    path: &Path,
+    options: &ValidationOptions,
+) -> Result<ValidatedProject, LoadError> {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    output(&project.output, &mut errors);
+    let frame_rate = match project.output.frame_rate.rational() {
+        Ok(rate) => rate,
+        Err(message) => {
+            errors.push(Diagnostic::error(
+                "MVP-OUTPUT-FPS",
+                Category::Semantic,
+                message,
+                "/output/frame_rate",
+            ));
+            (1, 1)
+        }
+    };
+    let root = path.parent().unwrap_or_else(|| Path::new("."));
+    let assets = assets::validate(&project.assets, root, &mut errors);
+    visual::validate(&project, &assets.kinds, &mut errors, &mut warnings);
+    let audio_end = audio::validate(
+        project.audio.as_ref(),
+        project.output.audio,
+        &assets.kinds,
+        &assets.audio_durations,
+        &mut errors,
+    );
+    let duration = duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+    let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
+    add_unused_asset_warnings(&project, &mut warnings);
+    if options.check_backend
+        && let Err(message) = media::backend_available()
+    {
+        errors.push(Diagnostic::error(
+            "MVP-BACKEND-UNAVAILABLE",
+            Category::Backend,
+            message,
+            "",
+        ));
+    }
+    if errors.is_empty() {
+        Ok(ValidatedProject {
+            project,
+            project_path: path.to_path_buf(),
+            asset_paths: assets.paths,
+            audio_durations: assets.audio_durations,
+            duration,
+            frame_rate,
+            frame_count: total_frames,
+            warnings,
+        })
+    } else {
+        Err(LoadError::Diagnostics(errors))
+    }
+}
+
+fn add_unused_asset_warnings(project: &Project, warnings: &mut Vec<Diagnostic>) {
+    let used_assets: BTreeSet<&str> = project
+        .visual
+        .clips
+        .iter()
+        .map(|clip| clip.asset.as_str())
+        .chain(project.audio.iter().map(|track| track.asset.as_str()))
+        .collect();
+    for (index, asset) in project.assets.iter().enumerate() {
+        if !used_assets.contains(asset.id.as_str()) {
+            warnings.push(
+                Diagnostic::warning(
+                    "MVP-ASSET-UNUSED",
+                    format!("asset '{}' is never used", asset.id),
+                    format!("/assets/{index}"),
+                )
+                .with_related_id(&asset.id),
+            );
+        }
+    }
+}
 
 pub(super) fn output(output: &Output, errors: &mut Vec<Diagnostic>) {
     if output.path.trim().is_empty() {

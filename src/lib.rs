@@ -2,6 +2,7 @@
 
 pub mod diagnostic;
 pub mod media;
+pub mod output;
 pub mod plan;
 pub mod project;
 pub mod render;

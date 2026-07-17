@@ -4,6 +4,7 @@ use crate::project::{Crop, Easing, Point};
 
 #[derive(Clone, Debug)]
 pub struct RenderPlan {
+    pub configured_output: PathBuf,
     pub canvas: Canvas,
     pub duration: f64,
     pub duration_nanos: u128,

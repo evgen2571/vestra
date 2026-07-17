@@ -1,5 +1,8 @@
 //! Rendering from a compiled plan.
 
-mod legacy;
+mod animation;
+mod compositor;
+mod engine;
+mod prepared;
 
-pub use legacy::*;
+pub use engine::{RenderError, RenderEvent, RenderOptions, RenderSummary, RenderTimings, render};

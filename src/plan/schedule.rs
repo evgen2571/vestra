@@ -1,33 +1,33 @@
 use crate::plan::{RenderPlan, ScheduledItem};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ScheduleAction {
+pub(crate) enum ScheduleAction {
     Deactivate,
     Activate,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScheduleEvent {
-    pub frame: u64,
-    pub action: ScheduleAction,
-    pub item: ScheduledItem,
+pub(crate) struct ScheduleEvent {
+    pub(crate) frame: u64,
+    pub(crate) action: ScheduleAction,
+    pub(crate) item: ScheduledItem,
 }
 
 /// Compact timeline events. At the same frame, deactivation comes before
 /// activation so `[start, end)` intervals remain half-open.
 #[derive(Clone, Debug)]
-pub struct ActiveSchedule {
+pub(crate) struct ActiveSchedule {
     events: Vec<ScheduleEvent>,
 }
 
-pub struct ScheduleCursor<'schedule> {
+pub(crate) struct ScheduleCursor<'schedule> {
     schedule: &'schedule ActiveSchedule,
     next_event: usize,
 }
 
 impl ActiveSchedule {
     #[must_use]
-    pub fn compile(plan: &RenderPlan) -> Self {
+    pub(crate) fn compile(plan: &RenderPlan) -> Self {
         let mut events = Vec::with_capacity((plan.clips.len() + plan.flashes.len()) * 2);
         for (index, clip) in plan.clips.iter().enumerate() {
             add_events(
@@ -50,12 +50,12 @@ impl ActiveSchedule {
     }
 
     #[must_use]
-    pub fn event_count(&self) -> usize {
+    pub(crate) fn event_count(&self) -> usize {
         self.events.len()
     }
 
     #[must_use]
-    pub fn cursor(&self) -> ScheduleCursor<'_> {
+    pub(crate) fn cursor(&self) -> ScheduleCursor<'_> {
         ScheduleCursor {
             schedule: self,
             next_event: 0,
@@ -67,7 +67,7 @@ impl ScheduleCursor<'_> {
     /// Returns every event at `frame`. Call this once for each rendered frame
     /// in increasing order.
     #[must_use]
-    pub fn events_at(&mut self, frame: u64) -> &[ScheduleEvent] {
+    pub(crate) fn events_at(&mut self, frame: u64) -> &[ScheduleEvent] {
         let start = self.next_event;
         while self.next_event < self.schedule.events.len()
             && self.schedule.events[self.next_event].frame <= frame

@@ -1016,10 +1016,15 @@ fn duration_for(
             }
         }
         DurationMode::Explicit => {
-            let duration = project
-                .output
-                .duration
-                .expect("validated explicit duration");
+            let Some(duration) = project.output.duration else {
+                errors.push(Diagnostic::error(
+                    "MVP-DURATION-EXPLICIT",
+                    Category::Internal,
+                    "validated explicit duration is missing",
+                    "/output/duration",
+                ));
+                return None;
+            };
             if visual_end > duration || audio_end.is_some_and(|end| end > duration) {
                 warnings.push(Diagnostic::warning(
                     "MVP-DURATION-TRUNCATED",

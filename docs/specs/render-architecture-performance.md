@@ -117,9 +117,9 @@ run` time. Millisecond fields can read zero for very small stages.
 
 | Project | Final renderer time | Decode | Static preparation | Composition | FFmpeg write/finalize | Structural evidence |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `static-image.json` | 198 ms | 1 ms | 0 ms | 100 ms | 61 / 12 ms | 1 decode, 1 static crop, 1 static resize |
-| `hard-cuts.json` | 506 ms | 58 ms | 0 ms | 338 ms | 59 / 12 ms | 2 decodes, 2 static crops, 2 static resizes |
-| `showcase.json` | 3044 ms | 72 ms | 0 ms | 2830 ms | 68 / 19 ms | 3 decodes, 2 static preparations, 28 dynamic misses, 7 hits, peak 28 entries |
+| `static-image.json` | 193 ms | 1 ms | 0 ms | 97 ms | 60 / 11 ms | 1 decode, 1 static crop, 1 static resize |
+| `hard-cuts.json` | 505 ms | 2 ms | 52 ms | 341 ms | 60 / 12 ms | 2 decodes, 2 static crops, 2 static resizes |
+| `showcase.json` | 3034 ms | 4 ms | 69 ms | 2827 ms | 70 / 17 ms | 3 decodes, 2 static preparations, 28 dynamic misses, 7 hits, peak 28 entries |
 
 All three final decoded-frame hashes match the baseline exactly. This is the
 strong compatibility check. The wall-clock comparison is intentionally not a

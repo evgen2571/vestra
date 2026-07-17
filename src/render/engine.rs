@@ -13,7 +13,7 @@ use crate::{
     Category, Diagnostic,
     media::FfmpegEncoder,
     output::OutputTarget,
-    plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduledItem},
+    plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem},
     render::{
         compositor,
         prepared::{PreparationStats, PreparedAssets},
@@ -93,6 +93,7 @@ pub fn render(
     .map_err(render_error)?;
     let mut prepared = PreparedAssets::build(plan).map_err(render_error)?;
     let schedule = ActiveSchedule::compile(plan);
+    let mut schedule_cursor = schedule.cursor();
     let mut timings = RenderTimings {
         asset_decode_ms: prepared.timings().decode.as_millis(),
         asset_prepare_ms: prepared.timings().static_prepare.as_millis(),
@@ -121,10 +122,16 @@ pub fn render(
                 "render cancelled".to_owned(),
             ));
         }
-        let (deactivate, activate) = schedule.at(frame);
-        active.retain(|item| !deactivate.contains(item));
-        active.extend_from_slice(activate);
-        active.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
+        let events = schedule_cursor.events_at(frame);
+        if !events.is_empty() {
+            for event in events {
+                match event.action {
+                    ScheduleAction::Deactivate => active.retain(|item| *item != event.item),
+                    ScheduleAction::Activate => active.push(event.item),
+                }
+            }
+            active.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
+        }
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
         let compose_started = Instant::now();
         let image = compositor::compose(plan, &mut prepared, &active, time);

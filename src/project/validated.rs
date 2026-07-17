@@ -21,15 +21,36 @@ impl Default for ValidationOptions {
 /// the project boundary so downstream layers cannot bypass its invariants.
 #[derive(Clone, Debug)]
 pub struct ValidatedProject {
-    pub project: Project,
-    pub project_path: PathBuf,
-    pub asset_paths: BTreeMap<String, PathBuf>,
-    pub audio_durations: BTreeMap<String, f64>,
-    pub duration: f64,
-    pub duration_nanos: u128,
-    pub frame_rate: (u64, u64),
-    pub frame_count: u64,
-    pub warnings: Vec<Diagnostic>,
+    pub(crate) project: Project,
+    pub(crate) project_path: PathBuf,
+    pub(crate) asset_paths: BTreeMap<String, PathBuf>,
+    pub(crate) audio_durations: BTreeMap<String, f64>,
+    pub(crate) duration: f64,
+    pub(crate) frame_rate: (u64, u64),
+    pub(crate) frame_count: u64,
+    pub(crate) warnings: Vec<Diagnostic>,
+}
+
+impl ValidatedProject {
+    #[must_use]
+    pub fn project(&self) -> &Project {
+        &self.project
+    }
+
+    #[must_use]
+    pub fn duration(&self) -> f64 {
+        self.duration
+    }
+
+    #[must_use]
+    pub fn frame_count(&self) -> u64 {
+        self.frame_count
+    }
+
+    #[must_use]
+    pub fn asset_path(&self, id: &str) -> Option<&std::path::Path> {
+        self.asset_paths.get(id).map(PathBuf::as_path)
+    }
 }
 
 #[derive(Debug)]

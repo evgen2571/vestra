@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{Category, Diagnostic};
 
-use super::{FORMAT_VERSION, LoadError, Project, ValidatedProject, ValidationOptions, model};
+use super::{FORMAT_VERSION, LoadError, Project, ValidatedProject, ValidationOptions, validation};
 
 pub fn load_and_validate(
     path: &Path,
@@ -53,5 +53,5 @@ pub fn load_and_validate(
             "",
         )])
     })?;
-    model::validate(project, path, options)
+    validation::validate(project, path, options)
 }

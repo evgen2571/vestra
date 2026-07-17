@@ -168,14 +168,22 @@ fn render_command(
     let validated = match load_and_validate(&project, &ValidationOptions::default()) {
         Ok(value) => value,
         Err(LoadError::Diagnostics(errors)) => {
-            let code = print_failure("render", format, errors.clone(), Vec::new());
-            write_failure_report(
+            if let Err(message) = write_failure_report(
                 report.as_deref(),
                 "project",
                 &errors,
                 began.elapsed().as_millis(),
-            );
-            return code;
+            ) {
+                let mut all_errors = vec![Diagnostic::error(
+                    "MVP-REPORT-WRITE",
+                    Category::Output,
+                    message,
+                    "",
+                )];
+                all_errors.extend(errors);
+                return print_failure("render", format, all_errors, Vec::new());
+            }
+            return print_failure("render", format, errors, Vec::new());
         }
     };
     let mut emit = |event: RenderEvent| match progress {
@@ -247,10 +255,25 @@ fn render_command(
             }
             if let Some(path) = report.as_deref() {
                 let report = json!({ "report_schema_version": 1, "status": "failure", "command": "render", "errors": [error.diagnostic], "temporary_removed": error.temporary_removed, "elapsed_ms": began.elapsed().as_millis() });
-                let _ = fs::write(
+                if let Err(report_error) = fs::write(
                     path,
                     serde_json::to_vec_pretty(&report).expect("report serializes"),
-                );
+                ) {
+                    return print_failure(
+                        "render",
+                        format,
+                        vec![
+                            Diagnostic::error(
+                                "MVP-REPORT-WRITE",
+                                Category::Output,
+                                format!("cannot write report: {report_error}"),
+                                "",
+                            ),
+                            error.diagnostic,
+                        ],
+                        validated.warnings,
+                    );
+                }
             }
             print_failure("render", format, vec![error.diagnostic], validated.warnings)
         }
@@ -343,12 +366,14 @@ fn write_failure_report(
     command: &str,
     errors: &[Diagnostic],
     elapsed_ms: u128,
-) {
+) -> Result<(), String> {
     if let Some(path) = path {
         let report = json!({ "report_schema_version": 1, "status": "failure", "command": command, "errors": errors, "elapsed_ms": elapsed_ms });
-        let _ = fs::write(
+        fs::write(
             path,
             serde_json::to_vec_pretty(&report).expect("report serializes"),
-        );
+        )
+        .map_err(|error| format!("cannot write report: {error}"))?;
     }
+    Ok(())
 }

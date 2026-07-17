@@ -6,7 +6,7 @@
 
 ## Normative contract
 
-The supported project version is exactly `1`. Normative rendering objects reject unknown fields; the optional `metadata` object is ignored. JSON uses snake_case. Times are finite non-negative decimal seconds. Internally they are converted to nanoseconds using decimal text, then frames are sampled as `index / frame_rate`; no frame duration is repeatedly accumulated. A positive duration `d` contains `ceil(d × frame_rate)` frames. An item is active iff `start <= frame_time < start + duration`.
+The supported project version is exactly `1`. Normative rendering objects reject unknown fields; the optional `metadata` object is ignored. JSON uses snake_case. Times are finite non-negative decimal seconds. Internally they are rounded once to nanoseconds, then frames are sampled as `index / frame_rate`; no frame duration is repeatedly accumulated. A positive duration `d` contains `ceil(d × frame_rate)` frames. An item is active iff `start <= frame_time < start + duration`. Encoded video duration may extend past the requested project duration by less than one output frame because frames are indivisible.
 
 `frame_rate` is either a positive JSON number or a rational string such as `"30000/1001"`. Output dimensions are positive even values in the inclusive range 2..8192. Output is MP4/H.264 (`yuv420p`) and AAC when audio is enabled. Quality profiles are `preview`, `balanced`, and `high`; they map to fixed CRFs 30, 23, and 18.
 
@@ -42,10 +42,10 @@ Rust owns project parsing, validation, path resolution, timeline evaluation, ima
 
 | Requirement | Implementation | Evidence | Status |
 |---|---|---|---|
-| MVP-PROJECT-001: versioned JSON, schema, strict fields | `project`, `schemas/project-v1.schema.json` | parser/validation tests | planned |
-| MVP-TIME-001: deterministic frame timing and duration | `timeline` | unit tests | planned |
-| MVP-VISUAL-001: image compositing, crop, transforms, animation | `render` | pixel and end-to-end tests | planned |
-| MVP-AUDIO-001: one trimmed, faded primary track | `media`, `render` | FFprobe end-to-end tests | planned |
-| MVP-CLI-001: validate, inspect, render and JSON events | `main`, `cli` | integration tests | planned |
-| MVP-SAFETY-001: temporary output and overwrite protection | `render` | integration tests | planned |
-| MVP-DOCS-001: runnable examples and docs | `examples`, `README` | example validation test | planned |
+| MVP-PROJECT-001: versioned JSON, schema, strict fields | `project`, `schemas/project-v1.schema.json` | `tests/cli.rs` valid/invalid fixture tests | implemented |
+| MVP-TIME-001: deterministic frame timing and duration | `timeline` | `timeline` unit tests and inspected showcase | implemented |
+| MVP-VISUAL-001: image compositing, crop, transforms, animation | `render` | alpha unit test and real showcase render | implemented |
+| MVP-AUDIO-001: one trimmed, faded primary track | `media`, `render` | FFprobe stream assertion in `tests/cli.rs` | implemented |
+| MVP-CLI-001: validate, inspect, render and JSON events | `main` | JSON result/event integration tests | implemented |
+| MVP-SAFETY-001: temporary output and overwrite protection | `render` | protection and overwrite integration tests | implemented |
+| MVP-DOCS-001: runnable examples and docs | `examples`, `README` | valid-example integration test | implemented |

@@ -3,6 +3,7 @@
 pub mod diagnostic;
 pub mod media;
 pub mod project;
+pub mod render;
 pub mod timeline;
 
 pub use diagnostic::{Category, Diagnostic, Severity};

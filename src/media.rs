@@ -1,4 +1,7 @@
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+};
 
 use serde::Deserialize;
 
@@ -6,6 +9,8 @@ pub fn backend_available() -> Result<(), String> {
     for executable in ["ffmpeg", "ffprobe"] {
         let status = Command::new(executable)
             .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .map_err(|error| format!("cannot start {executable}: {error}"))?;
         if !status.success() {

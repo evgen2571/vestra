@@ -31,6 +31,14 @@ See [the v1 specification](docs/specs/mvp-v1.md), [the staged render architectur
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets
+cargo test --all-features
+```
+
+Create a source package from tracked files only. This omits ignored render
+outputs, reports, temporary files, benchmark output, and Cargo build artifacts.
+
+```bash
+git archive --format=zip --output=video-editor.zip HEAD
 ```

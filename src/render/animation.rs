@@ -87,11 +87,21 @@ mod tests {
             end: 1.0,
         };
         assert_eq!(
-            evaluate(5.0, &[curve.clone()], 0.000000009, interpolate_scalar),
+            evaluate(
+                5.0,
+                std::slice::from_ref(&curve),
+                0.000000009,
+                interpolate_scalar
+            ),
             5.0
         );
         assert_eq!(
-            evaluate(5.0, &[curve.clone()], 0.000000010, interpolate_scalar),
+            evaluate(
+                5.0,
+                std::slice::from_ref(&curve),
+                0.000000010,
+                interpolate_scalar
+            ),
             0.0
         );
         assert_eq!(

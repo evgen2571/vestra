@@ -2,6 +2,7 @@
 
 mod loader;
 mod model;
+mod paths;
 
 pub use loader::load_and_validate;
 pub use model::*;

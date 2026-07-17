@@ -6,4 +6,4 @@ mod schedule;
 
 pub use compiler::{CompileOptions, compile};
 pub use model::*;
-pub use schedule::ActiveSchedule;
+pub use schedule::{ActiveSchedule, ScheduleAction};

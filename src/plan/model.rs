@@ -133,7 +133,7 @@ pub enum PreparationClass {
     CropAndScaleAnimated,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ScheduledItem {
     Clip(usize),
     Flash(usize),

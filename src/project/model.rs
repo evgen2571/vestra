@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::{
     diagnostic::{Category, Diagnostic},
     media,
-    timeline::{frame_count, seconds_to_nanos},
+    timeline::frame_count,
 };
 
 pub use crate::domain::{Crop, Easing, Point};
@@ -297,6 +297,7 @@ pub struct AudioTrack {
     pub mute: bool,
 }
 
+use super::validation;
 use super::{LoadError, ValidatedProject, ValidationOptions};
 
 pub(crate) fn validate(
@@ -307,7 +308,7 @@ pub(crate) fn validate(
     let project_path = path;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    validate_output(&project.output, &mut errors);
+    validation::output(&project.output, &mut errors);
     let frame_rate = match project.output.frame_rate.rational() {
         Ok(rate) => rate,
         Err(message) => {
@@ -418,8 +419,9 @@ pub(crate) fn validate(
         &audio_durations,
         &mut errors,
     );
-    let duration = duration_for(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
-    let duration_nanos = seconds_to_nanos(duration).unwrap_or(0);
+    let duration =
+        validation::duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+    let duration_nanos = validation::duration_nanos(duration);
     let total_frames = frame_count(duration_nanos, frame_rate.0, frame_rate.1);
     let used_assets: BTreeSet<&str> = project
         .visual
@@ -464,67 +466,6 @@ pub(crate) fn validate(
         })
     } else {
         Err(LoadError::Diagnostics(errors))
-    }
-}
-
-fn validate_output(output: &Output, errors: &mut Vec<Diagnostic>) {
-    if output.path.trim().is_empty() {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-PATH",
-            Category::Semantic,
-            "output path must not be empty",
-            "/output/path",
-        ));
-    }
-    if !(2..=8192).contains(&output.width) || !output.width.is_multiple_of(2) {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-WIDTH",
-            Category::Semantic,
-            "width must be an even integer in 2..=8192",
-            "/output/width",
-        ));
-    }
-    if !(2..=8192).contains(&output.height) || !output.height.is_multiple_of(2) {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-HEIGHT",
-            Category::Semantic,
-            "height must be an even integer in 2..=8192",
-            "/output/height",
-        ));
-    }
-    if parse_colour(&output.background).is_none() {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-COLOUR",
-            Category::Semantic,
-            "background must use #RRGGBB or #RRGGBBAA",
-            "/output/background",
-        ));
-    }
-    if !output.path.to_ascii_lowercase().ends_with(".mp4") {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-CONTAINER",
-            Category::Semantic,
-            "version 1 output path must end in .mp4",
-            "/output/path",
-        ));
-    }
-    match output.duration_mode {
-        DurationMode::Automatic if output.duration.is_some() => errors.push(Diagnostic::error(
-            "MVP-DURATION-MODE",
-            Category::Semantic,
-            "automatic duration must not specify duration",
-            "/output/duration",
-        )),
-        DurationMode::Explicit => match output.duration {
-            Some(value) if value.is_finite() && value > 0.0 => {}
-            _ => errors.push(Diagnostic::error(
-                "MVP-DURATION-EXPLICIT",
-                Category::Semantic,
-                "explicit duration must be positive and finite",
-                "/output/duration",
-            )),
-        },
-        DurationMode::Automatic => {}
     }
 }
 
@@ -956,57 +897,6 @@ fn validate_audio(
         return None;
     }
     Some(track.timeline_start + (trim_end - track.trim_start))
-}
-
-fn duration_for(
-    project: &Project,
-    audio_end: Option<f64>,
-    warnings: &mut Vec<Diagnostic>,
-    errors: &mut Vec<Diagnostic>,
-) -> Option<f64> {
-    let visual_end = project
-        .visual
-        .clips
-        .iter()
-        .map(|clip| clip.start + clip.duration)
-        .chain(
-            project
-                .visual
-                .flashes
-                .iter()
-                .map(|flash| flash.start + flash.duration),
-        )
-        .fold(0.0, f64::max);
-    match project.output.duration_mode {
-        DurationMode::Automatic => {
-            let duration = visual_end.max(audio_end.unwrap_or(0.0));
-            if !positive(duration) {
-                errors.push(Diagnostic::error("MVP-DURATION-EMPTY", Category::Semantic, "automatic-duration project needs positive visual, flash, or enabled audio content", "/output/duration_mode"));
-                None
-            } else {
-                Some(duration)
-            }
-        }
-        DurationMode::Explicit => {
-            let Some(duration) = project.output.duration else {
-                errors.push(Diagnostic::error(
-                    "MVP-DURATION-EXPLICIT",
-                    Category::Internal,
-                    "validated explicit duration is missing",
-                    "/output/duration",
-                ));
-                return None;
-            };
-            if visual_end > duration || audio_end.is_some_and(|end| end > duration) {
-                warnings.push(Diagnostic::warning(
-                    "MVP-DURATION-TRUNCATED",
-                    "content after explicit project duration will be clipped",
-                    "/output/duration",
-                ));
-            }
-            Some(duration)
-        }
-    }
 }
 
 #[must_use]

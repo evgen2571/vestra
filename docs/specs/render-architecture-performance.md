@@ -6,6 +6,27 @@ This document records the v1 renderer migration. It keeps one Cargo crate and
 the existing JSON schema, diagnostics, CLI commands, codecs, frame rounding,
 and deterministic draw order. The public project format remains version 1.
 
+## Finalization corrections
+
+This document originally described an in-progress migration. The final pass
+keeps that design and fixes the gaps found during review.
+
+* Validation retains all v1 clips, including hidden clips, so duration and
+  inspection remain compatible. Plan compilation filters hidden clips before
+  image preparation and schedule construction.
+* Output paths with no parent component use `.` as their effective parent.
+  The rule applies to configured paths, CLI overrides, temporary files, and
+  publication checks.
+* The timeline stores sorted activation and deactivation events. Its memory is
+  proportional to scheduled items, not rendered frames. At a shared frame,
+  deactivations run before activations, preserving half-open intervals.
+* Application timing starts before loading and retains `Duration` values until
+  report serialization. The report includes loading, validation, compilation,
+  render stages, publication, and end-to-end totals.
+* Decoded RGBA frame hashes, never MP4 container bytes, are the compatibility
+  fixture. Golden values are source-controlled and updated only by an explicit
+  maintenance command documented with the tests.
+
 ## Baseline
 
 The baseline was recorded on 2026-07-17 with the repository's supplied assets,

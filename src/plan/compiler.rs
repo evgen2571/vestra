@@ -3,7 +3,7 @@
     reason = "plan compilation preserves machine-readable diagnostics"
 )]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::from_value;
 
@@ -45,11 +45,20 @@ pub fn compile(
             "/output/background",
         )
     })?;
+    let renderable_assets: BTreeSet<_> = validated
+        .project
+        .visual
+        .clips
+        .iter()
+        .filter(|clip| clip.visible)
+        .map(|clip| clip.asset.as_str())
+        .collect();
     let images: Vec<_> = validated
         .project
         .assets
         .iter()
         .filter(|asset| matches!(asset.kind, crate::project::AssetType::Image))
+        .filter(|asset| renderable_assets.contains(asset.id.as_str()))
         .filter_map(|asset| {
             validated.asset_paths.get(&asset.id).map(|path| ImageAsset {
                 id: asset.id.clone(),
@@ -64,6 +73,9 @@ pub fn compile(
         .collect();
     let mut clips = Vec::with_capacity(validated.project.visual.clips.len());
     for clip in &validated.project.visual.clips {
+        if !clip.visible {
+            continue;
+        }
         let asset_index = *asset_indices.get(clip.asset.as_str()).ok_or_else(|| {
             Diagnostic::error(
                 "MVP-PLAN-ASSET",
@@ -117,21 +129,31 @@ pub fn compile(
             Transition::Crossfade {
                 outgoing, incoming, ..
             } => {
-                clips[*clip_indices.get(outgoing).expect("validated transition")]
-                    .transitions
-                    .push(CompiledTransition::Outgoing(curve.clone()));
-                clips[*clip_indices.get(incoming).expect("validated transition")]
-                    .transitions
-                    .push(CompiledTransition::Incoming(curve));
+                if let Some(index) = clip_indices.get(outgoing) {
+                    clips[*index]
+                        .transitions
+                        .push(CompiledTransition::Outgoing(curve.clone()));
+                }
+                if let Some(index) = clip_indices.get(incoming) {
+                    clips[*index]
+                        .transitions
+                        .push(CompiledTransition::Incoming(curve));
+                }
             }
-            Transition::FadeToBackground { clip, .. } => clips
-                [*clip_indices.get(clip).expect("validated transition")]
-            .transitions
-            .push(CompiledTransition::Outgoing(curve)),
-            Transition::FadeFromBackground { clip, .. } => clips
-                [*clip_indices.get(clip).expect("validated transition")]
-            .transitions
-            .push(CompiledTransition::Incoming(curve)),
+            Transition::FadeToBackground { clip, .. } => {
+                if let Some(index) = clip_indices.get(clip) {
+                    clips[*index]
+                        .transitions
+                        .push(CompiledTransition::Outgoing(curve));
+                }
+            }
+            Transition::FadeFromBackground { clip, .. } => {
+                if let Some(index) = clip_indices.get(clip) {
+                    clips[*index]
+                        .transitions
+                        .push(CompiledTransition::Incoming(curve));
+                }
+            }
         }
     }
     let flashes = validated
@@ -414,5 +436,40 @@ mod tests {
         assert_eq!(first_frame_at_or_after(0, (24, 1)), 0);
         assert_eq!(first_frame_at_or_after(1_000_000_000, (24, 1)), 24);
         assert_eq!(first_frame_at_or_after(1_000_000_001, (24, 1)), 25);
+    }
+
+    #[test]
+    fn hidden_clips_are_excluded_before_asset_preparation() {
+        let file = tempfile::NamedTempFile::new().expect("temporary project");
+        let mut project: serde_json::Value = serde_json::from_slice(
+            &std::fs::read("examples/projects/static-image.json").expect("project"),
+        )
+        .expect("project JSON");
+        project["assets"][0]["source"] = serde_json::Value::String(
+            std::fs::canonicalize("examples/assets/red.png")
+                .expect("asset path")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        project["visual"]["clips"][0]["visible"] = serde_json::Value::Bool(false);
+        std::fs::write(
+            file.path(),
+            serde_json::to_vec(&project).expect("project serializes"),
+        )
+        .expect("write project");
+        let validated = load_and_validate(
+            file.path(),
+            &ValidationOptions {
+                check_backend: false,
+            },
+        )
+        .expect("valid hidden clip");
+        let plan = compile(&validated, CompileOptions::default()).expect("plan");
+        assert_eq!(
+            plan.frame_count, 24,
+            "hidden clips still contribute duration"
+        );
+        assert!(plan.clips.is_empty());
+        assert!(plan.images.is_empty());
     }
 }

@@ -91,13 +91,11 @@ pub fn render(
         options.overwrite,
     )
     .map_err(render_error)?;
-    let decode_started = Instant::now();
     let mut prepared = PreparedAssets::build(plan).map_err(render_error)?;
-    let decode_elapsed = decode_started.elapsed();
     let schedule = ActiveSchedule::compile(plan);
     let mut timings = RenderTimings {
-        asset_decode_ms: decode_elapsed.as_millis(),
-        asset_prepare_ms: 0,
+        asset_decode_ms: prepared.timings().decode.as_millis(),
+        asset_prepare_ms: prepared.timings().static_prepare.as_millis(),
         ..RenderTimings::default()
     };
     emit(RenderEvent {

@@ -549,7 +549,9 @@ fn failed_backend_cleans_temporary_output() {
     assert_eq!(report["failure_category"], "render");
     assert_eq!(report["failure_stage"], "frame_write");
     assert_eq!(report["total_frames"], 24);
-    assert!(report.get("progress").is_none());
+    assert_eq!(report["completed_frames"], 0);
+    assert!(report.get("last_completed_frame_index").is_none());
+    assert_eq!(report["progress"], 0.0);
     assert!(report["project_path"].is_string());
     assert!(report["requested_output_path"].is_string());
     assert!(report["temporary_output_path"].is_string());
@@ -563,6 +565,101 @@ fn failed_backend_cleans_temporary_output() {
                 .to_string_lossy()
                 .contains(".tmp.mp4"))
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn finalization_failure_reports_all_written_frames_without_success_progress() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workspace = fixture_workspace();
+    let bin = workspace.path().join("bin");
+    fs::create_dir(&bin).expect("backend directory");
+    let failing_ffmpeg = bin.join("ffmpeg");
+    fs::write(
+        &failing_ffmpeg,
+        "#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then exit 0; fi\ncat >/dev/null\nexit 1\n",
+    )
+    .expect("write failing backend");
+    fs::set_permissions(&failing_ffmpeg, fs::Permissions::from_mode(0o755))
+        .expect("make backend executable");
+    let inherited_path = std::env::var("PATH").expect("PATH is set");
+    let output = workspace.path().join("failed.mp4");
+    let report = workspace.path().join("failed-report.json");
+    let project = workspace.path().join("projects/static-image.json");
+    let result = command()
+        .env("PATH", format!("{}:{inherited_path}", bin.display()))
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "json",
+            "--format",
+            "json",
+            "--report",
+            report.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("render runs");
+    assert_eq!(result.status.code(), Some(5));
+    let progress: Vec<f64> = String::from_utf8(result.stdout)
+        .expect("UTF-8 output")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("JSON event/result"))
+        .filter_map(|value| value.get("progress").and_then(Value::as_f64))
+        .collect();
+    assert_eq!(progress.last(), Some(&(23.0 / 24.0)));
+    assert!(!progress.contains(&1.0));
+    let report: Value = serde_json::from_slice(&fs::read(report).expect("read report"))
+        .expect("failure report JSON");
+    assert_eq!(report["failure_stage"], "encoder_finalization");
+    assert_eq!(report["completed_frames"], 24);
+    assert_eq!(report["last_completed_frame_index"], 23);
+    assert!(report.get("progress").is_none());
+    assert!(!output.exists());
+}
+
+#[test]
+fn publication_failure_reports_all_written_frames_without_success_progress() {
+    let workspace = fixture_workspace();
+    let output_directory = workspace.path().join("publication-target");
+    fs::create_dir(&output_directory).expect("output directory");
+    let report = workspace.path().join("publication-report.json");
+    let project = workspace.path().join("projects/static-image.json");
+    let result = command()
+        .args([
+            "render",
+            project.to_str().expect("UTF-8 path"),
+            "--output",
+            output_directory.to_str().expect("UTF-8 path"),
+            "--overwrite",
+            "--progress",
+            "json",
+            "--format",
+            "json",
+            "--report",
+            report.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("render runs");
+    assert_eq!(result.status.code(), Some(6));
+    let progress: Vec<f64> = String::from_utf8(result.stdout)
+        .expect("UTF-8 output")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("JSON event/result"))
+        .filter_map(|value| value.get("progress").and_then(Value::as_f64))
+        .collect();
+    assert_eq!(progress.last(), Some(&(23.0 / 24.0)));
+    assert!(!progress.contains(&1.0));
+    let report: Value = serde_json::from_slice(&fs::read(report).expect("read report"))
+        .expect("failure report JSON");
+    assert_eq!(report["failure_stage"], "output_publication");
+    assert_eq!(report["completed_frames"], 24);
+    assert_eq!(report["last_completed_frame_index"], 23);
+    assert!(report.get("progress").is_none());
+    assert!(output_directory.is_dir());
 }
 
 #[cfg(unix)]

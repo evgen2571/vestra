@@ -81,7 +81,8 @@ pub struct RenderError {
 pub struct RenderFailureContext {
     pub stage: RenderFailureStage,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_completed_frame: Option<u64>,
+    pub last_completed_frame_index: Option<u64>,
+    pub completed_frames: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attempted_frame: Option<u64>,
     pub total_frames: u64,
@@ -137,7 +138,7 @@ pub fn render(
             &output,
             plan,
             RenderFailureStage::AssetPreparation,
-            None,
+            0,
             None,
             diagnostic,
         )
@@ -169,7 +170,7 @@ pub fn render(
                 &output,
                 plan,
                 RenderFailureStage::EncoderStartup,
-                None,
+                0,
                 None,
                 Diagnostic::error("MVP-BACKEND-START", Category::Backend, message, ""),
             )
@@ -177,6 +178,7 @@ pub fn render(
     let mut active = Vec::new();
     let mut frame_composition = Duration::ZERO;
     let mut encoder_write = Duration::ZERO;
+    let mut completed_frames = 0;
     for frame in 0..plan.frame_count {
         if options.cancelled.load(Ordering::Relaxed) {
             encoder.cancel();
@@ -184,7 +186,7 @@ pub fn render(
                 &output,
                 plan,
                 RenderFailureStage::Cancellation,
-                completed_frame(frame),
+                completed_frames,
                 Some(frame),
                 Diagnostic::error(
                     "MVP-CANCELLED",
@@ -216,21 +218,21 @@ pub fn render(
                 &output,
                 plan,
                 RenderFailureStage::FrameWrite,
-                completed_frame(frame),
+                completed_frames,
                 Some(frame),
                 Diagnostic::error("MVP-RENDER-WRITE", Category::Render, message, ""),
             ));
         }
         encoder_write += write_started.elapsed();
-        let completed = frame + 1;
-        performance.rendered_frame_count = completed;
-        if completed < plan.frame_count {
+        completed_frames += 1;
+        performance.rendered_frame_count = completed_frames;
+        if completed_frames < plan.frame_count {
             emit(RenderEvent {
                 event_schema_version: 1,
                 kind: "progress".to_owned(),
-                frame: completed,
+                frame: completed_frames,
                 total_frames: plan.frame_count,
-                progress: Some(completed as f64 / plan.frame_count as f64),
+                progress: Some(completed_frames as f64 / plan.frame_count as f64),
                 output_path: None,
                 warnings: None,
             });
@@ -242,7 +244,7 @@ pub fn render(
             &output,
             plan,
             RenderFailureStage::EncoderFinalization,
-            Some(plan.frame_count),
+            completed_frames,
             None,
             Diagnostic::error("MVP-ENCODE", Category::Render, message, ""),
         ));
@@ -257,7 +259,7 @@ pub fn render(
             context: RenderFailureContext::at_output(
                 RenderFailureStage::OutputPublication,
                 plan,
-                Some(plan.frame_count),
+                completed_frames,
                 None,
                 &output,
             ),
@@ -313,7 +315,7 @@ fn cleanup_error(
     output: &OutputTarget,
     plan: &RenderPlan,
     stage: RenderFailureStage,
-    last_completed_frame: Option<u64>,
+    completed_frames: u64,
     attempted_frame: Option<u64>,
     diagnostic: Diagnostic,
 ) -> RenderError {
@@ -323,22 +325,19 @@ fn cleanup_error(
         context: RenderFailureContext::at_output(
             stage,
             plan,
-            last_completed_frame,
+            completed_frames,
             attempted_frame,
             output,
         ),
     }
 }
 
-const fn completed_frame(attempted_frame: u64) -> Option<u64> {
-    attempted_frame.checked_sub(1)
-}
-
 impl RenderFailureContext {
     fn before_render(stage: RenderFailureStage, plan: &RenderPlan) -> Self {
         Self {
             stage,
-            last_completed_frame: None,
+            last_completed_frame_index: None,
+            completed_frames: 0,
             attempted_frame: None,
             total_frames: plan.frame_count,
             timeline_position: None,
@@ -351,16 +350,16 @@ impl RenderFailureContext {
     fn at_output(
         stage: RenderFailureStage,
         plan: &RenderPlan,
-        last_completed_frame: Option<u64>,
+        completed_frames: u64,
         attempted_frame: Option<u64>,
         output: &OutputTarget,
     ) -> Self {
-        let progress = last_completed_frame.and_then(|completed| {
-            (completed < plan.frame_count).then(|| completed as f64 / plan.frame_count as f64)
-        });
+        let (last_completed_frame_index, progress) =
+            completed_frame_state(completed_frames, plan.frame_count);
         Self {
             stage,
-            last_completed_frame,
+            last_completed_frame_index,
+            completed_frames,
             attempted_frame,
             total_frames: plan.frame_count,
             timeline_position: attempted_frame
@@ -372,9 +371,23 @@ impl RenderFailureContext {
     }
 }
 
+fn completed_frame_state(completed_frames: u64, total_frames: u64) -> (Option<u64>, Option<f64>) {
+    (
+        completed_frames.checked_sub(1),
+        failure_progress(completed_frames, total_frames),
+    )
+}
+
+fn failure_progress(completed_frames: u64, total_frames: u64) -> Option<f64> {
+    (completed_frames < total_frames).then(|| completed_frames as f64 / total_frames as f64)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RenderFailureContext, RenderFailureStage, milliseconds};
+    use super::{
+        RenderFailureContext, RenderFailureStage, completed_frame_state, failure_progress,
+        milliseconds,
+    };
     use std::time::Duration;
 
     #[test]
@@ -384,10 +397,11 @@ mod tests {
     }
 
     #[test]
-    fn completed_frame_failure_has_no_false_success_progress() {
+    fn failure_context_tracks_completed_frames_and_last_index_separately() {
         let context = RenderFailureContext {
             stage: RenderFailureStage::EncoderFinalization,
-            last_completed_frame: Some(24),
+            last_completed_frame_index: Some(23),
+            completed_frames: 24,
             attempted_frame: None,
             total_frames: 24,
             timeline_position: None,
@@ -395,7 +409,37 @@ mod tests {
             output_path: None,
             temporary_output_path: None,
         };
-        assert_eq!(context.last_completed_frame, Some(context.total_frames));
+        assert_eq!(context.completed_frames, context.total_frames);
+        assert_eq!(
+            context.last_completed_frame_index,
+            Some(context.total_frames - 1)
+        );
         assert_eq!(context.progress, None);
+    }
+
+    #[test]
+    fn first_frame_failure_has_no_completed_frame() {
+        assert_eq!(completed_frame_state(0, 24), (None, Some(0.0)));
+    }
+
+    #[test]
+    fn mid_render_failure_uses_completed_frame_count() {
+        assert_eq!(completed_frame_state(10, 24), (Some(9), Some(10.0 / 24.0)));
+    }
+
+    #[test]
+    fn finalization_failure_never_reports_complete_progress() {
+        assert_eq!(completed_frame_state(24, 24), (Some(23), None));
+    }
+
+    #[test]
+    fn publication_failure_never_reports_complete_progress() {
+        assert_eq!(completed_frame_state(24, 24), (Some(23), None));
+    }
+
+    #[test]
+    fn cancellation_failure_reports_frames_written_before_cancellation() {
+        assert_eq!(completed_frame_state(10, 24), (Some(9), Some(10.0 / 24.0)));
+        assert_eq!(failure_progress(24, 24), None);
     }
 }

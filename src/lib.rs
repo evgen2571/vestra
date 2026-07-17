@@ -1,5 +1,7 @@
 //! Library implementation for the standalone declarative video renderer.
 
+pub mod application;
+pub mod cli;
 pub mod diagnostic;
 pub mod media;
 pub mod output;

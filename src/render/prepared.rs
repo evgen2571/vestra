@@ -1,3 +1,8 @@
+#![allow(
+    clippy::result_large_err,
+    reason = "asset preparation preserves machine-readable diagnostics"
+)]
+
 use std::collections::{BTreeMap, VecDeque};
 
 use image::{RgbaImage, imageops::FilterType};
@@ -121,10 +126,10 @@ impl PreparedAssets {
         }
         self.stats.bitmap_cache_misses += 1;
         let bitmap = prepare_bitmap(plan, &self.decoded[clip.asset_index], clip, crop, scale);
-        if self.dynamic_cache.len() == 128 {
-            if let Some(evicted) = self.cache_order.pop_front() {
-                self.dynamic_cache.remove(&evicted);
-            }
+        if self.dynamic_cache.len() == 128
+            && let Some(evicted) = self.cache_order.pop_front()
+        {
+            self.dynamic_cache.remove(&evicted);
         }
         self.cache_order.push_back(key.clone());
         self.dynamic_cache.insert(key.clone(), bitmap);

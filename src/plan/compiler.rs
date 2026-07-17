@@ -1,3 +1,8 @@
+#![allow(
+    clippy::result_large_err,
+    reason = "plan compilation preserves machine-readable diagnostics"
+)]
+
 use std::collections::BTreeMap;
 
 use serde_json::from_value;

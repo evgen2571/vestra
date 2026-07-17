@@ -1,3 +1,8 @@
+#![allow(
+    clippy::result_large_err,
+    reason = "output errors preserve machine-readable diagnostics"
+)]
+
 use std::{
     fs,
     path::{Path, PathBuf},

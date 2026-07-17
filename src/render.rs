@@ -56,6 +56,8 @@ pub struct RenderEvent {
     pub progress: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<Diagnostic>>,
 }
 
 #[derive(Debug)]
@@ -115,6 +117,7 @@ pub fn render(
         total_frames: validated.frame_count,
         progress: 0.0,
         output_path: Some(output_path.clone()),
+        warnings: None,
     });
     let mut child = start_ffmpeg(validated, &temporary, width, height)?;
     let Some(mut stdin) = child.stdin.take() else {
@@ -167,6 +170,7 @@ pub fn render(
             total_frames: validated.frame_count,
             progress: (completed as f64 / validated.frame_count as f64 * 0.99).min(0.99),
             output_path: None,
+            warnings: None,
         });
     }
     drop(stdin);
@@ -209,6 +213,7 @@ pub fn render(
         total_frames: validated.frame_count,
         progress: 1.0,
         output_path: Some(output_path.clone()),
+        warnings: Some(validated.warnings.clone()),
     });
     Ok(RenderSummary {
         output_path,

@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::{
     diagnostic::{Category, Diagnostic},
     media,
-    timeline::{frame_count, seconds_to_nanos},
+    timeline::frame_count,
 };
 
 pub use crate::domain::{Crop, Easing, Point};
@@ -297,6 +297,7 @@ pub struct AudioTrack {
     pub mute: bool,
 }
 
+use super::validation;
 use super::{LoadError, ValidatedProject, ValidationOptions};
 
 pub(crate) fn validate(
@@ -307,7 +308,7 @@ pub(crate) fn validate(
     let project_path = path;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    validate_output(&project.output, &mut errors);
+    validation::output(&project.output, &mut errors);
     let frame_rate = match project.output.frame_rate.rational() {
         Ok(rate) => rate,
         Err(message) => {
@@ -321,82 +322,13 @@ pub(crate) fn validate(
         }
     };
     let root = project_path.parent().unwrap_or_else(|| Path::new("."));
-    let mut asset_paths = BTreeMap::new();
-    let mut asset_kinds = BTreeMap::new();
-    let mut asset_ids = BTreeSet::new();
-    let mut audio_durations = BTreeMap::new();
-    for (index, asset) in project.assets.iter().enumerate() {
-        let pointer = format!("/assets/{index}");
-        if asset.id.trim().is_empty() {
-            errors.push(Diagnostic::error(
-                "MVP-ASSET-ID",
-                Category::Semantic,
-                "asset id must not be empty",
-                format!("{pointer}/id"),
-            ));
-        }
-        if !asset_ids.insert(asset.id.clone()) {
-            errors.push(
-                Diagnostic::error(
-                    "MVP-ASSET-DUPLICATE",
-                    Category::Semantic,
-                    format!("duplicate asset id '{}'", asset.id),
-                    format!("{pointer}/id"),
-                )
-                .with_related_id(&asset.id),
-            );
-        }
-        match super::paths::resolve_regular_file(root, &asset.source) {
-            Ok(resolved) => {
-                match asset.kind {
-                    AssetType::Image => {
-                        if let Err(error) = image::image_dimensions(&resolved) {
-                            errors.push(
-                                Diagnostic::error(
-                                    "MVP-ASSET-IMAGE",
-                                    Category::Media,
-                                    format!("invalid image asset '{}': {error}", asset.id),
-                                    format!("{pointer}/source"),
-                                )
-                                .with_related_id(&asset.id),
-                            );
-                        }
-                    }
-                    AssetType::Audio => match media::probe_audio_duration(&resolved) {
-                        Ok(duration) => {
-                            audio_durations.insert(asset.id.clone(), duration);
-                        }
-                        Err(error) => errors.push(
-                            Diagnostic::error(
-                                "MVP-ASSET-AUDIO",
-                                Category::Media,
-                                format!("invalid audio asset '{}': {error}", asset.id),
-                                format!("{pointer}/source"),
-                            )
-                            .with_related_id(&asset.id),
-                        ),
-                    },
-                }
-                asset_paths.insert(asset.id.clone(), resolved);
-            }
-            Err(error) => errors.push(
-                Diagnostic::error(
-                    "MVP-ASSET-PATH",
-                    Category::Asset,
-                    error,
-                    format!("{pointer}/source"),
-                )
-                .with_related_id(&asset.id),
-            ),
-        }
-        asset_kinds.insert(asset.id.clone(), asset.kind);
-    }
+    let assets = validation::assets::validate(&project.assets, root, &mut errors);
     let mut clip_ids = BTreeSet::new();
     for (index, clip) in project.visual.clips.iter().enumerate() {
         validate_clip(
             clip,
             index,
-            &asset_kinds,
+            &assets.kinds,
             &mut clip_ids,
             &mut errors,
             &mut warnings,
@@ -411,15 +343,16 @@ pub(crate) fn validate(
     for (index, flash) in project.visual.flashes.iter().enumerate() {
         validate_flash(flash, index, &mut flash_ids, &mut errors, &mut warnings);
     }
-    let audio_end = validate_audio(
+    let audio_end = validation::audio::validate(
         project.audio.as_ref(),
         project.output.audio,
-        &asset_kinds,
-        &audio_durations,
+        &assets.kinds,
+        &assets.audio_durations,
         &mut errors,
     );
-    let duration = duration_for(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
-    let duration_nanos = seconds_to_nanos(duration).unwrap_or(0);
+    let duration =
+        validation::duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+    let duration_nanos = validation::duration_nanos(duration);
     let total_frames = frame_count(duration_nanos, frame_rate.0, frame_rate.1);
     let used_assets: BTreeSet<&str> = project
         .visual
@@ -454,8 +387,8 @@ pub(crate) fn validate(
         Ok(ValidatedProject {
             project,
             project_path: project_path.to_path_buf(),
-            asset_paths,
-            audio_durations,
+            asset_paths: assets.paths,
+            audio_durations: assets.audio_durations,
             duration,
             duration_nanos,
             frame_rate,
@@ -464,67 +397,6 @@ pub(crate) fn validate(
         })
     } else {
         Err(LoadError::Diagnostics(errors))
-    }
-}
-
-fn validate_output(output: &Output, errors: &mut Vec<Diagnostic>) {
-    if output.path.trim().is_empty() {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-PATH",
-            Category::Semantic,
-            "output path must not be empty",
-            "/output/path",
-        ));
-    }
-    if !(2..=8192).contains(&output.width) || !output.width.is_multiple_of(2) {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-WIDTH",
-            Category::Semantic,
-            "width must be an even integer in 2..=8192",
-            "/output/width",
-        ));
-    }
-    if !(2..=8192).contains(&output.height) || !output.height.is_multiple_of(2) {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-HEIGHT",
-            Category::Semantic,
-            "height must be an even integer in 2..=8192",
-            "/output/height",
-        ));
-    }
-    if parse_colour(&output.background).is_none() {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-COLOUR",
-            Category::Semantic,
-            "background must use #RRGGBB or #RRGGBBAA",
-            "/output/background",
-        ));
-    }
-    if !output.path.to_ascii_lowercase().ends_with(".mp4") {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-CONTAINER",
-            Category::Semantic,
-            "version 1 output path must end in .mp4",
-            "/output/path",
-        ));
-    }
-    match output.duration_mode {
-        DurationMode::Automatic if output.duration.is_some() => errors.push(Diagnostic::error(
-            "MVP-DURATION-MODE",
-            Category::Semantic,
-            "automatic duration must not specify duration",
-            "/output/duration",
-        )),
-        DurationMode::Explicit => match output.duration {
-            Some(value) if value.is_finite() && value > 0.0 => {}
-            _ => errors.push(Diagnostic::error(
-                "MVP-DURATION-EXPLICIT",
-                Category::Semantic,
-                "explicit duration must be positive and finite",
-                "/output/duration",
-            )),
-        },
-        DurationMode::Automatic => {}
     }
 }
 
@@ -900,112 +772,6 @@ fn validate_flash(
             "flash is shorter than 50ms",
             p,
         ));
-    }
-}
-
-fn validate_audio(
-    audio: Option<&AudioTrack>,
-    output_audio: bool,
-    assets: &BTreeMap<String, AssetType>,
-    durations: &BTreeMap<String, f64>,
-    errors: &mut Vec<Diagnostic>,
-) -> Option<f64> {
-    let track = audio?;
-    if !output_audio || track.mute {
-        return None;
-    }
-    match assets.get(&track.asset) {
-        Some(AssetType::Audio) => {}
-        Some(AssetType::Image) => {
-            errors.push(Diagnostic::error(
-                "MVP-AUDIO-ASSET-TYPE",
-                Category::Semantic,
-                "audio track must reference an audio asset",
-                "/audio/asset",
-            ));
-            return None;
-        }
-        None => {
-            errors.push(Diagnostic::error(
-                "MVP-AUDIO-ASSET",
-                Category::Semantic,
-                format!("undeclared audio asset '{}'", track.asset),
-                "/audio/asset",
-            ));
-            return None;
-        }
-    }
-    let source_duration = *durations.get(&track.asset).unwrap_or(&0.0);
-    let trim_end = track.trim_end.unwrap_or(source_duration);
-    if !nonnegative(track.timeline_start)
-        || !nonnegative(track.trim_start)
-        || !trim_end.is_finite()
-        || trim_end <= track.trim_start
-        || trim_end > source_duration + 0.02
-        || !unit(track.volume)
-        || !nonnegative(track.fade_in)
-        || !nonnegative(track.fade_out)
-        || track.fade_in + track.fade_out > trim_end - track.trim_start + 1e-9
-    {
-        errors.push(Diagnostic::error(
-            "MVP-AUDIO-SETTINGS",
-            Category::Semantic,
-            "audio trim, timeline placement, gain, or fades are invalid",
-            "/audio",
-        ));
-        return None;
-    }
-    Some(track.timeline_start + (trim_end - track.trim_start))
-}
-
-fn duration_for(
-    project: &Project,
-    audio_end: Option<f64>,
-    warnings: &mut Vec<Diagnostic>,
-    errors: &mut Vec<Diagnostic>,
-) -> Option<f64> {
-    let visual_end = project
-        .visual
-        .clips
-        .iter()
-        .map(|clip| clip.start + clip.duration)
-        .chain(
-            project
-                .visual
-                .flashes
-                .iter()
-                .map(|flash| flash.start + flash.duration),
-        )
-        .fold(0.0, f64::max);
-    match project.output.duration_mode {
-        DurationMode::Automatic => {
-            let duration = visual_end.max(audio_end.unwrap_or(0.0));
-            if !positive(duration) {
-                errors.push(Diagnostic::error("MVP-DURATION-EMPTY", Category::Semantic, "automatic-duration project needs positive visual, flash, or enabled audio content", "/output/duration_mode"));
-                None
-            } else {
-                Some(duration)
-            }
-        }
-        DurationMode::Explicit => {
-            let Some(duration) = project.output.duration else {
-                errors.push(Diagnostic::error(
-                    "MVP-DURATION-EXPLICIT",
-                    Category::Internal,
-                    "validated explicit duration is missing",
-                    "/output/duration",
-                ));
-                return None;
-            };
-            if visual_end > duration || audio_end.is_some_and(|end| end > duration) {
-                warnings.push(Diagnostic::warning(
-                    "MVP-DURATION-TRUNCATED",
-                    "content after explicit project duration will be clipped",
-                    "/output/duration",
-                ));
-            }
-            Some(duration)
-        }
     }
 }
 

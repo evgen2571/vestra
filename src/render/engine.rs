@@ -4,7 +4,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use serde::Serialize;
@@ -30,6 +30,8 @@ pub struct RenderOptions {
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct RenderTimings {
+    pub project_load_and_validation_ms: u128,
+    pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
     pub asset_prepare_ms: u128,
     pub frame_composition_ms: u128,
@@ -95,8 +97,8 @@ pub fn render(
     let schedule = ActiveSchedule::compile(plan);
     let mut schedule_cursor = schedule.cursor();
     let mut timings = RenderTimings {
-        asset_decode_ms: prepared.timings().decode.as_millis(),
-        asset_prepare_ms: prepared.timings().static_prepare.as_millis(),
+        asset_decode_ms: milliseconds(prepared.timings().decode),
+        asset_prepare_ms: milliseconds(prepared.timings().static_prepare),
         ..RenderTimings::default()
     };
     emit(RenderEvent {
@@ -113,6 +115,8 @@ pub fn render(
             cleanup_error(&output, "MVP-BACKEND-START", Category::Backend, message)
         })?;
     let mut active = Vec::new();
+    let mut frame_composition = Duration::ZERO;
+    let mut encoder_write = Duration::ZERO;
     for frame in 0..plan.frame_count {
         if options.cancelled.load(Ordering::Relaxed) {
             encoder.cancel();
@@ -136,7 +140,7 @@ pub fn render(
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
         let compose_started = Instant::now();
         let image = compositor::compose(plan, &mut prepared, &active, time);
-        timings.frame_composition_ms += compose_started.elapsed().as_millis();
+        frame_composition += compose_started.elapsed();
         let write_started = Instant::now();
         if let Err(message) = encoder.write_frame(image.as_raw()) {
             encoder.cancel();
@@ -147,7 +151,7 @@ pub fn render(
                 message,
             ));
         }
-        timings.encoder_write_ms += write_started.elapsed().as_millis();
+        encoder_write += write_started.elapsed();
         let completed = frame + 1;
         emit(RenderEvent {
             event_schema_version: 1,
@@ -168,7 +172,7 @@ pub fn render(
             message,
         ));
     }
-    timings.encoder_finalize_ms = finish_started.elapsed().as_millis();
+    timings.encoder_finalize_ms = milliseconds(finish_started.elapsed());
     let publish_started = Instant::now();
     output.publish().map_err(|diagnostic| {
         let removed = output.cleanup();
@@ -177,8 +181,10 @@ pub fn render(
             temporary_removed: removed,
         }
     })?;
-    timings.output_publish_ms = publish_started.elapsed().as_millis();
-    timings.total_ms = total_started.elapsed().as_millis();
+    timings.output_publish_ms = milliseconds(publish_started.elapsed());
+    timings.frame_composition_ms = milliseconds(frame_composition);
+    timings.encoder_write_ms = milliseconds(encoder_write);
+    timings.total_ms = milliseconds(total_started.elapsed());
     emit(RenderEvent {
         event_schema_version: 1,
         kind: "completed".to_owned(),
@@ -202,6 +208,10 @@ pub fn render(
     })
 }
 
+fn milliseconds(duration: Duration) -> u128 {
+    duration.as_millis()
+}
+
 fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
     match item {
         ScheduledItem::Clip(index) => &plan.clips[index].draw_key,
@@ -223,5 +233,17 @@ fn cleanup_error(
     RenderError {
         diagnostic: Diagnostic::error(code, category, message, ""),
         temporary_removed: output.cleanup(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::milliseconds;
+    use std::time::Duration;
+
+    #[test]
+    fn timing_converts_after_submillisecond_samples_accumulate() {
+        let accumulated = Duration::from_micros(800) * 100;
+        assert_eq!(milliseconds(accumulated), 80);
     }
 }

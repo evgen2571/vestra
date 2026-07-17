@@ -6,6 +6,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, atomic::AtomicBool},
+    time::Instant,
 };
 
 use crate::{
@@ -42,9 +43,13 @@ pub fn render_project(
     request: RenderRequest,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<(crate::project::ValidatedProject, RenderSummary), ApplicationRenderError> {
+    let workflow_started = Instant::now();
+    let validation_started = Instant::now();
     let validated = validate_project(path).map_err(|error| match error {
         LoadError::Diagnostics(errors) => ApplicationRenderError::Project(errors),
     })?;
+    let validation_elapsed = validation_started.elapsed();
+    let compilation_started = Instant::now();
     let plan = compile(
         &validated,
         CompileOptions {
@@ -55,7 +60,8 @@ pub fn render_project(
         validated: validated.clone(),
         diagnostic,
     })?;
-    let summary = render(
+    let compilation_elapsed = compilation_started.elapsed();
+    let mut summary = render(
         &plan,
         &RenderOptions {
             output_override: request.output_override,
@@ -68,5 +74,9 @@ pub fn render_project(
         validated: validated.clone(),
         error,
     })?;
+    summary.timings.project_load_and_validation_ms = validation_elapsed.as_millis();
+    summary.timings.plan_compile_ms = compilation_elapsed.as_millis();
+    summary.timings.total_ms = workflow_started.elapsed().as_millis();
+    summary.elapsed_ms = summary.timings.total_ms;
     Ok((validated, summary))
 }

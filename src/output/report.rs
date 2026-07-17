@@ -134,7 +134,8 @@ struct RenderFailureReport<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temporary_output_path: Option<&'a Path>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    last_completed_frame: Option<u64>,
+    last_completed_frame_index: Option<u64>,
+    completed_frames: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     total_frames: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -167,7 +168,8 @@ pub fn write_render_failure_report(
             project_path,
             requested_output_path: context.output_path.as_deref(),
             temporary_output_path: context.temporary_output_path.as_deref(),
-            last_completed_frame: context.last_completed_frame,
+            last_completed_frame_index: context.last_completed_frame_index,
+            completed_frames: context.completed_frames,
             total_frames: Some(context.total_frames),
             progress: context.progress,
             warnings,

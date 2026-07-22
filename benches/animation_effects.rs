@@ -104,6 +104,21 @@ fn main() {
             .iter()
             .map(|sample| sample.summary.timings.gpu_initialization_ms),
     );
+    let median_gpu_adapter_request = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_adapter_request_ms),
+    );
+    let median_gpu_device_request = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_device_request_ms),
+    );
+    let median_gpu_pipeline_creation = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_pipeline_creation_ms),
+    );
     let median_texture_upload = median_optional(
         samples
             .iter()
@@ -132,7 +147,7 @@ fn main() {
     let median_index = MEASURED_RUNS / 2;
     let summary = &samples[0].summary;
     println!(
-        "animation-effects 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms gpu_init_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "animation-effects 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend.as_str(),
         wall_samples[median_index],
         wall_samples[0],
@@ -144,6 +159,9 @@ fn main() {
         median_frame_render,
         median_encoder_write,
         median_gpu_initialization,
+        median_gpu_adapter_request,
+        median_gpu_device_request,
+        median_gpu_pipeline_creation,
         median_texture_upload,
         median_command_encode,
         median_submission,

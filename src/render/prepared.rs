@@ -63,6 +63,9 @@ pub struct PreparationStats {
 pub struct PreparationTimings {
     pub decode: Duration,
     pub gpu_initialization: Duration,
+    pub gpu_adapter_request: Duration,
+    pub gpu_device_request: Duration,
+    pub gpu_pipeline_creation: Duration,
     pub texture_upload: Duration,
     pub gpu_frame_command_encode: Duration,
     pub gpu_submission: Duration,

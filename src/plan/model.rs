@@ -53,7 +53,7 @@ pub struct ImageAsset {
     pub(crate) path: PathBuf,
 }
 
-/// A renderer-visible layer. Project transitions and v1 flashes have already
+/// A renderer-visible layer. Project transitions and flashes have already
 /// become tracks and normal sources by the time this type exists.
 #[derive(Clone, Debug)]
 pub struct CompiledLayer {
@@ -65,8 +65,8 @@ pub struct CompiledLayer {
     pub(crate) source: CompiledVisualSource,
     pub(crate) transform: CompiledTransformTracks,
     pub(crate) opacity: Track<f64>,
-    /// Independent opacity contributors compose multiplicatively. V1
-    /// transitions populate one contributor instead of a transition variant.
+    /// Independent opacity contributors compose multiplicatively. Transitions
+    /// populate one contributor instead of a transition variant.
     pub(crate) opacity_contributions: Vec<Track<f64>>,
     pub(crate) effects: Vec<CompiledEffect>,
 }

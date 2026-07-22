@@ -1,8 +1,8 @@
 {
 
-  "name": "Animation and effects v2",
+  "name": "Animation and effects",
   "output": {
-    "path": "../output/animation-effects-v2.mp4",
+    "path": "../output/animation-effects.mp4",
     "width": 320,
     "height": 180,
     "frame_rate": "24/1",

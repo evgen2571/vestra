@@ -1,4 +1,4 @@
-//! Compilation from validated v1 projects to renderer-only data.
+//! Compilation from validated projects to renderer-only data.
 
 mod compiler;
 mod evaluated;

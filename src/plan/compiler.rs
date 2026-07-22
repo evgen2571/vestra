@@ -134,7 +134,7 @@ fn compile_canonical(
                         Diagnostic::error(
                             "MVP-PLAN-COLOUR",
                             Category::Internal,
-                            "validated v2 solid color is invalid",
+                            "validated solid color is invalid",
                             "",
                         )
                     })?,

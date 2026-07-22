@@ -9,13 +9,12 @@ use video_editor::application::{RenderRequest, render_project};
 
 fn main() {
     let output = tempfile::tempdir().expect("temporary benchmark directory");
-    let output_path = output.path().join("animation-effects-v2.mp4");
-    let project_path = output.path().join("animation-effects-v2-720x1280.json");
+    let output_path = output.path().join("animation-effects.mp4");
+    let project_path = output.path().join("animation-effects-720x1280.json");
     let mut project: serde_json::Value = serde_json::from_slice(
-        &fs::read("examples/projects/animation-effects-v2.json")
-            .expect("read v2 benchmark fixture"),
+        &fs::read("examples/projects/animation-effects-v2.json").expect("read benchmark fixture"),
     )
-    .expect("parse v2 benchmark fixture");
+    .expect("parse benchmark fixture");
     project["output"]["width"] = 720.into();
     project["output"]["height"] = 1280.into();
     for asset in project["assets"].as_array_mut().expect("fixture assets") {
@@ -49,7 +48,7 @@ fn main() {
         Err(_) => panic!("benchmark project renders"),
     };
     println!(
-        "animation-effects-v2 720x1280: total={}ms track_evaluation={}ms sampling_and_compositing={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
+        "animation-effects 720x1280: total={}ms track_evaluation={}ms sampling_and_compositing={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
         summary.timings.total_ms,
         summary.timings.track_evaluation_ms,
         summary.timings.cpu_sampling_and_compositing_ms,

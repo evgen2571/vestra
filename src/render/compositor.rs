@@ -513,4 +513,46 @@ mod tests {
             assert!(canvas.pixels().any(|pixel| pixel[3] > 0));
         }
     }
+
+    #[test]
+    fn scale_expands_coverage_around_the_anchor() {
+        let source = RgbaImage::from_pixel(2, 2, Rgba([255, 0, 0, 255]));
+        let coverage = |scale| {
+            let mut canvas = RgbaImage::new(12, 12);
+            draw_image(
+                &mut canvas,
+                &source,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                2.0,
+                2.0,
+                Transform2D {
+                    position: crate::domain::Point { x: 0.5, y: 0.5 },
+                    anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+                    scale: crate::domain::Point { x: scale, y: scale },
+                    rotation_radians: 0.0,
+                },
+                1.0,
+                ColourTransform::default(),
+            );
+            canvas.pixels().filter(|pixel| pixel[3] > 0).count()
+        };
+        assert!(coverage(2.0) > coverage(1.0));
+    }
+
+    #[test]
+    fn opacity_animation_uses_source_over_alpha() {
+        let destination = Rgba([0, 0, 255, 255]);
+        let source = Rgba([255, 0, 0, 255]);
+        assert_eq!(source_over(destination, source, 0.0), destination);
+        assert_eq!(source_over(destination, source, 1.0), source);
+        assert_eq!(
+            source_over(destination, source, 0.5),
+            Rgba([128, 0, 128, 255])
+        );
+    }
 }

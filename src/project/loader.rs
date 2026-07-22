@@ -37,21 +37,34 @@ pub fn load_and_validate(
                 "/format_version",
             )])
         })?;
-    if version != u64::from(FORMAT_VERSION) {
-        return Err(LoadError::Diagnostics(vec![Diagnostic::error(
+    match version {
+        version if version == u64::from(FORMAT_VERSION) => {
+            let project: Project = serde_json::from_value(value).map_err(|error| {
+                LoadError::Diagnostics(vec![Diagnostic::error(
+                    "MVP-PROJECT-SHAPE",
+                    Category::Project,
+                    format!("project does not match version 1: {error}"),
+                    "",
+                )])
+            })?;
+            validation::validate(project, path, options)
+        }
+        version if version == u64::from(super::v2::FORMAT_VERSION) => {
+            let project: super::v2::Project = serde_json::from_value(value).map_err(|error| {
+                LoadError::Diagnostics(vec![Diagnostic::error(
+                    "MVP-PROJECT-SHAPE",
+                    Category::Project,
+                    format!("project does not match version 2: {error}"),
+                    "",
+                )])
+            })?;
+            validation::validate_v2(project, path, options)
+        }
+        _ => Err(LoadError::Diagnostics(vec![Diagnostic::error(
             "MVP-VERSION-UNSUPPORTED",
             Category::Version,
-            format!("unsupported format_version {version}; supported versions: {FORMAT_VERSION}"),
+            format!("unsupported format_version {version}; supported versions: 1, 2"),
             "/format_version",
-        )]));
+        )])),
     }
-    let project: Project = serde_json::from_value(value).map_err(|error| {
-        LoadError::Diagnostics(vec![Diagnostic::error(
-            "MVP-PROJECT-SHAPE",
-            Category::Project,
-            format!("project does not match version 1: {error}"),
-            "",
-        )])
-    })?;
-    validation::validate(project, path, options)
 }

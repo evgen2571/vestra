@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use crate::{
-    domain::{Crop, Easing, Point},
+    animation::Track,
+    domain::{Crop, Point},
     media::EncoderSettings,
 };
 
@@ -14,8 +15,7 @@ pub struct RenderPlan {
     pub(crate) frame_count: u64,
     pub(crate) encoder: EncoderSettings,
     pub(crate) images: Vec<ImageAsset>,
-    pub(crate) clips: Vec<CompiledClip>,
-    pub(crate) flashes: Vec<CompiledFlash>,
+    pub(crate) layers: Vec<CompiledLayer>,
     pub(crate) compilation: CompilationStats,
     pub(crate) warnings: Vec<crate::Diagnostic>,
 }
@@ -42,22 +42,50 @@ pub struct ImageAsset {
     pub(crate) path: PathBuf,
 }
 
+/// A renderer-visible layer. Project transitions and v1 flashes have already
+/// become tracks and normal sources by the time this type exists.
 #[derive(Clone, Debug)]
-pub struct CompiledClip {
+pub struct CompiledLayer {
     pub(crate) id: String,
-    pub(crate) asset_index: usize,
     pub(crate) start_nanos: u128,
     pub(crate) start_frame: u64,
     pub(crate) end_frame: u64,
     pub(crate) draw_key: DrawKey,
-    pub(crate) position: Point,
-    pub(crate) anchor: Point,
-    pub(crate) crop: Crop,
-    pub(crate) sizing: CompiledSizing,
-    pub(crate) opacity: f64,
-    pub(crate) animations: CompiledAnimations,
-    pub(crate) transitions: Vec<CompiledTransition>,
-    pub(crate) preparation: PreparationClass,
+    pub(crate) source: CompiledVisualSource,
+    pub(crate) transform: CompiledTransformTracks,
+    pub(crate) opacity: Track<f64>,
+    /// Independent opacity contributors compose multiplicatively. V1
+    /// transitions populate one contributor instead of a transition variant.
+    pub(crate) opacity_contributions: Vec<Track<f64>>,
+    pub(crate) effects: Vec<CompiledEffect>,
+}
+
+#[derive(Clone, Debug)]
+pub enum CompiledVisualSource {
+    Image {
+        asset_index: usize,
+        crop: Track<Crop>,
+        sizing: CompiledSizing,
+    },
+    SolidColor {
+        colour: [u8; 4],
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct CompiledTransformTracks {
+    pub(crate) position: Track<Point>,
+    pub(crate) anchor: Track<Point>,
+    pub(crate) scale: Track<Point>,
+    pub(crate) rotation_radians: Track<f64>,
+}
+
+#[derive(Clone, Debug)]
+pub enum CompiledEffect {
+    Brightness { amount: Track<f64> },
+    Contrast { amount: Track<f64> },
+    Saturation { amount: Track<f64> },
+    Tint { colour: [u8; 4], amount: Track<f64> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -65,13 +93,6 @@ pub struct DrawKey {
     pub(crate) layer: i32,
     pub(crate) start_nanos: u128,
     pub(crate) id: String,
-    pub(crate) kind: ItemKind,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ItemKind {
-    Clip,
-    Flash,
 }
 
 #[derive(Clone, Debug)]
@@ -83,62 +104,5 @@ pub enum CompiledSizing {
     Stretch { width: u32, height: u32 },
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct CompiledAnimations {
-    pub(crate) position: Vec<Curve<Point>>,
-    pub(crate) scale: Vec<Curve<f64>>,
-    pub(crate) opacity: Vec<Curve<f64>>,
-    pub(crate) crop: Vec<Curve<Crop>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Curve<T> {
-    pub(crate) start_nanos: u128,
-    pub(crate) end_nanos: u128,
-    pub(crate) easing: Easing,
-    pub(crate) start: T,
-    pub(crate) end: T,
-}
-
-#[derive(Clone, Debug)]
-pub enum CompiledTransition {
-    Outgoing(Curve<()>),
-    Incoming(Curve<()>),
-}
-
-impl CompiledTransition {
-    #[must_use]
-    pub const fn curve(&self) -> &Curve<()> {
-        match self {
-            Self::Outgoing(curve) | Self::Incoming(curve) => curve,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct CompiledFlash {
-    pub(crate) start_nanos: u128,
-    pub(crate) end_nanos: u128,
-    pub(crate) start_frame: u64,
-    pub(crate) end_frame: u64,
-    pub(crate) draw_key: DrawKey,
-    pub(crate) colour: [u8; 4],
-    pub(crate) opacity: f64,
-    pub(crate) fade_in_nanos: u128,
-    pub(crate) fade_out_nanos: u128,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PreparationClass {
-    StaticBitmap,
-    PositionOrOpacityOnly,
-    ScaleAnimated,
-    CropAnimated,
-    CropAndScaleAnimated,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum ScheduledItem {
-    Clip(usize),
-    Flash(usize),
-}
+pub(crate) struct ScheduledItem(pub(crate) usize);

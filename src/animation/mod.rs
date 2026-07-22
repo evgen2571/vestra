@@ -1,6 +1,6 @@
 //! Typed, deterministic keyframe evaluation used by compiled render plans.
 
-use crate::domain::Point;
+use crate::domain::{Crop, Point};
 
 /// A clip-local point on the timeline, represented as whole nanoseconds.
 pub type TimelineTime = u128;
@@ -154,6 +154,17 @@ impl Interpolate for Point {
         Self {
             x: f64::interpolate(start.x, end.x, amount),
             y: f64::interpolate(start.y, end.y, amount),
+        }
+    }
+}
+
+impl Interpolate for Crop {
+    fn interpolate(start: Self, end: Self, amount: f64) -> Self {
+        Self {
+            x: f64::interpolate(start.x, end.x, amount),
+            y: f64::interpolate(start.y, end.y, amount),
+            width: f64::interpolate(start.width, end.width, amount),
+            height: f64::interpolate(start.height, end.height, amount),
         }
     }
 }

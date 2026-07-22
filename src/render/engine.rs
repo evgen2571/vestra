@@ -7,17 +7,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+use image::RgbaImage;
 use serde::Serialize;
 
 use crate::{
     Category, Diagnostic,
     media::FfmpegEncoder,
     output::OutputTarget,
-    plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem},
-    render::{
-        compositor,
-        prepared::{PreparationStats, PreparedAssets},
-    },
+    plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
+    render::{CpuBackend, RenderBackend, prepared::PreparationStats},
     timeline::frame_time_nanos,
 };
 
@@ -133,7 +131,8 @@ pub fn render(
     })?;
     let schedule = ActiveSchedule::compile(plan);
     let mut schedule_cursor = schedule.cursor();
-    let mut prepared = PreparedAssets::build(plan).map_err(|diagnostic| {
+    let mut backend = CpuBackend::default();
+    backend.prepare(plan).map_err(|diagnostic| {
         cleanup_error(
             &output,
             plan,
@@ -143,7 +142,7 @@ pub fn render(
             diagnostic,
         )
     })?;
-    let mut performance = prepared.stats().clone();
+    let mut performance = backend.stats().expect("prepared CPU backend").clone();
     performance.animation_value_parse_count = plan.compilation.animation_value_parse_count;
     performance.animation_sort_count = plan.compilation.animation_sort_count;
     performance.compiled_transition_association_count =
@@ -151,8 +150,13 @@ pub fn render(
     performance.parsed_colour_count = plan.compilation.parsed_colour_count;
     performance.schedule_event_count = schedule.event_count();
     let mut timings = RenderTimings {
-        asset_decode_ms: milliseconds(prepared.timings().decode),
-        asset_prepare_ms: milliseconds(prepared.timings().static_prepare),
+        asset_decode_ms: milliseconds(backend.timings().expect("prepared CPU backend").decode),
+        asset_prepare_ms: milliseconds(
+            backend
+                .timings()
+                .expect("prepared CPU backend")
+                .static_prepare,
+        ),
         ..RenderTimings::default()
     };
     emit(RenderEvent {
@@ -179,6 +183,7 @@ pub fn render(
     let mut frame_composition = Duration::ZERO;
     let mut encoder_write = Duration::ZERO;
     let mut completed_frames = 0;
+    let mut image = RgbaImage::new(plan.canvas.width, plan.canvas.height);
     for frame in 0..plan.frame_count {
         if options.cancelled.load(Ordering::Relaxed) {
             encoder.cancel();
@@ -209,7 +214,19 @@ pub fn render(
         performance.active_item_consideration_count += active.len() as u64;
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
         let compose_started = Instant::now();
-        let image = compositor::compose(plan, &mut prepared, &active, time);
+        let evaluated = evaluate(plan, &active, time);
+        backend
+            .render_frame(&evaluated, &mut image)
+            .map_err(|diagnostic| {
+                cleanup_error(
+                    &output,
+                    plan,
+                    RenderFailureStage::FrameComposition,
+                    completed_frames,
+                    Some(frame),
+                    diagnostic,
+                )
+            })?;
         frame_composition += compose_started.elapsed();
         let write_started = Instant::now();
         if let Err(message) = encoder.write_frame(image.as_raw()) {
@@ -278,7 +295,7 @@ pub fn render(
         output_path: Some(output.final_path.clone()),
         warnings: Some(plan.warnings.clone()),
     });
-    let preparation = prepared.stats();
+    let preparation = backend.stats().expect("prepared CPU backend");
     performance.decoded_image_count = preparation.decoded_image_count;
     performance.static_prepared_clip_count = preparation.static_prepared_clip_count;
     performance.static_crop_count = preparation.static_crop_count;
@@ -306,10 +323,7 @@ fn milliseconds(duration: Duration) -> u128 {
 }
 
 fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
-    match item {
-        ScheduledItem::Clip(index) => &plan.clips[index].draw_key,
-        ScheduledItem::Flash(index) => &plan.flashes[index].draw_key,
-    }
+    &plan.layers[item.0].draw_key
 }
 fn cleanup_error(
     output: &OutputTarget,

@@ -7,7 +7,7 @@ pub struct Point {
     pub y: f64,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Crop {
     pub x: f64,

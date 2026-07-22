@@ -369,7 +369,7 @@ impl WgpuBackend {
             source_textures.push(texture);
             source_dimensions.push((image.width(), image.height()));
         }
-        let source_bind_groups = source_textures
+        let source_bind_groups: Vec<wgpu::BindGroup> = source_textures
             .iter()
             .map(|texture| {
                 create_layer_bind_group(
@@ -407,6 +407,11 @@ impl WgpuBackend {
         stats.uploaded_texture_bytes = uploaded_texture_bytes;
         stats.readback_buffer_count = 1;
         stats.readback_buffer_bytes = readback_size;
+        stats.shader_module_count = 1;
+        stats.pipeline_count = 1;
+        stats.output_texture_count = 1;
+        stats.accumulation_buffer_count = 1;
+        stats.bind_group_count = source_bind_groups.len() + 1;
         let mut timings = decoded.timings();
         timings.texture_upload = upload_started.elapsed();
         timings.gpu_initialization = started.elapsed();
@@ -578,6 +583,7 @@ impl RenderBackend for WgpuBackend {
             },
         );
         self.queue.submit(Some(encoder.finish()));
+        self.stats.command_submission_count += frame.layers.len() as u64 + 2;
         let slice = self.readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {

@@ -84,6 +84,51 @@ fn main() {
         .collect();
     wall_samples.sort_unstable();
     render_samples.sort_unstable();
+    let median_track_evaluation = median(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.track_evaluation_ms),
+    );
+    let median_frame_render = median(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.frame_render_ms),
+    );
+    let median_encoder_write = median(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.encoder_write_ms),
+    );
+    let median_gpu_initialization = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_initialization_ms),
+    );
+    let median_texture_upload = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.texture_upload_ms),
+    );
+    let median_command_encode = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_frame_command_encode_ms),
+    );
+    let median_submission = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_submission_ms),
+    );
+    let median_readback_wait = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.gpu_readback_wait_ms),
+    );
+    let median_row_repack = median_optional(
+        samples
+            .iter()
+            .map(|sample| sample.summary.timings.row_repack_ms),
+    );
     let median_index = MEASURED_RUNS / 2;
     let summary = &samples[0].summary;
     println!(
@@ -95,19 +140,30 @@ fn main() {
         render_samples[median_index],
         render_samples[0],
         render_samples[MEASURED_RUNS - 1],
-        summary.timings.track_evaluation_ms,
-        summary.timings.frame_render_ms,
-        summary.timings.encoder_write_ms,
-        summary.timings.gpu_initialization_ms,
-        summary.timings.texture_upload_ms,
-        summary.timings.gpu_frame_command_encode_ms,
-        summary.timings.gpu_submission_ms,
-        summary.timings.gpu_readback_wait_ms,
-        summary.timings.row_repack_ms,
+        median_track_evaluation,
+        median_frame_render,
+        median_encoder_write,
+        median_gpu_initialization,
+        median_texture_upload,
+        median_command_encode,
+        median_submission,
+        median_readback_wait,
+        median_row_repack,
         summary.performance.cache_peak_bytes,
         summary.performance.peak_cache_entries,
         summary.performance.peak_decoded_bytes,
     );
+}
+
+fn median(values: impl Iterator<Item = u128>) -> u128 {
+    let mut values: Vec<_> = values.collect();
+    values.sort_unstable();
+    values[values.len() / 2]
+}
+
+fn median_optional(values: impl Iterator<Item = Option<u128>>) -> Option<u128> {
+    let values: Vec<_> = values.collect::<Option<Vec<_>>>()?;
+    Some(median(values.into_iter()))
 }
 
 struct Sample {

@@ -115,6 +115,8 @@ fn canonical_example_renders_an_h264_frame_sequence() {
         .args([
             "render",
             "examples/projects/animation-effects.json",
+            "--render-backend",
+            "cpu",
             "--output",
             output.to_str().expect("UTF-8 path"),
             "--progress",
@@ -134,7 +136,7 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     assert_eq!(report["width"], 320);
     assert_eq!(report["height"], 180);
     assert_eq!(report["render_backend"], "cpu");
-    assert_eq!(report["requested_render_backend"], "auto");
+    assert_eq!(report["requested_render_backend"], "cpu");
     assert_eq!(report["encoder_backend"], "ffmpeg");
     assert!(report["timings"].get("project_parse_ms").is_some());
     assert!(report["timings"].get("semantic_validation_ms").is_some());
@@ -258,6 +260,8 @@ fn render_report_includes_final_crop_cache_metrics() {
         .args([
             "render",
             path.to_str().expect("UTF-8 path"),
+            "--render-backend",
+            "cpu",
             "--output",
             output.to_str().expect("UTF-8 path"),
             "--progress",
@@ -328,6 +332,8 @@ fn canonical_render_has_decoded_crossfade_and_flash_regressions() {
         .args([
             "render",
             "examples/projects/animation-effects.json",
+            "--render-backend",
+            "cpu",
             "--output",
             output.to_str().expect("UTF-8 path"),
             "--progress",

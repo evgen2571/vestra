@@ -13,7 +13,9 @@ use crate::{
     Diagnostic,
     plan::{CompileOptions, compile},
     project::{LoadError, load_and_validate_with_timings},
-    render::{RenderError, RenderEvent, RenderOptions, RenderSummary, render},
+    render::{
+        RenderBackendPreference, RenderError, RenderEvent, RenderOptions, RenderSummary, render,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -22,6 +24,7 @@ pub struct RenderRequest {
     pub overwrite: bool,
     pub preview: bool,
     pub cancelled: Arc<AtomicBool>,
+    pub backend_preference: RenderBackendPreference,
 }
 
 pub enum ApplicationRenderError {
@@ -69,6 +72,7 @@ pub fn render_project(
             output_override: request.output_override,
             overwrite: request.overwrite,
             cancelled: request.cancelled,
+            backend_preference: request.backend_preference,
         },
         emit,
     )

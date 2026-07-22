@@ -15,7 +15,10 @@ use crate::{
     media::FfmpegEncoder,
     output::OutputTarget,
     plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
-    render::{CpuBackend, RenderBackend, prepared::PreparationStats},
+    render::{
+        AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind, WgpuBackend,
+        prepared::{DecodedAssets, PreparationStats},
+    },
     timeline::frame_time_nanos,
 };
 
@@ -24,6 +27,23 @@ pub struct RenderOptions {
     pub output_override: Option<PathBuf>,
     pub overwrite: bool,
     pub cancelled: Arc<AtomicBool>,
+    pub backend_preference: RenderBackendPreference,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderBackendPreference {
+    #[default]
+    Auto,
+    Cpu,
+    Wgpu,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct BackendFallback {
+    pub code: String,
+    pub stage: String,
+    pub message: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -52,6 +72,10 @@ pub struct RenderSummary {
     pub elapsed_ms: u128,
     pub timings: RenderTimings,
     pub performance: PreparationStats,
+    pub requested_render_backend: RenderBackendPreference,
+    pub render_backend: RenderBackendKind,
+    pub backend_fallback: Option<BackendFallback>,
+    pub adapter: Option<AdapterMetadata>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -130,10 +154,7 @@ pub fn render(
         temporary_removed: false,
         context: RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, plan),
     })?;
-    let schedule = ActiveSchedule::compile(plan);
-    let mut schedule_cursor = schedule.cursor();
-    let mut backend = CpuBackend::default();
-    backend.prepare(plan).map_err(|diagnostic| {
+    let decoded = DecodedAssets::build(plan).map_err(|diagnostic| {
         cleanup_error(
             &output,
             plan,
@@ -143,7 +164,32 @@ pub fn render(
             diagnostic,
         )
     })?;
-    let mut performance = backend.stats().expect("prepared CPU backend").clone();
+    let schedule = ActiveSchedule::compile(plan);
+    let mut schedule_cursor = schedule.cursor();
+    let (mut backend, backend_fallback) =
+        create_backend(options.backend_preference, plan, &decoded).map_err(|diagnostic| {
+            cleanup_error(
+                &output,
+                plan,
+                RenderFailureStage::AssetPreparation,
+                0,
+                None,
+                diagnostic,
+            )
+        })?;
+    backend
+        .prepare(plan, Arc::clone(&decoded))
+        .map_err(|diagnostic| {
+            cleanup_error(
+                &output,
+                plan,
+                RenderFailureStage::AssetPreparation,
+                0,
+                None,
+                diagnostic,
+            )
+        })?;
+    let mut performance = backend.stats();
     performance.compiled_transition_association_count =
         plan.compilation.compiled_transition_association_count;
     performance.parsed_colour_count = plan.compilation.parsed_colour_count;
@@ -160,7 +206,7 @@ pub fn render(
     performance.tint_effect_count = plan.compilation.tint_effect_count;
     performance.schedule_event_count = schedule.event_count();
     let mut timings = RenderTimings {
-        asset_decode_ms: milliseconds(backend.timings().expect("prepared CPU backend").decode),
+        asset_decode_ms: milliseconds(decoded.timings().decode),
         ..RenderTimings::default()
     };
     emit(RenderEvent {
@@ -224,18 +270,27 @@ pub fn render(
         performance.evaluated_track_count += evaluated.evaluated_track_count;
         track_evaluation += evaluation_started.elapsed();
         let compose_started = Instant::now();
-        backend
-            .render_frame(&evaluated, &mut image)
-            .map_err(|diagnostic| {
-                cleanup_error(
-                    &output,
-                    plan,
-                    RenderFailureStage::FrameComposition,
-                    completed_frames,
-                    Some(frame),
-                    diagnostic,
+        if let Err(diagnostic) = backend.render_frame(&evaluated, &mut image) {
+            // The explicit normal-path cleanup preserves the backend failure as
+            // primary evidence; Drop remains only a last-resort safeguard.
+            let cleanup = encoder.abort_after_backend_failure();
+            let diagnostic = cleanup.map_or(diagnostic.clone(), |detail| {
+                Diagnostic::error(
+                    &diagnostic.code,
+                    diagnostic.category.clone(),
+                    format!("{}; encoder cleanup: {detail}", diagnostic.message),
+                    diagnostic.pointer.clone().unwrap_or_default(),
                 )
-            })?;
+            });
+            return Err(cleanup_error(
+                &output,
+                plan,
+                RenderFailureStage::FrameComposition,
+                completed_frames,
+                Some(frame),
+                diagnostic,
+            ));
+        }
         frame_composition += compose_started.elapsed();
         let write_started = Instant::now();
         if let Err(message) = encoder.write_frame(image.as_raw()) {
@@ -305,7 +360,7 @@ pub fn render(
         output_path: Some(output.final_path.clone()),
         warnings: Some(plan.warnings.clone()),
     });
-    let preparation = backend.stats().expect("prepared CPU backend");
+    let preparation = backend.stats();
     performance.decoded_image_count = preparation.decoded_image_count;
     performance.bitmap_cache_hits = preparation.bitmap_cache_hits;
     performance.bitmap_cache_misses = preparation.bitmap_cache_misses;
@@ -330,7 +385,39 @@ pub fn render(
         elapsed_ms: timings.total_ms,
         timings,
         performance,
+        requested_render_backend: options.backend_preference,
+        render_backend: backend.kind(),
+        backend_fallback,
+        adapter: backend.adapter(),
     })
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "backend selection preserves structured diagnostics for auto fallback and explicit requests"
+)]
+fn create_backend(
+    preference: RenderBackendPreference,
+    plan: &RenderPlan,
+    decoded: &Arc<DecodedAssets>,
+) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
+    match preference {
+        RenderBackendPreference::Cpu => Ok((Box::new(CpuBackend::default()), None)),
+        RenderBackendPreference::Wgpu => {
+            Ok((Box::new(WgpuBackend::new(plan, Arc::clone(decoded))?), None))
+        }
+        RenderBackendPreference::Auto => match WgpuBackend::new(plan, Arc::clone(decoded)) {
+            Ok(backend) => Ok((Box::new(backend), None)),
+            Err(error) => Ok((
+                Box::new(CpuBackend::default()),
+                Some(BackendFallback {
+                    code: error.code,
+                    stage: "wgpu_preparation".to_owned(),
+                    message: error.message,
+                }),
+            )),
+        },
+    }
 }
 
 fn milliseconds(duration: Duration) -> u128 {

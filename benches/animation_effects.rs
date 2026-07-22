@@ -5,7 +5,10 @@ use std::{
     time::Instant,
 };
 
-use video_editor::application::{RenderRequest, render_project};
+use video_editor::{
+    application::{RenderRequest, render_project},
+    render::RenderBackendPreference,
+};
 
 fn main() {
     let output = tempfile::tempdir().expect("temporary benchmark directory");
@@ -46,6 +49,7 @@ fn main() {
             overwrite: false,
             preview: false,
             cancelled: Arc::new(AtomicBool::new(false)),
+            backend_preference: RenderBackendPreference::Cpu,
         },
         &mut |_| {},
     );

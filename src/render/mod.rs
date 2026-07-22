@@ -5,11 +5,13 @@ mod cache;
 mod compositor;
 mod engine;
 mod prepared;
+mod wgpu;
 
-pub use backend::{CpuBackend, RenderBackend};
+pub use backend::{AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind};
 pub use cache::{ByteLruCache, CacheStats};
 pub use engine::{
-    RenderError, RenderEvent, RenderFailureContext, RenderFailureStage, RenderOptions,
-    RenderSummary, RenderTimings, render,
+    BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
+    RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,
 };
-pub use prepared::PreparationStats;
+pub use prepared::{DecodedAssets, PreparationStats};
+pub use wgpu::WgpuBackend;

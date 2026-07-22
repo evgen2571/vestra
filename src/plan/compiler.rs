@@ -81,12 +81,6 @@ fn compile_canonical(
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
         declared_clip_count: project.visual.clips.len(),
-        rendered_clip_count: project
-            .visual
-            .clips
-            .iter()
-            .filter(|clip| clip.visible)
-            .count(),
         hidden_clip_count: project
             .visual
             .clips
@@ -164,6 +158,11 @@ fn compile_canonical(
             effects,
         });
     }
+    compilation.rendered_clip_count = layers
+        .iter()
+        .filter(|layer| layer.start_frame < layer.end_frame)
+        .count();
+    compilation.zero_frame_clip_count = layers.len() - compilation.rendered_clip_count;
     let indices: BTreeMap<String, usize> = layers
         .iter()
         .enumerate()
@@ -251,7 +250,10 @@ fn enforce_active_layer_limit(
     maximum_active_layers: usize,
 ) -> Result<(), Diagnostic> {
     let mut events = Vec::with_capacity(layers.len() * 2);
-    for layer in layers {
+    for layer in layers
+        .iter()
+        .filter(|layer| layer.start_frame < layer.end_frame)
+    {
         events.push((layer.start_frame, true));
         events.push((layer.end_frame, false));
     }
@@ -762,5 +764,13 @@ mod tests {
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
         assert_eq!(layer.end_frame, 72);
+    }
+
+    #[test]
+    fn zero_frame_layers_do_not_count_toward_active_layer_limit() {
+        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        layer.start_frame = 12;
+        layer.end_frame = 12;
+        enforce_active_layer_limit(&[layer], 0).expect("zero-frame layer is never active");
     }
 }

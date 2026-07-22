@@ -122,6 +122,8 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     assert_eq!(report["total_frames"], 60);
     assert_eq!(report["width"], 320);
     assert_eq!(report["height"], 180);
+    assert_eq!(report["render_backend"], "cpu");
+    assert_eq!(report["encoder_backend"], "ffmpeg");
     assert!(output.is_file());
 }
 

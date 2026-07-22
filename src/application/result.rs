@@ -128,7 +128,8 @@ pub struct RenderResult {
     pub elapsed_ms: u128,
     pub timings: RenderTimings,
     pub performance: crate::render::PreparationStats,
-    pub backend: &'static str,
+    pub render_backend: &'static str,
+    pub encoder_backend: &'static str,
     pub warnings: Vec<Diagnostic>,
 }
 
@@ -152,7 +153,8 @@ pub fn render_result(
         elapsed_ms: summary.elapsed_ms,
         timings: summary.timings,
         performance: summary.performance,
-        backend: "ffmpeg",
+        render_backend: "cpu",
+        encoder_backend: "ffmpeg",
         warnings: validated.warnings,
     }
 }

@@ -150,6 +150,7 @@ pub fn render(
     performance.declared_clip_count = plan.compilation.declared_clip_count;
     performance.rendered_clip_count = plan.compilation.rendered_clip_count;
     performance.hidden_clip_count = plan.compilation.hidden_clip_count;
+    performance.zero_frame_clip_count = plan.compilation.zero_frame_clip_count;
     performance.image_source_count = plan.compilation.image_source_count;
     performance.solid_color_source_count = plan.compilation.solid_color_source_count;
     performance.keyframe_count = plan.compilation.keyframe_count;

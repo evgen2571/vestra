@@ -33,6 +33,7 @@ pub struct WgpuBackend {
     _accumulation: wgpu::Buffer,
     _source_textures: Vec<wgpu::Texture>,
     _source_bind_groups: Vec<wgpu::BindGroup>,
+    source_dimensions: Vec<(u32, u32)>,
     output: wgpu::Texture,
     readback: wgpu::Buffer,
     row_bytes: u32,
@@ -224,6 +225,7 @@ impl WgpuBackend {
         });
         let upload_started = Instant::now();
         let mut source_textures = Vec::with_capacity(plan.images.len());
+        let mut source_dimensions = Vec::with_capacity(plan.images.len());
         let mut uploaded_texture_bytes = 0_u64;
         for asset in 0..plan.images.len() {
             let image = decoded.image(asset);
@@ -273,6 +275,7 @@ impl WgpuBackend {
             uploaded_texture_bytes = uploaded_texture_bytes
                 .saturating_add(u64::from(image.width()) * u64::from(image.height()) * 4);
             source_textures.push(texture);
+            source_dimensions.push((image.width(), image.height()));
         }
         let source_bind_groups = source_textures
             .iter()
@@ -306,6 +309,7 @@ impl WgpuBackend {
             _accumulation: accumulation,
             _source_textures: source_textures,
             _source_bind_groups: source_bind_groups,
+            source_dimensions,
             output,
             readback,
             row_bytes,
@@ -348,6 +352,35 @@ impl RenderBackend for WgpuBackend {
             }
         }
         compositor::compose(&reference_frame, &mut self.reference_assets, destination);
+        // Parameter updates are derived solely from the evaluated frame. This
+        // deliberately contains no project parsing or timeline evaluation.
+        for layer in &frame.layers {
+            if let crate::plan::EvaluatedSource::Image {
+                asset_index,
+                crop,
+                sizing,
+                transform,
+                ..
+            } = &layer.source
+            {
+                let (source_width, source_height) = self.source_dimensions[*asset_index];
+                let parameters = image_parameters(
+                    frame,
+                    source_width,
+                    source_height,
+                    *crop,
+                    sizing,
+                    *transform,
+                    layer.opacity,
+                    layer.colour_transform,
+                );
+                self.queue.write_buffer(
+                    &self._layer_parameters,
+                    0,
+                    bytemuck::bytes_of(&parameters),
+                );
+            }
+        }
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.output,
@@ -478,6 +511,110 @@ fn create_layer_bind_group(
             },
         ],
     })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the evaluator's image layer fields remain separate to avoid a GPU-specific plan type"
+)]
+fn image_parameters(
+    frame: &EvaluatedFrame,
+    source_width: u32,
+    source_height: u32,
+    crop: crate::domain::Crop,
+    sizing: &crate::plan::CompiledSizing,
+    transform: crate::animation::Transform2D,
+    opacity: f64,
+    colour: crate::plan::ColourTransform,
+) -> LayerParameters {
+    let cropped_width = crop.width * f64::from(source_width);
+    let cropped_height = crop.height * f64::from(source_height);
+    let (effective_width, effective_height) = match sizing {
+        crate::plan::CompiledSizing::Original => (cropped_width, cropped_height),
+        crate::plan::CompiledSizing::Stretch { width, height } => {
+            (f64::from(*width), f64::from(*height))
+        }
+        crate::plan::CompiledSizing::Scale(scale) => {
+            (cropped_width * scale, cropped_height * scale)
+        }
+        crate::plan::CompiledSizing::Fit | crate::plan::CompiledSizing::Cover => {
+            let horizontal = f64::from(frame.width) / cropped_width;
+            let vertical = f64::from(frame.height) / cropped_height;
+            let factor = if matches!(sizing, crate::plan::CompiledSizing::Fit) {
+                horizontal.min(vertical)
+            } else {
+                horizontal.max(vertical)
+            };
+            (cropped_width * factor, cropped_height * factor)
+        }
+    };
+    let (sine, cosine) = transform.rotation_radians.sin_cos();
+    let destination_x = transform.position.x * f64::from(frame.width);
+    let destination_y = transform.position.y * f64::from(frame.height);
+    let anchor_x = transform.anchor.x * effective_width;
+    let anchor_y = transform.anchor.y * effective_height;
+    let m00 = cosine / transform.scale.x;
+    let m01 = sine / transform.scale.x;
+    let m10 = -sine / transform.scale.y;
+    let m11 = cosine / transform.scale.y;
+    LayerParameters {
+        header: [
+            frame.width,
+            frame.height,
+            align_up(frame.width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) / 4,
+            1,
+        ],
+        source: [source_width, source_height, 0, 0],
+        crop: [
+            crop.x as f32,
+            crop.y as f32,
+            crop.width as f32,
+            crop.height as f32,
+        ],
+        effective: [
+            effective_width as f32,
+            effective_height as f32,
+            opacity as f32,
+            0.0,
+        ],
+        inverse_row0: [
+            m00 as f32,
+            m01 as f32,
+            (anchor_x - m00 * destination_x - m01 * destination_y) as f32,
+            0.0,
+        ],
+        inverse_row1: [
+            m10 as f32,
+            m11 as f32,
+            (anchor_y - m10 * destination_x - m11 * destination_y) as f32,
+            0.0,
+        ],
+        colour_row0: [
+            colour.matrix[0][0] as f32,
+            colour.matrix[0][1] as f32,
+            colour.matrix[0][2] as f32,
+            0.0,
+        ],
+        colour_row1: [
+            colour.matrix[1][0] as f32,
+            colour.matrix[1][1] as f32,
+            colour.matrix[1][2] as f32,
+            0.0,
+        ],
+        colour_row2: [
+            colour.matrix[2][0] as f32,
+            colour.matrix[2][1] as f32,
+            colour.matrix[2][2] as f32,
+            0.0,
+        ],
+        colour_offset: [
+            colour.offset[0] as f32,
+            colour.offset[1] as f32,
+            colour.offset[2] as f32,
+            0.0,
+        ],
+        solid_or_background: [0.0; 4],
+    }
 }
 
 fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnostic {

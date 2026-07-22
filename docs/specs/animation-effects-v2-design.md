@@ -38,7 +38,7 @@ backend.render_frame(&frame, &mut destination)?;
 
 ## Shape
 
-`project::v1` retains the existing strict model. `project::v2` has typed public tracks and sources. The loader dispatches on `format_version`, validates the selected model, and normalizes it to `NormalizedProject`. The compiler accepts only that normalized form.
+`project::v1` retains the existing strict model. `project::v2` has typed public tracks and sources. The loader dispatches on `format_version`, validates the selected model, and both paths compile into the same `RenderPlan` and evaluated-layer representation.
 
 `Track<T>` stores one base value and an ordered `Vec<Keyframe<T>>`; times are clip-local nanoseconds in compiled plans. A track returns its base before the first keyframe and its final keyframe after the last. The compiler rejects duplicates and unsorted input, so evaluation can use binary search without fallback rules.
 
@@ -60,10 +60,6 @@ backend.render_frame(&frame, &mut destination)?;
 - Extending the v1 `Animation` struct with optional fields lost because it would preserve raw JSON values and make version rules ambiguous.
 - Keeping transitions as backend variants lost because every backend would need to reimplement project presets.
 - Caching transformed bitmaps lost because subpixel transforms make the cache large and still produce stepped motion.
-
-## Next implementation step
-
-Add typed animation primitives and v2 public model/normalization, then compile both versions into evaluated layers.
 
 ## Implemented contract
 
@@ -89,6 +85,10 @@ Decoded images are reused. Static crops use a byte-budgeted LRU cache; animated
 crops and all transforms sample directly and do not create cached scaled or
 rotated bitmaps. Default resource limits cap output dimensions, duration,
 frames, clip/effect/keyframe counts, source pixels, decoded bytes, active layers,
-and cache bytes. `cargo bench --bench animation_effects` renders the complete v2
-fixture in release mode and reports end-to-end, composition, encoder, cache, and
-decoded-memory measurements.
+and cache bytes. Render reports include declared/rendered/hidden clip counts,
+image and solid-color source counts, keyframe and evaluated-track counts,
+per-effect-type counts, maximum active layers, decoded-memory statistics, and
+byte-cache statistics. Timings separate track evaluation, CPU sampling and
+composition, encoder writing, and total work. `cargo bench --bench
+animation_effects` derives a 720×1280 render from the complete v2 fixture and
+reports the same core timing and memory measurements.

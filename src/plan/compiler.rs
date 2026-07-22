@@ -51,6 +51,21 @@ pub fn compile(
     })?;
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
+        declared_clip_count: validated.project.visual.clips.len(),
+        rendered_clip_count: validated
+            .project
+            .visual
+            .clips
+            .iter()
+            .filter(|clip| clip.visible)
+            .count(),
+        hidden_clip_count: validated
+            .project
+            .visual
+            .clips
+            .iter()
+            .filter(|clip| !clip.visible)
+            .count(),
         ..CompilationStats::default()
     };
     let renderable_assets: BTreeSet<_> = validated
@@ -149,6 +164,7 @@ pub fn compile(
         )?);
     }
     compilation.parsed_colour_count += validated.project.visual.flashes.len() as u64;
+    record_compilation_workload(&mut compilation, &layers);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     let audio = compile_audio(validated)?;
     Ok(RenderPlan {
@@ -226,6 +242,20 @@ fn compile_v2(
     let mut layers = Vec::new();
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
+        declared_clip_count: project.visual.clips.len(),
+        rendered_clip_count: project
+            .visual
+            .clips
+            .iter()
+            .filter(|clip| clip.visible)
+            .count(),
+        hidden_clip_count: project
+            .visual
+            .clips
+            .iter()
+            .filter(|clip| !clip.visible)
+            .count(),
+        keyframe_count: v2_keyframe_count(project),
         ..CompilationStats::default()
     };
     for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
@@ -323,6 +353,7 @@ fn compile_v2(
         )?);
     }
     compilation.parsed_colour_count += project.visual.flashes.len() as u64;
+    record_compilation_workload(&mut compilation, &layers);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     Ok(RenderPlan {
         configured_output: resolved_output_path(validated),
@@ -926,6 +957,61 @@ fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, 
         fade_in: audio.fade_in,
         fade_out: audio.fade_out,
     }))
+}
+
+fn record_compilation_workload(compilation: &mut CompilationStats, layers: &[CompiledLayer]) {
+    for layer in layers {
+        match &layer.source {
+            CompiledVisualSource::Image { .. } => compilation.image_source_count += 1,
+            CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
+        }
+        for effect in &layer.effects {
+            match effect {
+                crate::plan::CompiledEffect::Brightness { .. } => {
+                    compilation.brightness_effect_count += 1;
+                }
+                crate::plan::CompiledEffect::Contrast { .. } => {
+                    compilation.contrast_effect_count += 1;
+                }
+                crate::plan::CompiledEffect::Saturation { .. } => {
+                    compilation.saturation_effect_count += 1;
+                }
+                crate::plan::CompiledEffect::Tint { .. } => compilation.tint_effect_count += 1,
+            }
+        }
+    }
+}
+
+fn v2_keyframe_count(project: &crate::project::v2::Project) -> u64 {
+    project
+        .visual
+        .clips
+        .iter()
+        .map(|clip| {
+            track_keyframe_count(&clip.transform.position)
+                + track_keyframe_count(&clip.transform.anchor)
+                + track_keyframe_count(&clip.transform.scale)
+                + track_keyframe_count(&clip.transform.rotation_degrees)
+                + track_keyframe_count(&clip.opacity)
+                + clip.crop.as_ref().map_or(0, track_keyframe_count)
+                + clip
+                    .effects
+                    .iter()
+                    .map(|effect| match effect {
+                        crate::project::v2::Effect::Brightness { amount, .. }
+                        | crate::project::v2::Effect::Contrast { amount, .. }
+                        | crate::project::v2::Effect::Saturation { amount, .. }
+                        | crate::project::v2::Effect::Tint { amount, .. } => {
+                            track_keyframe_count(amount)
+                        }
+                    })
+                    .sum::<u64>()
+        })
+        .sum()
+}
+
+fn track_keyframe_count<T>(track: &crate::project::v2::Track<T>) -> u64 {
+    track.keyframes.len() as u64
 }
 
 fn compile_sizing(sizing: &Sizing) -> CompiledSizing {

@@ -60,7 +60,6 @@ impl Default for ResourceLimits {
 #[derive(Clone, Debug)]
 pub struct ValidatedProject {
     pub(crate) project: Project,
-    pub(crate) v2: Option<super::v2::Project>,
     pub(crate) limits: ResourceLimits,
     pub(crate) project_path: PathBuf,
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
@@ -78,28 +77,12 @@ impl ValidatedProject {
     }
 
     #[must_use]
-    pub const fn format_version(&self) -> u32 {
-        if self.v2.is_some() {
-            super::v2::FORMAT_VERSION
-        } else {
-            super::FORMAT_VERSION
-        }
-    }
-
-    #[must_use]
     pub fn visual_counts(&self) -> (usize, usize, usize) {
-        match &self.v2 {
-            Some(project) => (
-                project.visual.clips.len(),
-                project.visual.flashes.len(),
-                project.visual.transitions.len(),
-            ),
-            None => (
-                self.project.visual.clips.len(),
-                self.project.visual.flashes.len(),
-                self.project.visual.transitions.len(),
-            ),
-        }
+        (
+            self.project.visual.clips.len(),
+            self.project.visual.flashes.len(),
+            self.project.visual.transitions.len(),
+        )
     }
 
     #[must_use]

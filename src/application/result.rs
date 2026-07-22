@@ -12,21 +12,18 @@ use crate::{
 #[derive(Clone, Debug, Serialize)]
 pub struct ValidateResult {
     pub project: PathBuf,
-    pub format_version: u32,
     pub warnings: Vec<Diagnostic>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionResult {
     pub editor_version: &'static str,
-    pub project_format_version: u32,
 }
 
 #[must_use]
 pub const fn version_result() -> VersionResult {
     VersionResult {
         editor_version: env!("CARGO_PKG_VERSION"),
-        project_format_version: crate::project::FORMAT_VERSION,
     }
 }
 
@@ -34,7 +31,6 @@ pub fn validate_result(path: &Path) -> Result<ValidateResult, LoadError> {
     let validated = validate_project(path)?;
     Ok(ValidateResult {
         project: path.to_path_buf(),
-        format_version: validated.format_version(),
         warnings: validated.warnings,
     })
 }
@@ -42,7 +38,6 @@ pub fn validate_result(path: &Path) -> Result<ValidateResult, LoadError> {
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectResult {
     pub project: PathBuf,
-    pub format_version: u32,
     pub name: Option<String>,
     pub output: InspectOutput,
     pub assets: InspectAssets,
@@ -94,7 +89,6 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
         });
     InspectResult {
         project: path.to_path_buf(),
-        format_version: inspection.validated.format_version(),
         name: inspection.validated.project.name.clone(),
         output: InspectOutput {
             path: inspection.output_path,
@@ -121,7 +115,6 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
 #[derive(Clone, Debug, Serialize)]
 pub struct RenderResult {
     pub editor_version: &'static str,
-    pub project_format_version: u32,
     pub project: PathBuf,
     pub output: PathBuf,
     pub width: u32,
@@ -146,7 +139,6 @@ pub fn render_result(
 ) -> RenderResult {
     RenderResult {
         editor_version: env!("CARGO_PKG_VERSION"),
-        project_format_version: validated.format_version(),
         project: project.to_path_buf(),
         output: summary.output_path,
         width: summary.width,

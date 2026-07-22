@@ -38,8 +38,9 @@ may be animated. Values are clamped only after the combined affine operation.
 
 Render results report `render_backend: "cpu"` separately from
 `encoder_backend: "ffmpeg"`. Timings are measured in milliseconds:
-project loading/validation, plan compilation, asset decoding, track evaluation,
-frame rendering, encoder write/finalization, output publication, and total.
+project parsing, semantic validation, plan compilation, asset decoding, track
+evaluation, frame rendering, encoder write/finalization, output publication,
+and total.
 Frame rendering is a single non-overlapping CPU compositor interval. Cache
 metrics report requests, hits, misses, insertions, evictions, current and peak
 bytes/entries, and oversized skips; declared, hidden, rendered, and zero-frame

@@ -87,7 +87,7 @@ struct PlanFailureReport<'a> {
 
 #[derive(Serialize)]
 struct PlanFailureTimings {
-    project_load_and_validation_ms: u128,
+    semantic_validation_ms: u128,
     plan_compile_ms: u128,
 }
 
@@ -112,7 +112,7 @@ pub fn write_plan_failure_report(
             project_path,
             warnings,
             timings: PlanFailureTimings {
-                project_load_and_validation_ms: validation_elapsed_ms,
+                semantic_validation_ms: validation_elapsed_ms,
                 plan_compile_ms: plan_compile_elapsed_ms,
             },
         },
@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(report["failure_stage"], "plan_compilation");
         assert_eq!(report["diagnostics"][0]["code"], "MVP-PLAN-ASSET");
         assert_eq!(report["warnings"][0]["code"], "MVP-CLIP-HIDDEN");
-        assert_eq!(report["timings"]["project_load_and_validation_ms"], 11);
+        assert_eq!(report["timings"]["semantic_validation_ms"], 11);
         assert_eq!(report["timings"]["plan_compile_ms"], 7);
     }
 }

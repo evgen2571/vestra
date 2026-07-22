@@ -34,7 +34,7 @@ pub fn validate_result(path: &Path) -> Result<ValidateResult, LoadError> {
     let validated = validate_project(path)?;
     Ok(ValidateResult {
         project: path.to_path_buf(),
-        format_version: validated.project.format_version,
+        format_version: validated.format_version(),
         warnings: validated.warnings,
     })
 }
@@ -94,7 +94,7 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
         });
     InspectResult {
         project: path.to_path_buf(),
-        format_version: inspection.validated.project.format_version,
+        format_version: inspection.validated.format_version(),
         name: inspection.validated.project.name.clone(),
         output: InspectOutput {
             path: inspection.output_path,
@@ -110,9 +110,9 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
             images: inspection.image_count,
             audio: inspection.audio_count,
         },
-        visual_clips: inspection.validated.project.visual.clips.len(),
-        flashes: inspection.validated.project.visual.flashes.len(),
-        transitions: inspection.validated.project.visual.transitions.len(),
+        visual_clips: inspection.validated.visual_counts().0,
+        flashes: inspection.validated.visual_counts().1,
+        transitions: inspection.validated.visual_counts().2,
         audio,
         warnings: inspection.validated.warnings,
     }
@@ -146,7 +146,7 @@ pub fn render_result(
 ) -> RenderResult {
     RenderResult {
         editor_version: env!("CARGO_PKG_VERSION"),
-        project_format_version: validated.project.format_version,
+        project_format_version: validated.format_version(),
         project: project.to_path_buf(),
         output: summary.output_path,
         width: summary.width,
@@ -154,7 +154,7 @@ pub fn render_result(
         frame_rate: validated.project.output.frame_rate.display(),
         duration: summary.duration,
         total_frames: summary.frame_count,
-        visual_clip_count: validated.project.visual.clips.len(),
+        visual_clip_count: validated.visual_counts().0,
         audio_present: summary.audio_present,
         preview: summary.preview,
         elapsed_ms: summary.elapsed_ms,

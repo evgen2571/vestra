@@ -31,7 +31,6 @@ pub struct RenderTimings {
     pub project_load_and_validation_ms: u128,
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
-    pub asset_prepare_ms: u128,
     pub track_evaluation_ms: u128,
     pub cpu_sampling_and_compositing_ms: u128,
     pub frame_composition_ms: u128,
@@ -161,12 +160,6 @@ pub fn render(
     performance.schedule_event_count = schedule.event_count();
     let mut timings = RenderTimings {
         asset_decode_ms: milliseconds(backend.timings().expect("prepared CPU backend").decode),
-        asset_prepare_ms: milliseconds(
-            backend
-                .timings()
-                .expect("prepared CPU backend")
-                .static_prepare,
-        ),
         ..RenderTimings::default()
     };
     emit(RenderEvent {

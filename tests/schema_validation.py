@@ -72,3 +72,11 @@ assert errors(unknown_transition_field), "unknown transition fields must not val
 versioned = copy.deepcopy(project)
 versioned["version"] = 2
 assert errors(versioned), "project version fields must not validate"
+
+for pointer in [("name",), ("metadata",), ("audio",), ("output", "duration"), ("visual", "clips", 0, "sizing"), ("visual", "clips", 0, "crop"), ("visual", "clips", 0, "transform")]:
+    null_field = copy.deepcopy(project)
+    target = null_field
+    for key in pointer[:-1]:
+        target = target[key]
+    target[pointer[-1]] = None
+    assert errors(null_field), f"explicit null at {pointer} must not validate"

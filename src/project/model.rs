@@ -3,15 +3,39 @@ use serde_json::Value;
 
 pub use crate::domain::{Crop, Point};
 
+fn optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+fn optional_metadata_non_null<'de, D>(deserializer: D) -> Result<Option<Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    if value.is_null() {
+        Err(serde::de::Error::custom(
+            "metadata must be omitted instead of null",
+        ))
+    } else {
+        Ok(Some(value))
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Project {
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub name: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_metadata_non_null")]
     pub metadata: Option<Value>,
     pub output: Output,
     pub assets: Vec<Asset>,
     pub visual: Visual,
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub audio: Option<AudioTrack>,
 }
 
@@ -26,6 +50,7 @@ pub struct Output {
     pub quality: Quality,
     pub audio: bool,
     pub duration_mode: DurationMode,
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub duration: Option<f64>,
 }
 
@@ -154,11 +179,11 @@ pub struct Clip {
     pub layer: i32,
     #[serde(default = "default_visible")]
     pub visible: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub sizing: Option<Sizing>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub crop: Option<Track<Crop>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub transform: Option<Transform>,
     pub opacity: Track<f64>,
     #[serde(default)]
@@ -322,6 +347,7 @@ pub struct AudioTrack {
     pub asset: String,
     pub timeline_start: f64,
     pub trim_start: f64,
+    #[serde(default, deserialize_with = "optional_non_null")]
     pub trim_end: Option<f64>,
     pub volume: f64,
     #[serde(default)]

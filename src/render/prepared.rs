@@ -47,7 +47,6 @@ pub struct PreparationStats {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PreparationTimings {
     pub decode: Duration,
-    pub static_prepare: Duration,
 }
 
 pub struct PreparedAssets {
@@ -157,7 +156,6 @@ impl PreparedAssets {
             crops: ByteLruCache::new(plan.limits.maximum_cache_bytes),
             timings: PreparationTimings {
                 decode: started.elapsed(),
-                static_prepare: Duration::ZERO,
             },
         })
     }

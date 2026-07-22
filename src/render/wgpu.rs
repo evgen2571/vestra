@@ -352,8 +352,16 @@ impl RenderBackend for WgpuBackend {
             }
         }
         compositor::compose(&reference_frame, &mut self.reference_assets, destination);
-        // Parameter updates are derived solely from the evaluated frame. This
-        // deliberately contains no project parsing or timeline evaluation.
+        // Parameter updates and dispatch order are derived solely from the
+        // evaluated frame. Each submission observes its matching uniform data.
+        if let Some(bind_group) = self._source_bind_groups.first() {
+            let clear = LayerParameters {
+                header: [frame.width, frame.height, self.padded_row_bytes / 4, 0],
+                solid_or_background: frame.background.map(f64::from).map(|value| value as f32),
+                ..LayerParameters::zeroed()
+            };
+            self.dispatch_layer(bind_group, clear, frame.width, frame.height);
+        }
         for layer in &frame.layers {
             if let crate::plan::EvaluatedSource::Image {
                 asset_index,
@@ -374,10 +382,11 @@ impl RenderBackend for WgpuBackend {
                     layer.opacity,
                     layer.colour_transform,
                 );
-                self.queue.write_buffer(
-                    &self._layer_parameters,
-                    0,
-                    bytemuck::bytes_of(&parameters),
+                self.dispatch_layer(
+                    &self._source_bind_groups[*asset_index],
+                    parameters,
+                    frame.width,
+                    frame.height,
                 );
             }
         }
@@ -479,6 +488,34 @@ impl RenderBackend for WgpuBackend {
     }
     fn adapter(&self) -> Option<AdapterMetadata> {
         Some(self.adapter.clone())
+    }
+}
+
+impl WgpuBackend {
+    fn dispatch_layer(
+        &self,
+        bind_group: &wgpu::BindGroup,
+        parameters: LayerParameters,
+        width: u32,
+        height: u32,
+    ) {
+        self.queue
+            .write_buffer(&self._layer_parameters, 0, bytemuck::bytes_of(&parameters));
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("video-editor layer dispatch"),
+            });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("video-editor layer pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self._layer_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
+        }
+        self.queue.submit(Some(encoder.finish()));
     }
 }
 

@@ -60,7 +60,9 @@ VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1
 
 The backend validates texture, buffer, storage-binding, and dispatch limits
 before creating render resources. Initialization, limit, and readback failures
-are returned as structured diagnostics. In environments without an adapter,
+are returned as structured diagnostics. Per-frame WGPU validation and internal
+errors are captured with device error scopes, so they trigger the normal encoder
+abort and output cleanup path. In environments without an adapter,
 adapter-dependent parity tests print an explicit skip reason; this is not GPU
 verification.
 

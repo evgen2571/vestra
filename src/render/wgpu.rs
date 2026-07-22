@@ -205,6 +205,8 @@ impl WgpuBackend {
             None,
         ))
         .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        device.push_error_scope(wgpu::ErrorFilter::Internal);
         let row_bytes = plan.canvas.width.checked_mul(4).ok_or_else(|| {
             Diagnostic::error(
                 "WGPU-READBACK-SIZE",
@@ -415,6 +417,8 @@ impl WgpuBackend {
         let mut timings = decoded.timings();
         timings.texture_upload = upload_started.elapsed();
         timings.gpu_initialization = started.elapsed();
+        device.poll(wgpu::Maintain::Wait);
+        finish_error_scopes(&device, "WGPU-RESOURCE-CREATION")?;
         Ok(Self {
             _instance: instance,
             _adapter: adapter,
@@ -460,6 +464,12 @@ impl RenderBackend for WgpuBackend {
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
+        // Queue writes and submissions report validation/internal failures
+        // asynchronously. Capture them for this frame so the engine can abort
+        // FFmpeg and retain a structured primary failure instead of relying on
+        // WGPU's uncaptured-error handler.
+        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        self.device.push_error_scope(wgpu::ErrorFilter::Internal);
         // Parameter updates and dispatch order are derived solely from the
         // evaluated frame. Each submission observes its matching uniform data.
         let clear = LayerParameters {
@@ -590,7 +600,7 @@ impl RenderBackend for WgpuBackend {
             let _ = sender.send(result);
         });
         self.device.poll(wgpu::Maintain::Wait);
-        receiver
+        let readback_result = receiver
             .recv()
             .map_err(|error| {
                 Diagnostic::error(
@@ -599,8 +609,16 @@ impl RenderBackend for WgpuBackend {
                     format!("readback callback failed: {error}"),
                     "",
                 )
-            })?
-            .map_err(|error| diagnostic("WGPU-READBACK", "buffer_map", error))?;
+            })
+            .and_then(|result| {
+                result.map_err(|error| diagnostic("WGPU-READBACK", "buffer_map", error))
+            });
+        let frame_error_result = finish_error_scopes(&self.device, "WGPU-COMMAND-SUBMISSION");
+        readback_result?;
+        if let Err(error) = frame_error_result {
+            self.readback.unmap();
+            return Err(error);
+        }
         let mapped = slice.get_mapped_range();
         for (row, target) in self
             .frame_bytes
@@ -654,6 +672,18 @@ impl WgpuBackend {
         }
         self.queue.submit(Some(encoder.finish()));
     }
+}
+
+fn finish_error_scopes(device: &wgpu::Device, code: &str) -> Result<(), Diagnostic> {
+    let internal_error = pollster::block_on(device.pop_error_scope());
+    let validation_error = pollster::block_on(device.pop_error_scope());
+    if let Some(error) = internal_error {
+        return Err(diagnostic(code, "internal", error));
+    }
+    if let Some(error) = validation_error {
+        return Err(diagnostic(code, "validation", error));
+    }
+    Ok(())
 }
 
 fn align_up(value: u32, alignment: u32) -> u32 {

@@ -611,7 +611,12 @@ mod tests {
         render::{AdapterMetadata, RenderBackend, RenderBackendKind},
     };
 
-    struct FailingBackend;
+    struct FailingBackend {
+        failure_code: &'static str,
+        failure_message: &'static str,
+        fail_after_completed_frames: u64,
+        rendered_frames: u64,
+    }
 
     impl RenderBackend for FailingBackend {
         fn kind(&self) -> RenderBackendKind {
@@ -628,13 +633,20 @@ mod tests {
 
         fn render_frame(
             &mut self,
-            _frame: &EvaluatedFrame,
-            _destination: &mut RgbaImage,
+            frame: &EvaluatedFrame,
+            destination: &mut RgbaImage,
         ) -> Result<(), Diagnostic> {
+            if self.rendered_frames < self.fail_after_completed_frames {
+                for pixel in destination.pixels_mut() {
+                    *pixel = image::Rgba(frame.background);
+                }
+                self.rendered_frames += 1;
+                return Ok(());
+            }
             Err(Diagnostic::error(
-                "WGPU-COMMAND-SUBMISSION",
+                self.failure_code,
                 Category::Backend,
-                "injected submission failure",
+                self.failure_message,
                 "",
             ))
         }
@@ -778,7 +790,15 @@ mod tests {
         };
         let plan = example_plan();
         let error = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
-            Ok((Box::new(FailingBackend), None))
+            Ok((
+                Box::new(FailingBackend {
+                    failure_code: "WGPU-COMMAND-SUBMISSION",
+                    failure_message: "injected submission failure",
+                    fail_after_completed_frames: 0,
+                    rendered_frames: 0,
+                }),
+                None,
+            ))
         })
         .expect_err("injected backend failure reaches the render loop");
 
@@ -799,5 +819,56 @@ mod tests {
                 .is_some_and(|path| !path.exists()),
             "temporary output is removed after backend failure"
         );
+    }
+
+    #[test]
+    fn runtime_gpu_failures_preserve_context_and_cleanup_after_completed_frames() {
+        for (code, message) in [
+            ("WGPU-COMMAND-SUBMISSION", "injected submission failure"),
+            ("WGPU-READBACK", "injected readback mapping failure"),
+            ("WGPU-DEVICE-LOST", "injected device loss"),
+            ("WGPU-OUT-OF-MEMORY", "injected out-of-memory equivalent"),
+        ] {
+            let workspace = TempDir::new().expect("temporary output directory");
+            let output = workspace.path().join(format!("{code}.mp4"));
+            let options = RenderOptions {
+                output_override: Some(output.clone()),
+                overwrite: false,
+                cancelled: Arc::new(AtomicBool::new(false)),
+                backend_preference: RenderBackendPreference::Wgpu,
+            };
+            let plan = example_plan();
+            let error = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
+                Ok((
+                    Box::new(FailingBackend {
+                        failure_code: code,
+                        failure_message: message,
+                        fail_after_completed_frames: 2,
+                        rendered_frames: 0,
+                    }),
+                    None,
+                ))
+            })
+            .expect_err("injected runtime GPU failure reaches the render loop");
+
+            assert!(matches!(
+                error.context.stage,
+                RenderFailureStage::FrameComposition
+            ));
+            assert_eq!(error.context.completed_frames, 2, "{code}");
+            assert_eq!(error.context.last_completed_frame_index, Some(1), "{code}");
+            assert_eq!(error.context.attempted_frame, Some(2), "{code}");
+            assert_eq!(error.diagnostic.code, code);
+            assert_eq!(error.diagnostic.message, message);
+            assert!(error.temporary_removed, "{code}");
+            assert!(!output.exists(), "{code} must not publish a final output");
+            assert!(
+                error
+                    .context
+                    .temporary_output_path
+                    .is_some_and(|path| !path.exists()),
+                "{code} temporary output is removed"
+            );
+        }
     }
 }

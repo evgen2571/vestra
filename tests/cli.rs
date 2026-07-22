@@ -80,3 +80,53 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     assert_eq!(report["height"], 180);
     assert!(output.is_file());
 }
+
+#[test]
+fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
+    let workspace = TempDir::new().expect("workspace");
+    let mut original: Value = serde_json::from_slice(
+        &std::fs::read("examples/projects/animation-effects.json").expect("read project"),
+    )
+    .expect("project JSON");
+    for asset in original["assets"].as_array_mut().expect("assets") {
+        let source = asset["source"].as_str().expect("asset source");
+        asset["source"] = std::path::Path::new("examples/projects")
+            .join(source)
+            .canonicalize()
+            .expect("canonical asset")
+            .to_string_lossy()
+            .into_owned()
+            .into();
+    }
+
+    let mut wrong_track = original.clone();
+    wrong_track["visual"]["clips"][0]["transform"]["position"]["base_value"] = 1.into();
+    let wrong_track_path = workspace.path().join("wrong-track.json");
+    std::fs::write(
+        &wrong_track_path,
+        serde_json::to_vec(&wrong_track).expect("serialize project"),
+    )
+    .expect("write project");
+    let wrong_track = command()
+        .args(["validate", wrong_track_path.to_str().expect("UTF-8 path")])
+        .output()
+        .expect("validate runs");
+    assert_eq!(wrong_track.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&wrong_track.stderr).contains("invalid type"));
+
+    let mut bad_fade = original;
+    bad_fade["visual"]["flashes"][0]["fade_in"] = 0.1.into();
+    bad_fade["visual"]["flashes"][0]["fade_out"] = 1.into();
+    let bad_fade_path = workspace.path().join("bad-fade.json");
+    std::fs::write(
+        &bad_fade_path,
+        serde_json::to_vec(&bad_fade).expect("serialize project"),
+    )
+    .expect("write project");
+    let bad_fade = command()
+        .args(["validate", bad_fade_path.to_str().expect("UTF-8 path")])
+        .output()
+        .expect("validate runs");
+    assert_eq!(bad_fade.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&bad_fade.stderr).contains("MVP-FLASH-FADES"));
+}

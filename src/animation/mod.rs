@@ -308,6 +308,37 @@ mod tests {
     }
 
     #[test]
+    fn cubic_bezier_interpolation_is_non_linear_and_has_exact_endpoints() {
+        let interpolation = Interpolation::CubicBezier(CubicBezier {
+            x1: 0.42,
+            y1: 0.0,
+            x2: 0.58,
+            y2: 1.0,
+        });
+        assert_eq!(eased(interpolation, 0.0), 0.0);
+        assert_eq!(eased(interpolation, 1.0), 1.0);
+        assert!(eased(interpolation, 0.25) < 0.25);
+    }
+
+    #[test]
+    fn validation_rejects_out_of_range_bezier_x_controls() {
+        let track = Track {
+            base_value: 0.0,
+            keyframes: vec![Keyframe {
+                time: 1,
+                value: 1.0,
+                interpolation: Interpolation::CubicBezier(CubicBezier {
+                    x1: -0.1,
+                    y1: 0.0,
+                    x2: 1.0,
+                    y2: 1.0,
+                }),
+            }],
+        };
+        assert!(track.validate().is_err());
+    }
+
+    #[test]
     fn transform_inverse_maps_anchor_to_position() {
         let transform = Transform2D {
             position: Point { x: 0.5, y: 0.5 },
@@ -319,5 +350,13 @@ mod tests {
             transform.destination_to_source(50.0, 50.0, 100, 100, 20, 10),
             Point { x: 10.0, y: 5.0 }
         );
+    }
+
+    #[test]
+    fn transform_inverse_preserves_fractional_translation() {
+        let transform = Transform2D::identity(Point { x: 0.505, y: 0.5 }, Point { x: 0.0, y: 0.0 });
+        let source = transform.destination_to_source(50.5, 50.0, 100, 100, 20, 20);
+        assert_eq!(source.x, 0.0);
+        assert_eq!(source.y, 0.0);
     }
 }

@@ -107,6 +107,23 @@ impl FfmpegEncoder {
         let _ = self.join_stderr();
     }
 
+    /// Stops an encoder after a failed frame write while retaining the bounded
+    /// encoder diagnostic that explains why its input pipe closed.
+    #[must_use]
+    pub fn abort_after_write_failure(&mut self, write_failure: String) -> String {
+        drop(self.stdin.take());
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let stderr = String::from_utf8_lossy(&self.join_stderr())
+            .trim()
+            .to_owned();
+        if stderr.is_empty() {
+            write_failure
+        } else {
+            format!("{write_failure}; FFmpeg: {stderr}")
+        }
+    }
+
     fn join_stderr(&mut self) -> Vec<u8> {
         self.stderr_reader
             .take()

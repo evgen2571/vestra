@@ -255,7 +255,7 @@ pub fn render(
         frame_composition += compose_started.elapsed();
         let write_started = Instant::now();
         if let Err(message) = encoder.write_frame(image.as_raw()) {
-            encoder.cancel();
+            let message = encoder.abort_after_write_failure(message);
             return Err(cleanup_error(
                 &output,
                 plan,

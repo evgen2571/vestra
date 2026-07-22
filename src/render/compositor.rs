@@ -314,6 +314,30 @@ pub fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgb
 mod tests {
     use super::*;
     use crate::plan::EvaluatedEffect;
+
+    fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
+        for effect in effects {
+            match effect {
+                EvaluatedEffect::Brightness { amount } => {
+                    rgb = rgb.map(|channel| channel + amount * 255.0);
+                }
+                EvaluatedEffect::Contrast { amount } => {
+                    rgb = rgb.map(|channel| (channel - 128.0) * amount + 128.0);
+                }
+                EvaluatedEffect::Saturation { amount } => {
+                    let luma = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+                    rgb = rgb.map(|channel| luma * (1.0 - amount) + channel * amount);
+                }
+                EvaluatedEffect::Tint { colour, amount } => {
+                    let amount = amount.clamp(0.0, 1.0);
+                    rgb = std::array::from_fn(|channel| {
+                        rgb[channel] * (1.0 - amount) + f64::from(colour[channel]) * amount
+                    });
+                }
+            }
+        }
+        rgb
+    }
     #[test]
     fn alpha_composition_is_known() {
         assert_eq!(
@@ -364,6 +388,43 @@ mod tests {
                 ColourTransform::from_effects([EvaluatedEffect::Contrast { amount: 1.0 }])
             ),
             Rgba([30, 140, 250, 180])
+        );
+    }
+
+    #[test]
+    fn combined_colour_matrix_matches_ordered_sequential_effects() {
+        let effects = [
+            EvaluatedEffect::Brightness { amount: -0.12 },
+            EvaluatedEffect::Saturation { amount: 0.55 },
+            EvaluatedEffect::Contrast { amount: 1.15 },
+            EvaluatedEffect::Tint {
+                colour: [30, 120, 240, 255],
+                amount: 0.3,
+            },
+        ];
+        let input = Rgba([180, 80, 40, 173]);
+        let expected = apply_sequential(
+            [
+                f64::from(input[0]),
+                f64::from(input[1]),
+                f64::from(input[2]),
+            ],
+            &effects,
+        )
+        .map(|channel| channel.round().clamp(0.0, 255.0) as u8);
+        let actual = apply_colour_transform(input, ColourTransform::from_effects(effects));
+        for channel in 0..3 {
+            assert!(actual[channel].abs_diff(expected[channel]) <= 1);
+        }
+        assert_eq!(actual[3], input[3]);
+    }
+
+    #[test]
+    fn identity_colour_matrix_leaves_pixels_unchanged() {
+        let pixel = Rgba([31, 127, 249, 90]);
+        assert_eq!(
+            apply_colour_transform(pixel, ColourTransform::default()),
+            pixel
         );
     }
 

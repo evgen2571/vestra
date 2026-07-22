@@ -34,6 +34,7 @@ pub struct PreparationStats {
     pub bitmap_cache_requests: u64,
     pub bitmap_cache_insertions: u64,
     pub bitmap_cache_hit_rate: Option<f64>,
+    pub cache_current_entries: usize,
     pub peak_cache_entries: usize,
     pub cache_budget_bytes: u64,
     pub cache_current_bytes: u64,
@@ -204,6 +205,7 @@ impl PreparedAssets {
         self.stats.bitmap_cache_insertions = cache.insertions;
         self.stats.bitmap_cache_hit_rate =
             (cache.requests > 0).then(|| cache.hits as f64 / cache.requests as f64);
+        self.stats.cache_current_entries = cache.current_entries;
         self.stats.peak_cache_entries = cache.peak_entries;
         self.stats.cache_budget_bytes = cache.budget_bytes;
         self.stats.cache_current_bytes = cache.current_bytes;
@@ -265,6 +267,8 @@ mod tests {
         let _ = assets.crop(1, crop);
         assert_eq!(assets.stats().bitmap_cache_misses, 1);
         assert_eq!(assets.stats().bitmap_cache_hits, 1);
+        assert_eq!(assets.stats().cache_current_entries, 1);
+        assert_eq!(assets.stats().peak_cache_entries, 1);
         assert!(assets.stats().cache_peak_bytes > 0);
     }
 

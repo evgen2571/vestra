@@ -25,13 +25,14 @@ pub struct WgpuBackend {
     _adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    _layer_shader: wgpu::ShaderModule,
     _source_textures: Vec<wgpu::Texture>,
     output: wgpu::Texture,
     readback: wgpu::Buffer,
     row_bytes: u32,
     padded_row_bytes: u32,
     frame_bytes: Vec<u8>,
-    cpu_reference: PreparedAssets,
+    reference_assets: PreparedAssets,
     stats: PreparationStats,
     timings: PreparationTimings,
     adapter: AdapterMetadata,
@@ -96,6 +97,10 @@ impl WgpuBackend {
                 "",
             )
         })?;
+        let layer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("video-editor layer compute shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/layer.wgsl").into()),
+        });
         let padded_row_bytes = align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let readback_size = u64::from(padded_row_bytes)
             .checked_mul(u64::from(plan.canvas.height))
@@ -194,13 +199,14 @@ impl WgpuBackend {
             _adapter: adapter,
             device,
             queue,
+            _layer_shader: layer_shader,
             _source_textures: source_textures,
             output,
             readback,
             row_bytes,
             padded_row_bytes,
             frame_bytes: vec![0; (u64::from(row_bytes) * u64::from(plan.canvas.height)) as usize],
-            cpu_reference: PreparedAssets::from_decoded(plan, decoded),
+            reference_assets: PreparedAssets::from_decoded(plan, decoded),
             stats,
             timings,
             adapter: adapter_metadata,
@@ -226,11 +232,17 @@ impl RenderBackend for WgpuBackend {
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
-        // The source resources are uploaded exactly once above. The next change
-        // replaces this reference compositor with the image/solid GPU passes;
-        // the GPU output/readback path below is already the production frame
-        // transport and preserves exact contiguous RGBA output semantics.
-        compositor::compose(frame, &mut self.cpu_reference, destination);
+        // The source resources are uploaded exactly once above. The CPU path is
+        // retained only while the GPU layer passes are brought up; it receives
+        // the same evaluated frame and disables its CPU-only crop cache so it
+        // samples the same full decoded assets uploaded to WGPU.
+        let mut reference_frame = frame.clone();
+        for layer in &mut reference_frame.layers {
+            if let crate::plan::EvaluatedSource::Image { cacheable_crop, .. } = &mut layer.source {
+                *cacheable_crop = false;
+            }
+        }
+        compositor::compose(&reference_frame, &mut self.reference_assets, destination);
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.output,
@@ -310,7 +322,7 @@ impl RenderBackend for WgpuBackend {
     }
 
     fn stats(&mut self) -> PreparationStats {
-        let cpu = self.cpu_reference.stats().clone();
+        let cpu = self.reference_assets.stats().clone();
         self.stats.bitmap_cache_hits = cpu.bitmap_cache_hits;
         self.stats.bitmap_cache_misses = cpu.bitmap_cache_misses;
         self.stats.bitmap_cache_requests = cpu.bitmap_cache_requests;

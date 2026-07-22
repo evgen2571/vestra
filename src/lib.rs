@@ -13,3 +13,4 @@ pub mod timeline;
 
 pub use diagnostic::{Category, Diagnostic, Severity};
 pub use project::{ValidatedProject, ValidationOptions, load_and_validate};
+pub mod animation;

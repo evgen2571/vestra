@@ -102,6 +102,7 @@ impl FfmpegEncoder {
     }
 
     pub fn cancel(&mut self) {
+        drop(self.stdin.take());
         let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = self.join_stderr();
@@ -129,6 +130,17 @@ impl FfmpegEncoder {
             .take()
             .and_then(|reader| reader.join().ok())
             .unwrap_or_default()
+    }
+}
+
+impl Drop for FfmpegEncoder {
+    fn drop(&mut self) {
+        // Rendering can fail after the encoder starts but before `finish` or
+        // an explicit cancellation path runs. Keep process ownership here so
+        // every such exit closes the pipe, reaps FFmpeg, and joins stderr.
+        if self.stdin.is_some() {
+            self.cancel();
+        }
     }
 }
 
@@ -238,5 +250,36 @@ mod tests {
         let collected = collect_stderr(std::io::Cursor::new(stderr));
         assert!(collected.len() <= 64 * 1024);
         assert!(String::from_utf8_lossy(&collected).contains("FFmpeg stderr truncated"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dropping_an_active_encoder_reaps_its_child() {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("start long-running encoder double");
+        let pid = child.id();
+        let stdin = child.stdin.take().expect("stdin");
+        let stderr = child.stderr.take().expect("stderr");
+        let encoder = FfmpegEncoder {
+            child,
+            stdin: Some(stdin),
+            stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+        };
+
+        drop(encoder);
+
+        let result = Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .output()
+            .expect("query child process");
+        assert!(
+            !result.status.success(),
+            "encoder child {pid} survived drop"
+        );
     }
 }

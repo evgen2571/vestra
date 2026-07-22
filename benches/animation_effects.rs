@@ -17,6 +17,12 @@ fn main() {
     .expect("parse benchmark fixture");
     project["output"]["width"] = 720.into();
     project["output"]["height"] = 1280.into();
+    project["visual"]["clips"][0]["effects"] = serde_json::json!([
+        { "id": "brightness", "type": "brightness", "amount": { "base_value": 0.05 } },
+        { "id": "contrast", "type": "contrast", "amount": { "base_value": 1.1 } },
+        { "id": "saturation", "type": "saturation", "amount": { "base_value": 1.1 } },
+        { "id": "tint", "type": "tint", "colour": "#2040ff", "amount": { "base_value": 0.15 } }
+    ]);
     for asset in project["assets"].as_array_mut().expect("fixture assets") {
         let source = asset["source"].as_str().expect("fixture asset source");
         asset["source"] = Path::new("examples/projects")
@@ -48,12 +54,13 @@ fn main() {
         Err(_) => panic!("benchmark project renders"),
     };
     println!(
-        "animation-effects 720x1280: total={}ms track_evaluation={}ms frame_render={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
+        "animation-effects 720x1280: total={}ms track_evaluation={}ms frame_render={}ms encode_write={}ms cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes wall={}ms",
         summary.timings.total_ms,
         summary.timings.track_evaluation_ms,
         summary.timings.frame_render_ms,
         summary.timings.encoder_write_ms,
         summary.performance.cache_peak_bytes,
+        summary.performance.peak_cache_entries,
         summary.performance.peak_decoded_bytes,
         started.elapsed().as_millis(),
     );

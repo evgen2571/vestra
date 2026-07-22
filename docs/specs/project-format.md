@@ -24,6 +24,27 @@ solid-colour sources. A flash with no fade-out keeps its configured opacity for
 its whole half-open interval. With a fade-out it holds until `end - fade_out`
 and then reaches zero at `end`.
 
+Tracks use clip-local seconds. `base_value` applies before the first keyframe;
+each keyframe's interpolation controls the segment ending at that keyframe;
+and the final keyframe holds after its time. Keyframe times must be strictly
+increasing and lie within the clip. Position is normalized to the canvas,
+anchor is normalized to the unscaled source, scale is positive, and source
+pixel centres are sampled bilinearly after crop and sizing are resolved.
+
+Brightness adds a normalized RGB offset, contrast uses `1` as identity,
+saturation uses `1` as identity, and tint blends toward its colour with an
+amount in `0..=1`. Effects are applied in declared order and their parameters
+may be animated. Values are clamped only after the combined affine operation.
+
+Render results report `render_backend: "cpu"` separately from
+`encoder_backend: "ffmpeg"`. Timings are measured in milliseconds:
+project loading/validation, plan compilation, asset decoding, track evaluation,
+frame rendering, encoder write/finalization, output publication, and total.
+Frame rendering is a single non-overlapping CPU compositor interval. Cache
+metrics report requests, hits, misses, insertions, evictions, current and peak
+bytes/entries, and oversized skips; declared, hidden, rendered, and zero-frame
+clip counts are kept distinct.
+
 Crossfades reference visible image clips and compile to generated opacity
 tracks. The renderer keeps decoded sources under configured resource limits and
 uses a byte-budgeted LRU cache for static crop materializations. Crops that

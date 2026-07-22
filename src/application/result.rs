@@ -6,7 +6,9 @@ use crate::{
     Diagnostic,
     application::{Inspection, validate_project},
     project::LoadError,
-    render::{RenderSummary, RenderTimings},
+    render::{
+        AdapterMetadata, BackendFallback, RenderBackendPreference, RenderSummary, RenderTimings,
+    },
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -128,8 +130,13 @@ pub struct RenderResult {
     pub elapsed_ms: u128,
     pub timings: RenderTimings,
     pub performance: crate::render::PreparationStats,
+    pub requested_render_backend: RenderBackendPreference,
     pub render_backend: &'static str,
     pub encoder_backend: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend_fallback: Option<BackendFallback>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<AdapterMetadata>,
     pub warnings: Vec<Diagnostic>,
 }
 
@@ -153,8 +160,11 @@ pub fn render_result(
         elapsed_ms: summary.elapsed_ms,
         timings: summary.timings,
         performance: summary.performance,
-        render_backend: "cpu",
+        requested_render_backend: summary.requested_render_backend,
+        render_backend: summary.render_backend.as_str(),
         encoder_backend: "ffmpeg",
+        backend_fallback: summary.backend_fallback,
+        adapter: summary.adapter,
         warnings: validated.warnings,
     }
 }

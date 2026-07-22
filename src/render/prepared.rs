@@ -3,7 +3,10 @@
     reason = "asset preparation preserves machine-readable diagnostics"
 )]
 
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use image::RgbaImage;
 
@@ -44,31 +47,31 @@ pub struct PreparationStats {
     pub schedule_event_count: usize,
     pub active_item_consideration_count: u64,
     pub rendered_frame_count: u64,
+    pub uploaded_texture_count: usize,
+    pub uploaded_texture_bytes: u64,
+    pub readback_buffer_count: usize,
+    pub readback_buffer_bytes: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PreparationTimings {
     pub decode: Duration,
+    pub gpu_initialization: Duration,
+    pub texture_upload: Duration,
 }
 
-pub struct PreparedAssets {
-    decoded: Vec<RgbaImage>,
-    crops: ByteLruCache<CropKey, RgbaImage>,
+/// Decoded source bytes shared by all render backends for one render.
+///
+/// This deliberately owns only backend-neutral image data. CPU crop caching and
+/// GPU texture upload state remain backend-local.
+pub struct DecodedAssets {
+    images: Vec<RgbaImage>,
     stats: PreparationStats,
     timings: PreparationTimings,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct CropKey {
-    asset: usize,
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-}
-
-impl PreparedAssets {
-    pub fn build(plan: &RenderPlan) -> Result<Self, Diagnostic> {
+impl DecodedAssets {
+    pub fn build(plan: &RenderPlan) -> Result<Arc<Self>, Diagnostic> {
         let started = Instant::now();
         let mut decoded = Vec::with_capacity(plan.images.len());
         let mut decoded_source_bytes = 0_u64;
@@ -146,7 +149,7 @@ impl PreparedAssets {
             }
             decoded.push(image);
         }
-        Ok(Self {
+        Ok(Arc::new(Self {
             stats: PreparationStats {
                 decoded_image_count: decoded.len(),
                 decoded_source_bytes,
@@ -154,28 +157,81 @@ impl PreparedAssets {
                 cache_budget_bytes: plan.limits.maximum_cache_bytes,
                 ..PreparationStats::default()
             },
-            decoded,
-            crops: ByteLruCache::new(plan.limits.maximum_cache_bytes),
+            images: decoded,
             timings: PreparationTimings {
                 decode: started.elapsed(),
+                ..PreparationTimings::default()
             },
-        })
+        }))
+    }
+
+    #[must_use]
+    pub fn image(&self, asset: usize) -> &RgbaImage {
+        &self.images[asset]
+    }
+
+    #[must_use]
+    pub fn stats(&self) -> &PreparationStats {
+        &self.stats
+    }
+
+    #[must_use]
+    pub const fn timings(&self) -> PreparationTimings {
+        self.timings
+    }
+}
+
+pub struct PreparedAssets {
+    decoded: Arc<DecodedAssets>,
+    crops: ByteLruCache<CropKey, RgbaImage>,
+    stats: PreparationStats,
+    timings: PreparationTimings,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct CropKey {
+    asset: usize,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl PreparedAssets {
+    #[cfg(test)]
+    pub fn build(plan: &RenderPlan) -> Result<Self, Diagnostic> {
+        let decoded = DecodedAssets::build(plan)?;
+        Ok(Self::from_decoded(plan, decoded))
+    }
+
+    #[must_use]
+    pub fn from_decoded(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
+        Self {
+            decoded,
+            crops: ByteLruCache::new(plan.limits.maximum_cache_bytes),
+            stats: PreparationStats {
+                cache_budget_bytes: plan.limits.maximum_cache_bytes,
+                ..PreparationStats::default()
+            },
+            timings: PreparationTimings::default(),
+        }
+        .with_shared_decode_stats()
     }
 
     #[must_use]
     pub fn crop(&mut self, asset: usize, crop: crate::domain::Crop) -> Option<&RgbaImage> {
-        let key = crop_key(asset, &self.decoded[asset], crop);
+        let key = crop_key(asset, self.decoded.image(asset), crop);
         if key.x == 0
             && key.y == 0
-            && key.width == self.decoded[asset].width()
-            && key.height == self.decoded[asset].height()
+            && key.width == self.decoded.image(asset).width()
+            && key.height == self.decoded.image(asset).height()
         {
-            return Some(&self.decoded[asset]);
+            return Some(self.decoded.image(asset));
         }
         let bytes = u64::from(key.width)
             .checked_mul(u64::from(key.height))
             .and_then(|pixels| pixels.checked_mul(4))?;
-        let source = &self.decoded[asset];
+        let source = self.decoded.image(asset);
         self.crops.get_or_insert_with(key.clone(), bytes, || {
             image::imageops::crop_imm(source, key.x, key.y, key.width, key.height).to_image()
         })
@@ -183,7 +239,7 @@ impl PreparedAssets {
 
     #[must_use]
     pub fn image(&self, asset: usize) -> &RgbaImage {
-        &self.decoded[asset]
+        self.decoded.image(asset)
     }
 
     #[must_use]
@@ -212,6 +268,14 @@ impl PreparedAssets {
         self.stats.cache_peak_bytes = cache.peak_bytes;
         self.stats.cache_evictions = cache.evictions;
         self.stats.cache_oversized_entries_skipped = cache.oversized_entries_skipped;
+    }
+
+    fn with_shared_decode_stats(mut self) -> Self {
+        self.stats.decoded_image_count = self.decoded.stats().decoded_image_count;
+        self.stats.decoded_source_bytes = self.decoded.stats().decoded_source_bytes;
+        self.stats.peak_decoded_bytes = self.decoded.stats().peak_decoded_bytes;
+        self.timings = self.decoded.timings();
+        self
     }
 }
 

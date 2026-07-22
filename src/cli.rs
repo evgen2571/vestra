@@ -20,7 +20,7 @@ use crate::{
         write_success_report,
     },
     project::LoadError,
-    render::RenderEvent,
+    render::{RenderBackendPreference, RenderEvent},
 };
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 
@@ -66,6 +66,8 @@ enum Command {
         progress: CliProgressFormat,
         #[arg(long)]
         report: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = CliRenderBackend::Auto)]
+        render_backend: CliRenderBackend,
     },
     Version,
 }
@@ -80,6 +82,13 @@ enum CliProgressFormat {
     Human,
     Json,
     None,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliRenderBackend {
+    Auto,
+    Cpu,
+    Wgpu,
 }
 
 impl From<CliResultFormat> for ResultFormat {
@@ -97,6 +106,16 @@ impl From<CliProgressFormat> for ProgressFormat {
             CliProgressFormat::Human => Self::Human,
             CliProgressFormat::Json => Self::Json,
             CliProgressFormat::None => Self::None,
+        }
+    }
+}
+
+impl From<CliRenderBackend> for RenderBackendPreference {
+    fn from(value: CliRenderBackend) -> Self {
+        match value {
+            CliRenderBackend::Auto => Self::Auto,
+            CliRenderBackend::Cpu => Self::Cpu,
+            CliRenderBackend::Wgpu => Self::Wgpu,
         }
     }
 }
@@ -119,6 +138,7 @@ pub fn run() -> ExitCode {
             format,
             progress,
             report,
+            render_backend,
         } => render_command(
             project,
             output,
@@ -127,6 +147,7 @@ pub fn run() -> ExitCode {
             format.into(),
             progress.into(),
             report,
+            render_backend.into(),
         ),
         Command::Version => {
             print_success(
@@ -167,6 +188,10 @@ fn inspect_command(project: PathBuf, preview: bool, format: ResultFormat) -> Exi
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the command dispatcher keeps CLI argument ownership explicit at the boundary"
+)]
 fn render_command(
     project: PathBuf,
     output: Option<PathBuf>,
@@ -175,6 +200,7 @@ fn render_command(
     format: ResultFormat,
     progress: ProgressFormat,
     report: Option<PathBuf>,
+    backend_preference: RenderBackendPreference,
 ) -> ExitCode {
     let began = Instant::now();
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -191,6 +217,7 @@ fn render_command(
             overwrite,
             preview,
             cancelled,
+            backend_preference,
         },
         &mut emit,
     ) {

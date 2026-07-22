@@ -108,6 +108,31 @@ impl FfmpegEncoder {
         let _ = self.join_stderr();
     }
 
+    /// Explicitly closes, stops, reaps, and collects the encoder after a
+    /// renderer failure. Returns secondary cleanup context without replacing
+    /// the renderer's primary diagnostic.
+    pub fn abort_after_backend_failure(&mut self) -> Option<String> {
+        drop(self.stdin.take());
+        let mut failures = Vec::new();
+        if let Err(error) = self.child.kill() {
+            // A child which already exited is still reaped below; its kill
+            // result is not a meaningful cleanup failure.
+            if self.child.try_wait().ok().flatten().is_none() {
+                failures.push(format!("cannot stop FFmpeg: {error}"));
+            }
+        }
+        if let Err(error) = self.child.wait() {
+            failures.push(format!("cannot reap FFmpeg: {error}"));
+        }
+        let stderr = String::from_utf8_lossy(&self.join_stderr())
+            .trim()
+            .to_owned();
+        if !stderr.is_empty() {
+            failures.push(format!("FFmpeg: {stderr}"));
+        }
+        (!failures.is_empty()).then(|| failures.join("; "))
+    }
+
     /// Stops an encoder after a failed frame write while retaining the bounded
     /// encoder diagnostic that explains why its input pipe closed.
     #[must_use]

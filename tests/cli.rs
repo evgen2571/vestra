@@ -27,6 +27,19 @@ fn decoded_frame(path: &std::path::Path, frame: u64, width: u32, height: u32) ->
     output.stdout
 }
 
+fn maximum_channel_difference(left: &[u8], right: &[u8]) -> u8 {
+    assert_eq!(
+        left.len(),
+        right.len(),
+        "decoded frames have equal dimensions"
+    );
+    left.iter()
+        .zip(right)
+        .map(|(left, right)| left.abs_diff(*right))
+        .max()
+        .unwrap_or(0)
+}
+
 fn canonical_project_with_absolute_assets() -> Value {
     let mut project: Value = serde_json::from_slice(
         &std::fs::read("examples/projects/animation-effects.json").expect("read project"),
@@ -261,6 +274,70 @@ fn explicit_wgpu_mode_never_falls_back_to_cpu_when_no_adapter_is_available() {
         let report: Value = serde_json::from_slice(&result.stdout).expect("failure JSON");
         assert_eq!(report["errors"][0]["code"], "WGPU-ADAPTER-NOT-FOUND");
         assert!(!output.exists());
+    }
+}
+
+#[test]
+fn strict_wgpu_canonical_render_matches_cpu_encoded_frames() {
+    if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_none() {
+        return;
+    }
+    let workspace = TempDir::new().expect("workspace");
+    let cpu_output = workspace.path().join("canonical-cpu.mp4");
+    let gpu_output = workspace.path().join("canonical-wgpu.mp4");
+    let render = |backend: &str, output: &std::path::Path| {
+        command()
+            .args([
+                "render",
+                "examples/projects/animation-effects.json",
+                "--render-backend",
+                backend,
+                "--output",
+                output.to_str().expect("UTF-8 path"),
+                "--progress",
+                "none",
+                "--format",
+                "json",
+            ])
+            .output()
+            .expect("canonical render runs")
+    };
+    let cpu = render("cpu", &cpu_output);
+    assert!(
+        cpu.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cpu.stderr)
+    );
+    let gpu = render("wgpu", &gpu_output);
+    assert!(
+        gpu.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gpu.stderr)
+    );
+    let cpu_report: Value = serde_json::from_slice(&cpu.stdout).expect("CPU report JSON");
+    let gpu_report: Value = serde_json::from_slice(&gpu.stdout).expect("WGPU report JSON");
+    for report in [&cpu_report, &gpu_report] {
+        assert_eq!(report["total_frames"], 60);
+        assert_eq!(report["width"], 320);
+        assert_eq!(report["height"], 180);
+        assert_eq!(report["audio_present"], false);
+    }
+    assert_eq!(cpu_report["render_backend"], "cpu");
+    assert_eq!(gpu_report["requested_render_backend"], "wgpu");
+    assert_eq!(gpu_report["render_backend"], "wgpu");
+    assert_eq!(gpu_report["adapter"]["graphics_backend"], "vulkan");
+    assert!(gpu_report.get("backend_fallback").is_none());
+    assert!(cpu_output.is_file());
+    assert!(gpu_output.is_file());
+
+    for frame in [0, 14, 24, 28, 36, 42, 48, 59] {
+        let cpu_frame = decoded_frame(&cpu_output, frame, 320, 180);
+        let gpu_frame = decoded_frame(&gpu_output, frame, 320, 180);
+        let maximum_error = maximum_channel_difference(&cpu_frame, &gpu_frame);
+        assert!(
+            maximum_error <= 5,
+            "encoded canonical frame {frame} exceeded tolerance: maximum channel error {maximum_error}"
+        );
     }
 }
 

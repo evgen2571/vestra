@@ -510,31 +510,6 @@ fn compile_v2_transitions(
                 start,
                 duration,
                 interpolation,
-            }
-            | crate::project::v2::Transition::FadeThroughColor {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-                ..
-            }
-            | crate::project::v2::Transition::Slide {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-            }
-            | crate::project::v2::Transition::ZoomCrossfade {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
             } => (id, outgoing, incoming, *start, *duration, interpolation),
         };
         let start = to_nanos(start, id)?;

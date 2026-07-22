@@ -8,6 +8,32 @@ fn command() -> Command {
     Command::cargo_bin("video-editor").expect("binary is built")
 }
 
+fn decoded_frame(path: &std::path::Path, frame: u64, width: u32, height: u32) -> Vec<u8> {
+    let filter = format!("select=eq(n\\,{frame})");
+    let output = Command::new("ffmpeg")
+        .args(["-hide_banner", "-loglevel", "error", "-i"])
+        .arg(path)
+        .args([
+            "-vf", &filter, "-vsync", "0", "-f", "rawvideo", "-pix_fmt", "rgba", "-",
+        ])
+        .output()
+        .expect("FFmpeg decodes rendered frame");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout.len(), (width * height * 4) as usize);
+    output.stdout
+}
+
+fn changed_channels(left: &[u8], right: &[u8]) -> usize {
+    left.iter()
+        .zip(right)
+        .filter(|(left, right)| left != right)
+        .count()
+}
+
 #[test]
 fn canonical_project_validates_and_rejects_a_version_field() {
     let project = "examples/projects/animation-effects.json";
@@ -79,6 +105,56 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     assert_eq!(report["width"], 320);
     assert_eq!(report["height"], 180);
     assert!(output.is_file());
+}
+
+#[test]
+fn canonical_render_has_decoded_animation_crossfade_and_flash_regressions() {
+    let workspace = TempDir::new().expect("workspace");
+    let output = workspace.path().join("canonical.mp4");
+    let result = command()
+        .args([
+            "render",
+            "examples/projects/animation-effects.json",
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "none",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let early = decoded_frame(&output, 12, 320, 180);
+    let animated = decoded_frame(&output, 24, 320, 180);
+    let crossfade = decoded_frame(&output, 42, 320, 180);
+    assert!(
+        changed_channels(&early, &animated) > 10_000,
+        "multi-keyframe transform or colour effect did not visibly change the decoded frame"
+    );
+    assert!(
+        changed_channels(&animated, &crossfade) > 10_000,
+        "crossfade did not visibly change the decoded frame"
+    );
+
+    let before_flash = decoded_frame(&output, 24, 320, 180);
+    let during_flash = decoded_frame(&output, 28, 320, 180);
+    let after_flash = decoded_frame(&output, 30, 320, 180);
+    assert!(
+        during_flash[1] > before_flash[1].saturating_add(30)
+            && during_flash[2] > before_flash[2].saturating_add(30),
+        "flash did not brighten the full-canvas overlay pixel"
+    );
+    assert!(
+        after_flash[1] <= before_flash[1].saturating_add(10)
+            && after_flash[2] <= before_flash[2].saturating_add(10),
+        "flash remained visible after its half-open interval"
+    );
 }
 
 #[test]

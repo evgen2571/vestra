@@ -199,7 +199,11 @@ impl WgpuBackend {
             &wgpu::DeviceDescriptor {
                 label: Some("video-editor headless renderer"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                // Resource requirements above were checked against this
+                // adapter. Request that same capability set so the device
+                // cannot silently negotiate unrelated downlevel defaults
+                // after successful adapter validation.
+                required_limits: limits.clone(),
                 memory_hints: wgpu::MemoryHints::Performance,
             },
             None,

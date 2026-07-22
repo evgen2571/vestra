@@ -70,7 +70,9 @@ pub struct FrameDifference {
     pub maximum_absolute_channel_error: u8,
     pub mean_absolute_channel_error: f64,
     pub differing_channels: usize,
+    pub differing_channel_percentage: f64,
     pub channels_exceeding_tolerance: usize,
+    pub pixels_exceeding_tolerance: usize,
 }
 
 #[must_use]
@@ -82,18 +84,30 @@ pub fn compare_rgba(reference: &[u8], candidate: &[u8], tolerance: u8) -> FrameD
     );
     let mut difference = FrameDifference::default();
     let mut total = 0_u64;
-    for (&left, &right) in reference.iter().zip(candidate) {
-        let error = left.abs_diff(right);
-        difference.maximum_absolute_channel_error =
-            difference.maximum_absolute_channel_error.max(error);
-        total += u64::from(error);
-        difference.differing_channels += usize::from(error != 0);
-        difference.channels_exceeding_tolerance += usize::from(error > tolerance);
+    for (reference_pixel, candidate_pixel) in
+        reference.chunks_exact(4).zip(candidate.chunks_exact(4))
+    {
+        let mut pixel_exceeds_tolerance = false;
+        for (&left, &right) in reference_pixel.iter().zip(candidate_pixel) {
+            let error = left.abs_diff(right);
+            difference.maximum_absolute_channel_error =
+                difference.maximum_absolute_channel_error.max(error);
+            total += u64::from(error);
+            difference.differing_channels += usize::from(error != 0);
+            difference.channels_exceeding_tolerance += usize::from(error > tolerance);
+            pixel_exceeds_tolerance |= error > tolerance;
+        }
+        difference.pixels_exceeding_tolerance += usize::from(pixel_exceeds_tolerance);
     }
     difference.mean_absolute_channel_error = if reference.is_empty() {
         0.0
     } else {
         total as f64 / reference.len() as f64
+    };
+    difference.differing_channel_percentage = if reference.is_empty() {
+        0.0
+    } else {
+        difference.differing_channels as f64 / reference.len() as f64 * 100.0
     };
     difference
 }
@@ -920,6 +934,8 @@ mod tests {
         assert_eq!(difference.maximum_absolute_channel_error, 2);
         assert_eq!(difference.differing_channels, 2);
         assert_eq!(difference.channels_exceeding_tolerance, 1);
+        assert_eq!(difference.pixels_exceeding_tolerance, 1);
+        assert_eq!(difference.differing_channel_percentage, 50.0);
         assert_eq!(difference.mean_absolute_channel_error, 0.75);
     }
 

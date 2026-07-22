@@ -34,6 +34,24 @@ fn changed_channels(left: &[u8], right: &[u8]) -> usize {
         .count()
 }
 
+fn canonical_project_with_absolute_assets() -> Value {
+    let mut project: Value = serde_json::from_slice(
+        &std::fs::read("examples/projects/animation-effects.json").expect("read project"),
+    )
+    .expect("project JSON");
+    for asset in project["assets"].as_array_mut().expect("assets") {
+        let source = asset["source"].as_str().expect("asset source");
+        asset["source"] = std::path::Path::new("examples/projects")
+            .join(source)
+            .canonicalize()
+            .expect("canonical asset")
+            .to_string_lossy()
+            .into_owned()
+            .into();
+    }
+    project
+}
+
 #[test]
 fn canonical_project_validates_and_rejects_a_version_field() {
     let project = "examples/projects/animation-effects.json";
@@ -160,20 +178,7 @@ fn canonical_render_has_decoded_animation_crossfade_and_flash_regressions() {
 #[test]
 fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
     let workspace = TempDir::new().expect("workspace");
-    let mut original: Value = serde_json::from_slice(
-        &std::fs::read("examples/projects/animation-effects.json").expect("read project"),
-    )
-    .expect("project JSON");
-    for asset in original["assets"].as_array_mut().expect("assets") {
-        let source = asset["source"].as_str().expect("asset source");
-        asset["source"] = std::path::Path::new("examples/projects")
-            .join(source)
-            .canonicalize()
-            .expect("canonical asset")
-            .to_string_lossy()
-            .into_owned()
-            .into();
-    }
+    let original = canonical_project_with_absolute_assets();
 
     let mut wrong_track = original.clone();
     wrong_track["visual"]["clips"][0]["transform"]["position"]["base_value"] = 1.into();
@@ -257,4 +262,96 @@ fn solid_colour_clips_cover_the_canvas_without_transforms() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
+}
+
+#[test]
+fn canonical_validation_rejects_focused_invalid_projects() {
+    let workspace = TempDir::new().expect("workspace");
+    let original = canonical_project_with_absolute_assets();
+    macro_rules! assert_invalid {
+        ($name:literal, $project:expr, $diagnostic:literal) => {{
+            let path = workspace.path().join(concat!($name, ".json"));
+            std::fs::write(
+                &path,
+                serde_json::to_vec(&$project).expect("serialize project"),
+            )
+            .expect("write project");
+            let output = command()
+                .args(["validate", path.to_str().expect("UTF-8 path")])
+                .output()
+                .expect("validate runs");
+            assert_eq!(output.status.code(), Some(3), "{}", $name);
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains($diagnostic),
+                "{}: {}",
+                $name,
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }};
+    }
+
+    let mut unsorted = original.clone();
+    unsorted["visual"]["clips"][0]["transform"]["position"]["keyframes"] = serde_json::json!([
+        {"time": 1.2, "value": {"x": 0.5, "y": 0.5}, "interpolation": "linear"},
+        {"time": 0.6, "value": {"x": 0.4, "y": 0.5}, "interpolation": "linear"}
+    ]);
+    assert_invalid!("unsorted-keyframes", unsorted, "MVP-KEYFRAME-TIME");
+
+    let mut duplicate_time = original.clone();
+    duplicate_time["visual"]["clips"][0]["transform"]["position"]["keyframes"][1]["time"] =
+        0.6.into();
+    assert_invalid!("duplicate-keyframes", duplicate_time, "MVP-KEYFRAME-TIME");
+
+    let mut outside_duration = original.clone();
+    outside_duration["visual"]["clips"][0]["transform"]["position"]["keyframes"][0]["time"] =
+        3.into();
+    assert_invalid!("outside-keyframe", outside_duration, "MVP-KEYFRAME-TIME");
+
+    let mut zero_scale = original.clone();
+    zero_scale["visual"]["clips"][0]["transform"]["scale"]["base_value"]["x"] = 0.into();
+    assert_invalid!("zero-scale", zero_scale, "MVP-TRACK-VALUE");
+
+    let mut negative_scale = original.clone();
+    negative_scale["visual"]["clips"][0]["transform"]["scale"]["base_value"]["x"] = (-1).into();
+    assert_invalid!("negative-scale", negative_scale, "MVP-TRACK-VALUE");
+
+    let mut opacity = original.clone();
+    opacity["visual"]["clips"][0]["opacity"]["base_value"] = 2.into();
+    assert_invalid!("opacity-range", opacity, "MVP-TRACK-VALUE");
+
+    let mut duplicate_effect = original.clone();
+    duplicate_effect["visual"]["clips"][0]["effects"] = serde_json::json!([
+        {"id": "same", "type": "brightness", "amount": {"base_value": 0.1}},
+        {"id": "same", "type": "contrast", "amount": {"base_value": 1.1}}
+    ]);
+    assert_invalid!("duplicate-effect", duplicate_effect, "MVP-EFFECT-ID");
+
+    let mut invalid_bezier = original.clone();
+    invalid_bezier["visual"]["clips"][0]["transform"]["position"]["keyframes"][1]["interpolation"] =
+        serde_json::json!({"type": "cubic_bezier", "x1": -0.1, "y1": 0.0, "x2": 1.2, "y2": 1.0});
+    assert_invalid!("invalid-bezier", invalid_bezier, "MVP-BEZIER");
+
+    let mut missing_transition = original.clone();
+    missing_transition["visual"]["transitions"][0]["incoming"] = "missing".into();
+    assert_invalid!(
+        "missing-transition-clip",
+        missing_transition,
+        "MVP-TRANSITION-CLIP"
+    );
+
+    let mut long_transition = original.clone();
+    long_transition["visual"]["transitions"][0]["duration"] = 3.into();
+    assert_invalid!("long-transition", long_transition, "MVP-TRANSITION-FIT");
+
+    let mut invalid_solid = original.clone();
+    invalid_solid["visual"]["clips"] = serde_json::json!([{
+        "id": "solid", "source": {"type": "solid_color", "colour": "red"},
+        "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1}
+    }]);
+    invalid_solid["visual"]["transitions"] = serde_json::json!([]);
+    assert_invalid!("invalid-solid-colour", invalid_solid, "MVP-SOURCE-COLOUR");
+
+    let mut unknown_top_level = original.clone();
+    unknown_top_level["unknown"] = true.into();
+    assert_invalid!("unknown-top-level", unknown_top_level, "MVP-PROJECT-SHAPE");
 }

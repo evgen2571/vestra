@@ -15,6 +15,7 @@ fn valid_examples_validate_and_inspect_as_json() {
         "examples/projects/static-image.json",
         "examples/projects/hard-cuts.json",
         "examples/projects/showcase.json",
+        "examples/projects/animation-effects-v2.json",
     ] {
         let output = command()
             .args(["validate", project, "--format", "json"])
@@ -27,6 +28,9 @@ fn valid_examples_validate_and_inspect_as_json() {
         );
         let value: Value = serde_json::from_slice(&output.stdout).expect("JSON result");
         assert_eq!(value["status"], "success");
+        if project.ends_with("animation-effects-v2.json") {
+            assert_eq!(value["format_version"], 2);
+        }
     }
     let output = command()
         .args([

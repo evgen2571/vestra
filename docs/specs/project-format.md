@@ -24,6 +24,17 @@ solid-colour sources. A flash with no fade-out keeps its configured opacity for
 its whole half-open interval. With a fade-out it holds until `end - fade_out`
 and then reaches zero at `end`.
 
+Optional fields are omitted when unused; JSON `null` is never a substitute for
+omission. This includes optional metadata, audio, sizing, crop, transform, and
+audio trim fields.
+
+For image clips, the renderer first resolves the normalized crop in source
+coordinates, then applies sizing (`original`, `fit`, `cover`, `scale`, or
+`stretch`), then anchor, scale, rotation, and position. `fit` and `cover` use
+the output canvas dimensions. Crop values are normalized rectangles inside the
+source (`x`, `y`, `width`, and `height`); static non-full crops can be cached,
+while animated or oversized crops fall back to direct source sampling.
+
 Tracks use clip-local seconds. `base_value` applies before the first keyframe;
 each keyframe's interpolation controls the segment ending at that keyframe;
 and the final keyframe holds after its time. Keyframe times must be strictly
@@ -47,11 +58,20 @@ bytes/entries, and oversized skips; declared, hidden, rendered, and zero-frame
 clip counts are kept distinct.
 
 Crossfades reference visible image clips and compile to generated opacity
-tracks. The renderer keeps decoded sources under configured resource limits and
+tracks. A transition is an additional multiplicative opacity contribution to
+each referenced clip; overlapping transitions combine multiplicatively with
+the clip's own opacity and any other transition contributions. The renderer keeps decoded sources under configured resource limits and
 uses a byte-budgeted LRU cache for static crop materializations. Crops that
 cannot fit are sampled from the original source without allocation.
 
+Default limits are: output up to 8192×8192, 216,000 frames and 7,200 seconds;
+100,000,000 source pixels per image; 400 MiB decoded per asset and 1 GiB total;
+64 active layers; 10,000 clips; 32 effects per clip; 1,000 keyframes per
+track; and a 256 MiB crop-cache budget.
+
 Reports expose declared/rendered/hidden clips, decoded-source and cache bytes,
 cache request outcomes, active/evaluated layers, effect counts, and measured
-render timings. Some CPU-only limitations remain: there is no GPU backend,
+render timings. Cache `current_*` values describe the final cache state;
+`peak_*` values are high-water marks; evictions and oversized skips explain
+why a requested crop was not retained. Some CPU-only limitations remain: there is no GPU backend,
 shape source, or encoded-byte golden comparison.

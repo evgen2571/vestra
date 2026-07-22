@@ -30,9 +30,13 @@ video-editor version
 See [the project format](docs/specs/project-format.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Run the canonical check suite with:
 
 ```bash
+python3 -m pip install -r requirements-dev.txt
 ./scripts/check.sh
 cargo bench --bench animation_effects
 ```
+
+`requirements-dev.txt` pins the Python package used by the JSON Schema check;
+Rust dependencies are locked in `Cargo.lock`.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

@@ -1,0 +1,2 @@
+# Schema-check dependency. Keep this pinned so the repository check is reproducible.
+jsonschema==4.26.0

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/video-editor/project-v2.schema.json",
+  "title": "Declarative Video Renderer Project v2",
+  "type": "object",
+  "required": ["format_version", "output", "assets", "visual"],
+  "additionalProperties": false,
+  "properties": {
+    "format_version": { "const": 2 },
+    "name": { "type": "string" },
+    "metadata": {},
+    "output": { "$ref": "project-v1.schema.json#/$defs/output" },
+    "assets": { "type": "array", "items": { "$ref": "project-v1.schema.json#/$defs/asset" } },
+    "audio": { "$ref": "project-v1.schema.json#/$defs/audio" },
+    "visual": { "$ref": "#/$defs/visual" }
+  },
+  "$defs": {
+    "track": {
+      "type": "object", "required": ["base_value"], "additionalProperties": false,
+      "properties": { "base_value": {}, "keyframes": { "type": "array", "items": { "$ref": "#/$defs/keyframe" } } }
+    },
+    "keyframe": {
+      "type": "object", "required": ["time", "value", "interpolation"], "additionalProperties": false,
+      "properties": { "time": { "type": "number", "minimum": 0 }, "value": {}, "interpolation": { "$ref": "#/$defs/interpolation" } }
+    },
+    "interpolation": {
+      "oneOf": [
+        { "enum": ["linear", "hold", "ease_in", "ease_out", "ease_in_out"] },
+        { "type": "object", "required": ["type", "x1", "y1", "x2", "y2"], "additionalProperties": false,
+          "properties": { "type": { "const": "cubic_bezier" }, "x1": { "type": "number", "minimum": 0, "maximum": 1 }, "y1": { "type": "number" }, "x2": { "type": "number", "minimum": 0, "maximum": 1 }, "y2": { "type": "number" } } }
+      ]
+    },
+    "transform": {
+      "type": "object", "required": ["position", "anchor", "scale"], "additionalProperties": false,
+      "properties": { "position": { "$ref": "#/$defs/track" }, "anchor": { "$ref": "#/$defs/track" }, "scale": { "$ref": "#/$defs/track" }, "rotation_degrees": { "$ref": "#/$defs/track" } }
+    },
+    "source": {
+      "oneOf": [
+        { "type": "object", "required": ["type", "asset"], "additionalProperties": false, "properties": { "type": { "const": "image" }, "asset": { "type": "string", "minLength": 1 } } },
+        { "type": "object", "required": ["type", "colour"], "additionalProperties": false, "properties": { "type": { "const": "solid_color" }, "colour": { "$ref": "project-v1.schema.json#/$defs/colour" } } }
+      ]
+    },
+    "effect": {
+      "type": "object", "required": ["id", "type", "amount"], "properties": { "id": { "type": "string", "minLength": 1 }, "type": { "enum": ["brightness", "contrast", "saturation", "tint"] }, "amount": { "$ref": "#/$defs/track" }, "colour": { "$ref": "project-v1.schema.json#/$defs/colour" } }
+    },
+    "clip": {
+      "type": "object", "required": ["id", "source", "start", "duration", "layer", "transform", "opacity"], "additionalProperties": false,
+      "properties": { "id": { "type": "string", "minLength": 1 }, "source": { "$ref": "#/$defs/source" }, "start": { "type": "number", "minimum": 0 }, "duration": { "type": "number", "exclusiveMinimum": 0 }, "layer": { "type": "integer" }, "visible": { "type": "boolean", "default": true }, "sizing": { "$ref": "project-v1.schema.json#/$defs/sizing" }, "crop": { "$ref": "#/$defs/track" }, "transform": { "$ref": "#/$defs/transform" }, "opacity": { "$ref": "#/$defs/track" }, "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } } }
+    },
+    "transition": { "type": "object", "required": ["type", "id", "outgoing", "incoming", "start", "duration", "interpolation"], "properties": { "type": { "enum": ["crossfade", "fade_through_color", "slide", "zoom_crossfade"] }, "id": { "type": "string", "minLength": 1 }, "outgoing": { "type": "string" }, "incoming": { "type": "string" }, "start": { "type": "number", "minimum": 0 }, "duration": { "type": "number", "exclusiveMinimum": 0 }, "colour": { "$ref": "project-v1.schema.json#/$defs/colour" }, "interpolation": { "$ref": "#/$defs/interpolation" } } },
+    "visual": { "type": "object", "required": ["clips"], "additionalProperties": false, "properties": { "clips": { "type": "array", "items": { "$ref": "#/$defs/clip" } }, "transitions": { "type": "array", "items": { "$ref": "#/$defs/transition" } }, "flashes": { "type": "array", "items": { "$ref": "project-v1.schema.json#/$defs/flash" } } } }
+  }
+}

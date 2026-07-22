@@ -49,6 +49,11 @@ python3 -m pip install -r requirements-dev.txt
 cargo bench --bench animation_effects
 ```
 
+The benchmark uses the canonical animation/effects fixture at 720×1280. Run it
+with `VIDEO_EDITOR_BENCH_BACKEND=cpu` or `VIDEO_EDITOR_BENCH_BACKEND=wgpu` to
+select the renderer; the output records the selected backend and available GPU
+preparation timings. WGPU benchmark results require a compatible adapter.
+
 `requirements-dev.txt` pins the Python package used by the JSON Schema check;
 Rust dependencies are locked in `Cargo.lock`.
 

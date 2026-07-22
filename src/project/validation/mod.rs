@@ -118,7 +118,12 @@ pub(crate) fn validate_v2(
     };
     let root = path.parent().unwrap_or_else(|| Path::new("."));
     let assets = assets::validate(&project.assets, root, &mut errors);
-    validate_v2_visual(&project.visual, &assets.kinds, &mut errors);
+    validate_v2_visual(
+        &project.visual,
+        &assets.kinds,
+        options.limits.maximum_keyframes_per_track,
+        &mut errors,
+    );
     validate_v2_transitions(&project.visual, &mut errors);
     let audio_end = audio::validate(
         project.audio.as_ref(),
@@ -320,6 +325,7 @@ fn enforce_limits(
 fn validate_v2_visual(
     visual: &crate::project::v2::Visual,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
+    maximum_keyframes_per_track: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
     let mut clip_ids = BTreeSet::new();
@@ -366,6 +372,7 @@ fn validate_v2_visual(
             &clip.transform.position,
             clip.duration,
             &format!("{path}/transform/position"),
+            maximum_keyframes_per_track,
             errors,
             |value| value.x.is_finite() && value.y.is_finite(),
         );
@@ -373,6 +380,7 @@ fn validate_v2_visual(
             &clip.transform.anchor,
             clip.duration,
             &format!("{path}/transform/anchor"),
+            maximum_keyframes_per_track,
             errors,
             |value| {
                 value.x.is_finite()
@@ -385,6 +393,7 @@ fn validate_v2_visual(
             &clip.transform.scale,
             clip.duration,
             &format!("{path}/transform/scale"),
+            maximum_keyframes_per_track,
             errors,
             |value| positive(value.x) && positive(value.y),
         );
@@ -392,6 +401,7 @@ fn validate_v2_visual(
             &clip.transform.rotation_degrees,
             clip.duration,
             &format!("{path}/transform/rotation_degrees"),
+            maximum_keyframes_per_track,
             errors,
             |value| value.is_finite(),
         );
@@ -399,6 +409,7 @@ fn validate_v2_visual(
             &clip.opacity,
             clip.duration,
             &format!("{path}/opacity"),
+            maximum_keyframes_per_track,
             errors,
             |value| unit(*value),
         );
@@ -407,6 +418,7 @@ fn validate_v2_visual(
                 crop,
                 clip.duration,
                 &format!("{path}/crop"),
+                maximum_keyframes_per_track,
                 errors,
                 |value| {
                     nonnegative(value.x)
@@ -428,6 +440,37 @@ fn validate_v2_visual(
                     format!("{path}/effects/{effect_index}/id"),
                 ));
             }
+            let effect_path = format!("{path}/effects/{effect_index}");
+            match effect {
+                crate::project::v2::Effect::Brightness { amount, .. }
+                | crate::project::v2::Effect::Contrast { amount, .. }
+                | crate::project::v2::Effect::Saturation { amount, .. } => validate_v2_track(
+                    amount,
+                    clip.duration,
+                    &format!("{effect_path}/amount"),
+                    maximum_keyframes_per_track,
+                    errors,
+                    |value| value.is_finite(),
+                ),
+                crate::project::v2::Effect::Tint { colour, amount, .. } => {
+                    if parse_colour(colour).is_none() {
+                        errors.push(Diagnostic::error(
+                            "MVP-V2-TINT-COLOUR",
+                            Category::Semantic,
+                            "tint must use #RRGGBB or #RRGGBBAA",
+                            format!("{effect_path}/colour"),
+                        ));
+                    }
+                    validate_v2_track(
+                        amount,
+                        clip.duration,
+                        &format!("{effect_path}/amount"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| unit(*value),
+                    );
+                }
+            }
         }
     }
 }
@@ -436,9 +479,18 @@ fn validate_v2_track<T>(
     track: &crate::project::v2::Track<T>,
     duration: f64,
     path: &str,
+    maximum_keyframes: usize,
     errors: &mut Vec<Diagnostic>,
     valid: impl Fn(&T) -> bool,
 ) {
+    if track.keyframes.len() > maximum_keyframes {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-KEYFRAMES",
+            Category::Semantic,
+            "track exceeds the keyframe limit",
+            format!("{path}/keyframes"),
+        ));
+    }
     if !valid(&track.base_value) {
         errors.push(Diagnostic::error(
             "MVP-V2-TRACK-VALUE",

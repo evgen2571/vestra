@@ -14,8 +14,8 @@ use crate::{
     Category, Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
-        AdapterMetadata, RenderBackend, RenderBackendKind, compositor,
-        prepared::{DecodedAssets, PreparationStats, PreparationTimings, PreparedAssets},
+        AdapterMetadata, RenderBackend, RenderBackendKind,
+        prepared::{DecodedAssets, PreparationStats, PreparationTimings},
     },
 };
 
@@ -33,13 +33,14 @@ pub struct WgpuBackend {
     _accumulation: wgpu::Buffer,
     _source_textures: Vec<wgpu::Texture>,
     _source_bind_groups: Vec<wgpu::BindGroup>,
+    _solid_texture: wgpu::Texture,
+    solid_bind_group: wgpu::BindGroup,
     source_dimensions: Vec<(u32, u32)>,
     output: wgpu::Texture,
     readback: wgpu::Buffer,
     row_bytes: u32,
     padded_row_bytes: u32,
     frame_bytes: Vec<u8>,
-    reference_assets: PreparedAssets,
     stats: PreparationStats,
     timings: PreparationTimings,
     adapter: AdapterMetadata,
@@ -289,6 +290,27 @@ impl WgpuBackend {
                 )
             })
             .collect();
+        let solid_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("video-editor solid source"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let solid_bind_group = create_layer_bind_group(
+            &device,
+            &layer_bind_group_layout,
+            &solid_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            &accumulation,
+            &layer_parameters,
+        );
         let mut stats = decoded.stats().clone();
         stats.uploaded_texture_count = source_textures.len();
         stats.uploaded_texture_bytes = uploaded_texture_bytes;
@@ -309,13 +331,14 @@ impl WgpuBackend {
             _accumulation: accumulation,
             _source_textures: source_textures,
             _source_bind_groups: source_bind_groups,
+            _solid_texture: solid_texture,
+            solid_bind_group,
             source_dimensions,
             output,
             readback,
             row_bytes,
             padded_row_bytes,
             frame_bytes: vec![0; (u64::from(row_bytes) * u64::from(plan.canvas.height)) as usize],
-            reference_assets: PreparedAssets::from_decoded(plan, decoded),
             stats,
             timings,
             adapter: adapter_metadata,
@@ -341,27 +364,14 @@ impl RenderBackend for WgpuBackend {
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
-        // The source resources are uploaded exactly once above. The CPU path is
-        // retained only while the GPU layer passes are brought up; it receives
-        // the same evaluated frame and disables its CPU-only crop cache so it
-        // samples the same full decoded assets uploaded to WGPU.
-        let mut reference_frame = frame.clone();
-        for layer in &mut reference_frame.layers {
-            if let crate::plan::EvaluatedSource::Image { cacheable_crop, .. } = &mut layer.source {
-                *cacheable_crop = false;
-            }
-        }
-        compositor::compose(&reference_frame, &mut self.reference_assets, destination);
         // Parameter updates and dispatch order are derived solely from the
         // evaluated frame. Each submission observes its matching uniform data.
-        if let Some(bind_group) = self._source_bind_groups.first() {
-            let clear = LayerParameters {
-                header: [frame.width, frame.height, self.padded_row_bytes / 4, 0],
-                solid_or_background: frame.background.map(f64::from).map(|value| value as f32),
-                ..LayerParameters::zeroed()
-            };
-            self.dispatch_layer(bind_group, clear, frame.width, frame.height);
-        }
+        let clear = LayerParameters {
+            header: [frame.width, frame.height, self.padded_row_bytes / 4, 0],
+            solid_or_background: frame.background.map(f64::from).map(|value| value as f32),
+            ..LayerParameters::zeroed()
+        };
+        self.dispatch_layer(&self.solid_bind_group, clear, frame.width, frame.height);
         for layer in &frame.layers {
             if let crate::plan::EvaluatedSource::Image {
                 asset_index,
@@ -388,20 +398,64 @@ impl RenderBackend for WgpuBackend {
                     frame.width,
                     frame.height,
                 );
+            } else if let crate::plan::EvaluatedSource::SolidColor { colour } = layer.source {
+                let parameters = LayerParameters {
+                    header: [frame.width, frame.height, self.padded_row_bytes / 4, 2],
+                    effective: [0.0, 0.0, layer.opacity as f32, 0.0],
+                    colour_row0: [
+                        layer.colour_transform.matrix[0][0] as f32,
+                        layer.colour_transform.matrix[0][1] as f32,
+                        layer.colour_transform.matrix[0][2] as f32,
+                        0.0,
+                    ],
+                    colour_row1: [
+                        layer.colour_transform.matrix[1][0] as f32,
+                        layer.colour_transform.matrix[1][1] as f32,
+                        layer.colour_transform.matrix[1][2] as f32,
+                        0.0,
+                    ],
+                    colour_row2: [
+                        layer.colour_transform.matrix[2][0] as f32,
+                        layer.colour_transform.matrix[2][1] as f32,
+                        layer.colour_transform.matrix[2][2] as f32,
+                        0.0,
+                    ],
+                    colour_offset: [
+                        layer.colour_transform.offset[0] as f32,
+                        layer.colour_transform.offset[1] as f32,
+                        layer.colour_transform.offset[2] as f32,
+                        0.0,
+                    ],
+                    solid_or_background: colour.map(f64::from).map(|value| value as f32),
+                    ..LayerParameters::zeroed()
+                };
+                self.dispatch_layer(
+                    &self.solid_bind_group,
+                    parameters,
+                    frame.width,
+                    frame.height,
+                );
             }
         }
-        self.queue.write_texture(
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("video-editor readback copy"),
+            });
+        encoder.copy_buffer_to_texture(
+            wgpu::ImageCopyBuffer {
+                buffer: &self._accumulation,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(self.padded_row_bytes),
+                    rows_per_image: Some(frame.height),
+                },
+            },
             wgpu::ImageCopyTexture {
                 texture: &self.output,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
-            },
-            destination.as_raw(),
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(self.row_bytes),
-                rows_per_image: Some(frame.height),
             },
             wgpu::Extent3d {
                 width: frame.width,
@@ -409,11 +463,6 @@ impl RenderBackend for WgpuBackend {
                 depth_or_array_layers: 1,
             },
         );
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("video-editor readback copy"),
-            });
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
                 texture: &self.output,
@@ -469,17 +518,6 @@ impl RenderBackend for WgpuBackend {
     }
 
     fn stats(&mut self) -> PreparationStats {
-        let cpu = self.reference_assets.stats().clone();
-        self.stats.bitmap_cache_hits = cpu.bitmap_cache_hits;
-        self.stats.bitmap_cache_misses = cpu.bitmap_cache_misses;
-        self.stats.bitmap_cache_requests = cpu.bitmap_cache_requests;
-        self.stats.bitmap_cache_insertions = cpu.bitmap_cache_insertions;
-        self.stats.bitmap_cache_hit_rate = cpu.bitmap_cache_hit_rate;
-        self.stats.cache_current_entries = cpu.cache_current_entries;
-        self.stats.peak_cache_entries = cpu.peak_cache_entries;
-        self.stats.cache_current_bytes = cpu.cache_current_bytes;
-        self.stats.cache_peak_bytes = cpu.cache_peak_bytes;
-        self.stats.cache_evictions = cpu.cache_evictions;
         self.stats.clone()
     }
 

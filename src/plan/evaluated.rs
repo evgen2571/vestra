@@ -13,6 +13,7 @@ pub struct EvaluatedFrame {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) layers: Vec<EvaluatedLayer>,
+    pub(crate) evaluated_track_count: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -20,7 +21,6 @@ pub struct EvaluatedLayer {
     pub(crate) source: EvaluatedSource,
     pub(crate) transform: Transform2D,
     pub(crate) opacity: f64,
-    pub(crate) evaluated_effect_count: usize,
     /// Ordered colour effects collapsed once per layer/frame. The compositor
     /// therefore performs no effect dispatch in its pixel loop.
     pub(crate) colour_transform: ColourTransform,
@@ -137,58 +137,65 @@ fn add(left: [f64; 3], right: [f64; 3]) -> [f64; 3] {
 
 #[must_use]
 pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> EvaluatedFrame {
-    let layers = active
-        .iter()
-        .filter_map(|ScheduledItem(index)| {
-            let layer = &plan.layers[*index];
-            let relative = time.saturating_sub(layer.start_nanos);
-            let opacity = layer
-                .opacity_contributions
-                .iter()
-                .fold(layer.opacity.evaluate(relative), |value, track| {
-                    value * track.evaluate(relative)
-                })
-                .clamp(0.0, 1.0);
-            (opacity > 0.0).then(|| EvaluatedLayer {
-                source: match &layer.source {
-                    CompiledVisualSource::Image {
-                        asset_index,
-                        crop,
-                        sizing,
-                        cacheable_crop,
-                    } => EvaluatedSource::Image {
-                        asset_index: *asset_index,
-                        crop: crop.evaluate(relative),
-                        sizing: sizing.clone(),
-                        cacheable_crop: *cacheable_crop,
-                    },
-                    CompiledVisualSource::SolidColor { colour } => {
-                        EvaluatedSource::SolidColor { colour: *colour }
-                    }
-                },
-                transform: Transform2D {
-                    position: layer.transform.position.evaluate(relative),
-                    anchor: layer.transform.anchor.evaluate(relative),
-                    scale: layer.transform.scale.evaluate(relative),
-                    rotation_radians: layer.transform.rotation_radians.evaluate(relative),
-                },
-                opacity,
-                evaluated_effect_count: layer.effects.len(),
-                colour_transform: ColourTransform::from_effects(
-                    layer
-                        .effects
-                        .iter()
-                        .map(|effect| evaluate_effect(effect, relative)),
-                ),
-            })
-        })
-        .collect();
+    let mut layers = Vec::with_capacity(active.len());
+    let mut evaluated_track_count = 0;
+    for ScheduledItem(index) in active {
+        let layer = &plan.layers[*index];
+        let relative = time.saturating_sub(layer.start_nanos);
+        let mut opacity = layer.opacity.evaluate(relative);
+        evaluated_track_count += 1;
+        for track in &layer.opacity_contributions {
+            opacity *= track.evaluate(relative);
+            evaluated_track_count += 1;
+        }
+        let opacity = opacity.clamp(0.0, 1.0);
+        if opacity <= 0.0 {
+            continue;
+        }
+        let source = match &layer.source {
+            CompiledVisualSource::Image {
+                asset_index,
+                crop,
+                sizing,
+                cacheable_crop,
+            } => {
+                evaluated_track_count += 1;
+                EvaluatedSource::Image {
+                    asset_index: *asset_index,
+                    crop: crop.evaluate(relative),
+                    sizing: sizing.clone(),
+                    cacheable_crop: *cacheable_crop,
+                }
+            }
+            CompiledVisualSource::SolidColor { colour } => {
+                EvaluatedSource::SolidColor { colour: *colour }
+            }
+        };
+        let transform = Transform2D {
+            position: layer.transform.position.evaluate(relative),
+            anchor: layer.transform.anchor.evaluate(relative),
+            scale: layer.transform.scale.evaluate(relative),
+            rotation_radians: layer.transform.rotation_radians.evaluate(relative),
+        };
+        evaluated_track_count += 4;
+        let colour_transform = ColourTransform::from_effects(layer.effects.iter().map(|effect| {
+            evaluated_track_count += 1;
+            evaluate_effect(effect, relative)
+        }));
+        layers.push(EvaluatedLayer {
+            source,
+            transform,
+            opacity,
+            colour_transform,
+        });
+    }
     EvaluatedFrame {
         time,
         background: plan.canvas.background,
         width: plan.canvas.width,
         height: plan.canvas.height,
         layers,
+        evaluated_track_count,
     }
 }
 

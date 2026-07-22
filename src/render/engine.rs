@@ -227,17 +227,7 @@ pub fn render(
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
         let evaluation_started = Instant::now();
         let evaluated = evaluate(plan, &active, time);
-        performance.evaluated_track_count += evaluated
-            .layers
-            .iter()
-            .map(|layer| {
-                let source_track_count = usize::from(matches!(
-                    &layer.source,
-                    crate::plan::EvaluatedSource::Image { .. }
-                ));
-                (5 + source_track_count + layer.evaluated_effect_count) as u64
-            })
-            .sum::<u64>();
+        performance.evaluated_track_count += evaluated.evaluated_track_count;
         track_evaluation += evaluation_started.elapsed();
         let compose_started = Instant::now();
         backend

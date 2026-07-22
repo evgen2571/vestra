@@ -41,7 +41,7 @@ Set `VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1` to prefer a fallback adapter, or
 `VIDEO_EDITOR_WGPU_BACKEND=vulkan|gl|metal|dx12` to constrain adapter discovery
 for CI or headless troubleshooting.
 
-See [the project format](docs/specs/project-format.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Run the canonical check suite with:
+See [the project format](docs/specs/project-format.md), [the WGPU renderer guide](docs/wgpu-renderer.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Run the canonical check suite with:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt

@@ -895,8 +895,11 @@ mod tests {
     use super::{WgpuBackend, compare_rgba};
     use crate::{
         animation::{Interpolation, Keyframe, Track},
-        domain::Crop,
-        plan::{CompileOptions, EvaluatedFrame, compile},
+        domain::{Crop, Point},
+        plan::{
+            CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource, EvaluatedFrame,
+            ScheduledItem, compile,
+        },
         project::{ValidationOptions, load_and_validate},
         render::{CpuBackend, RenderBackend},
     };
@@ -1070,6 +1073,116 @@ mod tests {
         assert!(
             difference.maximum_absolute_channel_error <= 2,
             "GPU image parity exceeded tolerance: {difference:?}"
+        );
+    }
+
+    #[test]
+    fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+        let image_layers = canonical
+            .layers
+            .iter()
+            .enumerate()
+            .filter_map(|(index, layer)| {
+                matches!(layer.source, CompiledVisualSource::Image { .. }).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let [red, blue] = image_layers.as_slice() else {
+            panic!("canonical fixture must have two image layers");
+        };
+
+        for sizing in [
+            CompiledSizing::Original,
+            CompiledSizing::Fit,
+            CompiledSizing::Cover,
+            CompiledSizing::Scale(0.73),
+            CompiledSizing::Stretch {
+                width: 177,
+                height: 91,
+            },
+        ] {
+            let mut plan = canonical.clone();
+            let CompiledVisualSource::Image {
+                sizing: layer_sizing,
+                ..
+            } = &mut plan.layers[*red].source
+            else {
+                unreachable!()
+            };
+            *layer_sizing = sizing.clone();
+            plan.layers[*red].transform.position = Track::new(Point { x: 0.47, y: 0.54 });
+            plan.layers[*red].transform.anchor = Track::new(Point { x: 0.31, y: 0.67 });
+            plan.layers[*red].transform.scale = Track::new(Point { x: 0.79, y: 1.13 });
+            plan.layers[*red].transform.rotation_radians = Track::new(0.31);
+            plan.layers[*red].opacity = Track::new(0.63);
+            plan.layers[*red].effects = vec![
+                CompiledEffect::Brightness {
+                    amount: Track::new(0.08),
+                },
+                CompiledEffect::Contrast {
+                    amount: Track::new(0.82),
+                },
+                CompiledEffect::Saturation {
+                    amount: Track::new(0.68),
+                },
+                CompiledEffect::Tint {
+                    colour: [28, 156, 231, 255],
+                    amount: Track::new(0.19),
+                },
+            ];
+            let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
+            let mut cpu = CpuBackend::default();
+            cpu.prepare(&plan, Arc::clone(&decoded))
+                .expect("CPU prepares");
+            let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+                return;
+            };
+            let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+            let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+            cpu.render_frame(&frame, &mut cpu_output)
+                .expect("CPU frame renders");
+            gpu.render_frame(&frame, &mut gpu_output)
+                .expect("GPU frame renders");
+            let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+            assert!(
+                difference.maximum_absolute_channel_error <= 2,
+                "{sizing:?} parity exceeded tolerance: {difference:?}"
+            );
+        }
+
+        let mut plan = canonical.clone();
+        plan.layers[*red].opacity = Track::new(0.47);
+        plan.layers[*blue].opacity = Track::new(0.58);
+        let frame = crate::plan::evaluate(
+            &plan,
+            &[ScheduledItem(*red), ScheduledItem(*blue)],
+            1_750_000_000,
+        );
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
+        };
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "transparent multi-layer parity exceeded tolerance: {difference:?}"
         );
     }
 

@@ -134,7 +134,9 @@ impl FfmpegEncoder {
 
 fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
     const MAX_STDERR_BYTES: usize = 64 * 1024;
+    const TRUNCATED: &[u8] = b"\n[FFmpeg stderr truncated]";
     let mut collected = Vec::new();
+    let mut truncated = false;
     let mut chunk = [0_u8; 8192];
     loop {
         let read = match stderr.read(&mut chunk) {
@@ -143,9 +145,14 @@ fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
         };
         collected.extend_from_slice(&chunk[..read]);
         if collected.len() > MAX_STDERR_BYTES {
-            let excess = collected.len() - MAX_STDERR_BYTES;
+            truncated = true;
+            let retained = MAX_STDERR_BYTES.saturating_sub(TRUNCATED.len());
+            let excess = collected.len() - retained;
             collected.drain(..excess);
         }
+    }
+    if truncated {
+        collected.extend_from_slice(TRUNCATED);
     }
     collected
 }
@@ -223,5 +230,13 @@ mod tests {
         let diagnostic = encoder.abort_after_write_failure("cannot stream frame".to_owned());
         assert!(diagnostic.contains("cannot stream frame"));
         assert!(diagnostic.contains("encoder rejected frame"));
+    }
+
+    #[test]
+    fn bounded_stderr_marks_truncation() {
+        let stderr = vec![b'x'; 65 * 1024];
+        let collected = collect_stderr(std::io::Cursor::new(stderr));
+        assert!(collected.len() <= 64 * 1024);
+        assert!(String::from_utf8_lossy(&collected).contains("FFmpeg stderr truncated"));
     }
 }

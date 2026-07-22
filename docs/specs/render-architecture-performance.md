@@ -1,5 +1,11 @@
 # Staged render architecture and performance plan
 
+> Historical v1 baseline. The active renderer architecture is documented in
+> [animation-effects-v2-design.md](animation-effects-v2-design.md). In
+> particular, the current CPU backend evaluates typed layers, uses inverse-map
+> bilinear sampling, reuses its frame buffer, clips sampling to visible bounds,
+> and uses a byte-budgeted LRU only for static source crops.
+
 ## Scope
 
 This document records the v1 renderer migration. It keeps one Cargo crate and

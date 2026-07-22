@@ -880,6 +880,8 @@ fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnos
 mod tests {
     use super::{WgpuBackend, compare_rgba};
     use crate::{
+        animation::Track,
+        domain::Crop,
         plan::{CompileOptions, EvaluatedFrame, compile},
         project::{ValidationOptions, load_and_validate},
         render::{CpuBackend, RenderBackend},
@@ -1167,5 +1169,92 @@ mod tests {
             initial.readback_buffer_count
         );
         assert_eq!(final_stats.command_submission_count, 9);
+    }
+
+    #[test]
+    fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+        let image_layer = canonical
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::CompiledVisualSource::Image { .. }
+                )
+            })
+            .expect("fixture has image");
+
+        for crop in [
+            Crop {
+                x: 0.13,
+                y: 0.17,
+                width: 0.61,
+                height: 0.59,
+            },
+            Crop {
+                x: 0.0,
+                y: 0.11,
+                width: 0.71,
+                height: 0.73,
+            },
+            Crop {
+                x: 0.29,
+                y: 0.0,
+                width: 0.71,
+                height: 0.73,
+            },
+            Crop {
+                x: 0.29,
+                y: 0.27,
+                width: 0.71,
+                height: 0.73,
+            },
+            Crop {
+                x: 0.13,
+                y: 0.27,
+                width: 0.61,
+                height: 0.73,
+            },
+        ] {
+            let mut plan = canonical.clone();
+            let crate::plan::CompiledVisualSource::Image {
+                crop: track,
+                cacheable_crop,
+                ..
+            } = &mut plan.layers[image_layer].source
+            else {
+                unreachable!()
+            };
+            *track = Track::new(crop);
+            *cacheable_crop = true;
+            let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+            let mut cpu = CpuBackend::default();
+            cpu.prepare(&plan, Arc::clone(&decoded))
+                .expect("CPU prepares");
+            let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+                return;
+            };
+            let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+            let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+            cpu.render_frame(&frame, &mut cpu_output)
+                .expect("CPU frame renders");
+            gpu.render_frame(&frame, &mut gpu_output)
+                .expect("GPU frame renders");
+            let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+            assert!(
+                difference.maximum_absolute_channel_error <= 2,
+                "static crop {crop:?}: {difference:?}"
+            );
+        }
     }
 }

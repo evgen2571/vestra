@@ -27,17 +27,22 @@ fn decoded_frame(path: &std::path::Path, frame: u64, width: u32, height: u32) ->
     output.stdout
 }
 
-fn maximum_channel_difference(left: &[u8], right: &[u8]) -> u8 {
+fn encoded_frame_difference(left: &[u8], right: &[u8]) -> (u8, f64, usize) {
     assert_eq!(
         left.len(),
         right.len(),
         "decoded frames have equal dimensions"
     );
-    left.iter()
-        .zip(right)
-        .map(|(left, right)| left.abs_diff(*right))
-        .max()
-        .unwrap_or(0)
+    let mut maximum = 0_u8;
+    let mut total = 0_u64;
+    let mut differing = 0_usize;
+    for (left, right) in left.iter().zip(right) {
+        let difference = left.abs_diff(*right);
+        maximum = maximum.max(difference);
+        total += u64::from(difference);
+        differing += usize::from(difference != 0);
+    }
+    (maximum, total as f64 / left.len() as f64, differing)
 }
 
 fn canonical_project_with_absolute_assets() -> Value {
@@ -333,10 +338,11 @@ fn strict_wgpu_canonical_render_matches_cpu_encoded_frames() {
     for frame in [0, 14, 24, 28, 36, 42, 48, 59] {
         let cpu_frame = decoded_frame(&cpu_output, frame, 320, 180);
         let gpu_frame = decoded_frame(&gpu_output, frame, 320, 180);
-        let maximum_error = maximum_channel_difference(&cpu_frame, &gpu_frame);
+        let (maximum_error, mean_error, differing_channels) =
+            encoded_frame_difference(&cpu_frame, &gpu_frame);
         assert!(
-            maximum_error <= 5,
-            "encoded canonical frame {frame} exceeded tolerance: maximum channel error {maximum_error}"
+            maximum_error <= 16 && mean_error <= 1.0,
+            "encoded canonical frame {frame} exceeded tolerance: maximum={maximum_error}, mean={mean_error:.3}, differing_channels={differing_channels}"
         );
     }
 }

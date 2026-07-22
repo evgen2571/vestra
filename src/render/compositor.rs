@@ -295,4 +295,40 @@ mod tests {
         image.put_pixel(1, 1, Rgba([100, 100, 0, 255]));
         assert_eq!(sample_bilinear(&image, 1.0, 1.0), Rgba([50, 50, 0, 255]));
     }
+
+    #[test]
+    fn basic_color_effects_apply_in_declared_order() {
+        let effects = [
+            EvaluatedEffect::Brightness { amount: 0.1 },
+            EvaluatedEffect::Tint {
+                colour: [0, 0, 255, 255],
+                amount: 0.5,
+            },
+        ];
+        assert_eq!(
+            apply_effects(Rgba([100, 0, 0, 255]), &effects),
+            Rgba([63, 13, 141, 255])
+        );
+    }
+
+    #[test]
+    fn saturation_zero_produces_neutral_channels() {
+        let pixel = apply_effects(
+            Rgba([255, 0, 0, 255]),
+            &[EvaluatedEffect::Saturation { amount: 0.0 }],
+        );
+        assert_eq!(pixel[0], pixel[1]);
+        assert_eq!(pixel[1], pixel[2]);
+    }
+
+    #[test]
+    fn contrast_one_is_identity() {
+        assert_eq!(
+            apply_effects(
+                Rgba([30, 140, 250, 180]),
+                &[EvaluatedEffect::Contrast { amount: 1.0 }]
+            ),
+            Rgba([30, 140, 250, 180])
+        );
+    }
 }

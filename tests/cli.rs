@@ -354,4 +354,21 @@ fn canonical_validation_rejects_focused_invalid_projects() {
     let mut unknown_top_level = original.clone();
     unknown_top_level["unknown"] = true.into();
     assert_invalid!("unknown-top-level", unknown_top_level, "MVP-PROJECT-SHAPE");
+
+    let mut excessive_clips = original;
+    excessive_clips["assets"] = serde_json::json!([]);
+    excessive_clips["visual"]["transitions"] = serde_json::json!([]);
+    excessive_clips["visual"]["clips"] = Value::Array(
+        (0..10_001)
+            .map(|index| {
+                serde_json::json!({
+                    "id": format!("solid-{index}"),
+                    "source": {"type": "solid_color", "colour": "#123456"},
+                    "start": 0, "duration": 1, "layer": 0,
+                    "opacity": {"base_value": 1}
+                })
+            })
+            .collect(),
+    );
+    assert_invalid!("excessive-clips", excessive_clips, "MVP-LIMIT-CLIPS");
 }

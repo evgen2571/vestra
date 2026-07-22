@@ -70,7 +70,8 @@ VIDEO_EDITOR_REQUIRE_WGPU=1
 The backend derives and validates output and source texture dimensions, padded
 row/copy sizes, buffer and storage-binding sizes, uniform size, bind-group
 bindings, and compute workgroup limits before creating render resources. It
-then checks the limits returned by the requested device again. Initialization, limit, and readback failures
+requests those project-derived limits on top of WGPU's downlevel baseline, then
+checks the limits returned by the requested device again. Initialization, limit, and readback failures
 are returned as structured diagnostics. Per-frame WGPU validation and internal
 errors are captured with device error scopes, so they trigger the normal encoder
 abort and output cleanup path. In environments without an adapter,

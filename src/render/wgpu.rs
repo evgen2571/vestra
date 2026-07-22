@@ -202,6 +202,41 @@ impl GpuRequirements {
         }
         Ok(())
     }
+
+    /// The device request asks only for limits exercised by this compiled
+    /// project, layered on WGPU's portable downlevel baseline.  This avoids
+    /// accidentally requesting an adapter's entire capability set while still
+    /// making the subsequent device-limit check meaningful.
+    fn requested_device_limits(self, plan: &RenderPlan) -> Result<wgpu::Limits, Diagnostic> {
+        let storage_binding_size = u32::try_from(self.copy_bytes).map_err(|_| {
+            Diagnostic::error(
+                "WGPU-STORAGE-LIMIT",
+                Category::Backend,
+                "output/readback buffer exceeds WGPU storage binding address space",
+                "",
+            )
+        })?;
+        let mut limits = wgpu::Limits::downlevel_defaults();
+        limits.max_texture_dimension_2d = self.max_texture_dimension_2d;
+        limits.max_bind_groups = 1;
+        limits.max_bindings_per_bind_group = 3;
+        limits.max_sampled_textures_per_shader_stage = 1;
+        limits.max_storage_buffers_per_shader_stage = 1;
+        limits.max_uniform_buffers_per_shader_stage = 1;
+        limits.max_uniform_buffer_binding_size = self.uniform_bytes;
+        limits.max_storage_buffer_binding_size = storage_binding_size;
+        limits.max_buffer_size = self.copy_bytes;
+        limits.max_compute_invocations_per_workgroup = 64;
+        limits.max_compute_workgroup_size_x = 8;
+        limits.max_compute_workgroup_size_y = 8;
+        limits.max_compute_workgroup_size_z = 1;
+        limits.max_compute_workgroups_per_dimension = plan
+            .canvas
+            .width
+            .div_ceil(8)
+            .max(plan.canvas.height.div_ceil(8));
+        Ok(limits)
+    }
 }
 
 fn limit_error(code: &str, required: u64, supported: u64, subject: &str) -> Diagnostic {
@@ -287,16 +322,13 @@ impl WgpuBackend {
         };
         let limits = adapter.limits();
         requirements.validate(&limits, plan)?;
+        let requested_limits = requirements.requested_device_limits(plan)?;
         let device_request_started = Instant::now();
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("video-editor headless renderer"),
                 required_features: wgpu::Features::empty(),
-                // Resource requirements above were checked against this
-                // adapter. Request that same capability set so the device
-                // cannot silently negotiate unrelated downlevel defaults
-                // after successful adapter validation.
-                required_limits: limits.clone(),
+                required_limits: requested_limits,
                 memory_hints: wgpu::MemoryHints::Performance,
             },
             None,
@@ -1048,6 +1080,43 @@ mod tests {
     }
 
     #[test]
+    fn project_requirements_construct_the_requested_device_limits() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let requirements = super::GpuRequirements::from_plan(&plan, &decoded)
+            .expect("requirements calculate with checked arithmetic");
+        let requested = requirements
+            .requested_device_limits(&plan)
+            .expect("canonical requirements fit WGPU storage binding limits");
+
+        assert_eq!(
+            requested.max_texture_dimension_2d,
+            requirements.max_texture_dimension_2d
+        );
+        assert_eq!(requested.max_buffer_size, requirements.copy_bytes);
+        assert_eq!(
+            requested.max_storage_buffer_binding_size,
+            u32::try_from(requirements.copy_bytes).expect("fixture size fits u32")
+        );
+        assert_eq!(
+            requested.max_uniform_buffer_binding_size,
+            requirements.uniform_bytes
+        );
+        assert_eq!(requested.max_bind_groups, 1);
+        assert_eq!(requested.max_bindings_per_bind_group, 3);
+        assert_eq!(requested.max_compute_workgroup_size_x, 8);
+        assert_eq!(requested.max_compute_workgroup_size_y, 8);
+    }
+
+    #[test]
     fn readback_row_alignment_matches_wgpu_copy_requirements() {
         for (width, expected) in [
             (62_u32, 256_u32),
@@ -1370,7 +1439,9 @@ mod tests {
             })
             .expect("fixture has image");
 
-        for width in [62, 66, 126, 130, 318, 322, 718, 722, 1080] {
+        for width in [
+            62, 64, 66, 126, 128, 130, 318, 320, 322, 718, 720, 722, 1080,
+        ] {
             let mut plan = canonical.clone();
             plan.canvas.width = width;
             plan.canvas.height = 18;

@@ -976,4 +976,46 @@ mod tests {
             25
         );
     }
+
+    #[test]
+    fn flash_without_fade_out_keeps_constant_opacity_until_its_end() {
+        let layer = compile_flash_overlay(
+            &crate::project::Flash {
+                id: "flash".to_owned(),
+                start: 1.0,
+                duration: 2.0,
+                colour: "#ffffff".to_owned(),
+                opacity: 0.7,
+                fade_in: 0.0,
+                fade_out: 0.0,
+                layer: 1,
+            },
+            (24, 1),
+            100,
+        )
+        .expect("flash compiles");
+        assert_eq!(layer.opacity.base_value, 0.7);
+        assert!(layer.opacity.keyframes.is_empty());
+    }
+
+    #[test]
+    fn flash_fade_out_holds_then_reaches_zero_at_end() {
+        let layer = compile_flash_overlay(
+            &crate::project::Flash {
+                id: "flash".to_owned(),
+                start: 0.0,
+                duration: 2.0,
+                colour: "#ffffff".to_owned(),
+                opacity: 1.0,
+                fade_in: 0.0,
+                fade_out: 0.5,
+                layer: 1,
+            },
+            (24, 1),
+            100,
+        )
+        .expect("flash compiles");
+        assert_eq!(layer.opacity.evaluate(1_500_000_000), 1.0);
+        assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
+    }
 }

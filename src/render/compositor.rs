@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
-pub fn compose(frame: &EvaluatedFrame, assets: &PreparedAssets, canvas: &mut RgbaImage) {
+pub fn compose(frame: &EvaluatedFrame, assets: &mut PreparedAssets, canvas: &mut RgbaImage) {
     let _time = frame.time;
     if canvas.width() != frame.width || canvas.height() != frame.height {
         *canvas = RgbaImage::from_pixel(frame.width, frame.height, Rgba(frame.background));
@@ -22,7 +22,7 @@ pub fn compose(frame: &EvaluatedFrame, assets: &PreparedAssets, canvas: &mut Rgb
     }
 }
 
-fn draw_layer(canvas: &mut RgbaImage, assets: &PreparedAssets, layer: &EvaluatedLayer) {
+fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &EvaluatedLayer) {
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
             fill_solid(canvas, *colour, layer.opacity, &layer.effects)
@@ -31,8 +31,21 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &PreparedAssets, layer: &Evaluated
             asset_index,
             crop,
             sizing,
+            cacheable_crop,
         } => {
-            let source = assets.image(*asset_index);
+            let (source, crop) = if *cacheable_crop {
+                (
+                    assets.crop(*asset_index, *crop),
+                    Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                )
+            } else {
+                (assets.image(*asset_index), *crop)
+            };
             let (source_width, source_height) = sizing_dimensions(
                 sizing,
                 crop.width * f64::from(source.width()),
@@ -44,7 +57,7 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &PreparedAssets, layer: &Evaluated
                 draw_image(
                     canvas,
                     source,
-                    *crop,
+                    crop,
                     source_width,
                     source_height,
                     layer.transform,

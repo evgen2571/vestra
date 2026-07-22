@@ -110,23 +110,22 @@ fn draw_image(
     for y in min_y..max_y {
         let mut mapped = inverse.map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
         for x in min_x..max_x {
-            if mapped.x < 0.0
-                || mapped.y < 0.0
-                || mapped.x >= effective_width
-                || mapped.y >= effective_height
+            if mapped.x >= 0.0
+                && mapped.y >= 0.0
+                && mapped.x < effective_width
+                && mapped.y < effective_height
             {
-                continue;
+                let source_x = crop.x * f64::from(source.width())
+                    + mapped.x / effective_width * crop.width * f64::from(source.width());
+                let source_y = crop.y * f64::from(source.height())
+                    + mapped.y / effective_height * crop.height * f64::from(source.height());
+                let sampled = apply_colour_transform(
+                    sample_bilinear(source, source_x, source_y),
+                    colour_transform,
+                );
+                let destination = canvas.get_pixel_mut(x, y);
+                *destination = source_over(*destination, sampled, opacity);
             }
-            let source_x = crop.x * f64::from(source.width())
-                + mapped.x / effective_width * crop.width * f64::from(source.width());
-            let source_y = crop.y * f64::from(source.height())
-                + mapped.y / effective_height * crop.height * f64::from(source.height());
-            let sampled = apply_colour_transform(
-                sample_bilinear(source, source_x, source_y),
-                colour_transform,
-            );
-            let destination = canvas.get_pixel_mut(x, y);
-            *destination = source_over(*destination, sampled, opacity);
             mapped.x += inverse.m00;
             mapped.y += inverse.m10;
         }
@@ -440,5 +439,78 @@ mod tests {
         let mapped = inverse.map(81.5, 44.5);
         let reference = transform.destination_to_source(81.5, 44.5, 320, 180, 140, 90);
         assert!((mapped.x - reference.x).abs() < 1e-10 && (mapped.y - reference.y).abs() < 1e-10);
+    }
+
+    #[test]
+    fn rotated_scanline_advances_after_an_out_of_bounds_sample() {
+        let source = RgbaImage::from_pixel(4, 2, Rgba([255, 0, 0, 255]));
+        let transform = Transform2D {
+            position: crate::domain::Point { x: 0.5, y: 0.5 },
+            anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+            scale: crate::domain::Point { x: 1.0, y: 1.0 },
+            rotation_radians: 0.7,
+        };
+        let (min_x, max_x, min_y, max_y) = visible_bounds(transform, 4.0, 2.0, 12, 12);
+        let inverse = InverseAffine::for_transform(transform, 12, 12, 4.0, 2.0);
+        let entering_row = (min_y..max_y)
+            .find(|y| {
+                let first = inverse.map(f64::from(min_x) + 0.5, f64::from(*y) + 0.5);
+                let later_is_valid = (min_x + 1..max_x).any(|x| {
+                    let mapped = inverse.map(f64::from(x) + 0.5, f64::from(*y) + 0.5);
+                    mapped.x >= 0.0 && mapped.y >= 0.0 && mapped.x < 4.0 && mapped.y < 2.0
+                });
+                (first.x < 0.0 || first.y < 0.0 || first.x >= 4.0 || first.y >= 2.0)
+                    && later_is_valid
+            })
+            .expect("rotation has a scanline that enters the source");
+        let mut canvas = RgbaImage::new(12, 12);
+        draw_image(
+            &mut canvas,
+            &source,
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            4.0,
+            2.0,
+            transform,
+            1.0,
+            ColourTransform::default(),
+        );
+        assert!(
+            (min_x..max_x).any(|x| canvas.get_pixel(x, entering_row)[3] > 0),
+            "the scanline must render after its mapping enters the rotated source"
+        );
+    }
+
+    #[test]
+    fn positive_and_negative_rotations_keep_a_non_square_source_visible() {
+        let source = RgbaImage::from_fn(5, 3, |x, y| Rgba([x as u8 * 40, y as u8 * 80, 255, 255]));
+        for rotation_radians in [0.65, -0.65] {
+            let mut canvas = RgbaImage::new(16, 16);
+            draw_image(
+                &mut canvas,
+                &source,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                5.0,
+                3.0,
+                Transform2D {
+                    position: crate::domain::Point { x: 0.5, y: 0.5 },
+                    anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+                    scale: crate::domain::Point { x: 1.0, y: 1.0 },
+                    rotation_radians,
+                },
+                1.0,
+                ColourTransform::default(),
+            );
+            assert!(canvas.pixels().any(|pixel| pixel[3] > 0));
+        }
     }
 }

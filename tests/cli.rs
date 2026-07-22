@@ -569,6 +569,9 @@ fn schema_is_valid_json_and_overwrite_replaces_only_on_success() {
     let _: Value =
         serde_json::from_slice(&fs::read("schemas/project-v1.schema.json").expect("read schema"))
             .expect("schema JSON");
+    let _: Value =
+        serde_json::from_slice(&fs::read("schemas/project-v2.schema.json").expect("read schema"))
+            .expect("schema JSON");
     let workspace = fixture_workspace();
     let output = workspace.path().join("replace.mp4");
     fs::write(&output, b"existing output").expect("write sentinel");

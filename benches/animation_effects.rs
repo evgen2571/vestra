@@ -1,4 +1,6 @@
 use std::{
+    fs,
+    path::Path,
     sync::{Arc, atomic::AtomicBool},
     time::Instant,
 };
@@ -8,9 +10,32 @@ use video_editor::application::{RenderRequest, render_project};
 fn main() {
     let output = tempfile::tempdir().expect("temporary benchmark directory");
     let output_path = output.path().join("animation-effects-v2.mp4");
+    let project_path = output.path().join("animation-effects-v2-720x1280.json");
+    let mut project: serde_json::Value = serde_json::from_slice(
+        &fs::read("examples/projects/animation-effects-v2.json")
+            .expect("read v2 benchmark fixture"),
+    )
+    .expect("parse v2 benchmark fixture");
+    project["output"]["width"] = 720.into();
+    project["output"]["height"] = 1280.into();
+    for asset in project["assets"].as_array_mut().expect("fixture assets") {
+        let source = asset["source"].as_str().expect("fixture asset source");
+        asset["source"] = Path::new("examples/projects")
+            .join(source)
+            .canonicalize()
+            .expect("canonical benchmark asset")
+            .to_string_lossy()
+            .into_owned()
+            .into();
+    }
+    fs::write(
+        &project_path,
+        serde_json::to_vec(&project).expect("serialize benchmark project"),
+    )
+    .expect("write benchmark project");
     let started = Instant::now();
     let result = render_project(
-        std::path::Path::new("examples/projects/animation-effects-v2.json"),
+        &project_path,
         RenderRequest {
             output_override: Some(output_path),
             overwrite: false,
@@ -24,9 +49,10 @@ fn main() {
         Err(_) => panic!("benchmark project renders"),
     };
     println!(
-        "animation-effects-v2: total={}ms composition={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
+        "animation-effects-v2 720x1280: total={}ms track_evaluation={}ms sampling_and_compositing={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
         summary.timings.total_ms,
-        summary.timings.frame_composition_ms,
+        summary.timings.track_evaluation_ms,
+        summary.timings.cpu_sampling_and_compositing_ms,
         summary.timings.encoder_write_ms,
         summary.performance.cache_peak_bytes,
         summary.performance.peak_decoded_bytes,

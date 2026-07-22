@@ -150,6 +150,16 @@ pub fn render(
     performance.compiled_transition_association_count =
         plan.compilation.compiled_transition_association_count;
     performance.parsed_colour_count = plan.compilation.parsed_colour_count;
+    performance.declared_clip_count = plan.compilation.declared_clip_count;
+    performance.rendered_clip_count = plan.compilation.rendered_clip_count;
+    performance.hidden_clip_count = plan.compilation.hidden_clip_count;
+    performance.image_source_count = plan.compilation.image_source_count;
+    performance.solid_color_source_count = plan.compilation.solid_color_source_count;
+    performance.keyframe_count = plan.compilation.keyframe_count;
+    performance.brightness_effect_count = plan.compilation.brightness_effect_count;
+    performance.contrast_effect_count = plan.compilation.contrast_effect_count;
+    performance.saturation_effect_count = plan.compilation.saturation_effect_count;
+    performance.tint_effect_count = plan.compilation.tint_effect_count;
     performance.schedule_event_count = schedule.event_count();
     let mut timings = RenderTimings {
         asset_decode_ms: milliseconds(backend.timings().expect("prepared CPU backend").decode),
@@ -215,9 +225,21 @@ pub fn render(
             active.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
         }
         performance.active_item_consideration_count += active.len() as u64;
+        performance.maximum_active_layers = performance.maximum_active_layers.max(active.len());
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
         let evaluation_started = Instant::now();
         let evaluated = evaluate(plan, &active, time);
+        performance.evaluated_track_count += evaluated
+            .layers
+            .iter()
+            .map(|layer| {
+                let source_track_count = usize::from(matches!(
+                    &layer.source,
+                    crate::plan::EvaluatedSource::Image { .. }
+                ));
+                (5 + source_track_count + layer.effects.len()) as u64
+            })
+            .sum::<u64>();
         track_evaluation += evaluation_started.elapsed();
         let compose_started = Instant::now();
         backend

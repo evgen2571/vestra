@@ -27,6 +27,16 @@ pub struct CompilationStats {
     pub(crate) animation_sort_count: u64,
     pub(crate) compiled_transition_association_count: u64,
     pub(crate) parsed_colour_count: u64,
+    pub(crate) declared_clip_count: usize,
+    pub(crate) rendered_clip_count: usize,
+    pub(crate) hidden_clip_count: usize,
+    pub(crate) image_source_count: usize,
+    pub(crate) solid_color_source_count: usize,
+    pub(crate) keyframe_count: u64,
+    pub(crate) brightness_effect_count: usize,
+    pub(crate) contrast_effect_count: usize,
+    pub(crate) saturation_effect_count: usize,
+    pub(crate) tint_effect_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]

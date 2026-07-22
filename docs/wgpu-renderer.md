@@ -56,6 +56,7 @@ Mesa Lavapipe for CI. Select discovery behavior with:
 ```bash
 VIDEO_EDITOR_WGPU_BACKEND=vulkan
 VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1
+VIDEO_EDITOR_REQUIRE_WGPU=1
 ```
 
 The backend validates texture, buffer, storage-binding, and dispatch limits
@@ -64,7 +65,10 @@ are returned as structured diagnostics. Per-frame WGPU validation and internal
 errors are captured with device error scopes, so they trigger the normal encoder
 abort and output cleanup path. In environments without an adapter,
 adapter-dependent parity tests print an explicit skip reason; this is not GPU
-verification.
+verification. With `VIDEO_EDITOR_REQUIRE_WGPU=1`, those tests fail instead of
+skipping when adapter or device creation fails. The project-local
+`nix develop .#software-vulkan` shell discovers Lavapipe through Nix's Mesa ICD
+path and enables strict Vulkan verification.
 
 ## Verification and benchmark
 

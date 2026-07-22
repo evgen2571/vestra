@@ -45,6 +45,9 @@ aligned to WGPU's copy-row requirement, then repacked into a contiguous RGBA
 buffer before streaming to FFmpeg. Renderer-owned resource counters and GPU
 preparation timings are exposed in reports.
 
+The compute shader samples with `textureLoad`, so source texture and byte
+counters are reported separately and `sampler_count` is intentionally zero.
+
 Every frame still transfers back to CPU. There is no zero-copy encoder path,
 hardware video encoding, windowed preview, or advanced GPU effects.
 

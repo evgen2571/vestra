@@ -19,7 +19,6 @@ pub struct EvaluatedFrame {
 #[derive(Clone, Debug)]
 pub struct EvaluatedLayer {
     pub(crate) source: EvaluatedSource,
-    pub(crate) transform: Transform2D,
     pub(crate) opacity: f64,
     /// Ordered colour effects collapsed once per layer/frame. The compositor
     /// therefore performs no effect dispatch in its pixel loop.
@@ -33,6 +32,7 @@ pub enum EvaluatedSource {
         crop: Crop,
         sizing: CompiledSizing,
         cacheable_crop: bool,
+        transform: Transform2D,
     },
     SolidColor {
         colour: [u8; 4],
@@ -159,32 +159,30 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 sizing,
                 cacheable_crop,
             } => {
-                evaluated_track_count += 1;
+                evaluated_track_count += 5;
                 EvaluatedSource::Image {
                     asset_index: *asset_index,
                     crop: crop.evaluate(relative),
                     sizing: sizing.clone(),
                     cacheable_crop: *cacheable_crop,
+                    transform: Transform2D {
+                        position: layer.transform.position.evaluate(relative),
+                        anchor: layer.transform.anchor.evaluate(relative),
+                        scale: layer.transform.scale.evaluate(relative),
+                        rotation_radians: layer.transform.rotation_radians.evaluate(relative),
+                    },
                 }
             }
             CompiledVisualSource::SolidColor { colour } => {
                 EvaluatedSource::SolidColor { colour: *colour }
             }
         };
-        let transform = Transform2D {
-            position: layer.transform.position.evaluate(relative),
-            anchor: layer.transform.anchor.evaluate(relative),
-            scale: layer.transform.scale.evaluate(relative),
-            rotation_radians: layer.transform.rotation_radians.evaluate(relative),
-        };
-        evaluated_track_count += 4;
         let colour_transform = ColourTransform::from_effects(layer.effects.iter().map(|effect| {
             evaluated_track_count += 1;
             evaluate_effect(effect, relative)
         }));
         layers.push(EvaluatedLayer {
             source,
-            transform,
             opacity,
             colour_transform,
         });
@@ -214,5 +212,56 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             colour: *colour,
             amount: amount.evaluate(time),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        plan::{CompileOptions, compile},
+        project::{ValidationOptions, load_and_validate},
+    };
+
+    fn canonical_plan() -> RenderPlan {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("valid project");
+        compile(&validated, CompileOptions::default()).expect("plan")
+    }
+
+    #[test]
+    fn solid_layers_skip_transform_tracks_while_images_evaluate_them() {
+        let plan = canonical_plan();
+        let flash = plan
+            .layers
+            .iter()
+            .position(|layer| matches!(layer.source, CompiledVisualSource::SolidColor { .. }))
+            .expect("flash layer");
+        let flash_frame = evaluate(&plan, &[ScheduledItem(flash)], 1_150_000_000);
+        assert_eq!(flash_frame.evaluated_track_count, 1);
+        assert!(matches!(
+            flash_frame.layers[0].source,
+            EvaluatedSource::SolidColor { .. }
+        ));
+
+        let image = plan
+            .layers
+            .iter()
+            .position(|layer| matches!(layer.source, CompiledVisualSource::Image { .. }))
+            .expect("image layer");
+        let image_frame = evaluate(&plan, &[ScheduledItem(image)], 100_000_000);
+        // Opacity, one transition contribution, crop, four transform tracks,
+        // and saturation are all evaluated for this image layer.
+        assert_eq!(image_frame.evaluated_track_count, 8);
+        assert!(matches!(
+            image_frame.layers[0].source,
+            EvaluatedSource::Image { .. }
+        ));
     }
 }

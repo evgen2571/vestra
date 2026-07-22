@@ -976,8 +976,8 @@ mod tests {
         animation::{Interpolation, Keyframe, Track},
         domain::{Crop, Point},
         plan::{
-            CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource, EvaluatedFrame,
-            ScheduledItem, compile,
+            ActiveSchedule, CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource,
+            EvaluatedFrame, ScheduleAction, ScheduledItem, compile,
         },
         project::{ValidationOptions, load_and_validate},
         render::{CpuBackend, RenderBackend},
@@ -1287,6 +1287,62 @@ mod tests {
             difference.maximum_absolute_channel_error <= 2,
             "transparent multi-layer parity exceeded tolerance: {difference:?}"
         );
+    }
+
+    #[test]
+    fn gpu_canonical_timeline_frames_match_cpu_within_two_channels() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
+        };
+        let schedule = ActiveSchedule::compile(&plan);
+        let mut cursor = schedule.cursor();
+        let mut active = Vec::new();
+        for frame_index in 0..plan.frame_count {
+            for event in cursor.events_at(frame_index) {
+                match event.action {
+                    ScheduleAction::Activate => active.push(event.item),
+                    ScheduleAction::Deactivate => active.retain(|item| *item != event.item),
+                }
+            }
+            active.sort_by(|left, right| {
+                plan.layers[left.0]
+                    .draw_key
+                    .cmp(&plan.layers[right.0].draw_key)
+            });
+            if ![0, 14, 24, 28, 36, 42, 48, 59].contains(&frame_index) {
+                continue;
+            }
+            let time = crate::timeline::frame_time_nanos(
+                frame_index,
+                plan.frame_rate.0,
+                plan.frame_rate.1,
+            );
+            let evaluated = crate::plan::evaluate(&plan, &active, time);
+            let mut cpu_output = RgbaImage::new(evaluated.width, evaluated.height);
+            let mut gpu_output = RgbaImage::new(evaluated.width, evaluated.height);
+            cpu.render_frame(&evaluated, &mut cpu_output)
+                .expect("CPU frame renders");
+            gpu.render_frame(&evaluated, &mut gpu_output)
+                .expect("GPU frame renders");
+            let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+            assert!(
+                difference.maximum_absolute_channel_error <= 2,
+                "canonical frame {frame_index} raw parity exceeded tolerance: {difference:?}"
+            );
+        }
     }
 
     #[test]

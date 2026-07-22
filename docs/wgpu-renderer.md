@@ -37,6 +37,11 @@ uses the CPU source-over equation with per-layer rounding. The initial parity
 target is a maximum absolute channel error of two for floating-point image
 cases; exact cases require exact bytes.
 
+Canonical raw-frame regression tests retain that two-channel maximum. The
+separate MP4 decode comparison allows a maximum channel error of sixteen and a
+mean error of one because H.264 quantization amplifies otherwise bounded raw
+rounding differences; it is not used as compositor parity evidence.
+
 ## Resources and readback
 
 WGPU owns persistent source textures, shader, compute pipeline, bind groups,

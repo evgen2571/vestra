@@ -190,7 +190,7 @@ fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
     assert_eq!(wrong_track.status.code(), Some(3));
     assert!(String::from_utf8_lossy(&wrong_track.stderr).contains("invalid type"));
 
-    let mut bad_fade = original;
+    let mut bad_fade = original.clone();
     bad_fade["visual"]["flashes"][0]["fade_in"] = 0.1.into();
     bad_fade["visual"]["flashes"][0]["fade_out"] = 1.into();
     let bad_fade_path = workspace.path().join("bad-fade.json");
@@ -205,6 +205,24 @@ fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
         .expect("validate runs");
     assert_eq!(bad_fade.status.code(), Some(3));
     assert!(String::from_utf8_lossy(&bad_fade.stderr).contains("MVP-FLASH-FADES"));
+
+    let mut hidden_transition = original;
+    hidden_transition["visual"]["clips"][0]["visible"] = false.into();
+    let hidden_transition_path = workspace.path().join("hidden-transition.json");
+    std::fs::write(
+        &hidden_transition_path,
+        serde_json::to_vec(&hidden_transition).expect("serialize project"),
+    )
+    .expect("write project");
+    let hidden_transition = command()
+        .args([
+            "validate",
+            hidden_transition_path.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("validate runs");
+    assert_eq!(hidden_transition.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&hidden_transition.stderr).contains("MVP-TRANSITION-HIDDEN"));
 }
 
 #[test]

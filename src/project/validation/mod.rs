@@ -187,6 +187,12 @@ fn validate_transitions(visual: &crate::project::Visual, errors: &mut Vec<Diagno
         }
         for clip_id in [outgoing.as_str(), incoming.as_str()] {
             match clips.get(clip_id) {
+                Some(clip) if !clip.visible => errors.push(Diagnostic::error(
+                    "MVP-TRANSITION-HIDDEN",
+                    Category::Semantic,
+                    format!("transition cannot reference hidden clip '{clip_id}'"),
+                    path.clone(),
+                )),
                 Some(clip)
                     if start >= clip.start && start + duration <= clip.start + clip.duration =>
                 {

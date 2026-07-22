@@ -1,14 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use crate::domain::{Crop, Easing, Point};
-
-pub const FORMAT_VERSION: u32 = 1;
+pub use crate::domain::{Crop, Point};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Project {
-    pub format_version: u32,
     pub name: Option<String>,
     #[serde(default)]
     pub metadata: Option<Value>,
@@ -95,7 +92,6 @@ impl FrameRate {
             }
         }
     }
-
     #[must_use]
     pub fn display(&self) -> String {
         match self {
@@ -106,15 +102,14 @@ impl FrameRate {
 }
 
 fn reduce(numerator: u64, denominator: u64) -> Result<(u64, u64), String> {
-    let gcd = gcd(numerator, denominator);
-    let reduced = (numerator / gcd, denominator / gcd);
+    let divisor = gcd(numerator, denominator);
+    let reduced = (numerator / divisor, denominator / divisor);
     if reduced.0 > 240_000 || reduced.1 > 1_000_000 {
         Err("frame_rate is outside supported range".to_owned())
     } else {
         Ok(reduced)
     }
 }
-
 const fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
         let remainder = a % b;
@@ -132,7 +127,6 @@ pub struct Asset {
     pub kind: AssetType,
     pub source: String,
 }
-
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetType {
@@ -154,53 +148,133 @@ pub struct Visual {
 #[serde(deny_unknown_fields)]
 pub struct Clip {
     pub id: String,
-    pub asset: String,
+    pub source: VisualSource,
     pub start: f64,
     pub duration: f64,
     pub layer: i32,
     #[serde(default = "default_visible")]
     pub visible: bool,
-    pub position: Point,
-    pub anchor: Point,
-    pub sizing: Sizing,
-    pub crop: Option<Crop>,
-    pub opacity: f64,
     #[serde(default)]
-    pub animations: Vec<Animation>,
+    pub sizing: Option<Sizing>,
+    #[serde(default)]
+    pub crop: Option<Track<Crop>>,
+    pub transform: Transform,
+    pub opacity: Track<f64>,
+    #[serde(default)]
+    pub effects: Vec<Effect>,
 }
-
 const fn default_visible() -> bool {
     true
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Sizing {
-    Original,
-    Fit,
-    Cover,
-    Scale { scale: f64 },
-    Stretch { width: u32, height: u32 },
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum VisualSource {
+    Image { asset: String },
+    SolidColor { colour: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Animation {
-    pub target: AnimationTarget,
-    pub start_value: Value,
-    pub end_value: Value,
-    pub start: f64,
-    pub duration: f64,
-    pub easing: Easing,
+pub struct Transform {
+    pub position: Track<Point>,
+    pub anchor: Track<Point>,
+    pub scale: Track<Point>,
+    #[serde(default = "zero_track")]
+    pub rotation_degrees: Track<f64>,
+}
+fn zero_track() -> Track<f64> {
+    Track::constant(0.0)
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+#[serde(bound(deserialize = "T: Deserialize<'de>", serialize = "T: Serialize"))]
+pub struct Track<T> {
+    pub base_value: T,
+    #[serde(default)]
+    pub keyframes: Vec<Keyframe<T>>,
+}
+impl<T> Track<T> {
+    #[must_use]
+    pub const fn constant(base_value: T) -> Self {
+        Self {
+            base_value,
+            keyframes: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Keyframe<T> {
+    pub time: f64,
+    pub value: T,
+    pub interpolation: Interpolation,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum Interpolation {
+    Named(InterpolationName),
+    CubicBezier(CubicBezier),
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AnimationTarget {
-    Position,
-    Scale,
-    Opacity,
-    Crop,
+pub enum InterpolationName {
+    Linear,
+    Hold,
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CubicBezier {
+    #[serde(rename = "type")]
+    pub kind: CubicBezierKind,
+    pub x1: f64,
+    pub y1: f64,
+    pub x2: f64,
+    pub y2: f64,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CubicBezierKind {
+    CubicBezier,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Effect {
+    Brightness {
+        id: String,
+        amount: Track<f64>,
+    },
+    Contrast {
+        id: String,
+        amount: Track<f64>,
+    },
+    Saturation {
+        id: String,
+        amount: Track<f64>,
+    },
+    Tint {
+        id: String,
+        colour: String,
+        amount: Track<f64>,
+    },
+}
+impl Effect {
+    #[must_use]
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Brightness { id, .. }
+            | Self::Contrast { id, .. }
+            | Self::Saturation { id, .. }
+            | Self::Tint { id, .. } => id,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -212,49 +286,8 @@ pub enum Transition {
         incoming: String,
         start: f64,
         duration: f64,
-        easing: Easing,
+        interpolation: Interpolation,
     },
-    FadeToBackground {
-        id: String,
-        clip: String,
-        start: f64,
-        duration: f64,
-        easing: Easing,
-    },
-    FadeFromBackground {
-        id: String,
-        clip: String,
-        start: f64,
-        duration: f64,
-        easing: Easing,
-    },
-}
-
-impl Transition {
-    #[must_use]
-    pub fn id(&self) -> &str {
-        match self {
-            Self::Crossfade { id, .. }
-            | Self::FadeToBackground { id, .. }
-            | Self::FadeFromBackground { id, .. } => id,
-        }
-    }
-    #[must_use]
-    pub fn start(&self) -> f64 {
-        match self {
-            Self::Crossfade { start, .. }
-            | Self::FadeToBackground { start, .. }
-            | Self::FadeFromBackground { start, .. } => *start,
-        }
-    }
-    #[must_use]
-    pub fn duration(&self) -> f64 {
-        match self {
-            Self::Crossfade { duration, .. }
-            | Self::FadeToBackground { duration, .. }
-            | Self::FadeFromBackground { duration, .. } => *duration,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -270,6 +303,16 @@ pub struct Flash {
     #[serde(default)]
     pub fade_out: f64,
     pub layer: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Sizing {
+    Original,
+    Fit,
+    Cover,
+    Scale { scale: f64 },
+    Stretch { width: u32, height: u32 },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

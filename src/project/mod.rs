@@ -1,9 +1,8 @@
-//! The JSON v1 project boundary: model loading and semantic validation.
+//! The canonical JSON project boundary: loading and semantic validation.
 
 mod loader;
 mod model;
 mod paths;
-pub mod v2;
 mod validated;
 mod validation;
 

@@ -6,13 +6,11 @@ use crate::{
 };
 
 use crate::project::{
-    DurationMode, LoadError, Output, Project, ValidatedProject, ValidationOptions, Visual,
-    parse_colour,
+    DurationMode, LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
 };
 
 pub(super) mod assets;
 pub(super) mod audio;
-pub(super) mod visual;
 
 pub(crate) fn validate(
     project: Project,
@@ -36,7 +34,13 @@ pub(crate) fn validate(
     };
     let root = path.parent().unwrap_or_else(|| Path::new("."));
     let assets = assets::validate(&project.assets, root, &mut errors);
-    visual::validate(&project, &assets.kinds, &mut errors, &mut warnings);
+    validate_visual(
+        &project.visual,
+        &assets.kinds,
+        options.limits.maximum_keyframes_per_track,
+        &mut errors,
+    );
+    validate_transitions(&project.visual, &mut errors);
     let audio_end = audio::validate(
         project.audio.as_ref(),
         project.output.audio,
@@ -45,94 +49,6 @@ pub(crate) fn validate(
         &mut errors,
     );
     let duration = duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
-    let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
-    enforce_limits(
-        &project.output,
-        project.visual.clips.len(),
-        total_frames,
-        duration,
-        options.limits,
-        &mut errors,
-    );
-    add_unused_asset_warnings(&project, &mut warnings);
-    if options.check_backend
-        && let Err(message) = media::backend_available()
-    {
-        errors.push(Diagnostic::error(
-            "MVP-BACKEND-UNAVAILABLE",
-            Category::Backend,
-            message,
-            "",
-        ));
-    }
-    if errors.is_empty() {
-        Ok(ValidatedProject {
-            project,
-            v2: None,
-            limits: options.limits,
-            project_path: path.to_path_buf(),
-            asset_paths: assets.paths,
-            audio_durations: assets.audio_durations,
-            duration,
-            frame_rate,
-            frame_count: total_frames,
-            warnings,
-        })
-    } else {
-        Err(LoadError::Diagnostics(errors))
-    }
-}
-
-pub(crate) fn validate_v2(
-    project: crate::project::v2::Project,
-    path: &Path,
-    options: &ValidationOptions,
-) -> Result<ValidatedProject, LoadError> {
-    let surrogate = Project {
-        format_version: crate::project::FORMAT_VERSION,
-        name: project.name.clone(),
-        metadata: project.metadata.clone(),
-        output: project.output.clone(),
-        assets: project.assets.clone(),
-        visual: Visual {
-            clips: Vec::new(),
-            transitions: Vec::new(),
-            flashes: Vec::new(),
-        },
-        audio: project.audio.clone(),
-    };
-    let mut errors = Vec::new();
-    let mut warnings = Vec::new();
-    output(&project.output, &mut errors);
-    let frame_rate = match project.output.frame_rate.rational() {
-        Ok(rate) => rate,
-        Err(message) => {
-            errors.push(Diagnostic::error(
-                "MVP-OUTPUT-FPS",
-                Category::Semantic,
-                message,
-                "/output/frame_rate",
-            ));
-            (1, 1)
-        }
-    };
-    let root = path.parent().unwrap_or_else(|| Path::new("."));
-    let assets = assets::validate(&project.assets, root, &mut errors);
-    validate_v2_visual(
-        &project.visual,
-        &assets.kinds,
-        options.limits.maximum_keyframes_per_track,
-        &mut errors,
-    );
-    validate_v2_transitions(&project.visual, &mut errors);
-    let audio_end = audio::validate(
-        project.audio.as_ref(),
-        project.output.audio,
-        &assets.kinds,
-        &assets.audio_durations,
-        &mut errors,
-    );
-    let duration = duration_v2(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
     enforce_limits(
         &project.output,
@@ -152,6 +68,7 @@ pub(crate) fn validate_v2(
             ));
         }
     }
+    add_unused_asset_warnings(&project, &mut warnings);
     if options.check_backend
         && let Err(message) = media::backend_available()
     {
@@ -164,8 +81,7 @@ pub(crate) fn validate_v2(
     }
     if errors.is_empty() {
         Ok(ValidatedProject {
-            project: surrogate,
-            v2: Some(project),
+            project,
             limits: options.limits,
             project_path: path.to_path_buf(),
             asset_paths: assets.paths,
@@ -180,8 +96,8 @@ pub(crate) fn validate_v2(
     }
 }
 
-fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec<Diagnostic>) {
-    let clips: std::collections::BTreeMap<&str, &crate::project::v2::Clip> = visual
+fn validate_transitions(visual: &crate::project::Visual, errors: &mut Vec<Diagnostic>) {
+    let clips: std::collections::BTreeMap<&str, &crate::project::Clip> = visual
         .clips
         .iter()
         .map(|clip| (clip.id.as_str(), clip))
@@ -192,7 +108,7 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
     for (index, transition) in visual.transitions.iter().enumerate() {
         let path = format!("/visual/transitions/{index}");
         let (id, outgoing, incoming, start, duration) = match transition {
-            crate::project::v2::Transition::Crossfade {
+            crate::project::Transition::Crossfade {
                 id,
                 outgoing,
                 incoming,
@@ -203,7 +119,7 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
         };
         if id.trim().is_empty() || !ids.insert(id) {
             errors.push(Diagnostic::error(
-                "MVP-V2-TRANSITION-ID",
+                "MVP-TRANSITION-ID",
                 Category::Semantic,
                 "transition ids must be non-empty and unique",
                 format!("{path}/id"),
@@ -211,7 +127,7 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
         }
         if !nonnegative(start) || !positive(duration) {
             errors.push(Diagnostic::error(
-                "MVP-V2-TRANSITION-TIME",
+                "MVP-TRANSITION-TIME",
                 Category::Semantic,
                 "transition start and duration are invalid",
                 path,
@@ -220,7 +136,7 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
         }
         if outgoing == incoming {
             errors.push(Diagnostic::error(
-                "MVP-V2-TRANSITION-SELF",
+                "MVP-TRANSITION-SELF",
                 Category::Semantic,
                 "transition requires two different clips",
                 path.clone(),
@@ -237,13 +153,13 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
                         .push((start, start + duration))
                 }
                 Some(_) => errors.push(Diagnostic::error(
-                    "MVP-V2-TRANSITION-FIT",
+                    "MVP-TRANSITION-FIT",
                     Category::Semantic,
                     format!("transition must fit inside clip '{clip_id}'"),
                     path.clone(),
                 )),
                 None => errors.push(Diagnostic::error(
-                    "MVP-V2-TRANSITION-CLIP",
+                    "MVP-TRANSITION-CLIP",
                     Category::Semantic,
                     format!("unknown clip '{clip_id}'"),
                     path.clone(),
@@ -255,7 +171,7 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
         ranges.sort_by(|left, right| left.0.total_cmp(&right.0));
         if ranges.windows(2).any(|pair| pair[1].0 < pair[0].1) {
             errors.push(Diagnostic::error(
-                "MVP-V2-TRANSITION-CONFLICT",
+                "MVP-TRANSITION-CONFLICT",
                 Category::Semantic,
                 format!("clip '{clip}' has overlapping transitions"),
                 "/visual/transitions",
@@ -298,8 +214,8 @@ fn enforce_limits(
     }
 }
 
-fn validate_v2_visual(
-    visual: &crate::project::v2::Visual,
+fn validate_visual(
+    visual: &crate::project::Visual,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
     errors: &mut Vec<Diagnostic>,
@@ -309,7 +225,7 @@ fn validate_v2_visual(
         let path = format!("/visual/clips/{index}");
         if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
             errors.push(Diagnostic::error(
-                "MVP-V2-CLIP-ID",
+                "MVP-CLIP-ID",
                 Category::Semantic,
                 "clip ids must be non-empty and unique",
                 format!("{path}/id"),
@@ -317,34 +233,34 @@ fn validate_v2_visual(
         }
         if !positive(clip.duration) || !nonnegative(clip.start) {
             errors.push(Diagnostic::error(
-                "MVP-V2-CLIP-TIME",
+                "MVP-CLIP-TIME",
                 Category::Semantic,
                 "clip start and duration must be finite with positive duration",
                 path.clone(),
             ));
         }
         match &clip.source {
-            crate::project::v2::VisualSource::Image { asset }
+            crate::project::VisualSource::Image { asset }
                 if assets.get(asset) == Some(&crate::project::AssetType::Image) => {}
-            crate::project::v2::VisualSource::Image { asset } => errors.push(Diagnostic::error(
-                "MVP-V2-SOURCE-ASSET",
+            crate::project::VisualSource::Image { asset } => errors.push(Diagnostic::error(
+                "MVP-SOURCE-ASSET",
                 Category::Semantic,
                 format!("image source references invalid asset '{asset}'"),
                 format!("{path}/source/asset"),
             )),
-            crate::project::v2::VisualSource::SolidColor { colour }
+            crate::project::VisualSource::SolidColor { colour }
                 if parse_colour(colour).is_none() =>
             {
                 errors.push(Diagnostic::error(
-                    "MVP-V2-SOURCE-COLOUR",
+                    "MVP-SOURCE-COLOUR",
                     Category::Semantic,
                     "solid color must use #RRGGBB or #RRGGBBAA",
                     format!("{path}/source/colour"),
                 ))
             }
-            crate::project::v2::VisualSource::SolidColor { .. } => {}
+            crate::project::VisualSource::SolidColor { .. } => {}
         }
-        validate_v2_track(
+        validate_track(
             &clip.transform.position,
             clip.duration,
             &format!("{path}/transform/position"),
@@ -352,7 +268,7 @@ fn validate_v2_visual(
             errors,
             |value| value.x.is_finite() && value.y.is_finite(),
         );
-        validate_v2_track(
+        validate_track(
             &clip.transform.anchor,
             clip.duration,
             &format!("{path}/transform/anchor"),
@@ -365,7 +281,7 @@ fn validate_v2_visual(
                     && (0.0..=1.0).contains(&value.y)
             },
         );
-        validate_v2_track(
+        validate_track(
             &clip.transform.scale,
             clip.duration,
             &format!("{path}/transform/scale"),
@@ -373,7 +289,7 @@ fn validate_v2_visual(
             errors,
             |value| positive(value.x) && positive(value.y),
         );
-        validate_v2_track(
+        validate_track(
             &clip.transform.rotation_degrees,
             clip.duration,
             &format!("{path}/transform/rotation_degrees"),
@@ -381,7 +297,7 @@ fn validate_v2_visual(
             errors,
             |value| value.is_finite(),
         );
-        validate_v2_track(
+        validate_track(
             &clip.opacity,
             clip.duration,
             &format!("{path}/opacity"),
@@ -390,7 +306,7 @@ fn validate_v2_visual(
             |value| unit(*value),
         );
         if let Some(crop) = &clip.crop {
-            validate_v2_track(
+            validate_track(
                 crop,
                 clip.duration,
                 &format!("{path}/crop"),
@@ -410,7 +326,7 @@ fn validate_v2_visual(
         for (effect_index, effect) in clip.effects.iter().enumerate() {
             if effect.id().trim().is_empty() || !effect_ids.insert(effect.id().to_owned()) {
                 errors.push(Diagnostic::error(
-                    "MVP-V2-EFFECT-ID",
+                    "MVP-EFFECT-ID",
                     Category::Semantic,
                     "effect ids must be non-empty and unique per clip",
                     format!("{path}/effects/{effect_index}/id"),
@@ -418,9 +334,9 @@ fn validate_v2_visual(
             }
             let effect_path = format!("{path}/effects/{effect_index}");
             match effect {
-                crate::project::v2::Effect::Brightness { amount, .. }
-                | crate::project::v2::Effect::Contrast { amount, .. }
-                | crate::project::v2::Effect::Saturation { amount, .. } => validate_v2_track(
+                crate::project::Effect::Brightness { amount, .. }
+                | crate::project::Effect::Contrast { amount, .. }
+                | crate::project::Effect::Saturation { amount, .. } => validate_track(
                     amount,
                     clip.duration,
                     &format!("{effect_path}/amount"),
@@ -428,16 +344,16 @@ fn validate_v2_visual(
                     errors,
                     |value| value.is_finite(),
                 ),
-                crate::project::v2::Effect::Tint { colour, amount, .. } => {
+                crate::project::Effect::Tint { colour, amount, .. } => {
                     if parse_colour(colour).is_none() {
                         errors.push(Diagnostic::error(
-                            "MVP-V2-TINT-COLOUR",
+                            "MVP-TINT-COLOUR",
                             Category::Semantic,
                             "tint must use #RRGGBB or #RRGGBBAA",
                             format!("{effect_path}/colour"),
                         ));
                     }
-                    validate_v2_track(
+                    validate_track(
                         amount,
                         clip.duration,
                         &format!("{effect_path}/amount"),
@@ -451,8 +367,8 @@ fn validate_v2_visual(
     }
 }
 
-fn validate_v2_track<T>(
-    track: &crate::project::v2::Track<T>,
+fn validate_track<T>(
+    track: &crate::project::Track<T>,
     duration: f64,
     path: &str,
     maximum_keyframes: usize,
@@ -469,7 +385,7 @@ fn validate_v2_track<T>(
     }
     if !valid(&track.base_value) {
         errors.push(Diagnostic::error(
-            "MVP-V2-TRACK-VALUE",
+            "MVP-TRACK-VALUE",
             Category::Semantic,
             "track base value is invalid",
             format!("{path}/base_value"),
@@ -482,7 +398,7 @@ fn validate_v2_track<T>(
             || previous.is_some_and(|time| keyframe.time <= time)
         {
             errors.push(Diagnostic::error(
-                "MVP-V2-KEYFRAME-TIME",
+                "MVP-KEYFRAME-TIME",
                 Category::Semantic,
                 "keyframe times must be finite, strictly increasing, and inside the clip",
                 format!("{path}/keyframes/{index}/time"),
@@ -490,13 +406,13 @@ fn validate_v2_track<T>(
         }
         if !valid(&keyframe.value) {
             errors.push(Diagnostic::error(
-                "MVP-V2-KEYFRAME-VALUE",
+                "MVP-KEYFRAME-VALUE",
                 Category::Semantic,
                 "keyframe value is invalid",
                 format!("{path}/keyframes/{index}/value"),
             ));
         }
-        if let crate::project::v2::Interpolation::CubicBezier(bezier) = keyframe.interpolation
+        if let crate::project::Interpolation::CubicBezier(bezier) = keyframe.interpolation
             && (!bezier.x1.is_finite()
                 || !bezier.y1.is_finite()
                 || !bezier.x2.is_finite()
@@ -505,7 +421,7 @@ fn validate_v2_track<T>(
                 || !(0.0..=1.0).contains(&bezier.x2))
         {
             errors.push(Diagnostic::error(
-                "MVP-V2-BEZIER",
+                "MVP-BEZIER",
                 Category::Semantic,
                 "cubic Bézier controls must be finite and have x controls in 0..=1",
                 format!("{path}/keyframes/{index}/interpolation"),
@@ -515,8 +431,9 @@ fn validate_v2_track<T>(
     }
 }
 
-fn duration_v2(
-    project: &crate::project::v2::Project,
+#[cfg(any())]
+fn canonical_duration(
+    project: &crate::project::Project,
     audio_end: Option<f64>,
     warnings: &mut Vec<Diagnostic>,
     errors: &mut Vec<Diagnostic>,
@@ -563,7 +480,10 @@ fn add_unused_asset_warnings(project: &Project, warnings: &mut Vec<Diagnostic>) 
         .visual
         .clips
         .iter()
-        .map(|clip| clip.asset.as_str())
+        .filter_map(|clip| match &clip.source {
+            crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
+            crate::project::VisualSource::SolidColor { .. } => None,
+        })
         .chain(project.audio.iter().map(|track| track.asset.as_str()))
         .collect();
     for (index, asset) in project.assets.iter().enumerate() {

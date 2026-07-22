@@ -5,18 +5,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::from_value;
-
 use crate::{
     Category, Diagnostic,
     animation::{Interpolation, Keyframe, Track},
-    domain::{Crop, Easing, Point},
+    domain::{Crop, Point},
     media::{AudioSettings, EncoderSettings},
     plan::{
         Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
         CompiledVisualSource, DrawKey, ImageAsset, RenderPlan,
     },
-    project::{Animation, AnimationTarget, Sizing, Transition, ValidatedProject, parse_colour},
+    project::{Sizing, ValidatedProject, parse_colour},
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
 };
 
@@ -33,171 +31,11 @@ pub fn compile(
     validated: &ValidatedProject,
     options: CompileOptions,
 ) -> Result<RenderPlan, Diagnostic> {
-    if let Some(project) = &validated.v2 {
-        return compile_v2(validated, project, options);
-    }
-    let (width, height) = effective_dimensions(
-        validated.project.output.width,
-        validated.project.output.height,
-        options.preview,
-    );
-    let background = parse_colour(&validated.project.output.background).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-BACKGROUND",
-            Category::Internal,
-            "validated background is invalid",
-            "/output/background",
-        )
-    })?;
-    let mut compilation = CompilationStats {
-        parsed_colour_count: 1,
-        declared_clip_count: validated.project.visual.clips.len(),
-        rendered_clip_count: validated
-            .project
-            .visual
-            .clips
-            .iter()
-            .filter(|clip| clip.visible)
-            .count(),
-        hidden_clip_count: validated
-            .project
-            .visual
-            .clips
-            .iter()
-            .filter(|clip| !clip.visible)
-            .count(),
-        ..CompilationStats::default()
-    };
-    let renderable_assets: BTreeSet<_> = validated
-        .project
-        .visual
-        .clips
-        .iter()
-        .filter(|clip| clip.visible)
-        .map(|clip| clip.asset.as_str())
-        .collect();
-    let images: Vec<_> = validated
-        .project
-        .assets
-        .iter()
-        .filter(|asset| matches!(asset.kind, crate::project::AssetType::Image))
-        .filter(|asset| renderable_assets.contains(asset.id.as_str()))
-        .filter_map(|asset| {
-            validated.asset_paths.get(&asset.id).map(|path| ImageAsset {
-                id: asset.id.clone(),
-                path: path.clone(),
-            })
-        })
-        .collect();
-    let asset_indices: BTreeMap<_, _> = images
-        .iter()
-        .enumerate()
-        .map(|(index, asset)| (asset.id.as_str(), index))
-        .collect();
-    let mut layers = Vec::with_capacity(
-        validated.project.visual.clips.len() + validated.project.visual.flashes.len(),
-    );
-    for clip in &validated.project.visual.clips {
-        if !clip.visible {
-            continue;
-        }
-        let asset_index = *asset_indices.get(clip.asset.as_str()).ok_or_else(|| {
-            Diagnostic::error(
-                "MVP-PLAN-ASSET",
-                Category::Internal,
-                format!("validated clip '{}' has no image asset", clip.id),
-                "",
-            )
-        })?;
-        let start_nanos = to_nanos(clip.start, &clip.id)?;
-        let duration_nanos = to_nanos(clip.duration, &clip.id)?;
-        compilation.animation_value_parse_count += clip.animations.len() as u64;
-        let tracks = compile_v1_tracks(clip, &clip.animations)?;
-        compilation.animation_sort_count += 4;
-        layers.push(CompiledLayer {
-            id: clip.id.clone(),
-            start_nanos,
-            start_frame: first_frame_at_or_after(start_nanos, validated.frame_rate)?,
-            end_frame: first_frame_at_or_after(
-                start_nanos.saturating_add(duration_nanos),
-                validated.frame_rate,
-            )?
-            .min(validated.frame_count),
-            draw_key: DrawKey {
-                layer: clip.layer,
-                start_nanos,
-                id: clip.id.clone(),
-            },
-            source: CompiledVisualSource::Image {
-                asset_index,
-                cacheable_crop: tracks.crop.keyframes.is_empty(),
-                crop: tracks.crop,
-                sizing: compile_sizing(&clip.sizing),
-            },
-            transform: CompiledTransformTracks {
-                position: tracks.position,
-                anchor: Track::new(clip.anchor),
-                scale: tracks.scale,
-                rotation_radians: Track::new(0.0),
-            },
-            opacity: tracks.opacity,
-            opacity_contributions: Vec::new(),
-            effects: Vec::new(),
-        });
-    }
-    let clip_indices: BTreeMap<String, usize> = layers
-        .iter()
-        .enumerate()
-        .map(|(index, layer)| (layer.id.clone(), index))
-        .collect();
-    compile_v1_transitions(
-        &validated.project.visual.transitions,
-        &clip_indices,
-        &mut layers,
-        &mut compilation,
-    )?;
-    for flash in &validated.project.visual.flashes {
-        layers.push(compile_flash(
-            flash,
-            validated.frame_rate,
-            validated.frame_count,
-        )?);
-    }
-    compilation.parsed_colour_count += validated.project.visual.flashes.len() as u64;
-    record_compilation_workload(&mut compilation, &layers);
-    enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
-    let audio = compile_audio(validated)?;
-    Ok(RenderPlan {
-        configured_output: resolved_output_path(validated),
-        canvas: Canvas {
-            width,
-            height,
-            background,
-            preview: options.preview,
-        },
-        duration: validated.duration,
-        frame_rate: validated.frame_rate,
-        frame_count: validated.frame_count,
-        encoder: EncoderSettings {
-            width,
-            height,
-            frame_rate: validated.frame_rate,
-            frame_count: validated.frame_count,
-            duration: validated.duration,
-            quality_crf: validated.project.output.quality.crf(),
-            audio,
-        },
-        limits: validated.limits,
-        images,
-        layers,
-        compilation,
-        warnings: validated.warnings.clone(),
-    })
+    compile_canonical(validated, &validated.project, options)
 }
-
-fn compile_v2(
+fn compile_canonical(
     validated: &ValidatedProject,
-    project: &crate::project::v2::Project,
+    project: &crate::project::Project,
     options: CompileOptions,
 ) -> Result<RenderPlan, Diagnostic> {
     let (width, height) =
@@ -216,8 +54,8 @@ fn compile_v2(
         .iter()
         .filter(|clip| clip.visible)
         .filter_map(|clip| match &clip.source {
-            crate::project::v2::VisualSource::Image { asset } => Some(asset.as_str()),
-            crate::project::v2::VisualSource::SolidColor { .. } => None,
+            crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
+            crate::project::VisualSource::SolidColor { .. } => None,
         })
         .collect();
     let images: Vec<_> = project
@@ -255,14 +93,14 @@ fn compile_v2(
             .iter()
             .filter(|clip| !clip.visible)
             .count(),
-        keyframe_count: v2_keyframe_count(project),
+        keyframe_count: keyframe_count(project),
         ..CompilationStats::default()
     };
     for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
         let start_nanos = to_nanos(clip.start, &clip.id)?;
         let end_nanos = start_nanos.saturating_add(to_nanos(clip.duration, &clip.id)?);
         let source = match &clip.source {
-            crate::project::v2::VisualSource::Image { asset } => CompiledVisualSource::Image {
+            crate::project::VisualSource::Image { asset } => CompiledVisualSource::Image {
                 asset_index: *indices.get(asset).ok_or_else(|| {
                     Diagnostic::error(
                         "MVP-PLAN-ASSET",
@@ -276,7 +114,7 @@ fn compile_v2(
                     .as_ref()
                     .is_none_or(|track| track.keyframes.is_empty()),
                 crop: match &clip.crop {
-                    Some(track) => compile_v2_track(track, &clip.id)?,
+                    Some(track) => compile_track(track, &clip.id)?,
                     None => Track::new(Crop {
                         x: 0.0,
                         y: 0.0,
@@ -289,7 +127,7 @@ fn compile_v2(
                     .as_ref()
                     .map_or(CompiledSizing::Original, compile_sizing),
             },
-            crate::project::v2::VisualSource::SolidColor { colour } => {
+            crate::project::VisualSource::SolidColor { colour } => {
                 compilation.parsed_colour_count += 1;
                 CompiledVisualSource::SolidColor {
                     colour: parse_colour(colour).ok_or_else(|| {
@@ -306,7 +144,7 @@ fn compile_v2(
         let effects = clip
             .effects
             .iter()
-            .map(|effect| compile_v2_effect(effect, &clip.id))
+            .map(|effect| compile_effect(effect, &clip.id))
             .collect::<Result<Vec<_>, _>>()?;
         layers.push(CompiledLayer {
             id: clip.id.clone(),
@@ -321,15 +159,15 @@ fn compile_v2(
             },
             source,
             transform: CompiledTransformTracks {
-                position: compile_v2_track(&clip.transform.position, &clip.id)?,
-                anchor: compile_v2_track(&clip.transform.anchor, &clip.id)?,
-                scale: compile_v2_track(&clip.transform.scale, &clip.id)?,
-                rotation_radians: degrees_track_to_radians(compile_v2_track(
+                position: compile_track(&clip.transform.position, &clip.id)?,
+                anchor: compile_track(&clip.transform.anchor, &clip.id)?,
+                scale: compile_track(&clip.transform.scale, &clip.id)?,
+                rotation_radians: degrees_track_to_radians(compile_track(
                     &clip.transform.rotation_degrees,
                     &clip.id,
                 )?),
             },
-            opacity: compile_v2_track(&clip.opacity, &clip.id)?,
+            opacity: compile_track(&clip.opacity, &clip.id)?,
             opacity_contributions: Vec::new(),
             effects,
         });
@@ -339,14 +177,14 @@ fn compile_v2(
         .enumerate()
         .map(|(index, layer)| (layer.id.clone(), index))
         .collect();
-    compile_v2_transitions(
+    compile_transitions(
         &project.visual.transitions,
         &indices,
         &mut layers,
         &mut compilation,
     )?;
     for flash in &project.visual.flashes {
-        layers.push(compile_v2_flash(
+        layers.push(compile_flash_overlay(
             flash,
             validated.frame_rate,
             validated.frame_count,
@@ -412,8 +250,8 @@ fn enforce_active_layer_limit(
     Ok(())
 }
 
-fn compile_v2_track<T: Copy>(
-    track: &crate::project::v2::Track<T>,
+fn compile_track<T: Copy>(
+    track: &crate::project::Track<T>,
     id: &str,
 ) -> Result<Track<T>, Diagnostic> {
     let mut keyframes = Vec::with_capacity(track.keyframes.len());
@@ -421,7 +259,7 @@ fn compile_v2_track<T: Copy>(
         keyframes.push(Keyframe {
             time: to_nanos(keyframe.time, id)?,
             value: keyframe.value,
-            interpolation: v2_interpolation(&keyframe.interpolation),
+            interpolation: project_interpolation(&keyframe.interpolation),
         });
     }
     Ok(Track {
@@ -438,16 +276,16 @@ fn degrees_track_to_radians(mut track: Track<f64>) -> Track<f64> {
     track
 }
 
-fn v2_interpolation(interpolation: &crate::project::v2::Interpolation) -> Interpolation {
+fn project_interpolation(interpolation: &crate::project::Interpolation) -> Interpolation {
     match interpolation {
-        crate::project::v2::Interpolation::Named(name) => match name {
-            crate::project::v2::InterpolationName::Linear => Interpolation::Linear,
-            crate::project::v2::InterpolationName::Hold => Interpolation::Hold,
-            crate::project::v2::InterpolationName::EaseIn => Interpolation::EaseIn,
-            crate::project::v2::InterpolationName::EaseOut => Interpolation::EaseOut,
-            crate::project::v2::InterpolationName::EaseInOut => Interpolation::EaseInOut,
+        crate::project::Interpolation::Named(name) => match name {
+            crate::project::InterpolationName::Linear => Interpolation::Linear,
+            crate::project::InterpolationName::Hold => Interpolation::Hold,
+            crate::project::InterpolationName::EaseIn => Interpolation::EaseIn,
+            crate::project::InterpolationName::EaseOut => Interpolation::EaseOut,
+            crate::project::InterpolationName::EaseInOut => Interpolation::EaseInOut,
         },
-        crate::project::v2::Interpolation::CubicBezier(bezier) => {
+        crate::project::Interpolation::CubicBezier(bezier) => {
             Interpolation::CubicBezier(crate::animation::CubicBezier {
                 x1: bezier.x1,
                 y1: bezier.y1,
@@ -458,44 +296,40 @@ fn v2_interpolation(interpolation: &crate::project::v2::Interpolation) -> Interp
     }
 }
 
-fn compile_v2_effect(
-    effect: &crate::project::v2::Effect,
+fn compile_effect(
+    effect: &crate::project::Effect,
     id: &str,
 ) -> Result<crate::plan::CompiledEffect, Diagnostic> {
     Ok(match effect {
-        crate::project::v2::Effect::Brightness { amount, .. } => {
+        crate::project::Effect::Brightness { amount, .. } => {
             crate::plan::CompiledEffect::Brightness {
-                amount: compile_v2_track(amount, id)?,
+                amount: compile_track(amount, id)?,
             }
         }
-        crate::project::v2::Effect::Contrast { amount, .. } => {
-            crate::plan::CompiledEffect::Contrast {
-                amount: compile_v2_track(amount, id)?,
-            }
-        }
-        crate::project::v2::Effect::Saturation { amount, .. } => {
+        crate::project::Effect::Contrast { amount, .. } => crate::plan::CompiledEffect::Contrast {
+            amount: compile_track(amount, id)?,
+        },
+        crate::project::Effect::Saturation { amount, .. } => {
             crate::plan::CompiledEffect::Saturation {
-                amount: compile_v2_track(amount, id)?,
+                amount: compile_track(amount, id)?,
             }
         }
-        crate::project::v2::Effect::Tint { colour, amount, .. } => {
-            crate::plan::CompiledEffect::Tint {
-                colour: parse_colour(colour).ok_or_else(|| {
-                    Diagnostic::error(
-                        "MVP-PLAN-EFFECT-COLOUR",
-                        Category::Internal,
-                        "validated tint color is invalid",
-                        "",
-                    )
-                })?,
-                amount: compile_v2_track(amount, id)?,
-            }
-        }
+        crate::project::Effect::Tint { colour, amount, .. } => crate::plan::CompiledEffect::Tint {
+            colour: parse_colour(colour).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-PLAN-EFFECT-COLOUR",
+                    Category::Internal,
+                    "validated tint color is invalid",
+                    "",
+                )
+            })?,
+            amount: compile_track(amount, id)?,
+        },
     })
 }
 
-fn compile_v2_transitions(
-    transitions: &[crate::project::v2::Transition],
+fn compile_transitions(
+    transitions: &[crate::project::Transition],
     indices: &BTreeMap<String, usize>,
     layers: &mut [CompiledLayer],
     compilation: &mut CompilationStats,
@@ -503,7 +337,7 @@ fn compile_v2_transitions(
     let mut curves: BTreeMap<usize, Vec<(u128, u128, bool, Interpolation)>> = BTreeMap::new();
     for transition in transitions {
         let (id, outgoing, incoming, start, duration, interpolation) = match transition {
-            crate::project::v2::Transition::Crossfade {
+            crate::project::Transition::Crossfade {
                 id,
                 outgoing,
                 incoming,
@@ -514,7 +348,7 @@ fn compile_v2_transitions(
         };
         let start = to_nanos(start, id)?;
         let end = start.saturating_add(to_nanos(duration, id)?);
-        let interpolation = v2_interpolation(interpolation);
+        let interpolation = project_interpolation(interpolation);
         for (clip, incoming) in [(outgoing, false), (incoming, true)] {
             if let Some(index) = indices.get(clip) {
                 curves
@@ -564,24 +398,77 @@ fn add_transition_tracks(
     }
 }
 
-fn compile_v2_flash(
-    flash: &crate::project::v2::Flash,
+fn compile_flash_overlay(
+    flash: &crate::project::Flash,
     rate: (u64, u64),
     frame_count: u64,
 ) -> Result<CompiledLayer, Diagnostic> {
-    let v1 = crate::project::Flash {
+    let start_nanos = to_nanos(flash.start, &flash.id)?;
+    let duration_nanos = to_nanos(flash.duration, &flash.id)?;
+    let colour = parse_colour(&flash.colour).ok_or_else(|| {
+        Diagnostic::error(
+            "MVP-PLAN-FLASH",
+            Category::Internal,
+            "validated flash has invalid colour",
+            "",
+        )
+    })?;
+    let fade_in = to_nanos(flash.fade_in, &flash.id)?;
+    let fade_out = to_nanos(flash.fade_out, &flash.id)?;
+    let mut opacity = Track::new(if fade_in == 0 { flash.opacity } else { 0.0 });
+    if fade_in > 0 {
+        insert_keyframe(
+            &mut opacity.keyframes,
+            Keyframe {
+                time: fade_in,
+                value: flash.opacity,
+                interpolation: Interpolation::Linear,
+            },
+        );
+    }
+    if fade_out > 0 {
+        insert_keyframe(
+            &mut opacity.keyframes,
+            Keyframe {
+                time: duration_nanos.saturating_sub(fade_out),
+                value: flash.opacity,
+                interpolation: Interpolation::Hold,
+            },
+        );
+        insert_keyframe(
+            &mut opacity.keyframes,
+            Keyframe {
+                time: duration_nanos,
+                value: 0.0,
+                interpolation: Interpolation::Linear,
+            },
+        );
+    }
+    Ok(CompiledLayer {
         id: flash.id.clone(),
-        start: flash.start,
-        duration: flash.duration,
-        colour: flash.colour.clone(),
-        opacity: flash.opacity,
-        fade_in: flash.fade_in,
-        fade_out: flash.fade_out,
-        layer: flash.layer,
-    };
-    compile_flash(&v1, rate, frame_count)
+        start_nanos,
+        start_frame: first_frame_at_or_after(start_nanos, rate)?,
+        end_frame: first_frame_at_or_after(start_nanos.saturating_add(duration_nanos), rate)?
+            .min(frame_count),
+        draw_key: DrawKey {
+            layer: flash.layer,
+            start_nanos,
+            id: flash.id.clone(),
+        },
+        source: CompiledVisualSource::SolidColor { colour },
+        transform: CompiledTransformTracks {
+            position: Track::new(Point { x: 0.5, y: 0.5 }),
+            anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+            scale: Track::new(Point { x: 1.0, y: 1.0 }),
+            rotation_radians: Track::new(0.0),
+        },
+        opacity,
+        opacity_contributions: Vec::new(),
+        effects: Vec::new(),
+    })
 }
 
+#[cfg(any())]
 struct V1Tracks {
     position: Track<Point>,
     scale: Track<Point>,
@@ -589,6 +476,7 @@ struct V1Tracks {
     opacity: Track<f64>,
 }
 
+#[cfg(any())]
 fn compile_v1_tracks(
     clip: &crate::project::Clip,
     animations: &[Animation],
@@ -657,6 +545,7 @@ fn compile_v1_tracks(
 }
 
 #[derive(Clone)]
+#[cfg(any())]
 struct TypedCurve<T> {
     start: u128,
     end: u128,
@@ -665,6 +554,7 @@ struct TypedCurve<T> {
     interpolation: Interpolation,
 }
 
+#[cfg(any())]
 fn typed_curve<T>(
     animation: &Animation,
     clip_id: &str,
@@ -689,6 +579,7 @@ fn typed_curve<T>(
     })
 }
 
+#[cfg(any())]
 fn track_from_curves<T: Copy>(base_value: T, mut curves: Vec<TypedCurve<T>>) -> Track<T> {
     curves.sort_by_key(|curve| curve.start);
     let mut track = Track::new(base_value);
@@ -724,6 +615,7 @@ fn insert_keyframe<T>(keyframes: &mut Vec<Keyframe<T>>, keyframe: Keyframe<T>) {
     }
 }
 
+#[cfg(any())]
 fn interpolation(easing: Easing) -> Interpolation {
     match easing {
         Easing::Linear => Interpolation::Linear,
@@ -733,6 +625,7 @@ fn interpolation(easing: Easing) -> Interpolation {
     }
 }
 
+#[cfg(any())]
 fn compile_v1_transitions(
     transitions: &[Transition],
     clip_indices: &BTreeMap<String, usize>,
@@ -802,6 +695,7 @@ fn compile_v1_transitions(
     Ok(())
 }
 
+#[cfg(any())]
 fn compile_flash(
     flash: &crate::project::Flash,
     rate: (u64, u64),
@@ -957,7 +851,7 @@ fn record_compilation_workload(compilation: &mut CompilationStats, layers: &[Com
     }
 }
 
-fn v2_keyframe_count(project: &crate::project::v2::Project) -> u64 {
+fn keyframe_count(project: &crate::project::Project) -> u64 {
     project
         .visual
         .clips
@@ -973,10 +867,10 @@ fn v2_keyframe_count(project: &crate::project::v2::Project) -> u64 {
                     .effects
                     .iter()
                     .map(|effect| match effect {
-                        crate::project::v2::Effect::Brightness { amount, .. }
-                        | crate::project::v2::Effect::Contrast { amount, .. }
-                        | crate::project::v2::Effect::Saturation { amount, .. }
-                        | crate::project::v2::Effect::Tint { amount, .. } => {
+                        crate::project::Effect::Brightness { amount, .. }
+                        | crate::project::Effect::Contrast { amount, .. }
+                        | crate::project::Effect::Saturation { amount, .. }
+                        | crate::project::Effect::Tint { amount, .. } => {
                             track_keyframe_count(amount)
                         }
                     })
@@ -985,7 +879,7 @@ fn v2_keyframe_count(project: &crate::project::v2::Project) -> u64 {
         .sum()
 }
 
-fn track_keyframe_count<T>(track: &crate::project::v2::Track<T>) -> u64 {
+fn track_keyframe_count<T>(track: &crate::project::Track<T>) -> u64 {
     track.keyframes.len() as u64
 }
 
@@ -1044,9 +938,9 @@ mod tests {
     use crate::project::{ValidationOptions, load_and_validate};
 
     #[test]
-    fn compiles_v1_transitions_and_flashes_to_normal_layers() {
+    fn compiles_transitions_and_flashes_to_normal_layers() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/showcase.json"),
+            std::path::Path::new("examples/projects/animation-effects-v2.json"),
             &ValidationOptions {
                 check_backend: false,
                 ..ValidationOptions::default()
@@ -1054,8 +948,8 @@ mod tests {
         )
         .expect("valid project");
         let plan = compile(&validated, CompileOptions::default()).expect("plan");
-        assert_eq!(plan.frame_count, 80);
-        assert_eq!(plan.images.len(), 3);
+        assert_eq!(plan.frame_count, 60);
+        assert_eq!(plan.images.len(), 2);
         assert!(
             plan.layers
                 .iter()
@@ -1066,8 +960,8 @@ mod tests {
                 .iter()
                 .any(|layer| !layer.opacity_contributions.is_empty())
         );
-        assert_eq!(plan.compilation.animation_value_parse_count, 6);
-        assert_eq!(plan.compilation.compiled_transition_association_count, 4);
+        assert_eq!(plan.compilation.keyframe_count, 4);
+        assert_eq!(plan.compilation.compiled_transition_association_count, 2);
     }
 
     #[test]

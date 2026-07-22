@@ -37,6 +37,9 @@ reports expose `requested_render_backend`, selected `render_backend`, optional
 textures, pipelines, and readback storage persist for a render; each output
 frame is still read back to CPU RGBA for FFmpeg, so it is not zero-copy or
 hardware video encoding.
+Set `VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1` to prefer a fallback adapter, or
+`VIDEO_EDITOR_WGPU_BACKEND=vulkan|gl|metal|dx12` to constrain adapter discovery
+for CI or headless troubleshooting.
 
 See [the project format](docs/specs/project-format.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Run the canonical check suite with:
 

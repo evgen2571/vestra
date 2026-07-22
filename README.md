@@ -21,11 +21,22 @@ Key commands are non-interactive:
 video-editor validate <project> [--format human|json]
 video-editor inspect <project> [--preview] [--format human|json]
 video-editor render <project> [--output PATH] [--overwrite] [--preview]
+                    [--render-backend auto|cpu|wgpu]
                     [--format human|json] [--progress human|json|none] [--report PATH]
 video-editor version
 ```
 
 `--format json` writes a result envelope. `render --progress json` writes JSON Lines events, starting at zero and ending with `completed` at 1.0 only after publication. Exit statuses are 0 (success), 1 (internal), 2 (usage), 3 (project), 4 (asset/media), 5 (backend/render), 6 (output), and 130 (interrupt cancellation).
+
+Rendering backend selection is a runtime option and is never stored in project
+JSON. `cpu` always uses the deterministic CPU compositor. `wgpu` requires a
+headless compatible adapter and fails without falling back. `auto` attempts
+WGPU during preparation and falls back to CPU only before the first frame;
+reports expose `requested_render_backend`, selected `render_backend`, optional
+`backend_fallback`, and adapter metadata. WGPU is headless: decoded image
+textures, pipelines, and readback storage persist for a render; each output
+frame is still read back to CPU RGBA for FFmpeg, so it is not zero-copy or
+hardware video encoding.
 
 See [the project format](docs/specs/project-format.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Run the canonical check suite with:
 

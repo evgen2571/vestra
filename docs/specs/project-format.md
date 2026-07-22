@@ -47,8 +47,12 @@ saturation uses `1` as identity, and tint blends toward its colour with an
 amount in `0..=1`. Effects are applied in declared order and their parameters
 may be animated. Values are clamped only after the combined affine operation.
 
-Render results report `render_backend: "cpu"` separately from
-`encoder_backend: "ffmpeg"`. Timings are measured in milliseconds:
+Render results report the runtime `requested_render_backend` (`auto`, `cpu`, or
+`wgpu`) and selected `render_backend` (`cpu` or `wgpu`) separately from
+`encoder_backend: "ffmpeg"`. An automatic pre-render fallback records a
+structured `backend_fallback`; successful WGPU renders also report adapter
+metadata. Backend selection is intentionally not a project-format property.
+Timings are measured in milliseconds:
 project parsing, semantic validation, plan compilation, asset decoding, track
 evaluation, frame rendering, encoder write/finalization, output publication,
 and total.
@@ -73,5 +77,8 @@ Reports expose declared/rendered/hidden clips, decoded-source and cache bytes,
 cache request outcomes, active/evaluated layers, effect counts, and measured
 render timings. Cache `current_*` values describe the final cache state;
 `peak_*` values are high-water marks; evictions and oversized skips explain
-why a requested crop was not retained. Some CPU-only limitations remain: there is no GPU backend,
-shape source, or encoded-byte golden comparison.
+why a requested crop was not retained. The WGPU backend is headless and uses
+the same evaluated frames and decoded source bytes as CPU; it uploads full
+decoded images once, uses persistent output/readback resources, and transfers
+each completed RGBA frame back to CPU for FFmpeg. It does not implement
+zero-copy or hardware encoding, windowed preview, or advanced GPU effects.

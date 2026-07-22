@@ -130,3 +130,37 @@ fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
     assert_eq!(bad_fade.status.code(), Some(3));
     assert!(String::from_utf8_lossy(&bad_fade.stderr).contains("MVP-FLASH-FADES"));
 }
+
+#[test]
+fn solid_colour_clips_cover_the_canvas_without_transforms() {
+    let workspace = TempDir::new().expect("workspace");
+    let mut project: Value = serde_json::from_slice(
+        &std::fs::read("examples/projects/animation-effects.json").expect("read project"),
+    )
+    .expect("project JSON");
+    project["assets"] = serde_json::json!([]);
+    project["visual"]["clips"] = serde_json::json!([{
+        "id": "canvas-colour",
+        "source": { "type": "solid_color", "colour": "#112233" },
+        "start": 0.0,
+        "duration": 0.1,
+        "layer": -1,
+        "opacity": { "base_value": 1.0 }
+    }]);
+    project["visual"]["transitions"] = serde_json::json!([]);
+    let path = workspace.path().join("solid-colour.json");
+    std::fs::write(
+        &path,
+        serde_json::to_vec(&project).expect("serialize project"),
+    )
+    .expect("write project");
+    let result = command()
+        .args(["validate", path.to_str().expect("UTF-8 path")])
+        .output()
+        .expect("validate runs");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}

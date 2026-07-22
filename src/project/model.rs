@@ -158,7 +158,8 @@ pub struct Clip {
     pub sizing: Option<Sizing>,
     #[serde(default)]
     pub crop: Option<Track<Crop>>,
-    pub transform: Transform,
+    #[serde(default)]
+    pub transform: Option<Transform>,
     pub opacity: Track<f64>,
     #[serde(default)]
     pub effects: Vec<Effect>,

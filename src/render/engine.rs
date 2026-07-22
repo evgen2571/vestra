@@ -55,6 +55,12 @@ pub struct RenderTimings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_initialization_ms: Option<u128>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_adapter_request_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_device_request_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_pipeline_creation_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub texture_upload_ms: Option<u128>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_frame_command_encode_ms: Option<u128>,
@@ -242,6 +248,12 @@ where
         asset_decode_ms: milliseconds(decoded.timings().decode),
         gpu_initialization_ms: (backend.kind() == RenderBackendKind::Wgpu)
             .then(|| milliseconds(backend_timings.gpu_initialization)),
+        gpu_adapter_request_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_adapter_request)),
+        gpu_device_request_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_device_request)),
+        gpu_pipeline_creation_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_pipeline_creation)),
         texture_upload_ms: (backend.kind() == RenderBackendKind::Wgpu)
             .then(|| milliseconds(backend_timings.texture_upload)),
         gpu_frame_command_encode_ms: (backend.kind() == RenderBackendKind::Wgpu)

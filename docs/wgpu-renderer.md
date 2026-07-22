@@ -91,3 +91,7 @@ The harness performs five warmups followed by five measured renders and prints
 median and range values for total render and wall-clock time. Timing fields are
 CPU-observed wall-clock values. Command encoding, queue submission, and
 readback wait are not GPU execution timestamps.
+
+`gpu_initialization_ms` is inclusive; its adapter request, device request, and
+pipeline creation sub-stages are reported separately. Texture upload and all
+per-frame stages are likewise CPU-observed durations, not hardware timestamps.

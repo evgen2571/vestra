@@ -119,6 +119,7 @@ impl WgpuBackend {
             backends: requested_backends(),
             ..wgpu::InstanceDescriptor::default()
         });
+        let adapter_request_started = Instant::now();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: std::env::var_os("VIDEO_EDITOR_WGPU_FORCE_FALLBACK").is_some(),
@@ -132,6 +133,7 @@ impl WgpuBackend {
                 "",
             )
         })?;
+        let adapter_request = adapter_request_started.elapsed();
         let info = adapter.get_info();
         let adapter_metadata = AdapterMetadata {
             adapter_name: info.name,
@@ -209,6 +211,7 @@ impl WgpuBackend {
                 "",
             ));
         }
+        let device_request_started = Instant::now();
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("video-editor headless renderer"),
@@ -223,8 +226,10 @@ impl WgpuBackend {
             None,
         ))
         .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
+        let device_request = device_request_started.elapsed();
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         device.push_error_scope(wgpu::ErrorFilter::Internal);
+        let pipeline_creation_started = Instant::now();
         let row_bytes = plan.canvas.width.checked_mul(4).ok_or_else(|| {
             Diagnostic::error(
                 "WGPU-READBACK-SIZE",
@@ -335,6 +340,7 @@ impl WgpuBackend {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let pipeline_creation = pipeline_creation_started.elapsed();
         let upload_started = Instant::now();
         let mut source_textures = Vec::with_capacity(plan.images.len());
         let mut source_dimensions = Vec::with_capacity(plan.images.len());
@@ -433,6 +439,9 @@ impl WgpuBackend {
         stats.accumulation_buffer_count = 1;
         stats.bind_group_count = source_bind_groups.len() + 1;
         let mut timings = decoded.timings();
+        timings.gpu_adapter_request = adapter_request;
+        timings.gpu_device_request = device_request;
+        timings.gpu_pipeline_creation = pipeline_creation;
         timings.texture_upload = upload_started.elapsed();
         timings.gpu_initialization = started.elapsed();
         device.poll(wgpu::Maintain::Wait);

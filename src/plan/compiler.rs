@@ -445,6 +445,14 @@ fn compile_flash_overlay(
         insert_keyframe(
             &mut opacity.keyframes,
             Keyframe {
+                time: 0,
+                value: 0.0,
+                interpolation: Interpolation::Hold,
+            },
+        );
+        insert_keyframe(
+            &mut opacity.keyframes,
+            Keyframe {
                 time: fade_in,
                 value: flash.opacity,
                 interpolation: Interpolation::Linear,
@@ -452,14 +460,17 @@ fn compile_flash_overlay(
         );
     }
     if fade_out > 0 {
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: duration_nanos.saturating_sub(fade_out),
-                value: flash.opacity,
-                interpolation: Interpolation::Hold,
-            },
-        );
+        let fade_out_start = duration_nanos.saturating_sub(fade_out);
+        if fade_out_start != fade_in {
+            insert_keyframe(
+                &mut opacity.keyframes,
+                Keyframe {
+                    time: fade_out_start,
+                    value: flash.opacity,
+                    interpolation: Interpolation::Hold,
+                },
+            );
+        }
         insert_keyframe(
             &mut opacity.keyframes,
             Keyframe {
@@ -658,6 +669,19 @@ mod tests {
     use super::*;
     use crate::project::{ValidationOptions, load_and_validate};
 
+    fn flash(fade_in: f64, fade_out: f64) -> crate::project::Flash {
+        crate::project::Flash {
+            id: "flash".to_owned(),
+            start: 1.0,
+            duration: 2.0,
+            colour: "#ffffff".to_owned(),
+            opacity: 0.7,
+            fade_in,
+            fade_out,
+            layer: 1,
+        }
+    }
+
     #[test]
     fn compiles_transitions_and_flashes_to_normal_layers() {
         let validated = load_and_validate(
@@ -700,43 +724,43 @@ mod tests {
 
     #[test]
     fn flash_without_fade_out_keeps_constant_opacity_until_its_end() {
-        let layer = compile_flash_overlay(
-            &crate::project::Flash {
-                id: "flash".to_owned(),
-                start: 1.0,
-                duration: 2.0,
-                colour: "#ffffff".to_owned(),
-                opacity: 0.7,
-                fade_in: 0.0,
-                fade_out: 0.0,
-                layer: 1,
-            },
-            (24, 1),
-            100,
-        )
-        .expect("flash compiles");
+        let layer = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash compiles");
         assert_eq!(layer.opacity.base_value, 0.7);
         assert!(layer.opacity.keyframes.is_empty());
     }
 
     #[test]
     fn flash_fade_out_holds_then_reaches_zero_at_end() {
-        let layer = compile_flash_overlay(
-            &crate::project::Flash {
-                id: "flash".to_owned(),
-                start: 0.0,
-                duration: 2.0,
-                colour: "#ffffff".to_owned(),
-                opacity: 1.0,
-                fade_in: 0.0,
-                fade_out: 0.5,
-                layer: 1,
-            },
-            (24, 1),
-            100,
-        )
-        .expect("flash compiles");
-        assert_eq!(layer.opacity.evaluate(1_500_000_000), 1.0);
+        let layer = compile_flash_overlay(&flash(0.0, 0.5), (24, 1), 100).expect("flash compiles");
+        assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
+    }
+
+    #[test]
+    fn flash_fade_in_only_reaches_and_holds_configured_opacity() {
+        let layer = compile_flash_overlay(&flash(0.5, 0.0), (24, 1), 100).expect("flash");
+        assert_eq!(layer.opacity.evaluate(0), 0.0);
+        assert_eq!(layer.opacity.evaluate(250_000_000), 0.35);
+        assert_eq!(layer.opacity.evaluate(500_000_000), 0.7);
+        assert_eq!(layer.opacity.evaluate(1_999_999_999), 0.7);
+    }
+
+    #[test]
+    fn flash_with_both_fades_holds_between_their_boundaries() {
+        let layer = compile_flash_overlay(&flash(0.5, 0.5), (24, 1), 100).expect("flash");
+        assert_eq!(layer.opacity.evaluate(250_000_000), 0.35);
+        assert_eq!(layer.opacity.evaluate(500_000_000), 0.7);
+        assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.7);
+        assert_eq!(layer.opacity.evaluate(1_750_000_000), 0.35);
+        assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
+    }
+
+    #[test]
+    fn flash_fades_can_fill_the_entire_interval() {
+        let layer = compile_flash_overlay(&flash(1.0, 1.0), (24, 1), 100).expect("flash");
+        assert_eq!(layer.opacity.evaluate(1_000_000_000), 0.7);
+        assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.35);
+        assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
+        assert_eq!(layer.end_frame, 72);
     }
 }

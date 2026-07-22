@@ -32,6 +32,8 @@ pub struct RenderTimings {
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
     pub asset_prepare_ms: u128,
+    pub track_evaluation_ms: u128,
+    pub cpu_sampling_and_compositing_ms: u128,
     pub frame_composition_ms: u128,
     pub encoder_write_ms: u128,
     pub encoder_finalize_ms: u128,
@@ -181,6 +183,7 @@ pub fn render(
         })?;
     let mut active = Vec::new();
     let mut frame_composition = Duration::ZERO;
+    let mut track_evaluation = Duration::ZERO;
     let mut encoder_write = Duration::ZERO;
     let mut completed_frames = 0;
     let mut image = RgbaImage::new(plan.canvas.width, plan.canvas.height);
@@ -213,8 +216,10 @@ pub fn render(
         }
         performance.active_item_consideration_count += active.len() as u64;
         let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
-        let compose_started = Instant::now();
+        let evaluation_started = Instant::now();
         let evaluated = evaluate(plan, &active, time);
+        track_evaluation += evaluation_started.elapsed();
+        let compose_started = Instant::now();
         backend
             .render_frame(&evaluated, &mut image)
             .map_err(|diagnostic| {
@@ -284,6 +289,8 @@ pub fn render(
     })?;
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
     timings.frame_composition_ms = milliseconds(frame_composition);
+    timings.track_evaluation_ms = milliseconds(track_evaluation);
+    timings.cpu_sampling_and_compositing_ms = milliseconds(backend.frame_render_time());
     timings.encoder_write_ms = milliseconds(encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
     emit(RenderEvent {

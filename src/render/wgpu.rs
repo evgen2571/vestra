@@ -9,6 +9,7 @@ use std::{sync::Arc, time::Instant};
 
 use bytemuck::{Pod, Zeroable};
 use image::RgbaImage;
+use serde::Serialize;
 
 use crate::{
     Category, Diagnostic,
@@ -61,6 +62,40 @@ struct LayerParameters {
     colour_row2: [f32; 4],
     colour_offset: [f32; 4],
     solid_or_background: [f32; 4],
+}
+
+/// Quantitative CPU/GPU frame comparison used by parity fixtures.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct FrameDifference {
+    pub maximum_absolute_channel_error: u8,
+    pub mean_absolute_channel_error: f64,
+    pub differing_channels: usize,
+    pub channels_exceeding_tolerance: usize,
+}
+
+#[must_use]
+pub fn compare_rgba(reference: &[u8], candidate: &[u8], tolerance: u8) -> FrameDifference {
+    assert_eq!(
+        reference.len(),
+        candidate.len(),
+        "frame buffers must have equal size"
+    );
+    let mut difference = FrameDifference::default();
+    let mut total = 0_u64;
+    for (&left, &right) in reference.iter().zip(candidate) {
+        let error = left.abs_diff(right);
+        difference.maximum_absolute_channel_error =
+            difference.maximum_absolute_channel_error.max(error);
+        total += u64::from(error);
+        difference.differing_channels += usize::from(error != 0);
+        difference.channels_exceeding_tolerance += usize::from(error > tolerance);
+    }
+    difference.mean_absolute_channel_error = if reference.is_empty() {
+        0.0
+    } else {
+        total as f64 / reference.len() as f64
+    };
+    difference
 }
 
 impl WgpuBackend {
@@ -722,9 +757,20 @@ fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnos
 
 #[cfg(test)]
 mod tests {
+    use super::compare_rgba;
+
     #[test]
     fn layer_shader_parses_without_a_gpu_adapter() {
         naga::front::wgsl::parse_str(include_str!("shaders/layer.wgsl"))
             .expect("layer WGSL must parse independently of adapter availability");
+    }
+
+    #[test]
+    fn rgba_comparison_reports_strict_channel_metrics() {
+        let difference = compare_rgba(&[0, 2, 5, 255], &[0, 4, 4, 255], 1);
+        assert_eq!(difference.maximum_absolute_channel_error, 2);
+        assert_eq!(difference.differing_channels, 2);
+        assert_eq!(difference.channels_exceeding_tolerance, 1);
+        assert_eq!(difference.mean_absolute_channel_error, 0.75);
     }
 }

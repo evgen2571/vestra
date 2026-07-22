@@ -7,6 +7,7 @@
 
 use std::{sync::Arc, time::Instant};
 
+use bytemuck::{Pod, Zeroable};
 use image::RgbaImage;
 
 use crate::{
@@ -25,16 +26,39 @@ pub struct WgpuBackend {
     _adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    _layer_shader: wgpu::ShaderModule,
+    _layer_pipeline: wgpu::ComputePipeline,
+    _layer_bind_group_layout: wgpu::BindGroupLayout,
+    _layer_parameters: wgpu::Buffer,
+    _accumulation: wgpu::Buffer,
     _source_textures: Vec<wgpu::Texture>,
+    _source_bind_groups: Vec<wgpu::BindGroup>,
     output: wgpu::Texture,
     readback: wgpu::Buffer,
     row_bytes: u32,
     padded_row_bytes: u32,
     frame_bytes: Vec<u8>,
-    cpu_reference: PreparedAssets,
+    reference_assets: PreparedAssets,
     stats: PreparationStats,
     timings: PreparationTimings,
     adapter: AdapterMetadata,
+}
+
+/// Matches the explicit sixteen-byte chunks in `layer.wgsl`.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct LayerParameters {
+    header: [u32; 4],
+    source: [u32; 4],
+    crop: [f32; 4],
+    effective: [f32; 4],
+    inverse_row0: [f32; 4],
+    inverse_row1: [f32; 4],
+    colour_row0: [f32; 4],
+    colour_row1: [f32; 4],
+    colour_row2: [f32; 4],
+    colour_offset: [f32; 4],
+    solid_or_background: [f32; 4],
 }
 
 impl WgpuBackend {
@@ -96,6 +120,63 @@ impl WgpuBackend {
                 "",
             )
         })?;
+        let layer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("video-editor layer compute shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/layer.wgsl").into()),
+        });
+        let layer_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("video-editor layer bindings"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<
+                                LayerParameters,
+                            >()
+                                as u64),
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        let layer_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("video-editor layer pipeline layout"),
+                bind_group_layouts: &[&layer_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let layer_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("video-editor layer pipeline"),
+            layout: Some(&layer_pipeline_layout),
+            module: &layer_shader,
+            entry_point: "compose",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
         let padded_row_bytes = align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let readback_size = u64::from(padded_row_bytes)
             .checked_mul(u64::from(plan.canvas.height))
@@ -127,6 +208,18 @@ impl WgpuBackend {
             label: Some("video-editor readback"),
             size: readback_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let accumulation = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("video-editor layer accumulation"),
+            size: readback_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let layer_parameters = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("video-editor layer parameters"),
+            size: std::mem::size_of::<LayerParameters>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let upload_started = Instant::now();
@@ -181,6 +274,18 @@ impl WgpuBackend {
                 .saturating_add(u64::from(image.width()) * u64::from(image.height()) * 4);
             source_textures.push(texture);
         }
+        let source_bind_groups = source_textures
+            .iter()
+            .map(|texture| {
+                create_layer_bind_group(
+                    &device,
+                    &layer_bind_group_layout,
+                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    &accumulation,
+                    &layer_parameters,
+                )
+            })
+            .collect();
         let mut stats = decoded.stats().clone();
         stats.uploaded_texture_count = source_textures.len();
         stats.uploaded_texture_bytes = uploaded_texture_bytes;
@@ -194,13 +299,19 @@ impl WgpuBackend {
             _adapter: adapter,
             device,
             queue,
+            _layer_shader: layer_shader,
+            _layer_pipeline: layer_pipeline,
+            _layer_bind_group_layout: layer_bind_group_layout,
+            _layer_parameters: layer_parameters,
+            _accumulation: accumulation,
             _source_textures: source_textures,
+            _source_bind_groups: source_bind_groups,
             output,
             readback,
             row_bytes,
             padded_row_bytes,
             frame_bytes: vec![0; (u64::from(row_bytes) * u64::from(plan.canvas.height)) as usize],
-            cpu_reference: PreparedAssets::from_decoded(plan, decoded),
+            reference_assets: PreparedAssets::from_decoded(plan, decoded),
             stats,
             timings,
             adapter: adapter_metadata,
@@ -226,11 +337,17 @@ impl RenderBackend for WgpuBackend {
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
-        // The source resources are uploaded exactly once above. The next change
-        // replaces this reference compositor with the image/solid GPU passes;
-        // the GPU output/readback path below is already the production frame
-        // transport and preserves exact contiguous RGBA output semantics.
-        compositor::compose(frame, &mut self.cpu_reference, destination);
+        // The source resources are uploaded exactly once above. The CPU path is
+        // retained only while the GPU layer passes are brought up; it receives
+        // the same evaluated frame and disables its CPU-only crop cache so it
+        // samples the same full decoded assets uploaded to WGPU.
+        let mut reference_frame = frame.clone();
+        for layer in &mut reference_frame.layers {
+            if let crate::plan::EvaluatedSource::Image { cacheable_crop, .. } = &mut layer.source {
+                *cacheable_crop = false;
+            }
+        }
+        compositor::compose(&reference_frame, &mut self.reference_assets, destination);
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &self.output,
@@ -310,7 +427,7 @@ impl RenderBackend for WgpuBackend {
     }
 
     fn stats(&mut self) -> PreparationStats {
-        let cpu = self.cpu_reference.stats().clone();
+        let cpu = self.reference_assets.stats().clone();
         self.stats.bitmap_cache_hits = cpu.bitmap_cache_hits;
         self.stats.bitmap_cache_misses = cpu.bitmap_cache_misses;
         self.stats.bitmap_cache_requests = cpu.bitmap_cache_requests;
@@ -334,6 +451,33 @@ impl RenderBackend for WgpuBackend {
 
 fn align_up(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
+}
+
+fn create_layer_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    source: &wgpu::TextureView,
+    accumulation: &wgpu::Buffer,
+    parameters: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("video-editor source layer bindings"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: accumulation.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: parameters.as_entire_binding(),
+            },
+        ],
+    })
 }
 
 fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnostic {

@@ -119,6 +119,7 @@ pub(crate) fn validate_v2(
     let root = path.parent().unwrap_or_else(|| Path::new("."));
     let assets = assets::validate(&project.assets, root, &mut errors);
     validate_v2_visual(&project.visual, &assets.kinds, &mut errors);
+    validate_v2_transitions(&project.visual, &mut errors);
     let audio_end = audio::validate(
         project.audio.as_ref(),
         project.output.audio,
@@ -171,6 +172,114 @@ pub(crate) fn validate_v2(
         })
     } else {
         Err(LoadError::Diagnostics(errors))
+    }
+}
+
+fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec<Diagnostic>) {
+    let clips: std::collections::BTreeMap<&str, &crate::project::v2::Clip> = visual
+        .clips
+        .iter()
+        .map(|clip| (clip.id.as_str(), clip))
+        .collect();
+    let mut ids = BTreeSet::new();
+    let mut affected: std::collections::BTreeMap<&str, Vec<(f64, f64)>> =
+        std::collections::BTreeMap::new();
+    for (index, transition) in visual.transitions.iter().enumerate() {
+        let path = format!("/visual/transitions/{index}");
+        let (id, outgoing, incoming, start, duration) = match transition {
+            crate::project::v2::Transition::Crossfade {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                ..
+            }
+            | crate::project::v2::Transition::FadeThroughColor {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                ..
+            }
+            | crate::project::v2::Transition::Slide {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                ..
+            }
+            | crate::project::v2::Transition::ZoomCrossfade {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                ..
+            } => (id, outgoing, incoming, *start, *duration),
+        };
+        if id.trim().is_empty() || !ids.insert(id) {
+            errors.push(Diagnostic::error(
+                "MVP-V2-TRANSITION-ID",
+                Category::Semantic,
+                "transition ids must be non-empty and unique",
+                format!("{path}/id"),
+            ));
+        }
+        if !nonnegative(start) || !positive(duration) {
+            errors.push(Diagnostic::error(
+                "MVP-V2-TRANSITION-TIME",
+                Category::Semantic,
+                "transition start and duration are invalid",
+                path,
+            ));
+            continue;
+        }
+        if outgoing == incoming {
+            errors.push(Diagnostic::error(
+                "MVP-V2-TRANSITION-SELF",
+                Category::Semantic,
+                "transition requires two different clips",
+                path.clone(),
+            ));
+        }
+        for clip_id in [outgoing.as_str(), incoming.as_str()] {
+            match clips.get(clip_id) {
+                Some(clip)
+                    if start >= clip.start && start + duration <= clip.start + clip.duration =>
+                {
+                    affected
+                        .entry(clip_id)
+                        .or_default()
+                        .push((start, start + duration))
+                }
+                Some(_) => errors.push(Diagnostic::error(
+                    "MVP-V2-TRANSITION-FIT",
+                    Category::Semantic,
+                    format!("transition must fit inside clip '{clip_id}'"),
+                    path.clone(),
+                )),
+                None => errors.push(Diagnostic::error(
+                    "MVP-V2-TRANSITION-CLIP",
+                    Category::Semantic,
+                    format!("unknown clip '{clip_id}'"),
+                    path.clone(),
+                )),
+            }
+        }
+    }
+    for (clip, mut ranges) in affected {
+        ranges.sort_by(|left, right| left.0.total_cmp(&right.0));
+        if ranges.windows(2).any(|pair| pair[1].0 < pair[0].1) {
+            errors.push(Diagnostic::error(
+                "MVP-V2-TRANSITION-CONFLICT",
+                Category::Semantic,
+                format!("clip '{clip}' has overlapping transitions"),
+                "/visual/transitions",
+            ));
+        }
     }
 }
 

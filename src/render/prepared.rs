@@ -154,14 +154,14 @@ impl PreparedAssets {
     }
 
     #[must_use]
-    pub fn crop(&mut self, asset: usize, crop: crate::domain::Crop) -> &RgbaImage {
+    pub fn crop(&mut self, asset: usize, crop: crate::domain::Crop) -> Option<&RgbaImage> {
         let key = crop_key(asset, &self.decoded[asset], crop);
         if key.x == 0
             && key.y == 0
             && key.width == self.decoded[asset].width()
             && key.height == self.decoded[asset].height()
         {
-            return &self.decoded[asset];
+            return Some(&self.decoded[asset]);
         }
         if self.crops.get(&key).is_none() {
             let image = image::imageops::crop_imm(
@@ -176,9 +176,7 @@ impl PreparedAssets {
             self.crops.insert(key.clone(), image, bytes);
         }
         self.sync_cache_stats();
-        self.crops
-            .get(&key)
-            .expect("crop was inserted unless it exceeded the cache budget")
+        self.crops.get(&key)
     }
 
     #[must_use]
@@ -268,5 +266,28 @@ mod tests {
         assert_eq!(assets.stats().bitmap_cache_misses, 1);
         assert_eq!(assets.stats().bitmap_cache_hits, 2);
         assert!(assets.stats().cache_peak_bytes > 0);
+    }
+
+    #[test]
+    fn oversized_crops_fall_back_without_panicking() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/showcase.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("valid fixture");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("compiled plan");
+        plan.limits.maximum_cache_bytes = 1;
+        let mut assets = PreparedAssets::build(&plan).expect("decoded assets");
+        let crop = crate::domain::Crop {
+            x: 0.1,
+            y: 0.0,
+            width: 0.8,
+            height: 1.0,
+        };
+        assert!(assets.crop(1, crop).is_none());
+        assert_eq!(assets.stats().cache_oversized_entries_skipped, 1);
     }
 }

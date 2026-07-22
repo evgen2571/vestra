@@ -779,6 +779,52 @@ mod tests {
     }
 
     #[test]
+    fn deterministic_wgpu_preparation_failures_preserve_selection_policy() {
+        // The backend factory closure is deliberately the only test seam: it
+        // simulates failures before rendering without changing WGPU production
+        // code or depending on adapter state.
+        for (code, message) in [
+            ("WGPU-ADAPTER-REQUEST", "injected adapter request failure"),
+            ("WGPU-DEVICE-REQUEST", "injected device request failure"),
+            ("WGPU-TEXTURE-LIMIT", "injected unsupported limits"),
+            (
+                "WGPU-SHADER-VALIDATION",
+                "injected shader validation failure",
+            ),
+            (
+                "WGPU-PIPELINE-CREATION",
+                "injected pipeline preparation failure",
+            ),
+            ("WGPU-TEXTURE-UPLOAD", "injected texture upload failure"),
+            (
+                "WGPU-OUTPUT-ALLOCATION",
+                "injected output allocation failure",
+            ),
+        ] {
+            let explicit = create_backend_with(RenderBackendPreference::Wgpu, || {
+                Err(Diagnostic::error(code, Category::Backend, message, ""))
+            });
+            let error = match explicit {
+                Ok(_) => panic!("explicit WGPU must not fall back"),
+                Err(error) => error,
+            };
+            assert_eq!(error.code, code);
+            assert_eq!(error.message, message);
+
+            let (backend, fallback) = create_backend_with(RenderBackendPreference::Auto, || {
+                Err(Diagnostic::error(code, Category::Backend, message, ""))
+            })
+            .expect("automatic mode falls back before rendering");
+            assert_eq!(backend.kind(), RenderBackendKind::Cpu, "{code}");
+            assert!(matches!(
+                fallback,
+                Some(BackendFallback { code: fallback_code, message: fallback_message, .. })
+                    if fallback_code == code && fallback_message == message
+            ));
+        }
+    }
+
+    #[test]
     fn backend_failure_aborts_encoder_and_removes_partial_output() {
         let workspace = TempDir::new().expect("temporary output directory");
         let output = workspace.path().join("failed-render.mp4");

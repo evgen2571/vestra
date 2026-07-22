@@ -43,6 +43,24 @@ wrong_position = copy.deepcopy(project)
 wrong_position["visual"]["clips"][0]["transform"]["position"]["base_value"] = 1
 assert errors(wrong_position), "scalar position must not validate"
 
+wrong_opacity = copy.deepcopy(project)
+wrong_opacity["visual"]["clips"][0]["opacity"]["base_value"] = 2
+assert errors(wrong_opacity), "out-of-range opacity must not validate"
+
+zero_scale = copy.deepcopy(project)
+zero_scale["visual"]["clips"][0]["transform"]["scale"]["base_value"]["x"] = 0
+assert errors(zero_scale), "zero scale must not validate"
+
+invalid_anchor = copy.deepcopy(project)
+invalid_anchor["visual"]["clips"][0]["transform"]["anchor"]["base_value"]["x"] = -0.1
+assert errors(invalid_anchor), "out-of-range anchor must not validate"
+
+invalid_tint = copy.deepcopy(project)
+invalid_tint["visual"]["clips"][0]["effects"] = [
+    {"id": "tint", "type": "tint", "colour": "#abcdef", "amount": {"base_value": 2}}
+]
+assert errors(invalid_tint), "out-of-range tint amount must not validate"
+
 unknown_effect_field = copy.deepcopy(project)
 unknown_effect_field["visual"]["clips"][0]["effects"][0]["unknown"] = True
 assert errors(unknown_effect_field), "unknown effect fields must not validate"

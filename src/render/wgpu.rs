@@ -142,6 +142,59 @@ impl WgpuBackend {
                 "",
             ));
         }
+        let requested_row_bytes = plan.canvas.width.checked_mul(4).ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-READBACK-SIZE",
+                Category::Backend,
+                "output row size overflow",
+                "",
+            )
+        })?;
+        let requested_copy_size = u64::from(align_up(
+            requested_row_bytes,
+            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
+        ))
+        .checked_mul(u64::from(plan.canvas.height))
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-READBACK-SIZE",
+                Category::Backend,
+                "readback buffer size overflow",
+                "",
+            )
+        })?;
+        if requested_copy_size > limits.max_buffer_size {
+            return Err(Diagnostic::error(
+                "WGPU-BUFFER-LIMIT",
+                Category::Backend,
+                format!(
+                    "output accumulation requires {requested_copy_size} bytes but adapter limit is {}",
+                    limits.max_buffer_size
+                ),
+                "",
+            ));
+        }
+        if requested_copy_size > u64::from(limits.max_storage_buffer_binding_size) {
+            return Err(Diagnostic::error(
+                "WGPU-STORAGE-LIMIT",
+                Category::Backend,
+                format!(
+                    "output accumulation requires {requested_copy_size} bytes but storage binding limit is {}",
+                    limits.max_storage_buffer_binding_size
+                ),
+                "",
+            ));
+        }
+        if plan.canvas.width.div_ceil(8) > limits.max_compute_workgroups_per_dimension
+            || plan.canvas.height.div_ceil(8) > limits.max_compute_workgroups_per_dimension
+        {
+            return Err(Diagnostic::error(
+                "WGPU-DISPATCH-LIMIT",
+                Category::Backend,
+                "output dispatch exceeds adapter workgroup dimension limit",
+                "",
+            ));
+        }
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("video-editor headless renderer"),

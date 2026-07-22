@@ -823,4 +823,50 @@ mod tests {
             "GPU background must be exact: {difference:?}"
         );
     }
+
+    #[test]
+    fn gpu_image_layer_matches_cpu_within_two_channels_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let mut gpu = match WgpuBackend::new(&plan, Arc::clone(&decoded)) {
+            Ok(backend) => backend,
+            Err(error) => {
+                eprintln!("skipping GPU image parity test: {}", error.message);
+                return;
+            }
+        };
+        let image_layer = plan
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::CompiledVisualSource::Image { .. }
+                )
+            })
+            .expect("fixture has image");
+        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "GPU image parity exceeded tolerance: {difference:?}"
+        );
+    }
 }

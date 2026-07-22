@@ -22,10 +22,10 @@ Recorded on 2026-07-22:
 | Rust | rustc 1.96.1 |
 | FFmpeg | 7.1.5 |
 | Build profile | Cargo `bench` (optimized release profile) |
-| Total / wall time | 3,737 ms |
-| Frame-render time | 3,316 ms |
+| Total / wall time | 3,945 ms |
+| Frame-render time | 3,498 ms |
 | Track evaluation | 0 ms at millisecond reporting precision |
-| Encoder write | 151 ms |
+| Encoder write | 159 ms |
 | Peak decoded bytes | 137,600 bytes |
 | Cache peak bytes / entries | 0 bytes / 0 entries |
 

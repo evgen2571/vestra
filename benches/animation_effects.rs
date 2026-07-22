@@ -66,6 +66,11 @@ fn main() {
         })
         .collect();
     let selected_backend = samples[0].summary.render_backend;
+    if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some()
+        && selected_backend != video_editor::render::RenderBackendKind::Wgpu
+    {
+        panic!("strict WGPU benchmark did not execute the WGPU backend");
+    }
     assert!(
         samples
             .iter()

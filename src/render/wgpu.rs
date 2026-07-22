@@ -875,6 +875,25 @@ mod tests {
     use image::RgbaImage;
     use std::sync::Arc;
 
+    fn wgpu_backend_or_skip(
+        plan: &crate::plan::RenderPlan,
+        decoded: Arc<crate::render::DecodedAssets>,
+    ) -> Option<WgpuBackend> {
+        match WgpuBackend::new(plan, decoded) {
+            Ok(backend) => Some(backend),
+            Err(error) if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some() => {
+                panic!(
+                    "strict WGPU verification requires an adapter and device: {}",
+                    error.message
+                )
+            }
+            Err(error) => {
+                eprintln!("skipping adapter-dependent WGPU test: {}", error.message);
+                None
+            }
+        }
+    }
+
     #[test]
     fn layer_shader_parses_without_a_gpu_adapter() {
         naga::front::wgsl::parse_str(include_str!("shaders/layer.wgsl"))
@@ -958,12 +977,8 @@ mod tests {
         let mut cpu = CpuBackend::default();
         cpu.prepare(&plan, Arc::clone(&decoded))
             .expect("CPU prepares");
-        let mut gpu = match WgpuBackend::new(&plan, Arc::clone(&decoded)) {
-            Ok(backend) => backend,
-            Err(error) => {
-                eprintln!("skipping GPU parity smoke test: {}", error.message);
-                return;
-            }
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
         };
         let frame = EvaluatedFrame {
             time: 0,
@@ -1001,12 +1016,8 @@ mod tests {
         let mut cpu = CpuBackend::default();
         cpu.prepare(&plan, Arc::clone(&decoded))
             .expect("CPU prepares");
-        let mut gpu = match WgpuBackend::new(&plan, Arc::clone(&decoded)) {
-            Ok(backend) => backend,
-            Err(error) => {
-                eprintln!("skipping GPU image parity test: {}", error.message);
-                return;
-            }
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
         };
         let image_layer = plan
             .layers

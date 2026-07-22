@@ -312,6 +312,7 @@ pub fn render(
     performance.bitmap_cache_requests = preparation.bitmap_cache_requests;
     performance.bitmap_cache_insertions = preparation.bitmap_cache_insertions;
     performance.bitmap_cache_hit_rate = preparation.bitmap_cache_hit_rate;
+    performance.cache_current_entries = preparation.cache_current_entries;
     performance.peak_cache_entries = preparation.peak_cache_entries;
     performance.cache_budget_bytes = preparation.cache_budget_bytes;
     performance.cache_current_bytes = preparation.cache_current_bytes;

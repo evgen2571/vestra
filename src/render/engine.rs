@@ -52,6 +52,10 @@ pub struct RenderTimings {
     pub semantic_validation_ms: u128,
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_initialization_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub texture_upload_ms: Option<u128>,
     pub track_evaluation_ms: u128,
     pub frame_render_ms: u128,
     pub encoder_write_ms: u128,
@@ -205,8 +209,13 @@ pub fn render(
     performance.saturation_effect_count = plan.compilation.saturation_effect_count;
     performance.tint_effect_count = plan.compilation.tint_effect_count;
     performance.schedule_event_count = schedule.event_count();
+    let backend_timings = backend.timings();
     let mut timings = RenderTimings {
         asset_decode_ms: milliseconds(decoded.timings().decode),
+        gpu_initialization_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_initialization)),
+        texture_upload_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.texture_upload)),
         ..RenderTimings::default()
     };
     emit(RenderEvent {

@@ -28,6 +28,7 @@ pub struct CompilationStats {
     pub(crate) declared_clip_count: usize,
     pub(crate) rendered_clip_count: usize,
     pub(crate) hidden_clip_count: usize,
+    pub(crate) zero_frame_clip_count: usize,
     pub(crate) image_source_count: usize,
     pub(crate) solid_color_source_count: usize,
     pub(crate) keyframe_count: u64,

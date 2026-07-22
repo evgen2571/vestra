@@ -16,6 +16,7 @@ pub struct PreparationStats {
     pub declared_clip_count: usize,
     pub rendered_clip_count: usize,
     pub hidden_clip_count: usize,
+    pub zero_frame_clip_count: usize,
     pub image_source_count: usize,
     pub solid_color_source_count: usize,
     pub keyframe_count: u64,

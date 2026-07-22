@@ -16,7 +16,7 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, RenderBackend, RenderBackendKind,
-        prepared::{DecodedAssets, PreparationStats, PreparationTimings},
+        prepared::{DecodedAssets, PreparationStats, PreparationTimings, crop_bounds},
     },
 };
 
@@ -416,6 +416,7 @@ impl RenderBackend for WgpuBackend {
                 crop,
                 sizing,
                 transform,
+                cacheable_crop,
                 ..
             } = &layer.source
             {
@@ -425,6 +426,7 @@ impl RenderBackend for WgpuBackend {
                     source_width,
                     source_height,
                     *crop,
+                    *cacheable_crop,
                     sizing,
                     *transform,
                     layer.opacity,
@@ -651,13 +653,31 @@ fn image_parameters(
     source_width: u32,
     source_height: u32,
     crop: crate::domain::Crop,
+    cacheable_crop: bool,
     sizing: &crate::plan::CompiledSizing,
     transform: crate::animation::Transform2D,
     opacity: f64,
     colour: crate::plan::ColourTransform,
 ) -> LayerParameters {
-    let cropped_width = crop.width * f64::from(source_width);
-    let cropped_height = crop.height * f64::from(source_height);
+    let (virtual_width, virtual_height, origin_x, origin_y, virtual_crop) = if cacheable_crop {
+        let bounds = crop_bounds(source_width, source_height, crop);
+        (
+            bounds.width,
+            bounds.height,
+            bounds.x,
+            bounds.y,
+            crate::domain::Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+        )
+    } else {
+        (source_width, source_height, 0, 0, crop)
+    };
+    let cropped_width = virtual_crop.width * f64::from(virtual_width);
+    let cropped_height = virtual_crop.height * f64::from(virtual_height);
     let (effective_width, effective_height) = match sizing {
         crate::plan::CompiledSizing::Original => (cropped_width, cropped_height),
         crate::plan::CompiledSizing::Stretch { width, height } => {
@@ -693,12 +713,12 @@ fn image_parameters(
             align_up(frame.width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) / 4,
             1,
         ],
-        source: [source_width, source_height, 0, 0],
+        source: [virtual_width, virtual_height, origin_x, origin_y],
         crop: [
-            crop.x as f32,
-            crop.y as f32,
-            crop.width as f32,
-            crop.height as f32,
+            virtual_crop.x as f32,
+            virtual_crop.y as f32,
+            virtual_crop.width as f32,
+            virtual_crop.height as f32,
         ],
         effective: [
             effective_width as f32,

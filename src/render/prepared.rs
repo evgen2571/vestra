@@ -189,12 +189,17 @@ pub struct PreparedAssets {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct CropBounds {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct CropKey {
     asset: usize,
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
+    bounds: CropBounds,
 }
 
 impl PreparedAssets {
@@ -221,19 +226,26 @@ impl PreparedAssets {
     #[must_use]
     pub fn crop(&mut self, asset: usize, crop: crate::domain::Crop) -> Option<&RgbaImage> {
         let key = crop_key(asset, self.decoded.image(asset), crop);
-        if key.x == 0
-            && key.y == 0
-            && key.width == self.decoded.image(asset).width()
-            && key.height == self.decoded.image(asset).height()
+        if key.bounds.x == 0
+            && key.bounds.y == 0
+            && key.bounds.width == self.decoded.image(asset).width()
+            && key.bounds.height == self.decoded.image(asset).height()
         {
             return Some(self.decoded.image(asset));
         }
-        let bytes = u64::from(key.width)
-            .checked_mul(u64::from(key.height))
+        let bytes = u64::from(key.bounds.width)
+            .checked_mul(u64::from(key.bounds.height))
             .and_then(|pixels| pixels.checked_mul(4))?;
         let source = self.decoded.image(asset);
         self.crops.get_or_insert_with(key.clone(), bytes, || {
-            image::imageops::crop_imm(source, key.x, key.y, key.width, key.height).to_image()
+            image::imageops::crop_imm(
+                source,
+                key.bounds.x,
+                key.bounds.y,
+                key.bounds.width,
+                key.bounds.height,
+            )
+            .to_image()
         })
     }
 
@@ -280,20 +292,31 @@ impl PreparedAssets {
 }
 
 fn crop_key(asset: usize, source: &RgbaImage, crop: crate::domain::Crop) -> CropKey {
-    let x = (crop.x * f64::from(source.width()))
-        .floor()
-        .clamp(0.0, f64::from(source.width() - 1)) as u32;
-    let y = (crop.y * f64::from(source.height()))
-        .floor()
-        .clamp(0.0, f64::from(source.height() - 1)) as u32;
-    let right = ((crop.x + crop.width) * f64::from(source.width()))
-        .ceil()
-        .clamp(f64::from(x + 1), f64::from(source.width())) as u32;
-    let bottom = ((crop.y + crop.height) * f64::from(source.height()))
-        .ceil()
-        .clamp(f64::from(y + 1), f64::from(source.height())) as u32;
     CropKey {
         asset,
+        bounds: crop_bounds(source.width(), source.height(), crop),
+    }
+}
+
+#[must_use]
+pub(crate) fn crop_bounds(
+    source_width: u32,
+    source_height: u32,
+    crop: crate::domain::Crop,
+) -> CropBounds {
+    let x = (crop.x * f64::from(source_width))
+        .floor()
+        .clamp(0.0, f64::from(source_width - 1)) as u32;
+    let y = (crop.y * f64::from(source_height))
+        .floor()
+        .clamp(0.0, f64::from(source_height - 1)) as u32;
+    let right = ((crop.x + crop.width) * f64::from(source_width))
+        .ceil()
+        .clamp(f64::from(x + 1), f64::from(source_width)) as u32;
+    let bottom = ((crop.y + crop.height) * f64::from(source_height))
+        .ceil()
+        .clamp(f64::from(y + 1), f64::from(source_height)) as u32;
+    CropBounds {
         x,
         y,
         width: right - x,
@@ -334,6 +357,24 @@ mod tests {
         assert_eq!(assets.stats().cache_current_entries, 1);
         assert_eq!(assets.stats().peak_cache_entries, 1);
         assert!(assets.stats().cache_peak_bytes > 0);
+    }
+
+    #[test]
+    fn crop_bounds_use_cpu_floor_and_ceil_materialization_rules() {
+        let bounds = crop_bounds(
+            10,
+            8,
+            crate::domain::Crop {
+                x: 0.15,
+                y: 0.26,
+                width: 0.41,
+                height: 0.36,
+            },
+        );
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (1, 2, 5, 3)
+        );
     }
 
     #[test]

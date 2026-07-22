@@ -66,7 +66,10 @@ struct LayerParameters {
 impl WgpuBackend {
     pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Result<Self, Diagnostic> {
         let started = Instant::now();
-        let instance = wgpu::Instance::default();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: requested_backends(),
+            ..wgpu::InstanceDescriptor::default()
+        });
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: std::env::var_os("VIDEO_EDITOR_WGPU_FORCE_FALLBACK").is_some(),
@@ -559,6 +562,22 @@ impl WgpuBackend {
 
 fn align_up(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
+}
+
+fn requested_backends() -> wgpu::Backends {
+    match std::env::var("VIDEO_EDITOR_WGPU_BACKEND")
+        .ok()
+        .as_deref()
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("vulkan") => wgpu::Backends::VULKAN,
+        Some("gl") | Some("gles") => wgpu::Backends::GL,
+        Some("metal") => wgpu::Backends::METAL,
+        Some("dx12") => wgpu::Backends::DX12,
+        Some("browser_webgpu") => wgpu::Backends::BROWSER_WEBGPU,
+        _ => wgpu::Backends::all(),
+    }
 }
 
 fn create_layer_bind_group(

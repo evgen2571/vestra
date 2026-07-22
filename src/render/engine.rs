@@ -145,8 +145,6 @@ pub fn render(
         )
     })?;
     let mut performance = backend.stats().expect("prepared CPU backend").clone();
-    performance.animation_value_parse_count = plan.compilation.animation_value_parse_count;
-    performance.animation_sort_count = plan.compilation.animation_sort_count;
     performance.compiled_transition_association_count =
         plan.compilation.compiled_transition_association_count;
     performance.parsed_colour_count = plan.compilation.parsed_colour_count;
@@ -326,12 +324,11 @@ pub fn render(
     });
     let preparation = backend.stats().expect("prepared CPU backend");
     performance.decoded_image_count = preparation.decoded_image_count;
-    performance.static_prepared_clip_count = preparation.static_prepared_clip_count;
-    performance.static_crop_count = preparation.static_crop_count;
-    performance.static_resize_count = preparation.static_resize_count;
-    performance.dynamic_clip_count = preparation.dynamic_clip_count;
     performance.bitmap_cache_hits = preparation.bitmap_cache_hits;
     performance.bitmap_cache_misses = preparation.bitmap_cache_misses;
+    performance.bitmap_cache_requests = preparation.bitmap_cache_requests;
+    performance.bitmap_cache_insertions = preparation.bitmap_cache_insertions;
+    performance.bitmap_cache_hit_rate = preparation.bitmap_cache_hit_rate;
     performance.peak_cache_entries = preparation.peak_cache_entries;
     performance.cache_budget_bytes = preparation.cache_budget_bytes;
     performance.cache_current_bytes = preparation.cache_current_bytes;

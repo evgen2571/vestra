@@ -23,8 +23,6 @@ pub struct RenderPlan {
 
 #[derive(Clone, Debug, Default)]
 pub struct CompilationStats {
-    pub(crate) animation_value_parse_count: u64,
-    pub(crate) animation_sort_count: u64,
     pub(crate) compiled_transition_association_count: u64,
     pub(crate) parsed_colour_count: u64,
     pub(crate) declared_clip_count: usize,

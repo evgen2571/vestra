@@ -11,8 +11,6 @@ use crate::{Category, Diagnostic, plan::RenderPlan, render::ByteLruCache};
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct PreparationStats {
-    pub animation_value_parse_count: u64,
-    pub animation_sort_count: u64,
     pub compiled_transition_association_count: u64,
     pub parsed_colour_count: u64,
     pub declared_clip_count: usize,
@@ -30,10 +28,6 @@ pub struct PreparationStats {
     pub decoded_image_count: usize,
     pub decoded_source_bytes: u64,
     pub peak_decoded_bytes: u64,
-    pub static_prepared_clip_count: usize,
-    pub static_crop_count: usize,
-    pub static_resize_count: usize,
-    pub dynamic_clip_count: usize,
     pub bitmap_cache_hits: u64,
     pub bitmap_cache_misses: u64,
     pub bitmap_cache_requests: u64,

@@ -3,6 +3,7 @@
 mod loader;
 mod model;
 mod paths;
+pub mod v2;
 mod validated;
 mod validation;
 

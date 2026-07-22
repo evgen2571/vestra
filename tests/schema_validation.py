@@ -20,6 +20,25 @@ def errors(instance):
 
 assert not errors(project), "canonical example must validate"
 
+solid_colour = copy.deepcopy(project)
+solid_colour["assets"] = []
+solid_colour["visual"]["clips"] = [
+    {
+        "id": "canvas-colour",
+        "source": {"type": "solid_color", "colour": "#112233"},
+        "start": 0,
+        "duration": 0.1,
+        "layer": 0,
+        "opacity": {"base_value": 1},
+    }
+]
+solid_colour["visual"]["transitions"] = []
+assert not errors(solid_colour), "solid colours do not need transforms"
+
+solid_with_transform = copy.deepcopy(solid_colour)
+solid_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert errors(solid_with_transform), "solid colours must not accept transforms"
+
 wrong_position = copy.deepcopy(project)
 wrong_position["visual"]["clips"][0]["transform"]["position"]["base_value"] = 1
 assert errors(wrong_position), "scalar position must not validate"

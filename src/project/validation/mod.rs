@@ -303,43 +303,30 @@ fn validate_visual(
             }
             crate::project::VisualSource::SolidColor { .. } => {}
         }
-        validate_track(
-            &clip.transform.position,
-            clip.duration,
-            &format!("{path}/transform/position"),
-            maximum_keyframes_per_track,
-            errors,
-            |value| value.x.is_finite() && value.y.is_finite(),
-        );
-        validate_track(
-            &clip.transform.anchor,
-            clip.duration,
-            &format!("{path}/transform/anchor"),
-            maximum_keyframes_per_track,
-            errors,
-            |value| {
-                value.x.is_finite()
-                    && value.y.is_finite()
-                    && (0.0..=1.0).contains(&value.x)
-                    && (0.0..=1.0).contains(&value.y)
-            },
-        );
-        validate_track(
-            &clip.transform.scale,
-            clip.duration,
-            &format!("{path}/transform/scale"),
-            maximum_keyframes_per_track,
-            errors,
-            |value| positive(value.x) && positive(value.y),
-        );
-        validate_track(
-            &clip.transform.rotation_degrees,
-            clip.duration,
-            &format!("{path}/transform/rotation_degrees"),
-            maximum_keyframes_per_track,
-            errors,
-            |value| value.is_finite(),
-        );
+        match (&clip.source, &clip.transform) {
+            (crate::project::VisualSource::Image { .. }, None) => errors.push(Diagnostic::error(
+                "MVP-IMAGE-TRANSFORM",
+                Category::Semantic,
+                "image clips require transform tracks",
+                format!("{path}/transform"),
+            )),
+            (crate::project::VisualSource::SolidColor { .. }, Some(_)) => {
+                errors.push(Diagnostic::error(
+                    "MVP-SOLID-TRANSFORM",
+                    Category::Semantic,
+                    "solid-color clips cover the canvas and cannot have transform tracks",
+                    format!("{path}/transform"),
+                ))
+            }
+            (_, Some(transform)) => validate_transform(
+                transform,
+                clip.duration,
+                &path,
+                maximum_keyframes_per_track,
+                errors,
+            ),
+            (_, None) => {}
+        }
         validate_track(
             &clip.opacity,
             clip.duration,
@@ -408,6 +395,52 @@ fn validate_visual(
             }
         }
     }
+}
+
+fn validate_transform(
+    transform: &crate::project::Transform,
+    duration: f64,
+    path: &str,
+    maximum_keyframes_per_track: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    validate_track(
+        &transform.position,
+        duration,
+        &format!("{path}/transform/position"),
+        maximum_keyframes_per_track,
+        errors,
+        |value| value.x.is_finite() && value.y.is_finite(),
+    );
+    validate_track(
+        &transform.anchor,
+        duration,
+        &format!("{path}/transform/anchor"),
+        maximum_keyframes_per_track,
+        errors,
+        |value| {
+            value.x.is_finite()
+                && value.y.is_finite()
+                && (0.0..=1.0).contains(&value.x)
+                && (0.0..=1.0).contains(&value.y)
+        },
+    );
+    validate_track(
+        &transform.scale,
+        duration,
+        &format!("{path}/transform/scale"),
+        maximum_keyframes_per_track,
+        errors,
+        |value| positive(value.x) && positive(value.y),
+    );
+    validate_track(
+        &transform.rotation_degrees,
+        duration,
+        &format!("{path}/transform/rotation_degrees"),
+        maximum_keyframes_per_track,
+        errors,
+        |value| value.is_finite(),
+    );
 }
 
 fn validate_track<T>(
@@ -536,7 +569,7 @@ pub(super) fn output(output: &Output, errors: &mut Vec<Diagnostic>) {
         errors.push(Diagnostic::error(
             "MVP-OUTPUT-CONTAINER",
             Category::Semantic,
-            "version 1 output path must end in .mp4",
+            "output path must end in .mp4",
             "/output/path",
         ));
     }

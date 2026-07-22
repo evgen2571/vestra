@@ -158,15 +158,7 @@ fn compile_canonical(
                 id: clip.id.clone(),
             },
             source,
-            transform: CompiledTransformTracks {
-                position: compile_track(&clip.transform.position, &clip.id)?,
-                anchor: compile_track(&clip.transform.anchor, &clip.id)?,
-                scale: compile_track(&clip.transform.scale, &clip.id)?,
-                rotation_radians: degrees_track_to_radians(compile_track(
-                    &clip.transform.rotation_degrees,
-                    &clip.id,
-                )?),
-            },
+            transform: compile_transform(clip)?,
             opacity: compile_track(&clip.opacity, &clip.id)?,
             opacity_contributions: Vec::new(),
             effects,
@@ -219,6 +211,39 @@ fn compile_canonical(
         compilation,
         warnings: validated.warnings.clone(),
     })
+}
+
+fn compile_transform(clip: &crate::project::Clip) -> Result<CompiledTransformTracks, Diagnostic> {
+    match (&clip.source, &clip.transform) {
+        (_, Some(transform)) => Ok(CompiledTransformTracks {
+            position: compile_track(&transform.position, &clip.id)?,
+            anchor: compile_track(&transform.anchor, &clip.id)?,
+            scale: compile_track(&transform.scale, &clip.id)?,
+            rotation_radians: degrees_track_to_radians(compile_track(
+                &transform.rotation_degrees,
+                &clip.id,
+            )?),
+        }),
+        (crate::project::VisualSource::SolidColor { .. }, None) => Ok(canvas_transform()),
+        (crate::project::VisualSource::Image { .. }, None) => Err(Diagnostic::error(
+            "MVP-PLAN-TRANSFORM",
+            Category::Internal,
+            format!(
+                "validated image clip '{}' is missing its transform",
+                clip.id
+            ),
+            "",
+        )),
+    }
+}
+
+fn canvas_transform() -> CompiledTransformTracks {
+    CompiledTransformTracks {
+        position: Track::new(Point { x: 0.5, y: 0.5 }),
+        anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+        scale: Track::new(Point { x: 1.0, y: 1.0 }),
+        rotation_radians: Track::new(0.0),
+    }
 }
 
 fn enforce_active_layer_limit(
@@ -456,12 +481,7 @@ fn compile_flash_overlay(
             id: flash.id.clone(),
         },
         source: CompiledVisualSource::SolidColor { colour },
-        transform: CompiledTransformTracks {
-            position: Track::new(Point { x: 0.5, y: 0.5 }),
-            anchor: Track::new(Point { x: 0.5, y: 0.5 }),
-            scale: Track::new(Point { x: 1.0, y: 1.0 }),
-            rotation_radians: Track::new(0.0),
-        },
+        transform: canvas_transform(),
         opacity,
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
@@ -557,11 +577,12 @@ fn keyframe_count(project: &crate::project::Project) -> u64 {
         .clips
         .iter()
         .map(|clip| {
-            track_keyframe_count(&clip.transform.position)
-                + track_keyframe_count(&clip.transform.anchor)
-                + track_keyframe_count(&clip.transform.scale)
-                + track_keyframe_count(&clip.transform.rotation_degrees)
-                + track_keyframe_count(&clip.opacity)
+            clip.transform.as_ref().map_or(0, |transform| {
+                track_keyframe_count(&transform.position)
+                    + track_keyframe_count(&transform.anchor)
+                    + track_keyframe_count(&transform.scale)
+                    + track_keyframe_count(&transform.rotation_degrees)
+            }) + track_keyframe_count(&clip.opacity)
                 + clip.crop.as_ref().map_or(0, track_keyframe_count)
                 + clip
                     .effects

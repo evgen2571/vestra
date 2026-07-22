@@ -399,6 +399,16 @@ where
     performance.cache_peak_bytes = preparation.cache_peak_bytes;
     performance.cache_evictions = preparation.cache_evictions;
     performance.cache_oversized_entries_skipped = preparation.cache_oversized_entries_skipped;
+    performance.uploaded_texture_count = preparation.uploaded_texture_count;
+    performance.uploaded_texture_bytes = preparation.uploaded_texture_bytes;
+    performance.readback_buffer_count = preparation.readback_buffer_count;
+    performance.readback_buffer_bytes = preparation.readback_buffer_bytes;
+    performance.shader_module_count = preparation.shader_module_count;
+    performance.pipeline_count = preparation.pipeline_count;
+    performance.output_texture_count = preparation.output_texture_count;
+    performance.accumulation_buffer_count = preparation.accumulation_buffer_count;
+    performance.bind_group_count = preparation.bind_group_count;
+    performance.command_submission_count = preparation.command_submission_count;
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,

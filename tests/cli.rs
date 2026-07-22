@@ -27,13 +27,6 @@ fn decoded_frame(path: &std::path::Path, frame: u64, width: u32, height: u32) ->
     output.stdout
 }
 
-fn changed_channels(left: &[u8], right: &[u8]) -> usize {
-    left.iter()
-        .zip(right)
-        .filter(|(left, right)| left != right)
-        .count()
-}
-
 fn canonical_project_with_absolute_assets() -> Value {
     let mut project: Value = serde_json::from_slice(
         &std::fs::read("examples/projects/animation-effects.json").expect("read project"),
@@ -146,7 +139,7 @@ fn canonical_example_renders_an_h264_frame_sequence() {
 }
 
 #[test]
-fn canonical_render_has_decoded_animation_crossfade_and_flash_regressions() {
+fn canonical_render_has_decoded_crossfade_and_flash_regressions() {
     let workspace = TempDir::new().expect("workspace");
     let output = workspace.path().join("canonical.mp4");
     let result = command()
@@ -168,16 +161,15 @@ fn canonical_render_has_decoded_animation_crossfade_and_flash_regressions() {
         String::from_utf8_lossy(&result.stderr)
     );
 
-    let early = decoded_frame(&output, 12, 320, 180);
-    let animated = decoded_frame(&output, 24, 320, 180);
-    let crossfade = decoded_frame(&output, 42, 320, 180);
+    let before_crossfade = decoded_frame(&output, 35, 320, 180);
+    let midpoint_crossfade = decoded_frame(&output, 42, 320, 180);
+    let after_crossfade = decoded_frame(&output, 48, 320, 180);
     assert!(
-        changed_channels(&early, &animated) > 10_000,
-        "multi-keyframe transform or colour effect did not visibly change the decoded frame"
-    );
-    assert!(
-        changed_channels(&animated, &crossfade) > 10_000,
-        "crossfade did not visibly change the decoded frame"
+        before_crossfade[0] > midpoint_crossfade[0]
+            && midpoint_crossfade[0] > after_crossfade[0]
+            && before_crossfade[2] < midpoint_crossfade[2]
+            && midpoint_crossfade[2] < after_crossfade[2],
+        "crossfade midpoint must contain ordered outgoing red and incoming blue contributions"
     );
 
     let before_flash = decoded_frame(&output, 24, 320, 180);

@@ -5,7 +5,6 @@ use serde::Serialize;
 pub enum Category {
     Usage,
     Project,
-    Version,
     Semantic,
     Asset,
     Media,

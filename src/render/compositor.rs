@@ -3,7 +3,7 @@ use image::{Rgba, RgbaImage};
 use crate::{
     animation::Transform2D,
     domain::Crop,
-    plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource},
+    plan::{ColourTransform, EvaluatedFrame, EvaluatedLayer, EvaluatedSource},
     render::prepared::PreparedAssets,
 };
 
@@ -25,7 +25,7 @@ pub fn compose(frame: &EvaluatedFrame, assets: &mut PreparedAssets, canvas: &mut
 fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &EvaluatedLayer) {
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
-            fill_solid(canvas, *colour, layer.opacity, &layer.effects)
+            fill_solid(canvas, *colour, layer.opacity, layer.colour_transform)
         }
         EvaluatedSource::Image {
             asset_index,
@@ -63,15 +63,20 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &Evalu
                     source_height,
                     layer.transform,
                     layer.opacity,
-                    &layer.effects,
+                    layer.colour_transform,
                 );
             }
         }
     }
 }
 
-fn fill_solid(canvas: &mut RgbaImage, colour: [u8; 4], opacity: f64, effects: &[EvaluatedEffect]) {
-    let source = apply_effects(Rgba(colour), effects);
+fn fill_solid(
+    canvas: &mut RgbaImage,
+    colour: [u8; 4],
+    opacity: f64,
+    colour_transform: ColourTransform,
+) {
+    let source = apply_colour_transform(Rgba(colour), colour_transform);
     for destination in canvas.pixels_mut() {
         *destination = source_over(*destination, source, opacity);
     }
@@ -86,7 +91,7 @@ fn draw_image(
     effective_height: f64,
     transform: Transform2D,
     opacity: f64,
-    effects: &[EvaluatedEffect],
+    colour_transform: ColourTransform,
 ) {
     let (min_x, max_x, min_y, max_y) = visible_bounds(
         transform,
@@ -95,16 +100,16 @@ fn draw_image(
         canvas.width(),
         canvas.height(),
     );
+    let inverse = InverseAffine::for_transform(
+        transform,
+        canvas.width(),
+        canvas.height(),
+        effective_width,
+        effective_height,
+    );
     for y in min_y..max_y {
+        let mut mapped = inverse.map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
         for x in min_x..max_x {
-            let mapped = transform.destination_to_source(
-                f64::from(x) + 0.5,
-                f64::from(y) + 0.5,
-                canvas.width(),
-                canvas.height(),
-                effective_width.round().max(1.0) as u32,
-                effective_height.round().max(1.0) as u32,
-            );
             if mapped.x < 0.0
                 || mapped.y < 0.0
                 || mapped.x >= effective_width
@@ -116,9 +121,61 @@ fn draw_image(
                 + mapped.x / effective_width * crop.width * f64::from(source.width());
             let source_y = crop.y * f64::from(source.height())
                 + mapped.y / effective_height * crop.height * f64::from(source.height());
-            let sampled = apply_effects(sample_bilinear(source, source_x, source_y), effects);
+            let sampled = apply_colour_transform(
+                sample_bilinear(source, source_x, source_y),
+                colour_transform,
+            );
             let destination = canvas.get_pixel_mut(x, y);
             *destination = source_over(*destination, sampled, opacity);
+            mapped.x += inverse.m00;
+            mapped.y += inverse.m10;
+        }
+    }
+}
+
+/// Inverse transform from canvas coordinates to an unscaled image coordinate.
+/// It is built once per layer and lets a scanline advance with two additions.
+#[derive(Clone, Copy, Debug)]
+struct InverseAffine {
+    m00: f64,
+    m01: f64,
+    m02: f64,
+    m10: f64,
+    m11: f64,
+    m12: f64,
+}
+
+impl InverseAffine {
+    fn for_transform(
+        transform: Transform2D,
+        canvas_width: u32,
+        canvas_height: u32,
+        source_width: f64,
+        source_height: f64,
+    ) -> Self {
+        let (sine, cosine) = transform.rotation_radians.sin_cos();
+        let destination_x = transform.position.x * f64::from(canvas_width);
+        let destination_y = transform.position.y * f64::from(canvas_height);
+        let anchor_x = transform.anchor.x * source_width;
+        let anchor_y = transform.anchor.y * source_height;
+        let m00 = cosine / transform.scale.x;
+        let m01 = sine / transform.scale.x;
+        let m10 = -sine / transform.scale.y;
+        let m11 = cosine / transform.scale.y;
+        Self {
+            m00,
+            m01,
+            m02: anchor_x - m00 * destination_x - m01 * destination_y,
+            m10,
+            m11,
+            m12: anchor_y - m10 * destination_x - m11 * destination_y,
+        }
+    }
+
+    fn map(self, x: f64, y: f64) -> crate::domain::Point {
+        crate::domain::Point {
+            x: self.m00 * x + self.m01 * y + self.m02,
+            y: self.m10 * x + self.m11 * y + self.m12,
         }
     }
 }
@@ -217,42 +274,19 @@ fn sample_bilinear(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
     Rgba(result.map(|channel| channel.round().clamp(0.0, 255.0) as u8))
 }
 
-fn apply_effects(mut pixel: Rgba<u8>, effects: &[EvaluatedEffect]) -> Rgba<u8> {
-    for effect in effects {
-        match effect {
-            EvaluatedEffect::Brightness { amount } => {
-                for channel in 0..3 {
-                    pixel[channel] = (f64::from(pixel[channel]) + amount * 255.0)
-                        .round()
-                        .clamp(0.0, 255.0) as u8;
-                }
-            }
-            EvaluatedEffect::Contrast { amount } => {
-                for channel in 0..3 {
-                    pixel[channel] = ((f64::from(pixel[channel]) - 128.0) * amount + 128.0)
-                        .round()
-                        .clamp(0.0, 255.0) as u8;
-                }
-            }
-            EvaluatedEffect::Saturation { amount } => {
-                let luma = 0.2126 * f64::from(pixel[0])
-                    + 0.7152 * f64::from(pixel[1])
-                    + 0.0722 * f64::from(pixel[2]);
-                for channel in 0..3 {
-                    pixel[channel] = (luma + (f64::from(pixel[channel]) - luma) * amount)
-                        .round()
-                        .clamp(0.0, 255.0) as u8;
-                }
-            }
-            EvaluatedEffect::Tint { colour, amount } => {
-                let amount = amount.clamp(0.0, 1.0);
-                for channel in 0..3 {
-                    pixel[channel] = (f64::from(pixel[channel]) * (1.0 - amount)
-                        + f64::from(colour[channel]) * amount)
-                        .round() as u8;
-                }
-            }
-        }
+fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rgba<u8> {
+    let input = [
+        f64::from(pixel[0]),
+        f64::from(pixel[1]),
+        f64::from(pixel[2]),
+    ];
+    for channel in 0..3 {
+        pixel[channel] = (transform.matrix[channel][0] * input[0]
+            + transform.matrix[channel][1] * input[1]
+            + transform.matrix[channel][2] * input[2]
+            + transform.offset[channel])
+            .round()
+            .clamp(0.0, 255.0) as u8;
     }
     pixel
 }
@@ -279,6 +313,7 @@ pub fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgb
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plan::EvaluatedEffect;
     #[test]
     fn alpha_composition_is_known() {
         assert_eq!(
@@ -298,24 +333,24 @@ mod tests {
 
     #[test]
     fn basic_color_effects_apply_in_declared_order() {
-        let effects = [
+        let transform = ColourTransform::from_effects([
             EvaluatedEffect::Brightness { amount: 0.1 },
             EvaluatedEffect::Tint {
                 colour: [0, 0, 255, 255],
                 amount: 0.5,
             },
-        ];
+        ]);
         assert_eq!(
-            apply_effects(Rgba([100, 0, 0, 255]), &effects),
-            Rgba([63, 13, 141, 255])
+            apply_colour_transform(Rgba([100, 0, 0, 255]), transform),
+            Rgba([63, 13, 140, 255])
         );
     }
 
     #[test]
     fn saturation_zero_produces_neutral_channels() {
-        let pixel = apply_effects(
+        let pixel = apply_colour_transform(
             Rgba([255, 0, 0, 255]),
-            &[EvaluatedEffect::Saturation { amount: 0.0 }],
+            ColourTransform::from_effects([EvaluatedEffect::Saturation { amount: 0.0 }]),
         );
         assert_eq!(pixel[0], pixel[1]);
         assert_eq!(pixel[1], pixel[2]);
@@ -324,11 +359,25 @@ mod tests {
     #[test]
     fn contrast_one_is_identity() {
         assert_eq!(
-            apply_effects(
+            apply_colour_transform(
                 Rgba([30, 140, 250, 180]),
-                &[EvaluatedEffect::Contrast { amount: 1.0 }]
+                ColourTransform::from_effects([EvaluatedEffect::Contrast { amount: 1.0 }])
             ),
             Rgba([30, 140, 250, 180])
         );
+    }
+
+    #[test]
+    fn inverse_affine_matches_transform_reference_mapping() {
+        let transform = Transform2D {
+            position: crate::domain::Point { x: 0.37, y: 0.61 },
+            anchor: crate::domain::Point { x: 0.4, y: 0.7 },
+            scale: crate::domain::Point { x: 1.3, y: 0.8 },
+            rotation_radians: 0.42,
+        };
+        let inverse = InverseAffine::for_transform(transform, 320, 180, 140.0, 90.0);
+        let mapped = inverse.map(81.5, 44.5);
+        let reference = transform.destination_to_source(81.5, 44.5, 320, 180, 140, 90);
+        assert!((mapped.x - reference.x).abs() < 1e-10 && (mapped.y - reference.y).abs() < 1e-10);
     }
 }

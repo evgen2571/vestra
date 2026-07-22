@@ -10,7 +10,12 @@
       pkgs = import nixpkgs { inherit system; };
       softwareVulkan = pkgs.mkShell {
         packages = with pkgs; [
+          cargo
+          rustc
+          rustfmt
+          clippy
           pkg-config
+          ffmpeg-headless
           vulkan-loader
           vulkan-tools
           mesa

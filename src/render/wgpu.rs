@@ -1106,4 +1106,66 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let image_layer = plan
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::CompiledVisualSource::Image { .. }
+                )
+            })
+            .expect("fixture has image");
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
+        };
+        let initial = gpu.stats();
+        assert_eq!(initial.shader_module_count, 1);
+        assert_eq!(initial.pipeline_count, 1);
+        assert_eq!(initial.uploaded_texture_count, plan.images.len());
+        assert_eq!(initial.output_texture_count, 1);
+        assert_eq!(initial.accumulation_buffer_count, 1);
+        assert_eq!(initial.readback_buffer_count, 1);
+
+        for time in [0, 500_000_000, 1_000_000_000] {
+            let frame =
+                crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], time);
+            let mut output = RgbaImage::new(frame.width, frame.height);
+            gpu.render_frame(&frame, &mut output)
+                .expect("GPU frame renders");
+        }
+        let final_stats = gpu.stats();
+        assert_eq!(
+            final_stats.uploaded_texture_count,
+            initial.uploaded_texture_count
+        );
+        assert_eq!(final_stats.shader_module_count, initial.shader_module_count);
+        assert_eq!(final_stats.pipeline_count, initial.pipeline_count);
+        assert_eq!(
+            final_stats.output_texture_count,
+            initial.output_texture_count
+        );
+        assert_eq!(
+            final_stats.accumulation_buffer_count,
+            initial.accumulation_buffer_count
+        );
+        assert_eq!(
+            final_stats.readback_buffer_count,
+            initial.readback_buffer_count
+        );
+        assert_eq!(final_stats.command_submission_count, 9);
+    }
 }

@@ -36,6 +36,9 @@ pub struct PreparationStats {
     pub dynamic_clip_count: usize,
     pub bitmap_cache_hits: u64,
     pub bitmap_cache_misses: u64,
+    pub bitmap_cache_requests: u64,
+    pub bitmap_cache_insertions: u64,
+    pub bitmap_cache_hit_rate: Option<f64>,
     pub peak_cache_entries: usize,
     pub cache_budget_bytes: u64,
     pub cache_current_bytes: u64,
@@ -175,20 +178,13 @@ impl PreparedAssets {
         {
             return Some(&self.decoded[asset]);
         }
-        if self.crops.get(&key).is_none() {
-            let image = image::imageops::crop_imm(
-                &self.decoded[asset],
-                key.x,
-                key.y,
-                key.width,
-                key.height,
-            )
-            .to_image();
-            let bytes = image_bytes(&image).expect("crop dimensions originated from decoded image");
-            self.crops.insert(key.clone(), image, bytes);
-        }
-        self.sync_cache_stats();
-        self.crops.get(&key)
+        let bytes = u64::from(key.width)
+            .checked_mul(u64::from(key.height))
+            .and_then(|pixels| pixels.checked_mul(4))?;
+        let source = &self.decoded[asset];
+        self.crops.get_or_insert_with(key.clone(), bytes, || {
+            image::imageops::crop_imm(source, key.x, key.y, key.width, key.height).to_image()
+        })
     }
 
     #[must_use]
@@ -197,7 +193,8 @@ impl PreparedAssets {
     }
 
     #[must_use]
-    pub fn stats(&self) -> &PreparationStats {
+    pub fn stats(&mut self) -> &PreparationStats {
+        self.sync_cache_stats();
         &self.stats
     }
 
@@ -210,6 +207,10 @@ impl PreparedAssets {
         let cache = self.crops.stats();
         self.stats.bitmap_cache_hits = cache.hits;
         self.stats.bitmap_cache_misses = cache.misses;
+        self.stats.bitmap_cache_requests = cache.requests;
+        self.stats.bitmap_cache_insertions = cache.insertions;
+        self.stats.bitmap_cache_hit_rate =
+            (cache.requests > 0).then(|| cache.hits as f64 / cache.requests as f64);
         self.stats.peak_cache_entries = self.stats.peak_cache_entries.max(self.crops.len());
         self.stats.cache_budget_bytes = cache.budget_bytes;
         self.stats.cache_current_bytes = cache.current_bytes;
@@ -241,12 +242,6 @@ fn crop_key(asset: usize, source: &RgbaImage, crop: crate::domain::Crop) -> Crop
     }
 }
 
-fn image_bytes(image: &RgbaImage) -> Option<u64> {
-    u64::from(image.width())
-        .checked_mul(u64::from(image.height()))?
-        .checked_mul(4)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,7 +271,7 @@ mod tests {
         let _ = assets.crop(1, crop);
         let _ = assets.crop(1, crop);
         assert_eq!(assets.stats().bitmap_cache_misses, 1);
-        assert_eq!(assets.stats().bitmap_cache_hits, 2);
+        assert_eq!(assets.stats().bitmap_cache_hits, 1);
         assert!(assets.stats().cache_peak_bytes > 0);
     }
 

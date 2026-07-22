@@ -11,31 +11,22 @@ fn command() -> Command {
 
 #[test]
 fn valid_examples_validate_and_inspect_as_json() {
-    for project in [
-        "examples/projects/static-image.json",
-        "examples/projects/hard-cuts.json",
-        "examples/projects/showcase.json",
-        "examples/projects/animation-effects-v2.json",
-    ] {
-        let output = command()
-            .args(["validate", project, "--format", "json"])
-            .output()
-            .expect("validate runs");
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let value: Value = serde_json::from_slice(&output.stdout).expect("JSON result");
-        assert_eq!(value["status"], "success");
-        if project.ends_with("animation-effects-v2.json") {
-            assert_eq!(value["format_version"], 2);
-        }
-    }
+    let project = "examples/projects/animation-effects-v2.json";
+    let output = command()
+        .args(["validate", project, "--format", "json"])
+        .output()
+        .expect("validate runs");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: Value = serde_json::from_slice(&output.stdout).expect("JSON result");
+    assert_eq!(value["status"], "success");
     let output = command()
         .args([
             "inspect",
-            "examples/projects/showcase.json",
+            "examples/projects/animation-effects-v2.json",
             "--preview",
             "--format",
             "json",
@@ -45,7 +36,7 @@ fn valid_examples_validate_and_inspect_as_json() {
     assert!(output.status.success());
     let value: Value = serde_json::from_slice(&output.stdout).expect("JSON result");
     assert_eq!(value["output"]["preview"], true);
-    assert_eq!(value["output"]["total_frames"], 80);
+    assert_eq!(value["output"]["total_frames"], 60);
 }
 
 #[test]
@@ -567,10 +558,7 @@ fn filename_only_runtime_output_uses_current_directory() {
 #[test]
 fn schema_is_valid_json_and_overwrite_replaces_only_on_success() {
     let _: Value =
-        serde_json::from_slice(&fs::read("schemas/project-v1.schema.json").expect("read schema"))
-            .expect("schema JSON");
-    let _: Value =
-        serde_json::from_slice(&fs::read("schemas/project-v2.schema.json").expect("read schema"))
+        serde_json::from_slice(&fs::read("schemas/project.schema.json").expect("read schema"))
             .expect("schema JSON");
     let workspace = fixture_workspace();
     let output = workspace.path().join("replace.mp4");

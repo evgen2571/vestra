@@ -9,7 +9,8 @@ struct Params {
     mode: u32, // 0 clear, 1 image, 2 solid
     source_width: u32,
     source_height: u32,
-    _pad0: vec2<u32>,
+    source_origin_x: u32,
+    source_origin_y: u32,
     crop: vec4<f32>,
     effective_size: vec2<f32>,
     opacity: f32,
@@ -46,7 +47,7 @@ fn texel(coord: vec2<i32>) -> vec4<f32> {
     if (coord.x < 0 || coord.y < 0 || coord.x >= i32(params.source_width) || coord.y >= i32(params.source_height)) {
         return vec4<f32>(0.0);
     }
-    return textureLoad(source, coord, 0) * 255.0;
+    return textureLoad(source, coord + vec2<i32>(i32(params.source_origin_x), i32(params.source_origin_y)), 0) * 255.0;
 }
 
 fn bilinear(position: vec2<f32>) -> vec4<f32> {

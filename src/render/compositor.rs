@@ -33,19 +33,20 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &Evalu
             sizing,
             cacheable_crop,
         } => {
-            let (source, crop) = if *cacheable_crop {
-                (
-                    assets.crop(*asset_index, *crop),
-                    Crop {
-                        x: 0.0,
-                        y: 0.0,
-                        width: 1.0,
-                        height: 1.0,
-                    },
-                )
-            } else {
-                (assets.image(*asset_index), *crop)
-            };
+            let (source, crop) =
+                if *cacheable_crop && let Some(source) = assets.crop(*asset_index, *crop) {
+                    (
+                        source,
+                        Crop {
+                            x: 0.0,
+                            y: 0.0,
+                            width: 1.0,
+                            height: 1.0,
+                        },
+                    )
+                } else {
+                    (assets.image(*asset_index), *crop)
+                };
             let (source_width, source_height) = sizing_dimensions(
                 sizing,
                 crop.width * f64::from(source.width()),

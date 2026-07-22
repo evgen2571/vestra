@@ -203,7 +203,7 @@ impl PreparedAssets {
         self.stats.bitmap_cache_insertions = cache.insertions;
         self.stats.bitmap_cache_hit_rate =
             (cache.requests > 0).then(|| cache.hits as f64 / cache.requests as f64);
-        self.stats.peak_cache_entries = self.stats.peak_cache_entries.max(self.crops.len());
+        self.stats.peak_cache_entries = cache.peak_entries;
         self.stats.cache_budget_bytes = cache.budget_bytes;
         self.stats.cache_current_bytes = cache.current_bytes;
         self.stats.cache_peak_bytes = cache.peak_bytes;

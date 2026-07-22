@@ -8,6 +8,8 @@ pub struct CacheStats {
     pub budget_bytes: u64,
     pub current_bytes: u64,
     pub peak_bytes: u64,
+    pub current_entries: usize,
+    pub peak_entries: usize,
     pub hits: u64,
     pub misses: u64,
     pub insertions: u64,
@@ -103,6 +105,7 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
                 last_used: self.clock,
             },
         );
+        self.sync_entry_count();
         Some(
             &self
                 .entries
@@ -139,6 +142,7 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
         self.clock = self.clock.wrapping_add(1);
         self.stats.current_bytes += bytes;
         self.stats.peak_bytes = self.stats.peak_bytes.max(self.stats.current_bytes);
+        self.stats.insertions += 1;
         self.entries.insert(
             key,
             Entry {
@@ -147,6 +151,7 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
                 last_used: self.clock,
             },
         );
+        self.sync_entry_count();
     }
 
     #[must_use]
@@ -162,6 +167,11 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    fn sync_entry_count(&mut self) {
+        self.stats.current_entries = self.entries.len();
+        self.stats.peak_entries = self.stats.peak_entries.max(self.stats.current_entries);
     }
 }
 
@@ -181,6 +191,8 @@ mod tests {
         assert_eq!(cache.get(&"c"), Some(&3));
         assert_eq!(cache.stats().evictions, 1);
         assert_eq!(cache.stats().current_bytes, 8);
+        assert_eq!(cache.stats().current_entries, 2);
+        assert_eq!(cache.stats().peak_entries, 2);
     }
 
     #[test]
@@ -201,5 +213,19 @@ mod tests {
             (stats.requests, stats.hits, stats.misses, stats.insertions),
             (2, 1, 1, 1)
         );
+    }
+
+    #[test]
+    fn peak_entries_remains_historical_after_eviction() {
+        let mut cache = ByteLruCache::new(8);
+        cache.insert("a", 1, 4);
+        cache.insert("b", 2, 4);
+        cache.insert("c", 3, 8);
+        let stats = cache.stats();
+        assert_eq!(stats.current_entries, 1);
+        assert_eq!(stats.peak_entries, 2);
+        assert_eq!(stats.insertions, 3);
+        assert_eq!(stats.evictions, 2);
+        assert_eq!(stats.requests, stats.hits + stats.misses);
     }
 }

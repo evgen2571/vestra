@@ -48,6 +48,32 @@ impl PreparedAssets {
         let mut decoded = Vec::with_capacity(plan.images.len());
         let mut decoded_source_bytes = 0_u64;
         for image_asset in &plan.images {
+            let (width, height) = image::image_dimensions(&image_asset.path).map_err(|error| {
+                Diagnostic::error(
+                    "MVP-IMAGE-INSPECT",
+                    Category::Media,
+                    format!("cannot inspect image '{}': {error}", image_asset.id),
+                    "",
+                )
+            })?;
+            let pixels = u64::from(width)
+                .checked_mul(u64::from(height))
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        "MVP-IMAGE-SIZE",
+                        Category::Media,
+                        "source image dimensions overflow",
+                        "",
+                    )
+                })?;
+            if pixels > plan.limits.maximum_source_pixels {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-SOURCE-PIXELS",
+                    Category::Media,
+                    "source image exceeds configured pixel limit",
+                    "",
+                ));
+            }
             let image = image::open(&image_asset.path)
                 .map_err(|error| {
                     Diagnostic::error(
@@ -69,6 +95,14 @@ impl PreparedAssets {
                         "",
                     )
                 })?;
+            if bytes > plan.limits.maximum_decoded_asset_bytes {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-DECODED-ASSET",
+                    Category::Media,
+                    "decoded image exceeds configured byte limit",
+                    "",
+                ));
+            }
             decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
                 Diagnostic::error(
                     "MVP-IMAGE-TOTAL-SIZE",
@@ -77,6 +111,14 @@ impl PreparedAssets {
                     "",
                 )
             })?;
+            if decoded_source_bytes > plan.limits.maximum_total_decoded_bytes {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-DECODED-TOTAL",
+                    Category::Media,
+                    "decoded images exceed configured byte limit",
+                    "",
+                ));
+            }
             decoded.push(image);
         }
         Ok(Self {

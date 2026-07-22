@@ -169,6 +169,7 @@ pub fn compile(
             quality_crf: validated.project.output.quality.crf(),
             audio,
         },
+        limits: validated.limits,
         images,
         layers,
         compilation,
@@ -336,6 +337,7 @@ fn compile_v2(
             quality_crf: project.output.quality.crf(),
             audio: compile_audio(validated)?,
         },
+        limits: validated.limits,
         images,
         layers,
         compilation,
@@ -950,6 +952,7 @@ mod tests {
             std::path::Path::new("examples/projects/showcase.json"),
             &ValidationOptions {
                 check_backend: false,
+                ..ValidationOptions::default()
             },
         )
         .expect("valid project");

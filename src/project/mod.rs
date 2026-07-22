@@ -9,4 +9,4 @@ mod validation;
 
 pub use loader::load_and_validate;
 pub use model::*;
-pub use validated::{LoadError, ValidatedProject, ValidationOptions};
+pub use validated::{LoadError, ResourceLimits, ValidatedProject, ValidationOptions};

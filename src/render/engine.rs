@@ -145,6 +145,26 @@ pub fn render(
     options: &RenderOptions,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<RenderSummary, RenderError> {
+    render_with_backend_builder(plan, options, emit, create_backend)
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "render errors retain cleanup status"
+)]
+fn render_with_backend_builder<F>(
+    plan: &RenderPlan,
+    options: &RenderOptions,
+    emit: &mut dyn FnMut(RenderEvent),
+    build_backend: F,
+) -> Result<RenderSummary, RenderError>
+where
+    F: FnOnce(
+        RenderBackendPreference,
+        &RenderPlan,
+        &Arc<DecodedAssets>,
+    ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
+{
     let total_started = Instant::now();
     let output = OutputTarget::prepare(
         options
@@ -170,8 +190,8 @@ pub fn render(
     })?;
     let schedule = ActiveSchedule::compile(plan);
     let mut schedule_cursor = schedule.cursor();
-    let (mut backend, backend_fallback) =
-        create_backend(options.backend_preference, plan, &decoded).map_err(|diagnostic| {
+    let (mut backend, backend_fallback) = build_backend(options.backend_preference, plan, &decoded)
+        .map_err(|diagnostic| {
             cleanup_error(
                 &output,
                 plan,
@@ -283,14 +303,10 @@ pub fn render(
             // The explicit normal-path cleanup preserves the backend failure as
             // primary evidence; Drop remains only a last-resort safeguard.
             let cleanup = encoder.abort_after_backend_failure();
-            let diagnostic = cleanup.map_or(diagnostic.clone(), |detail| {
-                Diagnostic::error(
-                    &diagnostic.code,
-                    diagnostic.category.clone(),
-                    format!("{}; encoder cleanup: {detail}", diagnostic.message),
-                    diagnostic.pointer.clone().unwrap_or_default(),
-                )
-            });
+            let diagnostic = match cleanup {
+                Some(detail) => diagnostic.with_hint(format!("encoder cleanup: {detail}")),
+                None => diagnostic,
+            };
             return Err(cleanup_error(
                 &output,
                 plan,
@@ -410,13 +426,27 @@ fn create_backend(
     plan: &RenderPlan,
     decoded: &Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
+    create_backend_with(preference, || {
+        WgpuBackend::new(plan, Arc::clone(decoded)).map(|backend| Box::new(backend) as _)
+    })
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "backend selection preserves structured diagnostics for auto fallback and explicit requests"
+)]
+fn create_backend_with<F>(
+    preference: RenderBackendPreference,
+    create_wgpu: F,
+) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>
+where
+    F: FnOnce() -> Result<Box<dyn RenderBackend>, Diagnostic>,
+{
     match preference {
         RenderBackendPreference::Cpu => Ok((Box::new(CpuBackend::default()), None)),
-        RenderBackendPreference::Wgpu => {
-            Ok((Box::new(WgpuBackend::new(plan, Arc::clone(decoded))?), None))
-        }
-        RenderBackendPreference::Auto => match WgpuBackend::new(plan, Arc::clone(decoded)) {
-            Ok(backend) => Ok((Box::new(backend), None)),
+        RenderBackendPreference::Wgpu => Ok((create_wgpu()?, None)),
+        RenderBackendPreference::Auto => match create_wgpu() {
+            Ok(backend) => Ok((backend, None)),
             Err(error) => Ok((
                 Box::new(CpuBackend::default()),
                 Some(BackendFallback {
@@ -508,12 +538,82 @@ fn failure_progress(completed_frames: u64, total_frames: u64) -> Option<f64> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::result_large_err,
+    reason = "test-only backend builders mirror the production diagnostic contract"
+)]
 mod tests {
     use super::{
-        RenderFailureContext, RenderFailureStage, completed_frame_state, failure_progress,
-        milliseconds,
+        BackendFallback, RenderBackendPreference, RenderFailureContext, RenderFailureStage,
+        RenderOptions, completed_frame_state, create_backend_with, failure_progress, milliseconds,
+        render_with_backend_builder,
     };
-    use std::time::Duration;
+    use std::{
+        path::Path,
+        sync::{Arc, atomic::AtomicBool},
+        time::Duration,
+    };
+
+    use image::RgbaImage;
+    use tempfile::TempDir;
+
+    use crate::{
+        Category, Diagnostic,
+        plan::{CompileOptions, EvaluatedFrame, RenderPlan, compile},
+        project::{ValidationOptions, load_and_validate},
+        render::prepared::{DecodedAssets, PreparationStats, PreparationTimings},
+        render::{AdapterMetadata, RenderBackend, RenderBackendKind},
+    };
+
+    struct FailingBackend;
+
+    impl RenderBackend for FailingBackend {
+        fn kind(&self) -> RenderBackendKind {
+            RenderBackendKind::Wgpu
+        }
+
+        fn prepare(
+            &mut self,
+            _plan: &RenderPlan,
+            _decoded: Arc<DecodedAssets>,
+        ) -> Result<(), Diagnostic> {
+            Ok(())
+        }
+
+        fn render_frame(
+            &mut self,
+            _frame: &EvaluatedFrame,
+            _destination: &mut RgbaImage,
+        ) -> Result<(), Diagnostic> {
+            Err(Diagnostic::error(
+                "WGPU-COMMAND-SUBMISSION",
+                Category::Backend,
+                "injected submission failure",
+                "",
+            ))
+        }
+
+        fn stats(&mut self) -> PreparationStats {
+            PreparationStats::default()
+        }
+
+        fn timings(&self) -> PreparationTimings {
+            PreparationTimings::default()
+        }
+
+        fn adapter(&self) -> Option<AdapterMetadata> {
+            None
+        }
+    }
+
+    fn example_plan() -> RenderPlan {
+        let validated = load_and_validate(
+            Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions::default(),
+        )
+        .expect("example project validates");
+        compile(&validated, CompileOptions::default()).expect("example project compiles")
+    }
 
     #[test]
     fn timing_converts_after_submillisecond_samples_accumulate() {
@@ -566,5 +666,92 @@ mod tests {
     fn cancellation_failure_reports_frames_written_before_cancellation() {
         assert_eq!(completed_frame_state(10, 24), (Some(9), Some(10.0 / 24.0)));
         assert_eq!(failure_progress(24, 24), None);
+    }
+
+    #[test]
+    fn cpu_selection_never_attempts_wgpu_initialization() {
+        let (backend, fallback) = create_backend_with(RenderBackendPreference::Cpu, || {
+            panic!("CPU selection must not initialize WGPU")
+        })
+        .expect("CPU backend selection succeeds");
+
+        assert_eq!(backend.kind(), RenderBackendKind::Cpu);
+        assert!(fallback.is_none());
+    }
+
+    #[test]
+    fn auto_selection_falls_back_with_the_wgpu_diagnostic() {
+        let (backend, fallback) = create_backend_with(RenderBackendPreference::Auto, || {
+            Err(Diagnostic::error(
+                "WGPU-ADAPTER-NOT-FOUND",
+                Category::Backend,
+                "injected adapter failure",
+                "",
+            ))
+        })
+        .expect("automatic selection falls back");
+
+        assert_eq!(backend.kind(), RenderBackendKind::Cpu);
+        assert!(matches!(
+            fallback,
+            Some(BackendFallback { code, stage, message })
+                if code == "WGPU-ADAPTER-NOT-FOUND"
+                    && stage == "wgpu_preparation"
+                    && message == "injected adapter failure"
+        ));
+    }
+
+    #[test]
+    fn explicit_wgpu_selection_propagates_the_wgpu_diagnostic() {
+        let result = create_backend_with(RenderBackendPreference::Wgpu, || {
+            Err(Diagnostic::error(
+                "WGPU-ADAPTER-NOT-FOUND",
+                Category::Backend,
+                "injected adapter failure",
+                "",
+            ))
+        });
+        let error = match result {
+            Ok(_) => panic!("explicit WGPU selection must not fall back"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code, "WGPU-ADAPTER-NOT-FOUND");
+        assert_eq!(error.message, "injected adapter failure");
+    }
+
+    #[test]
+    fn backend_failure_aborts_encoder_and_removes_partial_output() {
+        let workspace = TempDir::new().expect("temporary output directory");
+        let output = workspace.path().join("failed-render.mp4");
+        let options = RenderOptions {
+            output_override: Some(output.clone()),
+            overwrite: false,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            backend_preference: RenderBackendPreference::Wgpu,
+        };
+        let plan = example_plan();
+        let error = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
+            Ok((Box::new(FailingBackend), None))
+        })
+        .expect_err("injected backend failure reaches the render loop");
+
+        assert!(matches!(
+            error.context.stage,
+            RenderFailureStage::FrameComposition
+        ));
+        assert_eq!(error.context.completed_frames, 0);
+        assert_eq!(error.context.attempted_frame, Some(0));
+        assert_eq!(error.diagnostic.code, "WGPU-COMMAND-SUBMISSION");
+        assert_eq!(error.diagnostic.message, "injected submission failure");
+        assert!(error.temporary_removed);
+        assert!(!output.exists());
+        assert!(
+            error
+                .context
+                .temporary_output_path
+                .is_some_and(|path| !path.exists()),
+            "temporary output is removed after backend failure"
+        );
     }
 }

@@ -41,6 +41,8 @@ Canonical raw-frame regression tests retain that two-channel maximum. The
 separate MP4 decode comparison allows a maximum channel error of sixteen and a
 mean error of one because H.264 quantization amplifies otherwise bounded raw
 rounding differences; it is not used as compositor parity evidence.
+Parity metrics retain the first tolerance-exceeding pixel index with both RGBA
+values, so fixture failures can report compact context rather than frame contents.
 
 ## Resources and readback
 

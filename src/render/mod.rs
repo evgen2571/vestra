@@ -14,4 +14,4 @@ pub use engine::{
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,
 };
 pub use prepared::{DecodedAssets, PreparationStats};
-pub use wgpu::{FrameDifference, WgpuBackend, compare_rgba};
+pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};

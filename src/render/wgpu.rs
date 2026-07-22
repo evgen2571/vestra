@@ -32,6 +32,7 @@ pub struct WgpuBackend {
     _layer_parameters: wgpu::Buffer,
     _accumulation: wgpu::Buffer,
     _source_textures: Vec<wgpu::Texture>,
+    _source_bind_groups: Vec<wgpu::BindGroup>,
     output: wgpu::Texture,
     readback: wgpu::Buffer,
     row_bytes: u32,
@@ -273,6 +274,18 @@ impl WgpuBackend {
                 .saturating_add(u64::from(image.width()) * u64::from(image.height()) * 4);
             source_textures.push(texture);
         }
+        let source_bind_groups = source_textures
+            .iter()
+            .map(|texture| {
+                create_layer_bind_group(
+                    &device,
+                    &layer_bind_group_layout,
+                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    &accumulation,
+                    &layer_parameters,
+                )
+            })
+            .collect();
         let mut stats = decoded.stats().clone();
         stats.uploaded_texture_count = source_textures.len();
         stats.uploaded_texture_bytes = uploaded_texture_bytes;
@@ -292,6 +305,7 @@ impl WgpuBackend {
             _layer_parameters: layer_parameters,
             _accumulation: accumulation,
             _source_textures: source_textures,
+            _source_bind_groups: source_bind_groups,
             output,
             readback,
             row_bytes,
@@ -437,6 +451,33 @@ impl RenderBackend for WgpuBackend {
 
 fn align_up(value: u32, alignment: u32) -> u32 {
     value.div_ceil(alignment) * alignment
+}
+
+fn create_layer_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    source: &wgpu::TextureView,
+    accumulation: &wgpu::Buffer,
+    parameters: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("video-editor source layer bindings"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: accumulation.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: parameters.as_entire_binding(),
+            },
+        ],
+    })
 }
 
 fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnostic {

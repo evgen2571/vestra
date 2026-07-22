@@ -135,6 +135,14 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     assert_eq!(report["height"], 180);
     assert_eq!(report["render_backend"], "cpu");
     assert_eq!(report["encoder_backend"], "ffmpeg");
+    assert!(report["timings"].get("project_parse_ms").is_some());
+    assert!(report["timings"].get("semantic_validation_ms").is_some());
+    assert!(report["timings"].get("frame_render_ms").is_some());
+    assert!(
+        report["timings"]
+            .get("project_load_and_validation_ms")
+            .is_none()
+    );
     assert!(output.is_file());
 }
 

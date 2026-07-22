@@ -28,7 +28,8 @@ pub struct RenderOptions {
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct RenderTimings {
-    pub project_load_and_validation_ms: u128,
+    pub project_parse_ms: u128,
+    pub semantic_validation_ms: u128,
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
     pub track_evaluation_ms: u128,

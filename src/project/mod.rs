@@ -6,6 +6,6 @@ mod paths;
 mod validated;
 mod validation;
 
-pub use loader::load_and_validate;
+pub use loader::{LoadTimings, load_and_validate, load_and_validate_with_timings};
 pub use model::*;
 pub use validated::{LoadError, ResourceLimits, ValidatedProject, ValidationOptions};

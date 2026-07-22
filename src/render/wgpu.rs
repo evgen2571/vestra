@@ -9,6 +9,7 @@ use std::{sync::Arc, time::Instant};
 
 use bytemuck::{Pod, Zeroable};
 use image::RgbaImage;
+use serde::Serialize;
 
 use crate::{
     Category, Diagnostic,
@@ -61,6 +62,40 @@ struct LayerParameters {
     colour_row2: [f32; 4],
     colour_offset: [f32; 4],
     solid_or_background: [f32; 4],
+}
+
+/// Quantitative CPU/GPU frame comparison used by parity fixtures.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct FrameDifference {
+    pub maximum_absolute_channel_error: u8,
+    pub mean_absolute_channel_error: f64,
+    pub differing_channels: usize,
+    pub channels_exceeding_tolerance: usize,
+}
+
+#[must_use]
+pub fn compare_rgba(reference: &[u8], candidate: &[u8], tolerance: u8) -> FrameDifference {
+    assert_eq!(
+        reference.len(),
+        candidate.len(),
+        "frame buffers must have equal size"
+    );
+    let mut difference = FrameDifference::default();
+    let mut total = 0_u64;
+    for (&left, &right) in reference.iter().zip(candidate) {
+        let error = left.abs_diff(right);
+        difference.maximum_absolute_channel_error =
+            difference.maximum_absolute_channel_error.max(error);
+        total += u64::from(error);
+        difference.differing_channels += usize::from(error != 0);
+        difference.channels_exceeding_tolerance += usize::from(error > tolerance);
+    }
+    difference.mean_absolute_channel_error = if reference.is_empty() {
+        0.0
+    } else {
+        total as f64 / reference.len() as f64
+    };
+    difference
 }
 
 impl WgpuBackend {
@@ -722,9 +757,116 @@ fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnos
 
 #[cfg(test)]
 mod tests {
+    use super::{WgpuBackend, compare_rgba};
+    use crate::{
+        plan::{CompileOptions, EvaluatedFrame, compile},
+        project::{ValidationOptions, load_and_validate},
+        render::{CpuBackend, RenderBackend},
+    };
+    use image::RgbaImage;
+    use std::sync::Arc;
+
     #[test]
     fn layer_shader_parses_without_a_gpu_adapter() {
         naga::front::wgsl::parse_str(include_str!("shaders/layer.wgsl"))
             .expect("layer WGSL must parse independently of adapter availability");
+    }
+
+    #[test]
+    fn rgba_comparison_reports_strict_channel_metrics() {
+        let difference = compare_rgba(&[0, 2, 5, 255], &[0, 4, 4, 255], 1);
+        assert_eq!(difference.maximum_absolute_channel_error, 2);
+        assert_eq!(difference.differing_channels, 2);
+        assert_eq!(difference.channels_exceeding_tolerance, 1);
+        assert_eq!(difference.mean_absolute_channel_error, 0.75);
+    }
+
+    #[test]
+    fn gpu_background_frame_matches_cpu_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let mut gpu = match WgpuBackend::new(&plan, Arc::clone(&decoded)) {
+            Ok(backend) => backend,
+            Err(error) => {
+                eprintln!("skipping GPU parity smoke test: {}", error.message);
+                return;
+            }
+        };
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: plan.canvas.background,
+            width: plan.canvas.width,
+            height: plan.canvas.height,
+            layers: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 0);
+        assert_eq!(
+            difference.maximum_absolute_channel_error, 0,
+            "GPU background must be exact: {difference:?}"
+        );
+    }
+
+    #[test]
+    fn gpu_image_layer_matches_cpu_within_two_channels_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let mut gpu = match WgpuBackend::new(&plan, Arc::clone(&decoded)) {
+            Ok(backend) => backend,
+            Err(error) => {
+                eprintln!("skipping GPU image parity test: {}", error.message);
+                return;
+            }
+        };
+        let image_layer = plan
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::CompiledVisualSource::Image { .. }
+                )
+            })
+            .expect("fixture has image");
+        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "GPU image parity exceeded tolerance: {difference:?}"
+        );
     }
 }

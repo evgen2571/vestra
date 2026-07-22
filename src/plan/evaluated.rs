@@ -29,6 +29,7 @@ pub enum EvaluatedSource {
         asset_index: usize,
         crop: Crop,
         sizing: CompiledSizing,
+        cacheable_crop: bool,
     },
     SolidColor {
         colour: [u8; 4],
@@ -63,10 +64,12 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                         asset_index,
                         crop,
                         sizing,
+                        cacheable_crop,
                     } => EvaluatedSource::Image {
                         asset_index: *asset_index,
                         crop: crop.evaluate(relative),
                         sizing: sizing.clone(),
+                        cacheable_crop: *cacheable_crop,
                     },
                     CompiledVisualSource::SolidColor { colour } => {
                         EvaluatedSource::SolidColor { colour: *colour }

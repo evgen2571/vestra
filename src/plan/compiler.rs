@@ -115,6 +115,7 @@ pub fn compile(
             },
             source: CompiledVisualSource::Image {
                 asset_index,
+                cacheable_crop: tracks.crop.keyframes.is_empty(),
                 crop: tracks.crop,
                 sizing: compile_sizing(&clip.sizing),
             },
@@ -239,6 +240,10 @@ fn compile_v2(
                         "",
                     )
                 })?,
+                cacheable_crop: clip
+                    .crop
+                    .as_ref()
+                    .is_none_or(|track| track.keyframes.is_empty()),
                 crop: match &clip.crop {
                     Some(track) => compile_v2_track(track, &clip.id)?,
                     None => Track::new(Crop {

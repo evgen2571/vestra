@@ -304,6 +304,11 @@ pub fn render(
     performance.bitmap_cache_hits = preparation.bitmap_cache_hits;
     performance.bitmap_cache_misses = preparation.bitmap_cache_misses;
     performance.peak_cache_entries = preparation.peak_cache_entries;
+    performance.cache_budget_bytes = preparation.cache_budget_bytes;
+    performance.cache_current_bytes = preparation.cache_current_bytes;
+    performance.cache_peak_bytes = preparation.cache_peak_bytes;
+    performance.cache_evictions = preparation.cache_evictions;
+    performance.cache_oversized_entries_skipped = preparation.cache_oversized_entries_skipped;
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,

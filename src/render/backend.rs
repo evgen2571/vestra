@@ -52,7 +52,7 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
-        let assets = self.assets.as_ref().ok_or_else(|| {
+        let assets = self.assets.as_mut().ok_or_else(|| {
             Diagnostic::error(
                 "MVP-BACKEND-PREPARE",
                 crate::Category::Internal,

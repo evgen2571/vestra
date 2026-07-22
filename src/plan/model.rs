@@ -67,6 +67,7 @@ pub enum CompiledVisualSource {
         asset_index: usize,
         crop: Track<Crop>,
         sizing: CompiledSizing,
+        cacheable_crop: bool,
     },
     SolidColor {
         colour: [u8; 4],

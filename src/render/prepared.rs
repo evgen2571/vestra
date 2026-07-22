@@ -51,6 +51,12 @@ pub struct PreparationStats {
     pub uploaded_texture_bytes: u64,
     pub readback_buffer_count: usize,
     pub readback_buffer_bytes: u64,
+    pub shader_module_count: usize,
+    pub pipeline_count: usize,
+    pub output_texture_count: usize,
+    pub accumulation_buffer_count: usize,
+    pub bind_group_count: usize,
+    pub command_submission_count: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

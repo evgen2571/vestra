@@ -34,6 +34,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo test --all-features
+cargo bench --bench animation_effects
 ```
 
 Create a source package from tracked files only. This omits ignored render

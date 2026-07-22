@@ -64,3 +64,31 @@ backend.render_frame(&frame, &mut destination)?;
 ## Next implementation step
 
 Add typed animation primitives and v2 public model/normalization, then compile both versions into evaluated layers.
+
+## Implemented contract
+
+The loader dispatches strictly on `format_version`. Version 1 retains its JSON
+shape and defaults, then normalizes its legacy curves, transitions, and flashes
+into the same compiled layer form as version 2. Unsupported future versions
+produce `MVP-VERSION-UNSUPPORTED` diagnostics.
+
+Track times are clip-local and rounded once to nanoseconds. A track returns its
+base value before the first keyframe and its final value after the last.
+Keyframes must be strictly ordered. The CPU backend samples destination pixel
+centres with inverse mapping and bilinear filtering. It applies crop, anchor
+translation, independent X/Y scale, clockwise rotation in the downward-Y canvas,
+then destination-anchor translation. Positions and anchors are normalized, while
+the sampled source extent is in pixels.
+
+Effects run in declared order. The initial CPU effects are brightness, contrast,
+saturation, and tint. V1 flashes compile to `SolidColor` sources with opacity
+tracks. V1 and v2 crossfades compile to opacity contributors. The backend reads
+only `EvaluatedFrame` layers, never transition or flash project types.
+
+Decoded images are reused. Static crops use a byte-budgeted LRU cache; animated
+crops and all transforms sample directly and do not create cached scaled or
+rotated bitmaps. Default resource limits cap output dimensions, duration,
+frames, clip/effect/keyframe counts, source pixels, decoded bytes, active layers,
+and cache bytes. `cargo bench --bench animation_effects` renders the complete v2
+fixture in release mode and reports end-to-end, composition, encoder, cache, and
+decoded-memory measurements.

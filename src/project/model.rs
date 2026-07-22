@@ -393,4 +393,50 @@ mod tests {
         );
         assert!(FrameRate::Decimal(0.0).rational().is_err());
     }
+
+    #[test]
+    fn optional_fields_reject_explicit_null_but_allow_omission() {
+        let project: Value = serde_json::from_slice(
+            &std::fs::read("examples/projects/animation-effects.json").expect("project"),
+        )
+        .expect("project JSON");
+        assert!(serde_json::from_value::<Project>(project.clone()).is_ok());
+        let null_fields = [
+            vec!["name"],
+            vec!["metadata"],
+            vec!["audio"],
+            vec!["output", "duration"],
+            vec!["visual", "clips", "0", "sizing"],
+            vec!["visual", "clips", "0", "crop"],
+            vec!["visual", "clips", "0", "transform"],
+        ];
+        for pointer in null_fields {
+            let mut invalid = project.clone();
+            let mut value = &mut invalid;
+            for segment in &pointer[..pointer.len() - 1] {
+                value = match value {
+                    Value::Object(object) => object.get_mut(*segment).expect("object field"),
+                    Value::Array(items) => {
+                        &mut items[segment.parse::<usize>().expect("array index")]
+                    }
+                    _ => panic!("unexpected JSON shape"),
+                };
+            }
+            value
+                .as_object_mut()
+                .expect("optional field parent")
+                .insert(pointer.last().expect("field").to_string(), Value::Null);
+            assert!(
+                serde_json::from_value::<Project>(invalid).is_err(),
+                "{pointer:?}"
+            );
+        }
+
+        let mut audio_null = project;
+        audio_null["audio"] = serde_json::json!({
+            "asset": "audio", "timeline_start": 0, "trim_start": 0,
+            "trim_end": null, "volume": 1
+        });
+        assert!(serde_json::from_value::<Project>(audio_null).is_err());
+    }
 }

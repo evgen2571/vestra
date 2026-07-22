@@ -32,6 +32,7 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &Evalu
             crop,
             sizing,
             cacheable_crop,
+            transform,
         } => {
             let (source, crop) =
                 if *cacheable_crop && let Some(source) = assets.crop(*asset_index, *crop) {
@@ -54,14 +55,14 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &Evalu
                 canvas.width(),
                 canvas.height(),
             );
-            if layer.transform.is_valid() {
+            if transform.is_valid() {
                 draw_image(
                     canvas,
                     source,
                     crop,
                     source_width,
                     source_height,
-                    layer.transform,
+                    *transform,
                     layer.opacity,
                     layer.colour_transform,
                 );

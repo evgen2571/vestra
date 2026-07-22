@@ -3,8 +3,6 @@
     reason = "backend diagnostics retain structured user-facing context"
 )]
 
-use std::time::{Duration, Instant};
-
 use image::RgbaImage;
 
 use crate::{
@@ -29,7 +27,6 @@ pub trait RenderBackend {
 #[derive(Default)]
 pub struct CpuBackend {
     assets: Option<PreparedAssets>,
-    frame_render: Duration,
 }
 
 impl CpuBackend {
@@ -41,11 +38,6 @@ impl CpuBackend {
     #[must_use]
     pub fn timings(&self) -> Option<PreparationTimings> {
         self.assets.as_ref().map(PreparedAssets::timings)
-    }
-
-    #[must_use]
-    pub const fn frame_render_time(&self) -> Duration {
-        self.frame_render
     }
 }
 
@@ -68,9 +60,7 @@ impl RenderBackend for CpuBackend {
                 "",
             )
         })?;
-        let started = Instant::now();
         compositor::compose(frame, assets, destination);
-        self.frame_render += started.elapsed();
         Ok(())
     }
 }

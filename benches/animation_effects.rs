@@ -48,10 +48,10 @@ fn main() {
         Err(_) => panic!("benchmark project renders"),
     };
     println!(
-        "animation-effects 720x1280: total={}ms track_evaluation={}ms sampling_and_compositing={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
+        "animation-effects 720x1280: total={}ms track_evaluation={}ms frame_render={}ms encode_write={}ms cache_peak={} bytes decoded_peak={} bytes wall={}ms",
         summary.timings.total_ms,
         summary.timings.track_evaluation_ms,
-        summary.timings.cpu_sampling_and_compositing_ms,
+        summary.timings.frame_render_ms,
         summary.timings.encoder_write_ms,
         summary.performance.cache_peak_bytes,
         summary.performance.peak_decoded_bytes,

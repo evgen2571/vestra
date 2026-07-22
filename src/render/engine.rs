@@ -32,8 +32,7 @@ pub struct RenderTimings {
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
     pub track_evaluation_ms: u128,
-    pub cpu_sampling_and_compositing_ms: u128,
-    pub frame_composition_ms: u128,
+    pub frame_render_ms: u128,
     pub encoder_write_ms: u128,
     pub encoder_finalize_ms: u128,
     pub output_publish_ms: u128,
@@ -292,9 +291,8 @@ pub fn render(
         }
     })?;
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
-    timings.frame_composition_ms = milliseconds(frame_composition);
+    timings.frame_render_ms = milliseconds(frame_composition);
     timings.track_evaluation_ms = milliseconds(track_evaluation);
-    timings.cpu_sampling_and_compositing_ms = milliseconds(backend.frame_render_time());
     timings.encoder_write_ms = milliseconds(encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
     emit(RenderEvent {

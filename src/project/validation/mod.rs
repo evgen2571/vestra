@@ -46,6 +46,14 @@ pub(crate) fn validate(
     );
     let duration = duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
+    enforce_limits(
+        &project.output,
+        project.visual.clips.len(),
+        total_frames,
+        duration,
+        options.limits,
+        &mut errors,
+    );
     add_unused_asset_warnings(&project, &mut warnings);
     if options.check_backend
         && let Err(message) = media::backend_available()
@@ -61,6 +69,7 @@ pub(crate) fn validate(
         Ok(ValidatedProject {
             project,
             v2: None,
+            limits: options.limits,
             project_path: path.to_path_buf(),
             asset_paths: assets.paths,
             audio_durations: assets.audio_durations,
@@ -119,6 +128,24 @@ pub(crate) fn validate_v2(
     );
     let duration = duration_v2(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
+    enforce_limits(
+        &project.output,
+        project.visual.clips.len(),
+        total_frames,
+        duration,
+        options.limits,
+        &mut errors,
+    );
+    for (index, clip) in project.visual.clips.iter().enumerate() {
+        if clip.effects.len() > options.limits.maximum_effects_per_clip {
+            errors.push(Diagnostic::error(
+                "MVP-LIMIT-EFFECTS",
+                Category::Semantic,
+                "clip exceeds the effect limit",
+                format!("/visual/clips/{index}/effects"),
+            ));
+        }
+    }
     if options.check_backend
         && let Err(message) = media::backend_available()
     {
@@ -133,6 +160,7 @@ pub(crate) fn validate_v2(
         Ok(ValidatedProject {
             project: surrogate,
             v2: Some(project),
+            limits: options.limits,
             project_path: path.to_path_buf(),
             asset_paths: assets.paths,
             audio_durations: assets.audio_durations,
@@ -143,6 +171,40 @@ pub(crate) fn validate_v2(
         })
     } else {
         Err(LoadError::Diagnostics(errors))
+    }
+}
+
+fn enforce_limits(
+    output: &Output,
+    clips: usize,
+    frame_count: u64,
+    duration: f64,
+    limits: crate::project::ResourceLimits,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if output.width > limits.maximum_width || output.height > limits.maximum_height {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-DIMENSIONS",
+            Category::Semantic,
+            "output dimensions exceed configured resource limits",
+            "/output",
+        ));
+    }
+    if frame_count > limits.maximum_frames || duration > limits.maximum_duration_seconds {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-TIMELINE",
+            Category::Semantic,
+            "project duration or frame count exceeds configured resource limits",
+            "/output/duration",
+        ));
+    }
+    if clips > limits.maximum_clips {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-CLIPS",
+            Category::Semantic,
+            "project exceeds the clip limit",
+            "/visual/clips",
+        ));
     }
 }
 

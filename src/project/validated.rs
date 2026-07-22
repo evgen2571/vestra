@@ -7,12 +7,50 @@ use super::Project;
 #[derive(Clone, Debug)]
 pub struct ValidationOptions {
     pub check_backend: bool,
+    pub limits: ResourceLimits,
 }
 
 impl Default for ValidationOptions {
     fn default() -> Self {
         Self {
             check_backend: true,
+            limits: ResourceLimits::default(),
+        }
+    }
+}
+
+/// Upper bounds applied before rendering allocates or decodes untrusted input.
+#[derive(Clone, Copy, Debug)]
+pub struct ResourceLimits {
+    pub maximum_width: u32,
+    pub maximum_height: u32,
+    pub maximum_frames: u64,
+    pub maximum_duration_seconds: f64,
+    pub maximum_source_pixels: u64,
+    pub maximum_decoded_asset_bytes: u64,
+    pub maximum_total_decoded_bytes: u64,
+    pub maximum_active_layers: usize,
+    pub maximum_clips: usize,
+    pub maximum_effects_per_clip: usize,
+    pub maximum_keyframes_per_track: usize,
+    pub maximum_cache_bytes: u64,
+}
+
+impl Default for ResourceLimits {
+    fn default() -> Self {
+        Self {
+            maximum_width: 8192,
+            maximum_height: 8192,
+            maximum_frames: 216_000,
+            maximum_duration_seconds: 7_200.0,
+            maximum_source_pixels: 100_000_000,
+            maximum_decoded_asset_bytes: 400 * 1024 * 1024,
+            maximum_total_decoded_bytes: 1024 * 1024 * 1024,
+            maximum_active_layers: 64,
+            maximum_clips: 10_000,
+            maximum_effects_per_clip: 32,
+            maximum_keyframes_per_track: 1_000,
+            maximum_cache_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -23,6 +61,7 @@ impl Default for ValidationOptions {
 pub struct ValidatedProject {
     pub(crate) project: Project,
     pub(crate) v2: Option<super::v2::Project>,
+    pub(crate) limits: ResourceLimits,
     pub(crate) project_path: PathBuf,
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: BTreeMap<String, f64>,

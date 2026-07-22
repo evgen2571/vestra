@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{Read, Write},
     path::Path,
     process::{Child, ChildStdin, Command, Stdio},
 };
@@ -9,6 +9,7 @@ use crate::media::{AudioSettings, EncoderSettings};
 pub struct FfmpegEncoder {
     child: Child,
     stdin: Option<ChildStdin>,
+    stderr_reader: Option<std::thread::JoinHandle<Vec<u8>>>,
 }
 
 impl FfmpegEncoder {
@@ -63,9 +64,14 @@ impl FfmpegEncoder {
             .stdin
             .take()
             .ok_or_else(|| "FFmpeg did not expose a frame input pipe".to_owned())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "FFmpeg did not expose an error output pipe".to_owned())?;
         Ok(Self {
             child,
             stdin: Some(stdin),
+            stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
         })
     }
 
@@ -74,22 +80,23 @@ impl FfmpegEncoder {
             .as_mut()
             .ok_or_else(|| "FFmpeg frame input is closed".to_owned())?
             .write_all(bytes)
-            .map_err(|error| format!("cannot stream frame: {error}"))
+            .map_err(|error| format!("cannot stream frame to FFmpeg: {error}"))
     }
 
     pub fn finish(mut self) -> Result<(), String> {
         drop(self.stdin.take());
-        let output = self
+        let status = self
             .child
-            .wait_with_output()
+            .wait()
             .map_err(|error| format!("cannot wait for FFmpeg: {error}"))?;
-        if output.status.success() {
+        let stderr = self.join_stderr();
+        if status.success() {
             Ok(())
         } else {
             Err(format!(
                 "FFmpeg failed with status {}: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr).trim()
+                status,
+                String::from_utf8_lossy(&stderr).trim()
             ))
         }
     }
@@ -97,7 +104,33 @@ impl FfmpegEncoder {
     pub fn cancel(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = self.join_stderr();
     }
+
+    fn join_stderr(&mut self) -> Vec<u8> {
+        self.stderr_reader
+            .take()
+            .and_then(|reader| reader.join().ok())
+            .unwrap_or_default()
+    }
+}
+
+fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
+    const MAX_STDERR_BYTES: usize = 64 * 1024;
+    let mut collected = Vec::new();
+    let mut chunk = [0_u8; 8192];
+    loop {
+        let read = match stderr.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => read,
+        };
+        collected.extend_from_slice(&chunk[..read]);
+        if collected.len() > MAX_STDERR_BYTES {
+            let excess = collected.len() - MAX_STDERR_BYTES;
+            collected.drain(..excess);
+        }
+    }
+    collected
 }
 
 fn add_audio(command: &mut Command, audio: &AudioSettings, project_duration: f64) {

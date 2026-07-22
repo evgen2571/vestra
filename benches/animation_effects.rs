@@ -12,7 +12,7 @@ fn main() {
     let output_path = output.path().join("animation-effects.mp4");
     let project_path = output.path().join("animation-effects-720x1280.json");
     let mut project: serde_json::Value = serde_json::from_slice(
-        &fs::read("examples/projects/animation-effects-v2.json").expect("read benchmark fixture"),
+        &fs::read("examples/projects/animation-effects.json").expect("read benchmark fixture"),
     )
     .expect("parse benchmark fixture");
     project["output"]["width"] = 720.into();

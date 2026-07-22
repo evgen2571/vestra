@@ -8,9 +8,9 @@ It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported 
 cargo build --release
 
 # Run these from the repository root.
-./target/release/video-editor validate examples/projects/animation-effects-v2.json
-./target/release/video-editor inspect examples/projects/animation-effects-v2.json --format json
-./target/release/video-editor render examples/projects/animation-effects-v2.json --progress json
+./target/release/video-editor validate examples/projects/animation-effects.json
+./target/release/video-editor inspect examples/projects/animation-effects.json --format json
+./target/release/video-editor render examples/projects/animation-effects.json --progress json
 ```
 
 The reference output is written under `examples/output/` and is protected from accidental replacement. Re-render it only with `--overwrite`.
@@ -27,7 +27,7 @@ video-editor version
 
 `--format json` writes a result envelope. `render --progress json` writes JSON Lines events, starting at zero and ending with `completed` at 1.0 only after publication. Exit statuses are 0 (success), 1 (internal), 2 (usage), 3 (project), 4 (asset/media), 5 (backend/render), 6 (output), and 130 (interrupt cancellation).
 
-See [the project format](docs/specs/project-format.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects-v2.json) for the complete contract. Run all checks with:
+See [the project format](docs/specs/project-format.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Run all checks with:
 
 ```bash
 cargo fmt --check

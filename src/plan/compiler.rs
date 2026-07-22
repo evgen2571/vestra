@@ -640,7 +640,7 @@ mod tests {
     #[test]
     fn compiles_transitions_and_flashes_to_normal_layers() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/animation-effects-v2.json"),
+            std::path::Path::new("examples/projects/animation-effects.json"),
             &ValidationOptions {
                 check_backend: false,
                 ..ValidationOptions::default()

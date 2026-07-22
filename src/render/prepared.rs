@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn caches_static_source_crops_with_byte_metrics() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/animation-effects-v2.json"),
+            std::path::Path::new("examples/projects/animation-effects.json"),
             &ValidationOptions {
                 check_backend: false,
                 ..ValidationOptions::default()
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn oversized_crops_fall_back_without_panicking() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/animation-effects-v2.json"),
+            std::path::Path::new("examples/projects/animation-effects.json"),
             &ValidationOptions {
                 check_backend: false,
                 ..ValidationOptions::default()

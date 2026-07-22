@@ -2091,6 +2091,7 @@ dependencies = [
  "clap",
  "ctrlc",
  "image",
+ "naga",
  "pollster",
  "predicates",
  "serde",

@@ -34,8 +34,8 @@ pub struct CpuBackend {
 
 impl CpuBackend {
     #[must_use]
-    pub fn stats(&self) -> Option<&PreparationStats> {
-        self.assets.as_ref().map(PreparedAssets::stats)
+    pub fn stats(&mut self) -> Option<&PreparationStats> {
+        self.assets.as_mut().map(PreparedAssets::stats)
     }
 
     #[must_use]

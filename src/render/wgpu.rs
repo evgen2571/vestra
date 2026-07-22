@@ -7,6 +7,7 @@
 
 use std::{sync::Arc, time::Instant};
 
+use bytemuck::{Pod, Zeroable};
 use image::RgbaImage;
 
 use crate::{
@@ -26,6 +27,10 @@ pub struct WgpuBackend {
     device: wgpu::Device,
     queue: wgpu::Queue,
     _layer_shader: wgpu::ShaderModule,
+    _layer_pipeline: wgpu::ComputePipeline,
+    _layer_bind_group_layout: wgpu::BindGroupLayout,
+    _layer_parameters: wgpu::Buffer,
+    _accumulation: wgpu::Buffer,
     _source_textures: Vec<wgpu::Texture>,
     output: wgpu::Texture,
     readback: wgpu::Buffer,
@@ -36,6 +41,23 @@ pub struct WgpuBackend {
     stats: PreparationStats,
     timings: PreparationTimings,
     adapter: AdapterMetadata,
+}
+
+/// Matches the explicit sixteen-byte chunks in `layer.wgsl`.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct LayerParameters {
+    header: [u32; 4],
+    source: [u32; 4],
+    crop: [f32; 4],
+    effective: [f32; 4],
+    inverse_row0: [f32; 4],
+    inverse_row1: [f32; 4],
+    colour_row0: [f32; 4],
+    colour_row1: [f32; 4],
+    colour_row2: [f32; 4],
+    colour_offset: [f32; 4],
+    solid_or_background: [f32; 4],
 }
 
 impl WgpuBackend {
@@ -101,6 +123,59 @@ impl WgpuBackend {
             label: Some("video-editor layer compute shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/layer.wgsl").into()),
         });
+        let layer_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("video-editor layer bindings"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<
+                                LayerParameters,
+                            >()
+                                as u64),
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        let layer_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("video-editor layer pipeline layout"),
+                bind_group_layouts: &[&layer_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let layer_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("video-editor layer pipeline"),
+            layout: Some(&layer_pipeline_layout),
+            module: &layer_shader,
+            entry_point: "compose",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
         let padded_row_bytes = align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let readback_size = u64::from(padded_row_bytes)
             .checked_mul(u64::from(plan.canvas.height))
@@ -132,6 +207,18 @@ impl WgpuBackend {
             label: Some("video-editor readback"),
             size: readback_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let accumulation = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("video-editor layer accumulation"),
+            size: readback_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let layer_parameters = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("video-editor layer parameters"),
+            size: std::mem::size_of::<LayerParameters>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let upload_started = Instant::now();
@@ -200,6 +287,10 @@ impl WgpuBackend {
             device,
             queue,
             _layer_shader: layer_shader,
+            _layer_pipeline: layer_pipeline,
+            _layer_bind_group_layout: layer_bind_group_layout,
+            _layer_parameters: layer_parameters,
+            _accumulation: accumulation,
             _source_textures: source_textures,
             output,
             readback,

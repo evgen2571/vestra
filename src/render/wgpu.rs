@@ -70,7 +70,9 @@ pub struct FrameDifference {
     pub maximum_absolute_channel_error: u8,
     pub mean_absolute_channel_error: f64,
     pub differing_channels: usize,
+    pub differing_channel_percentage: f64,
     pub channels_exceeding_tolerance: usize,
+    pub pixels_exceeding_tolerance: usize,
 }
 
 #[must_use]
@@ -82,18 +84,30 @@ pub fn compare_rgba(reference: &[u8], candidate: &[u8], tolerance: u8) -> FrameD
     );
     let mut difference = FrameDifference::default();
     let mut total = 0_u64;
-    for (&left, &right) in reference.iter().zip(candidate) {
-        let error = left.abs_diff(right);
-        difference.maximum_absolute_channel_error =
-            difference.maximum_absolute_channel_error.max(error);
-        total += u64::from(error);
-        difference.differing_channels += usize::from(error != 0);
-        difference.channels_exceeding_tolerance += usize::from(error > tolerance);
+    for (reference_pixel, candidate_pixel) in
+        reference.chunks_exact(4).zip(candidate.chunks_exact(4))
+    {
+        let mut pixel_exceeds_tolerance = false;
+        for (&left, &right) in reference_pixel.iter().zip(candidate_pixel) {
+            let error = left.abs_diff(right);
+            difference.maximum_absolute_channel_error =
+                difference.maximum_absolute_channel_error.max(error);
+            total += u64::from(error);
+            difference.differing_channels += usize::from(error != 0);
+            difference.channels_exceeding_tolerance += usize::from(error > tolerance);
+            pixel_exceeds_tolerance |= error > tolerance;
+        }
+        difference.pixels_exceeding_tolerance += usize::from(pixel_exceeds_tolerance);
     }
     difference.mean_absolute_channel_error = if reference.is_empty() {
         0.0
     } else {
         total as f64 / reference.len() as f64
+    };
+    difference.differing_channel_percentage = if reference.is_empty() {
+        0.0
+    } else {
+        difference.differing_channels as f64 / reference.len() as f64 * 100.0
     };
     difference
 }
@@ -880,7 +894,12 @@ fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnos
 mod tests {
     use super::{WgpuBackend, compare_rgba};
     use crate::{
-        plan::{CompileOptions, EvaluatedFrame, compile},
+        animation::{Interpolation, Keyframe, Track},
+        domain::{Crop, Point},
+        plan::{
+            CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource, EvaluatedFrame,
+            ScheduledItem, compile,
+        },
         project::{ValidationOptions, load_and_validate},
         render::{CpuBackend, RenderBackend},
     };
@@ -918,6 +937,8 @@ mod tests {
         assert_eq!(difference.maximum_absolute_channel_error, 2);
         assert_eq!(difference.differing_channels, 2);
         assert_eq!(difference.channels_exceeding_tolerance, 1);
+        assert_eq!(difference.pixels_exceeding_tolerance, 1);
+        assert_eq!(difference.differing_channel_percentage, 50.0);
         assert_eq!(difference.mean_absolute_channel_error, 0.75);
     }
 
@@ -1056,6 +1077,116 @@ mod tests {
     }
 
     #[test]
+    fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+        let image_layers = canonical
+            .layers
+            .iter()
+            .enumerate()
+            .filter_map(|(index, layer)| {
+                matches!(layer.source, CompiledVisualSource::Image { .. }).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let [red, blue] = image_layers.as_slice() else {
+            panic!("canonical fixture must have two image layers");
+        };
+
+        for sizing in [
+            CompiledSizing::Original,
+            CompiledSizing::Fit,
+            CompiledSizing::Cover,
+            CompiledSizing::Scale(0.73),
+            CompiledSizing::Stretch {
+                width: 177,
+                height: 91,
+            },
+        ] {
+            let mut plan = canonical.clone();
+            let CompiledVisualSource::Image {
+                sizing: layer_sizing,
+                ..
+            } = &mut plan.layers[*red].source
+            else {
+                unreachable!()
+            };
+            *layer_sizing = sizing.clone();
+            plan.layers[*red].transform.position = Track::new(Point { x: 0.47, y: 0.54 });
+            plan.layers[*red].transform.anchor = Track::new(Point { x: 0.31, y: 0.67 });
+            plan.layers[*red].transform.scale = Track::new(Point { x: 0.79, y: 1.13 });
+            plan.layers[*red].transform.rotation_radians = Track::new(0.31);
+            plan.layers[*red].opacity = Track::new(0.63);
+            plan.layers[*red].effects = vec![
+                CompiledEffect::Brightness {
+                    amount: Track::new(0.08),
+                },
+                CompiledEffect::Contrast {
+                    amount: Track::new(0.82),
+                },
+                CompiledEffect::Saturation {
+                    amount: Track::new(0.68),
+                },
+                CompiledEffect::Tint {
+                    colour: [28, 156, 231, 255],
+                    amount: Track::new(0.19),
+                },
+            ];
+            let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
+            let mut cpu = CpuBackend::default();
+            cpu.prepare(&plan, Arc::clone(&decoded))
+                .expect("CPU prepares");
+            let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+                return;
+            };
+            let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+            let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+            cpu.render_frame(&frame, &mut cpu_output)
+                .expect("CPU frame renders");
+            gpu.render_frame(&frame, &mut gpu_output)
+                .expect("GPU frame renders");
+            let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+            assert!(
+                difference.maximum_absolute_channel_error <= 2,
+                "{sizing:?} parity exceeded tolerance: {difference:?}"
+            );
+        }
+
+        let mut plan = canonical.clone();
+        plan.layers[*red].opacity = Track::new(0.47);
+        plan.layers[*blue].opacity = Track::new(0.58);
+        let frame = crate::plan::evaluate(
+            &plan,
+            &[ScheduledItem(*red), ScheduledItem(*blue)],
+            1_750_000_000,
+        );
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
+        };
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "transparent multi-layer parity exceeded tolerance: {difference:?}"
+        );
+    }
+
+    #[test]
     fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
         let validated = load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
@@ -1167,5 +1298,165 @@ mod tests {
             initial.readback_buffer_count
         );
         assert_eq!(final_stats.command_submission_count, 9);
+    }
+
+    #[test]
+    fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+        let image_layer = canonical
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::CompiledVisualSource::Image { .. }
+                )
+            })
+            .expect("fixture has image");
+
+        for crop in [
+            Crop {
+                x: 0.13,
+                y: 0.17,
+                width: 0.61,
+                height: 0.59,
+            },
+            Crop {
+                x: 0.0,
+                y: 0.11,
+                width: 0.71,
+                height: 0.73,
+            },
+            Crop {
+                x: 0.29,
+                y: 0.0,
+                width: 0.71,
+                height: 0.73,
+            },
+            Crop {
+                x: 0.29,
+                y: 0.27,
+                width: 0.71,
+                height: 0.73,
+            },
+            Crop {
+                x: 0.13,
+                y: 0.27,
+                width: 0.61,
+                height: 0.73,
+            },
+        ] {
+            let mut plan = canonical.clone();
+            let crate::plan::CompiledVisualSource::Image {
+                crop: track,
+                cacheable_crop,
+                ..
+            } = &mut plan.layers[image_layer].source
+            else {
+                unreachable!()
+            };
+            *track = Track::new(crop);
+            *cacheable_crop = true;
+            let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+            let mut cpu = CpuBackend::default();
+            cpu.prepare(&plan, Arc::clone(&decoded))
+                .expect("CPU prepares");
+            let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+                return;
+            };
+            let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+            let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+            cpu.render_frame(&frame, &mut cpu_output)
+                .expect("CPU frame renders");
+            gpu.render_frame(&frame, &mut gpu_output)
+                .expect("GPU frame renders");
+            let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+            assert!(
+                difference.maximum_absolute_channel_error <= 2,
+                "static crop {crop:?}: {difference:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gpu_animated_crop_matches_cpu_when_an_adapter_is_available() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let image_layer = plan
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::CompiledVisualSource::Image { .. }
+                )
+            })
+            .expect("fixture has image");
+        let crate::plan::CompiledVisualSource::Image {
+            crop,
+            cacheable_crop,
+            ..
+        } = &mut plan.layers[image_layer].source
+        else {
+            unreachable!()
+        };
+        *crop = Track {
+            base_value: Crop {
+                x: 0.08,
+                y: 0.14,
+                width: 0.78,
+                height: 0.72,
+            },
+            keyframes: vec![Keyframe {
+                time: 1_000_000_000,
+                value: Crop {
+                    x: 0.19,
+                    y: 0.21,
+                    width: 0.67,
+                    height: 0.63,
+                },
+                interpolation: Interpolation::Linear,
+            }],
+        };
+        *cacheable_crop = false;
+        let frame = crate::plan::evaluate(
+            &plan,
+            &[crate::plan::ScheduledItem(image_layer)],
+            500_000_000,
+        );
+        let mut cpu = CpuBackend::default();
+        cpu.prepare(&plan, Arc::clone(&decoded))
+            .expect("CPU prepares");
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+            return;
+        };
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "animated crop: {difference:?}"
+        );
     }
 }

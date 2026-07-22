@@ -9,11 +9,12 @@ use serde_json::from_value;
 
 use crate::{
     Category, Diagnostic,
-    domain::Crop,
+    animation::{Interpolation, Keyframe, Track},
+    domain::{Crop, Easing, Point},
     media::{AudioSettings, EncoderSettings},
     plan::{
-        Canvas, CompilationStats, CompiledAnimations, CompiledClip, CompiledFlash, CompiledSizing,
-        CompiledTransition, Curve, DrawKey, ImageAsset, ItemKind, PreparationClass, RenderPlan,
+        Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
+        CompiledVisualSource, DrawKey, ImageAsset, RenderPlan,
     },
     project::{Animation, AnimationTarget, Sizing, Transition, ValidatedProject, parse_colour},
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
@@ -32,6 +33,9 @@ pub fn compile(
     validated: &ValidatedProject,
     options: CompileOptions,
 ) -> Result<RenderPlan, Diagnostic> {
+    if let Some(project) = &validated.v2 {
+        return compile_v2(validated, project, options);
+    }
     let (width, height) = effective_dimensions(
         validated.project.output.width,
         validated.project.output.height,
@@ -75,7 +79,9 @@ pub fn compile(
         .enumerate()
         .map(|(index, asset)| (asset.id.as_str(), index))
         .collect();
-    let mut clips = Vec::with_capacity(validated.project.visual.clips.len());
+    let mut layers = Vec::with_capacity(
+        validated.project.visual.clips.len() + validated.project.visual.flashes.len(),
+    );
     for clip in &validated.project.visual.clips {
         if !clip.visible {
             continue;
@@ -89,102 +95,59 @@ pub fn compile(
             )
         })?;
         let start_nanos = to_nanos(clip.start, &clip.id)?;
-        let end_nanos = start_nanos.saturating_add(to_nanos(clip.duration, &clip.id)?);
+        let duration_nanos = to_nanos(clip.duration, &clip.id)?;
         compilation.animation_value_parse_count += clip.animations.len() as u64;
-        let animations = compile_animations(&clip.animations, &clip.id)?;
-        compilation.animation_sort_count += [
-            !animations.position.is_empty(),
-            !animations.scale.is_empty(),
-            !animations.opacity.is_empty(),
-            !animations.crop.is_empty(),
-        ]
-        .into_iter()
-        .filter(|sorted| *sorted)
-        .count() as u64;
-        let preparation = classify(&animations);
-        let start_frame = first_frame_at_or_after(start_nanos, validated.frame_rate)?;
-        let end_frame = first_frame_at_or_after(end_nanos, validated.frame_rate)?;
-        clips.push(CompiledClip {
+        let tracks = compile_v1_tracks(clip, &clip.animations)?;
+        compilation.animation_sort_count += 4;
+        layers.push(CompiledLayer {
             id: clip.id.clone(),
-            asset_index,
             start_nanos,
-            start_frame,
-            end_frame: end_frame.min(validated.frame_count),
+            start_frame: first_frame_at_or_after(start_nanos, validated.frame_rate)?,
+            end_frame: first_frame_at_or_after(
+                start_nanos.saturating_add(duration_nanos),
+                validated.frame_rate,
+            )?
+            .min(validated.frame_count),
             draw_key: DrawKey {
                 layer: clip.layer,
                 start_nanos,
                 id: clip.id.clone(),
-                kind: ItemKind::Clip,
             },
-            position: clip.position,
-            anchor: clip.anchor,
-            crop: clip.crop.unwrap_or(Crop {
-                x: 0.0,
-                y: 0.0,
-                width: 1.0,
-                height: 1.0,
-            }),
-            sizing: compile_sizing(&clip.sizing),
-            opacity: clip.opacity,
-            animations,
-            transitions: Vec::new(),
-            preparation,
+            source: CompiledVisualSource::Image {
+                asset_index,
+                crop: tracks.crop,
+                sizing: compile_sizing(&clip.sizing),
+            },
+            transform: CompiledTransformTracks {
+                position: tracks.position,
+                anchor: Track::new(clip.anchor),
+                scale: tracks.scale,
+                rotation_radians: Track::new(0.0),
+            },
+            opacity: tracks.opacity,
+            opacity_contributions: Vec::new(),
+            effects: Vec::new(),
         });
     }
-    let clip_indices: BTreeMap<_, _> = clips
+    let clip_indices: BTreeMap<String, usize> = layers
         .iter()
         .enumerate()
-        .map(|(index, clip)| (clip.id.clone(), index))
+        .map(|(index, layer)| (layer.id.clone(), index))
         .collect();
-    for transition in &validated.project.visual.transitions {
-        let curve = transition_curve(transition)?;
-        match transition {
-            Transition::Crossfade {
-                outgoing, incoming, ..
-            } => {
-                if let Some(index) = clip_indices.get(outgoing) {
-                    clips[*index]
-                        .transitions
-                        .push(CompiledTransition::Outgoing(curve.clone()));
-                    compilation.compiled_transition_association_count += 1;
-                }
-                if let Some(index) = clip_indices.get(incoming) {
-                    clips[*index]
-                        .transitions
-                        .push(CompiledTransition::Incoming(curve));
-                    compilation.compiled_transition_association_count += 1;
-                }
-            }
-            Transition::FadeToBackground { clip, .. } => {
-                if let Some(index) = clip_indices.get(clip) {
-                    clips[*index]
-                        .transitions
-                        .push(CompiledTransition::Outgoing(curve));
-                    compilation.compiled_transition_association_count += 1;
-                }
-            }
-            Transition::FadeFromBackground { clip, .. } => {
-                if let Some(index) = clip_indices.get(clip) {
-                    clips[*index]
-                        .transitions
-                        .push(CompiledTransition::Incoming(curve));
-                    compilation.compiled_transition_association_count += 1;
-                }
-            }
-        }
+    compile_v1_transitions(
+        &validated.project.visual.transitions,
+        &clip_indices,
+        &mut layers,
+        &mut compilation,
+    )?;
+    for flash in &validated.project.visual.flashes {
+        layers.push(compile_flash(
+            flash,
+            validated.frame_rate,
+            validated.frame_count,
+        )?);
     }
-    for clip in &mut clips {
-        clip.transitions
-            .sort_by_key(|transition| transition.curve().start_nanos);
-    }
-    let flashes = validated
-        .project
-        .visual
-        .flashes
-        .iter()
-        .map(|flash| compile_flash(flash, validated.frame_rate, validated.frame_count))
-        .collect::<Result<Vec<_>, _>>()?;
-    compilation.parsed_colour_count += flashes.len() as u64;
+    compilation.parsed_colour_count += validated.project.visual.flashes.len() as u64;
     let audio = compile_audio(validated)?;
     Ok(RenderPlan {
         configured_output: resolved_output_path(validated),
@@ -207,10 +170,670 @@ pub fn compile(
             audio,
         },
         images,
-        clips,
-        flashes,
+        layers,
         compilation,
         warnings: validated.warnings.clone(),
+    })
+}
+
+fn compile_v2(
+    validated: &ValidatedProject,
+    project: &crate::project::v2::Project,
+    options: CompileOptions,
+) -> Result<RenderPlan, Diagnostic> {
+    let (width, height) =
+        effective_dimensions(project.output.width, project.output.height, options.preview);
+    let background = parse_colour(&project.output.background).ok_or_else(|| {
+        Diagnostic::error(
+            "MVP-PLAN-BACKGROUND",
+            Category::Internal,
+            "validated background is invalid",
+            "/output/background",
+        )
+    })?;
+    let image_ids: BTreeSet<&str> = project
+        .visual
+        .clips
+        .iter()
+        .filter(|clip| clip.visible)
+        .filter_map(|clip| match &clip.source {
+            crate::project::v2::VisualSource::Image { asset } => Some(asset.as_str()),
+            crate::project::v2::VisualSource::SolidColor { .. } => None,
+        })
+        .collect();
+    let images: Vec<_> = project
+        .assets
+        .iter()
+        .filter(|asset| {
+            matches!(asset.kind, crate::project::AssetType::Image)
+                && image_ids.contains(asset.id.as_str())
+        })
+        .filter_map(|asset| {
+            validated.asset_paths.get(&asset.id).map(|path| ImageAsset {
+                id: asset.id.clone(),
+                path: path.clone(),
+            })
+        })
+        .collect();
+    let indices: BTreeMap<String, usize> = images
+        .iter()
+        .enumerate()
+        .map(|(index, image)| (image.id.clone(), index))
+        .collect();
+    let mut layers = Vec::new();
+    let mut compilation = CompilationStats {
+        parsed_colour_count: 1,
+        ..CompilationStats::default()
+    };
+    for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
+        let start_nanos = to_nanos(clip.start, &clip.id)?;
+        let end_nanos = start_nanos.saturating_add(to_nanos(clip.duration, &clip.id)?);
+        let source = match &clip.source {
+            crate::project::v2::VisualSource::Image { asset } => CompiledVisualSource::Image {
+                asset_index: *indices.get(asset).ok_or_else(|| {
+                    Diagnostic::error(
+                        "MVP-PLAN-ASSET",
+                        Category::Internal,
+                        format!("validated clip '{}' has no image asset", clip.id),
+                        "",
+                    )
+                })?,
+                crop: match &clip.crop {
+                    Some(track) => compile_v2_track(track, &clip.id)?,
+                    None => Track::new(Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    }),
+                },
+                sizing: clip
+                    .sizing
+                    .as_ref()
+                    .map_or(CompiledSizing::Original, compile_sizing),
+            },
+            crate::project::v2::VisualSource::SolidColor { colour } => {
+                compilation.parsed_colour_count += 1;
+                CompiledVisualSource::SolidColor {
+                    colour: parse_colour(colour).ok_or_else(|| {
+                        Diagnostic::error(
+                            "MVP-PLAN-COLOUR",
+                            Category::Internal,
+                            "validated v2 solid color is invalid",
+                            "",
+                        )
+                    })?,
+                }
+            }
+        };
+        let effects = clip
+            .effects
+            .iter()
+            .map(|effect| compile_v2_effect(effect, &clip.id))
+            .collect::<Result<Vec<_>, _>>()?;
+        layers.push(CompiledLayer {
+            id: clip.id.clone(),
+            start_nanos,
+            start_frame: first_frame_at_or_after(start_nanos, validated.frame_rate)?,
+            end_frame: first_frame_at_or_after(end_nanos, validated.frame_rate)?
+                .min(validated.frame_count),
+            draw_key: DrawKey {
+                layer: clip.layer,
+                start_nanos,
+                id: clip.id.clone(),
+            },
+            source,
+            transform: CompiledTransformTracks {
+                position: compile_v2_track(&clip.transform.position, &clip.id)?,
+                anchor: compile_v2_track(&clip.transform.anchor, &clip.id)?,
+                scale: compile_v2_track(&clip.transform.scale, &clip.id)?,
+                rotation_radians: degrees_track_to_radians(compile_v2_track(
+                    &clip.transform.rotation_degrees,
+                    &clip.id,
+                )?),
+            },
+            opacity: compile_v2_track(&clip.opacity, &clip.id)?,
+            opacity_contributions: Vec::new(),
+            effects,
+        });
+    }
+    let indices: BTreeMap<String, usize> = layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| (layer.id.clone(), index))
+        .collect();
+    compile_v2_transitions(
+        &project.visual.transitions,
+        &indices,
+        &mut layers,
+        &mut compilation,
+    )?;
+    for flash in &project.visual.flashes {
+        layers.push(compile_v2_flash(
+            flash,
+            validated.frame_rate,
+            validated.frame_count,
+        )?);
+    }
+    compilation.parsed_colour_count += project.visual.flashes.len() as u64;
+    Ok(RenderPlan {
+        configured_output: resolved_output_path(validated),
+        canvas: Canvas {
+            width,
+            height,
+            background,
+            preview: options.preview,
+        },
+        duration: validated.duration,
+        frame_rate: validated.frame_rate,
+        frame_count: validated.frame_count,
+        encoder: EncoderSettings {
+            width,
+            height,
+            frame_rate: validated.frame_rate,
+            frame_count: validated.frame_count,
+            duration: validated.duration,
+            quality_crf: project.output.quality.crf(),
+            audio: compile_audio(validated)?,
+        },
+        images,
+        layers,
+        compilation,
+        warnings: validated.warnings.clone(),
+    })
+}
+
+fn compile_v2_track<T: Copy>(
+    track: &crate::project::v2::Track<T>,
+    id: &str,
+) -> Result<Track<T>, Diagnostic> {
+    let mut keyframes = Vec::with_capacity(track.keyframes.len());
+    for keyframe in &track.keyframes {
+        keyframes.push(Keyframe {
+            time: to_nanos(keyframe.time, id)?,
+            value: keyframe.value,
+            interpolation: v2_interpolation(&keyframe.interpolation),
+        });
+    }
+    Ok(Track {
+        base_value: track.base_value,
+        keyframes,
+    })
+}
+
+fn degrees_track_to_radians(mut track: Track<f64>) -> Track<f64> {
+    track.base_value = track.base_value.to_radians();
+    for keyframe in &mut track.keyframes {
+        keyframe.value = keyframe.value.to_radians();
+    }
+    track
+}
+
+fn v2_interpolation(interpolation: &crate::project::v2::Interpolation) -> Interpolation {
+    match interpolation {
+        crate::project::v2::Interpolation::Named(name) => match name {
+            crate::project::v2::InterpolationName::Linear => Interpolation::Linear,
+            crate::project::v2::InterpolationName::Hold => Interpolation::Hold,
+            crate::project::v2::InterpolationName::EaseIn => Interpolation::EaseIn,
+            crate::project::v2::InterpolationName::EaseOut => Interpolation::EaseOut,
+            crate::project::v2::InterpolationName::EaseInOut => Interpolation::EaseInOut,
+        },
+        crate::project::v2::Interpolation::CubicBezier(bezier) => {
+            Interpolation::CubicBezier(crate::animation::CubicBezier {
+                x1: bezier.x1,
+                y1: bezier.y1,
+                x2: bezier.x2,
+                y2: bezier.y2,
+            })
+        }
+    }
+}
+
+fn compile_v2_effect(
+    effect: &crate::project::v2::Effect,
+    id: &str,
+) -> Result<crate::plan::CompiledEffect, Diagnostic> {
+    Ok(match effect {
+        crate::project::v2::Effect::Brightness { amount, .. } => {
+            crate::plan::CompiledEffect::Brightness {
+                amount: compile_v2_track(amount, id)?,
+            }
+        }
+        crate::project::v2::Effect::Contrast { amount, .. } => {
+            crate::plan::CompiledEffect::Contrast {
+                amount: compile_v2_track(amount, id)?,
+            }
+        }
+        crate::project::v2::Effect::Saturation { amount, .. } => {
+            crate::plan::CompiledEffect::Saturation {
+                amount: compile_v2_track(amount, id)?,
+            }
+        }
+        crate::project::v2::Effect::Tint { colour, amount, .. } => {
+            crate::plan::CompiledEffect::Tint {
+                colour: parse_colour(colour).ok_or_else(|| {
+                    Diagnostic::error(
+                        "MVP-PLAN-EFFECT-COLOUR",
+                        Category::Internal,
+                        "validated tint color is invalid",
+                        "",
+                    )
+                })?,
+                amount: compile_v2_track(amount, id)?,
+            }
+        }
+    })
+}
+
+fn compile_v2_transitions(
+    transitions: &[crate::project::v2::Transition],
+    indices: &BTreeMap<String, usize>,
+    layers: &mut [CompiledLayer],
+    compilation: &mut CompilationStats,
+) -> Result<(), Diagnostic> {
+    let mut curves: BTreeMap<usize, Vec<(u128, u128, bool, Interpolation)>> = BTreeMap::new();
+    for transition in transitions {
+        let (id, outgoing, incoming, start, duration, interpolation) = match transition {
+            crate::project::v2::Transition::Crossfade {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+            }
+            | crate::project::v2::Transition::FadeThroughColor {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+                ..
+            }
+            | crate::project::v2::Transition::Slide {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+            }
+            | crate::project::v2::Transition::ZoomCrossfade {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+            } => (id, outgoing, incoming, *start, *duration, interpolation),
+        };
+        let start = to_nanos(start, id)?;
+        let end = start.saturating_add(to_nanos(duration, id)?);
+        let interpolation = v2_interpolation(interpolation);
+        for (clip, incoming) in [(outgoing, false), (incoming, true)] {
+            if let Some(index) = indices.get(clip) {
+                curves
+                    .entry(*index)
+                    .or_default()
+                    .push((start, end, incoming, interpolation));
+                compilation.compiled_transition_association_count += 1;
+            }
+        }
+    }
+    add_transition_tracks(curves, layers);
+    Ok(())
+}
+
+fn add_transition_tracks(
+    curves: BTreeMap<usize, Vec<(u128, u128, bool, Interpolation)>>,
+    layers: &mut [CompiledLayer],
+) {
+    for (index, mut items) in curves {
+        items.sort_by_key(|item| item.0);
+        let mut track = Track::new(if items.first().is_some_and(|item| item.2) {
+            0.0
+        } else {
+            1.0
+        });
+        for (start, end, incoming, easing) in items {
+            let start = start.saturating_sub(layers[index].start_nanos);
+            let end = end.saturating_sub(layers[index].start_nanos);
+            insert_keyframe(
+                &mut track.keyframes,
+                Keyframe {
+                    time: start,
+                    value: if incoming { 0.0 } else { 1.0 },
+                    interpolation: Interpolation::Hold,
+                },
+            );
+            insert_keyframe(
+                &mut track.keyframes,
+                Keyframe {
+                    time: end,
+                    value: if incoming { 1.0 } else { 0.0 },
+                    interpolation: easing,
+                },
+            );
+        }
+        layers[index].opacity_contributions.push(track);
+    }
+}
+
+fn compile_v2_flash(
+    flash: &crate::project::v2::Flash,
+    rate: (u64, u64),
+    frame_count: u64,
+) -> Result<CompiledLayer, Diagnostic> {
+    let v1 = crate::project::Flash {
+        id: flash.id.clone(),
+        start: flash.start,
+        duration: flash.duration,
+        colour: flash.colour.clone(),
+        opacity: flash.opacity,
+        fade_in: flash.fade_in,
+        fade_out: flash.fade_out,
+        layer: flash.layer,
+    };
+    compile_flash(&v1, rate, frame_count)
+}
+
+struct V1Tracks {
+    position: Track<Point>,
+    scale: Track<Point>,
+    crop: Track<Crop>,
+    opacity: Track<f64>,
+}
+
+fn compile_v1_tracks(
+    clip: &crate::project::Clip,
+    animations: &[Animation],
+) -> Result<V1Tracks, Diagnostic> {
+    let mut position = Vec::new();
+    let mut scale = Vec::new();
+    let mut crop = Vec::new();
+    let mut opacity = Vec::new();
+    for animation in animations {
+        match animation.target {
+            AnimationTarget::Position => position.push(typed_curve(
+                animation,
+                &clip.id,
+                from_value(animation.start_value.clone()).ok(),
+                from_value(animation.end_value.clone()).ok(),
+            )?),
+            AnimationTarget::Scale => scale.push(typed_curve(
+                animation,
+                &clip.id,
+                animation.start_value.as_f64(),
+                animation.end_value.as_f64(),
+            )?),
+            AnimationTarget::Opacity => opacity.push(typed_curve(
+                animation,
+                &clip.id,
+                animation.start_value.as_f64(),
+                animation.end_value.as_f64(),
+            )?),
+            AnimationTarget::Crop => crop.push(typed_curve(
+                animation,
+                &clip.id,
+                from_value(animation.start_value.clone()).ok(),
+                from_value(animation.end_value.clone()).ok(),
+            )?),
+        }
+    }
+    let uniform_scale = track_from_curves(1.0, scale);
+    Ok(V1Tracks {
+        position: track_from_curves(clip.position, position),
+        scale: Track {
+            base_value: Point { x: 1.0, y: 1.0 },
+            keyframes: uniform_scale
+                .keyframes
+                .into_iter()
+                .map(|keyframe| Keyframe {
+                    time: keyframe.time,
+                    value: Point {
+                        x: keyframe.value,
+                        y: keyframe.value,
+                    },
+                    interpolation: keyframe.interpolation,
+                })
+                .collect(),
+        },
+        crop: track_from_curves(
+            clip.crop.unwrap_or(Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            }),
+            crop,
+        ),
+        opacity: track_from_curves(clip.opacity, opacity),
+    })
+}
+
+#[derive(Clone)]
+struct TypedCurve<T> {
+    start: u128,
+    end: u128,
+    start_value: T,
+    end_value: T,
+    interpolation: Interpolation,
+}
+
+fn typed_curve<T>(
+    animation: &Animation,
+    clip_id: &str,
+    start_value: Option<T>,
+    end_value: Option<T>,
+) -> Result<TypedCurve<T>, Diagnostic> {
+    let (Some(start_value), Some(end_value)) = (start_value, end_value) else {
+        return Err(Diagnostic::error(
+            "MVP-PLAN-ANIMATION",
+            Category::Internal,
+            format!("validated animation in clip '{clip_id}' is not typed"),
+            "",
+        ));
+    };
+    let start = to_nanos(animation.start, clip_id)?;
+    Ok(TypedCurve {
+        start,
+        end: start.saturating_add(to_nanos(animation.duration, clip_id)?),
+        start_value,
+        end_value,
+        interpolation: interpolation(animation.easing),
+    })
+}
+
+fn track_from_curves<T: Copy>(base_value: T, mut curves: Vec<TypedCurve<T>>) -> Track<T> {
+    curves.sort_by_key(|curve| curve.start);
+    let mut track = Track::new(base_value);
+    for curve in curves {
+        if curve.start == 0 {
+            track.base_value = curve.start_value;
+        } else {
+            insert_keyframe(
+                &mut track.keyframes,
+                Keyframe {
+                    time: curve.start,
+                    value: curve.start_value,
+                    interpolation: Interpolation::Hold,
+                },
+            );
+        }
+        insert_keyframe(
+            &mut track.keyframes,
+            Keyframe {
+                time: curve.end,
+                value: curve.end_value,
+                interpolation: curve.interpolation,
+            },
+        );
+    }
+    track
+}
+
+fn insert_keyframe<T>(keyframes: &mut Vec<Keyframe<T>>, keyframe: Keyframe<T>) {
+    match keyframes.binary_search_by_key(&keyframe.time, |existing| existing.time) {
+        Ok(index) => keyframes[index] = keyframe,
+        Err(index) => keyframes.insert(index, keyframe),
+    }
+}
+
+fn interpolation(easing: Easing) -> Interpolation {
+    match easing {
+        Easing::Linear => Interpolation::Linear,
+        Easing::EaseIn => Interpolation::EaseIn,
+        Easing::EaseOut => Interpolation::EaseOut,
+        Easing::EaseInOut => Interpolation::EaseInOut,
+    }
+}
+
+fn compile_v1_transitions(
+    transitions: &[Transition],
+    clip_indices: &BTreeMap<String, usize>,
+    layers: &mut [CompiledLayer],
+    compilation: &mut CompilationStats,
+) -> Result<(), Diagnostic> {
+    let mut curves: BTreeMap<usize, Vec<(u128, u128, bool, Interpolation)>> = BTreeMap::new();
+    for transition in transitions {
+        let start = to_nanos(transition.start(), transition.id())?;
+        let end = start.saturating_add(to_nanos(transition.duration(), transition.id())?);
+        let easing = match transition {
+            Transition::Crossfade { easing, .. }
+            | Transition::FadeToBackground { easing, .. }
+            | Transition::FadeFromBackground { easing, .. } => interpolation(*easing),
+        };
+        let mut add = |clip: &str, incoming: bool| {
+            if let Some(index) = clip_indices.get(clip) {
+                curves
+                    .entry(*index)
+                    .or_default()
+                    .push((start, end, incoming, easing));
+                compilation.compiled_transition_association_count += 1;
+            }
+        };
+        match transition {
+            Transition::Crossfade {
+                outgoing, incoming, ..
+            } => {
+                add(outgoing, false);
+                add(incoming, true);
+            }
+            Transition::FadeToBackground { clip, .. } => add(clip, false),
+            Transition::FadeFromBackground { clip, .. } => add(clip, true),
+        }
+    }
+    for (index, mut items) in curves {
+        items.sort_by_key(|item| item.0);
+        let base_value = if items.first().is_some_and(|item| item.2) {
+            0.0
+        } else {
+            1.0
+        };
+        let mut track = Track::new(base_value);
+        let layer_start = layers[index].start_nanos;
+        for (start, end, incoming, easing) in items {
+            let start = start.saturating_sub(layer_start);
+            let end = end.saturating_sub(layer_start);
+            insert_keyframe(
+                &mut track.keyframes,
+                Keyframe {
+                    time: start,
+                    value: if incoming { 0.0 } else { 1.0 },
+                    interpolation: Interpolation::Hold,
+                },
+            );
+            insert_keyframe(
+                &mut track.keyframes,
+                Keyframe {
+                    time: end,
+                    value: if incoming { 1.0 } else { 0.0 },
+                    interpolation: easing,
+                },
+            );
+        }
+        layers[index].opacity_contributions.push(track);
+    }
+    Ok(())
+}
+
+fn compile_flash(
+    flash: &crate::project::Flash,
+    rate: (u64, u64),
+    frame_count: u64,
+) -> Result<CompiledLayer, Diagnostic> {
+    let start_nanos = to_nanos(flash.start, &flash.id)?;
+    let duration_nanos = to_nanos(flash.duration, &flash.id)?;
+    let colour = parse_colour(&flash.colour).ok_or_else(|| {
+        Diagnostic::error(
+            "MVP-PLAN-FLASH",
+            Category::Internal,
+            format!("validated flash '{}' has invalid colour", flash.id),
+            "",
+        )
+    })?;
+    let mut opacity = Track::new(0.0);
+    let fade_in = to_nanos(flash.fade_in, &flash.id)?;
+    let fade_out = to_nanos(flash.fade_out, &flash.id)?;
+    let end = duration_nanos;
+    insert_keyframe(
+        &mut opacity.keyframes,
+        Keyframe {
+            time: 0,
+            value: if fade_in == 0 { flash.opacity } else { 0.0 },
+            interpolation: Interpolation::Hold,
+        },
+    );
+    if fade_in > 0 {
+        insert_keyframe(
+            &mut opacity.keyframes,
+            Keyframe {
+                time: fade_in,
+                value: flash.opacity,
+                interpolation: Interpolation::Linear,
+            },
+        );
+    }
+    if fade_out > 0 {
+        insert_keyframe(
+            &mut opacity.keyframes,
+            Keyframe {
+                time: end - fade_out,
+                value: flash.opacity,
+                interpolation: Interpolation::Hold,
+            },
+        );
+    }
+    insert_keyframe(
+        &mut opacity.keyframes,
+        Keyframe {
+            time: end,
+            value: 0.0,
+            interpolation: Interpolation::Linear,
+        },
+    );
+    Ok(CompiledLayer {
+        id: flash.id.clone(),
+        start_nanos,
+        start_frame: first_frame_at_or_after(start_nanos, rate)?,
+        end_frame: first_frame_at_or_after(start_nanos.saturating_add(duration_nanos), rate)?
+            .min(frame_count),
+        draw_key: DrawKey {
+            layer: flash.layer,
+            start_nanos,
+            id: flash.id.clone(),
+        },
+        source: CompiledVisualSource::SolidColor { colour },
+        transform: CompiledTransformTracks {
+            position: Track::new(Point { x: 0.5, y: 0.5 }),
+            anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+            scale: Track::new(Point { x: 1.0, y: 1.0 }),
+            rotation_radians: Track::new(0.0),
+        },
+        opacity,
+        opacity_contributions: Vec::new(),
+        effects: Vec::new(),
     })
 }
 
@@ -225,119 +848,6 @@ fn resolved_output_path(validated: &ValidatedProject) -> std::path::PathBuf {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join(configured)
     }
-}
-
-fn compile_animations(
-    items: &[Animation],
-    clip_id: &str,
-) -> Result<CompiledAnimations, Diagnostic> {
-    let mut result = CompiledAnimations::default();
-    for animation in items {
-        match animation.target {
-            AnimationTarget::Position => result.position.push(curve(
-                animation,
-                clip_id,
-                from_value(animation.start_value.clone()).ok(),
-                from_value(animation.end_value.clone()).ok(),
-            )?),
-            AnimationTarget::Scale => result.scale.push(curve(
-                animation,
-                clip_id,
-                animation.start_value.as_f64(),
-                animation.end_value.as_f64(),
-            )?),
-            AnimationTarget::Opacity => result.opacity.push(curve(
-                animation,
-                clip_id,
-                animation.start_value.as_f64(),
-                animation.end_value.as_f64(),
-            )?),
-            AnimationTarget::Crop => result.crop.push(curve(
-                animation,
-                clip_id,
-                from_value(animation.start_value.clone()).ok(),
-                from_value(animation.end_value.clone()).ok(),
-            )?),
-        }
-    }
-    result.position.sort_by_key(|curve| curve.start_nanos);
-    result.scale.sort_by_key(|curve| curve.start_nanos);
-    result.opacity.sort_by_key(|curve| curve.start_nanos);
-    result.crop.sort_by_key(|curve| curve.start_nanos);
-    Ok(result)
-}
-
-fn curve<T>(
-    animation: &Animation,
-    clip_id: &str,
-    start: Option<T>,
-    end: Option<T>,
-) -> Result<Curve<T>, Diagnostic> {
-    let start_nanos = to_nanos(animation.start, clip_id)?;
-    let duration_nanos = to_nanos(animation.duration, clip_id)?;
-    match (start, end) {
-        (Some(start), Some(end)) => Ok(Curve {
-            start_nanos,
-            end_nanos: start_nanos.saturating_add(duration_nanos),
-            easing: animation.easing,
-            start,
-            end,
-        }),
-        _ => Err(Diagnostic::error(
-            "MVP-PLAN-ANIMATION",
-            Category::Internal,
-            format!("validated animation in clip '{clip_id}' is not typed"),
-            "",
-        )),
-    }
-}
-
-fn transition_curve(transition: &Transition) -> Result<Curve<()>, Diagnostic> {
-    let start_nanos = to_nanos(transition.start(), transition.id())?;
-    Ok(Curve {
-        start_nanos,
-        end_nanos: start_nanos.saturating_add(to_nanos(transition.duration(), transition.id())?),
-        easing: match transition {
-            Transition::Crossfade { easing, .. }
-            | Transition::FadeToBackground { easing, .. }
-            | Transition::FadeFromBackground { easing, .. } => *easing,
-        },
-        start: (),
-        end: (),
-    })
-}
-
-fn compile_flash(
-    flash: &crate::project::Flash,
-    rate: (u64, u64),
-    frame_count: u64,
-) -> Result<CompiledFlash, Diagnostic> {
-    let start_nanos = to_nanos(flash.start, &flash.id)?;
-    let end_nanos = start_nanos.saturating_add(to_nanos(flash.duration, &flash.id)?);
-    let colour = parse_colour(&flash.colour).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-FLASH",
-            Category::Internal,
-            format!("validated flash '{}' has invalid colour", flash.id),
-            "",
-        )
-    })?;
-    Ok(CompiledFlash {
-        start_nanos,
-        end_nanos,
-        start_frame: first_frame_at_or_after(start_nanos, rate)?,
-        end_frame: first_frame_at_or_after(end_nanos, rate)?.min(frame_count),
-        draw_key: DrawKey {
-            layer: flash.layer,
-            start_nanos,
-            id: flash.id.clone(),
-            kind: ItemKind::Flash,
-        },
-        colour,
-        opacity: flash.opacity,
-        fade_in_nanos: to_nanos(flash.fade_in, &flash.id)?,
-        fade_out_nanos: to_nanos(flash.fade_out, &flash.id)?,
-    })
 }
 
 fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, Diagnostic> {
@@ -393,18 +903,6 @@ fn compile_sizing(sizing: &Sizing) -> CompiledSizing {
     }
 }
 
-fn classify(animations: &CompiledAnimations) -> PreparationClass {
-    match (!animations.crop.is_empty(), !animations.scale.is_empty()) {
-        (false, false) if animations.position.is_empty() && animations.opacity.is_empty() => {
-            PreparationClass::StaticBitmap
-        }
-        (false, false) => PreparationClass::PositionOrOpacityOnly,
-        (false, true) => PreparationClass::ScaleAnimated,
-        (true, false) => PreparationClass::CropAnimated,
-        (true, true) => PreparationClass::CropAndScaleAnimated,
-    }
-}
-
 fn to_nanos(value: f64, id: &str) -> Result<u128, Diagnostic> {
     seconds_to_nanos(value).ok_or_else(|| {
         Diagnostic::error(
@@ -447,7 +945,7 @@ mod tests {
     use crate::project::{ValidationOptions, load_and_validate};
 
     #[test]
-    fn compiles_typed_animations_and_schedule_data() {
+    fn compiles_v1_transitions_and_flashes_to_normal_layers() {
         let validated = load_and_validate(
             std::path::Path::new("examples/projects/showcase.json"),
             &ValidationOptions {
@@ -458,10 +956,16 @@ mod tests {
         let plan = compile(&validated, CompileOptions::default()).expect("plan");
         assert_eq!(plan.frame_count, 80);
         assert_eq!(plan.images.len(), 3);
-        assert_eq!(plan.clips[0].animations.position.len(), 1);
-        assert_eq!(plan.clips[1].animations.crop.len(), 1);
-        assert!(!plan.clips[0].transitions.is_empty());
-        assert_eq!(plan.flashes[0].colour, [255, 255, 255, 255]);
+        assert!(
+            plan.layers
+                .iter()
+                .any(|layer| matches!(layer.source, CompiledVisualSource::SolidColor { .. }))
+        );
+        assert!(
+            plan.layers
+                .iter()
+                .any(|layer| !layer.opacity_contributions.is_empty())
+        );
         assert_eq!(plan.compilation.animation_value_parse_count, 6);
         assert_eq!(plan.compilation.compiled_transition_association_count, 4);
     }
@@ -477,134 +981,5 @@ mod tests {
             first_frame_at_or_after(1_000_000_001, (24, 1)).expect("frame"),
             25
         );
-    }
-
-    #[test]
-    fn hidden_clips_are_excluded_before_asset_preparation() {
-        let file = tempfile::NamedTempFile::new().expect("temporary project");
-        let mut project: serde_json::Value = serde_json::from_slice(
-            &std::fs::read("examples/projects/static-image.json").expect("project"),
-        )
-        .expect("project JSON");
-        project["assets"][0]["source"] = serde_json::Value::String(
-            std::fs::canonicalize("examples/assets/red.png")
-                .expect("asset path")
-                .to_string_lossy()
-                .into_owned(),
-        );
-        project["visual"]["clips"][0]["visible"] = serde_json::Value::Bool(false);
-        std::fs::write(
-            file.path(),
-            serde_json::to_vec(&project).expect("project serializes"),
-        )
-        .expect("write project");
-        let validated = load_and_validate(
-            file.path(),
-            &ValidationOptions {
-                check_backend: false,
-            },
-        )
-        .expect("valid hidden clip");
-        let plan = compile(&validated, CompileOptions::default()).expect("plan");
-        assert_eq!(
-            plan.frame_count, 24,
-            "hidden clips still contribute duration"
-        );
-        assert!(plan.clips.is_empty());
-        assert!(plan.images.is_empty());
-    }
-
-    #[test]
-    fn preview_only_changes_canvas_dimensions() {
-        let mut validated = load_and_validate(
-            std::path::Path::new("examples/projects/showcase.json"),
-            &ValidationOptions {
-                check_backend: false,
-            },
-        )
-        .expect("valid project");
-        validated.project.output.width = 1080;
-        validated.project.output.height = 1920;
-        let full = compile(&validated, CompileOptions::default()).expect("full plan");
-        let preview = compile(&validated, CompileOptions { preview: true }).expect("preview plan");
-
-        assert_eq!((full.canvas.width, full.canvas.height), (1080, 1920));
-        assert_eq!((preview.canvas.width, preview.canvas.height), (360, 640));
-        assert_eq!(preview.frame_rate, full.frame_rate);
-        assert_eq!(preview.frame_count, full.frame_count);
-        assert_eq!(preview.duration, full.duration);
-        assert_eq!(preview.clips.len(), full.clips.len());
-        assert_eq!(preview.flashes.len(), full.flashes.len());
-        for (preview_clip, full_clip) in preview.clips.iter().zip(&full.clips) {
-            assert_eq!(preview_clip.start_frame, full_clip.start_frame);
-            assert_eq!(preview_clip.end_frame, full_clip.end_frame);
-            assert_eq!(preview_clip.start_nanos, full_clip.start_nanos);
-            assert_eq!(preview_clip.transitions.len(), full_clip.transitions.len());
-            for (preview_transition, full_transition) in
-                preview_clip.transitions.iter().zip(&full_clip.transitions)
-            {
-                assert_eq!(
-                    preview_transition.curve().start_nanos,
-                    full_transition.curve().start_nanos
-                );
-                assert_eq!(
-                    preview_transition.curve().end_nanos,
-                    full_transition.curve().end_nanos
-                );
-            }
-            let preview_animation_times = [
-                preview_clip
-                    .animations
-                    .position
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-                preview_clip
-                    .animations
-                    .scale
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-                preview_clip
-                    .animations
-                    .opacity
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-                preview_clip
-                    .animations
-                    .crop
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-            ];
-            let full_animation_times = [
-                full_clip
-                    .animations
-                    .position
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-                full_clip
-                    .animations
-                    .scale
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-                full_clip
-                    .animations
-                    .opacity
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-                full_clip
-                    .animations
-                    .crop
-                    .iter()
-                    .map(|curve| (curve.start_nanos, curve.end_nanos))
-                    .collect::<Vec<_>>(),
-            ];
-            assert_eq!(preview_animation_times, full_animation_times);
-        }
     }
 }

@@ -200,11 +200,9 @@ fn real_render_has_h264_video_aac_audio_and_monotonic_events() {
     );
     assert_eq!(report["result"]["performance"]["schedule_event_count"], 8);
     assert_eq!(report["result"]["performance"]["rendered_frame_count"], 80);
-    assert!(
-        report["result"]["performance"]["bitmap_cache_misses"]
-            .as_u64()
-            .expect("cache misses")
-            > 0
+    assert_eq!(
+        report["result"]["performance"]["decoded_image_count"], 3,
+        "the CPU backend decoded each referenced source once"
     );
     let timings = report["result"]["timings"].as_object().expect("timings");
     assert!(timings.contains_key("project_load_and_validation_ms"));
@@ -300,11 +298,11 @@ fn supplied_projects_match_decoded_rgba_golden_hashes() {
         ),
         (
             "hard-cuts",
-            "9e5c8ac6690da827a1df6c693a91208e4216591c701aec3250ae2add59df20ce",
+            "3e62612c126c6bfbfdb0039b34dc862668260334fb574b6ac19606c71994d789",
         ),
         (
             "showcase",
-            "121e830d20142bc3f6441b930a31cd63c29f028ffc3e94d82a8b7c7eab438237",
+            "c807e6cc0a68b6d869bb0b809169827e1dc57483ee38d9a31004d366ab8102a7",
         ),
     ] {
         let project = workspace
@@ -355,7 +353,7 @@ fn showcase_preview_matches_the_normalized_decoded_frame_fixture() {
     );
     assert_eq!(
         decoded_rgba_frame_hash(&output),
-        "121e830d20142bc3f6441b930a31cd63c29f028ffc3e94d82a8b7c7eab438237"
+        "c807e6cc0a68b6d869bb0b809169827e1dc57483ee38d9a31004d366ab8102a7"
     );
 }
 
@@ -510,7 +508,7 @@ fn invisible_clip_does_not_affect_decoded_frame_or_preparation() {
         String::from_utf8_lossy(&result.stderr)
     );
     let result: Value = serde_json::from_slice(&result.stdout).expect("render JSON");
-    assert_eq!(result["performance"]["static_prepared_clip_count"], 1);
+    assert_eq!(result["performance"]["decoded_image_count"], 1);
     assert_eq!(result["performance"]["bitmap_cache_misses"], 0);
     let pixels = decode_first_frame(&output);
     assert_eq!(

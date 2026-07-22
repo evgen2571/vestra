@@ -490,6 +490,9 @@ impl WgpuBackend {
             &layer_parameters,
         );
         let mut stats = decoded.stats().clone();
+        stats.source_texture_count = source_textures.len();
+        stats.source_texture_bytes = uploaded_texture_bytes;
+        stats.sampler_count = 0;
         stats.uploaded_texture_count = source_textures.len();
         stats.uploaded_texture_bytes = uploaded_texture_bytes;
         stats.readback_buffer_count = 1;
@@ -1367,6 +1370,9 @@ mod tests {
         assert_eq!(initial.shader_module_count, 1);
         assert_eq!(initial.pipeline_count, 1);
         assert_eq!(initial.uploaded_texture_count, plan.images.len());
+        assert_eq!(initial.source_texture_count, plan.images.len());
+        assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);
+        assert_eq!(initial.sampler_count, 0);
         assert_eq!(initial.output_texture_count, 1);
         assert_eq!(initial.accumulation_buffer_count, 1);
         assert_eq!(initial.readback_buffer_count, 1);
@@ -1382,6 +1388,14 @@ mod tests {
         assert_eq!(
             final_stats.uploaded_texture_count,
             initial.uploaded_texture_count
+        );
+        assert_eq!(
+            final_stats.source_texture_count,
+            initial.source_texture_count
+        );
+        assert_eq!(
+            final_stats.source_texture_bytes,
+            initial.source_texture_bytes
         );
         assert_eq!(final_stats.shader_module_count, initial.shader_module_count);
         assert_eq!(final_stats.pipeline_count, initial.pipeline_count);

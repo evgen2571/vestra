@@ -237,7 +237,7 @@ pub fn render(
                     &layer.source,
                     crate::plan::EvaluatedSource::Image { .. }
                 ));
-                (5 + source_track_count + layer.effects.len()) as u64
+                (5 + source_track_count + layer.evaluated_effect_count) as u64
             })
             .sum::<u64>();
         track_evaluation += evaluation_started.elapsed();

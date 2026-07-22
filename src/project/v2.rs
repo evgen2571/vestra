@@ -188,31 +188,6 @@ pub enum Transition {
         duration: f64,
         interpolation: Interpolation,
     },
-    FadeThroughColor {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        colour: String,
-        interpolation: Interpolation,
-    },
-    Slide {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-    },
-    ZoomCrossfade {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

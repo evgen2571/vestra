@@ -78,7 +78,8 @@ the sampled source extent is in pixels.
 
 Effects run in declared order. The initial CPU effects are brightness, contrast,
 saturation, and tint. V1 flashes compile to `SolidColor` sources with opacity
-tracks. V1 and v2 crossfades compile to opacity contributors. The backend reads
+tracks. V1 and v2 crossfades compile to opacity contributors; additional
+transition presets remain deliberately unsupported. The backend reads
 only `EvaluatedFrame` layers, never transition or flash project types.
 
 Decoded images are reused. Static crops use a byte-budgeted LRU cache; animated

@@ -199,30 +199,6 @@ fn validate_v2_transitions(visual: &crate::project::v2::Visual, errors: &mut Vec
                 start,
                 duration,
                 ..
-            }
-            | crate::project::v2::Transition::FadeThroughColor {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                ..
-            }
-            | crate::project::v2::Transition::Slide {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                ..
-            }
-            | crate::project::v2::Transition::ZoomCrossfade {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                ..
             } => (id, outgoing, incoming, *start, *duration),
         };
         if id.trim().is_empty() || !ids.insert(id) {

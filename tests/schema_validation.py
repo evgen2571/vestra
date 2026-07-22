@@ -80,3 +80,7 @@ for pointer in [("name",), ("metadata",), ("audio",), ("output", "duration"), ("
         target = target[key]
     target[pointer[-1]] = None
     assert errors(null_field), f"explicit null at {pointer} must not validate"
+
+null_audio_trim = copy.deepcopy(project)
+null_audio_trim["audio"] = {"asset": "audio", "timeline_start": 0, "trim_start": 0, "trim_end": None, "volume": 1}
+assert errors(null_audio_trim), "explicit null audio trim_end must not validate"

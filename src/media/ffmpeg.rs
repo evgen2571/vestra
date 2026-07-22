@@ -198,3 +198,30 @@ fn audio_filter(audio: &AudioSettings, project_duration: f64) -> String {
 fn seconds(value: f64) -> String {
     format!("{value:.9}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_failure_retains_encoder_stderr() {
+        let mut child = Command::new("sh")
+            .args(["-c", "printf 'encoder rejected frame\\n' >&2; exit 7"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("start failing encoder double");
+        let stdin = child.stdin.take().expect("stdin");
+        let stderr = child.stderr.take().expect("stderr");
+        let mut encoder = FfmpegEncoder {
+            child,
+            stdin: Some(stdin),
+            stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+        };
+        encoder.child.wait().expect("failing encoder exits");
+        let diagnostic = encoder.abort_after_write_failure("cannot stream frame".to_owned());
+        assert!(diagnostic.contains("cannot stream frame"));
+        assert!(diagnostic.contains("encoder rejected frame"));
+    }
+}

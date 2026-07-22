@@ -474,6 +474,7 @@ impl RenderBackend for WgpuBackend {
         // WGPU's uncaptured-error handler.
         self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.device.push_error_scope(wgpu::ErrorFilter::Internal);
+        let command_encode_started = Instant::now();
         // Parameter updates and dispatch order are derived solely from the
         // evaluated frame. Each submission observes its matching uniform data.
         let clear = LayerParameters {
@@ -596,10 +597,14 @@ impl RenderBackend for WgpuBackend {
                 depth_or_array_layers: 1,
             },
         );
+        self.timings.gpu_frame_command_encode += command_encode_started.elapsed();
+        let submission_started = Instant::now();
         self.queue.submit(Some(encoder.finish()));
+        self.timings.gpu_submission += submission_started.elapsed();
         self.stats.command_submission_count += frame.layers.len() as u64 + 2;
         let slice = self.readback.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
+        let readback_wait_started = Instant::now();
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
         });
@@ -618,12 +623,14 @@ impl RenderBackend for WgpuBackend {
                 result.map_err(|error| diagnostic("WGPU-READBACK", "buffer_map", error))
             });
         let frame_error_result = finish_error_scopes(&self.device, "WGPU-COMMAND-SUBMISSION");
+        self.timings.gpu_readback_wait += readback_wait_started.elapsed();
         readback_result?;
         if let Err(error) = frame_error_result {
             self.readback.unmap();
             return Err(error);
         }
         let mapped = slice.get_mapped_range();
+        let row_repack_started = Instant::now();
         for (row, target) in self
             .frame_bytes
             .chunks_exact_mut(self.row_bytes as usize)
@@ -634,6 +641,7 @@ impl RenderBackend for WgpuBackend {
         }
         drop(mapped);
         self.readback.unmap();
+        self.timings.row_repack += row_repack_started.elapsed();
         destination.as_mut().copy_from_slice(&self.frame_bytes);
         Ok(())
     }

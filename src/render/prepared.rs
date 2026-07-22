@@ -64,6 +64,10 @@ pub struct PreparationTimings {
     pub decode: Duration,
     pub gpu_initialization: Duration,
     pub texture_upload: Duration,
+    pub gpu_frame_command_encode: Duration,
+    pub gpu_submission: Duration,
+    pub gpu_readback_wait: Duration,
+    pub row_repack: Duration,
 }
 
 /// Decoded source bytes shared by all render backends for one render.

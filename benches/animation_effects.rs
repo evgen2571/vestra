@@ -87,7 +87,7 @@ fn main() {
     let median_index = MEASURED_RUNS / 2;
     let summary = &samples[0].summary;
     println!(
-        "animation-effects 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms gpu_init_ms={:?} texture_upload_ms={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "animation-effects 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms gpu_init_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend.as_str(),
         wall_samples[median_index],
         wall_samples[0],
@@ -100,6 +100,10 @@ fn main() {
         summary.timings.encoder_write_ms,
         summary.timings.gpu_initialization_ms,
         summary.timings.texture_upload_ms,
+        summary.timings.gpu_frame_command_encode_ms,
+        summary.timings.gpu_submission_ms,
+        summary.timings.gpu_readback_wait_ms,
+        summary.timings.row_repack_ms,
         summary.performance.cache_peak_bytes,
         summary.performance.peak_cache_entries,
         summary.performance.peak_decoded_bytes,

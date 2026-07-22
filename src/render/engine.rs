@@ -56,6 +56,14 @@ pub struct RenderTimings {
     pub gpu_initialization_ms: Option<u128>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub texture_upload_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_frame_command_encode_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_submission_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_readback_wait_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_repack_ms: Option<u128>,
     pub track_evaluation_ms: u128,
     pub frame_render_ms: u128,
     pub encoder_write_ms: u128,
@@ -236,6 +244,14 @@ where
             .then(|| milliseconds(backend_timings.gpu_initialization)),
         texture_upload_ms: (backend.kind() == RenderBackendKind::Wgpu)
             .then(|| milliseconds(backend_timings.texture_upload)),
+        gpu_frame_command_encode_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_frame_command_encode)),
+        gpu_submission_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_submission)),
+        gpu_readback_wait_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.gpu_readback_wait)),
+        row_repack_ms: (backend.kind() == RenderBackendKind::Wgpu)
+            .then(|| milliseconds(backend_timings.row_repack)),
         ..RenderTimings::default()
     };
     emit(RenderEvent {
@@ -409,6 +425,14 @@ where
     performance.accumulation_buffer_count = preparation.accumulation_buffer_count;
     performance.bind_group_count = preparation.bind_group_count;
     performance.command_submission_count = preparation.command_submission_count;
+    if backend.kind() == RenderBackendKind::Wgpu {
+        let backend_timings = backend.timings();
+        timings.gpu_frame_command_encode_ms =
+            Some(milliseconds(backend_timings.gpu_frame_command_encode));
+        timings.gpu_submission_ms = Some(milliseconds(backend_timings.gpu_submission));
+        timings.gpu_readback_wait_ms = Some(milliseconds(backend_timings.gpu_readback_wait));
+        timings.row_repack_ms = Some(milliseconds(backend_timings.row_repack));
+    }
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,

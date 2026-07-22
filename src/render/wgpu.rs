@@ -75,6 +75,146 @@ pub struct FrameDifference {
     pub pixels_exceeding_tolerance: usize,
 }
 
+/// Concrete WGPU capabilities used by this renderer for one compiled plan.
+/// Keeping this calculation independent of adapter discovery makes limit
+/// failures deterministic and ensures no GPU resource is created first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GpuRequirements {
+    max_texture_dimension_2d: u32,
+    row_bytes: u32,
+    padded_row_bytes: u32,
+    copy_bytes: u64,
+    uniform_bytes: u32,
+}
+
+impl GpuRequirements {
+    fn from_plan(plan: &RenderPlan, decoded: &DecodedAssets) -> Result<Self, Diagnostic> {
+        let row_bytes = plan.canvas.width.checked_mul(4).ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-READBACK-SIZE",
+                Category::Backend,
+                "output row size overflow",
+                "",
+            )
+        })?;
+        let padded_row_bytes = checked_align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-READBACK-SIZE",
+                    Category::Backend,
+                    "padded output row size overflow",
+                    "",
+                )
+            })?;
+        let copy_bytes = u64::from(padded_row_bytes)
+            .checked_mul(u64::from(plan.canvas.height))
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-READBACK-SIZE",
+                    Category::Backend,
+                    "readback buffer size overflow",
+                    "",
+                )
+            })?;
+        let max_source_dimension = (0..plan.images.len())
+            .flat_map(|asset| [decoded.image(asset).width(), decoded.image(asset).height()])
+            .max()
+            .unwrap_or(1);
+        Ok(Self {
+            max_texture_dimension_2d: plan
+                .canvas
+                .width
+                .max(plan.canvas.height)
+                .max(max_source_dimension),
+            row_bytes,
+            padded_row_bytes,
+            copy_bytes,
+            uniform_bytes: std::mem::size_of::<LayerParameters>() as u32,
+        })
+    }
+
+    fn validate(self, limits: &wgpu::Limits, plan: &RenderPlan) -> Result<(), Diagnostic> {
+        if self.max_texture_dimension_2d > limits.max_texture_dimension_2d {
+            return Err(limit_error(
+                "WGPU-TEXTURE-LIMIT",
+                u64::from(self.max_texture_dimension_2d),
+                u64::from(limits.max_texture_dimension_2d),
+                "output or source texture",
+            ));
+        }
+        if u64::from(self.row_bytes) > limits.max_buffer_size {
+            return Err(limit_error(
+                "WGPU-BUFFER-LIMIT",
+                u64::from(self.row_bytes),
+                limits.max_buffer_size,
+                "output row",
+            ));
+        }
+        if self.copy_bytes > limits.max_buffer_size {
+            return Err(limit_error(
+                "WGPU-BUFFER-LIMIT",
+                self.copy_bytes,
+                limits.max_buffer_size,
+                "output/readback buffer",
+            ));
+        }
+        if self.copy_bytes > u64::from(limits.max_storage_buffer_binding_size) {
+            return Err(limit_error(
+                "WGPU-STORAGE-LIMIT",
+                self.copy_bytes,
+                u64::from(limits.max_storage_buffer_binding_size),
+                "accumulation storage binding",
+            ));
+        }
+        if self.uniform_bytes > limits.max_uniform_buffer_binding_size {
+            return Err(limit_error(
+                "WGPU-UNIFORM-LIMIT",
+                u64::from(self.uniform_bytes),
+                u64::from(limits.max_uniform_buffer_binding_size),
+                "layer parameters",
+            ));
+        }
+        if limits.max_bind_groups < 1
+            || limits.max_bindings_per_bind_group < 3
+            || limits.max_sampled_textures_per_shader_stage < 1
+            || limits.max_storage_buffers_per_shader_stage < 1
+            || limits.max_uniform_buffers_per_shader_stage < 1
+        {
+            return Err(Diagnostic::error(
+                "WGPU-BINDING-LIMIT",
+                Category::Backend,
+                "WGPU adapter cannot provide the renderer's one bind group with texture, storage, and uniform bindings",
+                "",
+            ));
+        }
+        if limits.max_compute_workgroup_size_x < 8
+            || limits.max_compute_workgroup_size_y < 8
+            || limits.max_compute_invocations_per_workgroup < 64
+            || plan.canvas.width.div_ceil(8) > limits.max_compute_workgroups_per_dimension
+            || plan.canvas.height.div_ceil(8) > limits.max_compute_workgroups_per_dimension
+        {
+            return Err(Diagnostic::error(
+                "WGPU-DISPATCH-LIMIT",
+                Category::Backend,
+                "output dispatch exceeds adapter compute workgroup limits",
+                "",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn limit_error(code: &str, required: u64, supported: u64, subject: &str) -> Diagnostic {
+    Diagnostic::error(
+        code,
+        Category::Backend,
+        format!(
+            "WGPU limit validation for {subject}: required {required}, adapter supports {supported}"
+        ),
+        "",
+    )
+}
+
 #[must_use]
 pub fn compare_rgba(reference: &[u8], candidate: &[u8], tolerance: u8) -> FrameDifference {
     assert_eq!(
@@ -115,6 +255,7 @@ pub fn compare_rgba(reference: &[u8], candidate: &[u8], tolerance: u8) -> FrameD
 impl WgpuBackend {
     pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Result<Self, Diagnostic> {
         let started = Instant::now();
+        let requirements = GpuRequirements::from_plan(plan, &decoded)?;
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: requested_backends(),
             ..wgpu::InstanceDescriptor::default()
@@ -145,72 +286,7 @@ impl WgpuBackend {
             device_id: info.device,
         };
         let limits = adapter.limits();
-        if plan.canvas.width > limits.max_texture_dimension_2d
-            || plan.canvas.height > limits.max_texture_dimension_2d
-        {
-            return Err(Diagnostic::error(
-                "WGPU-OUTPUT-DIMENSIONS",
-                Category::Backend,
-                format!(
-                    "output {}x{} exceeds adapter maximum 2D texture dimension {}",
-                    plan.canvas.width, plan.canvas.height, limits.max_texture_dimension_2d
-                ),
-                "",
-            ));
-        }
-        let requested_row_bytes = plan.canvas.width.checked_mul(4).ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-READBACK-SIZE",
-                Category::Backend,
-                "output row size overflow",
-                "",
-            )
-        })?;
-        let requested_copy_size = u64::from(align_up(
-            requested_row_bytes,
-            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
-        ))
-        .checked_mul(u64::from(plan.canvas.height))
-        .ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-READBACK-SIZE",
-                Category::Backend,
-                "readback buffer size overflow",
-                "",
-            )
-        })?;
-        if requested_copy_size > limits.max_buffer_size {
-            return Err(Diagnostic::error(
-                "WGPU-BUFFER-LIMIT",
-                Category::Backend,
-                format!(
-                    "output accumulation requires {requested_copy_size} bytes but adapter limit is {}",
-                    limits.max_buffer_size
-                ),
-                "",
-            ));
-        }
-        if requested_copy_size > u64::from(limits.max_storage_buffer_binding_size) {
-            return Err(Diagnostic::error(
-                "WGPU-STORAGE-LIMIT",
-                Category::Backend,
-                format!(
-                    "output accumulation requires {requested_copy_size} bytes but storage binding limit is {}",
-                    limits.max_storage_buffer_binding_size
-                ),
-                "",
-            ));
-        }
-        if plan.canvas.width.div_ceil(8) > limits.max_compute_workgroups_per_dimension
-            || plan.canvas.height.div_ceil(8) > limits.max_compute_workgroups_per_dimension
-        {
-            return Err(Diagnostic::error(
-                "WGPU-DISPATCH-LIMIT",
-                Category::Backend,
-                "output dispatch exceeds adapter workgroup dimension limit",
-                "",
-            ));
-        }
+        requirements.validate(&limits, plan)?;
         let device_request_started = Instant::now();
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -227,17 +303,11 @@ impl WgpuBackend {
         ))
         .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
         let device_request = device_request_started.elapsed();
+        requirements.validate(&device.limits(), plan)?;
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         device.push_error_scope(wgpu::ErrorFilter::Internal);
         let pipeline_creation_started = Instant::now();
-        let row_bytes = plan.canvas.width.checked_mul(4).ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-READBACK-SIZE",
-                Category::Backend,
-                "output row size overflow",
-                "",
-            )
-        })?;
+        let row_bytes = requirements.row_bytes;
         let layer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("video-editor layer compute shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/layer.wgsl").into()),
@@ -295,17 +365,8 @@ impl WgpuBackend {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
-        let padded_row_bytes = align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let readback_size = u64::from(padded_row_bytes)
-            .checked_mul(u64::from(plan.canvas.height))
-            .ok_or_else(|| {
-                Diagnostic::error(
-                    "WGPU-READBACK-SIZE",
-                    Category::Backend,
-                    "readback buffer size overflow",
-                    "",
-                )
-            })?;
+        let padded_row_bytes = requirements.padded_row_bytes;
+        let readback_size = requirements.copy_bytes;
         let output = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("video-editor output"),
             size: wgpu::Extent3d {
@@ -721,8 +782,14 @@ fn finish_error_scopes(device: &wgpu::Device, code: &str) -> Result<(), Diagnost
     Ok(())
 }
 
+fn checked_align_up(value: u32, alignment: u32) -> Option<u32> {
+    value
+        .checked_add(alignment - 1)
+        .map(|value| value / alignment * alignment)
+}
+
 fn align_up(value: u32, alignment: u32) -> u32 {
-    value.div_ceil(alignment) * alignment
+    value.div_ceil(alignment).saturating_mul(alignment)
 }
 
 fn requested_backends() -> wgpu::Backends {
@@ -949,6 +1016,30 @@ mod tests {
         assert_eq!(difference.pixels_exceeding_tolerance, 1);
         assert_eq!(difference.differing_channel_percentage, 50.0);
         assert_eq!(difference.mean_absolute_channel_error, 0.75);
+    }
+
+    #[test]
+    fn project_requirements_reject_unsupported_limits_before_wgpu_creation() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("canonical fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let requirements = super::GpuRequirements::from_plan(&plan, &decoded)
+            .expect("requirements calculate with checked arithmetic");
+        let mut limits = wgpu::Limits::default();
+        limits.max_texture_dimension_2d = requirements.max_texture_dimension_2d - 1;
+        let error = requirements
+            .validate(&limits, &plan)
+            .expect_err("undersized texture limit is rejected before device creation");
+        assert_eq!(error.code, "WGPU-TEXTURE-LIMIT");
+        assert!(error.message.contains("required"));
+        assert!(error.message.contains("adapter supports"));
     }
 
     #[test]

@@ -59,8 +59,10 @@ VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1
 VIDEO_EDITOR_REQUIRE_WGPU=1
 ```
 
-The backend validates texture, buffer, storage-binding, and dispatch limits
-before creating render resources. Initialization, limit, and readback failures
+The backend derives and validates output and source texture dimensions, padded
+row/copy sizes, buffer and storage-binding sizes, uniform size, bind-group
+bindings, and compute workgroup limits before creating render resources. It
+then checks the limits returned by the requested device again. Initialization, limit, and readback failures
 are returned as structured diagnostics. Per-frame WGPU validation and internal
 errors are captured with device error scopes, so they trigger the normal encoder
 abort and output cleanup path. In environments without an adapter,
@@ -95,3 +97,10 @@ readback wait are not GPU execution timestamps.
 `gpu_initialization_ms` is inclusive; its adapter request, device request, and
 pipeline creation sub-stages are reported separately. Texture upload and all
 per-frame stages are likewise CPU-observed durations, not hardware timestamps.
+
+Each layer currently has its own queue submission. The uniform parameter buffer
+is overwritten for every layer, so coalescing these dispatches would make all
+dispatches observe the final parameters unless the renderer first introduces a
+persisted, correctly aligned parameter ring. The current bounded strategy
+preserves exact layer ordering and CPU rounding parity; the submission count is
+reported so that trade-off remains visible.

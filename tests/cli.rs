@@ -94,6 +94,24 @@ fn canonical_project_validates_and_rejects_a_version_field() {
         String::from_utf8_lossy(&invalid.stderr)
     );
     assert!(diagnostic.contains("unknown field"));
+
+    let mut null_project: Value = serde_json::from_slice(
+        &std::fs::read("examples/projects/animation-effects.json").expect("read canonical project"),
+    )
+    .expect("canonical JSON");
+    null_project["visual"]["clips"][0]["transform"] = Value::Null;
+    let null_path = workspace.path().join("explicit-null.json");
+    std::fs::write(
+        &null_path,
+        serde_json::to_vec(&null_project).expect("serialize project"),
+    )
+    .expect("write project");
+    let null_result = command()
+        .args(["validate", null_path.to_str().expect("UTF-8 path")])
+        .output()
+        .expect("null validation runs");
+    assert_eq!(null_result.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&null_result.stderr).contains("MVP-PROJECT-SHAPE"));
 }
 
 #[test]

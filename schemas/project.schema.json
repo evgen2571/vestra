@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "properties": {
     "name": { "type": "string" },
-    "metadata": {},
+    "metadata": { "not": { "type": "null" } },
     "output": { "$ref": "#/$defs/output" },
     "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" } },
     "audio": { "$ref": "#/$defs/audio" },

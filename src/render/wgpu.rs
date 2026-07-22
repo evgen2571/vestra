@@ -1035,8 +1035,10 @@ mod tests {
         let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
         let requirements = super::GpuRequirements::from_plan(&plan, &decoded)
             .expect("requirements calculate with checked arithmetic");
-        let mut limits = wgpu::Limits::default();
-        limits.max_texture_dimension_2d = requirements.max_texture_dimension_2d - 1;
+        let limits = wgpu::Limits {
+            max_texture_dimension_2d: requirements.max_texture_dimension_2d - 1,
+            ..wgpu::Limits::default()
+        };
         let error = requirements
             .validate(&limits, &plan)
             .expect_err("undersized texture limit is rejected before device creation");

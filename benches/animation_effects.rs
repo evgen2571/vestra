@@ -7,8 +7,11 @@ use std::{
 
 use video_editor::{
     application::{RenderRequest, render_project},
-    render::RenderBackendPreference,
+    render::{RenderBackendPreference, RenderSummary},
 };
+
+const WARMUP_RUNS: usize = 5;
+const MEASURED_RUNS: usize = 5;
 
 fn main() {
     let backend_preference = match std::env::var("VIDEO_EDITOR_BENCH_BACKEND").as_deref() {
@@ -18,7 +21,6 @@ fn main() {
         Ok(value) => panic!("VIDEO_EDITOR_BENCH_BACKEND must be cpu, wgpu, or auto; got {value}"),
     };
     let output = tempfile::tempdir().expect("temporary benchmark directory");
-    let output_path = output.path().join("animation-effects.mp4");
     let project_path = output.path().join("animation-effects-720x1280.json");
     let mut project: serde_json::Value = serde_json::from_slice(
         &fs::read("examples/projects/animation-effects.json").expect("read benchmark fixture"),
@@ -47,9 +49,71 @@ fn main() {
         serde_json::to_vec(&project).expect("serialize benchmark project"),
     )
     .expect("write benchmark project");
+    for run in 0..WARMUP_RUNS {
+        let _ = render_once(
+            &project_path,
+            output.path().join(format!("warmup-{run}.mp4")),
+            backend_preference,
+        );
+    }
+    let samples: Vec<_> = (0..MEASURED_RUNS)
+        .map(|run| {
+            render_once(
+                &project_path,
+                output.path().join(format!("sample-{run}.mp4")),
+                backend_preference,
+            )
+        })
+        .collect();
+    let selected_backend = samples[0].summary.render_backend;
+    assert!(
+        samples
+            .iter()
+            .all(|sample| sample.summary.render_backend == selected_backend),
+        "benchmark runs selected different render backends"
+    );
+    let mut wall_samples: Vec<_> = samples.iter().map(|sample| sample.wall_ms).collect();
+    let mut render_samples: Vec<_> = samples
+        .iter()
+        .map(|sample| sample.summary.timings.total_ms)
+        .collect();
+    wall_samples.sort_unstable();
+    render_samples.sort_unstable();
+    let median_index = MEASURED_RUNS / 2;
+    let summary = &samples[0].summary;
+    println!(
+        "animation-effects 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms gpu_init_ms={:?} texture_upload_ms={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        selected_backend.as_str(),
+        wall_samples[median_index],
+        wall_samples[0],
+        wall_samples[MEASURED_RUNS - 1],
+        render_samples[median_index],
+        render_samples[0],
+        render_samples[MEASURED_RUNS - 1],
+        summary.timings.track_evaluation_ms,
+        summary.timings.frame_render_ms,
+        summary.timings.encoder_write_ms,
+        summary.timings.gpu_initialization_ms,
+        summary.timings.texture_upload_ms,
+        summary.performance.cache_peak_bytes,
+        summary.performance.peak_cache_entries,
+        summary.performance.peak_decoded_bytes,
+    );
+}
+
+struct Sample {
+    summary: RenderSummary,
+    wall_ms: u128,
+}
+
+fn render_once(
+    project_path: &Path,
+    output_path: std::path::PathBuf,
+    backend_preference: RenderBackendPreference,
+) -> Sample {
     let started = Instant::now();
     let result = render_project(
-        &project_path,
+        project_path,
         RenderRequest {
             output_override: Some(output_path),
             overwrite: false,
@@ -63,19 +127,8 @@ fn main() {
         Ok(result) => result,
         Err(_) => panic!("benchmark project renders"),
     };
-    println!(
-        "animation-effects 720x1280: requested_backend={:?} selected_backend={} total={}ms track_evaluation={}ms frame_render={}ms encode_write={}ms gpu_init_ms={:?} texture_upload_ms={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes wall={}ms",
-        backend_preference,
-        summary.render_backend.as_str(),
-        summary.timings.total_ms,
-        summary.timings.track_evaluation_ms,
-        summary.timings.frame_render_ms,
-        summary.timings.encoder_write_ms,
-        summary.timings.gpu_initialization_ms,
-        summary.timings.texture_upload_ms,
-        summary.performance.cache_peak_bytes,
-        summary.performance.peak_cache_entries,
-        summary.performance.peak_decoded_bytes,
-        started.elapsed().as_millis(),
-    );
+    Sample {
+        summary,
+        wall_ms: started.elapsed().as_millis(),
+    }
 }

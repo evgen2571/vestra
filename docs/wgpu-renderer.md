@@ -81,5 +81,7 @@ VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench --bench animation_effects -- --nocapt
 VIDEO_EDITOR_BENCH_BACKEND=wgpu cargo bench --bench animation_effects -- --nocapture
 ```
 
-Benchmark timing fields are CPU-observed wall-clock values. Command encoding,
-queue submission, and readback wait are not GPU execution timestamps.
+The harness performs five warmups followed by five measured renders and prints
+median and range values for total render and wall-clock time. Timing fields are
+CPU-observed wall-clock values. Command encoding, queue submission, and
+readback wait are not GPU execution timestamps.

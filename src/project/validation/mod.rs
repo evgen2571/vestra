@@ -1581,4 +1581,19 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].code, "MVP-COLOR-POINTS");
     }
+
+    #[test]
+    fn effect_local_track_rejects_keyframes_after_its_active_interval() {
+        let mut errors = Vec::new();
+        validate_track(
+            &track(0.0, 1.0),
+            0.28,
+            "/visual/clips/0/effects/0/amount",
+            16,
+            &mut errors,
+            finite,
+        );
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].code, "MVP-KEYFRAME-TIME");
+    }
 }

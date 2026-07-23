@@ -1,1 +1,90 @@
-{"name":"Chromatic aberration","output":{"path":"../output/chromatic-aberration.mp4","width":320,"height":180,"frame_rate":30,"background":"#101018","quality":"preview","audio":false,"duration_mode":"explicit","duration":0.2},"assets":[{"id":"red","type":"image","source":"../assets/red.png"}],"visual":{"clips":[{"id":"clip","source":{"type":"image","asset":"red"},"start":0,"duration":0.2,"layer":0,"sizing":{"mode":"cover"},"transform":{"position":{"base_value":{"x":0.5,"y":0.5}},"anchor":{"base_value":{"x":0.5,"y":0.5}},"scale":{"base_value":{"x":1,"y":1}}},"opacity":{"base_value":1},"effects":[{"id":"rgb","type":"chromatic_aberration","amount":{"base_value":2},"angle_degrees":{"base_value":0}}]}]}}
+{
+  "name": "Chromatic aberration",
+  "output": {
+    "path": "../output/chromatic-aberration.mp4",
+    "width": 320,
+    "height": 180,
+    "frame_rate": 30,
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 5
+  },
+  "assets": [
+    {
+      "id": "red",
+      "type": "image",
+      "source": "../assets/red.png"
+    }
+  ],
+  "visual": {
+    "clips": [
+      {
+        "id": "clip",
+        "source": {
+          "type": "image",
+          "asset": "red"
+        },
+        "start": 0,
+        "duration": 5,
+        "layer": 0,
+        "sizing": {
+          "mode": "cover"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
+        "effects": [
+          {
+            "id": "rgb",
+            "type": "chromatic_aberration",
+            "amount": {
+              "base_value": 0,
+              "keyframes": [
+                {
+                  "time": 1,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 2.25,
+                  "value": 2,
+                  "interpolation": "ease_in_out"
+                },
+                {
+                  "time": 3.5,
+                  "value": 0,
+                  "interpolation": "ease_in_out"
+                }
+              ]
+            },
+            "angle_degrees": {
+              "base_value": 0
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

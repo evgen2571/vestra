@@ -1,1 +1,147 @@
-{"name":"Color adjustment","output":{"path":"../output/color-adjust.mp4","width":320,"height":180,"frame_rate":30,"background":"#101018","quality":"preview","audio":false,"duration_mode":"explicit","duration":0.2},"assets":[{"id":"red","type":"image","source":"../assets/red.png"}],"visual":{"clips":[{"id":"clip","source":{"type":"image","asset":"red"},"start":0,"duration":0.2,"layer":0,"sizing":{"mode":"cover"},"transform":{"position":{"base_value":{"x":0.5,"y":0.5}},"anchor":{"base_value":{"x":0.5,"y":0.5}},"scale":{"base_value":{"x":1,"y":1}}},"opacity":{"base_value":1},"effects":[{"id":"grade","type":"color_adjust","exposure":{"base_value":0.25},"gamma":{"base_value":1.05},"black_point":{"base_value":0.02},"white_point":{"base_value":0.95}}]}]}}
+{
+  "name": "Color adjustment",
+  "output": {
+    "path": "../output/color-adjust.mp4",
+    "width": 320,
+    "height": 180,
+    "frame_rate": 30,
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 5
+  },
+  "assets": [
+    {
+      "id": "red",
+      "type": "image",
+      "source": "../assets/red.png"
+    }
+  ],
+  "visual": {
+    "clips": [
+      {
+        "id": "clip",
+        "source": {
+          "type": "image",
+          "asset": "red"
+        },
+        "start": 0,
+        "duration": 5,
+        "layer": 0,
+        "sizing": {
+          "mode": "cover"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
+        "effects": [
+          {
+            "id": "grade",
+            "type": "color_adjust",
+            "exposure": {
+              "base_value": 0,
+              "keyframes": [
+                {
+                  "time": 1,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 2.25,
+                  "value": 0.25,
+                  "interpolation": "ease_in_out"
+                },
+                {
+                  "time": 3.5,
+                  "value": 0,
+                  "interpolation": "ease_in_out"
+                }
+              ]
+            },
+            "gamma": {
+              "base_value": 1,
+              "keyframes": [
+                {
+                  "time": 1,
+                  "value": 1,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 2.25,
+                  "value": 1.05,
+                  "interpolation": "ease_in_out"
+                },
+                {
+                  "time": 3.5,
+                  "value": 1,
+                  "interpolation": "ease_in_out"
+                }
+              ]
+            },
+            "black_point": {
+              "base_value": 0,
+              "keyframes": [
+                {
+                  "time": 1,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 2.25,
+                  "value": 0.02,
+                  "interpolation": "ease_in_out"
+                },
+                {
+                  "time": 3.5,
+                  "value": 0,
+                  "interpolation": "ease_in_out"
+                }
+              ]
+            },
+            "white_point": {
+              "base_value": 1,
+              "keyframes": [
+                {
+                  "time": 1,
+                  "value": 1,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 2.25,
+                  "value": 0.95,
+                  "interpolation": "ease_in_out"
+                },
+                {
+                  "time": 3.5,
+                  "value": 1,
+                  "interpolation": "ease_in_out"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

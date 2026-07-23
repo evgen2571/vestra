@@ -150,7 +150,7 @@ fn canonical_example_renders_an_h264_frame_sequence() {
         String::from_utf8_lossy(&result.stderr)
     );
     let report: Value = serde_json::from_slice(&result.stdout).expect("render JSON");
-    assert_eq!(report["total_frames"], 60);
+    assert_eq!(report["total_frames"], 144);
     assert_eq!(report["width"], 320);
     assert_eq!(report["height"], 180);
     assert_eq!(report["render_backend"], "cpu");
@@ -455,9 +455,9 @@ fn canonical_render_has_decoded_crossfade_and_flash_regressions() {
         String::from_utf8_lossy(&result.stderr)
     );
 
-    let before_crossfade = decoded_frame(&output, 35, 320, 180);
-    let midpoint_crossfade = decoded_frame(&output, 42, 320, 180);
-    let after_crossfade = decoded_frame(&output, 48, 320, 180);
+    let before_crossfade = decoded_frame(&output, 68, 320, 180);
+    let midpoint_crossfade = decoded_frame(&output, 84, 320, 180);
+    let after_crossfade = decoded_frame(&output, 100, 320, 180);
     assert!(
         before_crossfade[0] > midpoint_crossfade[0]
             && midpoint_crossfade[0] > after_crossfade[0]

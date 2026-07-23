@@ -23,6 +23,25 @@ assert not errors(project), "canonical example must validate"
 for example in sorted((ROOT / "examples").rglob("*.json")):
     instance = json.loads(example.read_text())
     assert not errors(instance), f"example must validate: {example.relative_to(ROOT)}"
+    output = instance["output"]
+    frame_rate = output["frame_rate"]
+    if isinstance(frame_rate, str):
+        numerator, denominator = map(int, frame_rate.split("/"))
+        frame_rate = numerator / denominator
+    duration = output.get("duration")
+    if duration is None:
+        duration = max(
+            (clip["start"] + clip["duration"] for clip in instance["visual"]["clips"]),
+            default=0,
+        )
+    if example.parent.name in {"effects", "transitions", "presets", "compositing"}:
+        assert frame_rate * duration >= 90, f"preview is too short: {example.relative_to(ROOT)}"
+    for transition in instance["visual"].get("transitions", []):
+        clips = {clip["id"]: clip for clip in instance["visual"]["clips"]}
+        outgoing = clips[transition["outgoing"]]
+        incoming = clips[transition["incoming"]]
+        assert transition["start"] - outgoing["start"] >= 1, f"no outgoing lead-in: {example.relative_to(ROOT)}"
+        assert incoming["start"] + incoming["duration"] - (transition["start"] + transition["duration"]) >= 1, f"no incoming settle: {example.relative_to(ROOT)}"
 
 solid_colour = copy.deepcopy(project)
 solid_colour["assets"] = []

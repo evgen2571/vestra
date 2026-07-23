@@ -95,16 +95,20 @@ the result into the frame. `visual.post_effects` runs after all layers, also in
 declared order. A two-surface ping-pong buffer avoids an allocation for every
 effect pass.
 
-Available effects are `gaussian_blur`, `directional_blur`, `glow`,
+Available effects are `gaussian_blur`, `directional_blur`, `zoom_blur`, `glow`,
 `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`,
 `camera_shake`, and `motion_blur`, in addition to the original colour effects.
-Blur radii are bounded at 32 pixels. Glow extracts highlights before blur and
-adds the tinted result. Sharpen is an unsharp-mask approximation. Colour
+Blur radii are bounded at 32 pixels. `zoom_blur` samples along scaled rays from
+its normalized anchor, with `inward`, `outward`, or centered exposure and 2 to
+32 samples. Glow extracts highlights into premultiplied alpha, blurs the
+tinted signal, and composites it without discarding glow alpha outside the
+source bounds. Sharpen is an unsharp-mask approximation. Colour
 adjustment applies exposure, black and white levels, then gamma, preserving
 alpha. Vignette uses aspect-correct canvas distance.
 
-Camera shake is a continuous seeded timeline signal. It runs after authored
-transforms and before rasterization. Motion blur samples neighbouring timeline
+Camera shake is a continuous seeded timeline signal. `start` and optional
+`duration` create a half-open clip-local active interval; outside it the shake
+is identity and its attack and decay use effect-local time. Motion blur samples neighbouring timeline
 transforms, derives translation direction in screen space, and caps the
 directional blur. v1 does not derive blur from rotation or scale velocity.
 
@@ -123,7 +127,10 @@ preset contributions, transition contributions, and camera shake. Position and
 rotation contributions add to authored values; scale contributions multiply.
 Generated transform contributions are identity outside their active interval,
 so they never replace authored keyframes.
-Available values are `slow_drift`, `zoom_punch`, `impact`, `heavy_impact`, and
+Every preset accepts clip-local `start` and `duration`. Omitted durations use
+the remaining clip for `slow_drift`, 0.35 seconds for `zoom_punch`, 0.28 for
+`impact`, 0.4 for `heavy_impact`, and 0.8 for `focus_reveal`, capped by the
+remaining clip. Available values are `slow_drift`, `zoom_punch`, `impact`, `heavy_impact`, and
 `focus_reveal`; every preset has an intensity in `0..=2`, and impact presets
 need a stable `seed`. User effects run after generated preset effects. See
 [`effects-ready-v1.json`](../../examples/projects/effects-ready-v1.json) for a
@@ -149,5 +156,7 @@ Focused fixtures live under [`examples/effects`](../../examples/effects),
 [`examples/transitions`](../../examples/transitions), and
 [`examples/presets`](../../examples/presets), and
 [`examples/compositing`](../../examples/compositing). The schema check
-discovers every JSON example. Each is a short CPU-renderable project using the
-bundled assets.
+discovers every JSON example and rejects focused previews shorter than 90
+frames. Render the complete CPU preview set with
+`./scripts/render-effect-examples.sh`; use `--skip-existing` only when a
+previous render is intentional. Outputs are written under `examples/output`.

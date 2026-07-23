@@ -1,5 +1,4 @@
 {
-
   "name": "Animation and effects",
   "output": {
     "path": "../output/animation-effects.mp4",
@@ -12,56 +11,167 @@
     "duration_mode": "automatic"
   },
   "assets": [
-    { "id": "red", "type": "image", "source": "../assets/red.png" },
-    { "id": "blue", "type": "image", "source": "../assets/blue.png" }
+    {
+      "id": "red",
+      "type": "image",
+      "source": "../assets/red.png"
+    },
+    {
+      "id": "blue",
+      "type": "image",
+      "source": "../assets/blue.png"
+    }
   ],
   "visual": {
     "clips": [
       {
         "id": "red-pan",
-        "source": { "type": "image", "asset": "red" },
-        "start": 0,
-        "duration": 2,
-        "layer": 0,
-        "sizing": { "mode": "fit" },
-        "transform": {
-          "position": { "base_value": { "x": 0.4, "y": 0.5 }, "keyframes": [
-            { "time": 0.6, "value": { "x": 0.45, "y": 0.5 }, "interpolation": "ease_out" },
-            { "time": 2, "value": { "x": 0.55, "y": 0.45 }, "interpolation": { "type": "cubic_bezier", "x1": 0.42, "y1": 0, "x2": 0.58, "y2": 1 } }
-          ] },
-          "anchor": { "base_value": { "x": 0.5, "y": 0.5 } },
-          "scale": { "base_value": { "x": 1, "y": 1 }, "keyframes": [
-            { "time": 2, "value": { "x": 1.1, "y": 1.1 }, "interpolation": "linear" }
-          ] },
-          "rotation_degrees": { "base_value": 0, "keyframes": [
-            { "time": 2, "value": 8, "interpolation": "ease_in_out" }
-          ] }
+        "source": {
+          "type": "image",
+          "asset": "red"
         },
-        "opacity": { "base_value": 1 },
+        "start": 0,
+        "duration": 4,
+        "layer": 0,
+        "sizing": {
+          "mode": "fit"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.4,
+              "y": 0.5
+            },
+            "keyframes": [
+              {
+                "time": 0.6,
+                "value": {
+                  "x": 0.45,
+                  "y": 0.5
+                },
+                "interpolation": "ease_out"
+              },
+              {
+                "time": 2,
+                "value": {
+                  "x": 0.55,
+                  "y": 0.45
+                },
+                "interpolation": {
+                  "type": "cubic_bezier",
+                  "x1": 0.42,
+                  "y1": 0,
+                  "x2": 0.58,
+                  "y2": 1
+                }
+              }
+            ]
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            },
+            "keyframes": [
+              {
+                "time": 2,
+                "value": {
+                  "x": 1.1,
+                  "y": 1.1
+                },
+                "interpolation": "linear"
+              }
+            ]
+          },
+          "rotation_degrees": {
+            "base_value": 0,
+            "keyframes": [
+              {
+                "time": 2,
+                "value": 8,
+                "interpolation": "ease_in_out"
+              }
+            ]
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
         "effects": [
-          { "id": "warm", "type": "saturation", "amount": { "base_value": 1.1 } }
+          {
+            "id": "warm",
+            "type": "saturation",
+            "amount": {
+              "base_value": 1.1
+            }
+          }
         ]
       },
       {
         "id": "blue-in",
-        "source": { "type": "image", "asset": "blue" },
-        "start": 1.5,
-        "duration": 1,
-        "layer": 0,
-        "sizing": { "mode": "cover" },
-        "transform": {
-          "position": { "base_value": { "x": 0.5, "y": 0.5 } },
-          "anchor": { "base_value": { "x": 0.5, "y": 0.5 } },
-          "scale": { "base_value": { "x": 1, "y": 1 } }
+        "source": {
+          "type": "image",
+          "asset": "blue"
         },
-        "opacity": { "base_value": 1 }
+        "start": 3,
+        "duration": 3,
+        "layer": 0,
+        "sizing": {
+          "mode": "cover"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        }
       }
     ],
     "transitions": [
-      { "type": "crossfade", "id": "red-blue", "outgoing": "red-pan", "incoming": "blue-in", "start": 1.5, "duration": 0.5, "interpolation": "linear" }
+      {
+        "type": "crossfade",
+        "id": "red-blue",
+        "outgoing": "red-pan",
+        "incoming": "blue-in",
+        "start": 3,
+        "duration": 1,
+        "interpolation": "linear"
+      }
     ],
     "flashes": [
-      { "id": "white", "start": 1.1, "duration": 0.15, "colour": "#FFFFFF", "opacity": 0.25, "fade_in": 0.03, "fade_out": 0.05, "layer": 2 }
+      {
+        "id": "white",
+        "start": 1.1,
+        "duration": 0.15,
+        "colour": "#FFFFFF",
+        "opacity": 0.25,
+        "fade_in": 0.03,
+        "fade_out": 0.05,
+        "layer": 2
+      }
     ]
   }
 }

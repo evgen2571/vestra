@@ -1487,7 +1487,7 @@ mod tests {
         )
         .expect("valid project");
         let plan = compile(&validated, CompileOptions::default()).expect("plan");
-        assert_eq!(plan.frame_count, 60);
+        assert_eq!(plan.frame_count, 144);
         assert_eq!(plan.images.len(), 2);
         assert!(
             plan.layers

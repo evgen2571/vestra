@@ -1,1 +1,84 @@
-{"name":"Camera shake","output":{"path":"../output/camera-shake.mp4","width":320,"height":180,"frame_rate":30,"background":"#101018","quality":"preview","audio":false,"duration_mode":"explicit","duration":0.2},"assets":[{"id":"red","type":"image","source":"../assets/red.png"}],"visual":{"clips":[{"id":"clip","source":{"type":"image","asset":"red"},"start":0,"duration":0.2,"layer":0,"sizing":{"mode":"cover"},"transform":{"position":{"base_value":{"x":0.5,"y":0.5}},"anchor":{"base_value":{"x":0.5,"y":0.5}},"scale":{"base_value":{"x":1,"y":1}}},"opacity":{"base_value":1},"effects":[{"id":"shake","type":"camera_shake","position_amount":{"base_value":0.015},"rotation_degrees":{"base_value":1},"scale_amount":{"base_value":0.01},"frequency":{"base_value":14},"seed":7,"attack":0.03,"decay":0.2}]}]}}
+{
+  "name": "Camera shake",
+  "output": {
+    "path": "../output/camera-shake.mp4",
+    "width": 320,
+    "height": 180,
+    "frame_rate": 30,
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 5
+  },
+  "assets": [
+    {
+      "id": "red",
+      "type": "image",
+      "source": "../assets/red.png"
+    }
+  ],
+  "visual": {
+    "clips": [
+      {
+        "id": "clip",
+        "source": {
+          "type": "image",
+          "asset": "red"
+        },
+        "start": 0,
+        "duration": 5,
+        "layer": 0,
+        "sizing": {
+          "mode": "cover"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
+        "effects": [
+          {
+            "id": "shake",
+            "type": "camera_shake",
+            "position_amount": {
+              "base_value": 0.015
+            },
+            "rotation_degrees": {
+              "base_value": 1
+            },
+            "scale_amount": {
+              "base_value": 0.01
+            },
+            "frequency": {
+              "base_value": 14
+            },
+            "seed": 7,
+            "attack": 0.03,
+            "decay": 0.2,
+            "start": 1.5,
+            "duration": 0.4
+          }
+        ]
+      }
+    ]
+  }
+}

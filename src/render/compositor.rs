@@ -514,7 +514,7 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
         EvaluatedEffect::ChromaticAberration {
             amount,
             angle_degrees,
-        } => chromatic(source, target, *amount, *angle_degrees),
+        } => crate::render::chromatic::apply(source, target, *amount, *angle_degrees),
         EvaluatedEffect::Vignette {
             amount,
             radius,
@@ -672,19 +672,6 @@ fn zoom_blur(
             y,
             Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]),
         );
-    }
-}
-fn chromatic(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
-    if amount <= 0.0 {
-        target.copy_from(source, 0, 0).expect("same dimensions");
-        return;
-    }
-    let r = angle.to_radians();
-    let (dx, dy) = (r.cos() * amount, r.sin() * amount);
-    for (x, y, p) in source.enumerate_pixels() {
-        let left = sample_edge(source, f64::from(x) - dx + 0.5, f64::from(y) - dy + 0.5);
-        let right = sample_edge(source, f64::from(x) + dx + 0.5, f64::from(y) + dy + 0.5);
-        target.put_pixel(x, y, Rgba([left[0], p[1], right[2], p[3]]));
     }
 }
 #[cfg(test)]
@@ -964,7 +951,7 @@ mod tests {
     fn chromatic_zero_amount_is_an_exact_noop() {
         let source = RgbaImage::from_pixel(2, 2, Rgba([17, 83, 201, 129]));
         let mut target = RgbaImage::new(2, 2);
-        chromatic(&source, &mut target, 0.0, 0.0);
+        crate::render::chromatic::apply(&source, &mut target, 0.0, 0.0);
         assert_eq!(source, target);
     }
 

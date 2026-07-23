@@ -3,6 +3,7 @@
 mod backend;
 mod blend;
 mod cache;
+pub(crate) mod chromatic;
 pub(crate) mod colour_adjust;
 mod compositor;
 mod effects;

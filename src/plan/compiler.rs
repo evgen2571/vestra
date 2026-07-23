@@ -18,6 +18,7 @@ use crate::{
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
 };
 
+mod flashes;
 mod presets;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -187,7 +188,7 @@ fn compile_canonical(
         &mut compilation,
     )?;
     for flash in &project.visual.flashes {
-        layers.push(compile_flash_overlay(
+        layers.push(flashes::compile(
             flash,
             validated.frame_rate,
             validated.frame_count,
@@ -1177,6 +1178,8 @@ fn add_transition_tracks(
     }
 }
 
+/// Test-only reference implementation for the extracted flash compiler.
+#[cfg(test)]
 fn compile_flash_overlay(
     flash: &crate::project::Flash,
     rate: (u64, u64),

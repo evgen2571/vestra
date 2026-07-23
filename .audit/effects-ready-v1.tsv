@@ -19,3 +19,4 @@ ts	phase	decision	why	evidence	result
 2026-07-23T17:28:00Z	refactor	moved vertical vignette sampling out of compositor coordination	aspect-aware image algorithms should be independently testable and reusable	src/render/vignette.rs	vignette golden test and strict clippy pass
 2026-07-23T17:32:00Z	refactor	moved color adjustment out of compositor coordination	levels and gamma are a cohesive per-pixel finishing algorithm	src/render/colour_adjust.rs	compiled test target and strict clippy pass
 2026-07-23T17:36:00Z	refactor	moved chromatic aberration out of compositor coordination	channel-offset sampling is independently testable CPU effect logic	src/render/chromatic.rs	no-op regression test and strict clippy pass
+2026-07-23T17:40:00Z	refactor	isolated flash-overlay layer compilation	flash envelopes are compiled into regular layers independently of general clip coordination	src/plan/compiler/flashes.rs	compiler tests and strict clippy pass

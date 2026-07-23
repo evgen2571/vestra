@@ -159,6 +159,109 @@ fn validate_transitions(visual: &crate::project::Visual, errors: &mut Vec<Diagno
                 duration,
                 ..
             } => (id, outgoing, incoming, *start, *duration),
+            crate::project::Transition::ZoomCrossfade {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                outgoing_zoom,
+                incoming_start_zoom,
+                ..
+            } => {
+                if !outgoing_zoom.is_finite()
+                    || !incoming_start_zoom.is_finite()
+                    || *outgoing_zoom <= 0.0
+                    || *incoming_start_zoom <= 0.0
+                {
+                    errors.push(Diagnostic::error(
+                        "MVP-TRANSITION-PARAMETERS",
+                        Category::Semantic,
+                        "zoom crossfade zoom values must be finite and positive",
+                        path.clone(),
+                    ));
+                }
+                (id, outgoing, incoming, *start, *duration)
+            }
+            crate::project::Transition::FlashCut {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                colour,
+                intensity,
+                ..
+            } => {
+                if parse_colour(colour).is_none()
+                    || !intensity.is_finite()
+                    || *intensity < 0.0
+                    || *intensity > 1.0
+                {
+                    errors.push(Diagnostic::error(
+                        "MVP-TRANSITION-PARAMETERS",
+                        Category::Semantic,
+                        "flash cut colour or intensity is invalid",
+                        path.clone(),
+                    ));
+                }
+                (id, outgoing, incoming, *start, *duration)
+            }
+            crate::project::Transition::DirectionalPush {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                angle_degrees,
+                distance,
+                blur_radius,
+                ..
+            } => {
+                if !angle_degrees.is_finite()
+                    || !distance.is_finite()
+                    || *distance < 0.0
+                    || !blur_radius.is_finite()
+                    || *blur_radius < 0.0
+                    || *blur_radius > 32.0
+                {
+                    errors.push(Diagnostic::error(
+                        "MVP-TRANSITION-PARAMETERS",
+                        Category::Semantic,
+                        "directional push parameters are invalid",
+                        path.clone(),
+                    ));
+                }
+                (id, outgoing, incoming, *start, *duration)
+            }
+            crate::project::Transition::ZoomBlur {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                outgoing_zoom,
+                incoming_start_zoom,
+                blur_radius,
+                ..
+            } => {
+                if !outgoing_zoom.is_finite()
+                    || !incoming_start_zoom.is_finite()
+                    || *outgoing_zoom <= 0.0
+                    || *incoming_start_zoom <= 0.0
+                    || !blur_radius.is_finite()
+                    || *blur_radius < 0.0
+                    || *blur_radius > 32.0
+                {
+                    errors.push(Diagnostic::error(
+                        "MVP-TRANSITION-PARAMETERS",
+                        Category::Semantic,
+                        "zoom blur parameters are invalid",
+                        path.clone(),
+                    ));
+                }
+                (id, outgoing, incoming, *start, *duration)
+            }
         };
         if id.trim().is_empty() || !ids.insert(id) {
             errors.push(Diagnostic::error(

@@ -30,6 +30,8 @@ pub struct PreparationStats {
     pub saturation_effect_count: usize,
     pub tint_effect_count: usize,
     pub local_effect_count: usize,
+    /// Preset-generated effects, included in `local_effect_count`.
+    pub generated_local_effect_count: usize,
     pub global_effect_count: usize,
     pub advanced_effect_count: usize,
     pub generated_transform_contribution_count: usize,

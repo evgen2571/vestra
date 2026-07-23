@@ -38,6 +38,8 @@ pub struct CompilationStats {
     pub(crate) saturation_effect_count: usize,
     pub(crate) tint_effect_count: usize,
     pub(crate) local_effect_count: usize,
+    /// Effects synthesized from presets, included in `local_effect_count`.
+    pub(crate) generated_local_effect_count: usize,
     pub(crate) global_effect_count: usize,
     pub(crate) advanced_effect_count: usize,
     pub(crate) generated_transform_contribution_count: usize,

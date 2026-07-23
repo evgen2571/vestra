@@ -87,7 +87,6 @@ fn compile_canonical(
             .iter()
             .filter(|clip| !clip.visible)
             .count(),
-        keyframe_count: keyframe_count(project),
         ..CompilationStats::default()
     };
     for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
@@ -165,6 +164,7 @@ fn compile_canonical(
                 layers.last_mut().expect("layer was inserted"),
                 preset,
                 clip.duration,
+                &mut compilation,
             )?;
         }
     }
@@ -233,6 +233,7 @@ fn apply_preset(
     layer: &mut CompiledLayer,
     preset: &crate::project::Preset,
     duration: f64,
+    compilation: &mut CompilationStats,
 ) -> Result<(), Diagnostic> {
     let timing = preset.timing();
     let start = to_nanos(timing.start, &layer.id)?;
@@ -399,6 +400,7 @@ fn apply_preset(
     }
     // Presets establish the base look. Authored effects run afterwards and can
     // deliberately refine it, matching the project-format documentation.
+    compilation.generated_local_effect_count += generated.len();
     layer.effects.splice(
         0..0,
         generated
@@ -1313,11 +1315,30 @@ fn record_compilation_workload(
     for layer in layers {
         compilation.local_effect_count += layer.effects.len();
         compilation.generated_transform_contribution_count += layer.transform_contributions.len();
+        compilation.keyframe_count += track_keyframe_count(&layer.opacity)
+            + layer
+                .opacity_contributions
+                .iter()
+                .map(track_keyframe_count)
+                .sum::<u64>()
+            + track_keyframe_count(&layer.transform.position)
+            + track_keyframe_count(&layer.transform.anchor)
+            + track_keyframe_count(&layer.transform.scale)
+            + track_keyframe_count(&layer.transform.rotation_radians)
+            + layer
+                .transform_contributions
+                .iter()
+                .map(transform_contribution_keyframe_count)
+                .sum::<u64>();
         match &layer.source {
-            CompiledVisualSource::Image { .. } => compilation.image_source_count += 1,
+            CompiledVisualSource::Image { crop, .. } => {
+                compilation.image_source_count += 1;
+                compilation.keyframe_count += track_keyframe_count(crop);
+            }
             CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
         }
         for effect in &layer.effects {
+            compilation.keyframe_count += compiled_effect_keyframe_count(&effect.effect);
             compilation.effect_pass_count += effect_passes(&effect.effect);
             match &effect.effect {
                 crate::plan::CompiledEffect::Brightness { .. } => {
@@ -1346,6 +1367,10 @@ fn record_compilation_workload(
         }
     }
     compilation.global_effect_count = post_effects.len();
+    compilation.keyframe_count += post_effects
+        .iter()
+        .map(|effect| compiled_effect_keyframe_count(&effect.effect))
+        .sum::<u64>();
     compilation.advanced_effect_count += post_effects
         .iter()
         .filter(|effect| {
@@ -1375,37 +1400,90 @@ fn effect_passes(effect: &crate::plan::CompiledEffect) -> usize {
     }
 }
 
-fn keyframe_count(project: &crate::project::Project) -> u64 {
-    project
-        .visual
-        .clips
-        .iter()
-        .map(|clip| {
-            clip.transform.as_ref().map_or(0, |transform| {
-                track_keyframe_count(&transform.position)
-                    + track_keyframe_count(&transform.anchor)
-                    + track_keyframe_count(&transform.scale)
-                    + track_keyframe_count(&transform.rotation_degrees)
-            }) + track_keyframe_count(&clip.opacity)
-                + clip.crop.as_ref().map_or(0, track_keyframe_count)
-                + clip
-                    .effects
-                    .iter()
-                    .map(|effect| match effect {
-                        crate::project::Effect::Brightness { amount, .. }
-                        | crate::project::Effect::Contrast { amount, .. }
-                        | crate::project::Effect::Saturation { amount, .. }
-                        | crate::project::Effect::Tint { amount, .. } => {
-                            track_keyframe_count(amount)
-                        }
-                        _ => 0,
-                    })
-                    .sum::<u64>()
-        })
-        .sum()
+fn transform_contribution_keyframe_count(contribution: &TransformContribution) -> u64 {
+    track_keyframe_count(&contribution.position_offset)
+        + track_keyframe_count(&contribution.scale_multiplier)
+        + track_keyframe_count(&contribution.rotation_radians_offset)
 }
 
-fn track_keyframe_count<T>(track: &crate::project::Track<T>) -> u64 {
+fn compiled_effect_keyframe_count(effect: &crate::plan::CompiledEffect) -> u64 {
+    match effect {
+        crate::plan::CompiledEffect::Brightness { amount }
+        | crate::plan::CompiledEffect::Contrast { amount }
+        | crate::plan::CompiledEffect::Saturation { amount }
+        | crate::plan::CompiledEffect::Tint { amount, .. }
+        | crate::plan::CompiledEffect::GaussianBlur { radius: amount }
+        | crate::plan::CompiledEffect::ZoomBlur { radius: amount, .. } => {
+            track_keyframe_count(amount)
+        }
+        crate::plan::CompiledEffect::Sharpen { amount, radius } => {
+            track_keyframe_count(amount) + track_keyframe_count(radius)
+        }
+        crate::plan::CompiledEffect::DirectionalBlur {
+            radius,
+            angle_degrees,
+        } => track_keyframe_count(radius) + track_keyframe_count(angle_degrees),
+        crate::plan::CompiledEffect::ChromaticAberration {
+            amount,
+            angle_degrees,
+        } => track_keyframe_count(amount) + track_keyframe_count(angle_degrees),
+        crate::plan::CompiledEffect::Glow {
+            threshold,
+            radius,
+            intensity,
+            ..
+        } => {
+            track_keyframe_count(threshold)
+                + track_keyframe_count(radius)
+                + track_keyframe_count(intensity)
+        }
+        crate::plan::CompiledEffect::Vignette {
+            amount,
+            radius,
+            softness,
+            ..
+        } => {
+            track_keyframe_count(amount)
+                + track_keyframe_count(radius)
+                + track_keyframe_count(softness)
+        }
+        crate::plan::CompiledEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => {
+            track_keyframe_count(exposure)
+                + track_keyframe_count(gamma)
+                + track_keyframe_count(black_point)
+                + track_keyframe_count(white_point)
+        }
+        crate::plan::CompiledEffect::CameraShake {
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            ..
+        } => {
+            track_keyframe_count(position_amount)
+                + track_keyframe_count(rotation_degrees)
+                + track_keyframe_count(scale_amount)
+                + track_keyframe_count(frequency)
+        }
+        crate::plan::CompiledEffect::MotionBlur {
+            intensity,
+            shutter_angle,
+            max_radius,
+            ..
+        } => {
+            track_keyframe_count(intensity)
+                + track_keyframe_count(shutter_angle)
+                + track_keyframe_count(max_radius)
+        }
+    }
+}
+
+fn track_keyframe_count<T>(track: &Track<T>) -> u64 {
     track.keyframes.len() as u64
 }
 
@@ -1499,7 +1577,9 @@ mod tests {
                 .iter()
                 .any(|layer| !layer.opacity_contributions.is_empty())
         );
-        assert_eq!(plan.compilation.keyframe_count, 4);
+        // Includes authored tracks plus transition and flash tracks generated by
+        // compilation, which are all evaluated while rendering this plan.
+        assert_eq!(plan.compilation.keyframe_count, 12);
         assert_eq!(plan.compilation.compiled_transition_association_count, 2);
     }
 
@@ -1637,7 +1717,9 @@ mod tests {
             intensity: 1.0,
             seed: 7,
         };
-        apply_preset(&mut layer, &preset, 4.0).expect("preset compiles");
+        let mut compilation = CompilationStats::default();
+        apply_preset(&mut layer, &preset, 4.0, &mut compilation).expect("preset compiles");
+        assert_eq!(compilation.generated_local_effect_count, 3);
         assert!(
             layer
                 .transform_contributions

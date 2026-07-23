@@ -21,22 +21,30 @@ fn main() {
         Ok(value) => panic!("VIDEO_EDITOR_BENCH_BACKEND must be cpu, wgpu, or auto; got {value}"),
     };
     let output = tempfile::tempdir().expect("temporary benchmark directory");
-    let project_path = output.path().join("animation-effects-720x1280.json");
-    let mut project: serde_json::Value = serde_json::from_slice(
-        &fs::read("examples/projects/animation-effects.json").expect("read benchmark fixture"),
-    )
-    .expect("parse benchmark fixture");
+    let scenario =
+        std::env::var("VIDEO_EDITOR_BENCH_SCENARIO").unwrap_or_else(|_| "basic_colour".to_owned());
+    let fixture = scenario_fixture(&scenario);
+    let project_path = output.path().join(format!("{scenario}-720x1280.json"));
+    let mut project: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture).expect("read benchmark fixture"))
+            .expect("parse benchmark fixture");
     project["output"]["width"] = 720.into();
     project["output"]["height"] = 1280.into();
-    project["visual"]["clips"][0]["effects"] = serde_json::json!([
-        { "id": "brightness", "type": "brightness", "amount": { "base_value": 0.05 } },
-        { "id": "contrast", "type": "contrast", "amount": { "base_value": 1.1 } },
-        { "id": "saturation", "type": "saturation", "amount": { "base_value": 1.1 } },
-        { "id": "tint", "type": "tint", "colour": "#2040ff", "amount": { "base_value": 0.15 } }
-    ]);
+    if scenario == "basic_colour" {
+        project["visual"]["clips"][0]["effects"] = serde_json::json!([
+            { "id": "brightness", "type": "brightness", "amount": { "base_value": 0.05 } },
+            { "id": "contrast", "type": "contrast", "amount": { "base_value": 1.1 } },
+            { "id": "saturation", "type": "saturation", "amount": { "base_value": 1.1 } },
+            { "id": "tint", "type": "tint", "colour": "#2040ff", "amount": { "base_value": 0.15 } }
+        ]);
+    }
+    if scenario == "gaussian_large" {
+        project["visual"]["clips"][0]["effects"][0]["radius"]["base_value"] = 16.into();
+    }
+    let fixture_parent = fixture.parent().expect("fixture parent");
     for asset in project["assets"].as_array_mut().expect("fixture assets") {
         let source = asset["source"].as_str().expect("fixture asset source");
-        asset["source"] = Path::new("examples/projects")
+        asset["source"] = fixture_parent
             .join(source)
             .canonicalize()
             .expect("canonical benchmark asset")
@@ -162,7 +170,7 @@ fn main() {
         );
     }
     println!(
-        "animation-effects 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "{scenario} 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend.as_str(),
         wall_samples[median_index],
         wall_samples[0],
@@ -188,6 +196,24 @@ fn main() {
         summary.performance.peak_cache_entries,
         summary.performance.peak_decoded_bytes,
     );
+}
+
+fn scenario_fixture(scenario: &str) -> &'static Path {
+    match scenario {
+        "baseline" | "basic_colour" => Path::new("examples/projects/animation-effects.json"),
+        "gaussian_small" | "gaussian_large" => Path::new("examples/effects/gaussian-blur.json"),
+        "glow" => Path::new("examples/effects/glow.json"),
+        "sharpen" => Path::new("examples/effects/sharpen.json"),
+        "directional_blur" => Path::new("examples/effects/directional-blur.json"),
+        "motion_blur" => Path::new("examples/effects/motion-blur.json"),
+        "blend_modes" => Path::new("examples/compositing/blend-modes.json"),
+        "global_post" => Path::new("examples/compositing/global-post-effects.json"),
+        "impact" => Path::new("examples/presets/impact.json"),
+        "heavy_impact" => Path::new("examples/presets/heavy-impact.json"),
+        "transitions" => Path::new("examples/transitions/zoom-blur.json"),
+        "combined" => Path::new("examples/projects/effects-ready-v1.json"),
+        _ => panic!("unknown VIDEO_EDITOR_BENCH_SCENARIO: {scenario}"),
+    }
 }
 
 fn median(values: impl Iterator<Item = u128>) -> u128 {

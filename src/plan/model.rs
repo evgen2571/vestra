@@ -64,6 +64,7 @@ pub struct ImageAsset {
 pub struct CompiledLayer {
     pub(crate) id: String,
     pub(crate) start_nanos: u128,
+    pub(crate) duration_nanos: u128,
     pub(crate) start_frame: u64,
     pub(crate) end_frame: u64,
     pub(crate) draw_key: DrawKey,

@@ -264,8 +264,9 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                     / u128::from(plan.frame_rate.0);
                 let exposure = (frame_duration as f64 * (*shutter_angle / 360.0)).round() as u128;
                 let half_window = exposure / 2;
-                let before = relative.saturating_sub(half_window);
-                let after = relative.saturating_add(half_window);
+                let (lower, upper) = motion_sample_bounds(layer, relative);
+                let before = relative.saturating_sub(half_window).max(lower);
+                let after = relative.saturating_add(half_window).min(upper);
                 let mut ignored_tracks = 0;
                 let start = evaluate_transform(layer, before, &mut ignored_tracks).position;
                 let end = evaluate_transform(layer, after, &mut ignored_tracks).position;
@@ -329,6 +330,18 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
             .collect(),
         evaluated_track_count,
     }
+}
+
+fn motion_sample_bounds(layer: &crate::plan::CompiledLayer, relative: u128) -> (u128, u128) {
+    let mut lower = 0;
+    let mut upper = layer.duration_nanos;
+    for contribution in &layer.transform_contributions {
+        if contribution.start <= relative && relative < contribution.end {
+            lower = lower.max(contribution.start);
+            upper = upper.min(contribution.end);
+        }
+    }
+    (lower, upper)
 }
 
 fn evaluate_transform(

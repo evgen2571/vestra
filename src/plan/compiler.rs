@@ -143,6 +143,7 @@ fn compile_canonical(
         layers.push(CompiledLayer {
             id: clip.id.clone(),
             start_nanos,
+            duration_nanos: end_nanos - start_nanos,
             start_frame: first_frame_at_or_after(start_nanos, validated.frame_rate)?,
             end_frame: first_frame_at_or_after(end_nanos, validated.frame_rate)?
                 .min(validated.frame_count),
@@ -1210,6 +1211,7 @@ fn compile_flash_overlay(
     Ok(CompiledLayer {
         id: flash.id.clone(),
         start_nanos,
+        duration_nanos,
         start_frame: first_frame_at_or_after(start_nanos, rate)?,
         end_frame: first_frame_at_or_after(start_nanos.saturating_add(duration_nanos), rate)?
             .min(frame_count),

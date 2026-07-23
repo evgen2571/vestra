@@ -526,7 +526,7 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             gamma,
             black_point,
             white_point,
-        } => colour_adjust(
+        } => crate::render::colour_adjust::apply(
             source,
             target,
             *exposure,
@@ -687,26 +687,6 @@ fn chromatic(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64
         target.put_pixel(x, y, Rgba([left[0], p[1], right[2], p[3]]));
     }
 }
-fn colour_adjust(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    exposure: f64,
-    gamma: f64,
-    black: f64,
-    white: f64,
-) {
-    let scale = 1.0 / (white - black).max(0.000_1);
-    map_pixels(source, target, |mut p, _, _| {
-        for c in 0..3 {
-            let v = (((f64::from(p[c]) / 255.0) * 2f64.powf(exposure) - black) * scale)
-                .clamp(0.0, 1.0)
-                .powf(1.0 / gamma.max(0.001));
-            p[c] = (v * 255.0).round() as u8;
-        }
-        p
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

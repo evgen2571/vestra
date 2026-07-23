@@ -12,7 +12,7 @@ use crate::{
     media::{AudioSettings, EncoderSettings},
     plan::{
         Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
-        CompiledVisualSource, DrawKey, ImageAsset, RenderPlan,
+        CompiledVisualSource, DrawKey, ImageAsset, RenderPlan, TransformContribution,
     },
     project::{Sizing, ValidatedProject, parse_colour},
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
@@ -153,6 +153,7 @@ fn compile_canonical(
             },
             source,
             transform: compile_transform(clip)?,
+            transform_contributions: Vec::new(),
             opacity: compile_track(&clip.opacity, &clip.id)?,
             opacity_contributions: Vec::new(),
             effects,
@@ -806,7 +807,7 @@ fn add_transition_style(
                 radians,
                 distance,
                 blur,
-                1.0,
+                false,
             );
             push_transition_layer(
                 &mut layers[incoming],
@@ -815,7 +816,7 @@ fn add_transition_style(
                 radians,
                 distance,
                 blur,
-                -1.0,
+                true,
             );
         }
     }
@@ -836,29 +837,18 @@ fn zoom_transition_layer(
 ) {
     let a = start.saturating_sub(layer.start_nanos);
     let b = end.saturating_sub(layer.start_nanos);
-    let base = layer.transform.scale.evaluate(a);
-    insert_keyframe(
-        &mut layer.transform.scale.keyframes,
-        Keyframe {
-            time: a,
-            value: Point {
-                x: base.x * from,
-                y: base.y * from,
-            },
-            interpolation: Interpolation::Linear,
-        },
-    );
-    insert_keyframe(
-        &mut layer.transform.scale.keyframes,
-        Keyframe {
+    let mut contribution = TransformContribution::identity();
+    contribution.start = a;
+    contribution.end = b;
+    contribution.scale_multiplier = Track {
+        base_value: Point { x: from, y: from },
+        keyframes: vec![Keyframe {
             time: b,
-            value: Point {
-                x: base.x * to,
-                y: base.y * to,
-            },
+            value: Point { x: to, y: to },
             interpolation: Interpolation::EaseInOut,
-        },
-    );
+        }],
+    };
+    layer.transform_contributions.push(contribution);
     if let Some(radius) = blur {
         layer
             .effects
@@ -893,37 +883,37 @@ fn push_transition_layer(
     angle: f64,
     distance: f64,
     blur: f64,
-    sign: f64,
+    incoming: bool,
 ) {
     let a = start.saturating_sub(layer.start_nanos);
     let b = end.saturating_sub(layer.start_nanos);
-    let base = layer.transform.position.evaluate(a);
     let delta = Point {
-        x: angle.cos() * distance * sign,
-        y: angle.sin() * distance * sign,
+        x: angle.cos() * distance,
+        y: angle.sin() * distance,
     };
-    insert_keyframe(
-        &mut layer.transform.position.keyframes,
-        Keyframe {
-            time: a,
-            value: Point {
-                x: base.x - delta.x,
-                y: base.y - delta.y,
-            },
-            interpolation: Interpolation::Linear,
+    let mut contribution = TransformContribution::identity();
+    contribution.start = a;
+    contribution.end = b;
+    contribution.position_offset = Track {
+        base_value: if incoming {
+            Point {
+                x: -delta.x,
+                y: -delta.y,
+            }
+        } else {
+            Point { x: 0.0, y: 0.0 }
         },
-    );
-    insert_keyframe(
-        &mut layer.transform.position.keyframes,
-        Keyframe {
+        keyframes: vec![Keyframe {
             time: b,
-            value: Point {
-                x: base.x + delta.x,
-                y: base.y + delta.y,
+            value: if incoming {
+                Point { x: 0.0, y: 0.0 }
+            } else {
+                delta
             },
             interpolation: Interpolation::EaseInOut,
-        },
-    );
+        }],
+    };
+    layer.transform_contributions.push(contribution);
     layer
         .effects
         .push(crate::plan::CompiledEffect::DirectionalBlur {
@@ -1056,6 +1046,7 @@ fn compile_flash_overlay(
         },
         source: CompiledVisualSource::SolidColor { colour },
         transform: canvas_transform(),
+        transform_contributions: Vec::new(),
         opacity,
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
@@ -1336,5 +1327,64 @@ mod tests {
         layer.start_frame = 12;
         layer.end_frame = 12;
         enforce_active_layer_limit(&[layer], 0).expect("zero-frame layer is never active");
+    }
+
+    #[test]
+    fn directional_push_keeps_authored_tracks_and_has_correct_endpoints() {
+        let mut outgoing = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        outgoing.start_nanos = 0;
+        push_transition_layer(
+            &mut outgoing,
+            1_000_000_000,
+            2_000_000_000,
+            0.0,
+            0.25,
+            0.0,
+            false,
+        );
+        let outgoing_contribution = &outgoing.transform_contributions[0];
+        assert_eq!(
+            outgoing_contribution
+                .position_offset
+                .evaluate(1_000_000_000)
+                .x,
+            0.0
+        );
+        assert_eq!(
+            outgoing_contribution
+                .position_offset
+                .evaluate(2_000_000_000)
+                .x,
+            0.25
+        );
+        assert!(outgoing.transform.position.keyframes.is_empty());
+
+        let mut incoming = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        incoming.start_nanos = 0;
+        push_transition_layer(
+            &mut incoming,
+            1_000_000_000,
+            2_000_000_000,
+            0.0,
+            0.25,
+            0.0,
+            true,
+        );
+        let incoming_contribution = &incoming.transform_contributions[0];
+        assert_eq!(
+            incoming_contribution
+                .position_offset
+                .evaluate(1_000_000_000)
+                .x,
+            -0.25
+        );
+        assert_eq!(
+            incoming_contribution
+                .position_offset
+                .evaluate(2_000_000_000)
+                .x,
+            0.0
+        );
+        assert!(incoming.transform.position.keyframes.is_empty());
     }
 }

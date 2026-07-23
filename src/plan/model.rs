@@ -64,6 +64,9 @@ pub struct CompiledLayer {
     pub(crate) draw_key: DrawKey,
     pub(crate) source: CompiledVisualSource,
     pub(crate) transform: CompiledTransformTracks,
+    /// Generated motion stays separate from user-authored tracks. Evaluation
+    /// adds position/rotation offsets and multiplies scale in declaration order.
+    pub(crate) transform_contributions: Vec<TransformContribution>,
     pub(crate) opacity: Track<f64>,
     /// Independent opacity contributors compose multiplicatively. Transitions
     /// populate one contributor instead of a transition variant.
@@ -91,6 +94,28 @@ pub struct CompiledTransformTracks {
     pub(crate) anchor: Track<Point>,
     pub(crate) scale: Track<Point>,
     pub(crate) rotation_radians: Track<f64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TransformContribution {
+    pub(crate) start: u128,
+    pub(crate) end: u128,
+    pub(crate) position_offset: Track<Point>,
+    pub(crate) scale_multiplier: Track<Point>,
+    pub(crate) rotation_radians_offset: Track<f64>,
+}
+
+impl TransformContribution {
+    #[must_use]
+    pub(crate) fn identity() -> Self {
+        Self {
+            start: 0,
+            end: u128::MAX,
+            position_offset: Track::new(Point { x: 0.0, y: 0.0 }),
+            scale_multiplier: Track::new(Point { x: 1.0, y: 1.0 }),
+            rotation_radians_offset: Track::new(0.0),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

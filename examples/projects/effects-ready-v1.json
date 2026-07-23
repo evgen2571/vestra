@@ -1,20 +1,191 @@
 {
   "name": "Effects-ready v1",
-  "output": { "path": "../output/effects-ready-v1.mp4", "width": 320, "height": 180, "frame_rate": 30, "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 2.0 },
+  "output": {
+    "path": "../output/effects-ready-v1.mp4",
+    "width": 720,
+    "height": 1280,
+    "frame_rate": 30,
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 6
+  },
   "assets": [
-    { "id": "red", "type": "image", "source": "../assets/red.png" },
-    { "id": "blue", "type": "image", "source": "../assets/blue.png" }
+    {
+      "id": "red",
+      "type": "image",
+      "source": "../assets/red.png"
+    },
+    {
+      "id": "blue",
+      "type": "image",
+      "source": "../assets/blue.png"
+    }
   ],
   "visual": {
     "clips": [
-      { "id": "outgoing", "source": { "type": "image", "asset": "red" }, "start": 0, "duration": 2, "layer": 0, "sizing": { "mode": "cover" }, "transform": { "position": { "base_value": { "x": 0.5, "y": 0.5 } }, "anchor": { "base_value": { "x": 0.5, "y": 0.5 } }, "scale": { "base_value": { "x": 1, "y": 1 } } }, "opacity": { "base_value": 1 }, "preset": { "type": "slow_drift", "intensity": 0.8 }, "effects": [ { "id": "glow", "type": "glow", "threshold": { "base_value": 0.6 }, "radius": { "base_value": 4 }, "intensity": { "base_value": 0.35 }, "colour": "#FF8899" } ] },
-      { "id": "incoming", "source": { "type": "image", "asset": "blue" }, "start": 0, "duration": 2, "layer": 1, "sizing": { "mode": "cover" }, "transform": { "position": { "base_value": { "x": 0.5, "y": 0.5 } }, "anchor": { "base_value": { "x": 0.5, "y": 0.5 } }, "scale": { "base_value": { "x": 1, "y": 1 } } }, "opacity": { "base_value": 1 }, "blend_mode": "screen", "effects": [ { "id": "rgb", "type": "chromatic_aberration", "amount": { "base_value": 2 }, "angle_degrees": { "base_value": 0 } } ] }
+      {
+        "id": "outgoing",
+        "source": {
+          "type": "image",
+          "asset": "red"
+        },
+        "start": 0,
+        "duration": 4,
+        "layer": 0,
+        "sizing": {
+          "mode": "cover"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
+        "preset": {
+          "type": "slow_drift",
+          "intensity": 0.8
+        },
+        "effects": [
+          {
+            "id": "glow",
+            "type": "glow",
+            "threshold": {
+              "base_value": 0.6
+            },
+            "radius": {
+              "base_value": 4
+            },
+            "intensity": {
+              "base_value": 0.35
+            },
+            "colour": "#FF8899"
+          }
+        ]
+      },
+      {
+        "id": "incoming",
+        "source": {
+          "type": "image",
+          "asset": "blue"
+        },
+        "start": 2.5,
+        "duration": 3.5,
+        "layer": 1,
+        "sizing": {
+          "mode": "cover"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
+        "blend_mode": "screen",
+        "effects": [
+          {
+            "id": "rgb",
+            "type": "chromatic_aberration",
+            "amount": {
+              "base_value": 2
+            },
+            "angle_degrees": {
+              "base_value": 0
+            }
+          }
+        ]
+      }
     ],
-    "transitions": [ { "type": "zoom_blur", "id": "cut", "outgoing": "outgoing", "incoming": "incoming", "start": 0.7, "duration": 0.45, "interpolation": "ease_in_out", "outgoing_zoom": 1.15, "incoming_start_zoom": 1.12, "blur_radius": 6 } ],
+    "transitions": [
+      {
+        "type": "zoom_blur",
+        "id": "cut",
+        "outgoing": "outgoing",
+        "incoming": "incoming",
+        "start": 2.5,
+        "duration": 1,
+        "interpolation": "ease_in_out",
+        "outgoing_zoom": 1.15,
+        "incoming_start_zoom": 1.12,
+        "blur_radius": 6
+      }
+    ],
     "post_effects": [
-      { "id": "grade", "type": "color_adjust", "exposure": { "base_value": 0.1 }, "gamma": { "base_value": 1.0 }, "black_point": { "base_value": 0.0 }, "white_point": { "base_value": 1.0 } },
-      { "id": "vignette", "type": "vignette", "amount": { "base_value": 0.18 }, "radius": { "base_value": 0.72 }, "softness": { "base_value": 0.35 }, "colour": "#000000" },
-      { "id": "finish", "type": "sharpen", "amount": { "base_value": 0.25 }, "radius": { "base_value": 1.0 } }
+      {
+        "id": "grade",
+        "type": "color_adjust",
+        "exposure": {
+          "base_value": 0.1
+        },
+        "gamma": {
+          "base_value": 1.0
+        },
+        "black_point": {
+          "base_value": 0.0
+        },
+        "white_point": {
+          "base_value": 1.0
+        }
+      },
+      {
+        "id": "vignette",
+        "type": "vignette",
+        "amount": {
+          "base_value": 0.18
+        },
+        "radius": {
+          "base_value": 0.72
+        },
+        "softness": {
+          "base_value": 0.35
+        },
+        "colour": "#000000"
+      },
+      {
+        "id": "finish",
+        "type": "sharpen",
+        "amount": {
+          "base_value": 0.25
+        },
+        "radius": {
+          "base_value": 1.0
+        }
+      }
     ]
   }
 }

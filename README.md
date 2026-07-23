@@ -47,6 +47,7 @@ See [the project format](docs/specs/project-format.md), [the effects-ready examp
 python3 -m pip install -r requirements-dev.txt
 ./scripts/check.sh
 cargo bench --bench animation_effects
+./scripts/render-effect-examples.sh
 ```
 
 The benchmark uses the canonical animation/effects fixture at 720×1280. Run it
@@ -54,6 +55,10 @@ with `VIDEO_EDITOR_BENCH_BACKEND=cpu` or `VIDEO_EDITOR_BENCH_BACKEND=wgpu` to
 select the renderer; it performs five warmups and reports median/range values
 across five measured renders, along with the selected backend and available GPU
 preparation timings. WGPU benchmark results require a compatible adapter.
+
+Focused effect, transition, preset, and compositing projects render at least
+90 frames. The helper writes predictable CPU preview files below
+`examples/output/`; pass `--skip-existing` only to retain existing files.
 
 `requirements-dev.txt` pins the Python package used by the JSON Schema check;
 Rust dependencies are locked in `Cargo.lock`.

@@ -138,7 +138,7 @@ fn compile_canonical(
         let effects = clip
             .effects
             .iter()
-            .map(|effect| compile_effect(effect, &clip.id))
+            .map(|effect| compile_timed_effect(effect, &clip.id, clip.duration))
             .collect::<Result<Vec<_>, _>>()?;
         layers.push(CompiledLayer {
             id: clip.id.clone(),
@@ -195,7 +195,7 @@ fn compile_canonical(
         .visual
         .post_effects
         .iter()
-        .map(|effect| compile_effect(effect, "global post effect"))
+        .map(|effect| compile_timed_effect(effect, "global post effect", validated.duration))
         .collect::<Result<Vec<_>, _>>()?;
     record_compilation_workload(&mut compilation, &layers, &post_effects);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
@@ -233,7 +233,13 @@ fn apply_preset(
     preset: &crate::project::Preset,
     duration: f64,
 ) -> Result<(), Diagnostic> {
-    let end = to_nanos(duration, &layer.id)?;
+    let timing = preset.timing();
+    let start = to_nanos(timing.start, &layer.id)?;
+    let interval_duration = timing
+        .duration
+        .unwrap_or_else(|| default_preset_duration(preset, duration - timing.start));
+    let end = start.saturating_add(to_nanos(interval_duration, &layer.id)?);
+    let span = end - start;
     let key = |time, value| Keyframe {
         time,
         value,
@@ -252,8 +258,9 @@ fn apply_preset(
         })
     };
     match preset {
-        crate::project::Preset::SlowDrift { intensity } => {
+        crate::project::Preset::SlowDrift { intensity, .. } => {
             let mut contribution = TransformContribution::identity();
+            contribution.start = start;
             contribution.end = end;
             contribution.position_offset = Track {
                 base_value: Point {
@@ -280,10 +287,11 @@ fn apply_preset(
             };
             layer.transform_contributions.push(contribution);
         }
-        crate::project::Preset::ZoomPunch { intensity } => {
-            let peak = end / 4;
+        crate::project::Preset::ZoomPunch { intensity, .. } => {
+            let peak = start + span / 4;
             let mut contribution = TransformContribution::identity();
-            contribution.end = end / 2;
+            contribution.start = start;
+            contribution.end = start + span / 2;
             contribution.scale_multiplier = Track {
                 base_value: Point { x: 1.0, y: 1.0 },
                 keyframes: vec![
@@ -294,25 +302,27 @@ fn apply_preset(
                             y: 1.0 + 0.16 * intensity,
                         },
                     ),
-                    key(end / 2, Point { x: 1.0, y: 1.0 }),
+                    key(start + span / 2, Point { x: 1.0, y: 1.0 }),
                 ],
             };
             layer.transform_contributions.push(contribution);
         }
-        crate::project::Preset::Impact { intensity, seed } => {
-            add_zoom_punch(layer, end, *intensity, 0.20);
+        crate::project::Preset::Impact {
+            intensity, seed, ..
+        } => {
+            add_zoom_punch(layer, start, span, *intensity, 0.20);
             add_shake(&mut generated, *intensity, *seed);
             generated.push(crate::plan::CompiledEffect::ChromaticAberration {
                 amount: Track {
                     base_value: 0.0,
                     keyframes: vec![
                         Keyframe {
-                            time: end / 8,
+                            time: span / 8,
                             value: 3.0 * intensity,
                             interpolation: Interpolation::EaseInOut,
                         },
                         Keyframe {
-                            time: end / 3,
+                            time: span / 3,
                             value: 0.0,
                             interpolation: Interpolation::EaseInOut,
                         },
@@ -320,22 +330,24 @@ fn apply_preset(
                 },
                 angle_degrees: Track::new(0.0),
             });
-            generated.push(pulse_tint(end, *intensity));
+            generated.push(pulse_tint(span, *intensity));
         }
-        crate::project::Preset::HeavyImpact { intensity, seed } => {
-            add_zoom_punch(layer, end, *intensity, 0.28);
+        crate::project::Preset::HeavyImpact {
+            intensity, seed, ..
+        } => {
+            add_zoom_punch(layer, start, span, *intensity, 0.28);
             add_shake(&mut generated, *intensity * 1.8, *seed);
             generated.push(crate::plan::CompiledEffect::DirectionalBlur {
                 radius: Track {
                     base_value: 0.0,
                     keyframes: vec![
                         Keyframe {
-                            time: end / 8,
+                            time: span / 8,
                             value: 10.0 * intensity,
                             interpolation: Interpolation::EaseInOut,
                         },
                         Keyframe {
-                            time: end / 3,
+                            time: span / 3,
                             value: 0.0,
                             interpolation: Interpolation::EaseInOut,
                         },
@@ -344,27 +356,28 @@ fn apply_preset(
                 angle_degrees: Track::new(0.0),
             });
             generated.push(crate::plan::CompiledEffect::ChromaticAberration {
-                amount: pulse_track(end, 5.0 * intensity),
+                amount: pulse_track(span, 5.0 * intensity),
                 angle_degrees: Track::new(0.0),
             });
-            generated.push(pulse_tint(end, *intensity * 0.75));
+            generated.push(pulse_tint(span, *intensity * 0.75));
         }
-        crate::project::Preset::FocusReveal { intensity } => {
+        crate::project::Preset::FocusReveal { intensity, .. } => {
             let mut contribution = TransformContribution::identity();
-            contribution.end = end / 2;
+            contribution.start = start;
+            contribution.end = start + span / 2;
             contribution.scale_multiplier = Track {
                 base_value: Point {
                     x: 1.0 + 0.04 * intensity,
                     y: 1.0 + 0.04 * intensity,
                 },
-                keyframes: vec![key(end / 2, Point { x: 1.0, y: 1.0 })],
+                keyframes: vec![key(start + span / 2, Point { x: 1.0, y: 1.0 })],
             };
             layer.transform_contributions.push(contribution);
             generated.push(crate::plan::CompiledEffect::GaussianBlur {
                 radius: Track {
                     base_value: 8.0 * intensity,
                     keyframes: vec![Keyframe {
-                        time: end / 2,
+                        time: span / 2,
                         value: 0.0,
                         interpolation: Interpolation::EaseInOut,
                     }],
@@ -374,7 +387,7 @@ fn apply_preset(
                 amount: Track {
                     base_value: 0.0,
                     keyframes: vec![Keyframe {
-                        time: end / 2,
+                        time: span / 2,
                         value: 0.35 * intensity,
                         interpolation: Interpolation::EaseInOut,
                     }],
@@ -385,18 +398,35 @@ fn apply_preset(
     }
     // Presets establish the base look. Authored effects run afterwards and can
     // deliberately refine it, matching the project-format documentation.
-    layer.effects.splice(0..0, generated);
+    layer.effects.splice(
+        0..0,
+        generated
+            .into_iter()
+            .map(|effect| crate::plan::TimedEffect { start, end, effect }),
+    );
     Ok(())
 }
 
-fn add_zoom_punch(layer: &mut CompiledLayer, end: u128, intensity: f64, amount: f64) {
+fn default_preset_duration(preset: &crate::project::Preset, remaining: f64) -> f64 {
+    let preferred = match preset {
+        crate::project::Preset::SlowDrift { .. } => remaining,
+        crate::project::Preset::ZoomPunch { .. } => 0.35,
+        crate::project::Preset::Impact { .. } => 0.28,
+        crate::project::Preset::HeavyImpact { .. } => 0.4,
+        crate::project::Preset::FocusReveal { .. } => 0.8,
+    };
+    preferred.min(remaining)
+}
+
+fn add_zoom_punch(layer: &mut CompiledLayer, start: u128, span: u128, intensity: f64, amount: f64) {
     let mut contribution = TransformContribution::identity();
-    contribution.end = end / 2;
+    contribution.start = start;
+    contribution.end = start + span / 2;
     contribution.scale_multiplier = Track {
         base_value: Point { x: 1.0, y: 1.0 },
         keyframes: vec![
             Keyframe {
-                time: end / 8,
+                time: start + span / 8,
                 value: Point {
                     x: 1.0 + amount * intensity,
                     y: 1.0 + amount * intensity,
@@ -404,7 +434,7 @@ fn add_zoom_punch(layer: &mut CompiledLayer, end: u128, intensity: f64, amount: 
                 interpolation: Interpolation::EaseOut,
             },
             Keyframe {
-                time: end / 2,
+                time: start + span / 2,
                 value: Point { x: 1.0, y: 1.0 },
                 interpolation: Interpolation::EaseInOut,
             },
@@ -688,6 +718,21 @@ fn compile_effect(
     })
 }
 
+fn compile_timed_effect(
+    effect: &crate::project::Effect,
+    id: &str,
+    owner_duration: f64,
+) -> Result<crate::plan::TimedEffect, Diagnostic> {
+    let timing = effect.timing();
+    let start = to_nanos(timing.start, id)?;
+    let duration = to_nanos(timing.duration.unwrap_or(owner_duration - timing.start), id)?;
+    Ok(crate::plan::TimedEffect {
+        start,
+        end: start.saturating_add(duration),
+        effect: compile_effect(effect, id)?,
+    })
+}
+
 fn compile_transitions(
     transitions: &[crate::project::Transition],
     indices: &BTreeMap<String, usize>,
@@ -885,7 +930,7 @@ fn add_transition_style(
                         Keyframe {
                             time: relative_peak,
                             value: if incoming { 1.0 } else { 0.0 },
-                            interpolation: Interpolation::Linear,
+                            interpolation: Interpolation::Hold,
                         },
                         Keyframe {
                             time: relative_end,
@@ -894,27 +939,31 @@ fn add_transition_style(
                         },
                     ],
                 });
-                layer.effects.push(crate::plan::CompiledEffect::Tint {
-                    colour,
-                    amount: Track {
-                        base_value: 0.0,
-                        keyframes: vec![
-                            Keyframe {
-                                time: relative_start,
-                                value: 0.0,
-                                interpolation: Interpolation::Linear,
-                            },
-                            Keyframe {
-                                time: relative_start + (relative_end - relative_start) / 2,
-                                value: intensity,
-                                interpolation: Interpolation::Linear,
-                            },
-                            Keyframe {
-                                time: relative_end,
-                                value: 0.0,
-                                interpolation: Interpolation::Linear,
-                            },
-                        ],
+                layer.effects.push(crate::plan::TimedEffect {
+                    start: relative_start,
+                    end: relative_end,
+                    effect: crate::plan::CompiledEffect::Tint {
+                        colour,
+                        amount: Track {
+                            base_value: 0.0,
+                            keyframes: vec![
+                                Keyframe {
+                                    time: 0,
+                                    value: 0.0,
+                                    interpolation: Interpolation::Linear,
+                                },
+                                Keyframe {
+                                    time: (relative_end - relative_start) / 2,
+                                    value: intensity,
+                                    interpolation: Interpolation::Linear,
+                                },
+                                Keyframe {
+                                    time: relative_end - relative_start,
+                                    value: 0.0,
+                                    interpolation: Interpolation::Linear,
+                                },
+                            ],
+                        },
                     },
                 });
             }
@@ -971,30 +1020,32 @@ fn zoom_transition_layer(
     };
     layer.transform_contributions.push(contribution);
     if let Some(radius) = blur {
-        layer
-            .effects
-            .push(crate::plan::CompiledEffect::GaussianBlur {
+        layer.effects.push(crate::plan::TimedEffect {
+            start: a,
+            end: b,
+            effect: crate::plan::CompiledEffect::GaussianBlur {
                 radius: Track {
                     base_value: 0.0,
                     keyframes: vec![
                         Keyframe {
-                            time: a,
+                            time: 0,
                             value: 0.0,
                             interpolation: Interpolation::Linear,
                         },
                         Keyframe {
-                            time: a + (b - a) / 2,
+                            time: (b - a) / 2,
                             value: radius,
                             interpolation: Interpolation::Linear,
                         },
                         Keyframe {
-                            time: b,
+                            time: b - a,
                             value: 0.0,
                             interpolation: Interpolation::Linear,
                         },
                     ],
                 },
-            });
+            },
+        });
     }
 }
 fn push_transition_layer(
@@ -1035,31 +1086,33 @@ fn push_transition_layer(
         }],
     };
     layer.transform_contributions.push(contribution);
-    layer
-        .effects
-        .push(crate::plan::CompiledEffect::DirectionalBlur {
+    layer.effects.push(crate::plan::TimedEffect {
+        start: a,
+        end: b,
+        effect: crate::plan::CompiledEffect::DirectionalBlur {
             radius: Track {
                 base_value: 0.0,
                 keyframes: vec![
                     Keyframe {
-                        time: a,
+                        time: 0,
                         value: 0.0,
                         interpolation: Interpolation::Linear,
                     },
                     Keyframe {
-                        time: a + (b - a) / 2,
+                        time: (b - a) / 2,
                         value: blur,
                         interpolation: Interpolation::Linear,
                     },
                     Keyframe {
-                        time: b,
+                        time: b - a,
                         value: 0.0,
                         interpolation: Interpolation::Linear,
                     },
                 ],
             },
             angle_degrees: Track::new(angle.to_degrees()),
-        });
+        },
+    });
 }
 
 fn add_transition_tracks(
@@ -1238,7 +1291,7 @@ fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, 
 fn record_compilation_workload(
     compilation: &mut CompilationStats,
     layers: &[CompiledLayer],
-    post_effects: &[crate::plan::CompiledEffect],
+    post_effects: &[crate::plan::TimedEffect],
 ) {
     for layer in layers {
         compilation.local_effect_count += layer.effects.len();
@@ -1248,8 +1301,8 @@ fn record_compilation_workload(
             CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
         }
         for effect in &layer.effects {
-            compilation.effect_pass_count += effect_passes(effect);
-            match effect {
+            compilation.effect_pass_count += effect_passes(&effect.effect);
+            match &effect.effect {
                 crate::plan::CompiledEffect::Brightness { .. } => {
                     compilation.brightness_effect_count += 1;
                 }
@@ -1279,7 +1332,7 @@ fn record_compilation_workload(
         .iter()
         .filter(|effect| {
             !matches!(
-                effect,
+                effect.effect,
                 crate::plan::CompiledEffect::Brightness { .. }
                     | crate::plan::CompiledEffect::Contrast { .. }
                     | crate::plan::CompiledEffect::Saturation { .. }
@@ -1287,7 +1340,10 @@ fn record_compilation_workload(
             )
         })
         .count();
-    compilation.effect_pass_count += post_effects.iter().map(effect_passes).sum::<usize>();
+    compilation.effect_pass_count += post_effects
+        .iter()
+        .map(|effect| effect_passes(&effect.effect))
+        .sum::<usize>();
 }
 
 fn effect_passes(effect: &crate::plan::CompiledEffect) -> usize {
@@ -1548,5 +1604,80 @@ mod tests {
             0.0
         );
         assert!(incoming.transform.position.keyframes.is_empty());
+    }
+
+    #[test]
+    fn transient_preset_uses_its_own_interval_on_a_long_clip() {
+        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
+        layer.id = "clip".to_owned();
+        let preset = crate::project::Preset::Impact {
+            timing: crate::project::ActiveInterval {
+                start: 1.25,
+                duration: Some(0.28),
+            },
+            intensity: 1.0,
+            seed: 7,
+        };
+        apply_preset(&mut layer, &preset, 4.0).expect("preset compiles");
+        assert!(
+            layer
+                .transform_contributions
+                .iter()
+                .all(|contribution| contribution.start >= 1_250_000_000)
+        );
+        assert!(
+            layer
+                .effects
+                .iter()
+                .all(|effect| { effect.start == 1_250_000_000 && effect.end == 1_530_000_000 })
+        );
+        assert!(
+            layer
+                .effects
+                .iter()
+                .all(|effect| !effect.active_at(1_000_000_000))
+        );
+        assert!(
+            layer
+                .effects
+                .iter()
+                .all(|effect| !effect.active_at(1_530_000_000))
+        );
+    }
+
+    #[test]
+    fn flash_cut_holds_visibility_until_its_peak_then_switches() {
+        let mut outgoing = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("out");
+        outgoing.id = "out".to_owned();
+        outgoing.start_nanos = 0;
+        let mut incoming = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("in");
+        incoming.id = "in".to_owned();
+        incoming.start_nanos = 0;
+        let mut layers = vec![outgoing, incoming];
+        let indices = BTreeMap::from([("out".to_owned(), 0), ("in".to_owned(), 1)]);
+        compile_transitions(
+            &[crate::project::Transition::FlashCut {
+                id: "cut".to_owned(),
+                outgoing: "out".to_owned(),
+                incoming: "in".to_owned(),
+                start: 1.0,
+                duration: 0.2,
+                interpolation: crate::project::Interpolation::Named(
+                    crate::project::InterpolationName::Linear,
+                ),
+                colour: "#ffffff".to_owned(),
+                intensity: 1.0,
+            }],
+            &indices,
+            &mut layers,
+            &mut CompilationStats::default(),
+        )
+        .expect("flash cut compiles");
+        let outgoing = &layers[0].opacity_contributions[0];
+        let incoming = &layers[1].opacity_contributions[0];
+        assert_eq!(outgoing.evaluate(1_099_999_999), 1.0);
+        assert_eq!(incoming.evaluate(1_099_999_999), 0.0);
+        assert_eq!(outgoing.evaluate(1_100_000_000), 0.0);
+        assert_eq!(incoming.evaluate(1_100_000_000), 1.0);
     }
 }

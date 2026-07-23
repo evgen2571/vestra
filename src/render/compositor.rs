@@ -496,7 +496,9 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             samples,
             anchor,
             direction,
-        } => zoom_blur(source, target, *radius, *samples, *anchor, *direction),
+        } => {
+            crate::render::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction)
+        }
         EvaluatedEffect::MotionBlur {
             radius,
             angle_degrees,
@@ -547,7 +549,7 @@ fn map_pixels(
         target.put_pixel(x, y, map(*pixel, x, y));
     }
 }
-fn sample_edge(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
+pub(crate) fn sample_edge(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
     sample_bilinear(
         image,
         x.clamp(0.5, f64::from(image.width()) - 0.5),
@@ -614,6 +616,7 @@ fn blur(
 /// Samples along the ray through each pixel instead of applying a spatial
 /// Gaussian. Radius is expressed in pixels and converted to a bounded scale
 /// exposure around the centre of the source surface.
+#[cfg(test)]
 fn zoom_blur(
     source: &RgbaImage,
     target: &mut RgbaImage,

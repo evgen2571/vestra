@@ -499,4 +499,52 @@ mod tests {
             EvaluatedSource::Image { .. }
         ));
     }
+
+    #[test]
+    fn camera_shake_is_deterministic_and_continuous() {
+        let base = Transform2D {
+            position: crate::domain::Point { x: 0.5, y: 0.5 },
+            anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+            scale: crate::domain::Point { x: 1.0, y: 1.0 },
+            rotation_radians: 0.0,
+        };
+        let mut first = base;
+        let mut repeated = base;
+        let mut nearby = base;
+        apply_camera_shake(
+            &mut first,
+            100_000_000,
+            0.02,
+            0.1,
+            0.01,
+            14.0,
+            7,
+            0.03,
+            0.22,
+        );
+        apply_camera_shake(
+            &mut repeated,
+            100_000_000,
+            0.02,
+            0.1,
+            0.01,
+            14.0,
+            7,
+            0.03,
+            0.22,
+        );
+        apply_camera_shake(
+            &mut nearby,
+            101_000_000,
+            0.02,
+            0.1,
+            0.01,
+            14.0,
+            7,
+            0.03,
+            0.22,
+        );
+        assert_eq!(first.position.x, repeated.position.x);
+        assert!((first.position.x - nearby.position.x).abs() < 0.02);
+    }
 }

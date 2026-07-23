@@ -261,8 +261,9 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 let half_window = exposure / 2;
                 let before = relative.saturating_sub(half_window);
                 let after = relative.saturating_add(half_window);
-                let start = layer.transform.position.evaluate(before);
-                let end = layer.transform.position.evaluate(after);
+                let mut ignored_tracks = 0;
+                let start = evaluate_transform(layer, before, &mut ignored_tracks).position;
+                let end = evaluate_transform(layer, after, &mut ignored_tracks).position;
                 let dx = (end.x - start.x) * f64::from(plan.canvas.width);
                 let dy = (end.y - start.y) * f64::from(plan.canvas.height);
                 let displacement = (dx * dx + dy * dy).sqrt();

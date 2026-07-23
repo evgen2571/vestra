@@ -1,6 +1,9 @@
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::render::blend::{blend_surface, source_over};
+use crate::render::{
+    blend::{blend_surface, source_over},
+    effects::{CpuEffectPass, effect_pass_plan},
+};
 use crate::{
     animation::Transform2D,
     domain::Crop,
@@ -113,16 +116,19 @@ impl EffectSurfacePool {
         } else {
             (&self.second, &mut self.first)
         };
-        match effect {
-            EvaluatedEffect::GaussianBlur { radius } => {
+        match effect_pass_plan(effect).as_slice() {
+            [
+                CpuEffectPass::GaussianHorizontal { radius },
+                CpuEffectPass::GaussianVertical { .. },
+            ] => {
                 crate::render::effects::gaussian_blur(source, &mut self.horizontal, target, *radius)
             }
-            EvaluatedEffect::Glow {
-                threshold,
-                radius,
-                intensity,
-                colour,
-            } => crate::render::effects::glow(
+            [
+                CpuEffectPass::HighlightExtract { threshold, colour },
+                CpuEffectPass::GaussianHorizontal { radius },
+                CpuEffectPass::GaussianVertical { .. },
+                CpuEffectPass::GlowComposite { intensity },
+            ] => crate::render::effects::glow(
                 source,
                 &mut self.horizontal,
                 target,
@@ -131,14 +137,20 @@ impl EffectSurfacePool {
                 *intensity,
                 *colour,
             ),
-            EvaluatedEffect::Sharpen { amount, radius } => crate::render::effects::sharpen(
+            [
+                CpuEffectPass::GaussianHorizontal { radius },
+                CpuEffectPass::GaussianVertical { .. },
+                CpuEffectPass::UnsharpComposite { amount },
+            ] => crate::render::effects::sharpen(
                 source,
                 &mut self.horizontal,
                 target,
                 *amount,
                 *radius,
             ),
-            _ => apply_effect(source, target, effect),
+            [CpuEffectPass::Single] => apply_effect(source, target, effect),
+            [] => unreachable!("effect passes are skipped before execution"),
+            _ => unreachable!("effect pass plans must be complete"),
         }
         self.first_is_current = !self.first_is_current;
     }

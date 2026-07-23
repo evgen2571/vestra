@@ -487,6 +487,42 @@ fn compile_transitions(
                 duration,
                 interpolation,
             } => (id, outgoing, incoming, *start, *duration, interpolation),
+            crate::project::Transition::ZoomCrossfade {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+                ..
+            }
+            | crate::project::Transition::FlashCut {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+                ..
+            }
+            | crate::project::Transition::DirectionalPush {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+                ..
+            }
+            | crate::project::Transition::ZoomBlur {
+                id,
+                outgoing,
+                incoming,
+                start,
+                duration,
+                interpolation,
+                ..
+            } => (id, outgoing, incoming, *start, *duration, interpolation),
         };
         let start = to_nanos(start, id)?;
         let end = start.saturating_add(to_nanos(duration, id)?);
@@ -502,7 +538,297 @@ fn compile_transitions(
         }
     }
     add_transition_tracks(curves, layers);
+    for transition in transitions {
+        add_transition_style(transition, indices, layers)?;
+    }
     Ok(())
+}
+
+fn add_transition_style(
+    transition: &crate::project::Transition,
+    indices: &BTreeMap<String, usize>,
+    layers: &mut [CompiledLayer],
+) -> Result<(), Diagnostic> {
+    let (outgoing, incoming, start, duration, style) = match transition {
+        crate::project::Transition::Crossfade { .. } => return Ok(()),
+        crate::project::Transition::ZoomCrossfade {
+            outgoing,
+            incoming,
+            start,
+            duration,
+            outgoing_zoom,
+            incoming_start_zoom,
+            ..
+        } => (
+            outgoing,
+            incoming,
+            *start,
+            *duration,
+            TransitionStyle::Zoom(*outgoing_zoom, *incoming_start_zoom, None),
+        ),
+        crate::project::Transition::FlashCut {
+            outgoing,
+            incoming,
+            start,
+            duration,
+            colour,
+            intensity,
+            ..
+        } => (
+            outgoing,
+            incoming,
+            *start,
+            *duration,
+            TransitionStyle::Flash(
+                parse_colour(colour).ok_or_else(|| {
+                    Diagnostic::error(
+                        "MVP-PLAN-COLOUR",
+                        Category::Internal,
+                        "validated flash colour is invalid",
+                        "",
+                    )
+                })?,
+                *intensity,
+            ),
+        ),
+        crate::project::Transition::DirectionalPush {
+            outgoing,
+            incoming,
+            start,
+            duration,
+            angle_degrees,
+            distance,
+            blur_radius,
+            ..
+        } => (
+            outgoing,
+            incoming,
+            *start,
+            *duration,
+            TransitionStyle::Push(*angle_degrees, *distance, *blur_radius),
+        ),
+        crate::project::Transition::ZoomBlur {
+            outgoing,
+            incoming,
+            start,
+            duration,
+            outgoing_zoom,
+            incoming_start_zoom,
+            blur_radius,
+            ..
+        } => (
+            outgoing,
+            incoming,
+            *start,
+            *duration,
+            TransitionStyle::Zoom(*outgoing_zoom, *incoming_start_zoom, Some(*blur_radius)),
+        ),
+    };
+    let start = to_nanos(start, "transition")?;
+    let end = start.saturating_add(to_nanos(duration, "transition")?);
+    let outgoing = *indices.get(outgoing).ok_or_else(|| {
+        Diagnostic::error(
+            "MVP-PLAN-TRANSITION",
+            Category::Internal,
+            "validated outgoing clip is missing",
+            "",
+        )
+    })?;
+    let incoming = *indices.get(incoming).ok_or_else(|| {
+        Diagnostic::error(
+            "MVP-PLAN-TRANSITION",
+            Category::Internal,
+            "validated incoming clip is missing",
+            "",
+        )
+    })?;
+    match style {
+        TransitionStyle::Zoom(out_zoom, in_zoom, blur) => {
+            zoom_transition_layer(&mut layers[outgoing], start, end, 1.0, out_zoom, blur);
+            zoom_transition_layer(&mut layers[incoming], start, end, in_zoom, 1.0, blur);
+        }
+        TransitionStyle::Flash(colour, intensity) => {
+            for index in [outgoing, incoming] {
+                let layer = &mut layers[index];
+                let relative_start = start.saturating_sub(layer.start_nanos);
+                let relative_end = end.saturating_sub(layer.start_nanos);
+                layer.effects.push(crate::plan::CompiledEffect::Tint {
+                    colour,
+                    amount: Track {
+                        base_value: 0.0,
+                        keyframes: vec![
+                            Keyframe {
+                                time: relative_start,
+                                value: 0.0,
+                                interpolation: Interpolation::Linear,
+                            },
+                            Keyframe {
+                                time: relative_start + (relative_end - relative_start) / 2,
+                                value: intensity,
+                                interpolation: Interpolation::Linear,
+                            },
+                            Keyframe {
+                                time: relative_end,
+                                value: 0.0,
+                                interpolation: Interpolation::Linear,
+                            },
+                        ],
+                    },
+                });
+            }
+        }
+        TransitionStyle::Push(angle, distance, blur) => {
+            let radians = angle.to_radians();
+            push_transition_layer(
+                &mut layers[outgoing],
+                start,
+                end,
+                radians,
+                distance,
+                blur,
+                1.0,
+            );
+            push_transition_layer(
+                &mut layers[incoming],
+                start,
+                end,
+                radians,
+                distance,
+                blur,
+                -1.0,
+            );
+        }
+    }
+    Ok(())
+}
+enum TransitionStyle {
+    Zoom(f64, f64, Option<f64>),
+    Flash([u8; 4], f64),
+    Push(f64, f64, f64),
+}
+fn zoom_transition_layer(
+    layer: &mut CompiledLayer,
+    start: u128,
+    end: u128,
+    from: f64,
+    to: f64,
+    blur: Option<f64>,
+) {
+    let a = start.saturating_sub(layer.start_nanos);
+    let b = end.saturating_sub(layer.start_nanos);
+    let base = layer.transform.scale.evaluate(a);
+    insert_keyframe(
+        &mut layer.transform.scale.keyframes,
+        Keyframe {
+            time: a,
+            value: Point {
+                x: base.x * from,
+                y: base.y * from,
+            },
+            interpolation: Interpolation::Linear,
+        },
+    );
+    insert_keyframe(
+        &mut layer.transform.scale.keyframes,
+        Keyframe {
+            time: b,
+            value: Point {
+                x: base.x * to,
+                y: base.y * to,
+            },
+            interpolation: Interpolation::EaseInOut,
+        },
+    );
+    if let Some(radius) = blur {
+        layer
+            .effects
+            .push(crate::plan::CompiledEffect::GaussianBlur {
+                radius: Track {
+                    base_value: 0.0,
+                    keyframes: vec![
+                        Keyframe {
+                            time: a,
+                            value: 0.0,
+                            interpolation: Interpolation::Linear,
+                        },
+                        Keyframe {
+                            time: a + (b - a) / 2,
+                            value: radius,
+                            interpolation: Interpolation::Linear,
+                        },
+                        Keyframe {
+                            time: b,
+                            value: 0.0,
+                            interpolation: Interpolation::Linear,
+                        },
+                    ],
+                },
+            });
+    }
+}
+fn push_transition_layer(
+    layer: &mut CompiledLayer,
+    start: u128,
+    end: u128,
+    angle: f64,
+    distance: f64,
+    blur: f64,
+    sign: f64,
+) {
+    let a = start.saturating_sub(layer.start_nanos);
+    let b = end.saturating_sub(layer.start_nanos);
+    let base = layer.transform.position.evaluate(a);
+    let delta = Point {
+        x: angle.cos() * distance * sign,
+        y: angle.sin() * distance * sign,
+    };
+    insert_keyframe(
+        &mut layer.transform.position.keyframes,
+        Keyframe {
+            time: a,
+            value: Point {
+                x: base.x - delta.x,
+                y: base.y - delta.y,
+            },
+            interpolation: Interpolation::Linear,
+        },
+    );
+    insert_keyframe(
+        &mut layer.transform.position.keyframes,
+        Keyframe {
+            time: b,
+            value: Point {
+                x: base.x + delta.x,
+                y: base.y + delta.y,
+            },
+            interpolation: Interpolation::EaseInOut,
+        },
+    );
+    layer
+        .effects
+        .push(crate::plan::CompiledEffect::DirectionalBlur {
+            radius: Track {
+                base_value: 0.0,
+                keyframes: vec![
+                    Keyframe {
+                        time: a,
+                        value: 0.0,
+                        interpolation: Interpolation::Linear,
+                    },
+                    Keyframe {
+                        time: a + (b - a) / 2,
+                        value: blur,
+                        interpolation: Interpolation::Linear,
+                    },
+                    Keyframe {
+                        time: b,
+                        value: 0.0,
+                        interpolation: Interpolation::Linear,
+                    },
+                ],
+            },
+            angle_degrees: Track::new(angle.to_degrees()),
+        });
 }
 
 fn add_transition_tracks(

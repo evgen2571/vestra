@@ -803,6 +803,43 @@ mod tests {
     }
 
     #[test]
+    fn blend_modes_are_distinct_and_preserve_alpha() {
+        let destination = Rgba([40, 100, 200, 255]);
+        let source = Rgba([200, 80, 20, 255]);
+        let add = blend_pixel(destination, source, crate::project::BlendMode::Add, 1.0);
+        let multiply = blend_pixel(
+            destination,
+            source,
+            crate::project::BlendMode::Multiply,
+            1.0,
+        );
+        let screen = blend_pixel(destination, source, crate::project::BlendMode::Screen, 1.0);
+        let overlay = blend_pixel(destination, source, crate::project::BlendMode::Overlay, 1.0);
+        assert_eq!(add[3], 255);
+        assert_eq!(multiply[3], 255);
+        assert_ne!(add, multiply);
+        assert_ne!(screen, overlay);
+    }
+
+    #[test]
+    fn zero_radius_blur_is_an_exact_noop() {
+        let mut source = RgbaImage::new(2, 1);
+        source.put_pixel(0, 0, Rgba([255, 0, 0, 127]));
+        source.put_pixel(1, 0, Rgba([0, 0, 255, 255]));
+        let mut target = RgbaImage::new(2, 1);
+        blur(&source, &mut target, 0.0, None);
+        assert_eq!(source, target);
+    }
+
+    #[test]
+    fn chromatic_zero_amount_is_an_exact_noop() {
+        let source = RgbaImage::from_pixel(2, 2, Rgba([17, 83, 201, 129]));
+        let mut target = RgbaImage::new(2, 2);
+        chromatic(&source, &mut target, 0.0, 0.0);
+        assert_eq!(source, target);
+    }
+
+    #[test]
     fn rotated_scanline_advances_after_an_out_of_bounds_sample() {
         let source = RgbaImage::from_pixel(4, 2, Rgba([255, 0, 0, 255]));
         let transform = Transform2D {

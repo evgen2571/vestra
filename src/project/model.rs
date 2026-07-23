@@ -194,6 +194,8 @@ pub struct Clip {
     pub effects: Vec<Effect>,
     #[serde(default)]
     pub blend_mode: BlendMode,
+    #[serde(default, deserialize_with = "optional_non_null")]
+    pub preset: Option<Preset>,
 }
 const fn default_visible() -> bool {
     true
@@ -384,6 +386,16 @@ pub enum BlendMode {
     Screen,
     Multiply,
     Overlay,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Preset {
+    SlowDrift { intensity: f64 },
+    ZoomPunch { intensity: f64 },
+    Impact { intensity: f64, seed: u64 },
+    HeavyImpact { intensity: f64, seed: u64 },
+    FocusReveal { intensity: f64 },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

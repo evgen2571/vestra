@@ -158,6 +158,13 @@ fn compile_canonical(
             effects,
             blend_mode: clip.blend_mode,
         });
+        if let Some(preset) = &clip.preset {
+            apply_preset(
+                layers.last_mut().expect("layer was inserted"),
+                preset,
+                clip.duration,
+            )?;
+        }
     }
     compilation.rendered_clip_count = layers
         .iter()
@@ -218,6 +225,119 @@ fn compile_canonical(
         compilation,
         warnings: validated.warnings.clone(),
     })
+}
+
+fn apply_preset(
+    layer: &mut CompiledLayer,
+    preset: &crate::project::Preset,
+    duration: f64,
+) -> Result<(), Diagnostic> {
+    let end = to_nanos(duration, &layer.id)?;
+    let key = |time, value| Keyframe {
+        time,
+        value,
+        interpolation: Interpolation::EaseInOut,
+    };
+    let add_shake = |layer: &mut CompiledLayer, intensity: f64, seed: u64| {
+        layer
+            .effects
+            .push(crate::plan::CompiledEffect::CameraShake {
+                position_amount: Track::new(0.012 * intensity),
+                rotation_degrees: Track::new(1.2 * intensity),
+                scale_amount: Track::new(0.01 * intensity),
+                frequency: Track::new(14.0),
+                seed,
+                attack: 0.03,
+                decay: 0.22,
+            })
+    };
+    match preset {
+        crate::project::Preset::SlowDrift { intensity } => {
+            let base = layer.transform.scale.base_value;
+            layer.transform.scale.keyframes.push(key(
+                end,
+                Point {
+                    x: base.x * (1.0 + 0.04 * intensity),
+                    y: base.y * (1.0 + 0.04 * intensity),
+                },
+            ));
+        }
+        crate::project::Preset::ZoomPunch { intensity } => {
+            let peak = end / 4;
+            let base = layer.transform.scale.base_value;
+            layer.transform.scale.keyframes.extend([
+                key(
+                    peak,
+                    Point {
+                        x: base.x * (1.0 + 0.16 * intensity),
+                        y: base.y * (1.0 + 0.16 * intensity),
+                    },
+                ),
+                key(end / 2, base),
+            ]);
+        }
+        crate::project::Preset::Impact { intensity, seed } => {
+            add_shake(layer, *intensity, *seed);
+            layer
+                .effects
+                .push(crate::plan::CompiledEffect::ChromaticAberration {
+                    amount: Track {
+                        base_value: 0.0,
+                        keyframes: vec![
+                            Keyframe {
+                                time: end / 8,
+                                value: 3.0 * intensity,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                            Keyframe {
+                                time: end / 3,
+                                value: 0.0,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                        ],
+                    },
+                    angle_degrees: Track::new(0.0),
+                });
+        }
+        crate::project::Preset::HeavyImpact { intensity, seed } => {
+            add_shake(layer, *intensity * 1.8, *seed);
+            layer
+                .effects
+                .push(crate::plan::CompiledEffect::DirectionalBlur {
+                    radius: Track {
+                        base_value: 0.0,
+                        keyframes: vec![
+                            Keyframe {
+                                time: end / 8,
+                                value: 10.0 * intensity,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                            Keyframe {
+                                time: end / 3,
+                                value: 0.0,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                        ],
+                    },
+                    angle_degrees: Track::new(0.0),
+                });
+        }
+        crate::project::Preset::FocusReveal { intensity } => {
+            layer
+                .effects
+                .push(crate::plan::CompiledEffect::GaussianBlur {
+                    radius: Track {
+                        base_value: 8.0 * intensity,
+                        keyframes: vec![Keyframe {
+                            time: end / 2,
+                            value: 0.0,
+                            interpolation: Interpolation::EaseInOut,
+                        }],
+                    },
+                })
+        }
+    }
+    Ok(())
 }
 
 fn compile_transform(clip: &crate::project::Clip) -> Result<CompiledTransformTracks, Diagnostic> {

@@ -18,6 +18,8 @@ use crate::{
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
 };
 
+mod presets;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,
@@ -160,7 +162,7 @@ fn compile_canonical(
             blend_mode: clip.blend_mode,
         });
         if let Some(preset) = &clip.preset {
-            apply_preset(
+            presets::apply(
                 layers.last_mut().expect("layer was inserted"),
                 preset,
                 clip.duration,
@@ -229,6 +231,9 @@ fn compile_canonical(
     })
 }
 
+/// Test-only reference implementation retained while preset expansion is
+/// isolated from the coordinator. Production compilation uses `presets::apply`.
+#[cfg(test)]
 fn apply_preset(
     layer: &mut CompiledLayer,
     preset: &crate::project::Preset,
@@ -410,6 +415,7 @@ fn apply_preset(
     Ok(())
 }
 
+#[cfg(test)]
 fn default_preset_duration(preset: &crate::project::Preset, remaining: f64) -> f64 {
     let preferred = match preset {
         crate::project::Preset::SlowDrift { .. } => remaining,
@@ -421,6 +427,7 @@ fn default_preset_duration(preset: &crate::project::Preset, remaining: f64) -> f
     preferred.min(remaining)
 }
 
+#[cfg(test)]
 fn add_zoom_punch(layer: &mut CompiledLayer, start: u128, span: u128, intensity: f64, amount: f64) {
     let mut contribution = TransformContribution::identity();
     contribution.start = start;
@@ -446,6 +453,7 @@ fn add_zoom_punch(layer: &mut CompiledLayer, start: u128, span: u128, intensity:
     layer.transform_contributions.push(contribution);
 }
 
+#[cfg(test)]
 fn pulse_track(end: u128, amount: f64) -> Track<f64> {
     Track {
         base_value: 0.0,
@@ -464,6 +472,7 @@ fn pulse_track(end: u128, amount: f64) -> Track<f64> {
     }
 }
 
+#[cfg(test)]
 fn pulse_tint(end: u128, intensity: f64) -> crate::plan::CompiledEffect {
     crate::plan::CompiledEffect::Tint {
         colour: [255, 255, 255, 255],
@@ -1709,6 +1718,7 @@ mod tests {
     fn transient_preset_uses_its_own_interval_on_a_long_clip() {
         let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.id = "clip".to_owned();
+        let mut oracle_layer = layer.clone();
         let preset = crate::project::Preset::Impact {
             timing: crate::project::ActiveInterval {
                 start: 1.25,
@@ -1718,8 +1728,16 @@ mod tests {
             seed: 7,
         };
         let mut compilation = CompilationStats::default();
-        apply_preset(&mut layer, &preset, 4.0, &mut compilation).expect("preset compiles");
+        presets::apply(&mut layer, &preset, 4.0, &mut compilation).expect("preset compiles");
         assert_eq!(compilation.generated_local_effect_count, 3);
+        let mut oracle_compilation = CompilationStats::default();
+        apply_preset(&mut oracle_layer, &preset, 4.0, &mut oracle_compilation)
+            .expect("reference preset compiles");
+        assert_eq!(format!("{layer:?}"), format!("{oracle_layer:?}"));
+        assert_eq!(
+            compilation.generated_local_effect_count,
+            oracle_compilation.generated_local_effect_count
+        );
         assert!(
             layer
                 .transform_contributions

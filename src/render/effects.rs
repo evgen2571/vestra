@@ -17,22 +17,54 @@ pub(crate) enum CpuEffectPass {
     UnsharpComposite { amount: f64 },
 }
 
+/// The largest built-in chain (glow) has four passes. Keeping this on the
+/// stack avoids per-frame heap allocation while still preserving pass order.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CpuEffectPassPlan {
+    passes: [CpuEffectPass; 4],
+    len: usize,
+}
+
+impl CpuEffectPassPlan {
+    fn new(passes: &[CpuEffectPass]) -> Self {
+        debug_assert!(passes.len() <= 4);
+        let mut planned = [CpuEffectPass::Single; 4];
+        planned[..passes.len()].copy_from_slice(passes);
+        Self {
+            passes: planned,
+            len: passes.len(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn is_empty(self) -> bool {
+        self.len == 0
+    }
+
+    #[must_use]
+    pub(crate) fn as_slice(&self) -> &[CpuEffectPass] {
+        &self.passes[..self.len]
+    }
+}
+
 /// Expands one evaluated effect into the CPU passes it requires. Identity
 /// effects return no passes, so callers can avoid allocating intermediates.
 #[must_use]
-pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> Vec<CpuEffectPass> {
+pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> CpuEffectPassPlan {
+    if evaluated_effect_is_noop(effect) {
+        return CpuEffectPassPlan::new(&[]);
+    }
     match effect {
-        EvaluatedEffect::GaussianBlur { radius } if *radius <= 0.0 => Vec::new(),
-        EvaluatedEffect::GaussianBlur { radius } if *radius > 0.0 => vec![
+        EvaluatedEffect::GaussianBlur { radius } => CpuEffectPassPlan::new(&[
             CpuEffectPass::GaussianHorizontal { radius: *radius },
             CpuEffectPass::GaussianVertical { radius: *radius },
-        ],
+        ]),
         EvaluatedEffect::Glow {
             threshold,
             radius,
             intensity,
             colour,
-        } if *radius > 0.0 && *intensity > 0.0 => vec![
+        } => CpuEffectPassPlan::new(&[
             CpuEffectPass::HighlightExtract {
                 threshold: *threshold,
                 colour: *colour,
@@ -42,16 +74,39 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> Vec<CpuEffectPass> {
             CpuEffectPass::GlowComposite {
                 intensity: *intensity,
             },
-        ],
-        EvaluatedEffect::Glow { .. } => Vec::new(),
-        EvaluatedEffect::Sharpen { amount, radius } if *amount > 0.0 && *radius > 0.0 => vec![
+        ]),
+        EvaluatedEffect::Sharpen { amount, radius } => CpuEffectPassPlan::new(&[
             CpuEffectPass::GaussianHorizontal { radius: *radius },
             CpuEffectPass::GaussianVertical { radius: *radius },
             CpuEffectPass::UnsharpComposite { amount: *amount },
-        ],
-        EvaluatedEffect::Sharpen { .. } => Vec::new(),
-        EvaluatedEffect::CameraShake { .. } => Vec::new(),
-        _ => vec![CpuEffectPass::Single],
+        ]),
+        _ => CpuEffectPassPlan::new(&[CpuEffectPass::Single]),
+    }
+}
+
+fn evaluated_effect_is_noop(effect: &EvaluatedEffect) -> bool {
+    match effect {
+        EvaluatedEffect::Brightness { amount } => *amount == 0.0,
+        EvaluatedEffect::Contrast { amount } | EvaluatedEffect::Saturation { amount } => {
+            *amount == 1.0
+        }
+        EvaluatedEffect::Tint { amount, .. }
+        | EvaluatedEffect::ChromaticAberration { amount, .. }
+        | EvaluatedEffect::Vignette { amount, .. }
+        | EvaluatedEffect::Sharpen { amount, .. } => *amount == 0.0,
+        EvaluatedEffect::GaussianBlur { radius }
+        | EvaluatedEffect::DirectionalBlur { radius, .. }
+        | EvaluatedEffect::MotionBlur { radius, .. } => *radius == 0.0,
+        EvaluatedEffect::Glow {
+            radius, intensity, ..
+        } => *radius == 0.0 || *intensity == 0.0,
+        EvaluatedEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => *exposure == 0.0 && *gamma == 1.0 && *black_point == 0.0 && *white_point == 1.0,
+        EvaluatedEffect::CameraShake { .. } => true,
     }
 }
 
@@ -217,8 +272,9 @@ mod tests {
                 radius: 3.0,
                 intensity: 0.75,
                 colour: [255, 128, 64, 255],
-            }),
-            vec![
+            })
+            .as_slice(),
+            &[
                 CpuEffectPass::HighlightExtract {
                     threshold: 0.6,
                     colour: [255, 128, 64, 255],
@@ -232,8 +288,9 @@ mod tests {
             effect_pass_plan(&EvaluatedEffect::Sharpen {
                 amount: 0.0,
                 radius: 2.0,
-            }),
-            Vec::new()
+            })
+            .as_slice(),
+            &[]
         );
     }
 

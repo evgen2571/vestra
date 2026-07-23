@@ -3,10 +3,13 @@
 mod backend;
 mod blend;
 mod cache;
+pub(crate) mod chromatic;
+pub(crate) mod colour_adjust;
 mod compositor;
 mod effects;
 mod engine;
 mod prepared;
+pub(crate) mod vignette;
 mod wgpu;
 pub(crate) mod zoom_blur;
 

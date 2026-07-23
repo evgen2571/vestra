@@ -514,19 +514,19 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
         EvaluatedEffect::ChromaticAberration {
             amount,
             angle_degrees,
-        } => chromatic(source, target, *amount, *angle_degrees),
+        } => crate::render::chromatic::apply(source, target, *amount, *angle_degrees),
         EvaluatedEffect::Vignette {
             amount,
             radius,
             softness,
             colour,
-        } => vignette(source, target, *amount, *radius, *softness, *colour),
+        } => crate::render::vignette::apply(source, target, *amount, *radius, *softness, *colour),
         EvaluatedEffect::ColorAdjust {
             exposure,
             gamma,
             black_point,
             white_point,
-        } => colour_adjust(
+        } => crate::render::colour_adjust::apply(
             source,
             target,
             *exposure,
@@ -674,62 +674,6 @@ fn zoom_blur(
         );
     }
 }
-fn chromatic(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
-    if amount <= 0.0 {
-        target.copy_from(source, 0, 0).expect("same dimensions");
-        return;
-    }
-    let r = angle.to_radians();
-    let (dx, dy) = (r.cos() * amount, r.sin() * amount);
-    for (x, y, p) in source.enumerate_pixels() {
-        let left = sample_edge(source, f64::from(x) - dx + 0.5, f64::from(y) - dy + 0.5);
-        let right = sample_edge(source, f64::from(x) + dx + 0.5, f64::from(y) + dy + 0.5);
-        target.put_pixel(x, y, Rgba([left[0], p[1], right[2], p[3]]));
-    }
-}
-fn vignette(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    amount: f64,
-    radius: f64,
-    softness: f64,
-    colour: [u8; 4],
-) {
-    let w = f64::from(source.width());
-    let h = f64::from(source.height());
-    for (x, y, p) in source.enumerate_pixels() {
-        let dx = (f64::from(x) + 0.5 - w / 2.0) / (w / 2.0);
-        let dy = (f64::from(y) + 0.5 - h / 2.0) / (h / 2.0);
-        let distance = (dx * dx + dy * dy).sqrt();
-        let edge = ((distance - radius) / (softness.max(0.001))).clamp(0.0, 1.0);
-        let t = (amount * edge).clamp(0.0, 1.0);
-        let mut out = *p;
-        for c in 0..3 {
-            out[c] = (f64::from(p[c]) * (1.0 - t) + f64::from(colour[c]) * t).round() as u8;
-        }
-        target.put_pixel(x, y, out);
-    }
-}
-fn colour_adjust(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    exposure: f64,
-    gamma: f64,
-    black: f64,
-    white: f64,
-) {
-    let scale = 1.0 / (white - black).max(0.000_1);
-    map_pixels(source, target, |mut p, _, _| {
-        for c in 0..3 {
-            let v = (((f64::from(p[c]) / 255.0) * 2f64.powf(exposure) - black) * scale)
-                .clamp(0.0, 1.0)
-                .powf(1.0 / gamma.max(0.001));
-            p[c] = (v * 255.0).round() as u8;
-        }
-        p
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -808,7 +752,7 @@ mod tests {
     fn vignette_normalizes_each_frame_axis_independently() {
         let source = RgbaImage::from_pixel(10, 100, Rgba([255, 255, 255, 255]));
         let mut target = RgbaImage::new(10, 100);
-        vignette(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
+        crate::render::vignette::apply(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
         let top = target.get_pixel(5, 0)[0];
         let side = target.get_pixel(0, 50)[0];
         assert!(top.abs_diff(side) <= 32);
@@ -819,7 +763,7 @@ mod tests {
     fn vertical_vignette_matches_the_pixel_golden_fixture() {
         let source = RgbaImage::from_pixel(3, 5, Rgba([200, 160, 120, 255]));
         let mut target = RgbaImage::new(3, 5);
-        vignette(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
+        crate::render::vignette::apply(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
         assert_eq!(
             target.as_raw(),
             &[
@@ -1007,7 +951,7 @@ mod tests {
     fn chromatic_zero_amount_is_an_exact_noop() {
         let source = RgbaImage::from_pixel(2, 2, Rgba([17, 83, 201, 129]));
         let mut target = RgbaImage::new(2, 2);
-        chromatic(&source, &mut target, 0.0, 0.0);
+        crate::render::chromatic::apply(&source, &mut target, 0.0, 0.0);
         assert_eq!(source, target);
     }
 

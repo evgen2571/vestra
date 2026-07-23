@@ -37,6 +37,11 @@ pub struct CompilationStats {
     pub(crate) contrast_effect_count: usize,
     pub(crate) saturation_effect_count: usize,
     pub(crate) tint_effect_count: usize,
+    pub(crate) local_effect_count: usize,
+    pub(crate) global_effect_count: usize,
+    pub(crate) advanced_effect_count: usize,
+    pub(crate) generated_transform_contribution_count: usize,
+    pub(crate) effect_pass_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]

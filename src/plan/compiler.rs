@@ -156,6 +156,7 @@ fn compile_canonical(
             opacity: compile_track(&clip.opacity, &clip.id)?,
             opacity_contributions: Vec::new(),
             effects,
+            blend_mode: clip.blend_mode,
         });
     }
     compilation.rendered_clip_count = layers
@@ -182,6 +183,12 @@ fn compile_canonical(
         )?);
     }
     compilation.parsed_colour_count += project.visual.flashes.len() as u64;
+    let post_effects = project
+        .visual
+        .post_effects
+        .iter()
+        .map(|effect| compile_effect(effect, "global post effect"))
+        .collect::<Result<Vec<_>, _>>()?;
     record_compilation_workload(&mut compilation, &layers);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     Ok(RenderPlan {
@@ -207,6 +214,7 @@ fn compile_canonical(
         limits: validated.limits,
         images,
         layers,
+        post_effects,
         compilation,
         warnings: validated.warnings.clone(),
     })
@@ -351,6 +359,113 @@ fn compile_effect(
                 )
             })?,
             amount: compile_track(amount, id)?,
+        },
+        crate::project::Effect::GaussianBlur { radius, .. } => {
+            crate::plan::CompiledEffect::GaussianBlur {
+                radius: compile_track(radius, id)?,
+            }
+        }
+        crate::project::Effect::DirectionalBlur {
+            radius,
+            angle_degrees,
+            ..
+        } => crate::plan::CompiledEffect::DirectionalBlur {
+            radius: compile_track(radius, id)?,
+            angle_degrees: compile_track(angle_degrees, id)?,
+        },
+        crate::project::Effect::Glow {
+            threshold,
+            radius,
+            intensity,
+            colour,
+            ..
+        } => crate::plan::CompiledEffect::Glow {
+            threshold: compile_track(threshold, id)?,
+            radius: compile_track(radius, id)?,
+            intensity: compile_track(intensity, id)?,
+            colour: parse_colour(colour).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-PLAN-EFFECT-COLOUR",
+                    Category::Internal,
+                    "validated glow color is invalid",
+                    "",
+                )
+            })?,
+        },
+        crate::project::Effect::ChromaticAberration {
+            amount,
+            angle_degrees,
+            ..
+        } => crate::plan::CompiledEffect::ChromaticAberration {
+            amount: compile_track(amount, id)?,
+            angle_degrees: compile_track(angle_degrees, id)?,
+        },
+        crate::project::Effect::Vignette {
+            amount,
+            radius,
+            softness,
+            colour,
+            ..
+        } => crate::plan::CompiledEffect::Vignette {
+            amount: compile_track(amount, id)?,
+            radius: compile_track(radius, id)?,
+            softness: compile_track(softness, id)?,
+            colour: parse_colour(colour).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-PLAN-EFFECT-COLOUR",
+                    Category::Internal,
+                    "validated vignette color is invalid",
+                    "",
+                )
+            })?,
+        },
+        crate::project::Effect::Sharpen { amount, radius, .. } => {
+            crate::plan::CompiledEffect::Sharpen {
+                amount: compile_track(amount, id)?,
+                radius: compile_track(radius, id)?,
+            }
+        }
+        crate::project::Effect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+            ..
+        } => crate::plan::CompiledEffect::ColorAdjust {
+            exposure: compile_track(exposure, id)?,
+            gamma: compile_track(gamma, id)?,
+            black_point: compile_track(black_point, id)?,
+            white_point: compile_track(white_point, id)?,
+        },
+        crate::project::Effect::CameraShake {
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            seed,
+            attack,
+            decay,
+            ..
+        } => crate::plan::CompiledEffect::CameraShake {
+            position_amount: compile_track(position_amount, id)?,
+            rotation_degrees: compile_track(rotation_degrees, id)?,
+            scale_amount: compile_track(scale_amount, id)?,
+            frequency: compile_track(frequency, id)?,
+            seed: *seed,
+            attack: *attack,
+            decay: *decay,
+        },
+        crate::project::Effect::MotionBlur {
+            intensity,
+            shutter_angle,
+            max_radius,
+            samples,
+            ..
+        } => crate::plan::CompiledEffect::MotionBlur {
+            intensity: compile_track(intensity, id)?,
+            shutter_angle: compile_track(shutter_angle, id)?,
+            max_radius: compile_track(max_radius, id)?,
+            samples: *samples,
         },
     })
 }
@@ -498,6 +613,7 @@ fn compile_flash_overlay(
         opacity,
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
+        blend_mode: crate::project::BlendMode::Normal,
     })
 }
 
@@ -579,6 +695,7 @@ fn record_compilation_workload(compilation: &mut CompilationStats, layers: &[Com
                     compilation.saturation_effect_count += 1;
                 }
                 crate::plan::CompiledEffect::Tint { .. } => compilation.tint_effect_count += 1,
+                _ => {}
             }
         }
     }
@@ -607,6 +724,7 @@ fn keyframe_count(project: &crate::project::Project) -> u64 {
                         | crate::project::Effect::Tint { amount, .. } => {
                             track_keyframe_count(amount)
                         }
+                        _ => 0,
                     })
                     .sum::<u64>()
         })

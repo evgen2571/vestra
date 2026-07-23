@@ -13,6 +13,7 @@ pub struct EvaluatedFrame {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) layers: Vec<EvaluatedLayer>,
+    pub(crate) post_effects: Vec<EvaluatedEffect>,
     pub(crate) evaluated_track_count: u64,
 }
 
@@ -20,9 +21,13 @@ pub struct EvaluatedFrame {
 pub struct EvaluatedLayer {
     pub(crate) source: EvaluatedSource,
     pub(crate) opacity: f64,
-    /// Ordered colour effects collapsed once per layer/frame. The compositor
-    /// therefore performs no effect dispatch in its pixel loop.
+    /// Ordered local effect chain. Image effects consume and produce complete
+    /// surfaces, so its order is never inferred or rearranged by a backend.
+    pub(crate) effects: Vec<EvaluatedEffect>,
+    /// Legacy single-pass representation used by the basic WGPU path. Advanced
+    /// chains are rejected by that backend before frame rendering.
     pub(crate) colour_transform: ColourTransform,
+    pub(crate) blend_mode: crate::project::BlendMode,
 }
 
 #[derive(Clone, Debug)]
@@ -41,10 +46,66 @@ pub enum EvaluatedSource {
 
 #[derive(Clone, Debug)]
 pub enum EvaluatedEffect {
-    Brightness { amount: f64 },
-    Contrast { amount: f64 },
-    Saturation { amount: f64 },
-    Tint { colour: [u8; 4], amount: f64 },
+    Brightness {
+        amount: f64,
+    },
+    Contrast {
+        amount: f64,
+    },
+    Saturation {
+        amount: f64,
+    },
+    Tint {
+        colour: [u8; 4],
+        amount: f64,
+    },
+    GaussianBlur {
+        radius: f64,
+    },
+    DirectionalBlur {
+        radius: f64,
+        angle_degrees: f64,
+    },
+    Glow {
+        threshold: f64,
+        radius: f64,
+        intensity: f64,
+        colour: [u8; 4],
+    },
+    ChromaticAberration {
+        amount: f64,
+        angle_degrees: f64,
+    },
+    Vignette {
+        amount: f64,
+        radius: f64,
+        softness: f64,
+        colour: [u8; 4],
+    },
+    Sharpen {
+        amount: f64,
+        radius: f64,
+    },
+    ColorAdjust {
+        exposure: f64,
+        gamma: f64,
+        black_point: f64,
+        white_point: f64,
+    },
+    CameraShake {
+        position_amount: f64,
+        rotation_radians: f64,
+        scale_amount: f64,
+        frequency: f64,
+        seed: u64,
+        attack: f64,
+        decay: f64,
+    },
+    MotionBlur {
+        radius: f64,
+        angle_degrees: f64,
+        samples: u8,
+    },
 }
 
 /// An affine RGB operation in byte colour space: `matrix * rgb + offset`.
@@ -109,6 +170,7 @@ impl ColourTransform {
                         ],
                     )
                 }
+                _ => transform,
             })
     }
 }
@@ -152,7 +214,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
         if opacity <= 0.0 {
             continue;
         }
-        let source = match &layer.source {
+        let mut source = match &layer.source {
             CompiledVisualSource::Image {
                 asset_index,
                 crop,
@@ -177,14 +239,46 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 EvaluatedSource::SolidColor { colour: *colour }
             }
         };
-        let colour_transform = ColourTransform::from_effects(layer.effects.iter().map(|effect| {
-            evaluated_track_count += 1;
-            evaluate_effect(effect, relative)
-        }));
+        let effects = layer
+            .effects
+            .iter()
+            .map(|effect| {
+                evaluated_track_count += 1;
+                evaluate_effect(effect, relative)
+            })
+            .collect::<Vec<_>>();
+        if let EvaluatedSource::Image { transform, .. } = &mut source {
+            for effect in &effects {
+                if let EvaluatedEffect::CameraShake {
+                    position_amount,
+                    rotation_radians,
+                    scale_amount,
+                    frequency,
+                    seed,
+                    attack,
+                    decay,
+                } = effect
+                {
+                    apply_camera_shake(
+                        transform,
+                        relative,
+                        *position_amount,
+                        *rotation_radians,
+                        *scale_amount,
+                        *frequency,
+                        *seed,
+                        *attack,
+                        *decay,
+                    );
+                }
+            }
+        }
         layers.push(EvaluatedLayer {
             source,
             opacity,
-            colour_transform,
+            colour_transform: ColourTransform::from_effects(effects.clone()),
+            effects,
+            blend_mode: layer.blend_mode,
         });
     }
     EvaluatedFrame {
@@ -193,6 +287,11 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
         width: plan.canvas.width,
         height: plan.canvas.height,
         layers,
+        post_effects: plan
+            .post_effects
+            .iter()
+            .map(|effect| evaluate_effect(effect, time))
+            .collect(),
         evaluated_track_count,
     }
 }
@@ -212,7 +311,120 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             colour: *colour,
             amount: amount.evaluate(time),
         },
+        CompiledEffect::GaussianBlur { radius } => EvaluatedEffect::GaussianBlur {
+            radius: radius.evaluate(time),
+        },
+        CompiledEffect::DirectionalBlur {
+            radius,
+            angle_degrees,
+        } => EvaluatedEffect::DirectionalBlur {
+            radius: radius.evaluate(time),
+            angle_degrees: angle_degrees.evaluate(time),
+        },
+        CompiledEffect::Glow {
+            threshold,
+            radius,
+            intensity,
+            colour,
+        } => EvaluatedEffect::Glow {
+            threshold: threshold.evaluate(time),
+            radius: radius.evaluate(time),
+            intensity: intensity.evaluate(time),
+            colour: *colour,
+        },
+        CompiledEffect::ChromaticAberration {
+            amount,
+            angle_degrees,
+        } => EvaluatedEffect::ChromaticAberration {
+            amount: amount.evaluate(time),
+            angle_degrees: angle_degrees.evaluate(time),
+        },
+        CompiledEffect::Vignette {
+            amount,
+            radius,
+            softness,
+            colour,
+        } => EvaluatedEffect::Vignette {
+            amount: amount.evaluate(time),
+            radius: radius.evaluate(time),
+            softness: softness.evaluate(time),
+            colour: *colour,
+        },
+        CompiledEffect::Sharpen { amount, radius } => EvaluatedEffect::Sharpen {
+            amount: amount.evaluate(time),
+            radius: radius.evaluate(time),
+        },
+        CompiledEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => EvaluatedEffect::ColorAdjust {
+            exposure: exposure.evaluate(time),
+            gamma: gamma.evaluate(time),
+            black_point: black_point.evaluate(time),
+            white_point: white_point.evaluate(time),
+        },
+        CompiledEffect::CameraShake {
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            seed,
+            attack,
+            decay,
+        } => EvaluatedEffect::CameraShake {
+            position_amount: position_amount.evaluate(time),
+            rotation_radians: rotation_degrees.evaluate(time).to_radians(),
+            scale_amount: scale_amount.evaluate(time),
+            frequency: frequency.evaluate(time),
+            seed: *seed,
+            attack: *attack,
+            decay: *decay,
+        },
+        CompiledEffect::MotionBlur {
+            intensity,
+            shutter_angle,
+            max_radius,
+            samples,
+        } => EvaluatedEffect::MotionBlur {
+            radius: (intensity.evaluate(time) * shutter_angle.evaluate(time) / 180.0)
+                .clamp(0.0, max_radius.evaluate(time)),
+            angle_degrees: 0.0,
+            samples: *samples,
+        },
     }
+}
+
+fn apply_camera_shake(
+    transform: &mut Transform2D,
+    time: u128,
+    position_amount: f64,
+    rotation_radians: f64,
+    scale_amount: f64,
+    frequency: f64,
+    seed: u64,
+    attack: f64,
+    decay: f64,
+) {
+    let seconds = time as f64 / 1_000_000_000.0;
+    let attack = if attack <= 0.0 {
+        1.0
+    } else {
+        (seconds / attack).clamp(0.0, 1.0)
+    };
+    let envelope = attack * (-seconds / decay.max(0.000_1)).exp();
+    let sample = |offset: f64| {
+        ((seconds * frequency * std::f64::consts::TAU + seed as f64 * 0.000_013 + offset).sin()
+            + 0.5 * (seconds * frequency * 1.618 * std::f64::consts::TAU + offset * 3.0).sin())
+            / 1.5
+    };
+    transform.position.x += sample(0.0) * position_amount * envelope;
+    transform.position.y += sample(1.7) * position_amount * envelope;
+    transform.rotation_radians += sample(3.1) * rotation_radians * envelope;
+    let scale = 1.0 + sample(4.9).abs() * scale_amount * envelope;
+    transform.scale.x *= scale;
+    transform.scale.y *= scale;
 }
 
 #[cfg(test)]

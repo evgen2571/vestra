@@ -351,6 +351,30 @@ mod tests {
     }
 
     #[test]
+    fn transparent_glow_matches_the_pixel_golden_fixture() {
+        let mut source = RgbaImage::new(3, 3);
+        source.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
+        let mut horizontal = RgbaImage::new(3, 3);
+        let mut output = RgbaImage::new(3, 3);
+        glow(
+            &source,
+            &mut horizontal,
+            &mut output,
+            0.0,
+            1.0,
+            1.0,
+            [255, 64, 0, 255],
+        );
+        assert_eq!(
+            output.as_raw(),
+            &[
+                255, 64, 0, 3, 255, 64, 0, 21, 255, 64, 0, 3, 255, 64, 0, 21, 255, 255, 255, 255,
+                255, 64, 0, 21, 255, 64, 0, 3, 255, 64, 0, 21, 255, 64, 0, 3,
+            ]
+        );
+    }
+
+    #[test]
     fn glow_spreads_visible_premultiplied_alpha_outside_the_source() {
         let mut source = RgbaImage::new(7, 7);
         source.put_pixel(3, 3, Rgba([255, 255, 255, 255]));

@@ -816,6 +816,22 @@ mod tests {
     }
 
     #[test]
+    fn vertical_vignette_matches_the_pixel_golden_fixture() {
+        let source = RgbaImage::from_pixel(3, 5, Rgba([200, 160, 120, 255]));
+        let mut target = RgbaImage::new(3, 5);
+        vignette(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
+        assert_eq!(
+            target.as_raw(),
+            &[
+                40, 32, 24, 255, 40, 32, 24, 255, 40, 32, 24, 255, 40, 32, 24, 255, 152, 122, 91,
+                255, 40, 32, 24, 255, 67, 53, 40, 255, 200, 160, 120, 255, 67, 53, 40, 255, 40, 32,
+                24, 255, 152, 122, 91, 255, 40, 32, 24, 255, 40, 32, 24, 255, 40, 32, 24, 255, 40,
+                32, 24, 255,
+            ]
+        );
+    }
+
+    #[test]
     fn basic_color_effects_apply_in_declared_order() {
         let transform = ColourTransform::from_effects([
             EvaluatedEffect::Brightness { amount: 0.1 },

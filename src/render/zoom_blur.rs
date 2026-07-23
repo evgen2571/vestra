@@ -61,3 +61,29 @@ pub(crate) fn apply(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn centered_radial_blur_matches_the_pixel_golden_fixture() {
+        let mut source = RgbaImage::new(5, 1);
+        source.put_pixel(4, 0, Rgba([255, 128, 0, 255]));
+        let mut output = RgbaImage::new(5, 1);
+        apply(
+            &source,
+            &mut output,
+            2.0,
+            5,
+            Point { x: 0.0, y: 0.5 },
+            ZoomBlurDirection::Centered,
+        );
+        assert_eq!(
+            output.as_raw(),
+            &[
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 128, 0, 82, 255, 128, 0, 163,
+            ]
+        );
+    }
+}

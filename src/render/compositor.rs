@@ -25,7 +25,8 @@ pub fn compose(
     }
     surfaces.resize(frame.width, frame.height);
     for layer in &frame.layers {
-        if matches!(layer.blend_mode, crate::project::BlendMode::Normal) && layer.effects.is_empty()
+        if matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+            && layer.effects.iter().all(effect_is_noop)
         {
             draw_layer(
                 canvas,
@@ -88,13 +89,13 @@ impl EffectSurfacePool {
     }
     fn apply(&mut self, effects: &[EvaluatedEffect]) {
         for effect in effects {
-            if !matches!(effect, EvaluatedEffect::CameraShake { .. }) {
+            if !effect_is_noop(effect) {
                 self.run(effect);
             }
         }
     }
     fn apply_to(&mut self, destination: &mut RgbaImage, effects: &[EvaluatedEffect]) {
-        if effects.is_empty() {
+        if effects.iter().all(effect_is_noop) {
             return;
         }
         self.first
@@ -140,6 +141,32 @@ impl EffectSurfacePool {
             _ => apply_effect(source, target, effect),
         }
         self.first_is_current = !self.first_is_current;
+    }
+}
+
+fn effect_is_noop(effect: &EvaluatedEffect) -> bool {
+    match effect {
+        EvaluatedEffect::Brightness { amount } => *amount == 0.0,
+        EvaluatedEffect::Contrast { amount } | EvaluatedEffect::Saturation { amount } => {
+            *amount == 1.0
+        }
+        EvaluatedEffect::Tint { amount, .. }
+        | EvaluatedEffect::ChromaticAberration { amount, .. }
+        | EvaluatedEffect::Vignette { amount, .. }
+        | EvaluatedEffect::Sharpen { amount, .. } => *amount == 0.0,
+        EvaluatedEffect::GaussianBlur { radius }
+        | EvaluatedEffect::DirectionalBlur { radius, .. }
+        | EvaluatedEffect::MotionBlur { radius, .. } => *radius == 0.0,
+        EvaluatedEffect::Glow {
+            radius, intensity, ..
+        } => *radius == 0.0 || *intensity == 0.0,
+        EvaluatedEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => *exposure == 0.0 && *gamma == 1.0 && *black_point == 0.0 && *white_point == 1.0,
+        EvaluatedEffect::CameraShake { .. } => true,
     }
 }
 
@@ -698,6 +725,34 @@ mod tests {
             ),
             Rgba([30, 140, 250, 180])
         );
+    }
+
+    #[test]
+    fn evaluated_effect_identity_predicate_skips_only_identity_work() {
+        assert!(effect_is_noop(&EvaluatedEffect::GaussianBlur {
+            radius: 0.0,
+        }));
+        assert!(effect_is_noop(&EvaluatedEffect::ColorAdjust {
+            exposure: 0.0,
+            gamma: 1.0,
+            black_point: 0.0,
+            white_point: 1.0,
+        }));
+        assert!(effect_is_noop(&EvaluatedEffect::CameraShake {
+            position_amount: 1.0,
+            rotation_radians: 1.0,
+            scale_amount: 1.0,
+            frequency: 1.0,
+            seed: 1,
+            attack: 0.0,
+            decay: 0.0,
+        }));
+        assert!(!effect_is_noop(&EvaluatedEffect::Glow {
+            threshold: 0.5,
+            radius: 2.0,
+            intensity: 1.0,
+            colour: [255, 255, 255, 255],
+        }));
     }
 
     #[test]

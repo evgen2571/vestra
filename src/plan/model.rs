@@ -17,7 +17,7 @@ pub struct RenderPlan {
     pub(crate) limits: crate::project::ResourceLimits,
     pub(crate) images: Vec<ImageAsset>,
     pub(crate) layers: Vec<CompiledLayer>,
-    pub(crate) post_effects: Vec<CompiledEffect>,
+    pub(crate) post_effects: Vec<TimedEffect>,
     pub(crate) compilation: CompilationStats,
     pub(crate) warnings: Vec<crate::Diagnostic>,
 }
@@ -76,7 +76,7 @@ pub struct CompiledLayer {
     /// Independent opacity contributors compose multiplicatively. Transitions
     /// populate one contributor instead of a transition variant.
     pub(crate) opacity_contributions: Vec<Track<f64>>,
-    pub(crate) effects: Vec<CompiledEffect>,
+    pub(crate) effects: Vec<TimedEffect>,
     pub(crate) blend_mode: crate::project::BlendMode,
 }
 
@@ -188,6 +188,22 @@ pub enum CompiledEffect {
     },
 }
 
+/// A compiled effect whose tracks use time relative to its active interval.
+/// The interval is half-open, matching scheduled layers and transitions.
+#[derive(Clone, Debug)]
+pub struct TimedEffect {
+    pub(crate) start: u128,
+    pub(crate) end: u128,
+    pub(crate) effect: CompiledEffect,
+}
+
+impl TimedEffect {
+    #[must_use]
+    pub(crate) fn active_at(&self, time: u128) -> bool {
+        self.start <= time && time < self.end
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DrawKey {
     pub(crate) layer: i32,
@@ -206,3 +222,23 @@ pub enum CompiledSizing {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ScheduledItem(pub(crate) usize);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timed_effects_use_half_open_intervals() {
+        let effect = TimedEffect {
+            start: 10,
+            end: 20,
+            effect: CompiledEffect::Brightness {
+                amount: Track::new(0.0),
+            },
+        };
+        assert!(!effect.active_at(9));
+        assert!(effect.active_at(10));
+        assert!(effect.active_at(19));
+        assert!(!effect.active_at(20));
+    }
+}

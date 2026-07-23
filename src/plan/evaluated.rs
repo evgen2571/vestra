@@ -93,6 +93,7 @@ pub enum EvaluatedEffect {
         white_point: f64,
     },
     CameraShake {
+        local_time: u128,
         position_amount: f64,
         rotation_radians: f64,
         scale_amount: f64,
@@ -240,9 +241,10 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
         let mut effects = layer
             .effects
             .iter()
+            .filter(|effect| effect.active_at(relative))
             .map(|effect| {
                 evaluated_track_count += 1;
-                evaluate_effect(effect, relative)
+                evaluate_effect(&effect.effect, relative - effect.start)
             })
             .collect::<Vec<_>>();
         for effect in &mut effects {
@@ -278,6 +280,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
         if let EvaluatedSource::Image { transform, .. } = &mut source {
             for effect in &effects {
                 if let EvaluatedEffect::CameraShake {
+                    local_time,
                     position_amount,
                     rotation_radians,
                     scale_amount,
@@ -289,7 +292,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 {
                     apply_camera_shake(
                         transform,
-                        relative,
+                        *local_time,
                         *position_amount,
                         *rotation_radians,
                         *scale_amount,
@@ -318,7 +321,8 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
         post_effects: plan
             .post_effects
             .iter()
-            .map(|effect| evaluate_effect(effect, time))
+            .filter(|effect| effect.active_at(time))
+            .map(|effect| evaluate_effect(&effect.effect, time - effect.start))
             .collect(),
         evaluated_track_count,
     }
@@ -337,7 +341,7 @@ fn evaluate_transform(
         rotation_radians: layer.transform.rotation_radians.evaluate(relative),
     };
     for contribution in &layer.transform_contributions {
-        if relative < contribution.start || relative > contribution.end {
+        if relative < contribution.start || relative >= contribution.end {
             continue;
         }
         *evaluated_track_count += 3;
@@ -430,6 +434,7 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             attack,
             decay,
         } => EvaluatedEffect::CameraShake {
+            local_time: time,
             position_amount: position_amount.evaluate(time),
             rotation_radians: rotation_degrees.evaluate(time).to_radians(),
             scale_amount: scale_amount.evaluate(time),

@@ -789,7 +789,8 @@ impl RenderBackend for WgpuBackend {
         drop(mapped);
         self.readback.unmap();
         self.timings.row_repack += row_repack_started.elapsed();
-        destination.as_mut().copy_from_slice(&self.frame_bytes);
+        let destination_bytes: &mut [u8] = destination.as_mut();
+        destination_bytes.copy_from_slice(&self.frame_bytes);
         Ok(())
     }
 
@@ -1349,7 +1350,14 @@ mod tests {
                     colour: [28, 156, 231, 255],
                     amount: Track::new(0.19),
                 },
-            ];
+            ]
+            .into_iter()
+            .map(|effect| crate::plan::TimedEffect {
+                start: 0,
+                end: u128::MAX,
+                effect,
+            })
+            .collect();
             let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
             let mut cpu = CpuBackend::default();
             cpu.prepare(&plan, Arc::clone(&decoded))

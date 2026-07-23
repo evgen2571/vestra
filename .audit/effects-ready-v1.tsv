@@ -1,0 +1,5 @@
+ts	phase	decision	why	evidence	result
+2026-07-23T16:23:08Z	frame	captured the green baseline and identified missing milestone features	we need current evidence before changing renderer semantics	/tmp/effects-ready-v1-baseline and git log	96 tests passed, focused examples are 6 to 9 frames
+2026-07-23T16:23:08Z	design	use a timed effect wrapper with half-open intervals	one wrapper keeps effects and preset-generated passes consistent without duplicating timing fields in every plan variant	src/plan/model.rs and timing design review	ready to implement
+2026-07-23T16:30:26Z	baseline	stopped the check-script benchmark child after 469 seconds	cargo test --all-targets executes the 10-sample 720x1280 benchmark because the benchmark has no test harness	/scripts/check.sh process output	INCONCLUSIVE, test suite portion passed before benchmark child was stopped
+2026-07-23T16:30:26Z	timing	implemented active intervals for camera shake and presets	transient work needs a local timeline and identity outside it	src/project/model.rs src/plan/model.rs src/plan/compiler.rs	focused timing and flash-cut tests pass

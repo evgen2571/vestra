@@ -156,10 +156,11 @@ fn validate_effect_parameters(
     maximum_keyframes: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
+    let active_duration = validate_active_interval(effect.timing(), duration, path, errors);
     let track = |track, field, valid: fn(&f64) -> bool, errors: &mut Vec<Diagnostic>| {
         validate_track(
             track,
-            duration,
+            active_duration,
             &format!("{path}/{field}"),
             maximum_keyframes,
             errors,
@@ -379,6 +380,34 @@ fn validate_effect_parameters(
             }
         }
     }
+}
+
+fn validate_active_interval(
+    timing: crate::project::ActiveInterval,
+    owner_duration: f64,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) -> f64 {
+    if !timing.start.is_finite() || timing.start < 0.0 || timing.start >= owner_duration {
+        errors.push(Diagnostic::error(
+            "MVP-EFFECT-INTERVAL",
+            Category::Semantic,
+            "active interval start must be finite and lie within its owner",
+            format!("{path}/start"),
+        ));
+        return owner_duration;
+    }
+    let duration = timing.duration.unwrap_or(owner_duration - timing.start);
+    if !duration.is_finite() || duration <= 0.0 || timing.start + duration > owner_duration {
+        errors.push(Diagnostic::error(
+            "MVP-EFFECT-INTERVAL",
+            Category::Semantic,
+            "active interval duration must be finite, positive, and fit within its owner",
+            format!("{path}/duration"),
+        ));
+        return owner_duration;
+    }
+    duration
 }
 
 fn valid_blur_radius(value: &f64) -> bool {
@@ -826,7 +855,13 @@ fn validate_visual(
             );
         }
         if let Some(preset) = &clip.preset {
-            validate_preset(preset, &clip.source, &format!("{path}/preset"), errors);
+            validate_preset(
+                preset,
+                &clip.source,
+                clip.duration,
+                &format!("{path}/preset"),
+                errors,
+            );
         }
         let mut effect_ids = BTreeSet::new();
         for (effect_index, effect) in clip.effects.iter().enumerate() {
@@ -839,6 +874,7 @@ fn validate_visual(
                 ));
             }
             let effect_path = format!("{path}/effects/{effect_index}");
+            validate_active_interval(effect.timing(), clip.duration, &effect_path, errors);
             match effect {
                 crate::project::Effect::Brightness { amount, .. }
                 | crate::project::Effect::Contrast { amount, .. }
@@ -1157,6 +1193,7 @@ fn validate_visual(
 fn validate_preset(
     preset: &crate::project::Preset,
     source: &crate::project::VisualSource,
+    clip_duration: f64,
     path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
@@ -1169,9 +1206,9 @@ fn validate_preset(
         ));
     }
     let intensity = match preset {
-        crate::project::Preset::SlowDrift { intensity }
-        | crate::project::Preset::ZoomPunch { intensity }
-        | crate::project::Preset::FocusReveal { intensity }
+        crate::project::Preset::SlowDrift { intensity, .. }
+        | crate::project::Preset::ZoomPunch { intensity, .. }
+        | crate::project::Preset::FocusReveal { intensity, .. }
         | crate::project::Preset::Impact { intensity, .. }
         | crate::project::Preset::HeavyImpact { intensity, .. } => *intensity,
     };
@@ -1183,6 +1220,23 @@ fn validate_preset(
             format!("{path}/intensity"),
         ));
     }
+    let timing = preset.timing();
+    let preferred_duration = match preset {
+        crate::project::Preset::SlowDrift { .. } => clip_duration - timing.start,
+        crate::project::Preset::ZoomPunch { .. } => 0.35,
+        crate::project::Preset::Impact { .. } => 0.28,
+        crate::project::Preset::HeavyImpact { .. } => 0.4,
+        crate::project::Preset::FocusReveal { .. } => 0.8,
+    };
+    let resolved_timing = crate::project::ActiveInterval {
+        start: timing.start,
+        duration: Some(
+            timing
+                .duration
+                .unwrap_or(preferred_duration.min((clip_duration - timing.start).max(0.0))),
+        ),
+    };
+    let _ = validate_active_interval(resolved_timing, clip_duration, path, errors);
 }
 
 fn validate_transform(

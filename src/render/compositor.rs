@@ -733,6 +733,7 @@ mod tests {
         );
         assert!(
             effect_pass_plan(&EvaluatedEffect::CameraShake {
+                local_time: 0,
                 position_amount: 1.0,
                 rotation_radians: 1.0,
                 scale_amount: 1.0,

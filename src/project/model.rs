@@ -247,6 +247,28 @@ pub struct Keyframe<T> {
     pub interpolation: Interpolation,
 }
 
+/// A half-open local interval for a transient clip feature.
+///
+/// Omitted duration means "the rest of the owning clip".  The validator
+/// resolves that default after it knows the clip duration.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActiveInterval {
+    #[serde(default)]
+    pub start: f64,
+    #[serde(default, deserialize_with = "optional_non_null")]
+    pub duration: Option<f64>,
+}
+
+impl Default for ActiveInterval {
+    fn default() -> Self {
+        Self {
+            start: 0.0,
+            duration: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Interpolation {
@@ -340,6 +362,8 @@ pub enum Effect {
     },
     CameraShake {
         id: String,
+        #[serde(flatten)]
+        timing: ActiveInterval,
         position_amount: Track<f64>,
         rotation_degrees: Track<f64>,
         scale_amount: Track<f64>,
@@ -375,6 +399,14 @@ impl Effect {
             | Self::MotionBlur { id, .. } => id,
         }
     }
+
+    #[must_use]
+    pub fn timing(&self) -> ActiveInterval {
+        match self {
+            Self::CameraShake { timing, .. } => *timing,
+            _ => ActiveInterval::default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -391,11 +423,46 @@ pub enum BlendMode {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Preset {
-    SlowDrift { intensity: f64 },
-    ZoomPunch { intensity: f64 },
-    Impact { intensity: f64, seed: u64 },
-    HeavyImpact { intensity: f64, seed: u64 },
-    FocusReveal { intensity: f64 },
+    SlowDrift {
+        #[serde(flatten)]
+        timing: ActiveInterval,
+        intensity: f64,
+    },
+    ZoomPunch {
+        #[serde(flatten)]
+        timing: ActiveInterval,
+        intensity: f64,
+    },
+    Impact {
+        #[serde(flatten)]
+        timing: ActiveInterval,
+        intensity: f64,
+        seed: u64,
+    },
+    HeavyImpact {
+        #[serde(flatten)]
+        timing: ActiveInterval,
+        intensity: f64,
+        seed: u64,
+    },
+    FocusReveal {
+        #[serde(flatten)]
+        timing: ActiveInterval,
+        intensity: f64,
+    },
+}
+
+impl Preset {
+    #[must_use]
+    pub fn timing(&self) -> ActiveInterval {
+        match self {
+            Self::SlowDrift { timing, .. }
+            | Self::ZoomPunch { timing, .. }
+            | Self::Impact { timing, .. }
+            | Self::HeavyImpact { timing, .. }
+            | Self::FocusReveal { timing, .. } => *timing,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -575,5 +642,33 @@ mod tests {
             "trim_end": null, "volume": 1
         });
         assert!(serde_json::from_value::<Project>(audio_null).is_err());
+    }
+
+    #[test]
+    fn transient_timing_deserializes_without_changing_legacy_defaults() {
+        let shake: Effect = serde_json::from_value(serde_json::json!({
+            "id": "shake", "type": "camera_shake", "start": 1.25, "duration": 0.3,
+            "position_amount": {"base_value": 0.01},
+            "rotation_degrees": {"base_value": 1.0},
+            "scale_amount": {"base_value": 0.01},
+            "frequency": {"base_value": 14.0}, "seed": 7, "attack": 0.03, "decay": 0.22
+        }))
+        .expect("shake timing parses");
+        assert_eq!(shake.timing().start, 1.25);
+        assert_eq!(shake.timing().duration, Some(0.3));
+
+        let preset: Preset = serde_json::from_value(serde_json::json!({
+            "type": "impact", "start": 1.0, "duration": 0.28, "intensity": 1.0, "seed": 7
+        }))
+        .expect("preset timing parses");
+        assert_eq!(preset.timing().start, 1.0);
+        assert_eq!(preset.timing().duration, Some(0.28));
+
+        let legacy: Preset = serde_json::from_value(serde_json::json!({
+            "type": "impact", "intensity": 1.0, "seed": 7
+        }))
+        .expect("legacy preset parses");
+        assert_eq!(legacy.timing().start, 0.0);
+        assert_eq!(legacy.timing().duration, None);
     }
 }

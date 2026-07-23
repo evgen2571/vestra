@@ -507,9 +507,9 @@ fn plan_requires_cpu_effects(plan: &RenderPlan) -> bool {
     !plan.post_effects.is_empty()
         || plan.layers.iter().any(|layer| {
             layer.blend_mode != crate::project::BlendMode::Normal
-                || layer.effects.iter().any(|effect| {
+                || layer.effects.iter().any(|timed| {
                     !matches!(
-                        effect,
+                        timed.effect,
                         crate::plan::CompiledEffect::Brightness { .. }
                             | crate::plan::CompiledEffect::Contrast { .. }
                             | crate::plan::CompiledEffect::Saturation { .. }

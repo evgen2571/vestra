@@ -243,6 +243,7 @@ where
     performance.saturation_effect_count = plan.compilation.saturation_effect_count;
     performance.tint_effect_count = plan.compilation.tint_effect_count;
     performance.local_effect_count = plan.compilation.local_effect_count;
+    performance.generated_local_effect_count = plan.compilation.generated_local_effect_count;
     performance.global_effect_count = plan.compilation.global_effect_count;
     performance.advanced_effect_count = plan.compilation.advanced_effect_count;
     performance.generated_transform_contribution_count =

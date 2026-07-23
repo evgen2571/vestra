@@ -197,7 +197,7 @@ fn compile_canonical(
         .iter()
         .map(|effect| compile_effect(effect, "global post effect"))
         .collect::<Result<Vec<_>, _>>()?;
-    record_compilation_workload(&mut compilation, &layers);
+    record_compilation_workload(&mut compilation, &layers, &post_effects);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     Ok(RenderPlan {
         configured_output: resolved_output_path(validated),
@@ -1235,13 +1235,20 @@ fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, 
     }))
 }
 
-fn record_compilation_workload(compilation: &mut CompilationStats, layers: &[CompiledLayer]) {
+fn record_compilation_workload(
+    compilation: &mut CompilationStats,
+    layers: &[CompiledLayer],
+    post_effects: &[crate::plan::CompiledEffect],
+) {
     for layer in layers {
+        compilation.local_effect_count += layer.effects.len();
+        compilation.generated_transform_contribution_count += layer.transform_contributions.len();
         match &layer.source {
             CompiledVisualSource::Image { .. } => compilation.image_source_count += 1,
             CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
         }
         for effect in &layer.effects {
+            compilation.effect_pass_count += effect_passes(effect);
             match effect {
                 crate::plan::CompiledEffect::Brightness { .. } => {
                     compilation.brightness_effect_count += 1;
@@ -1253,9 +1260,43 @@ fn record_compilation_workload(compilation: &mut CompilationStats, layers: &[Com
                     compilation.saturation_effect_count += 1;
                 }
                 crate::plan::CompiledEffect::Tint { .. } => compilation.tint_effect_count += 1,
-                _ => {}
+                crate::plan::CompiledEffect::GaussianBlur { .. }
+                | crate::plan::CompiledEffect::DirectionalBlur { .. }
+                | crate::plan::CompiledEffect::Glow { .. }
+                | crate::plan::CompiledEffect::ChromaticAberration { .. }
+                | crate::plan::CompiledEffect::Vignette { .. }
+                | crate::plan::CompiledEffect::Sharpen { .. }
+                | crate::plan::CompiledEffect::ColorAdjust { .. }
+                | crate::plan::CompiledEffect::CameraShake { .. }
+                | crate::plan::CompiledEffect::MotionBlur { .. } => {
+                    compilation.advanced_effect_count += 1;
+                }
             }
         }
+    }
+    compilation.global_effect_count = post_effects.len();
+    compilation.advanced_effect_count += post_effects
+        .iter()
+        .filter(|effect| {
+            !matches!(
+                effect,
+                crate::plan::CompiledEffect::Brightness { .. }
+                    | crate::plan::CompiledEffect::Contrast { .. }
+                    | crate::plan::CompiledEffect::Saturation { .. }
+                    | crate::plan::CompiledEffect::Tint { .. }
+            )
+        })
+        .count();
+    compilation.effect_pass_count += post_effects.iter().map(effect_passes).sum::<usize>();
+}
+
+fn effect_passes(effect: &crate::plan::CompiledEffect) -> usize {
+    match effect {
+        crate::plan::CompiledEffect::GaussianBlur { .. } => 2,
+        crate::plan::CompiledEffect::Glow { .. } => 4,
+        crate::plan::CompiledEffect::Sharpen { .. } => 3,
+        crate::plan::CompiledEffect::CameraShake { .. } => 0,
+        _ => 1,
     }
 }
 

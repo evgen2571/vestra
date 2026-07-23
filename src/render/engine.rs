@@ -242,6 +242,12 @@ where
     performance.contrast_effect_count = plan.compilation.contrast_effect_count;
     performance.saturation_effect_count = plan.compilation.saturation_effect_count;
     performance.tint_effect_count = plan.compilation.tint_effect_count;
+    performance.local_effect_count = plan.compilation.local_effect_count;
+    performance.global_effect_count = plan.compilation.global_effect_count;
+    performance.advanced_effect_count = plan.compilation.advanced_effect_count;
+    performance.generated_transform_contribution_count =
+        plan.compilation.generated_transform_contribution_count;
+    performance.effect_pass_count = plan.compilation.effect_pass_count;
     performance.schedule_event_count = schedule.event_count();
     let backend_timings = backend.timings();
     let mut timings = RenderTimings {

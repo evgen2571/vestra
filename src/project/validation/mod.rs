@@ -11,6 +11,7 @@ use crate::project::{
 
 pub(super) mod assets;
 pub(super) mod audio;
+pub(super) mod presets;
 
 pub(crate) fn validate(
     project: Project,
@@ -923,7 +924,7 @@ fn validate_visual(
             );
         }
         if let Some(preset) = &clip.preset {
-            validate_preset(
+            presets::validate(
                 preset,
                 &clip.source,
                 clip.duration,
@@ -1287,55 +1288,6 @@ fn validate_visual(
             }
         }
     }
-}
-
-fn validate_preset(
-    preset: &crate::project::Preset,
-    source: &crate::project::VisualSource,
-    clip_duration: f64,
-    path: &str,
-    errors: &mut Vec<Diagnostic>,
-) {
-    if matches!(source, crate::project::VisualSource::SolidColor { .. }) {
-        errors.push(Diagnostic::error(
-            "MVP-PRESET-SOURCE",
-            Category::Semantic,
-            "presets require an image clip",
-            path,
-        ));
-    }
-    let intensity = match preset {
-        crate::project::Preset::SlowDrift { intensity, .. }
-        | crate::project::Preset::ZoomPunch { intensity, .. }
-        | crate::project::Preset::FocusReveal { intensity, .. }
-        | crate::project::Preset::Impact { intensity, .. }
-        | crate::project::Preset::HeavyImpact { intensity, .. } => *intensity,
-    };
-    if !intensity.is_finite() || !(0.0..=2.0).contains(&intensity) {
-        errors.push(Diagnostic::error(
-            "MVP-PRESET-INTENSITY",
-            Category::Semantic,
-            "preset intensity must be finite and in 0..=2",
-            format!("{path}/intensity"),
-        ));
-    }
-    let timing = preset.timing();
-    let preferred_duration = match preset {
-        crate::project::Preset::SlowDrift { .. } => clip_duration - timing.start,
-        crate::project::Preset::ZoomPunch { .. } => 0.35,
-        crate::project::Preset::Impact { .. } => 0.28,
-        crate::project::Preset::HeavyImpact { .. } => 0.4,
-        crate::project::Preset::FocusReveal { .. } => 0.8,
-    };
-    let resolved_timing = crate::project::ActiveInterval {
-        start: timing.start,
-        duration: Some(
-            timing
-                .duration
-                .unwrap_or(preferred_duration.min((clip_duration - timing.start).max(0.0))),
-        ),
-    };
-    let _ = validate_active_interval(resolved_timing, clip_duration, path, errors);
 }
 
 fn validate_transform(

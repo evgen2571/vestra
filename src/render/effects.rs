@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::plan::EvaluatedEffect;
@@ -124,9 +126,10 @@ pub(crate) fn gaussian_blur(
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
-    let kernel = GaussianKernel::new(radius);
-    convolve(source, horizontal, &kernel, true);
-    convolve(horizontal, target, &kernel, false);
+    with_gaussian_kernel(radius, |kernel| {
+        convolve(source, horizontal, kernel, true);
+        convolve(horizontal, target, kernel, false);
+    });
 }
 
 pub(crate) fn glow(
@@ -162,9 +165,10 @@ pub(crate) fn glow(
             ]),
         );
     }
-    let kernel = GaussianKernel::new(radius);
-    convolve(target, horizontal, &kernel, true);
-    convolve(horizontal, target, &kernel, false);
+    with_gaussian_kernel(radius, |kernel| {
+        convolve(target, horizontal, kernel, true);
+        convolve(horizontal, target, kernel, false);
+    });
     for (base, bloom) in source.pixels().zip(target.pixels_mut()) {
         let base_alpha = f64::from(base[3]) / 255.0;
         let glow_alpha = (f64::from(bloom[3]) / 255.0 * intensity).clamp(0.0, 1.0);
@@ -208,9 +212,37 @@ pub(crate) fn sharpen(
     }
 }
 
+#[derive(Clone)]
 struct GaussianKernel {
     weights: Vec<f64>,
     radius: i32,
+}
+
+thread_local! {
+    static GAUSSIAN_KERNEL_CACHE: RefCell<Vec<(u16, GaussianKernel)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKernel) -> T) -> T {
+    let key = (radius.clamp(0.0, 32.0) * 4.0).round() as u16;
+    GAUSSIAN_KERNEL_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let index = cache
+            .iter()
+            .position(|(cached, _)| *cached == key)
+            .unwrap_or_else(|| {
+                if cache.len() == 16 {
+                    cache.remove(0);
+                }
+                cache.push((key, GaussianKernel::new(f64::from(key) / 4.0)));
+                cache.len() - 1
+            });
+        work(&cache[index].1)
+    })
+}
+
+#[cfg(test)]
+fn gaussian_kernel_cache_len() -> usize {
+    GAUSSIAN_KERNEL_CACHE.with(|cache| cache.borrow().len())
 }
 
 impl GaussianKernel {
@@ -342,5 +374,20 @@ mod tests {
         assert!(target.get_pixel(2, 3)[3] > target.get_pixel(1, 3)[3]);
         assert_eq!(target.get_pixel(2, 3)[1], 0);
         assert_eq!(target.get_pixel(2, 3)[2], 0);
+    }
+
+    #[test]
+    fn gaussian_kernels_are_reused_and_bounded() {
+        let source = RgbaImage::from_pixel(3, 3, Rgba([255, 255, 255, 255]));
+        let mut horizontal = RgbaImage::new(3, 3);
+        let mut target = RgbaImage::new(3, 3);
+        gaussian_blur(&source, &mut horizontal, &mut target, 2.0);
+        let after_first = gaussian_kernel_cache_len();
+        gaussian_blur(&source, &mut horizontal, &mut target, 2.0);
+        assert_eq!(gaussian_kernel_cache_len(), after_first);
+        for radius in 1..24 {
+            gaussian_blur(&source, &mut horizontal, &mut target, f64::from(radius));
+        }
+        assert!(gaussian_kernel_cache_len() <= 16);
     }
 }

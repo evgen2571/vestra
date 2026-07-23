@@ -28,19 +28,8 @@ pub fn compose(
     }
     surfaces.resize(frame.width, frame.height);
     for layer in &frame.layers {
-        if matches!(layer.blend_mode, crate::project::BlendMode::Normal)
-            && layer
-                .effects
-                .iter()
-                .all(|effect| effect_pass_plan(effect).is_empty())
-        {
-            draw_layer(
-                canvas,
-                assets,
-                layer,
-                layer.opacity,
-                ColourTransform::default(),
-            );
+        if uses_direct_colour_path(layer) {
+            draw_layer(canvas, assets, layer, layer.opacity, layer.colour_transform);
             continue;
         }
         surfaces.clear();
@@ -55,6 +44,19 @@ pub fn compose(
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
     }
     surfaces.apply_to(canvas, &frame.post_effects);
+}
+
+fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
+    matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+        && layer.effects.iter().all(|effect| {
+            matches!(
+                effect,
+                EvaluatedEffect::Brightness { .. }
+                    | EvaluatedEffect::Contrast { .. }
+                    | EvaluatedEffect::Saturation { .. }
+                    | EvaluatedEffect::Tint { .. }
+            )
+        })
 }
 
 pub struct EffectSurfacePool {
@@ -799,6 +801,26 @@ mod tests {
             apply_colour_transform(Rgba([100, 0, 0, 255]), transform),
             Rgba([63, 13, 140, 255])
         );
+    }
+
+    #[test]
+    fn basic_colour_effects_keep_the_direct_render_path() {
+        let base = EvaluatedLayer {
+            source: EvaluatedSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            opacity: 1.0,
+            effects: vec![EvaluatedEffect::Brightness { amount: 0.1 }],
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        };
+        assert!(uses_direct_colour_path(&base));
+        let mut advanced = base;
+        advanced.effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
+        assert!(!uses_direct_colour_path(&advanced));
+        advanced.effects.clear();
+        advanced.blend_mode = crate::project::BlendMode::Screen;
+        assert!(!uses_direct_colour_path(&advanced));
     }
 
     #[test]

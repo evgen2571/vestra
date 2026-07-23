@@ -96,6 +96,7 @@ fn evaluated_effect_is_noop(effect: &EvaluatedEffect) -> bool {
         | EvaluatedEffect::Sharpen { amount, .. } => *amount == 0.0,
         EvaluatedEffect::GaussianBlur { radius }
         | EvaluatedEffect::DirectionalBlur { radius, .. }
+        | EvaluatedEffect::ZoomBlur { radius }
         | EvaluatedEffect::MotionBlur { radius, .. } => *radius == 0.0,
         EvaluatedEffect::Glow {
             radius, intensity, ..
@@ -154,9 +155,9 @@ pub(crate) fn glow(
             x,
             y,
             Rgba([
-                (f64::from(colour[0]) * highlight).round() as u8,
-                (f64::from(colour[1]) * highlight).round() as u8,
-                (f64::from(colour[2]) * highlight).round() as u8,
+                colour[0],
+                colour[1],
+                colour[2],
                 (alpha * 255.0).round() as u8,
             ]),
         );
@@ -165,12 +166,22 @@ pub(crate) fn glow(
     convolve(target, horizontal, &kernel, true);
     convolve(horizontal, target, &kernel, false);
     for (base, bloom) in source.pixels().zip(target.pixels_mut()) {
-        for channel in 0..3 {
-            bloom[channel] = (f64::from(base[channel]) + f64::from(bloom[channel]) * intensity)
-                .round()
-                .clamp(0.0, 255.0) as u8;
-        }
-        bloom[3] = base[3];
+        let base_alpha = f64::from(base[3]) / 255.0;
+        let glow_alpha = (f64::from(bloom[3]) / 255.0 * intensity).clamp(0.0, 1.0);
+        let alpha = base_alpha + glow_alpha * (1.0 - base_alpha);
+        let rgb = if alpha <= 0.000_000_1 {
+            [0; 3]
+        } else {
+            std::array::from_fn(|channel| {
+                ((f64::from(base[channel]) / 255.0 * base_alpha
+                    + f64::from(bloom[channel]) / 255.0 * glow_alpha)
+                    / alpha
+                    * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            })
+        };
+        *bloom = Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]);
     }
 }
 
@@ -308,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn glow_spreads_on_both_axes_and_preserves_the_source() {
+    fn glow_spreads_visible_premultiplied_alpha_outside_the_source() {
         let mut source = RgbaImage::new(7, 7);
         source.put_pixel(3, 3, Rgba([255, 255, 255, 255]));
         let mut horizontal = RgbaImage::new(7, 7);
@@ -323,7 +334,13 @@ mod tests {
             [255, 0, 0, 255],
         );
         assert_eq!(target.get_pixel(3, 3)[0], 255);
-        assert!(target.get_pixel(2, 3)[0] > 0);
-        assert!(target.get_pixel(3, 2)[0] > 0);
+        let horizontal = target.get_pixel(2, 3);
+        let vertical = target.get_pixel(3, 2);
+        assert!(horizontal[0] > 0 && horizontal[3] > 0);
+        assert!(vertical[0] > 0 && vertical[3] > 0);
+        assert_eq!(horizontal, vertical);
+        assert!(target.get_pixel(2, 3)[3] > target.get_pixel(1, 3)[3]);
+        assert_eq!(target.get_pixel(2, 3)[1], 0);
+        assert_eq!(target.get_pixel(2, 3)[2], 0);
     }
 }

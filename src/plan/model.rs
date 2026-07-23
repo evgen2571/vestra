@@ -145,6 +145,9 @@ pub enum CompiledEffect {
         radius: Track<f64>,
         angle_degrees: Track<f64>,
     },
+    ZoomBlur {
+        radius: Track<f64>,
+    },
     Glow {
         threshold: Track<f64>,
         radius: Track<f64>,

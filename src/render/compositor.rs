@@ -398,7 +398,8 @@ fn sample_bilinear(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
     let y0 = y.floor() as i64;
     let tx = x - x0 as f64;
     let ty = y - y0 as f64;
-    let mut result = [0.0; 4];
+    let mut premultiplied = [0.0; 3];
+    let mut alpha = 0.0;
     for (offset_x, weight_x) in [(0_i64, 1.0 - tx), (1, tx)] {
         for (offset_y, weight_y) in [(0_i64, 1.0 - ty), (1, ty)] {
             let sample_x = x0 + offset_x;
@@ -412,12 +413,20 @@ fn sample_bilinear(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
             }
             let sample = image.get_pixel(sample_x as u32, sample_y as u32);
             let weight = weight_x * weight_y;
-            for channel in 0..4 {
-                result[channel] += f64::from(sample[channel]) * weight;
+            let sample_alpha = f64::from(sample[3]) / 255.0;
+            alpha += sample_alpha * weight;
+            for channel in 0..3 {
+                premultiplied[channel] +=
+                    f64::from(sample[channel]) / 255.0 * sample_alpha * weight;
             }
         }
     }
-    Rgba(result.map(|channel| channel.round().clamp(0.0, 255.0) as u8))
+    let rgb = if alpha <= 0.000_000_1 {
+        [0; 3]
+    } else {
+        premultiplied.map(|value| (value / alpha * 255.0).round().clamp(0.0, 255.0) as u8)
+    };
+    Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8])
 }
 
 fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rgba<u8> {
@@ -480,6 +489,7 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             radius,
             angle_degrees,
         } => blur(source, target, *radius, Some(*angle_degrees), None),
+        EvaluatedEffect::ZoomBlur { radius } => zoom_blur(source, target, *radius),
         EvaluatedEffect::MotionBlur {
             radius,
             angle_degrees,
@@ -556,7 +566,8 @@ fn blur(
         (radians.cos(), radians.sin())
     });
     for (x, y, _) in source.enumerate_pixels() {
-        let mut sum = [0.0; 4];
+        let mut premultiplied = [0.0; 3];
+        let mut alpha = 0.0;
         for index in 0..samples {
             let offset = (f64::from(index) / f64::from(samples - 1) - 0.5) * 2.0 * radius;
             let (sx, sy) = if direction.is_some() {
@@ -569,14 +580,75 @@ fn blur(
                 )
             };
             let pixel = sample_edge(source, sx + 0.5, sy + 0.5);
-            for c in 0..4 {
-                sum[c] += f64::from(pixel[c]);
+            let sample_alpha = f64::from(pixel[3]) / 255.0;
+            alpha += sample_alpha;
+            for c in 0..3 {
+                premultiplied[c] += f64::from(pixel[c]) / 255.0 * sample_alpha;
             }
         }
+        alpha /= f64::from(samples);
+        let rgb = if alpha <= 0.000_000_1 {
+            [0; 3]
+        } else {
+            premultiplied.map(|value| {
+                (value / f64::from(samples) / alpha * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            })
+        };
         target.put_pixel(
             x,
             y,
-            Rgba(sum.map(|v| (v / f64::from(samples)).round() as u8)),
+            Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]),
+        );
+    }
+}
+
+/// Samples along the ray through each pixel instead of applying a spatial
+/// Gaussian. Radius is expressed in pixels and converted to a bounded scale
+/// exposure around the centre of the source surface.
+fn zoom_blur(source: &RgbaImage, target: &mut RgbaImage, radius: f64) {
+    if radius <= 0.01 {
+        target.copy_from(source, 0, 0).expect("same dimensions");
+        return;
+    }
+    let amount = (radius / f64::from(source.width().max(source.height()))).clamp(0.0, 0.5);
+    let samples = (radius.ceil() as i32 * 2 + 1).clamp(3, 21);
+    let centre_x = (f64::from(source.width()) - 1.0) / 2.0;
+    let centre_y = (f64::from(source.height()) - 1.0) / 2.0;
+    for (x, y, _) in source.enumerate_pixels() {
+        let ray_x = f64::from(x) - centre_x;
+        let ray_y = f64::from(y) - centre_y;
+        let mut premultiplied = [0.0; 3];
+        let mut alpha = 0.0;
+        for index in 0..samples {
+            let exposure = f64::from(index) / f64::from(samples - 1) * 2.0 - 1.0;
+            let scale = 1.0 + exposure * amount;
+            let pixel = sample_edge(
+                source,
+                centre_x + ray_x * scale + 0.5,
+                centre_y + ray_y * scale + 0.5,
+            );
+            let sample_alpha = f64::from(pixel[3]) / 255.0;
+            alpha += sample_alpha;
+            for channel in 0..3 {
+                premultiplied[channel] += f64::from(pixel[channel]) / 255.0 * sample_alpha;
+            }
+        }
+        alpha /= f64::from(samples);
+        let rgb = if alpha <= 0.000_000_1 {
+            [0; 3]
+        } else {
+            premultiplied.map(|value| {
+                (value / f64::from(samples) / alpha * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            })
+        };
+        target.put_pixel(
+            x,
+            y,
+            Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]),
         );
     }
 }
@@ -604,8 +676,8 @@ fn vignette(
     let w = f64::from(source.width());
     let h = f64::from(source.height());
     for (x, y, p) in source.enumerate_pixels() {
-        let dx = (f64::from(x) + 0.5 - w / 2.0) / (w.min(h) / 2.0);
-        let dy = (f64::from(y) + 0.5 - h / 2.0) / (w.min(h) / 2.0);
+        let dx = (f64::from(x) + 0.5 - w / 2.0) / (w / 2.0);
+        let dy = (f64::from(y) + 0.5 - h / 2.0) / (h / 2.0);
         let distance = (dx * dx + dy * dy).sqrt();
         let edge = ((distance - radius) / (softness.max(0.001))).clamp(0.0, 1.0);
         let t = (amount * edge).clamp(0.0, 1.0);
@@ -681,6 +753,37 @@ mod tests {
         image.put_pixel(0, 1, Rgba([0, 100, 0, 255]));
         image.put_pixel(1, 1, Rgba([100, 100, 0, 255]));
         assert_eq!(sample_bilinear(&image, 1.0, 1.0), Rgba([50, 50, 0, 255]));
+    }
+
+    #[test]
+    fn directional_blur_keeps_transparent_edges_coloured() {
+        let mut source = RgbaImage::from_pixel(7, 1, Rgba([0, 0, 255, 0]));
+        source.put_pixel(3, 0, Rgba([255, 128, 32, 255]));
+        let mut target = RgbaImage::new(7, 1);
+        blur(&source, &mut target, 2.0, Some(0.0), Some(5));
+        let edge = target.get_pixel(2, 0);
+        assert!(edge[3] > 0);
+        assert!(edge[0] > edge[2]);
+    }
+
+    #[test]
+    fn zoom_blur_streaks_along_the_ray_from_the_anchor() {
+        let mut source = RgbaImage::new(9, 9);
+        source.put_pixel(7, 4, Rgba([255, 255, 255, 255]));
+        let mut target = RgbaImage::new(9, 9);
+        zoom_blur(&source, &mut target, 4.0);
+        assert!(target.get_pixel(6, 4)[3] > target.get_pixel(7, 3)[3]);
+    }
+
+    #[test]
+    fn vignette_normalizes_each_frame_axis_independently() {
+        let source = RgbaImage::from_pixel(10, 100, Rgba([255, 255, 255, 255]));
+        let mut target = RgbaImage::new(10, 100);
+        vignette(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
+        let top = target.get_pixel(5, 0)[0];
+        let side = target.get_pixel(0, 50)[0];
+        assert!(top.abs_diff(side) <= 32);
+        assert!(target.get_pixel(5, 50)[0] > top);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Rendering from a compiled plan.
 
 mod backend;
+mod blend;
 mod cache;
 mod compositor;
 mod effects;

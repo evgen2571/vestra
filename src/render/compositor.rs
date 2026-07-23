@@ -733,6 +733,20 @@ mod tests {
     }
 
     #[test]
+    fn directional_blur_matches_the_transparent_pixel_golden_fixture() {
+        let mut source = RgbaImage::new(5, 1);
+        source.put_pixel(2, 0, Rgba([255, 80, 20, 192]));
+        let mut output = RgbaImage::new(5, 1);
+        blur(&source, &mut output, 1.0, Some(0.0), Some(3));
+        assert_eq!(
+            output.as_raw(),
+            &[
+                0, 0, 0, 0, 255, 80, 20, 64, 255, 80, 20, 64, 255, 80, 20, 64, 0, 0, 0, 0,
+            ]
+        );
+    }
+
+    #[test]
     fn zoom_blur_streaks_along_the_ray_from_the_anchor() {
         let mut source = RgbaImage::new(9, 9);
         source.put_pixel(7, 4, Rgba([255, 255, 255, 255]));

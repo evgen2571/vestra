@@ -375,6 +375,21 @@ mod tests {
     }
 
     #[test]
+    fn sharpen_matches_the_pixel_golden_fixture() {
+        let mut source = RgbaImage::new(3, 1);
+        source.put_pixel(0, 0, Rgba([20, 80, 160, 255]));
+        source.put_pixel(1, 0, Rgba([180, 120, 60, 192]));
+        source.put_pixel(2, 0, Rgba([40, 200, 100, 128]));
+        let mut horizontal = RgbaImage::new(3, 1);
+        let mut output = RgbaImage::new(3, 1);
+        sharpen(&source, &mut horizontal, &mut output, 0.8, 1.0);
+        assert_eq!(
+            output.as_raw(),
+            &[10, 78, 166, 255, 206, 120, 46, 192, 23, 210, 105, 128]
+        );
+    }
+
+    #[test]
     fn glow_spreads_visible_premultiplied_alpha_outside_the_source() {
         let mut source = RgbaImage::new(7, 7);
         source.put_pixel(3, 3, Rgba([255, 255, 255, 255]));

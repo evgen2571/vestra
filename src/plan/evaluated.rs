@@ -660,4 +660,31 @@ mod tests {
         assert!((first.position.x - next.position.x).abs() > 0.000_1);
         assert!((first.position.y - next.position.y).abs() > 0.000_1);
     }
+
+    #[test]
+    fn motion_samples_stay_inside_an_active_generated_contribution() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/transitions/directional-push.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("valid directional-push example");
+        let plan = compile(&validated, CompileOptions::default()).expect("plan");
+        let layer = plan
+            .layers
+            .iter()
+            .find(|layer| !layer.transform_contributions.is_empty())
+            .expect("canonical transition creates a contribution");
+        let contribution = &layer.transform_contributions[0];
+        assert_eq!(
+            motion_sample_bounds(layer, contribution.start),
+            (contribution.start, contribution.end)
+        );
+        assert_eq!(
+            motion_sample_bounds(layer, contribution.end),
+            (0, layer.duration_nanos)
+        );
+    }
 }

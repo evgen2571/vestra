@@ -23,13 +23,23 @@ fn main() {
     let output = tempfile::tempdir().expect("temporary benchmark directory");
     let scenario =
         std::env::var("VIDEO_EDITOR_BENCH_SCENARIO").unwrap_or_else(|_| "basic_colour".to_owned());
+    let warmup_runs = env_usize("VIDEO_EDITOR_BENCH_WARMUPS", WARMUP_RUNS);
+    let measured_runs = env_usize("VIDEO_EDITOR_BENCH_SAMPLES", MEASURED_RUNS);
+    assert!(
+        measured_runs > 0,
+        "VIDEO_EDITOR_BENCH_SAMPLES must be positive"
+    );
+    let width = env_u32("VIDEO_EDITOR_BENCH_WIDTH", 720);
+    let height = env_u32("VIDEO_EDITOR_BENCH_HEIGHT", 1280);
     let fixture = scenario_fixture(&scenario);
-    let project_path = output.path().join(format!("{scenario}-720x1280.json"));
+    let project_path = output
+        .path()
+        .join(format!("{scenario}-{width}x{height}.json"));
     let mut project: serde_json::Value =
         serde_json::from_slice(&fs::read(fixture).expect("read benchmark fixture"))
             .expect("parse benchmark fixture");
-    project["output"]["width"] = 720.into();
-    project["output"]["height"] = 1280.into();
+    project["output"]["width"] = width.into();
+    project["output"]["height"] = height.into();
     if scenario == "basic_colour" {
         project["visual"]["clips"][0]["effects"] = serde_json::json!([
             { "id": "brightness", "type": "brightness", "amount": { "base_value": 0.05 } },
@@ -57,14 +67,14 @@ fn main() {
         serde_json::to_vec(&project).expect("serialize benchmark project"),
     )
     .expect("write benchmark project");
-    for run in 0..WARMUP_RUNS {
+    for run in 0..warmup_runs {
         let _ = render_once(
             &project_path,
             output.path().join(format!("warmup-{run}.mp4")),
             backend_preference,
         );
     }
-    let samples: Vec<_> = (0..MEASURED_RUNS)
+    let samples: Vec<_> = (0..measured_runs)
         .map(|run| {
             render_once(
                 &project_path,
@@ -157,7 +167,7 @@ fn main() {
             .iter()
             .map(|sample| sample.summary.timings.row_repack_ms),
     );
-    let median_index = MEASURED_RUNS / 2;
+    let median_index = measured_runs / 2;
     let summary = &samples[0].summary;
     let effective_fps = if wall_samples[median_index] == 0 {
         f64::INFINITY
@@ -170,14 +180,14 @@ fn main() {
         );
     }
     println!(
-        "{scenario} 720x1280: requested_backend={backend_preference:?} selected_backend={} warmups={WARMUP_RUNS} samples={MEASURED_RUNS} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend.as_str(),
         wall_samples[median_index],
         wall_samples[0],
-        wall_samples[MEASURED_RUNS - 1],
+        wall_samples[measured_runs - 1],
         render_samples[median_index],
         render_samples[0],
-        render_samples[MEASURED_RUNS - 1],
+        render_samples[measured_runs - 1],
         median_track_evaluation,
         median_frame_render,
         median_encoder_write,
@@ -206,6 +216,7 @@ fn scenario_fixture(scenario: &str) -> &'static Path {
         "sharpen" => Path::new("examples/effects/sharpen.json"),
         "directional_blur" => Path::new("examples/effects/directional-blur.json"),
         "motion_blur" => Path::new("examples/effects/motion-blur.json"),
+        "zoom_blur" => Path::new("examples/effects/zoom-blur.json"),
         "blend_modes" => Path::new("examples/compositing/blend-modes.json"),
         "global_post" => Path::new("examples/compositing/global-post-effects.json"),
         "impact" => Path::new("examples/presets/impact.json"),
@@ -214,6 +225,22 @@ fn scenario_fixture(scenario: &str) -> &'static Path {
         "combined" => Path::new("examples/projects/effects-ready-v1.json"),
         _ => panic!("unknown VIDEO_EDITOR_BENCH_SCENARIO: {scenario}"),
     }
+}
+
+fn env_usize(name: &str, default: usize) -> usize {
+    std::env::var(name).map_or(default, |value| {
+        value
+            .parse()
+            .unwrap_or_else(|_| panic!("{name} must be a positive integer"))
+    })
+}
+
+fn env_u32(name: &str, default: u32) -> u32 {
+    std::env::var(name).map_or(default, |value| {
+        value
+            .parse()
+            .unwrap_or_else(|_| panic!("{name} must be a positive integer"))
+    })
 }
 
 fn median(values: impl Iterator<Item = u128>) -> u128 {

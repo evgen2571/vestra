@@ -799,6 +799,9 @@ fn validate_visual(
                 },
             );
         }
+        if let Some(preset) = &clip.preset {
+            validate_preset(preset, &clip.source, &format!("{path}/preset"), errors);
+        }
         let mut effect_ids = BTreeSet::new();
         for (effect_index, effect) in clip.effects.iter().enumerate() {
             if effect.id().trim().is_empty() || !effect_ids.insert(effect.id().to_owned()) {
@@ -1122,6 +1125,37 @@ fn validate_visual(
                 }
             }
         }
+    }
+}
+
+fn validate_preset(
+    preset: &crate::project::Preset,
+    source: &crate::project::VisualSource,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if matches!(source, crate::project::VisualSource::SolidColor { .. }) {
+        errors.push(Diagnostic::error(
+            "MVP-PRESET-SOURCE",
+            Category::Semantic,
+            "presets require an image clip",
+            path,
+        ));
+    }
+    let intensity = match preset {
+        crate::project::Preset::SlowDrift { intensity }
+        | crate::project::Preset::ZoomPunch { intensity }
+        | crate::project::Preset::FocusReveal { intensity }
+        | crate::project::Preset::Impact { intensity, .. }
+        | crate::project::Preset::HeavyImpact { intensity, .. } => *intensity,
+    };
+    if !intensity.is_finite() || !(0.0..=2.0).contains(&intensity) {
+        errors.push(Diagnostic::error(
+            "MVP-PRESET-INTENSITY",
+            Category::Semantic,
+            "preset intensity must be finite and in 0..=2",
+            format!("{path}/intensity"),
+        ));
     }
 }
 

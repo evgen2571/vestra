@@ -160,3 +160,14 @@ discovers every JSON example and rejects focused previews shorter than 90
 frames. Render the complete CPU preview set with
 `./scripts/render-effect-examples.sh`; use `--skip-existing` only when a
 previous render is intentional. Outputs are written under `examples/output`.
+
+| Config group | Output | Duration / frames | Resolution / rate | Demonstrates |
+| --- | --- | --- | --- | --- |
+| `effects/{camera-shake,chromatic-aberration,color-adjust,directional-blur,gaussian-blur,glow,motion-blur,sharpen,zoom-blur}.json` | `effects-*.mp4` | 5 s / 150 | 320×180, 30 fps (zoom blur: 360×640) | baseline, animated effect, recovery |
+| `effects/vignette.json` | `effects-vignette.mp4` | 5 s / 150 | 360×640, 30 fps | 9:16 normalized vignette |
+| `transitions/{directional-push,flash-cut,zoom-blur,zoom-crossfade}.json` | `transitions-*.mp4` | 5 s / 150 | 320×180, 30 fps | stable outgoing and incoming footage around the transition |
+| `presets/{focus-reveal,heavy-impact,impact,zoom-punch}.json` | `presets-*.mp4` | 5 s / 150 | 320×180, 30 fps | a timed transient followed by a settled source |
+| `presets/slow-drift.json` | `presets-slow-drift.mp4` | 6 s / 180 | 320×180, 30 fps | full-duration drift |
+| `compositing/{blend-modes,global-post-effects}.json` | `compositing-*.mp4` | 5 s / 150 | 320×180, 30 fps | layer blending and ordered global finishing |
+| `projects/animation-effects.json` | `projects-animation-effects.mp4` | 6 s / 144 | 320×180, 24 fps | timeline animation, transition, flash, and effects |
+| `projects/effects-ready-v1.json` | `projects-effects-ready-v1.mp4` | 6 s / 180 | 720×1280, 30 fps | realistic combined CPU effects-ready project |

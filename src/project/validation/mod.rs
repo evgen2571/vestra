@@ -943,13 +943,14 @@ fn validate_visual(
                 ));
             }
             let effect_path = format!("{path}/effects/{effect_index}");
-            validate_active_interval(effect.timing(), clip.duration, &effect_path, errors);
+            let effect_duration =
+                validate_active_interval(effect.timing(), clip.duration, &effect_path, errors);
             match effect {
                 crate::project::Effect::Brightness { amount, .. }
                 | crate::project::Effect::Contrast { amount, .. }
                 | crate::project::Effect::Saturation { amount, .. } => validate_track(
                     amount,
-                    clip.duration,
+                    effect_duration,
                     &format!("{effect_path}/amount"),
                     maximum_keyframes_per_track,
                     errors,
@@ -966,7 +967,7 @@ fn validate_visual(
                     }
                     validate_track(
                         amount,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/amount"),
                         maximum_keyframes_per_track,
                         errors,
@@ -975,7 +976,7 @@ fn validate_visual(
                 }
                 crate::project::Effect::GaussianBlur { radius, .. } => validate_track(
                     radius,
-                    clip.duration,
+                    effect_duration,
                     &format!("{effect_path}/radius"),
                     maximum_keyframes_per_track,
                     errors,
@@ -988,7 +989,7 @@ fn validate_visual(
                 } => {
                     validate_track(
                         radius,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/radius"),
                         maximum_keyframes_per_track,
                         errors,
@@ -996,7 +997,7 @@ fn validate_visual(
                     );
                     validate_track(
                         angle_degrees,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/angle_degrees"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1011,7 +1012,7 @@ fn validate_visual(
                 } => {
                     validate_track(
                         radius,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/radius"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1051,7 +1052,7 @@ fn validate_visual(
                     }
                     validate_track(
                         threshold,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/threshold"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1059,7 +1060,7 @@ fn validate_visual(
                     );
                     validate_track(
                         radius,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/radius"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1067,7 +1068,7 @@ fn validate_visual(
                     );
                     validate_track(
                         intensity,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/intensity"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1081,7 +1082,7 @@ fn validate_visual(
                 } => {
                     validate_track(
                         amount,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/amount"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1089,7 +1090,7 @@ fn validate_visual(
                     );
                     validate_track(
                         angle_degrees,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/angle_degrees"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1113,7 +1114,7 @@ fn validate_visual(
                     }
                     validate_track(
                         amount,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/amount"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1121,7 +1122,7 @@ fn validate_visual(
                     );
                     validate_track(
                         radius,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/radius"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1129,7 +1130,7 @@ fn validate_visual(
                     );
                     validate_track(
                         softness,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/softness"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1139,7 +1140,7 @@ fn validate_visual(
                 crate::project::Effect::Sharpen { amount, radius, .. } => {
                     validate_track(
                         amount,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/amount"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1147,7 +1148,7 @@ fn validate_visual(
                     );
                     validate_track(
                         radius,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/radius"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1163,7 +1164,7 @@ fn validate_visual(
                 } => {
                     validate_track(
                         exposure,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/exposure"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1171,7 +1172,7 @@ fn validate_visual(
                     );
                     validate_track(
                         gamma,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/gamma"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1179,7 +1180,7 @@ fn validate_visual(
                     );
                     validate_track(
                         black_point,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/black_point"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1187,7 +1188,7 @@ fn validate_visual(
                     );
                     validate_track(
                         white_point,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/white_point"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1206,7 +1207,7 @@ fn validate_visual(
                 } => {
                     validate_track(
                         position_amount,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/position_amount"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1214,7 +1215,7 @@ fn validate_visual(
                     );
                     validate_track(
                         rotation_degrees,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/rotation_degrees"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1222,7 +1223,7 @@ fn validate_visual(
                     );
                     validate_track(
                         scale_amount,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/scale_amount"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1230,7 +1231,7 @@ fn validate_visual(
                     );
                     validate_track(
                         frequency,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/frequency"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1254,7 +1255,7 @@ fn validate_visual(
                 } => {
                     validate_track(
                         intensity,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/intensity"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1262,7 +1263,7 @@ fn validate_visual(
                     );
                     validate_track(
                         shutter_angle,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/shutter_angle"),
                         maximum_keyframes_per_track,
                         errors,
@@ -1270,7 +1271,7 @@ fn validate_visual(
                     );
                     validate_track(
                         max_radius,
-                        clip.duration,
+                        effect_duration,
                         &format!("{effect_path}/max_radius"),
                         maximum_keyframes_per_track,
                         errors,

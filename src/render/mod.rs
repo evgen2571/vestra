@@ -3,6 +3,7 @@
 mod backend;
 mod cache;
 mod compositor;
+mod effects;
 mod engine;
 mod prepared;
 mod wgpu;

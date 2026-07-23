@@ -221,18 +221,13 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 sizing,
                 cacheable_crop,
             } => {
-                evaluated_track_count += 5;
+                evaluated_track_count += 1;
                 EvaluatedSource::Image {
                     asset_index: *asset_index,
                     crop: crop.evaluate(relative),
                     sizing: sizing.clone(),
                     cacheable_crop: *cacheable_crop,
-                    transform: Transform2D {
-                        position: layer.transform.position.evaluate(relative),
-                        anchor: layer.transform.anchor.evaluate(relative),
-                        scale: layer.transform.scale.evaluate(relative),
-                        rotation_radians: layer.transform.rotation_radians.evaluate(relative),
-                    },
+                    transform: evaluate_transform(layer, relative, &mut evaluated_track_count),
                 }
             }
             CompiledVisualSource::SolidColor { colour } => {
@@ -317,6 +312,34 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
             .collect(),
         evaluated_track_count,
     }
+}
+
+fn evaluate_transform(
+    layer: &crate::plan::CompiledLayer,
+    relative: u128,
+    evaluated_track_count: &mut u64,
+) -> Transform2D {
+    *evaluated_track_count += 4;
+    let mut transform = Transform2D {
+        position: layer.transform.position.evaluate(relative),
+        anchor: layer.transform.anchor.evaluate(relative),
+        scale: layer.transform.scale.evaluate(relative),
+        rotation_radians: layer.transform.rotation_radians.evaluate(relative),
+    };
+    for contribution in &layer.transform_contributions {
+        if relative < contribution.start || relative > contribution.end {
+            continue;
+        }
+        *evaluated_track_count += 3;
+        let position = contribution.position_offset.evaluate(relative);
+        let scale = contribution.scale_multiplier.evaluate(relative);
+        transform.position.x += position.x;
+        transform.position.y += position.y;
+        transform.scale.x *= scale.x;
+        transform.scale.y *= scale.y;
+        transform.rotation_radians += contribution.rotation_radians_offset.evaluate(relative);
+    }
+    transform
 }
 
 fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {

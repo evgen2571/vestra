@@ -144,5 +144,7 @@ not contribute to its velocity.
 
 Focused fixtures live under [`examples/effects`](../../examples/effects),
 [`examples/transitions`](../../examples/transitions), and
-[`examples/presets`](../../examples/presets). The schema check discovers every
-JSON example. Each is a short CPU-renderable project using the bundled assets.
+[`examples/presets`](../../examples/presets), and
+[`examples/compositing`](../../examples/compositing). The schema check
+discovers every JSON example. Each is a short CPU-renderable project using the
+bundled assets.

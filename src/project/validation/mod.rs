@@ -40,6 +40,11 @@ pub(crate) fn validate(
         options.limits.maximum_keyframes_per_track,
         &mut errors,
     );
+    validate_global_effects(
+        &project.visual.post_effects,
+        options.limits.maximum_effects_per_clip,
+        &mut errors,
+    );
     validate_transitions(&project.visual, &mut errors);
     validate_flashes(&project.visual.flashes, &mut errors);
     let audio_end = audio::validate(
@@ -94,6 +99,44 @@ pub(crate) fn validate(
         })
     } else {
         Err(LoadError::Diagnostics(errors))
+    }
+}
+
+fn validate_global_effects(
+    effects: &[crate::project::Effect],
+    maximum_effects: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if effects.len() > maximum_effects {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-POST-EFFECTS",
+            Category::Semantic,
+            "global post-effect chain exceeds the effect limit",
+            "/visual/post_effects",
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for (index, effect) in effects.iter().enumerate() {
+        let path = format!("/visual/post_effects/{index}");
+        if effect.id().trim().is_empty() || !ids.insert(effect.id()) {
+            errors.push(Diagnostic::error(
+                "MVP-POST-EFFECT-ID",
+                Category::Semantic,
+                "post-effect ids must be non-empty and unique",
+                format!("{path}/id"),
+            ));
+        }
+        if matches!(
+            effect,
+            crate::project::Effect::CameraShake { .. } | crate::project::Effect::MotionBlur { .. }
+        ) {
+            errors.push(Diagnostic::error(
+                "MVP-POST-EFFECT-SCOPE",
+                Category::Semantic,
+                "camera shake and transform-aware motion blur are clip-local effects",
+                path,
+            ));
+        }
     }
 }
 

@@ -657,6 +657,32 @@ fn canonical_validation_rejects_focused_invalid_projects() {
     invalid_solid["visual"]["transitions"] = serde_json::json!([]);
     assert_invalid!("invalid-solid-colour", invalid_solid, "MVP-SOURCE-COLOUR");
 
+    let mut solid_image_properties = original.clone();
+    solid_image_properties["visual"]["clips"] = serde_json::json!([{
+        "id": "solid", "source": {"type": "solid_color", "colour": "#112233"},
+        "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1},
+        "sizing": {"mode": "cover"}
+    }]);
+    solid_image_properties["visual"]["transitions"] = serde_json::json!([]);
+    assert_invalid!(
+        "solid-image-properties",
+        solid_image_properties,
+        "MVP-SOLID-PROPERTIES"
+    );
+
+    let mut solid_transition = original.clone();
+    solid_transition["visual"]["clips"][1]["source"] =
+        serde_json::json!({"type": "solid_color", "colour": "#112233"});
+    solid_transition["visual"]["clips"][1]
+        .as_object_mut()
+        .expect("clip")
+        .remove("transform");
+    assert_invalid!(
+        "solid-transition",
+        solid_transition,
+        "MVP-TRANSITION-SOURCE"
+    );
+
     let mut unknown_top_level = original.clone();
     unknown_top_level["unknown"] = true.into();
     assert_invalid!("unknown-top-level", unknown_top_level, "MVP-PROJECT-SHAPE");

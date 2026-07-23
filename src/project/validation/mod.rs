@@ -635,6 +635,16 @@ fn validate_transitions(visual: &crate::project::Visual, errors: &mut Vec<Diagno
                     path.clone(),
                 )),
                 Some(clip)
+                    if !matches!(clip.source, crate::project::VisualSource::Image { .. }) =>
+                {
+                    errors.push(Diagnostic::error(
+                        "MVP-TRANSITION-SOURCE",
+                        Category::Semantic,
+                        format!("transition requires image clip '{clip_id}'"),
+                        path.clone(),
+                    ));
+                }
+                Some(clip)
                     if start >= clip.start && start + duration <= clip.start + clip.duration =>
                 {
                     affected
@@ -773,6 +783,22 @@ fn validate_visual(
                 errors,
             ),
             (_, None) => {}
+        }
+        if matches!(clip.source, crate::project::VisualSource::SolidColor { .. }) {
+            for (field, present) in [
+                ("sizing", clip.sizing.is_some()),
+                ("crop", clip.crop.is_some()),
+                ("preset", clip.preset.is_some()),
+            ] {
+                if present {
+                    errors.push(Diagnostic::error(
+                        "MVP-SOLID-PROPERTIES",
+                        Category::Semantic,
+                        "solid-color clips cannot use image-only properties",
+                        format!("{path}/{field}"),
+                    ));
+                }
+            }
         }
         validate_track(
             &clip.opacity,

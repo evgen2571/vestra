@@ -82,3 +82,41 @@ the same evaluated frames and decoded source bytes as CPU; it uploads full
 decoded images once, uses persistent output/readback resources, and transfers
 each completed RGBA frame back to CPU for FFmpeg. It does not implement
 zero-copy or hardware encoding, windowed preview, or advanced GPU effects.
+
+## Effects-ready v1
+
+Each clip may contain an ordered `effects` array and a `blend_mode` of
+`normal`, `add`, `screen`, `multiply`, or `overlay`. The CPU renderer draws a
+clip into a reusable local surface, runs effects in declared order, then blends
+the result into the frame. `visual.post_effects` runs after all layers, also in
+declared order. A two-surface ping-pong buffer avoids an allocation for every
+effect pass.
+
+Available effects are `gaussian_blur`, `directional_blur`, `glow`,
+`chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`,
+`camera_shake`, and `motion_blur`, in addition to the original colour effects.
+Blur radii are bounded at 32 pixels. Glow extracts highlights before blur and
+adds the tinted result. Sharpen is an unsharp-mask approximation. Colour
+adjustment applies exposure, black and white levels, then gamma, preserving
+alpha. Vignette uses aspect-correct canvas distance.
+
+Camera shake is a continuous seeded timeline signal. It runs after authored
+transforms and before rasterization. Motion blur samples neighbouring timeline
+transforms, derives translation direction in screen space, and caps the
+directional blur. v1 does not derive blur from rotation or scale velocity.
+
+Advanced effects, non-normal blend modes, and global post effects run on CPU.
+`auto` chooses CPU with a structured capability fallback; explicit `wgpu`
+rejects these projects before frame rendering. This avoids silent degradation.
+
+Supported coordinated transitions are `crossfade`, `zoom_crossfade`,
+`flash_cut`, `directional_push`, and `zoom_blur`. They must fit in both clips.
+The compiler adds linked opacity, transform, flash, and blur tracks for the
+participating layers.
+
+`preset` expands during compilation into ordinary transform and effect tracks.
+Available values are `slow_drift`, `zoom_punch`, `impact`, `heavy_impact`, and
+`focus_reveal`; every preset has `intensity`, and impact presets need a stable
+`seed`. User effects run after generated preset effects. See
+[`effects-ready-v1.json`](../../examples/projects/effects-ready-v1.json) for a
+combined runnable project.

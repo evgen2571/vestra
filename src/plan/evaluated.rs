@@ -239,7 +239,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 EvaluatedSource::SolidColor { colour: *colour }
             }
         };
-        let effects = layer
+        let mut effects = layer
             .effects
             .iter()
             .map(|effect| {
@@ -247,6 +247,29 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 evaluate_effect(effect, relative)
             })
             .collect::<Vec<_>>();
+        for effect in &mut effects {
+            if let EvaluatedEffect::MotionBlur {
+                radius,
+                angle_degrees,
+                ..
+            } = effect
+            {
+                let window = 16_666_667_u128;
+                let before = relative.saturating_sub(window);
+                let after = relative.saturating_add(window);
+                let start = layer.transform.position.evaluate(before);
+                let end = layer.transform.position.evaluate(after);
+                let dx = (end.x - start.x) * f64::from(plan.canvas.width);
+                let dy = (end.y - start.y) * f64::from(plan.canvas.height);
+                let speed = (dx * dx + dy * dy).sqrt();
+                if speed <= 0.000_1 {
+                    *radius = 0.0;
+                } else {
+                    *angle_degrees = dy.atan2(dx).to_degrees();
+                    *radius = (*radius * speed / 32.0).min(*radius).max(0.0);
+                }
+            }
+        }
         if let EvaluatedSource::Image { transform, .. } = &mut source {
             for effect in &effects {
                 if let EvaluatedEffect::CameraShake {

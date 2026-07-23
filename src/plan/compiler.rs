@@ -622,6 +622,18 @@ fn compile_effect(
             radius: compile_track(radius, id)?,
             angle_degrees: compile_track(angle_degrees, id)?,
         },
+        crate::project::Effect::ZoomBlur {
+            radius,
+            samples,
+            anchor,
+            direction,
+            ..
+        } => crate::plan::CompiledEffect::ZoomBlur {
+            radius: compile_track(radius, id)?,
+            samples: *samples,
+            anchor: *anchor,
+            direction: *direction,
+        },
         crate::project::Effect::Glow {
             threshold,
             radius,
@@ -1045,6 +1057,9 @@ fn zoom_transition_layer(
                         },
                     ],
                 },
+                samples: 12,
+                anchor: Point { x: 0.5, y: 0.5 },
+                direction: crate::project::ZoomBlurDirection::Centered,
             },
         });
     }

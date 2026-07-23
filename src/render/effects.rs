@@ -98,7 +98,7 @@ fn evaluated_effect_is_noop(effect: &EvaluatedEffect) -> bool {
         | EvaluatedEffect::Sharpen { amount, .. } => *amount == 0.0,
         EvaluatedEffect::GaussianBlur { radius }
         | EvaluatedEffect::DirectionalBlur { radius, .. }
-        | EvaluatedEffect::ZoomBlur { radius }
+        | EvaluatedEffect::ZoomBlur { radius, .. }
         | EvaluatedEffect::MotionBlur { radius, .. } => *radius == 0.0,
         EvaluatedEffect::Glow {
             radius, intensity, ..

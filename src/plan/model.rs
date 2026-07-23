@@ -148,6 +148,9 @@ pub enum CompiledEffect {
     },
     ZoomBlur {
         radius: Track<f64>,
+        samples: u8,
+        anchor: Point,
+        direction: crate::project::ZoomBlurDirection,
     },
     Glow {
         threshold: Track<f64>,

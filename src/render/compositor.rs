@@ -1,9 +1,9 @@
-use image::{Rgba, RgbaImage};
+use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::{
     animation::Transform2D,
     domain::Crop,
-    plan::{ColourTransform, EvaluatedFrame, EvaluatedLayer, EvaluatedSource},
+    plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource},
     render::prepared::PreparedAssets,
 };
 
@@ -17,15 +17,73 @@ pub fn compose(frame: &EvaluatedFrame, assets: &mut PreparedAssets, canvas: &mut
             *pixel = Rgba(frame.background);
         }
     }
+    let mut surfaces = SurfacePool::new(frame.width, frame.height);
     for layer in &frame.layers {
-        draw_layer(canvas, assets, layer);
+        surfaces.clear();
+        draw_layer(surfaces.current(), assets, layer);
+        surfaces.apply(&layer.effects);
+        blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+    }
+    surfaces.apply_to(canvas, &frame.post_effects);
+}
+
+struct SurfacePool {
+    first: RgbaImage,
+    second: RgbaImage,
+    first_is_current: bool,
+}
+impl SurfacePool {
+    fn new(width: u32, height: u32) -> Self {
+        Self {
+            first: RgbaImage::new(width, height),
+            second: RgbaImage::new(width, height),
+            first_is_current: true,
+        }
+    }
+    fn current(&mut self) -> &mut RgbaImage {
+        if self.first_is_current {
+            &mut self.first
+        } else {
+            &mut self.second
+        }
+    }
+    fn clear(&mut self) {
+        for pixel in self.current().pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
+        }
+    }
+    fn apply(&mut self, effects: &[EvaluatedEffect]) {
+        for effect in effects {
+            if !matches!(effect, EvaluatedEffect::CameraShake { .. }) {
+                self.run(effect);
+            }
+        }
+    }
+    fn apply_to(&mut self, destination: &mut RgbaImage, effects: &[EvaluatedEffect]) {
+        self.first
+            .copy_from(destination, 0, 0)
+            .expect("matching effect surface dimensions");
+        self.first_is_current = true;
+        self.apply(effects);
+        destination
+            .copy_from(self.current(), 0, 0)
+            .expect("matching effect surface dimensions");
+    }
+    fn run(&mut self, effect: &EvaluatedEffect) {
+        let (source, target) = if self.first_is_current {
+            (&self.first, &mut self.second)
+        } else {
+            (&self.second, &mut self.first)
+        };
+        apply_effect(source, target, effect);
+        self.first_is_current = !self.first_is_current;
     }
 }
 
 fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &EvaluatedLayer) {
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
-            fill_solid(canvas, *colour, layer.opacity, layer.colour_transform)
+            fill_solid(canvas, *colour, 1.0, ColourTransform::default())
         }
         EvaluatedSource::Image {
             asset_index,
@@ -63,8 +121,8 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &Evalu
                     source_width,
                     source_height,
                     *transform,
-                    layer.opacity,
-                    layer.colour_transform,
+                    1.0,
+                    ColourTransform::default(),
                 );
             }
         }
@@ -310,6 +368,307 @@ pub fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgb
     Rgba(result)
 }
 
+fn blend_surface(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    mode: crate::project::BlendMode,
+    opacity: f64,
+) {
+    for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
+        *destination = blend_pixel(*destination, *source, mode, opacity);
+    }
+}
+
+fn blend_pixel(
+    destination: Rgba<u8>,
+    source: Rgba<u8>,
+    mode: crate::project::BlendMode,
+    opacity: f64,
+) -> Rgba<u8> {
+    if matches!(mode, crate::project::BlendMode::Normal) {
+        return source_over(destination, source, opacity);
+    }
+    let sa = f64::from(source[3]) / 255.0 * opacity;
+    let da = f64::from(destination[3]) / 255.0;
+    let alpha = sa + da * (1.0 - sa);
+    if alpha <= 0.0 {
+        return Rgba([0, 0, 0, 0]);
+    }
+    let mut result = [0; 4];
+    for channel in 0..3 {
+        let s = f64::from(source[channel]) / 255.0;
+        let d = f64::from(destination[channel]) / 255.0;
+        let blend = match mode {
+            crate::project::BlendMode::Normal => s,
+            crate::project::BlendMode::Add => (s + d).min(1.0),
+            crate::project::BlendMode::Screen => 1.0 - (1.0 - s) * (1.0 - d),
+            crate::project::BlendMode::Multiply => s * d,
+            crate::project::BlendMode::Overlay => {
+                if d <= 0.5 {
+                    2.0 * s * d
+                } else {
+                    1.0 - 2.0 * (1.0 - s) * (1.0 - d)
+                }
+            }
+        };
+        let premultiplied = blend * sa * da + s * sa * (1.0 - da) + d * da * (1.0 - sa);
+        result[channel] = (premultiplied / alpha * 255.0).round().clamp(0.0, 255.0) as u8;
+    }
+    result[3] = (alpha * 255.0).round() as u8;
+    Rgba(result)
+}
+
+fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEffect) {
+    match effect {
+        EvaluatedEffect::Brightness { amount } => map_pixels(source, target, |mut p, _x, _y| {
+            for channel in 0..3 {
+                p[channel] = (f64::from(p[channel]) + amount * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+            }
+            p
+        }),
+        EvaluatedEffect::Contrast { amount } => map_pixels(source, target, |mut p, _x, _y| {
+            for channel in 0..3 {
+                p[channel] = ((f64::from(p[channel]) - 128.0) * amount + 128.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+            }
+            p
+        }),
+        EvaluatedEffect::Saturation { amount } => map_pixels(source, target, |mut p, _x, _y| {
+            let l = f64::from(p[0]) * 0.2126 + f64::from(p[1]) * 0.7152 + f64::from(p[2]) * 0.0722;
+            for c in 0..3 {
+                p[c] = (l * (1.0 - amount) + f64::from(p[c]) * amount)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+            }
+            p
+        }),
+        EvaluatedEffect::Tint { colour, amount } => map_pixels(source, target, |mut p, _x, _y| {
+            let t = amount.clamp(0.0, 1.0);
+            for c in 0..3 {
+                p[c] = (f64::from(p[c]) * (1.0 - t) + f64::from(colour[c]) * t).round() as u8;
+            }
+            p
+        }),
+        EvaluatedEffect::GaussianBlur { radius } => blur(source, target, *radius, None),
+        EvaluatedEffect::DirectionalBlur {
+            radius,
+            angle_degrees,
+        }
+        | EvaluatedEffect::MotionBlur {
+            radius,
+            angle_degrees,
+            ..
+        } => blur(source, target, *radius, Some(*angle_degrees)),
+        EvaluatedEffect::Glow {
+            threshold,
+            radius,
+            intensity,
+            colour,
+        } => glow(source, target, *threshold, *radius, *intensity, *colour),
+        EvaluatedEffect::ChromaticAberration {
+            amount,
+            angle_degrees,
+        } => chromatic(source, target, *amount, *angle_degrees),
+        EvaluatedEffect::Vignette {
+            amount,
+            radius,
+            softness,
+            colour,
+        } => vignette(source, target, *amount, *radius, *softness, *colour),
+        EvaluatedEffect::Sharpen { amount, radius } => sharpen(source, target, *amount, *radius),
+        EvaluatedEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => colour_adjust(
+            source,
+            target,
+            *exposure,
+            *gamma,
+            *black_point,
+            *white_point,
+        ),
+        EvaluatedEffect::CameraShake { .. } => {
+            target.copy_from(source, 0, 0).expect("same dimensions")
+        }
+    }
+}
+
+fn map_pixels(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    mut map: impl FnMut(Rgba<u8>, u32, u32) -> Rgba<u8>,
+) {
+    for (x, y, pixel) in source.enumerate_pixels() {
+        target.put_pixel(x, y, map(*pixel, x, y));
+    }
+}
+fn sample_edge(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
+    sample_bilinear(
+        image,
+        x.clamp(0.5, f64::from(image.width()) - 0.5),
+        y.clamp(0.5, f64::from(image.height()) - 0.5),
+    )
+}
+fn blur(source: &RgbaImage, target: &mut RgbaImage, radius: f64, direction: Option<f64>) {
+    if radius <= 0.01 {
+        target.copy_from(source, 0, 0).expect("same dimensions");
+        return;
+    }
+    let radius = radius.clamp(0.0, 32.0);
+    let samples = (radius.ceil() as i32 * 2 + 1).clamp(3, 33);
+    let (dx, dy) = direction.map_or((1.0, 0.0), |degrees| {
+        let radians = degrees.to_radians();
+        (radians.cos(), radians.sin())
+    });
+    for (x, y, _) in source.enumerate_pixels() {
+        let mut sum = [0.0; 4];
+        for index in 0..samples {
+            let offset = (f64::from(index) / f64::from(samples - 1) - 0.5) * 2.0 * radius;
+            let (sx, sy) = if direction.is_some() {
+                (f64::from(x) + dx * offset, f64::from(y) + dy * offset)
+            } else {
+                let angle = f64::from(index) / f64::from(samples) * std::f64::consts::TAU;
+                (
+                    f64::from(x) + angle.cos() * offset.abs(),
+                    f64::from(y) + angle.sin() * offset.abs(),
+                )
+            };
+            let pixel = sample_edge(source, sx + 0.5, sy + 0.5);
+            for c in 0..4 {
+                sum[c] += f64::from(pixel[c]);
+            }
+        }
+        target.put_pixel(
+            x,
+            y,
+            Rgba(sum.map(|v| (v / f64::from(samples)).round() as u8)),
+        );
+    }
+}
+fn glow(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    threshold: f64,
+    radius: f64,
+    intensity: f64,
+    colour: [u8; 4],
+) {
+    if intensity <= 0.0 {
+        target.copy_from(source, 0, 0).expect("same dimensions");
+        return;
+    }
+    for (x, y, base) in source.enumerate_pixels() {
+        let mut glow = [0.0; 3];
+        let samples = (radius.ceil() as i32 * 2 + 1).clamp(3, 17);
+        for i in 0..samples {
+            let offset = (f64::from(i) / f64::from(samples - 1) - 0.5) * 2.0 * radius;
+            let p = sample_edge(source, f64::from(x) + offset + 0.5, f64::from(y) + 0.5);
+            let brightness = (f64::from(p[0]) + f64::from(p[1]) + f64::from(p[2])) / (3.0 * 255.0);
+            let highlight =
+                ((brightness - threshold) / (1.0 - threshold).max(0.001)).clamp(0.0, 1.0);
+            for c in 0..3 {
+                glow[c] += highlight * f64::from(colour[c]);
+            }
+        }
+        let mut out = *base;
+        for c in 0..3 {
+            out[c] = (f64::from(base[c]) + glow[c] / f64::from(samples) * intensity)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+        target.put_pixel(x, y, out);
+    }
+}
+fn chromatic(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
+    if amount <= 0.0 {
+        target.copy_from(source, 0, 0).expect("same dimensions");
+        return;
+    }
+    let r = angle.to_radians();
+    let (dx, dy) = (r.cos() * amount, r.sin() * amount);
+    for (x, y, p) in source.enumerate_pixels() {
+        let left = sample_edge(source, f64::from(x) - dx + 0.5, f64::from(y) - dy + 0.5);
+        let right = sample_edge(source, f64::from(x) + dx + 0.5, f64::from(y) + dy + 0.5);
+        target.put_pixel(x, y, Rgba([left[0], p[1], right[2], p[3]]));
+    }
+}
+fn vignette(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    amount: f64,
+    radius: f64,
+    softness: f64,
+    colour: [u8; 4],
+) {
+    let w = f64::from(source.width());
+    let h = f64::from(source.height());
+    for (x, y, p) in source.enumerate_pixels() {
+        let dx = (f64::from(x) + 0.5 - w / 2.0) / (w.min(h) / 2.0);
+        let dy = (f64::from(y) + 0.5 - h / 2.0) / (w.min(h) / 2.0);
+        let distance = (dx * dx + dy * dy).sqrt();
+        let edge = ((distance - radius) / (softness.max(0.001))).clamp(0.0, 1.0);
+        let t = (amount * edge).clamp(0.0, 1.0);
+        let mut out = *p;
+        for c in 0..3 {
+            out[c] = (f64::from(p[c]) * (1.0 - t) + f64::from(colour[c]) * t).round() as u8;
+        }
+        target.put_pixel(x, y, out);
+    }
+}
+fn sharpen(source: &RgbaImage, target: &mut RgbaImage, amount: f64, radius: f64) {
+    if amount <= 0.0 {
+        target.copy_from(source, 0, 0).expect("same dimensions");
+        return;
+    }
+    for (x, y, p) in source.enumerate_pixels() {
+        let mut avg = [0.0; 3];
+        let n = 5.0;
+        for (dx, dy) in [
+            (-radius, 0.0),
+            (radius, 0.0),
+            (0.0, -radius),
+            (0.0, radius),
+            (0.0, 0.0),
+        ] {
+            let q = sample_edge(source, f64::from(x) + dx + 0.5, f64::from(y) + dy + 0.5);
+            for c in 0..3 {
+                avg[c] += f64::from(q[c]) / n;
+            }
+        }
+        let mut out = *p;
+        for c in 0..3 {
+            out[c] = (f64::from(p[c]) + (f64::from(p[c]) - avg[c]) * amount)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+        target.put_pixel(x, y, out);
+    }
+}
+fn colour_adjust(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    exposure: f64,
+    gamma: f64,
+    black: f64,
+    white: f64,
+) {
+    let scale = 1.0 / (white - black).max(0.000_1);
+    map_pixels(source, target, |mut p, _, _| {
+        for c in 0..3 {
+            let v = (((f64::from(p[c]) / 255.0) * 2f64.powf(exposure) - black) * scale)
+                .clamp(0.0, 1.0)
+                .powf(1.0 / gamma.max(0.001));
+            p[c] = (v * 255.0).round() as u8;
+        }
+        p
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,6 +693,7 @@ mod tests {
                         rgb[channel] * (1.0 - amount) + f64::from(colour[channel]) * amount
                     });
                 }
+                _ => {}
             }
         }
         rgb

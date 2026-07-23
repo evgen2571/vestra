@@ -17,6 +17,7 @@ pub struct RenderPlan {
     pub(crate) limits: crate::project::ResourceLimits,
     pub(crate) images: Vec<ImageAsset>,
     pub(crate) layers: Vec<CompiledLayer>,
+    pub(crate) post_effects: Vec<CompiledEffect>,
     pub(crate) compilation: CompilationStats,
     pub(crate) warnings: Vec<crate::Diagnostic>,
 }
@@ -68,6 +69,7 @@ pub struct CompiledLayer {
     /// populate one contributor instead of a transition variant.
     pub(crate) opacity_contributions: Vec<Track<f64>>,
     pub(crate) effects: Vec<CompiledEffect>,
+    pub(crate) blend_mode: crate::project::BlendMode,
 }
 
 #[derive(Clone, Debug)]
@@ -93,10 +95,67 @@ pub struct CompiledTransformTracks {
 
 #[derive(Clone, Debug)]
 pub enum CompiledEffect {
-    Brightness { amount: Track<f64> },
-    Contrast { amount: Track<f64> },
-    Saturation { amount: Track<f64> },
-    Tint { colour: [u8; 4], amount: Track<f64> },
+    Brightness {
+        amount: Track<f64>,
+    },
+    Contrast {
+        amount: Track<f64>,
+    },
+    Saturation {
+        amount: Track<f64>,
+    },
+    Tint {
+        colour: [u8; 4],
+        amount: Track<f64>,
+    },
+    GaussianBlur {
+        radius: Track<f64>,
+    },
+    DirectionalBlur {
+        radius: Track<f64>,
+        angle_degrees: Track<f64>,
+    },
+    Glow {
+        threshold: Track<f64>,
+        radius: Track<f64>,
+        intensity: Track<f64>,
+        colour: [u8; 4],
+    },
+    ChromaticAberration {
+        amount: Track<f64>,
+        angle_degrees: Track<f64>,
+    },
+    Vignette {
+        amount: Track<f64>,
+        radius: Track<f64>,
+        softness: Track<f64>,
+        colour: [u8; 4],
+    },
+    Sharpen {
+        amount: Track<f64>,
+        radius: Track<f64>,
+    },
+    ColorAdjust {
+        exposure: Track<f64>,
+        gamma: Track<f64>,
+        black_point: Track<f64>,
+        white_point: Track<f64>,
+    },
+    CameraShake {
+        position_amount: Track<f64>,
+        rotation_degrees: Track<f64>,
+        scale_amount: Track<f64>,
+        frequency: Track<f64>,
+        seed: u64,
+        attack: f64,
+        decay: f64,
+    },
+    MotionBlur {
+        intensity: Track<f64>,
+        shutter_angle: Track<f64>,
+        max_radius: Track<f64>,
+        samples: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

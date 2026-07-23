@@ -398,6 +398,286 @@ fn validate_visual(
                         |value| unit(*value),
                     );
                 }
+                crate::project::Effect::GaussianBlur { radius, .. } => validate_track(
+                    radius,
+                    clip.duration,
+                    &format!("{effect_path}/radius"),
+                    maximum_keyframes_per_track,
+                    errors,
+                    |value| value.is_finite() && *value >= 0.0 && *value <= 32.0,
+                ),
+                crate::project::Effect::DirectionalBlur {
+                    radius,
+                    angle_degrees,
+                    ..
+                } => {
+                    validate_track(
+                        radius,
+                        clip.duration,
+                        &format!("{effect_path}/radius"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 32.0,
+                    );
+                    validate_track(
+                        angle_degrees,
+                        clip.duration,
+                        &format!("{effect_path}/angle_degrees"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite(),
+                    );
+                }
+                crate::project::Effect::Glow {
+                    threshold,
+                    radius,
+                    intensity,
+                    colour,
+                    ..
+                } => {
+                    if parse_colour(colour).is_none() {
+                        errors.push(Diagnostic::error(
+                            "MVP-GLOW-COLOUR",
+                            Category::Semantic,
+                            "glow colour must use #RRGGBB or #RRGGBBAA",
+                            format!("{effect_path}/colour"),
+                        ));
+                    }
+                    validate_track(
+                        threshold,
+                        clip.duration,
+                        &format!("{effect_path}/threshold"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| (0.0..=1.0).contains(value),
+                    );
+                    validate_track(
+                        radius,
+                        clip.duration,
+                        &format!("{effect_path}/radius"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 32.0,
+                    );
+                    validate_track(
+                        intensity,
+                        clip.duration,
+                        &format!("{effect_path}/intensity"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 4.0,
+                    );
+                }
+                crate::project::Effect::ChromaticAberration {
+                    amount,
+                    angle_degrees,
+                    ..
+                } => {
+                    validate_track(
+                        amount,
+                        clip.duration,
+                        &format!("{effect_path}/amount"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 32.0,
+                    );
+                    validate_track(
+                        angle_degrees,
+                        clip.duration,
+                        &format!("{effect_path}/angle_degrees"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite(),
+                    );
+                }
+                crate::project::Effect::Vignette {
+                    amount,
+                    radius,
+                    softness,
+                    colour,
+                    ..
+                } => {
+                    if parse_colour(colour).is_none() {
+                        errors.push(Diagnostic::error(
+                            "MVP-VIGNETTE-COLOUR",
+                            Category::Semantic,
+                            "vignette colour must use #RRGGBB or #RRGGBBAA",
+                            format!("{effect_path}/colour"),
+                        ));
+                    }
+                    validate_track(
+                        amount,
+                        clip.duration,
+                        &format!("{effect_path}/amount"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && (0.0..=1.0).contains(value),
+                    );
+                    validate_track(
+                        radius,
+                        clip.duration,
+                        &format!("{effect_path}/radius"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 2.0,
+                    );
+                    validate_track(
+                        softness,
+                        clip.duration,
+                        &format!("{effect_path}/softness"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value > 0.0 && *value <= 2.0,
+                    );
+                }
+                crate::project::Effect::Sharpen { amount, radius, .. } => {
+                    validate_track(
+                        amount,
+                        clip.duration,
+                        &format!("{effect_path}/amount"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 4.0,
+                    );
+                    validate_track(
+                        radius,
+                        clip.duration,
+                        &format!("{effect_path}/radius"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 16.0,
+                    );
+                }
+                crate::project::Effect::ColorAdjust {
+                    exposure,
+                    gamma,
+                    black_point,
+                    white_point,
+                    ..
+                } => {
+                    validate_track(
+                        exposure,
+                        clip.duration,
+                        &format!("{effect_path}/exposure"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && (-8.0..=8.0).contains(value),
+                    );
+                    validate_track(
+                        gamma,
+                        clip.duration,
+                        &format!("{effect_path}/gamma"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value > 0.0 && *value <= 8.0,
+                    );
+                    validate_track(
+                        black_point,
+                        clip.duration,
+                        &format!("{effect_path}/black_point"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && (0.0..1.0).contains(value),
+                    );
+                    validate_track(
+                        white_point,
+                        clip.duration,
+                        &format!("{effect_path}/white_point"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value > 0.0 && *value <= 1.0,
+                    );
+                }
+                crate::project::Effect::CameraShake {
+                    position_amount,
+                    rotation_degrees,
+                    scale_amount,
+                    frequency,
+                    attack,
+                    decay,
+                    ..
+                } => {
+                    validate_track(
+                        position_amount,
+                        clip.duration,
+                        &format!("{effect_path}/position_amount"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0,
+                    );
+                    validate_track(
+                        rotation_degrees,
+                        clip.duration,
+                        &format!("{effect_path}/rotation_degrees"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0,
+                    );
+                    validate_track(
+                        scale_amount,
+                        clip.duration,
+                        &format!("{effect_path}/scale_amount"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0,
+                    );
+                    validate_track(
+                        frequency,
+                        clip.duration,
+                        &format!("{effect_path}/frequency"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value > 0.0,
+                    );
+                    if !nonnegative(*attack) || !positive(*decay) {
+                        errors.push(Diagnostic::error(
+                            "MVP-SHAKE-ENVELOPE",
+                            Category::Semantic,
+                            "camera shake attack must be non-negative and decay positive",
+                            effect_path,
+                        ));
+                    }
+                }
+                crate::project::Effect::MotionBlur {
+                    intensity,
+                    shutter_angle,
+                    max_radius,
+                    samples,
+                    ..
+                } => {
+                    validate_track(
+                        intensity,
+                        clip.duration,
+                        &format!("{effect_path}/intensity"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0,
+                    );
+                    validate_track(
+                        shutter_angle,
+                        clip.duration,
+                        &format!("{effect_path}/shutter_angle"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && (0.0..=360.0).contains(value),
+                    );
+                    validate_track(
+                        max_radius,
+                        clip.duration,
+                        &format!("{effect_path}/max_radius"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        |value| value.is_finite() && *value >= 0.0 && *value <= 32.0,
+                    );
+                    if *samples < 2 || *samples > 32 {
+                        errors.push(Diagnostic::error(
+                            "MVP-MOTION-BLUR-SAMPLES",
+                            Category::Semantic,
+                            "motion blur samples must be between 2 and 32",
+                            format!("{effect_path}/samples"),
+                        ));
+                    }
+                }
             }
         }
     }

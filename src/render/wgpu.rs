@@ -1229,6 +1229,7 @@ mod tests {
             width: plan.canvas.width,
             height: plan.canvas.height,
             layers: Vec::new(),
+            post_effects: Vec::new(),
             evaluated_track_count: 0,
         };
         let mut cpu_output = RgbaImage::new(frame.width, frame.height);

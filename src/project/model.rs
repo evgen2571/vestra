@@ -167,6 +167,10 @@ pub struct Visual {
     pub transitions: Vec<Transition>,
     #[serde(default)]
     pub flashes: Vec<Flash>,
+    /// Effects applied after all clip layers have been composited, in the
+    /// declared order.
+    #[serde(default)]
+    pub post_effects: Vec<Effect>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -188,6 +192,8 @@ pub struct Clip {
     pub opacity: Track<f64>,
     #[serde(default)]
     pub effects: Vec<Effect>,
+    #[serde(default)]
+    pub blend_mode: BlendMode,
 }
 const fn default_visible() -> bool {
     true
@@ -290,6 +296,63 @@ pub enum Effect {
         colour: String,
         amount: Track<f64>,
     },
+    GaussianBlur {
+        id: String,
+        radius: Track<f64>,
+    },
+    DirectionalBlur {
+        id: String,
+        radius: Track<f64>,
+        angle_degrees: Track<f64>,
+    },
+    Glow {
+        id: String,
+        threshold: Track<f64>,
+        radius: Track<f64>,
+        intensity: Track<f64>,
+        colour: String,
+    },
+    ChromaticAberration {
+        id: String,
+        amount: Track<f64>,
+        angle_degrees: Track<f64>,
+    },
+    Vignette {
+        id: String,
+        amount: Track<f64>,
+        radius: Track<f64>,
+        softness: Track<f64>,
+        colour: String,
+    },
+    Sharpen {
+        id: String,
+        amount: Track<f64>,
+        radius: Track<f64>,
+    },
+    ColorAdjust {
+        id: String,
+        exposure: Track<f64>,
+        gamma: Track<f64>,
+        black_point: Track<f64>,
+        white_point: Track<f64>,
+    },
+    CameraShake {
+        id: String,
+        position_amount: Track<f64>,
+        rotation_degrees: Track<f64>,
+        scale_amount: Track<f64>,
+        frequency: Track<f64>,
+        seed: u64,
+        attack: f64,
+        decay: f64,
+    },
+    MotionBlur {
+        id: String,
+        intensity: Track<f64>,
+        shutter_angle: Track<f64>,
+        max_radius: Track<f64>,
+        samples: u8,
+    },
 }
 impl Effect {
     #[must_use]
@@ -298,9 +361,29 @@ impl Effect {
             Self::Brightness { id, .. }
             | Self::Contrast { id, .. }
             | Self::Saturation { id, .. }
-            | Self::Tint { id, .. } => id,
+            | Self::Tint { id, .. }
+            | Self::GaussianBlur { id, .. }
+            | Self::DirectionalBlur { id, .. }
+            | Self::Glow { id, .. }
+            | Self::ChromaticAberration { id, .. }
+            | Self::Vignette { id, .. }
+            | Self::Sharpen { id, .. }
+            | Self::ColorAdjust { id, .. }
+            | Self::CameraShake { id, .. }
+            | Self::MotionBlur { id, .. } => id,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BlendMode {
+    #[default]
+    Normal,
+    Add,
+    Screen,
+    Multiply,
+    Overlay,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

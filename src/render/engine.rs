@@ -472,9 +472,45 @@ fn create_backend(
     plan: &RenderPlan,
     decoded: &Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
+    if plan_requires_cpu_effects(plan) {
+        let error = Diagnostic::error(
+            "EFFECTS-WGPU-UNSUPPORTED",
+            Category::Backend,
+            "the WGPU backend does not yet support ordered multi-pass effects; select CPU or use auto",
+            "",
+        );
+        return match preference {
+            RenderBackendPreference::Wgpu => Err(error),
+            RenderBackendPreference::Auto => Ok((
+                Box::new(CpuBackend::default()),
+                Some(BackendFallback {
+                    code: error.code,
+                    stage: "effect_capability".to_owned(),
+                    message: error.message,
+                }),
+            )),
+            RenderBackendPreference::Cpu => Ok((Box::new(CpuBackend::default()), None)),
+        };
+    }
     create_backend_with(preference, || {
         WgpuBackend::new(plan, Arc::clone(decoded)).map(|backend| Box::new(backend) as _)
     })
+}
+
+fn plan_requires_cpu_effects(plan: &RenderPlan) -> bool {
+    !plan.post_effects.is_empty()
+        || plan.layers.iter().any(|layer| {
+            layer.blend_mode != crate::project::BlendMode::Normal
+                || layer.effects.iter().any(|effect| {
+                    !matches!(
+                        effect,
+                        crate::plan::CompiledEffect::Brightness { .. }
+                            | crate::plan::CompiledEffect::Contrast { .. }
+                            | crate::plan::CompiledEffect::Saturation { .. }
+                            | crate::plan::CompiledEffect::Tint { .. }
+                    )
+                })
+        })
 }
 
 #[expect(

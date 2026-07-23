@@ -1,5 +1,6 @@
 use image::{GenericImage, Rgba, RgbaImage};
 
+use crate::render::blend::{blend_surface, source_over};
 use crate::{
     animation::Transform2D,
     domain::Crop,
@@ -417,75 +418,6 @@ fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rg
     pixel
 }
 
-pub fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgba<u8> {
-    let source_alpha = f64::from(source[3]) / 255.0 * opacity;
-    let destination_alpha = f64::from(destination[3]) / 255.0;
-    let alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
-    if alpha <= 0.0 {
-        return Rgba([0, 0, 0, 0]);
-    }
-    let mut result = [0; 4];
-    for channel in 0..3 {
-        result[channel] = ((f64::from(source[channel]) * source_alpha
-            + f64::from(destination[channel]) * destination_alpha * (1.0 - source_alpha))
-            / alpha)
-            .round()
-            .clamp(0.0, 255.0) as u8;
-    }
-    result[3] = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
-    Rgba(result)
-}
-
-fn blend_surface(
-    canvas: &mut RgbaImage,
-    source: &RgbaImage,
-    mode: crate::project::BlendMode,
-    opacity: f64,
-) {
-    for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
-        *destination = blend_pixel(*destination, *source, mode, opacity);
-    }
-}
-
-fn blend_pixel(
-    destination: Rgba<u8>,
-    source: Rgba<u8>,
-    mode: crate::project::BlendMode,
-    opacity: f64,
-) -> Rgba<u8> {
-    if matches!(mode, crate::project::BlendMode::Normal) {
-        return source_over(destination, source, opacity);
-    }
-    let sa = f64::from(source[3]) / 255.0 * opacity;
-    let da = f64::from(destination[3]) / 255.0;
-    let alpha = sa + da * (1.0 - sa);
-    if alpha <= 0.0 {
-        return Rgba([0, 0, 0, 0]);
-    }
-    let mut result = [0; 4];
-    for channel in 0..3 {
-        let s = f64::from(source[channel]) / 255.0;
-        let d = f64::from(destination[channel]) / 255.0;
-        let blend = match mode {
-            crate::project::BlendMode::Normal => s,
-            crate::project::BlendMode::Add => (s + d).min(1.0),
-            crate::project::BlendMode::Screen => 1.0 - (1.0 - s) * (1.0 - d),
-            crate::project::BlendMode::Multiply => s * d,
-            crate::project::BlendMode::Overlay => {
-                if d <= 0.5 {
-                    2.0 * s * d
-                } else {
-                    1.0 - 2.0 * (1.0 - s) * (1.0 - d)
-                }
-            }
-        };
-        let premultiplied = blend * sa * da + s * sa * (1.0 - da) + d * da * (1.0 - sa);
-        result[channel] = (premultiplied / alpha * 255.0).round().clamp(0.0, 255.0) as u8;
-    }
-    result[3] = (alpha * 255.0).round() as u8;
-    Rgba(result)
-}
-
 fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEffect) {
     match effect {
         EvaluatedEffect::Brightness { amount } => map_pixels(source, target, |mut p, _x, _y| {
@@ -689,6 +621,7 @@ fn colour_adjust(
 mod tests {
     use super::*;
     use crate::plan::EvaluatedEffect;
+    use crate::render::blend::{blend_pixel, source_over};
 
     fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
         for effect in effects {

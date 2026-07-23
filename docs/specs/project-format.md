@@ -114,9 +114,14 @@ Supported coordinated transitions are `crossfade`, `zoom_crossfade`,
 The compiler adds linked opacity, transform, flash, and blur tracks for the
 participating layers.
 
-`preset` expands during compilation into ordinary transform and effect tracks.
+`preset` expands during compilation into generated transform contributions and
+effect tracks. The renderer evaluates authored transforms first, then applies
+preset contributions, transition contributions, and camera shake. Position and
+rotation contributions add to authored values; scale contributions multiply.
+Generated transform contributions are identity outside their active interval,
+so they never replace authored keyframes.
 Available values are `slow_drift`, `zoom_punch`, `impact`, `heavy_impact`, and
-`focus_reveal`; every preset has `intensity`, and impact presets need a stable
-`seed`. User effects run after generated preset effects. See
+`focus_reveal`; every preset has an intensity in `0..=2`, and impact presets
+need a stable `seed`. User effects run after generated preset effects. See
 [`effects-ready-v1.json`](../../examples/projects/effects-ready-v1.json) for a
 combined runnable project.

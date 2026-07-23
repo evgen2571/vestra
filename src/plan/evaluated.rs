@@ -104,6 +104,9 @@ pub enum EvaluatedEffect {
     MotionBlur {
         radius: f64,
         angle_degrees: f64,
+        intensity: f64,
+        shutter_angle: f64,
+        max_radius: f64,
         samples: u8,
     },
 }
@@ -246,22 +249,28 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
             if let EvaluatedEffect::MotionBlur {
                 radius,
                 angle_degrees,
+                intensity,
+                shutter_angle,
+                max_radius,
                 ..
             } = effect
             {
-                let window = 16_666_667_u128;
-                let before = relative.saturating_sub(window);
-                let after = relative.saturating_add(window);
+                let frame_duration = (1_000_000_000_u128 * u128::from(plan.frame_rate.1))
+                    / u128::from(plan.frame_rate.0);
+                let exposure = (frame_duration as f64 * (*shutter_angle / 360.0)).round() as u128;
+                let half_window = exposure / 2;
+                let before = relative.saturating_sub(half_window);
+                let after = relative.saturating_add(half_window);
                 let start = layer.transform.position.evaluate(before);
                 let end = layer.transform.position.evaluate(after);
                 let dx = (end.x - start.x) * f64::from(plan.canvas.width);
                 let dy = (end.y - start.y) * f64::from(plan.canvas.height);
-                let speed = (dx * dx + dy * dy).sqrt();
-                if speed <= 0.000_1 {
+                let displacement = (dx * dx + dy * dy).sqrt();
+                if displacement <= 0.000_1 || exposure == 0 {
                     *radius = 0.0;
                 } else {
                     *angle_degrees = dy.atan2(dx).to_degrees();
-                    *radius = (*radius * speed / 32.0).min(*radius).max(0.0);
+                    *radius = (displacement * *intensity).clamp(0.0, *max_radius);
                 }
             }
         }
@@ -434,9 +443,11 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             max_radius,
             samples,
         } => EvaluatedEffect::MotionBlur {
-            radius: (intensity.evaluate(time) * shutter_angle.evaluate(time) / 180.0)
-                .clamp(0.0, max_radius.evaluate(time)),
+            radius: 0.0,
             angle_degrees: 0.0,
+            intensity: intensity.evaluate(time),
+            shutter_angle: shutter_angle.evaluate(time),
+            max_radius: max_radius.evaluate(time),
             samples: *samples,
         },
     }
@@ -464,17 +475,30 @@ fn apply_camera_shake(
         (seconds / attack).clamp(0.0, 1.0)
     };
     let envelope = attack * (-seconds / decay.max(0.000_1)).exp();
-    let sample = |offset: f64| {
-        ((seconds * frequency * std::f64::consts::TAU + seed as f64 * 0.000_013 + offset).sin()
-            + 0.5 * (seconds * frequency * 1.618 * std::f64::consts::TAU + offset * 3.0).sin())
+    let phase = |channel| {
+        let value = stable_seed(seed.wrapping_add(channel));
+        f64::from((value >> 11) as u32) / f64::from(u32::MAX) * std::f64::consts::TAU
+    };
+    let sample = |channel: u64| {
+        let primary = phase(channel);
+        let secondary = phase(channel.wrapping_add(0x9e37_79b9));
+        ((seconds * frequency * std::f64::consts::TAU + primary).sin()
+            + 0.5 * (seconds * frequency * 1.618 * std::f64::consts::TAU + secondary).sin())
             / 1.5
     };
-    transform.position.x += sample(0.0) * position_amount * envelope;
-    transform.position.y += sample(1.7) * position_amount * envelope;
-    transform.rotation_radians += sample(3.1) * rotation_radians * envelope;
-    let scale = 1.0 + sample(4.9).abs() * scale_amount * envelope;
+    transform.position.x += sample(0) * position_amount * envelope;
+    transform.position.y += sample(1) * position_amount * envelope;
+    transform.rotation_radians += sample(2) * rotation_radians * envelope;
+    let scale = 1.0 + sample(3).abs() * scale_amount * envelope;
     transform.scale.x *= scale;
     transform.scale.y *= scale;
+}
+
+fn stable_seed(mut value: u64) -> u64 {
+    value = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
 }
 
 #[cfg(test)]
@@ -573,5 +597,31 @@ mod tests {
         );
         assert_eq!(first.position.x, repeated.position.x);
         assert!((first.position.x - nearby.position.x).abs() < 0.02);
+    }
+
+    #[test]
+    fn camera_shake_seeds_produce_distinct_continuous_patterns() {
+        let base = Transform2D {
+            position: crate::domain::Point { x: 0.5, y: 0.5 },
+            anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+            scale: crate::domain::Point { x: 1.0, y: 1.0 },
+            rotation_radians: 0.0,
+        };
+        let mut first = base;
+        let mut next = base;
+        apply_camera_shake(
+            &mut first,
+            100_000_000,
+            0.02,
+            0.1,
+            0.01,
+            14.0,
+            7,
+            0.03,
+            0.22,
+        );
+        apply_camera_shake(&mut next, 100_000_000, 0.02, 0.1, 0.01, 14.0, 8, 0.03, 0.22);
+        assert!((first.position.x - next.position.x).abs() > 0.000_1);
+        assert!((first.position.y - next.position.y).abs() > 0.000_1);
     }
 }

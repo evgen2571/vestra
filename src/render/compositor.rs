@@ -35,6 +35,7 @@ pub fn compose(
 pub struct EffectSurfacePool {
     first: RgbaImage,
     second: RgbaImage,
+    horizontal: RgbaImage,
     first_is_current: bool,
 }
 impl EffectSurfacePool {
@@ -43,6 +44,7 @@ impl EffectSurfacePool {
         Self {
             first: RgbaImage::new(width, height),
             second: RgbaImage::new(width, height),
+            horizontal: RgbaImage::new(width, height),
             first_is_current: true,
         }
     }
@@ -50,6 +52,7 @@ impl EffectSurfacePool {
         if self.first.width() != width || self.first.height() != height {
             self.first = RgbaImage::new(width, height);
             self.second = RgbaImage::new(width, height);
+            self.horizontal = RgbaImage::new(width, height);
             self.first_is_current = true;
         }
     }
@@ -88,7 +91,33 @@ impl EffectSurfacePool {
         } else {
             (&self.second, &mut self.first)
         };
-        apply_effect(source, target, effect);
+        match effect {
+            EvaluatedEffect::GaussianBlur { radius } => {
+                crate::render::effects::gaussian_blur(source, &mut self.horizontal, target, *radius)
+            }
+            EvaluatedEffect::Glow {
+                threshold,
+                radius,
+                intensity,
+                colour,
+            } => crate::render::effects::glow(
+                source,
+                &mut self.horizontal,
+                target,
+                *threshold,
+                *radius,
+                *intensity,
+                *colour,
+            ),
+            EvaluatedEffect::Sharpen { amount, radius } => crate::render::effects::sharpen(
+                source,
+                &mut self.horizontal,
+                target,
+                *amount,
+                *radius,
+            ),
+            _ => apply_effect(source, target, effect),
+        }
         self.first_is_current = !self.first_is_current;
     }
 }
@@ -465,7 +494,11 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             }
             p
         }),
-        EvaluatedEffect::GaussianBlur { radius } => blur(source, target, *radius, None),
+        EvaluatedEffect::GaussianBlur { .. }
+        | EvaluatedEffect::Glow { .. }
+        | EvaluatedEffect::Sharpen { .. } => {
+            unreachable!("multi-pass effects are dispatched by the surface pool")
+        }
         EvaluatedEffect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -475,12 +508,6 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             angle_degrees,
             ..
         } => blur(source, target, *radius, Some(*angle_degrees)),
-        EvaluatedEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-        } => glow(source, target, *threshold, *radius, *intensity, *colour),
         EvaluatedEffect::ChromaticAberration {
             amount,
             angle_degrees,
@@ -491,7 +518,6 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             softness,
             colour,
         } => vignette(source, target, *amount, *radius, *softness, *colour),
-        EvaluatedEffect::Sharpen { amount, radius } => sharpen(source, target, *amount, *radius),
         EvaluatedEffect::ColorAdjust {
             exposure,
             gamma,
@@ -563,40 +589,6 @@ fn blur(source: &RgbaImage, target: &mut RgbaImage, radius: f64, direction: Opti
         );
     }
 }
-fn glow(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    threshold: f64,
-    radius: f64,
-    intensity: f64,
-    colour: [u8; 4],
-) {
-    if intensity <= 0.0 {
-        target.copy_from(source, 0, 0).expect("same dimensions");
-        return;
-    }
-    for (x, y, base) in source.enumerate_pixels() {
-        let mut glow = [0.0; 3];
-        let samples = (radius.ceil() as i32 * 2 + 1).clamp(3, 17);
-        for i in 0..samples {
-            let offset = (f64::from(i) / f64::from(samples - 1) - 0.5) * 2.0 * radius;
-            let p = sample_edge(source, f64::from(x) + offset + 0.5, f64::from(y) + 0.5);
-            let brightness = (f64::from(p[0]) + f64::from(p[1]) + f64::from(p[2])) / (3.0 * 255.0);
-            let highlight =
-                ((brightness - threshold) / (1.0 - threshold).max(0.001)).clamp(0.0, 1.0);
-            for c in 0..3 {
-                glow[c] += highlight * f64::from(colour[c]);
-            }
-        }
-        let mut out = *base;
-        for c in 0..3 {
-            out[c] = (f64::from(base[c]) + glow[c] / f64::from(samples) * intensity)
-                .round()
-                .clamp(0.0, 255.0) as u8;
-        }
-        target.put_pixel(x, y, out);
-    }
-}
 fn chromatic(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
     if amount <= 0.0 {
         target.copy_from(source, 0, 0).expect("same dimensions");
@@ -629,35 +621,6 @@ fn vignette(
         let mut out = *p;
         for c in 0..3 {
             out[c] = (f64::from(p[c]) * (1.0 - t) + f64::from(colour[c]) * t).round() as u8;
-        }
-        target.put_pixel(x, y, out);
-    }
-}
-fn sharpen(source: &RgbaImage, target: &mut RgbaImage, amount: f64, radius: f64) {
-    if amount <= 0.0 {
-        target.copy_from(source, 0, 0).expect("same dimensions");
-        return;
-    }
-    for (x, y, p) in source.enumerate_pixels() {
-        let mut avg = [0.0; 3];
-        let n = 5.0;
-        for (dx, dy) in [
-            (-radius, 0.0),
-            (radius, 0.0),
-            (0.0, -radius),
-            (0.0, radius),
-            (0.0, 0.0),
-        ] {
-            let q = sample_edge(source, f64::from(x) + dx + 0.5, f64::from(y) + dy + 0.5);
-            for c in 0..3 {
-                avg[c] += f64::from(q[c]) / n;
-            }
-        }
-        let mut out = *p;
-        for c in 0..3 {
-            out[c] = (f64::from(p[c]) + (f64::from(p[c]) - avg[c]) * amount)
-                .round()
-                .clamp(0.0, 255.0) as u8;
         }
         target.put_pixel(x, y, out);
     }

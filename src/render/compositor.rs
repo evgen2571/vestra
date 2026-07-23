@@ -24,8 +24,25 @@ pub fn compose(
     }
     surfaces.resize(frame.width, frame.height);
     for layer in &frame.layers {
+        if matches!(layer.blend_mode, crate::project::BlendMode::Normal) && layer.effects.is_empty()
+        {
+            draw_layer(
+                canvas,
+                assets,
+                layer,
+                layer.opacity,
+                ColourTransform::default(),
+            );
+            continue;
+        }
         surfaces.clear();
-        draw_layer(surfaces.current(), assets, layer);
+        draw_layer(
+            surfaces.current(),
+            assets,
+            layer,
+            1.0,
+            ColourTransform::default(),
+        );
         surfaces.apply(&layer.effects);
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
     }
@@ -76,6 +93,9 @@ impl EffectSurfacePool {
         }
     }
     fn apply_to(&mut self, destination: &mut RgbaImage, effects: &[EvaluatedEffect]) {
+        if effects.is_empty() {
+            return;
+        }
         self.first
             .copy_from(destination, 0, 0)
             .expect("matching effect surface dimensions");
@@ -122,10 +142,16 @@ impl EffectSurfacePool {
     }
 }
 
-fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &EvaluatedLayer) {
+fn draw_layer(
+    canvas: &mut RgbaImage,
+    assets: &mut PreparedAssets,
+    layer: &EvaluatedLayer,
+    opacity: f64,
+    colour_transform: ColourTransform,
+) {
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
-            fill_solid(canvas, *colour, 1.0, ColourTransform::default())
+            fill_solid(canvas, *colour, opacity, colour_transform)
         }
         EvaluatedSource::Image {
             asset_index,
@@ -163,8 +189,8 @@ fn draw_layer(canvas: &mut RgbaImage, assets: &mut PreparedAssets, layer: &Evalu
                     source_width,
                     source_height,
                     *transform,
-                    1.0,
-                    ColourTransform::default(),
+                    opacity,
+                    colour_transform,
                 );
             }
         }

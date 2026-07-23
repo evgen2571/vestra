@@ -502,12 +502,19 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
         EvaluatedEffect::DirectionalBlur {
             radius,
             angle_degrees,
-        }
-        | EvaluatedEffect::MotionBlur {
+        } => blur(source, target, *radius, Some(*angle_degrees), None),
+        EvaluatedEffect::MotionBlur {
             radius,
             angle_degrees,
+            samples,
             ..
-        } => blur(source, target, *radius, Some(*angle_degrees)),
+        } => blur(
+            source,
+            target,
+            *radius,
+            Some(*angle_degrees),
+            Some(*samples),
+        ),
         EvaluatedEffect::ChromaticAberration {
             amount,
             angle_degrees,
@@ -553,13 +560,20 @@ fn sample_edge(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
         y.clamp(0.5, f64::from(image.height()) - 0.5),
     )
 }
-fn blur(source: &RgbaImage, target: &mut RgbaImage, radius: f64, direction: Option<f64>) {
+fn blur(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    radius: f64,
+    direction: Option<f64>,
+    configured_samples: Option<u8>,
+) {
     if radius <= 0.01 {
         target.copy_from(source, 0, 0).expect("same dimensions");
         return;
     }
     let radius = radius.clamp(0.0, 32.0);
-    let samples = (radius.ceil() as i32 * 2 + 1).clamp(3, 33);
+    let samples =
+        configured_samples.map_or_else(|| (radius.ceil() as i32 * 2 + 1).clamp(3, 33), i32::from);
     let (dx, dy) = direction.map_or((1.0, 0.0), |degrees| {
         let radians = degrees.to_radians();
         (radians.cos(), radians.sin())
@@ -803,7 +817,7 @@ mod tests {
         source.put_pixel(0, 0, Rgba([255, 0, 0, 127]));
         source.put_pixel(1, 0, Rgba([0, 0, 255, 255]));
         let mut target = RgbaImage::new(2, 1);
-        blur(&source, &mut target, 0.0, None);
+        blur(&source, &mut target, 0.0, None, None);
         assert_eq!(source, target);
     }
 

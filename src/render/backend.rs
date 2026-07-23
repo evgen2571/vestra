@@ -64,6 +64,7 @@ pub trait RenderBackend {
 #[derive(Default)]
 pub struct CpuBackend {
     assets: Option<PreparedAssets>,
+    effects: Option<compositor::EffectSurfacePool>,
 }
 
 impl CpuBackend {
@@ -90,6 +91,10 @@ impl RenderBackend for CpuBackend {
         decoded: Arc<DecodedAssets>,
     ) -> Result<(), Diagnostic> {
         self.assets = Some(PreparedAssets::from_decoded(plan, decoded));
+        self.effects = Some(compositor::EffectSurfacePool::new(
+            plan.canvas.width,
+            plan.canvas.height,
+        ));
         Ok(())
     }
 
@@ -98,8 +103,24 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
-        let assets = self.prepared_assets()?;
-        compositor::compose(frame, assets, destination);
+        let (assets, effects) = (&mut self.assets, &mut self.effects);
+        let assets = assets.as_mut().ok_or_else(|| {
+            Diagnostic::error(
+                "MVP-BACKEND-PREPARE",
+                crate::Category::Internal,
+                "CPU backend was not prepared",
+                "",
+            )
+        })?;
+        let effects = effects.as_mut().ok_or_else(|| {
+            Diagnostic::error(
+                "MVP-BACKEND-PREPARE",
+                crate::Category::Internal,
+                "CPU effect surfaces were not prepared",
+                "",
+            )
+        })?;
+        compositor::compose(frame, assets, destination, effects);
         Ok(())
     }
 

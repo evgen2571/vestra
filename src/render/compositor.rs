@@ -8,7 +8,12 @@ use crate::{
 };
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
-pub fn compose(frame: &EvaluatedFrame, assets: &mut PreparedAssets, canvas: &mut RgbaImage) {
+pub fn compose(
+    frame: &EvaluatedFrame,
+    assets: &mut PreparedAssets,
+    canvas: &mut RgbaImage,
+    surfaces: &mut EffectSurfacePool,
+) {
     let _time = frame.time;
     if canvas.width() != frame.width || canvas.height() != frame.height {
         *canvas = RgbaImage::from_pixel(frame.width, frame.height, Rgba(frame.background));
@@ -17,7 +22,7 @@ pub fn compose(frame: &EvaluatedFrame, assets: &mut PreparedAssets, canvas: &mut
             *pixel = Rgba(frame.background);
         }
     }
-    let mut surfaces = SurfacePool::new(frame.width, frame.height);
+    surfaces.resize(frame.width, frame.height);
     for layer in &frame.layers {
         surfaces.clear();
         draw_layer(surfaces.current(), assets, layer);
@@ -27,17 +32,25 @@ pub fn compose(frame: &EvaluatedFrame, assets: &mut PreparedAssets, canvas: &mut
     surfaces.apply_to(canvas, &frame.post_effects);
 }
 
-struct SurfacePool {
+pub struct EffectSurfacePool {
     first: RgbaImage,
     second: RgbaImage,
     first_is_current: bool,
 }
-impl SurfacePool {
-    fn new(width: u32, height: u32) -> Self {
+impl EffectSurfacePool {
+    #[must_use]
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
             first: RgbaImage::new(width, height),
             second: RgbaImage::new(width, height),
             first_is_current: true,
+        }
+    }
+    fn resize(&mut self, width: u32, height: u32) {
+        if self.first.width() != width || self.first.height() != height {
+            self.first = RgbaImage::new(width, height);
+            self.second = RgbaImage::new(width, height);
+            self.first_is_current = true;
         }
     }
     fn current(&mut self) -> &mut RgbaImage {

@@ -22,3 +22,4 @@ ts	phase	decision	why	evidence	result
 2026-07-23T17:40:00Z	refactor	isolated flash-overlay layer compilation	flash envelopes are compiled into regular layers independently of general clip coordination	src/plan/compiler/flashes.rs	compiler tests and strict clippy pass
 2026-07-23T17:44:00Z	golden-test	added a deterministic levels-and-gamma pixel golden	color adjustment needs exact output coverage in addition to schema and integration checks	src/render/colour_adjust.rs	focused golden test and strict clippy pass
 2026-07-23T17:48:00Z	golden-test	added a deterministic sharpen pixel golden	unsharp compositing needs an exact regression fixture across alpha values	src/render/effects.rs	focused golden test and strict clippy pass
+2026-07-23T17:52:00Z	golden-test	added a deterministic transparent directional-blur pixel golden	premultiplied edge behavior must not regress into transparent black halos	src/render/compositor.rs	focused golden test and strict clippy pass

@@ -20,6 +20,10 @@ def errors(instance):
 
 assert not errors(project), "canonical example must validate"
 
+for example in sorted((ROOT / "examples").rglob("*.json")):
+    instance = json.loads(example.read_text())
+    assert not errors(instance), f"example must validate: {example.relative_to(ROOT)}"
+
 solid_colour = copy.deepcopy(project)
 solid_colour["assets"] = []
 solid_colour["visual"]["clips"] = [

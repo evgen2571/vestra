@@ -8,6 +8,7 @@ mod effects;
 mod engine;
 mod prepared;
 mod wgpu;
+pub(crate) mod zoom_blur;
 
 pub use backend::{AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind};
 pub use cache::{ByteLruCache, CacheStats};

@@ -24,6 +24,9 @@ solid-colour sources. A flash with no fade-out keeps its configured opacity for
 its whole half-open interval. With a fade-out it holds until `end - fade_out`
 and then reaches zero at `end`.
 
+Solid-colour clips also reject image-only sizing, crop, and preset fields.
+Coordinated transitions reference visible image clips only.
+
 Optional fields are omitted when unused; JSON `null` is never a substitute for
 omission. This includes optional metadata, audio, sizing, crop, transform, and
 audio trim fields.

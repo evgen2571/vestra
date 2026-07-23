@@ -745,13 +745,15 @@ fn compile_transitions(
         let start = to_nanos(start, id)?;
         let end = start.saturating_add(to_nanos(duration, id)?);
         let interpolation = project_interpolation(interpolation);
-        for (clip, incoming) in [(outgoing, false), (incoming, true)] {
-            if let Some(index) = indices.get(clip) {
-                curves
-                    .entry(*index)
-                    .or_default()
-                    .push((start, end, incoming, interpolation));
-                compilation.compiled_transition_association_count += 1;
+        if !matches!(transition, crate::project::Transition::FlashCut { .. }) {
+            for (clip, incoming) in [(outgoing, false), (incoming, true)] {
+                if let Some(index) = indices.get(clip) {
+                    curves
+                        .entry(*index)
+                        .or_default()
+                        .push((start, end, incoming, interpolation));
+                    compilation.compiled_transition_association_count += 1;
+                }
             }
         }
     }
@@ -866,10 +868,32 @@ fn add_transition_style(
             zoom_transition_layer(&mut layers[incoming], start, end, in_zoom, 1.0, blur);
         }
         TransitionStyle::Flash(colour, intensity) => {
-            for index in [outgoing, incoming] {
+            let peak = start + (end - start) / 2;
+            for (index, incoming) in [(outgoing, false), (incoming, true)] {
                 let layer = &mut layers[index];
                 let relative_start = start.saturating_sub(layer.start_nanos);
                 let relative_end = end.saturating_sub(layer.start_nanos);
+                let relative_peak = peak.saturating_sub(layer.start_nanos);
+                layer.opacity_contributions.push(Track {
+                    base_value: if incoming { 0.0 } else { 1.0 },
+                    keyframes: vec![
+                        Keyframe {
+                            time: relative_start,
+                            value: if incoming { 0.0 } else { 1.0 },
+                            interpolation: Interpolation::Hold,
+                        },
+                        Keyframe {
+                            time: relative_peak,
+                            value: if incoming { 1.0 } else { 0.0 },
+                            interpolation: Interpolation::Linear,
+                        },
+                        Keyframe {
+                            time: relative_end,
+                            value: if incoming { 1.0 } else { 0.0 },
+                            interpolation: Interpolation::Hold,
+                        },
+                    ],
+                });
                 layer.effects.push(crate::plan::CompiledEffect::Tint {
                     colour,
                     amount: Track {

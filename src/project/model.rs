@@ -329,6 +329,14 @@ pub enum Effect {
         radius: Track<f64>,
         angle_degrees: Track<f64>,
     },
+    ZoomBlur {
+        id: String,
+        radius: Track<f64>,
+        samples: u8,
+        anchor: Point,
+        #[serde(default)]
+        direction: ZoomBlurDirection,
+    },
     Glow {
         id: String,
         threshold: Track<f64>,
@@ -390,6 +398,7 @@ impl Effect {
             | Self::Tint { id, .. }
             | Self::GaussianBlur { id, .. }
             | Self::DirectionalBlur { id, .. }
+            | Self::ZoomBlur { id, .. }
             | Self::Glow { id, .. }
             | Self::ChromaticAberration { id, .. }
             | Self::Vignette { id, .. }
@@ -407,6 +416,15 @@ impl Effect {
             _ => ActiveInterval::default(),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ZoomBlurDirection {
+    Inward,
+    Outward,
+    #[default]
+    Centered,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]

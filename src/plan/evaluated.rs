@@ -68,6 +68,9 @@ pub enum EvaluatedEffect {
     },
     ZoomBlur {
         radius: f64,
+        samples: u8,
+        anchor: crate::domain::Point,
+        direction: crate::project::ZoomBlurDirection,
     },
     Glow {
         threshold: f64,
@@ -397,8 +400,16 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             radius: radius.evaluate(time),
             angle_degrees: angle_degrees.evaluate(time),
         },
-        CompiledEffect::ZoomBlur { radius } => EvaluatedEffect::ZoomBlur {
+        CompiledEffect::ZoomBlur {
+            radius,
+            samples,
+            anchor,
+            direction,
+        } => EvaluatedEffect::ZoomBlur {
             radius: radius.evaluate(time),
+            samples: *samples,
+            anchor: *anchor,
+            direction: *direction,
         },
         CompiledEffect::Glow {
             threshold,

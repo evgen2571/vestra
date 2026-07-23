@@ -196,6 +196,32 @@ fn validate_effect_parameters(
             track(radius, "radius", valid_blur_radius, errors);
             track(angle_degrees, "angle_degrees", finite, errors);
         }
+        crate::project::Effect::ZoomBlur {
+            radius,
+            samples,
+            anchor,
+            ..
+        } => {
+            track(radius, "radius", valid_blur_radius, errors);
+            if !(2..=32).contains(samples) {
+                invalid_effect(
+                    errors,
+                    "MVP-ZOOM-BLUR-SAMPLES",
+                    "zoom blur samples must be between 2 and 32",
+                    path,
+                    "samples",
+                );
+            }
+            if !unit(anchor.x) || !unit(anchor.y) {
+                invalid_effect(
+                    errors,
+                    "MVP-ZOOM-BLUR-ANCHOR",
+                    "zoom blur anchor must be in the unit square",
+                    path,
+                    "anchor",
+                );
+            }
+        }
         crate::project::Effect::Glow {
             threshold,
             radius,
@@ -975,6 +1001,37 @@ fn validate_visual(
                         errors,
                         |value| value.is_finite(),
                     );
+                }
+                crate::project::Effect::ZoomBlur {
+                    radius,
+                    samples,
+                    anchor,
+                    ..
+                } => {
+                    validate_track(
+                        radius,
+                        clip.duration,
+                        &format!("{effect_path}/radius"),
+                        maximum_keyframes_per_track,
+                        errors,
+                        valid_blur_radius,
+                    );
+                    if !(2..=32).contains(samples) {
+                        errors.push(Diagnostic::error(
+                            "MVP-ZOOM-BLUR-SAMPLES",
+                            Category::Semantic,
+                            "zoom blur samples must be between 2 and 32",
+                            format!("{effect_path}/samples"),
+                        ));
+                    }
+                    if !unit(anchor.x) || !unit(anchor.y) {
+                        errors.push(Diagnostic::error(
+                            "MVP-ZOOM-BLUR-ANCHOR",
+                            Category::Semantic,
+                            "zoom blur anchor must be in the unit square",
+                            format!("{effect_path}/anchor"),
+                        ));
+                    }
                 }
                 crate::project::Effect::Glow {
                     threshold,

@@ -419,6 +419,10 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
     }
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the evaluated shake signal is kept allocation-free"
+)]
 fn apply_camera_shake(
     transform: &mut Transform2D,
     time: u128,

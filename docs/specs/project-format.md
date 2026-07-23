@@ -125,3 +125,24 @@ Available values are `slow_drift`, `zoom_punch`, `impact`, `heavy_impact`, and
 need a stable `seed`. User effects run after generated preset effects. See
 [`effects-ready-v1.json`](../../examples/projects/effects-ready-v1.json) for a
 combined runnable project.
+
+## Backend support
+
+| Feature | CPU | WGPU | Auto |
+| --- | --- | --- | --- |
+| Basic transforms and colour effects | yes | yes | prefers WGPU when available |
+| Advanced effects and blend modes | yes | no | falls back to CPU with a diagnostic |
+| Global post-effects | yes | no | falls back to CPU with a diagnostic |
+| Advanced transitions and presets | yes | no | falls back to CPU with a diagnostic |
+
+Advanced image processing uses straight-alpha storage with premultiplied-alpha
+accumulation during blur passes. Gaussian blur is separable and bounded to a
+32-pixel radius. Motion blur derives translation only; scale and rotation do
+not contribute to its velocity.
+
+## Runnable examples
+
+Focused fixtures live under [`examples/effects`](../../examples/effects),
+[`examples/transitions`](../../examples/transitions), and
+[`examples/presets`](../../examples/presets). The schema check discovers every
+JSON example. Each is a short CPU-renderable project using the bundled assets.

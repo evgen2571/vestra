@@ -23,3 +23,20 @@ pub(crate) fn apply(
         target.put_pixel(x, y, output);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use image::{Rgba, RgbaImage};
+
+    use super::apply;
+
+    #[test]
+    fn levels_and_gamma_match_the_pixel_golden_fixture() {
+        let mut source = RgbaImage::new(2, 1);
+        source.put_pixel(0, 0, Rgba([64, 128, 192, 173]));
+        source.put_pixel(1, 0, Rgba([32, 96, 224, 255]));
+        let mut output = RgbaImage::new(2, 1);
+        apply(&source, &mut output, 0.5, 1.8, 0.1, 0.9);
+        assert_eq!(output.as_raw(), &[135, 219, 255, 173, 70, 181, 255, 255]);
+    }
+}

@@ -66,6 +66,9 @@ pub enum EvaluatedEffect {
         radius: f64,
         angle_degrees: f64,
     },
+    ZoomBlur {
+        radius: f64,
+    },
     Glow {
         threshold: f64,
         radius: f64,
@@ -380,6 +383,9 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
         } => EvaluatedEffect::DirectionalBlur {
             radius: radius.evaluate(time),
             angle_degrees: angle_degrees.evaluate(time),
+        },
+        CompiledEffect::ZoomBlur { radius } => EvaluatedEffect::ZoomBlur {
+            radius: radius.evaluate(time),
         },
         CompiledEffect::Glow {
             threshold,

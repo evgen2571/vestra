@@ -1023,7 +1023,7 @@ fn zoom_transition_layer(
         layer.effects.push(crate::plan::TimedEffect {
             start: a,
             end: b,
-            effect: crate::plan::CompiledEffect::GaussianBlur {
+            effect: crate::plan::CompiledEffect::ZoomBlur {
                 radius: Track {
                     base_value: 0.0,
                     keyframes: vec![
@@ -1315,6 +1315,7 @@ fn record_compilation_workload(
                 crate::plan::CompiledEffect::Tint { .. } => compilation.tint_effect_count += 1,
                 crate::plan::CompiledEffect::GaussianBlur { .. }
                 | crate::plan::CompiledEffect::DirectionalBlur { .. }
+                | crate::plan::CompiledEffect::ZoomBlur { .. }
                 | crate::plan::CompiledEffect::Glow { .. }
                 | crate::plan::CompiledEffect::ChromaticAberration { .. }
                 | crate::plan::CompiledEffect::Vignette { .. }
@@ -1349,6 +1350,7 @@ fn record_compilation_workload(
 fn effect_passes(effect: &crate::plan::CompiledEffect) -> usize {
     match effect {
         crate::plan::CompiledEffect::GaussianBlur { .. } => 2,
+        crate::plan::CompiledEffect::ZoomBlur { .. } => 1,
         crate::plan::CompiledEffect::Glow { .. } => 4,
         crate::plan::CompiledEffect::Sharpen { .. } => 3,
         crate::plan::CompiledEffect::CameraShake { .. } => 0,
@@ -1679,5 +1681,24 @@ mod tests {
         assert_eq!(incoming.evaluate(1_099_999_999), 0.0);
         assert_eq!(outgoing.evaluate(1_100_000_000), 0.0);
         assert_eq!(incoming.evaluate(1_100_000_000), 1.0);
+    }
+
+    #[test]
+    fn zoom_blur_transition_compiles_to_a_radial_blur_effect() {
+        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
+        layer.start_nanos = 0;
+        zoom_transition_layer(
+            &mut layer,
+            1_000_000_000,
+            1_200_000_000,
+            1.0,
+            1.1,
+            Some(4.0),
+        );
+        assert!(matches!(
+            layer.effects[0].effect,
+            crate::plan::CompiledEffect::ZoomBlur { .. }
+        ));
+        assert!(!layer.effects[0].active_at(1_200_000_000));
     }
 }

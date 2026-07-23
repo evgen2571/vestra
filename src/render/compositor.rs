@@ -520,7 +520,7 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             radius,
             softness,
             colour,
-        } => vignette(source, target, *amount, *radius, *softness, *colour),
+        } => crate::render::vignette::apply(source, target, *amount, *radius, *softness, *colour),
         EvaluatedEffect::ColorAdjust {
             exposure,
             gamma,
@@ -687,29 +687,6 @@ fn chromatic(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64
         target.put_pixel(x, y, Rgba([left[0], p[1], right[2], p[3]]));
     }
 }
-fn vignette(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    amount: f64,
-    radius: f64,
-    softness: f64,
-    colour: [u8; 4],
-) {
-    let w = f64::from(source.width());
-    let h = f64::from(source.height());
-    for (x, y, p) in source.enumerate_pixels() {
-        let dx = (f64::from(x) + 0.5 - w / 2.0) / (w / 2.0);
-        let dy = (f64::from(y) + 0.5 - h / 2.0) / (h / 2.0);
-        let distance = (dx * dx + dy * dy).sqrt();
-        let edge = ((distance - radius) / (softness.max(0.001))).clamp(0.0, 1.0);
-        let t = (amount * edge).clamp(0.0, 1.0);
-        let mut out = *p;
-        for c in 0..3 {
-            out[c] = (f64::from(p[c]) * (1.0 - t) + f64::from(colour[c]) * t).round() as u8;
-        }
-        target.put_pixel(x, y, out);
-    }
-}
 fn colour_adjust(
     source: &RgbaImage,
     target: &mut RgbaImage,
@@ -808,7 +785,7 @@ mod tests {
     fn vignette_normalizes_each_frame_axis_independently() {
         let source = RgbaImage::from_pixel(10, 100, Rgba([255, 255, 255, 255]));
         let mut target = RgbaImage::new(10, 100);
-        vignette(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
+        crate::render::vignette::apply(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
         let top = target.get_pixel(5, 0)[0];
         let side = target.get_pixel(0, 50)[0];
         assert!(top.abs_diff(side) <= 32);
@@ -819,7 +796,7 @@ mod tests {
     fn vertical_vignette_matches_the_pixel_golden_fixture() {
         let source = RgbaImage::from_pixel(3, 5, Rgba([200, 160, 120, 255]));
         let mut target = RgbaImage::new(3, 5);
-        vignette(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
+        crate::render::vignette::apply(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
         assert_eq!(
             target.as_raw(),
             &[

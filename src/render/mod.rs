@@ -7,6 +7,7 @@ mod compositor;
 mod effects;
 mod engine;
 mod prepared;
+pub(crate) mod vignette;
 mod wgpu;
 pub(crate) mod zoom_blur;
 

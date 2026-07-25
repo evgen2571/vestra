@@ -1,5 +1,7 @@
+//! Rendering command workflow and report-failure handling.
+
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::ExitCode,
     sync::{
         Arc,
@@ -10,143 +12,20 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    application::{
-        ApplicationRenderError, RenderRequest, inspect, inspect_result, render_project,
-        render_result, validate_result, version_result,
-    },
+    application::{ApplicationRenderError, RenderRequest, render_project, render_result},
     output::{
         ProgressFormat, ResultFormat, print_failure, print_success, write_command_failure_report,
         write_plan_failure_report, write_progress, write_render_failure_report,
         write_success_report,
     },
-    project::LoadError,
     render::{RenderBackendPreference, RenderEvent},
 };
-use clap::{ArgAction, Parser, Subcommand};
-
-use super::formats::{CliProgressFormat, CliRenderBackend, CliResultFormat};
-
-#[derive(Parser, Debug)]
-#[command(
-    name = "video-editor",
-    version,
-    about = "Standalone JSON-driven declarative video renderer",
-    arg_required_else_help = true
-)]
-struct Cli {
-    #[arg(short, long, global = true, action = ArgAction::Count)]
-    verbose: u8,
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    Validate {
-        project: PathBuf,
-        #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
-        format: CliResultFormat,
-    },
-    Inspect {
-        project: PathBuf,
-        #[arg(long)]
-        preview: bool,
-        #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
-        format: CliResultFormat,
-    },
-    Render {
-        project: PathBuf,
-        #[arg(long)]
-        output: Option<PathBuf>,
-        #[arg(long)]
-        overwrite: bool,
-        #[arg(long)]
-        preview: bool,
-        #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
-        format: CliResultFormat,
-        #[arg(long, value_enum, default_value_t = CliProgressFormat::Human)]
-        progress: CliProgressFormat,
-        #[arg(long)]
-        report: Option<PathBuf>,
-        #[arg(long, value_enum, default_value_t = CliRenderBackend::Auto)]
-        render_backend: CliRenderBackend,
-    },
-    Version,
-}
-
-pub fn run() -> ExitCode {
-    let cli = Cli::parse();
-    let _verbosity = cli.verbose;
-    match cli.command {
-        Command::Validate { project, format } => validate_command(project, format.into()),
-        Command::Inspect {
-            project,
-            preview,
-            format,
-        } => inspect_command(project, preview, format.into()),
-        Command::Render {
-            project,
-            output,
-            overwrite,
-            preview,
-            format,
-            progress,
-            report,
-            render_backend,
-        } => render_command(
-            project,
-            output,
-            overwrite,
-            preview,
-            format.into(),
-            progress.into(),
-            report,
-            render_backend.into(),
-        ),
-        Command::Version => {
-            print_success(
-                "version",
-                ResultFormat::Human,
-                version_result(),
-                &format!("video-editor {}", env!("CARGO_PKG_VERSION")),
-            );
-            ExitCode::SUCCESS
-        }
-    }
-}
-
-fn validate_command(project: PathBuf, format: ResultFormat) -> ExitCode {
-    match validate_result(&project) {
-        Ok(result) => {
-            print_success("validate", format, result, "project is valid");
-            ExitCode::SUCCESS
-        }
-        Err(LoadError::Diagnostics(errors)) => {
-            print_failure("validate", format, errors, Vec::new())
-        }
-    }
-}
-
-fn inspect_command(project: PathBuf, preview: bool, format: ResultFormat) -> ExitCode {
-    match inspect(&project, preview) {
-        Ok(inspection) => {
-            print_success(
-                "inspect",
-                format,
-                inspect_result(&project, inspection),
-                "project inspection complete",
-            );
-            ExitCode::SUCCESS
-        }
-        Err(LoadError::Diagnostics(errors)) => print_failure("inspect", format, errors, Vec::new()),
-    }
-}
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "the command dispatcher keeps CLI argument ownership explicit at the boundary"
+    reason = "the command boundary keeps parsed arguments explicit"
 )]
-fn render_command(
+pub(super) fn run(
     project: PathBuf,
     output: Option<PathBuf>,
     overwrite: bool,
@@ -298,13 +177,13 @@ fn render_command(
 }
 
 fn write_failure_report(
-    path: Option<&std::path::Path>,
+    path: Option<&Path>,
     command: &str,
     category: &str,
     stage: &str,
     errors: &[Diagnostic],
     elapsed_ms: u128,
-    project_path: Option<&std::path::Path>,
+    project_path: Option<&Path>,
 ) -> Result<(), String> {
     if let Some(path) = path {
         write_command_failure_report(

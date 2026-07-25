@@ -8,6 +8,7 @@ pub(crate) mod colour_adjust;
 mod compositor;
 mod effects;
 mod engine;
+mod engine_failure;
 mod engine_types;
 pub(crate) mod geometry;
 mod metrics;

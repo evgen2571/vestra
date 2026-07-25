@@ -9,17 +9,19 @@ use crate::{
     Category, Diagnostic,
     animation::{Interpolation, Keyframe, Track},
     domain::{Crop, Point},
-    media::{AudioSettings, EncoderSettings},
+    media::EncoderSettings,
     plan::{
         Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
         CompiledVisualSource, DrawKey, ImageAsset, RenderPlan, TransformContribution,
     },
-    project::{Sizing, ValidatedProject, parse_colour},
+    project::{ValidatedProject, parse_colour},
 };
 
+mod audio;
 mod effects;
 mod flashes;
 mod metrics;
+mod output;
 mod presets;
 mod time;
 mod tracks;
@@ -126,7 +128,7 @@ fn compile_canonical(
                 sizing: clip
                     .sizing
                     .as_ref()
-                    .map_or(CompiledSizing::Original, compile_sizing),
+                    .map_or(CompiledSizing::Original, output::compile_sizing),
             },
             crate::project::VisualSource::SolidColor { colour } => {
                 compilation.parsed_colour_count += 1;
@@ -209,7 +211,7 @@ fn compile_canonical(
     metrics::record(&mut compilation, &layers, &post_effects);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     Ok(RenderPlan {
-        configured_output: resolved_output_path(validated),
+        configured_output: output::resolve_path(validated),
         canvas: Canvas {
             width,
             height,
@@ -226,7 +228,7 @@ fn compile_canonical(
             frame_count: validated.frame_count,
             duration: validated.duration,
             quality_crf: project.output.quality.crf(),
-            audio: compile_audio(validated)?,
+            audio: audio::compile(validated)?,
         },
         limits: validated.limits,
         images,
@@ -691,72 +693,6 @@ fn insert_keyframe<T>(keyframes: &mut Vec<Keyframe<T>>, keyframe: Keyframe<T>) {
     match keyframes.binary_search_by_key(&keyframe.time, |existing| existing.time) {
         Ok(index) => keyframes[index] = keyframe,
         Err(index) => keyframes.insert(index, keyframe),
-    }
-}
-
-fn resolved_output_path(validated: &ValidatedProject) -> std::path::PathBuf {
-    let configured = std::path::PathBuf::from(&validated.project.output.path);
-    if configured.is_absolute() {
-        configured
-    } else {
-        validated
-            .project_path
-            .parent()
-            .unwrap_or_else(|| std::path::Path::new("."))
-            .join(configured)
-    }
-}
-
-fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, Diagnostic> {
-    if !validated.project.output.audio
-        || validated
-            .project
-            .audio
-            .as_ref()
-            .is_none_or(|audio| audio.mute)
-    {
-        return Ok(None);
-    }
-    let Some(audio) = validated.project.audio.as_ref() else {
-        return Ok(None);
-    };
-    let source_duration = validated.audio_durations.get(&audio.asset).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-AUDIO",
-            Category::Internal,
-            "validated audio duration is missing",
-            "",
-        )
-    })?;
-    let path = validated.asset_paths.get(&audio.asset).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-AUDIO",
-            Category::Internal,
-            "validated audio path is missing",
-            "",
-        )
-    })?;
-    Ok(Some(AudioSettings {
-        path: path.clone(),
-        trim_start: audio.trim_start,
-        selected_duration: audio.trim_end.unwrap_or(*source_duration) - audio.trim_start,
-        timeline_start: audio.timeline_start,
-        volume: audio.volume,
-        fade_in: audio.fade_in,
-        fade_out: audio.fade_out,
-    }))
-}
-
-fn compile_sizing(sizing: &Sizing) -> CompiledSizing {
-    match sizing {
-        Sizing::Original => CompiledSizing::Original,
-        Sizing::Fit => CompiledSizing::Fit,
-        Sizing::Cover => CompiledSizing::Cover,
-        Sizing::Scale { scale } => CompiledSizing::Scale(*scale),
-        Sizing::Stretch { width, height } => CompiledSizing::Stretch {
-            width: *width,
-            height: *height,
-        },
     }
 }
 

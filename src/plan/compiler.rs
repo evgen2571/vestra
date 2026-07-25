@@ -9,7 +9,7 @@ use crate::{
     Category, Diagnostic,
     animation::{Interpolation, Keyframe, Track},
     domain::{Crop, Point},
-    media::{AudioSettings, EncoderSettings},
+    media::EncoderSettings,
     plan::{
         Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
         CompiledVisualSource, DrawKey, ImageAsset, RenderPlan, TransformContribution,
@@ -17,6 +17,7 @@ use crate::{
     project::{Sizing, ValidatedProject, parse_colour},
 };
 
+mod audio;
 mod effects;
 mod flashes;
 mod metrics;
@@ -226,7 +227,7 @@ fn compile_canonical(
             frame_count: validated.frame_count,
             duration: validated.duration,
             quality_crf: project.output.quality.crf(),
-            audio: compile_audio(validated)?,
+            audio: audio::compile(validated)?,
         },
         limits: validated.limits,
         images,
@@ -705,46 +706,6 @@ fn resolved_output_path(validated: &ValidatedProject) -> std::path::PathBuf {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join(configured)
     }
-}
-
-fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, Diagnostic> {
-    if !validated.project.output.audio
-        || validated
-            .project
-            .audio
-            .as_ref()
-            .is_none_or(|audio| audio.mute)
-    {
-        return Ok(None);
-    }
-    let Some(audio) = validated.project.audio.as_ref() else {
-        return Ok(None);
-    };
-    let source_duration = validated.audio_durations.get(&audio.asset).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-AUDIO",
-            Category::Internal,
-            "validated audio duration is missing",
-            "",
-        )
-    })?;
-    let path = validated.asset_paths.get(&audio.asset).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-AUDIO",
-            Category::Internal,
-            "validated audio path is missing",
-            "",
-        )
-    })?;
-    Ok(Some(AudioSettings {
-        path: path.clone(),
-        trim_start: audio.trim_start,
-        selected_duration: audio.trim_end.unwrap_or(*source_duration) - audio.trim_start,
-        timeline_start: audio.timeline_start,
-        volume: audio.volume,
-        fade_in: audio.fade_in,
-        fade_out: audio.fade_out,
-    }))
 }
 
 fn compile_sizing(sizing: &Sizing) -> CompiledSizing {

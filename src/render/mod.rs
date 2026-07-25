@@ -15,6 +15,7 @@ mod parity;
 mod prepared;
 pub(crate) mod vignette;
 mod wgpu;
+mod wgpu_parameters;
 mod wgpu_requirements;
 mod wgpu_support;
 pub(crate) mod zoom_blur;

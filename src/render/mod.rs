@@ -9,6 +9,7 @@ mod compositor;
 mod effects;
 mod engine;
 mod engine_types;
+mod metrics;
 mod prepared;
 pub(crate) mod vignette;
 mod wgpu;
@@ -21,5 +22,6 @@ pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,
 };
-pub use prepared::{DecodedAssets, PreparationStats};
+pub use metrics::{PreparationStats, PreparationTimings};
+pub use prepared::DecodedAssets;
 pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};

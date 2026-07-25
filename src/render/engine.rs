@@ -84,28 +84,8 @@ where
             )
         })?;
     let mut performance = backend.stats();
-    performance.compiled_transition_association_count =
-        plan.compilation.compiled_transition_association_count;
-    performance.parsed_colour_count = plan.compilation.parsed_colour_count;
-    performance.declared_clip_count = plan.compilation.declared_clip_count;
-    performance.rendered_clip_count = plan.compilation.rendered_clip_count;
-    performance.hidden_clip_count = plan.compilation.hidden_clip_count;
-    performance.zero_frame_clip_count = plan.compilation.zero_frame_clip_count;
-    performance.image_source_count = plan.compilation.image_source_count;
-    performance.solid_color_source_count = plan.compilation.solid_color_source_count;
-    performance.keyframe_count = plan.compilation.keyframe_count;
-    performance.brightness_effect_count = plan.compilation.brightness_effect_count;
-    performance.contrast_effect_count = plan.compilation.contrast_effect_count;
-    performance.saturation_effect_count = plan.compilation.saturation_effect_count;
-    performance.tint_effect_count = plan.compilation.tint_effect_count;
-    performance.local_effect_count = plan.compilation.local_effect_count;
-    performance.generated_local_effect_count = plan.compilation.generated_local_effect_count;
-    performance.global_effect_count = plan.compilation.global_effect_count;
-    performance.advanced_effect_count = plan.compilation.advanced_effect_count;
-    performance.generated_transform_contribution_count =
-        plan.compilation.generated_transform_contribution_count;
-    performance.effect_pass_count = plan.compilation.effect_pass_count;
-    performance.schedule_event_count = schedule.event_count();
+    performance.absorb_compilation(&plan.compilation);
+    performance.absorb_schedule(&schedule);
     let backend_timings = backend.timings();
     let mut timings = RenderTimings {
         asset_decode_ms: milliseconds(decoded.timings().decode),
@@ -277,29 +257,7 @@ where
         warnings: Some(plan.warnings.clone()),
     });
     let preparation = backend.stats();
-    performance.decoded_image_count = preparation.decoded_image_count;
-    performance.bitmap_cache_hits = preparation.bitmap_cache_hits;
-    performance.bitmap_cache_misses = preparation.bitmap_cache_misses;
-    performance.bitmap_cache_requests = preparation.bitmap_cache_requests;
-    performance.bitmap_cache_insertions = preparation.bitmap_cache_insertions;
-    performance.bitmap_cache_hit_rate = preparation.bitmap_cache_hit_rate;
-    performance.cache_current_entries = preparation.cache_current_entries;
-    performance.peak_cache_entries = preparation.peak_cache_entries;
-    performance.cache_budget_bytes = preparation.cache_budget_bytes;
-    performance.cache_current_bytes = preparation.cache_current_bytes;
-    performance.cache_peak_bytes = preparation.cache_peak_bytes;
-    performance.cache_evictions = preparation.cache_evictions;
-    performance.cache_oversized_entries_skipped = preparation.cache_oversized_entries_skipped;
-    performance.uploaded_texture_count = preparation.uploaded_texture_count;
-    performance.uploaded_texture_bytes = preparation.uploaded_texture_bytes;
-    performance.readback_buffer_count = preparation.readback_buffer_count;
-    performance.readback_buffer_bytes = preparation.readback_buffer_bytes;
-    performance.shader_module_count = preparation.shader_module_count;
-    performance.pipeline_count = preparation.pipeline_count;
-    performance.output_texture_count = preparation.output_texture_count;
-    performance.accumulation_buffer_count = preparation.accumulation_buffer_count;
-    performance.bind_group_count = preparation.bind_group_count;
-    performance.command_submission_count = preparation.command_submission_count;
+    performance.absorb_backend_snapshot(&preparation);
     if backend.kind() == RenderBackendKind::Wgpu {
         let backend_timings = backend.timings();
         timings.gpu_frame_command_encode_ms =
@@ -489,8 +447,8 @@ mod tests {
         Category, Diagnostic,
         plan::{CompileOptions, EvaluatedFrame, RenderPlan, compile},
         project::{ValidationOptions, load_and_validate},
-        render::prepared::{PreparationStats, PreparationTimings},
         render::{AdapterMetadata, RenderBackend, RenderBackendKind},
+        render::{PreparationStats, PreparationTimings},
     };
 
     struct FailingBackend {

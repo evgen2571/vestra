@@ -16,7 +16,8 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, RenderBackend, RenderBackendKind,
-        prepared::{DecodedAssets, PreparationStats, PreparationTimings, crop_bounds},
+        metrics::{PreparationStats, PreparationTimings},
+        prepared::{DecodedAssets, crop_bounds},
     },
 };
 

@@ -3,87 +3,18 @@
     reason = "asset preparation preserves machine-readable diagnostics"
 )]
 
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Instant};
 
 use image::RgbaImage;
 
-use crate::{Category, Diagnostic, plan::RenderPlan, render::ByteLruCache};
-
-#[derive(Clone, Debug, Default, serde::Serialize)]
-pub struct PreparationStats {
-    pub compiled_transition_association_count: u64,
-    pub parsed_colour_count: u64,
-    pub declared_clip_count: usize,
-    pub rendered_clip_count: usize,
-    pub hidden_clip_count: usize,
-    pub zero_frame_clip_count: usize,
-    pub image_source_count: usize,
-    pub solid_color_source_count: usize,
-    pub keyframe_count: u64,
-    pub evaluated_track_count: u64,
-    pub maximum_active_layers: usize,
-    pub brightness_effect_count: usize,
-    pub contrast_effect_count: usize,
-    pub saturation_effect_count: usize,
-    pub tint_effect_count: usize,
-    pub local_effect_count: usize,
-    /// Preset-generated effects, included in `local_effect_count`.
-    pub generated_local_effect_count: usize,
-    pub global_effect_count: usize,
-    pub advanced_effect_count: usize,
-    pub generated_transform_contribution_count: usize,
-    pub effect_pass_count: usize,
-    pub decoded_image_count: usize,
-    pub decoded_source_bytes: u64,
-    pub peak_decoded_bytes: u64,
-    pub bitmap_cache_hits: u64,
-    pub bitmap_cache_misses: u64,
-    pub bitmap_cache_requests: u64,
-    pub bitmap_cache_insertions: u64,
-    pub bitmap_cache_hit_rate: Option<f64>,
-    pub cache_current_entries: usize,
-    pub peak_cache_entries: usize,
-    pub cache_budget_bytes: u64,
-    pub cache_current_bytes: u64,
-    pub cache_peak_bytes: u64,
-    pub cache_evictions: u64,
-    pub cache_oversized_entries_skipped: u64,
-    pub schedule_event_count: usize,
-    pub active_item_consideration_count: u64,
-    pub rendered_frame_count: u64,
-    /// WGPU source images uploaded once for this render. CPU leaves this zero.
-    pub source_texture_count: usize,
-    pub source_texture_bytes: u64,
-    /// Manual bilinear sampling uses textureLoad, so WGPU creates no sampler.
-    pub sampler_count: usize,
-    pub uploaded_texture_count: usize,
-    pub uploaded_texture_bytes: u64,
-    pub readback_buffer_count: usize,
-    pub readback_buffer_bytes: u64,
-    pub shader_module_count: usize,
-    pub pipeline_count: usize,
-    pub output_texture_count: usize,
-    pub accumulation_buffer_count: usize,
-    pub bind_group_count: usize,
-    pub command_submission_count: u64,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct PreparationTimings {
-    pub decode: Duration,
-    pub gpu_initialization: Duration,
-    pub gpu_adapter_request: Duration,
-    pub gpu_device_request: Duration,
-    pub gpu_pipeline_creation: Duration,
-    pub texture_upload: Duration,
-    pub gpu_frame_command_encode: Duration,
-    pub gpu_submission: Duration,
-    pub gpu_readback_wait: Duration,
-    pub row_repack: Duration,
-}
+use crate::{
+    Category, Diagnostic,
+    plan::RenderPlan,
+    render::{
+        ByteLruCache,
+        metrics::{PreparationStats, PreparationTimings},
+    },
+};
 
 /// Decoded source bytes shared by all render backends for one render.
 ///

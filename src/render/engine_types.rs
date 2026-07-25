@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::{
     Diagnostic,
-    render::{AdapterMetadata, RenderBackendKind, prepared::PreparationStats},
+    render::{AdapterMetadata, PreparationStats, RenderBackendKind},
 };
 
 #[derive(Clone, Debug)]

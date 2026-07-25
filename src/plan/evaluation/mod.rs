@@ -9,6 +9,8 @@ use crate::{
 use super::colour_transform::ColourTransform;
 
 mod effects;
+mod motion;
+mod shake;
 mod transform;
 
 pub use effects::EvaluatedEffect;
@@ -111,7 +113,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                     / u128::from(plan.frame_rate.0);
                 let exposure = (frame_duration as f64 * (*shutter_angle / 360.0)).round() as u128;
                 let half_window = exposure / 2;
-                let (lower, upper) = super::motion::sample_bounds(layer, relative);
+                let (lower, upper) = motion::sample_bounds(layer, relative);
                 let before = relative.saturating_sub(half_window).max(lower);
                 let after = relative.saturating_add(half_window).min(upper);
                 let mut ignored_tracks = 0;
@@ -141,7 +143,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                     decay,
                 } = effect
                 {
-                    super::shake::apply(
+                    shake::apply(
                         transform,
                         *local_time,
                         *position_amount,
@@ -241,7 +243,7 @@ mod tests {
         let mut first = base;
         let mut repeated = base;
         let mut nearby = base;
-        super::super::shake::apply(
+        super::shake::apply(
             &mut first,
             100_000_000,
             0.02,
@@ -252,7 +254,7 @@ mod tests {
             0.03,
             0.22,
         );
-        super::super::shake::apply(
+        super::shake::apply(
             &mut repeated,
             100_000_000,
             0.02,
@@ -263,7 +265,7 @@ mod tests {
             0.03,
             0.22,
         );
-        super::super::shake::apply(
+        super::shake::apply(
             &mut nearby,
             101_000_000,
             0.02,
@@ -288,7 +290,7 @@ mod tests {
         };
         let mut first = base;
         let mut next = base;
-        super::super::shake::apply(
+        super::shake::apply(
             &mut first,
             100_000_000,
             0.02,
@@ -299,7 +301,7 @@ mod tests {
             0.03,
             0.22,
         );
-        super::super::shake::apply(&mut next, 100_000_000, 0.02, 0.1, 0.01, 14.0, 8, 0.03, 0.22);
+        super::shake::apply(&mut next, 100_000_000, 0.02, 0.1, 0.01, 14.0, 8, 0.03, 0.22);
         assert!((first.position.x - next.position.x).abs() > 0.000_1);
         assert!((first.position.y - next.position.y).abs() > 0.000_1);
     }
@@ -322,11 +324,11 @@ mod tests {
             .expect("canonical transition creates a contribution");
         let contribution = &layer.transform_contributions[0];
         assert_eq!(
-            super::super::motion::sample_bounds(layer, contribution.start),
+            super::motion::sample_bounds(layer, contribution.start),
             (contribution.start, contribution.end)
         );
         assert_eq!(
-            super::super::motion::sample_bounds(layer, contribution.end),
+            super::motion::sample_bounds(layer, contribution.end),
             (0, layer.duration_nanos)
         );
     }

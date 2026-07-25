@@ -10,8 +10,9 @@ pub(crate) mod geometry;
 mod metrics;
 mod wgpu;
 
-pub use backend::{AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind};
+pub use backend::{AdapterMetadata, RenderBackend, RenderBackendKind};
 pub use cache::{ByteLruCache, CacheStats};
+pub use cpu::backend::CpuBackend;
 pub use decoded::DecodedAssets;
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,

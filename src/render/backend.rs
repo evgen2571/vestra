@@ -3,19 +3,13 @@
     reason = "backend diagnostics retain structured user-facing context"
 )]
 
-use std::sync::Arc;
-
 use image::RgbaImage;
 use serde::Serialize;
 
 use crate::{
     Diagnostic,
-    plan::{EvaluatedFrame, RenderPlan},
-    render::{
-        cpu::{assets::PreparedAssets, compositor},
-        decoded::DecodedAssets,
-        metrics::{PreparationStats, PreparationTimings},
-    },
+    plan::EvaluatedFrame,
+    render::metrics::{PreparationStats, PreparationTimings},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -58,46 +52,4 @@ pub trait RenderBackend {
     fn stats(&mut self) -> PreparationStats;
     fn timings(&self) -> PreparationTimings;
     fn adapter(&self) -> Option<AdapterMetadata>;
-}
-
-pub struct CpuBackend {
-    assets: PreparedAssets,
-    effects: compositor::EffectSurfacePool,
-}
-
-impl CpuBackend {
-    #[must_use]
-    pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
-        Self {
-            assets: PreparedAssets::from_decoded(plan, decoded),
-            effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
-        }
-    }
-}
-
-impl RenderBackend for CpuBackend {
-    fn kind(&self) -> RenderBackendKind {
-        RenderBackendKind::Cpu
-    }
-
-    fn render_frame(
-        &mut self,
-        frame: &EvaluatedFrame,
-        destination: &mut RgbaImage,
-    ) -> Result<(), Diagnostic> {
-        compositor::compose(frame, &mut self.assets, destination, &mut self.effects);
-        Ok(())
-    }
-
-    fn stats(&mut self) -> PreparationStats {
-        self.assets.stats().clone()
-    }
-
-    fn timings(&self) -> PreparationTimings {
-        self.assets.timings()
-    }
-
-    fn adapter(&self) -> Option<AdapterMetadata> {
-        None
-    }
 }

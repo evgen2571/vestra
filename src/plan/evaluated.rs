@@ -219,7 +219,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                     / u128::from(plan.frame_rate.0);
                 let exposure = (frame_duration as f64 * (*shutter_angle / 360.0)).round() as u128;
                 let half_window = exposure / 2;
-                let (lower, upper) = motion_sample_bounds(layer, relative);
+                let (lower, upper) = super::motion::sample_bounds(layer, relative);
                 let before = relative.saturating_sub(half_window).max(lower);
                 let after = relative.saturating_add(half_window).min(upper);
                 let mut ignored_tracks = 0;
@@ -249,7 +249,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                     decay,
                 } = effect
                 {
-                    apply_camera_shake(
+                    super::shake::apply(
                         transform,
                         *local_time,
                         *position_amount,
@@ -285,18 +285,6 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
             .collect(),
         evaluated_track_count,
     }
-}
-
-fn motion_sample_bounds(layer: &crate::plan::CompiledLayer, relative: u128) -> (u128, u128) {
-    let mut lower = 0;
-    let mut upper = layer.duration_nanos;
-    for contribution in &layer.transform_contributions {
-        if contribution.start <= relative && relative < contribution.end {
-            lower = lower.max(contribution.start);
-            upper = upper.min(contribution.end);
-        }
-    }
-    (lower, upper)
 }
 
 fn evaluate_transform(
@@ -441,54 +429,6 @@ fn evaluate_effect(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
     }
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "the evaluated shake signal is kept allocation-free"
-)]
-fn apply_camera_shake(
-    transform: &mut Transform2D,
-    time: u128,
-    position_amount: f64,
-    rotation_radians: f64,
-    scale_amount: f64,
-    frequency: f64,
-    seed: u64,
-    attack: f64,
-    decay: f64,
-) {
-    let seconds = time as f64 / 1_000_000_000.0;
-    let attack = if attack <= 0.0 {
-        1.0
-    } else {
-        (seconds / attack).clamp(0.0, 1.0)
-    };
-    let envelope = attack * (-seconds / decay.max(0.000_1)).exp();
-    let phase = |channel| {
-        let value = stable_seed(seed.wrapping_add(channel));
-        f64::from((value >> 11) as u32) / f64::from(u32::MAX) * std::f64::consts::TAU
-    };
-    let sample = |channel: u64| {
-        let primary = phase(channel);
-        let secondary = phase(channel.wrapping_add(0x9e37_79b9));
-        ((seconds * frequency * std::f64::consts::TAU + primary).sin()
-            + 0.5 * (seconds * frequency * 1.618 * std::f64::consts::TAU + secondary).sin())
-            / 1.5
-    };
-    transform.position.x += sample(0) * position_amount * envelope;
-    transform.position.y += sample(1) * position_amount * envelope;
-    transform.rotation_radians += sample(2) * rotation_radians * envelope;
-    let scale = 1.0 + sample(3).abs() * scale_amount * envelope;
-    transform.scale.x *= scale;
-    transform.scale.y *= scale;
-}
-
-fn stable_seed(mut value: u64) -> u64 {
-    value = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
-    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    value ^ (value >> 31)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -550,7 +490,7 @@ mod tests {
         let mut first = base;
         let mut repeated = base;
         let mut nearby = base;
-        apply_camera_shake(
+        super::super::shake::apply(
             &mut first,
             100_000_000,
             0.02,
@@ -561,7 +501,7 @@ mod tests {
             0.03,
             0.22,
         );
-        apply_camera_shake(
+        super::super::shake::apply(
             &mut repeated,
             100_000_000,
             0.02,
@@ -572,7 +512,7 @@ mod tests {
             0.03,
             0.22,
         );
-        apply_camera_shake(
+        super::super::shake::apply(
             &mut nearby,
             101_000_000,
             0.02,
@@ -597,7 +537,7 @@ mod tests {
         };
         let mut first = base;
         let mut next = base;
-        apply_camera_shake(
+        super::super::shake::apply(
             &mut first,
             100_000_000,
             0.02,
@@ -608,7 +548,7 @@ mod tests {
             0.03,
             0.22,
         );
-        apply_camera_shake(&mut next, 100_000_000, 0.02, 0.1, 0.01, 14.0, 8, 0.03, 0.22);
+        super::super::shake::apply(&mut next, 100_000_000, 0.02, 0.1, 0.01, 14.0, 8, 0.03, 0.22);
         assert!((first.position.x - next.position.x).abs() > 0.000_1);
         assert!((first.position.y - next.position.y).abs() > 0.000_1);
     }
@@ -631,11 +571,11 @@ mod tests {
             .expect("canonical transition creates a contribution");
         let contribution = &layer.transform_contributions[0];
         assert_eq!(
-            motion_sample_bounds(layer, contribution.start),
+            super::super::motion::sample_bounds(layer, contribution.start),
             (contribution.start, contribution.end)
         );
         assert_eq!(
-            motion_sample_bounds(layer, contribution.end),
+            super::super::motion::sample_bounds(layer, contribution.end),
             (0, layer.duration_nanos)
         );
     }

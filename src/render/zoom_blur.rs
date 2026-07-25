@@ -2,7 +2,7 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::{domain::Point, project::ZoomBlurDirection, render::compositor::sample_edge};
+use crate::{domain::Point, project::ZoomBlurDirection, render::raster::sample_edge};
 
 pub(crate) fn apply(
     source: &RgbaImage,

@@ -2,7 +2,7 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::render::compositor::sample_edge;
+use crate::render::raster::sample_edge;
 
 pub(crate) fn apply(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
     if amount <= 0.0 {

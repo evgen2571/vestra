@@ -15,6 +15,7 @@ pub(crate) mod geometry;
 mod metrics;
 mod parity;
 mod prepared;
+mod raster;
 pub(crate) mod vignette;
 mod wgpu;
 mod wgpu_parameters;

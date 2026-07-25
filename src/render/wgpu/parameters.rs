@@ -6,11 +6,10 @@ use crate::{
     animation::Transform2D,
     domain::Crop,
     plan::{ColourTransform, CompiledSizing, EvaluatedFrame},
-    render::{
-        geometry::{self, crop_bounds},
-        wgpu_requirements::align_up,
-    },
+    render::geometry::{self, crop_bounds},
 };
+
+use super::requirements::align_up;
 
 /// Matches the explicit sixteen-byte chunks in `layer.wgsl`.
 #[repr(C)]

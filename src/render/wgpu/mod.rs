@@ -18,9 +18,14 @@ use crate::{
 use bytemuck::Zeroable;
 use image::RgbaImage;
 
-pub use super::parity::{FrameDifference, PixelMismatch, compare_rgba};
-use super::wgpu_parameters::{self as parameters, LayerParameters};
-use super::wgpu_requirements::GpuRequirements;
+mod parameters;
+mod parity;
+mod requirements;
+pub(crate) mod support;
+
+use parameters::LayerParameters;
+pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
+use requirements::GpuRequirements;
 
 /// A headless WGPU session. Its textures, output target, staging buffer and
 /// source uploads persist for the complete render lifetime.
@@ -108,7 +113,7 @@ impl WgpuBackend {
         let row_bytes = requirements.row_bytes;
         let layer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("video-editor layer compute shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/layer.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/layer.wgsl").into()),
         });
         let layer_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -665,7 +670,7 @@ mod tests {
 
     #[test]
     fn layer_shader_parses_without_a_gpu_adapter() {
-        naga::front::wgsl::parse_str(include_str!("shaders/layer.wgsl"))
+        naga::front::wgsl::parse_str(include_str!("../shaders/layer.wgsl"))
             .expect("layer WGSL must parse independently of adapter availability");
     }
 
@@ -774,10 +779,7 @@ mod tests {
             (1080, 4352),
         ] {
             assert_eq!(
-                super::super::wgpu_requirements::align_up(
-                    width * 4,
-                    wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
-                ),
+                super::requirements::align_up(width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,),
                 expected
             );
         }
@@ -786,10 +788,7 @@ mod tests {
     #[test]
     fn row_repacking_removes_padding_without_shifting_rows() {
         let row_bytes = 62 * 4;
-        let padded = super::super::wgpu_requirements::align_up(
-            row_bytes,
-            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
-        );
+        let padded = super::requirements::align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let mut mapped = vec![0_u8; (padded * 3) as usize];
         for row in 0..3_usize {
             mapped[row * padded as usize..row * padded as usize + row_bytes as usize]

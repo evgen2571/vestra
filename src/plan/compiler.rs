@@ -21,6 +21,7 @@ use crate::{
 mod effects;
 mod flashes;
 mod presets;
+mod tracks;
 mod transitions;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -112,7 +113,7 @@ fn compile_canonical(
                     .as_ref()
                     .is_none_or(|track| track.keyframes.is_empty()),
                 crop: match &clip.crop {
-                    Some(track) => compile_track(track, &clip.id)?,
+                    Some(track) => tracks::compile(track, &clip.id)?,
                     None => Track::new(Crop {
                         x: 0.0,
                         y: 0.0,
@@ -159,7 +160,7 @@ fn compile_canonical(
             source,
             transform: compile_transform(clip)?,
             transform_contributions: Vec::new(),
-            opacity: compile_track(&clip.opacity, &clip.id)?,
+            opacity: tracks::compile(&clip.opacity, &clip.id)?,
             opacity_contributions: Vec::new(),
             effects,
             blend_mode: clip.blend_mode,
@@ -237,10 +238,10 @@ fn compile_canonical(
 fn compile_transform(clip: &crate::project::Clip) -> Result<CompiledTransformTracks, Diagnostic> {
     match (&clip.source, &clip.transform) {
         (_, Some(transform)) => Ok(CompiledTransformTracks {
-            position: compile_track(&transform.position, &clip.id)?,
-            anchor: compile_track(&transform.anchor, &clip.id)?,
-            scale: compile_track(&transform.scale, &clip.id)?,
-            rotation_radians: degrees_track_to_radians(compile_track(
+            position: tracks::compile(&transform.position, &clip.id)?,
+            anchor: tracks::compile(&transform.anchor, &clip.id)?,
+            scale: tracks::compile(&transform.scale, &clip.id)?,
+            rotation_radians: tracks::degrees_to_radians(tracks::compile(
                 &transform.rotation_degrees,
                 &clip.id,
             )?),
@@ -299,52 +300,6 @@ fn enforce_active_layer_limit(
     Ok(())
 }
 
-fn compile_track<T: Copy>(
-    track: &crate::project::Track<T>,
-    id: &str,
-) -> Result<Track<T>, Diagnostic> {
-    let mut keyframes = Vec::with_capacity(track.keyframes.len());
-    for keyframe in &track.keyframes {
-        keyframes.push(Keyframe {
-            time: to_nanos(keyframe.time, id)?,
-            value: keyframe.value,
-            interpolation: project_interpolation(&keyframe.interpolation),
-        });
-    }
-    Ok(Track {
-        base_value: track.base_value,
-        keyframes,
-    })
-}
-
-fn degrees_track_to_radians(mut track: Track<f64>) -> Track<f64> {
-    track.base_value = track.base_value.to_radians();
-    for keyframe in &mut track.keyframes {
-        keyframe.value = keyframe.value.to_radians();
-    }
-    track
-}
-
-fn project_interpolation(interpolation: &crate::project::Interpolation) -> Interpolation {
-    match interpolation {
-        crate::project::Interpolation::Named(name) => match name {
-            crate::project::InterpolationName::Linear => Interpolation::Linear,
-            crate::project::InterpolationName::Hold => Interpolation::Hold,
-            crate::project::InterpolationName::EaseIn => Interpolation::EaseIn,
-            crate::project::InterpolationName::EaseOut => Interpolation::EaseOut,
-            crate::project::InterpolationName::EaseInOut => Interpolation::EaseInOut,
-        },
-        crate::project::Interpolation::CubicBezier(bezier) => {
-            Interpolation::CubicBezier(crate::animation::CubicBezier {
-                x1: bezier.x1,
-                y1: bezier.y1,
-                x2: bezier.x2,
-                y2: bezier.y2,
-            })
-        }
-    }
-}
-
 fn compile_transitions(
     transitions: &[crate::project::Transition],
     indices: &BTreeMap<String, usize>,
@@ -401,7 +356,7 @@ fn compile_transitions(
         };
         let start = to_nanos(start, id)?;
         let end = start.saturating_add(to_nanos(duration, id)?);
-        let interpolation = project_interpolation(interpolation);
+        let interpolation = tracks::interpolation(interpolation);
         if !matches!(transition, crate::project::Transition::FlashCut { .. }) {
             for (clip, incoming) in [(outgoing, false), (incoming, true)] {
                 if let Some(index) = indices.get(clip) {

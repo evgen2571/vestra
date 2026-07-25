@@ -9,15 +9,15 @@ pub(super) fn compile(
     Ok(match effect {
         crate::project::Effect::Brightness { amount, .. } => {
             crate::plan::CompiledEffect::Brightness {
-                amount: super::compile_track(amount, id)?,
+                amount: super::tracks::compile(amount, id)?,
             }
         }
         crate::project::Effect::Contrast { amount, .. } => crate::plan::CompiledEffect::Contrast {
-            amount: super::compile_track(amount, id)?,
+            amount: super::tracks::compile(amount, id)?,
         },
         crate::project::Effect::Saturation { amount, .. } => {
             crate::plan::CompiledEffect::Saturation {
-                amount: super::compile_track(amount, id)?,
+                amount: super::tracks::compile(amount, id)?,
             }
         }
         crate::project::Effect::Tint { colour, amount, .. } => crate::plan::CompiledEffect::Tint {
@@ -29,11 +29,11 @@ pub(super) fn compile(
                     "",
                 )
             })?,
-            amount: super::compile_track(amount, id)?,
+            amount: super::tracks::compile(amount, id)?,
         },
         crate::project::Effect::GaussianBlur { radius, .. } => {
             crate::plan::CompiledEffect::GaussianBlur {
-                radius: super::compile_track(radius, id)?,
+                radius: super::tracks::compile(radius, id)?,
             }
         }
         crate::project::Effect::DirectionalBlur {
@@ -41,8 +41,8 @@ pub(super) fn compile(
             angle_degrees,
             ..
         } => crate::plan::CompiledEffect::DirectionalBlur {
-            radius: super::compile_track(radius, id)?,
-            angle_degrees: super::compile_track(angle_degrees, id)?,
+            radius: super::tracks::compile(radius, id)?,
+            angle_degrees: super::tracks::compile(angle_degrees, id)?,
         },
         crate::project::Effect::ZoomBlur {
             radius,
@@ -51,7 +51,7 @@ pub(super) fn compile(
             direction,
             ..
         } => crate::plan::CompiledEffect::ZoomBlur {
-            radius: super::compile_track(radius, id)?,
+            radius: super::tracks::compile(radius, id)?,
             samples: *samples,
             anchor: *anchor,
             direction: *direction,
@@ -63,9 +63,9 @@ pub(super) fn compile(
             colour,
             ..
         } => crate::plan::CompiledEffect::Glow {
-            threshold: super::compile_track(threshold, id)?,
-            radius: super::compile_track(radius, id)?,
-            intensity: super::compile_track(intensity, id)?,
+            threshold: super::tracks::compile(threshold, id)?,
+            radius: super::tracks::compile(radius, id)?,
+            intensity: super::tracks::compile(intensity, id)?,
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
                     "MVP-PLAN-EFFECT-COLOUR",
@@ -80,8 +80,8 @@ pub(super) fn compile(
             angle_degrees,
             ..
         } => crate::plan::CompiledEffect::ChromaticAberration {
-            amount: super::compile_track(amount, id)?,
-            angle_degrees: super::compile_track(angle_degrees, id)?,
+            amount: super::tracks::compile(amount, id)?,
+            angle_degrees: super::tracks::compile(angle_degrees, id)?,
         },
         crate::project::Effect::Vignette {
             amount,
@@ -90,9 +90,9 @@ pub(super) fn compile(
             colour,
             ..
         } => crate::plan::CompiledEffect::Vignette {
-            amount: super::compile_track(amount, id)?,
-            radius: super::compile_track(radius, id)?,
-            softness: super::compile_track(softness, id)?,
+            amount: super::tracks::compile(amount, id)?,
+            radius: super::tracks::compile(radius, id)?,
+            softness: super::tracks::compile(softness, id)?,
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
                     "MVP-PLAN-EFFECT-COLOUR",
@@ -104,8 +104,8 @@ pub(super) fn compile(
         },
         crate::project::Effect::Sharpen { amount, radius, .. } => {
             crate::plan::CompiledEffect::Sharpen {
-                amount: super::compile_track(amount, id)?,
-                radius: super::compile_track(radius, id)?,
+                amount: super::tracks::compile(amount, id)?,
+                radius: super::tracks::compile(radius, id)?,
             }
         }
         crate::project::Effect::ColorAdjust {
@@ -115,10 +115,10 @@ pub(super) fn compile(
             white_point,
             ..
         } => crate::plan::CompiledEffect::ColorAdjust {
-            exposure: super::compile_track(exposure, id)?,
-            gamma: super::compile_track(gamma, id)?,
-            black_point: super::compile_track(black_point, id)?,
-            white_point: super::compile_track(white_point, id)?,
+            exposure: super::tracks::compile(exposure, id)?,
+            gamma: super::tracks::compile(gamma, id)?,
+            black_point: super::tracks::compile(black_point, id)?,
+            white_point: super::tracks::compile(white_point, id)?,
         },
         crate::project::Effect::CameraShake {
             position_amount,
@@ -130,10 +130,10 @@ pub(super) fn compile(
             decay,
             ..
         } => crate::plan::CompiledEffect::CameraShake {
-            position_amount: super::compile_track(position_amount, id)?,
-            rotation_degrees: super::compile_track(rotation_degrees, id)?,
-            scale_amount: super::compile_track(scale_amount, id)?,
-            frequency: super::compile_track(frequency, id)?,
+            position_amount: super::tracks::compile(position_amount, id)?,
+            rotation_degrees: super::tracks::compile(rotation_degrees, id)?,
+            scale_amount: super::tracks::compile(scale_amount, id)?,
+            frequency: super::tracks::compile(frequency, id)?,
             seed: *seed,
             attack: *attack,
             decay: *decay,
@@ -145,9 +145,9 @@ pub(super) fn compile(
             samples,
             ..
         } => crate::plan::CompiledEffect::MotionBlur {
-            intensity: super::compile_track(intensity, id)?,
-            shutter_angle: super::compile_track(shutter_angle, id)?,
-            max_radius: super::compile_track(max_radius, id)?,
+            intensity: super::tracks::compile(intensity, id)?,
+            shutter_angle: super::tracks::compile(shutter_angle, id)?,
+            max_radius: super::tracks::compile(max_radius, id)?,
             samples: *samples,
         },
     })

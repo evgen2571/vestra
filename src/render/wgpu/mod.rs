@@ -8,7 +8,7 @@
 use std::{sync::Arc, time::Instant};
 
 use crate::{
-    Category, Diagnostic,
+    Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, DecodedAssets, RenderBackend, RenderBackendKind,
@@ -24,16 +24,18 @@ mod executor;
 mod parameters;
 mod parity;
 mod pipeline;
+mod readback;
 mod requirements;
 mod resources;
 pub(crate) mod support;
 
 use context::GpuContext;
-use diagnostics::{diagnostic, finish_error_scopes};
+use diagnostics::finish_error_scopes;
 use executor::dispatch_layer;
 use parameters::LayerParameters;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
 use pipeline::LayerPipeline;
+use readback::read_frame;
 use requirements::GpuRequirements;
 use resources::{FrameResources, SourceResources};
 
@@ -158,7 +160,6 @@ impl RenderBackend for WgpuBackend {
         // WGPU's uncaptured-error handler.
         self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.device.push_error_scope(wgpu::ErrorFilter::Internal);
-        let command_encode_started = Instant::now();
         // Parameter updates and dispatch order are derived solely from the
         // evaluated frame. Each submission observes its matching uniform data.
         let clear = LayerParameters {
@@ -261,101 +262,19 @@ impl RenderBackend for WgpuBackend {
                 );
             }
         }
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("video-editor readback copy"),
-            });
-        encoder.copy_buffer_to_texture(
-            wgpu::ImageCopyBuffer {
-                buffer: &self.frame.accumulation,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(self.frame.padded_row_bytes),
-                    rows_per_image: Some(frame.height),
-                },
-            },
-            wgpu::ImageCopyTexture {
-                texture: &self.frame.output,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::Extent3d {
-                width: frame.width,
-                height: frame.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture: &self.frame.output,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &self.frame.readback,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(self.frame.padded_row_bytes),
-                    rows_per_image: Some(frame.height),
-                },
-            },
-            wgpu::Extent3d {
-                width: frame.width,
-                height: frame.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.timings.gpu_frame_command_encode += command_encode_started.elapsed();
-        let submission_started = Instant::now();
-        self.queue.submit(Some(encoder.finish()));
-        self.timings.gpu_submission += submission_started.elapsed();
+        let readback = read_frame(
+            &self.device,
+            &self.queue,
+            &mut self.frame,
+            frame.width,
+            frame.height,
+            destination,
+        )?;
+        self.timings.gpu_frame_command_encode += readback.command_encode;
+        self.timings.gpu_submission += readback.submission;
         self.stats.command_submission_count += frame.layers.len() as u64 + 2;
-        let slice = self.frame.readback.slice(..);
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let readback_wait_started = Instant::now();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        self.device.poll(wgpu::Maintain::Wait);
-        let readback_result = receiver
-            .recv()
-            .map_err(|error| {
-                Diagnostic::error(
-                    "WGPU-READBACK",
-                    Category::Backend,
-                    format!("readback callback failed: {error}"),
-                    "",
-                )
-            })
-            .and_then(|result| {
-                result.map_err(|error| diagnostic("WGPU-READBACK", "buffer_map", error))
-            });
-        let frame_error_result = finish_error_scopes(&self.device, "WGPU-COMMAND-SUBMISSION");
-        self.timings.gpu_readback_wait += readback_wait_started.elapsed();
-        readback_result?;
-        if let Err(error) = frame_error_result {
-            self.frame.readback.unmap();
-            return Err(error);
-        }
-        let mapped = slice.get_mapped_range();
-        let row_repack_started = Instant::now();
-        for (row, target) in self
-            .frame
-            .frame_bytes
-            .chunks_exact_mut(self.frame.row_bytes as usize)
-            .enumerate()
-        {
-            let start = row * self.frame.padded_row_bytes as usize;
-            target.copy_from_slice(&mapped[start..start + self.frame.row_bytes as usize]);
-        }
-        drop(mapped);
-        self.frame.readback.unmap();
-        self.timings.row_repack += row_repack_started.elapsed();
-        let destination_bytes: &mut [u8] = destination.as_mut();
-        destination_bytes.copy_from_slice(&self.frame.frame_bytes);
+        self.timings.gpu_readback_wait += readback.wait;
+        self.timings.row_repack += readback.row_repack;
         Ok(())
     }
 

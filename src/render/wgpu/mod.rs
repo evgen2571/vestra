@@ -18,13 +18,19 @@ use crate::{
 use bytemuck::Zeroable;
 use image::RgbaImage;
 
+mod context;
+mod diagnostics;
 mod parameters;
 mod parity;
+mod pipeline;
 mod requirements;
 pub(crate) mod support;
 
+use context::GpuContext;
+use diagnostics::{diagnostic, finish_error_scopes};
 use parameters::LayerParameters;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
+use pipeline::LayerPipeline;
 use requirements::GpuRequirements;
 
 /// A headless WGPU session. Its textures, output target, staging buffer and
@@ -62,112 +68,27 @@ impl WgpuBackend {
             &decoded,
             std::mem::size_of::<LayerParameters>() as u32,
         )?;
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: requested_backends(),
-            ..wgpu::InstanceDescriptor::default()
-        });
-        let adapter_request_started = Instant::now();
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: std::env::var_os("VIDEO_EDITOR_WGPU_FORCE_FALLBACK").is_some(),
-            compatible_surface: None,
-        }))
-        .ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-ADAPTER-NOT-FOUND",
-                Category::Backend,
-                "WGPU adapter request returned no compatible adapter",
-                "",
-            )
-        })?;
-        let adapter_request = adapter_request_started.elapsed();
-        let info = adapter.get_info();
-        let adapter_metadata = AdapterMetadata {
-            adapter_name: info.name,
-            device_type: format!("{:?}", info.device_type).to_lowercase(),
-            graphics_backend: format!("{:?}", info.backend).to_lowercase(),
-            driver_name: info.driver,
-            driver_info: info.driver_info,
-            vendor_id: info.vendor,
-            device_id: info.device,
-        };
-        let limits = adapter.limits();
-        requirements.validate(&limits, plan)?;
-        let requested_limits = requirements.requested_device_limits(plan)?;
-        let device_request_started = Instant::now();
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("video-editor headless renderer"),
-                required_features: wgpu::Features::empty(),
-                required_limits: requested_limits,
-                memory_hints: wgpu::MemoryHints::Performance,
-            },
-            None,
-        ))
-        .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
-        let device_request = device_request_started.elapsed();
-        requirements.validate(&device.limits(), plan)?;
+        let context = GpuContext::create(plan, requirements)?;
+        let GpuContext {
+            instance,
+            adapter,
+            device,
+            queue,
+            adapter_metadata,
+            adapter_limits: limits,
+            adapter_request,
+            device_request,
+        } = context;
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         device.push_error_scope(wgpu::ErrorFilter::Internal);
         let pipeline_creation_started = Instant::now();
         let row_bytes = requirements.row_bytes;
-        let layer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("video-editor layer compute shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/layer.wgsl").into()),
-        });
-        let layer_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("video-editor layer bindings"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<
-                                LayerParameters,
-                            >()
-                                as u64),
-                        },
-                        count: None,
-                    },
-                ],
-            });
-        let layer_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("video-editor layer pipeline layout"),
-                bind_group_layouts: &[&layer_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let layer_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("video-editor layer pipeline"),
-            layout: Some(&layer_pipeline_layout),
-            module: &layer_shader,
-            entry_point: "compose",
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
-        });
+        let LayerPipeline {
+            shader: layer_shader,
+            compute: layer_pipeline,
+            bindings: layer_bind_group_layout,
+            parameters: layer_parameters,
+        } = LayerPipeline::create(&device);
         let padded_row_bytes = requirements.padded_row_bytes;
         let readback_size = requirements.copy_bytes;
         let output = device.create_texture(&wgpu::TextureDescriptor {
@@ -196,12 +117,6 @@ impl WgpuBackend {
             label: Some("video-editor layer accumulation"),
             size: readback_size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let layer_parameters = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("video-editor layer parameters"),
-            size: std::mem::size_of::<LayerParameters>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let pipeline_creation = pipeline_creation_started.elapsed();
@@ -569,34 +484,6 @@ impl WgpuBackend {
     }
 }
 
-fn finish_error_scopes(device: &wgpu::Device, code: &str) -> Result<(), Diagnostic> {
-    let internal_error = pollster::block_on(device.pop_error_scope());
-    let validation_error = pollster::block_on(device.pop_error_scope());
-    if let Some(error) = internal_error {
-        return Err(diagnostic(code, "internal", error));
-    }
-    if let Some(error) = validation_error {
-        return Err(diagnostic(code, "validation", error));
-    }
-    Ok(())
-}
-
-fn requested_backends() -> wgpu::Backends {
-    match std::env::var("VIDEO_EDITOR_WGPU_BACKEND")
-        .ok()
-        .as_deref()
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("vulkan") => wgpu::Backends::VULKAN,
-        Some("gl") | Some("gles") => wgpu::Backends::GL,
-        Some("metal") => wgpu::Backends::METAL,
-        Some("dx12") => wgpu::Backends::DX12,
-        Some("browser_webgpu") => wgpu::Backends::BROWSER_WEBGPU,
-        _ => wgpu::Backends::all(),
-    }
-}
-
 fn create_layer_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
@@ -622,15 +509,6 @@ fn create_layer_bind_group(
             },
         ],
     })
-}
-
-fn diagnostic(code: &str, stage: &str, error: impl std::fmt::Display) -> Diagnostic {
-    Diagnostic::error(
-        code,
-        Category::Backend,
-        format!("WGPU {stage} failed: {error}"),
-        "",
-    )
 }
 
 #[cfg(test)]

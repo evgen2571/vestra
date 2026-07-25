@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::Path};
+use std::path::Path;
 
 use crate::{
     Category, Diagnostic, media,
@@ -62,7 +62,7 @@ pub(crate) fn validate(
     );
     let duration =
         duration::resolve(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
-    validate_global_effects(
+    effects::validate_global(
         &project.visual.post_effects,
         duration,
         options.limits.maximum_effects_per_clip,
@@ -113,47 +113,6 @@ pub(crate) fn validate(
         })
     } else {
         Err(LoadError::Diagnostics(errors))
-    }
-}
-
-fn validate_global_effects(
-    effects: &[crate::project::Effect],
-    duration: f64,
-    maximum_effects: usize,
-    maximum_keyframes: usize,
-    errors: &mut Vec<Diagnostic>,
-) {
-    if effects.len() > maximum_effects {
-        errors.push(Diagnostic::error(
-            "MVP-LIMIT-POST-EFFECTS",
-            Category::Semantic,
-            "global post-effect chain exceeds the effect limit",
-            "/visual/post_effects",
-        ));
-    }
-    let mut ids = BTreeSet::new();
-    for (index, effect) in effects.iter().enumerate() {
-        let path = format!("/visual/post_effects/{index}");
-        if effect.id().trim().is_empty() || !ids.insert(effect.id()) {
-            errors.push(Diagnostic::error(
-                "MVP-POST-EFFECT-ID",
-                Category::Semantic,
-                "post-effect ids must be non-empty and unique",
-                format!("{path}/id"),
-            ));
-        }
-        if matches!(
-            effect,
-            crate::project::Effect::CameraShake { .. } | crate::project::Effect::MotionBlur { .. }
-        ) {
-            errors.push(Diagnostic::error(
-                "MVP-POST-EFFECT-SCOPE",
-                Category::Semantic,
-                "camera shake and transform-aware motion blur are clip-local effects",
-                path.clone(),
-            ));
-        }
-        effects::validate_parameters(effect, duration, &path, maximum_keyframes, errors);
     }
 }
 

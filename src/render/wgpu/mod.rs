@@ -8,7 +8,7 @@
 use std::{sync::Arc, time::Instant};
 
 use crate::{
-    Category, Diagnostic,
+    Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, DecodedAssets, RenderBackend, RenderBackendKind,
@@ -20,18 +20,24 @@ use image::RgbaImage;
 
 mod context;
 mod diagnostics;
+mod executor;
 mod parameters;
 mod parity;
 mod pipeline;
+mod readback;
 mod requirements;
+mod resources;
 pub(crate) mod support;
 
 use context::GpuContext;
-use diagnostics::{diagnostic, finish_error_scopes};
+use diagnostics::finish_error_scopes;
+use executor::dispatch_layer;
 use parameters::LayerParameters;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
 use pipeline::LayerPipeline;
+use readback::read_frame;
 use requirements::GpuRequirements;
+use resources::{FrameResources, SourceResources};
 
 /// A headless WGPU session. Its textures, output target, staging buffer and
 /// source uploads persist for the complete render lifetime.
@@ -44,17 +50,8 @@ pub struct WgpuBackend {
     _layer_pipeline: wgpu::ComputePipeline,
     _layer_bind_group_layout: wgpu::BindGroupLayout,
     _layer_parameters: wgpu::Buffer,
-    _accumulation: wgpu::Buffer,
-    _source_textures: Vec<wgpu::Texture>,
-    _source_bind_groups: Vec<wgpu::BindGroup>,
-    _solid_texture: wgpu::Texture,
-    solid_bind_group: wgpu::BindGroup,
-    source_dimensions: Vec<(u32, u32)>,
-    output: wgpu::Texture,
-    readback: wgpu::Buffer,
-    row_bytes: u32,
-    padded_row_bytes: u32,
-    frame_bytes: Vec<u8>,
+    frame: FrameResources,
+    sources: SourceResources,
     stats: PreparationStats,
     timings: PreparationTimings,
     adapter: AdapterMetadata,
@@ -89,137 +86,38 @@ impl WgpuBackend {
             bindings: layer_bind_group_layout,
             parameters: layer_parameters,
         } = LayerPipeline::create(&device);
-        let padded_row_bytes = requirements.padded_row_bytes;
-        let readback_size = requirements.copy_bytes;
-        let output = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("video-editor output"),
-            size: wgpu::Extent3d {
-                width: plan.canvas.width,
-                height: plan.canvas.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-        let readback = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("video-editor readback"),
-            size: readback_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let accumulation = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("video-editor layer accumulation"),
-            size: readback_size,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        let frame = FrameResources::create(
+            &device,
+            plan,
+            row_bytes,
+            requirements.padded_row_bytes,
+            requirements.copy_bytes,
+        );
         let pipeline_creation = pipeline_creation_started.elapsed();
         let upload_started = Instant::now();
-        let mut source_textures = Vec::with_capacity(plan.images.len());
-        let mut source_dimensions = Vec::with_capacity(plan.images.len());
-        let mut uploaded_texture_bytes = 0_u64;
-        for asset in 0..plan.images.len() {
-            let image = decoded.image(asset);
-            if image.width() > limits.max_texture_dimension_2d
-                || image.height() > limits.max_texture_dimension_2d
-            {
-                return Err(Diagnostic::error(
-                    "WGPU-SOURCE-DIMENSIONS",
-                    Category::Backend,
-                    format!("source image {} exceeds adapter texture dimensions", asset),
-                    "",
-                ));
-            }
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("video-editor source"),
-                size: wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image.as_raw(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(image.width() * 4),
-                    rows_per_image: Some(image.height()),
-                },
-                wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-            );
-            uploaded_texture_bytes = uploaded_texture_bytes
-                .saturating_add(u64::from(image.width()) * u64::from(image.height()) * 4);
-            source_textures.push(texture);
-            source_dimensions.push((image.width(), image.height()));
-        }
-        let source_bind_groups: Vec<wgpu::BindGroup> = source_textures
-            .iter()
-            .map(|texture| {
-                create_layer_bind_group(
-                    &device,
-                    &layer_bind_group_layout,
-                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                    &accumulation,
-                    &layer_parameters,
-                )
-            })
-            .collect();
-        let solid_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("video-editor solid source"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let solid_bind_group = create_layer_bind_group(
+        let sources = SourceResources::create(
             &device,
+            &queue,
+            plan,
+            &decoded,
             &layer_bind_group_layout,
-            &solid_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            &accumulation,
+            &frame.accumulation,
             &layer_parameters,
-        );
+            limits.max_texture_dimension_2d,
+        )?;
         let mut stats = decoded.stats().clone();
-        stats.source_texture_count = source_textures.len();
-        stats.source_texture_bytes = uploaded_texture_bytes;
+        stats.source_texture_count = sources._textures.len();
+        stats.source_texture_bytes = sources.uploaded_texture_bytes;
         stats.sampler_count = 0;
-        stats.uploaded_texture_count = source_textures.len();
-        stats.uploaded_texture_bytes = uploaded_texture_bytes;
+        stats.uploaded_texture_count = sources._textures.len();
+        stats.uploaded_texture_bytes = sources.uploaded_texture_bytes;
         stats.readback_buffer_count = 1;
-        stats.readback_buffer_bytes = readback_size;
+        stats.readback_buffer_bytes = requirements.copy_bytes;
         stats.shader_module_count = 1;
         stats.pipeline_count = 1;
         stats.output_texture_count = 1;
         stats.accumulation_buffer_count = 1;
-        stats.bind_group_count = source_bind_groups.len() + 1;
+        stats.bind_group_count = sources.bind_groups.len() + 1;
         let mut timings = decoded.timings();
         timings.gpu_adapter_request = adapter_request;
         timings.gpu_device_request = device_request;
@@ -237,17 +135,8 @@ impl WgpuBackend {
             _layer_pipeline: layer_pipeline,
             _layer_bind_group_layout: layer_bind_group_layout,
             _layer_parameters: layer_parameters,
-            _accumulation: accumulation,
-            _source_textures: source_textures,
-            _source_bind_groups: source_bind_groups,
-            _solid_texture: solid_texture,
-            solid_bind_group,
-            source_dimensions,
-            output,
-            readback,
-            row_bytes,
-            padded_row_bytes,
-            frame_bytes: vec![0; (u64::from(row_bytes) * u64::from(plan.canvas.height)) as usize],
+            frame,
+            sources,
             stats,
             timings,
             adapter: adapter_metadata,
@@ -271,15 +160,28 @@ impl RenderBackend for WgpuBackend {
         // WGPU's uncaptured-error handler.
         self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.device.push_error_scope(wgpu::ErrorFilter::Internal);
-        let command_encode_started = Instant::now();
         // Parameter updates and dispatch order are derived solely from the
         // evaluated frame. Each submission observes its matching uniform data.
         let clear = LayerParameters {
-            header: [frame.width, frame.height, self.padded_row_bytes / 4, 0],
+            header: [
+                frame.width,
+                frame.height,
+                self.frame.padded_row_bytes / 4,
+                0,
+            ],
             solid_or_background: frame.background.map(f64::from).map(|value| value as f32),
             ..LayerParameters::zeroed()
         };
-        self.dispatch_layer(&self.solid_bind_group, clear, frame.width, frame.height);
+        dispatch_layer(
+            &self.device,
+            &self.queue,
+            &self._layer_pipeline,
+            &self._layer_parameters,
+            &self.sources.solid_bind_group,
+            clear,
+            frame.width,
+            frame.height,
+        );
         for layer in &frame.layers {
             if let crate::plan::EvaluatedSource::Image {
                 asset_index,
@@ -290,7 +192,7 @@ impl RenderBackend for WgpuBackend {
                 ..
             } = &layer.source
             {
-                let (source_width, source_height) = self.source_dimensions[*asset_index];
+                let (source_width, source_height) = self.sources.dimensions[*asset_index];
                 let parameters = parameters::image(
                     frame,
                     source_width,
@@ -302,15 +204,24 @@ impl RenderBackend for WgpuBackend {
                     layer.opacity,
                     layer.colour_transform,
                 );
-                self.dispatch_layer(
-                    &self._source_bind_groups[*asset_index],
+                dispatch_layer(
+                    &self.device,
+                    &self.queue,
+                    &self._layer_pipeline,
+                    &self._layer_parameters,
+                    &self.sources.bind_groups[*asset_index],
                     parameters,
                     frame.width,
                     frame.height,
                 );
             } else if let crate::plan::EvaluatedSource::SolidColor { colour } = layer.source {
                 let parameters = LayerParameters {
-                    header: [frame.width, frame.height, self.padded_row_bytes / 4, 2],
+                    header: [
+                        frame.width,
+                        frame.height,
+                        self.frame.padded_row_bytes / 4,
+                        2,
+                    ],
                     effective: [0.0, 0.0, layer.opacity as f32, 0.0],
                     colour_row0: [
                         layer.colour_transform.matrix[0][0] as f32,
@@ -339,108 +250,31 @@ impl RenderBackend for WgpuBackend {
                     solid_or_background: colour.map(f64::from).map(|value| value as f32),
                     ..LayerParameters::zeroed()
                 };
-                self.dispatch_layer(
-                    &self.solid_bind_group,
+                dispatch_layer(
+                    &self.device,
+                    &self.queue,
+                    &self._layer_pipeline,
+                    &self._layer_parameters,
+                    &self.sources.solid_bind_group,
                     parameters,
                     frame.width,
                     frame.height,
                 );
             }
         }
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("video-editor readback copy"),
-            });
-        encoder.copy_buffer_to_texture(
-            wgpu::ImageCopyBuffer {
-                buffer: &self._accumulation,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(self.padded_row_bytes),
-                    rows_per_image: Some(frame.height),
-                },
-            },
-            wgpu::ImageCopyTexture {
-                texture: &self.output,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::Extent3d {
-                width: frame.width,
-                height: frame.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture: &self.output,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &self.readback,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(self.padded_row_bytes),
-                    rows_per_image: Some(frame.height),
-                },
-            },
-            wgpu::Extent3d {
-                width: frame.width,
-                height: frame.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.timings.gpu_frame_command_encode += command_encode_started.elapsed();
-        let submission_started = Instant::now();
-        self.queue.submit(Some(encoder.finish()));
-        self.timings.gpu_submission += submission_started.elapsed();
+        let readback = read_frame(
+            &self.device,
+            &self.queue,
+            &mut self.frame,
+            frame.width,
+            frame.height,
+            destination,
+        )?;
+        self.timings.gpu_frame_command_encode += readback.command_encode;
+        self.timings.gpu_submission += readback.submission;
         self.stats.command_submission_count += frame.layers.len() as u64 + 2;
-        let slice = self.readback.slice(..);
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let readback_wait_started = Instant::now();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        self.device.poll(wgpu::Maintain::Wait);
-        let readback_result = receiver
-            .recv()
-            .map_err(|error| {
-                Diagnostic::error(
-                    "WGPU-READBACK",
-                    Category::Backend,
-                    format!("readback callback failed: {error}"),
-                    "",
-                )
-            })
-            .and_then(|result| {
-                result.map_err(|error| diagnostic("WGPU-READBACK", "buffer_map", error))
-            });
-        let frame_error_result = finish_error_scopes(&self.device, "WGPU-COMMAND-SUBMISSION");
-        self.timings.gpu_readback_wait += readback_wait_started.elapsed();
-        readback_result?;
-        if let Err(error) = frame_error_result {
-            self.readback.unmap();
-            return Err(error);
-        }
-        let mapped = slice.get_mapped_range();
-        let row_repack_started = Instant::now();
-        for (row, target) in self
-            .frame_bytes
-            .chunks_exact_mut(self.row_bytes as usize)
-            .enumerate()
-        {
-            let start = row * self.padded_row_bytes as usize;
-            target.copy_from_slice(&mapped[start..start + self.row_bytes as usize]);
-        }
-        drop(mapped);
-        self.readback.unmap();
-        self.timings.row_repack += row_repack_started.elapsed();
-        let destination_bytes: &mut [u8] = destination.as_mut();
-        destination_bytes.copy_from_slice(&self.frame_bytes);
+        self.timings.gpu_readback_wait += readback.wait;
+        self.timings.row_repack += readback.row_repack;
         Ok(())
     }
 
@@ -454,61 +288,6 @@ impl RenderBackend for WgpuBackend {
     fn adapter(&self) -> Option<AdapterMetadata> {
         Some(self.adapter.clone())
     }
-}
-
-impl WgpuBackend {
-    fn dispatch_layer(
-        &self,
-        bind_group: &wgpu::BindGroup,
-        parameters: LayerParameters,
-        width: u32,
-        height: u32,
-    ) {
-        self.queue
-            .write_buffer(&self._layer_parameters, 0, bytemuck::bytes_of(&parameters));
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("video-editor layer dispatch"),
-            });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("video-editor layer pass"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&self._layer_pipeline);
-            pass.set_bind_group(0, bind_group, &[]);
-            pass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
-        }
-        self.queue.submit(Some(encoder.finish()));
-    }
-}
-
-fn create_layer_bind_group(
-    device: &wgpu::Device,
-    layout: &wgpu::BindGroupLayout,
-    source: &wgpu::TextureView,
-    accumulation: &wgpu::Buffer,
-    parameters: &wgpu::Buffer,
-) -> wgpu::BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("video-editor source layer bindings"),
-        layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(source),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: accumulation.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: parameters.as_entire_binding(),
-            },
-        ],
-    })
 }
 
 #[cfg(test)]

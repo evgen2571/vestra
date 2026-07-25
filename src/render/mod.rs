@@ -6,6 +6,7 @@ mod cache;
 pub(crate) mod chromatic;
 pub(crate) mod colour_adjust;
 mod compositor;
+mod decoded;
 mod effects;
 mod engine;
 mod engine_events;
@@ -26,10 +27,10 @@ pub(crate) mod zoom_blur;
 
 pub use backend::{AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind};
 pub use cache::{ByteLruCache, CacheStats};
+pub use decoded::DecodedAssets;
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,
 };
 pub use metrics::{PreparationStats, PreparationTimings};
-pub use prepared::DecodedAssets;
 pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};

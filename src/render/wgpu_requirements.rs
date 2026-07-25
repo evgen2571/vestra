@@ -5,7 +5,7 @@
     reason = "WGPU requirements preserve structured user-facing diagnostics"
 )]
 
-use crate::{Category, Diagnostic, plan::RenderPlan, render::prepared::DecodedAssets};
+use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 
 /// Concrete WGPU capabilities used by this renderer for one compiled plan.
 /// Keeping this calculation independent of adapter discovery makes limit

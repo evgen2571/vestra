@@ -5,14 +5,13 @@ use crate::{
     timeline::{frame_count, seconds_to_nanos},
 };
 
-use crate::project::{
-    LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
-};
+use crate::project::{LoadError, Output, Project, ValidatedProject, ValidationOptions};
 
 pub(super) mod assets;
 pub(super) mod audio;
 pub(super) mod duration;
 pub(super) mod effects;
+pub(super) mod flashes;
 pub(super) mod output;
 pub(super) mod presets;
 pub(super) mod tracks;
@@ -51,7 +50,7 @@ pub(crate) fn validate(
         &mut errors,
     );
     transitions::validate(&project.visual, &mut errors);
-    validate_flashes(&project.visual.flashes, &mut errors);
+    flashes::validate(&project.visual.flashes, &mut errors);
     let audio_end = audio::validate(
         project.audio.as_ref(),
         project.output.audio,
@@ -278,48 +277,6 @@ fn evaluate_scalar_track(track: &crate::project::Track<f64>, time: f64) -> f64 {
         }
     };
     start.value + (end.value - start.value) * crate::animation::eased(interpolation, progress)
-}
-
-fn validate_flashes(flashes: &[crate::project::Flash], errors: &mut Vec<Diagnostic>) {
-    let mut ids = BTreeSet::new();
-    for (index, flash) in flashes.iter().enumerate() {
-        let path = format!("/visual/flashes/{index}");
-        if flash.id.trim().is_empty() || !ids.insert(&flash.id) {
-            errors.push(Diagnostic::error(
-                "MVP-FLASH-ID",
-                Category::Semantic,
-                "flash ids must be non-empty and unique",
-                format!("{path}/id"),
-            ));
-        }
-        if !nonnegative(flash.start) || !positive(flash.duration) {
-            errors.push(Diagnostic::error(
-                "MVP-FLASH-TIME",
-                Category::Semantic,
-                "flash start and duration must be finite with positive duration",
-                path.clone(),
-            ));
-        }
-        if !unit(flash.opacity) || parse_colour(&flash.colour).is_none() {
-            errors.push(Diagnostic::error(
-                "MVP-FLASH-PROPERTIES",
-                Category::Semantic,
-                "flash opacity or colour is invalid",
-                path.clone(),
-            ));
-        }
-        if !nonnegative(flash.fade_in)
-            || !nonnegative(flash.fade_out)
-            || flash.fade_in + flash.fade_out > flash.duration
-        {
-            errors.push(Diagnostic::error(
-                "MVP-FLASH-FADES",
-                Category::Semantic,
-                "flash fades must be finite, non-negative, and fit within duration",
-                path,
-            ));
-        }
-    }
 }
 
 fn enforce_limits(

@@ -120,6 +120,45 @@ pub enum EvaluatedEffect {
     },
 }
 
+impl EvaluatedEffect {
+    #[must_use]
+    pub(crate) fn is_identity(&self) -> bool {
+        match self {
+            Self::Brightness { amount } => *amount == 0.0,
+            Self::Contrast { amount } | Self::Saturation { amount } => *amount == 1.0,
+            Self::Tint { amount, .. }
+            | Self::ChromaticAberration { amount, .. }
+            | Self::Vignette { amount, .. }
+            | Self::Sharpen { amount, .. } => *amount == 0.0,
+            Self::GaussianBlur { radius }
+            | Self::DirectionalBlur { radius, .. }
+            | Self::ZoomBlur { radius, .. }
+            | Self::MotionBlur { radius, .. } => *radius == 0.0,
+            Self::Glow {
+                radius, intensity, ..
+            } => *radius == 0.0 || *intensity == 0.0,
+            Self::ColorAdjust {
+                exposure,
+                gamma,
+                black_point,
+                white_point,
+            } => *exposure == 0.0 && *gamma == 1.0 && *black_point == 0.0 && *white_point == 1.0,
+            Self::CameraShake { .. } => true,
+        }
+    }
+
+    #[must_use]
+    pub(crate) const fn is_basic_colour_effect(&self) -> bool {
+        matches!(
+            self,
+            Self::Brightness { .. }
+                | Self::Contrast { .. }
+                | Self::Saturation { .. }
+                | Self::Tint { .. }
+        )
+    }
+}
+
 #[must_use]
 pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> EvaluatedFrame {
     let mut layers = Vec::with_capacity(active.len());

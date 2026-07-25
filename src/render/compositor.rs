@@ -48,15 +48,10 @@ pub fn compose(
 
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
     matches!(layer.blend_mode, crate::project::BlendMode::Normal)
-        && layer.effects.iter().all(|effect| {
-            matches!(
-                effect,
-                EvaluatedEffect::Brightness { .. }
-                    | EvaluatedEffect::Contrast { .. }
-                    | EvaluatedEffect::Saturation { .. }
-                    | EvaluatedEffect::Tint { .. }
-            )
-        })
+        && layer
+            .effects
+            .iter()
+            .all(EvaluatedEffect::is_basic_colour_effect)
 }
 
 pub struct EffectSurfacePool {

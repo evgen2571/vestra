@@ -29,6 +29,19 @@ mod requirements;
 mod resources;
 pub(crate) mod support;
 
+#[cfg(test)]
+#[path = "tests/parity.rs"]
+mod parity_tests;
+#[cfg(test)]
+#[path = "tests/readback.rs"]
+mod readback_tests;
+#[cfg(test)]
+#[path = "tests/requirements.rs"]
+mod requirements_tests;
+#[cfg(test)]
+#[path = "tests/shader.rs"]
+mod shader_tests;
+
 use context::GpuContext;
 use diagnostics::finish_error_scopes;
 use executor::dispatch_layer;
@@ -323,155 +336,6 @@ mod tests {
                 None
             }
         }
-    }
-
-    #[test]
-    fn layer_shader_parses_without_a_gpu_adapter() {
-        naga::front::wgsl::parse_str(include_str!("../shaders/layer.wgsl"))
-            .expect("layer WGSL must parse independently of adapter availability");
-    }
-
-    #[test]
-    fn rgba_comparison_reports_strict_channel_metrics() {
-        let difference = compare_rgba(&[0, 2, 5, 255], &[0, 4, 4, 255], 1);
-        assert_eq!(difference.maximum_absolute_channel_error, 2);
-        assert_eq!(difference.differing_channels, 2);
-        assert_eq!(difference.channels_exceeding_tolerance, 1);
-        assert_eq!(difference.pixels_exceeding_tolerance, 1);
-        assert_eq!(difference.differing_channel_percentage, 50.0);
-        assert_eq!(difference.mean_absolute_channel_error, 0.75);
-        assert!(matches!(
-            difference.first_significant_mismatch,
-            Some(super::PixelMismatch {
-                pixel_index: 0,
-                reference_rgba: [0, 2, 5, 255],
-                candidate_rgba: [0, 4, 4, 255],
-            })
-        ));
-    }
-
-    #[test]
-    fn project_requirements_reject_unsupported_limits_before_wgpu_creation() {
-        let validated = load_and_validate(
-            std::path::Path::new("examples/projects/animation-effects.json"),
-            &ValidationOptions {
-                check_backend: false,
-                ..ValidationOptions::default()
-            },
-        )
-        .expect("canonical fixture validates");
-        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
-        let requirements = super::GpuRequirements::from_plan(
-            &plan,
-            &decoded,
-            std::mem::size_of::<super::LayerParameters>() as u32,
-        )
-        .expect("requirements calculate with checked arithmetic");
-        let limits = wgpu::Limits {
-            max_texture_dimension_2d: requirements.max_texture_dimension_2d - 1,
-            ..wgpu::Limits::default()
-        };
-        let error = requirements
-            .validate(&limits, &plan)
-            .expect_err("undersized texture limit is rejected before device creation");
-        assert_eq!(error.code, "WGPU-TEXTURE-LIMIT");
-        assert!(error.message.contains("required"));
-        assert!(error.message.contains("adapter supports"));
-    }
-
-    #[test]
-    fn project_requirements_construct_the_requested_device_limits() {
-        let validated = load_and_validate(
-            std::path::Path::new("examples/projects/animation-effects.json"),
-            &ValidationOptions {
-                check_backend: false,
-                ..ValidationOptions::default()
-            },
-        )
-        .expect("canonical fixture validates");
-        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
-        let requirements = super::GpuRequirements::from_plan(
-            &plan,
-            &decoded,
-            std::mem::size_of::<super::LayerParameters>() as u32,
-        )
-        .expect("requirements calculate with checked arithmetic");
-        let requested = requirements
-            .requested_device_limits(&plan)
-            .expect("canonical requirements fit WGPU storage binding limits");
-
-        assert_eq!(
-            requested.max_texture_dimension_2d,
-            requirements.max_texture_dimension_2d
-        );
-        assert_eq!(requested.max_buffer_size, requirements.copy_bytes);
-        assert_eq!(
-            requested.max_storage_buffer_binding_size,
-            u32::try_from(requirements.copy_bytes).expect("fixture size fits u32")
-        );
-        assert_eq!(
-            requested.max_uniform_buffer_binding_size,
-            requirements.uniform_bytes
-        );
-        assert_eq!(requested.max_bind_groups, 1);
-        assert_eq!(requested.max_bindings_per_bind_group, 3);
-        assert_eq!(requested.max_compute_workgroup_size_x, 8);
-        assert_eq!(requested.max_compute_workgroup_size_y, 8);
-    }
-
-    #[test]
-    fn readback_row_alignment_matches_wgpu_copy_requirements() {
-        for (width, expected) in [
-            (62_u32, 256_u32),
-            (64, 256),
-            (66, 512),
-            (318, 1280),
-            (320, 1280),
-            (322, 1536),
-            (718, 3072),
-            (720, 3072),
-            (722, 3072),
-            (1080, 4352),
-        ] {
-            assert_eq!(
-                super::requirements::align_up(width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,),
-                expected
-            );
-        }
-    }
-
-    #[test]
-    fn row_repacking_removes_padding_without_shifting_rows() {
-        let row_bytes = 62 * 4;
-        let padded = super::requirements::align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let mut mapped = vec![0_u8; (padded * 3) as usize];
-        for row in 0..3_usize {
-            mapped[row * padded as usize..row * padded as usize + row_bytes as usize]
-                .fill((row + 1) as u8);
-        }
-        let mut contiguous = vec![0_u8; (row_bytes * 3) as usize];
-        for (row, target) in contiguous.chunks_exact_mut(row_bytes as usize).enumerate() {
-            let start = row * padded as usize;
-            target.copy_from_slice(&mapped[start..start + row_bytes as usize]);
-        }
-        assert_eq!(contiguous.len(), (62 * 3 * 4) as usize);
-        assert!(
-            contiguous[..row_bytes as usize]
-                .iter()
-                .all(|byte| *byte == 1)
-        );
-        assert!(
-            contiguous[row_bytes as usize..row_bytes as usize * 2]
-                .iter()
-                .all(|byte| *byte == 2)
-        );
-        assert!(
-            contiguous[row_bytes as usize * 2..]
-                .iter()
-                .all(|byte| *byte == 3)
-        );
     }
 
     #[test]

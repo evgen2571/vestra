@@ -281,5 +281,14 @@ impl RenderBackend for WgpuBackend {
 }
 
 #[cfg(test)]
+#[path = "tests/crops_gpu.rs"]
+mod crop_gpu_tests;
+#[cfg(test)]
 #[path = "tests/gpu.rs"]
-mod gpu_tests;
+mod gpu;
+#[cfg(test)]
+#[path = "tests/parity_gpu.rs"]
+mod parity_gpu_tests;
+#[cfg(test)]
+#[path = "tests/resources_gpu.rs"]
+mod resource_gpu_tests;

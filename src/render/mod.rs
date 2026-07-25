@@ -11,6 +11,7 @@ mod engine;
 mod engine_types;
 pub(crate) mod geometry;
 mod metrics;
+mod parity;
 mod prepared;
 pub(crate) mod vignette;
 mod wgpu;

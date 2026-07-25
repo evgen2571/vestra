@@ -12,6 +12,7 @@ use crate::{
     plan::RenderPlan,
     render::{
         ByteLruCache,
+        geometry::{CropBounds, crop_bounds},
         metrics::{PreparationStats, PreparationTimings},
     },
 };
@@ -145,14 +146,6 @@ pub struct PreparedAssets {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct CropBounds {
-    pub(crate) x: u32,
-    pub(crate) y: u32,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct CropKey {
     asset: usize,
     bounds: CropBounds,
@@ -251,32 +244,6 @@ fn crop_key(asset: usize, source: &RgbaImage, crop: crate::domain::Crop) -> Crop
     CropKey {
         asset,
         bounds: crop_bounds(source.width(), source.height(), crop),
-    }
-}
-
-#[must_use]
-pub(crate) fn crop_bounds(
-    source_width: u32,
-    source_height: u32,
-    crop: crate::domain::Crop,
-) -> CropBounds {
-    let x = (crop.x * f64::from(source_width))
-        .floor()
-        .clamp(0.0, f64::from(source_width - 1)) as u32;
-    let y = (crop.y * f64::from(source_height))
-        .floor()
-        .clamp(0.0, f64::from(source_height - 1)) as u32;
-    let right = ((crop.x + crop.width) * f64::from(source_width))
-        .ceil()
-        .clamp(f64::from(x + 1), f64::from(source_width)) as u32;
-    let bottom = ((crop.y + crop.height) * f64::from(source_height))
-        .ceil()
-        .clamp(f64::from(y + 1), f64::from(source_height)) as u32;
-    CropBounds {
-        x,
-        y,
-        width: right - x,
-        height: bottom - y,
     }
 }
 

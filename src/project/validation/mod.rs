@@ -6,15 +6,19 @@ use crate::{
 };
 
 use crate::project::{
-    DurationMode, LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
+    LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
 };
 
 pub(super) mod assets;
 pub(super) mod audio;
+pub(super) mod duration;
 pub(super) mod effects;
+pub(super) mod output;
 pub(super) mod presets;
 pub(super) mod tracks;
+pub(super) mod visual;
 
+use output::validate as validate_output;
 use tracks::validate_track;
 
 pub(crate) fn validate(
@@ -24,7 +28,7 @@ pub(crate) fn validate(
 ) -> Result<ValidatedProject, LoadError> {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    output(&project.output, &mut errors);
+    validate_output(&project.output, &mut errors);
     let frame_rate = match project.output.frame_rate.rational() {
         Ok(rate) => rate,
         Err(message) => {
@@ -39,7 +43,7 @@ pub(crate) fn validate(
     };
     let root = path.parent().unwrap_or_else(|| Path::new("."));
     let assets = assets::validate(&project.assets, root, &mut errors);
-    validate_visual(
+    visual::validate(
         &project.visual,
         &assets.kinds,
         options.limits.maximum_keyframes_per_track,
@@ -54,7 +58,8 @@ pub(crate) fn validate(
         &assets.audio_durations,
         &mut errors,
     );
-    let duration = duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+    let duration =
+        duration::resolve(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     validate_global_effects(
         &project.visual.post_effects,
         duration,
@@ -553,194 +558,6 @@ fn enforce_limits(
     }
 }
 
-fn validate_visual(
-    visual: &crate::project::Visual,
-    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
-    maximum_keyframes_per_track: usize,
-    errors: &mut Vec<Diagnostic>,
-) {
-    let mut clip_ids = BTreeSet::new();
-    for (index, clip) in visual.clips.iter().enumerate() {
-        let path = format!("/visual/clips/{index}");
-        if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
-            errors.push(Diagnostic::error(
-                "MVP-CLIP-ID",
-                Category::Semantic,
-                "clip ids must be non-empty and unique",
-                format!("{path}/id"),
-            ));
-        }
-        if !positive(clip.duration) || !nonnegative(clip.start) {
-            errors.push(Diagnostic::error(
-                "MVP-CLIP-TIME",
-                Category::Semantic,
-                "clip start and duration must be finite with positive duration",
-                path.clone(),
-            ));
-        }
-        match &clip.source {
-            crate::project::VisualSource::Image { asset }
-                if assets.get(asset) == Some(&crate::project::AssetType::Image) => {}
-            crate::project::VisualSource::Image { asset } => errors.push(Diagnostic::error(
-                "MVP-SOURCE-ASSET",
-                Category::Semantic,
-                format!("image source references invalid asset '{asset}'"),
-                format!("{path}/source/asset"),
-            )),
-            crate::project::VisualSource::SolidColor { colour }
-                if parse_colour(colour).is_none() =>
-            {
-                errors.push(Diagnostic::error(
-                    "MVP-SOURCE-COLOUR",
-                    Category::Semantic,
-                    "solid color must use #RRGGBB or #RRGGBBAA",
-                    format!("{path}/source/colour"),
-                ))
-            }
-            crate::project::VisualSource::SolidColor { .. } => {}
-        }
-        match (&clip.source, &clip.transform) {
-            (crate::project::VisualSource::Image { .. }, None) => errors.push(Diagnostic::error(
-                "MVP-IMAGE-TRANSFORM",
-                Category::Semantic,
-                "image clips require transform tracks",
-                format!("{path}/transform"),
-            )),
-            (crate::project::VisualSource::SolidColor { .. }, Some(_)) => {
-                errors.push(Diagnostic::error(
-                    "MVP-SOLID-TRANSFORM",
-                    Category::Semantic,
-                    "solid-color clips cover the canvas and cannot have transform tracks",
-                    format!("{path}/transform"),
-                ))
-            }
-            (_, Some(transform)) => validate_transform(
-                transform,
-                clip.duration,
-                &path,
-                maximum_keyframes_per_track,
-                errors,
-            ),
-            (_, None) => {}
-        }
-        if matches!(clip.source, crate::project::VisualSource::SolidColor { .. }) {
-            for (field, present) in [
-                ("sizing", clip.sizing.is_some()),
-                ("crop", clip.crop.is_some()),
-                ("preset", clip.preset.is_some()),
-            ] {
-                if present {
-                    errors.push(Diagnostic::error(
-                        "MVP-SOLID-PROPERTIES",
-                        Category::Semantic,
-                        "solid-color clips cannot use image-only properties",
-                        format!("{path}/{field}"),
-                    ));
-                }
-            }
-        }
-        validate_track(
-            &clip.opacity,
-            clip.duration,
-            &format!("{path}/opacity"),
-            maximum_keyframes_per_track,
-            errors,
-            |value| unit(*value),
-        );
-        if let Some(crop) = &clip.crop {
-            validate_track(
-                crop,
-                clip.duration,
-                &format!("{path}/crop"),
-                maximum_keyframes_per_track,
-                errors,
-                |value| {
-                    nonnegative(value.x)
-                        && nonnegative(value.y)
-                        && positive(value.width)
-                        && positive(value.height)
-                        && value.x + value.width <= 1.0
-                        && value.y + value.height <= 1.0
-                },
-            );
-        }
-        if let Some(preset) = &clip.preset {
-            presets::validate(
-                preset,
-                &clip.source,
-                clip.duration,
-                &format!("{path}/preset"),
-                errors,
-            );
-        }
-        let mut effect_ids = BTreeSet::new();
-        for (effect_index, effect) in clip.effects.iter().enumerate() {
-            if effect.id().trim().is_empty() || !effect_ids.insert(effect.id().to_owned()) {
-                errors.push(Diagnostic::error(
-                    "MVP-EFFECT-ID",
-                    Category::Semantic,
-                    "effect ids must be non-empty and unique per clip",
-                    format!("{path}/effects/{effect_index}/id"),
-                ));
-            }
-            let effect_path = format!("{path}/effects/{effect_index}");
-            effects::validate_parameters(
-                effect,
-                clip.duration,
-                &effect_path,
-                maximum_keyframes_per_track,
-                errors,
-            );
-        }
-    }
-}
-
-fn validate_transform(
-    transform: &crate::project::Transform,
-    duration: f64,
-    path: &str,
-    maximum_keyframes_per_track: usize,
-    errors: &mut Vec<Diagnostic>,
-) {
-    validate_track(
-        &transform.position,
-        duration,
-        &format!("{path}/transform/position"),
-        maximum_keyframes_per_track,
-        errors,
-        |value| value.x.is_finite() && value.y.is_finite(),
-    );
-    validate_track(
-        &transform.anchor,
-        duration,
-        &format!("{path}/transform/anchor"),
-        maximum_keyframes_per_track,
-        errors,
-        |value| {
-            value.x.is_finite()
-                && value.y.is_finite()
-                && (0.0..=1.0).contains(&value.x)
-                && (0.0..=1.0).contains(&value.y)
-        },
-    );
-    validate_track(
-        &transform.scale,
-        duration,
-        &format!("{path}/transform/scale"),
-        maximum_keyframes_per_track,
-        errors,
-        |value| positive(value.x) && positive(value.y),
-    );
-    validate_track(
-        &transform.rotation_degrees,
-        duration,
-        &format!("{path}/transform/rotation_degrees"),
-        maximum_keyframes_per_track,
-        errors,
-        |value| value.is_finite(),
-    );
-}
-
 fn add_unused_asset_warnings(project: &Project, warnings: &mut Vec<Diagnostic>) {
     let used_assets: BTreeSet<&str> = project
         .visual
@@ -762,118 +579,6 @@ fn add_unused_asset_warnings(project: &Project, warnings: &mut Vec<Diagnostic>) 
                 )
                 .with_related_id(&asset.id),
             );
-        }
-    }
-}
-
-pub(super) fn output(output: &Output, errors: &mut Vec<Diagnostic>) {
-    if output.path.trim().is_empty() {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-PATH",
-            Category::Semantic,
-            "output path must not be empty",
-            "/output/path",
-        ));
-    }
-    if !(2..=8192).contains(&output.width) || !output.width.is_multiple_of(2) {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-WIDTH",
-            Category::Semantic,
-            "width must be an even integer in 2..=8192",
-            "/output/width",
-        ));
-    }
-    if !(2..=8192).contains(&output.height) || !output.height.is_multiple_of(2) {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-HEIGHT",
-            Category::Semantic,
-            "height must be an even integer in 2..=8192",
-            "/output/height",
-        ));
-    }
-    if parse_colour(&output.background).is_none() {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-COLOUR",
-            Category::Semantic,
-            "background must use #RRGGBB or #RRGGBBAA",
-            "/output/background",
-        ));
-    }
-    if !output.path.to_ascii_lowercase().ends_with(".mp4") {
-        errors.push(Diagnostic::error(
-            "MVP-OUTPUT-CONTAINER",
-            Category::Semantic,
-            "output path must end in .mp4",
-            "/output/path",
-        ));
-    }
-    match output.duration_mode {
-        DurationMode::Automatic if output.duration.is_some() => errors.push(Diagnostic::error(
-            "MVP-DURATION-MODE",
-            Category::Semantic,
-            "automatic duration must not specify duration",
-            "/output/duration",
-        )),
-        DurationMode::Explicit => match output.duration {
-            Some(value) if value.is_finite() && value > 0.0 => {}
-            _ => errors.push(Diagnostic::error(
-                "MVP-DURATION-EXPLICIT",
-                Category::Semantic,
-                "explicit duration must be positive and finite",
-                "/output/duration",
-            )),
-        },
-        DurationMode::Automatic => {}
-    }
-}
-
-pub(super) fn duration(
-    project: &Project,
-    audio_end: Option<f64>,
-    warnings: &mut Vec<Diagnostic>,
-    errors: &mut Vec<Diagnostic>,
-) -> Option<f64> {
-    let visual_end = project
-        .visual
-        .clips
-        .iter()
-        .map(|clip| clip.start + clip.duration)
-        .chain(
-            project
-                .visual
-                .flashes
-                .iter()
-                .map(|flash| flash.start + flash.duration),
-        )
-        .fold(0.0, f64::max);
-    match project.output.duration_mode {
-        DurationMode::Automatic => {
-            let duration = visual_end.max(audio_end.unwrap_or(0.0));
-            if !positive(duration) {
-                errors.push(Diagnostic::error("MVP-DURATION-EMPTY", Category::Semantic, "automatic-duration project needs positive visual, flash, or enabled audio content", "/output/duration_mode"));
-                None
-            } else {
-                Some(duration)
-            }
-        }
-        DurationMode::Explicit => {
-            let Some(duration) = project.output.duration else {
-                errors.push(Diagnostic::error(
-                    "MVP-DURATION-EXPLICIT",
-                    Category::Internal,
-                    "validated explicit duration is missing",
-                    "/output/duration",
-                ));
-                return None;
-            };
-            if visual_end > duration || audio_end.is_some_and(|end| end > duration) {
-                warnings.push(Diagnostic::warning(
-                    "MVP-DURATION-TRUNCATED",
-                    "content after explicit project duration will be clipped",
-                    "/output/duration",
-                ));
-            }
-            Some(duration)
         }
     }
 }

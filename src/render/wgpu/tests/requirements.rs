@@ -1,6 +1,6 @@
 //! Adapter-independent WGPU requirement checks.
 
-use super::{GpuRequirements, LayerParameters};
+use super::{parameters::LayerParameters, requirements::GpuRequirements};
 use crate::{
     plan::{CompileOptions, compile},
     project::{ValidationOptions, load_and_validate},

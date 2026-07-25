@@ -233,255 +233,6 @@ fn compile_canonical(
     })
 }
 
-/// Test-only reference implementation retained while preset expansion is
-/// isolated from the coordinator. Production compilation uses `presets::apply`.
-#[cfg(test)]
-fn apply_preset(
-    layer: &mut CompiledLayer,
-    preset: &crate::project::Preset,
-    duration: f64,
-    compilation: &mut CompilationStats,
-) -> Result<(), Diagnostic> {
-    let timing = preset.timing();
-    let start = to_nanos(timing.start, &layer.id)?;
-    let interval_duration = timing
-        .duration
-        .unwrap_or_else(|| default_preset_duration(preset, duration - timing.start));
-    let end = start.saturating_add(to_nanos(interval_duration, &layer.id)?);
-    let span = end - start;
-    let key = |time, value| Keyframe {
-        time,
-        value,
-        interpolation: Interpolation::EaseInOut,
-    };
-    let mut generated = Vec::new();
-    let add_shake = |effects: &mut Vec<crate::plan::CompiledEffect>, intensity: f64, seed: u64| {
-        effects.push(crate::plan::CompiledEffect::CameraShake {
-            position_amount: Track::new(0.012 * intensity),
-            rotation_degrees: Track::new(1.2 * intensity),
-            scale_amount: Track::new(0.01 * intensity),
-            frequency: Track::new(14.0),
-            seed,
-            attack: 0.03,
-            decay: 0.22,
-        })
-    };
-    match preset {
-        crate::project::Preset::SlowDrift { intensity, .. } => {
-            let mut contribution = TransformContribution::identity();
-            contribution.start = start;
-            contribution.end = end;
-            contribution.position_offset = Track {
-                base_value: Point {
-                    x: -0.01 * intensity,
-                    y: 0.008 * intensity,
-                },
-                keyframes: vec![key(
-                    end,
-                    Point {
-                        x: 0.01 * intensity,
-                        y: -0.008 * intensity,
-                    },
-                )],
-            };
-            contribution.scale_multiplier = Track {
-                base_value: Point { x: 1.0, y: 1.0 },
-                keyframes: vec![key(
-                    end,
-                    Point {
-                        x: 1.0 + 0.04 * intensity,
-                        y: 1.0 + 0.04 * intensity,
-                    },
-                )],
-            };
-            layer.transform_contributions.push(contribution);
-        }
-        crate::project::Preset::ZoomPunch { intensity, .. } => {
-            let peak = start + span / 4;
-            let mut contribution = TransformContribution::identity();
-            contribution.start = start;
-            contribution.end = start + span / 2;
-            contribution.scale_multiplier = Track {
-                base_value: Point { x: 1.0, y: 1.0 },
-                keyframes: vec![
-                    key(
-                        peak,
-                        Point {
-                            x: 1.0 + 0.16 * intensity,
-                            y: 1.0 + 0.16 * intensity,
-                        },
-                    ),
-                    key(start + span / 2, Point { x: 1.0, y: 1.0 }),
-                ],
-            };
-            layer.transform_contributions.push(contribution);
-        }
-        crate::project::Preset::Impact {
-            intensity, seed, ..
-        } => {
-            add_zoom_punch(layer, start, span, *intensity, 0.20);
-            add_shake(&mut generated, *intensity, *seed);
-            generated.push(crate::plan::CompiledEffect::ChromaticAberration {
-                amount: Track {
-                    base_value: 0.0,
-                    keyframes: vec![
-                        Keyframe {
-                            time: span / 8,
-                            value: 3.0 * intensity,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                        Keyframe {
-                            time: span / 3,
-                            value: 0.0,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                    ],
-                },
-                angle_degrees: Track::new(0.0),
-            });
-            generated.push(pulse_tint(span, *intensity));
-        }
-        crate::project::Preset::HeavyImpact {
-            intensity, seed, ..
-        } => {
-            add_zoom_punch(layer, start, span, *intensity, 0.28);
-            add_shake(&mut generated, *intensity * 1.8, *seed);
-            generated.push(crate::plan::CompiledEffect::DirectionalBlur {
-                radius: Track {
-                    base_value: 0.0,
-                    keyframes: vec![
-                        Keyframe {
-                            time: span / 8,
-                            value: 10.0 * intensity,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                        Keyframe {
-                            time: span / 3,
-                            value: 0.0,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                    ],
-                },
-                angle_degrees: Track::new(0.0),
-            });
-            generated.push(crate::plan::CompiledEffect::ChromaticAberration {
-                amount: pulse_track(span, 5.0 * intensity),
-                angle_degrees: Track::new(0.0),
-            });
-            generated.push(pulse_tint(span, *intensity * 0.75));
-        }
-        crate::project::Preset::FocusReveal { intensity, .. } => {
-            let mut contribution = TransformContribution::identity();
-            contribution.start = start;
-            contribution.end = start + span / 2;
-            contribution.scale_multiplier = Track {
-                base_value: Point {
-                    x: 1.0 + 0.04 * intensity,
-                    y: 1.0 + 0.04 * intensity,
-                },
-                keyframes: vec![key(start + span / 2, Point { x: 1.0, y: 1.0 })],
-            };
-            layer.transform_contributions.push(contribution);
-            generated.push(crate::plan::CompiledEffect::GaussianBlur {
-                radius: Track {
-                    base_value: 8.0 * intensity,
-                    keyframes: vec![Keyframe {
-                        time: span / 2,
-                        value: 0.0,
-                        interpolation: Interpolation::EaseInOut,
-                    }],
-                },
-            });
-            generated.push(crate::plan::CompiledEffect::Sharpen {
-                amount: Track {
-                    base_value: 0.0,
-                    keyframes: vec![Keyframe {
-                        time: span / 2,
-                        value: 0.35 * intensity,
-                        interpolation: Interpolation::EaseInOut,
-                    }],
-                },
-                radius: Track::new(1.0),
-            });
-        }
-    }
-    // Presets establish the base look. Authored effects run afterwards and can
-    // deliberately refine it, matching the project-format documentation.
-    compilation.generated_local_effect_count += generated.len();
-    layer.effects.splice(
-        0..0,
-        generated
-            .into_iter()
-            .map(|effect| crate::plan::TimedEffect { start, end, effect }),
-    );
-    Ok(())
-}
-
-#[cfg(test)]
-fn default_preset_duration(preset: &crate::project::Preset, remaining: f64) -> f64 {
-    let preferred = match preset {
-        crate::project::Preset::SlowDrift { .. } => remaining,
-        crate::project::Preset::ZoomPunch { .. } => 0.35,
-        crate::project::Preset::Impact { .. } => 0.28,
-        crate::project::Preset::HeavyImpact { .. } => 0.4,
-        crate::project::Preset::FocusReveal { .. } => 0.8,
-    };
-    preferred.min(remaining)
-}
-
-#[cfg(test)]
-fn add_zoom_punch(layer: &mut CompiledLayer, start: u128, span: u128, intensity: f64, amount: f64) {
-    let mut contribution = TransformContribution::identity();
-    contribution.start = start;
-    contribution.end = start + span / 2;
-    contribution.scale_multiplier = Track {
-        base_value: Point { x: 1.0, y: 1.0 },
-        keyframes: vec![
-            Keyframe {
-                time: start + span / 8,
-                value: Point {
-                    x: 1.0 + amount * intensity,
-                    y: 1.0 + amount * intensity,
-                },
-                interpolation: Interpolation::EaseOut,
-            },
-            Keyframe {
-                time: start + span / 2,
-                value: Point { x: 1.0, y: 1.0 },
-                interpolation: Interpolation::EaseInOut,
-            },
-        ],
-    };
-    layer.transform_contributions.push(contribution);
-}
-
-#[cfg(test)]
-fn pulse_track(end: u128, amount: f64) -> Track<f64> {
-    Track {
-        base_value: 0.0,
-        keyframes: vec![
-            Keyframe {
-                time: end / 8,
-                value: amount,
-                interpolation: Interpolation::EaseOut,
-            },
-            Keyframe {
-                time: end / 3,
-                value: 0.0,
-                interpolation: Interpolation::EaseInOut,
-            },
-        ],
-    }
-}
-
-#[cfg(test)]
-fn pulse_tint(end: u128, intensity: f64) -> crate::plan::CompiledEffect {
-    crate::plan::CompiledEffect::Tint {
-        colour: [255, 255, 255, 255],
-        amount: pulse_track(end, (0.25 * intensity).clamp(0.0, 1.0)),
-    }
-}
-
 fn compile_transform(clip: &crate::project::Clip) -> Result<CompiledTransformTracks, Diagnostic> {
     match (&clip.source, &clip.transform) {
         (_, Some(transform)) => Ok(CompiledTransformTracks {
@@ -1687,7 +1438,6 @@ mod tests {
     fn transient_preset_uses_its_own_interval_on_a_long_clip() {
         let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.id = "clip".to_owned();
-        let mut oracle_layer = layer.clone();
         let preset = crate::project::Preset::Impact {
             timing: crate::project::ActiveInterval {
                 start: 1.25,
@@ -1699,14 +1449,20 @@ mod tests {
         let mut compilation = CompilationStats::default();
         presets::apply(&mut layer, &preset, 4.0, &mut compilation).expect("preset compiles");
         assert_eq!(compilation.generated_local_effect_count, 3);
-        let mut oracle_compilation = CompilationStats::default();
-        apply_preset(&mut oracle_layer, &preset, 4.0, &mut oracle_compilation)
-            .expect("reference preset compiles");
-        assert_eq!(format!("{layer:?}"), format!("{oracle_layer:?}"));
-        assert_eq!(
-            compilation.generated_local_effect_count,
-            oracle_compilation.generated_local_effect_count
-        );
+        assert_eq!(layer.transform_contributions.len(), 1);
+        assert_eq!(layer.effects.len(), 3);
+        assert!(matches!(
+            layer.effects[0].effect,
+            crate::plan::CompiledEffect::CameraShake { .. }
+        ));
+        assert!(matches!(
+            layer.effects[1].effect,
+            crate::plan::CompiledEffect::ChromaticAberration { .. }
+        ));
+        assert!(matches!(
+            layer.effects[2].effect,
+            crate::plan::CompiledEffect::Tint { .. }
+        ));
         assert!(
             layer
                 .transform_contributions

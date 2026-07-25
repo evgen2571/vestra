@@ -11,6 +11,7 @@ mod engine;
 mod prepared;
 pub(crate) mod vignette;
 mod wgpu;
+mod wgpu_support;
 pub(crate) mod zoom_blur;
 
 pub use backend::{AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind};

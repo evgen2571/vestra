@@ -55,19 +55,12 @@ use resources::{FrameResources, SourceResources};
 /// A headless WGPU session. Its textures, output target, staging buffer and
 /// source uploads persist for the complete render lifetime.
 pub struct WgpuBackend {
-    _instance: wgpu::Instance,
-    _adapter: wgpu::Adapter,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    _layer_shader: wgpu::ShaderModule,
-    _layer_pipeline: wgpu::ComputePipeline,
-    _layer_bind_group_layout: wgpu::BindGroupLayout,
-    _layer_parameters: wgpu::Buffer,
+    context: GpuContext,
+    pipeline: LayerPipeline,
     frame: FrameResources,
     sources: SourceResources,
     stats: PreparationStats,
     timings: PreparationTimings,
-    adapter: AdapterMetadata,
 }
 
 impl WgpuBackend {
@@ -79,28 +72,15 @@ impl WgpuBackend {
             std::mem::size_of::<LayerParameters>() as u32,
         )?;
         let context = GpuContext::create(plan, requirements)?;
-        let GpuContext {
-            instance,
-            adapter,
-            device,
-            queue,
-            adapter_metadata,
-            adapter_limits: limits,
-            adapter_request,
-            device_request,
-        } = context;
-        device.push_error_scope(wgpu::ErrorFilter::Validation);
-        device.push_error_scope(wgpu::ErrorFilter::Internal);
+        context
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        context.device.push_error_scope(wgpu::ErrorFilter::Internal);
         let pipeline_creation_started = Instant::now();
         let row_bytes = requirements.row_bytes;
-        let LayerPipeline {
-            shader: layer_shader,
-            compute: layer_pipeline,
-            bindings: layer_bind_group_layout,
-            parameters: layer_parameters,
-        } = LayerPipeline::create(&device);
+        let pipeline = LayerPipeline::create(&context.device);
         let frame = FrameResources::create(
-            &device,
+            &context.device,
             plan,
             row_bytes,
             requirements.padded_row_bytes,
@@ -109,14 +89,14 @@ impl WgpuBackend {
         let pipeline_creation = pipeline_creation_started.elapsed();
         let upload_started = Instant::now();
         let sources = SourceResources::create(
-            &device,
-            &queue,
+            &context.device,
+            &context.queue,
             plan,
             &decoded,
-            &layer_bind_group_layout,
+            &pipeline.bindings,
             &frame.accumulation,
-            &layer_parameters,
-            limits.max_texture_dimension_2d,
+            &pipeline.parameters,
+            context.adapter_limits.max_texture_dimension_2d,
         )?;
         let mut stats = decoded.stats().clone();
         stats.source_texture_count = sources._textures.len();
@@ -132,27 +112,20 @@ impl WgpuBackend {
         stats.accumulation_buffer_count = 1;
         stats.bind_group_count = sources.bind_groups.len() + 1;
         let mut timings = decoded.timings();
-        timings.gpu_adapter_request = adapter_request;
-        timings.gpu_device_request = device_request;
+        timings.gpu_adapter_request = context.adapter_request;
+        timings.gpu_device_request = context.device_request;
         timings.gpu_pipeline_creation = pipeline_creation;
         timings.texture_upload = upload_started.elapsed();
         timings.gpu_initialization = started.elapsed();
-        device.poll(wgpu::Maintain::Wait);
-        finish_error_scopes(&device, "WGPU-RESOURCE-CREATION")?;
+        context.device.poll(wgpu::Maintain::Wait);
+        finish_error_scopes(&context.device, "WGPU-RESOURCE-CREATION")?;
         Ok(Self {
-            _instance: instance,
-            _adapter: adapter,
-            device,
-            queue,
-            _layer_shader: layer_shader,
-            _layer_pipeline: layer_pipeline,
-            _layer_bind_group_layout: layer_bind_group_layout,
-            _layer_parameters: layer_parameters,
+            context,
+            pipeline,
             frame,
             sources,
             stats,
             timings,
-            adapter: adapter_metadata,
         })
     }
 }
@@ -171,8 +144,12 @@ impl RenderBackend for WgpuBackend {
         // asynchronously. Capture them for this frame so the engine can abort
         // FFmpeg and retain a structured primary failure instead of relying on
         // WGPU's uncaptured-error handler.
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        self.device.push_error_scope(wgpu::ErrorFilter::Internal);
+        self.context
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        self.context
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Internal);
         // Parameter updates and dispatch order are derived solely from the
         // evaluated frame. Each submission observes its matching uniform data.
         let clear = LayerParameters {
@@ -186,10 +163,10 @@ impl RenderBackend for WgpuBackend {
             ..LayerParameters::zeroed()
         };
         dispatch_layer(
-            &self.device,
-            &self.queue,
-            &self._layer_pipeline,
-            &self._layer_parameters,
+            &self.context.device,
+            &self.context.queue,
+            &self.pipeline.compute,
+            &self.pipeline.parameters,
             &self.sources.solid_bind_group,
             clear,
             frame.width,
@@ -218,10 +195,10 @@ impl RenderBackend for WgpuBackend {
                     layer.colour_transform,
                 );
                 dispatch_layer(
-                    &self.device,
-                    &self.queue,
-                    &self._layer_pipeline,
-                    &self._layer_parameters,
+                    &self.context.device,
+                    &self.context.queue,
+                    &self.pipeline.compute,
+                    &self.pipeline.parameters,
                     &self.sources.bind_groups[*asset_index],
                     parameters,
                     frame.width,
@@ -264,10 +241,10 @@ impl RenderBackend for WgpuBackend {
                     ..LayerParameters::zeroed()
                 };
                 dispatch_layer(
-                    &self.device,
-                    &self.queue,
-                    &self._layer_pipeline,
-                    &self._layer_parameters,
+                    &self.context.device,
+                    &self.context.queue,
+                    &self.pipeline.compute,
+                    &self.pipeline.parameters,
                     &self.sources.solid_bind_group,
                     parameters,
                     frame.width,
@@ -276,8 +253,8 @@ impl RenderBackend for WgpuBackend {
             }
         }
         let readback = read_frame(
-            &self.device,
-            &self.queue,
+            &self.context.device,
+            &self.context.queue,
             &mut self.frame,
             frame.width,
             frame.height,
@@ -299,7 +276,7 @@ impl RenderBackend for WgpuBackend {
         self.timings
     }
     fn adapter(&self) -> Option<AdapterMetadata> {
-        Some(self.adapter.clone())
+        Some(self.context.adapter_metadata.clone())
     }
 }
 

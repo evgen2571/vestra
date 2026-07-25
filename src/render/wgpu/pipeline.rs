@@ -3,7 +3,7 @@
 use super::parameters::LayerParameters;
 
 pub(super) struct LayerPipeline {
-    pub(super) shader: wgpu::ShaderModule,
+    pub(super) _shader: wgpu::ShaderModule,
     pub(super) compute: wgpu::ComputePipeline,
     pub(super) bindings: wgpu::BindGroupLayout,
     pub(super) parameters: wgpu::Buffer,
@@ -72,7 +72,7 @@ impl LayerPipeline {
             mapped_at_creation: false,
         });
         Self {
-            shader,
+            _shader: shader,
             compute,
             bindings,
             parameters,

@@ -10,8 +10,8 @@ use super::{
 };
 
 pub(super) struct GpuContext {
-    pub(super) instance: wgpu::Instance,
-    pub(super) adapter: wgpu::Adapter,
+    pub(super) _instance: wgpu::Instance,
+    pub(super) _adapter: wgpu::Adapter,
     pub(super) device: wgpu::Device,
     pub(super) queue: wgpu::Queue,
     pub(super) adapter_metadata: AdapterMetadata,
@@ -71,8 +71,8 @@ impl GpuContext {
         let device_request = device_request_started.elapsed();
         requirements.validate(&device.limits(), plan)?;
         Ok(Self {
-            instance,
-            adapter,
+            _instance: instance,
+            _adapter: adapter,
             device,
             queue,
             adapter_metadata,

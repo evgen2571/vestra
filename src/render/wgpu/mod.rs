@@ -22,6 +22,7 @@ mod context;
 mod diagnostics;
 mod parameters;
 mod parity;
+mod pipeline;
 mod requirements;
 pub(crate) mod support;
 
@@ -29,6 +30,7 @@ use context::GpuContext;
 use diagnostics::{diagnostic, finish_error_scopes};
 use parameters::LayerParameters;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
+use pipeline::LayerPipeline;
 use requirements::GpuRequirements;
 
 /// A headless WGPU session. Its textures, output target, staging buffer and
@@ -81,63 +83,12 @@ impl WgpuBackend {
         device.push_error_scope(wgpu::ErrorFilter::Internal);
         let pipeline_creation_started = Instant::now();
         let row_bytes = requirements.row_bytes;
-        let layer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("video-editor layer compute shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/layer.wgsl").into()),
-        });
-        let layer_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("video-editor layer bindings"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<
-                                LayerParameters,
-                            >()
-                                as u64),
-                        },
-                        count: None,
-                    },
-                ],
-            });
-        let layer_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("video-editor layer pipeline layout"),
-                bind_group_layouts: &[&layer_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let layer_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("video-editor layer pipeline"),
-            layout: Some(&layer_pipeline_layout),
-            module: &layer_shader,
-            entry_point: "compose",
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
-        });
+        let LayerPipeline {
+            shader: layer_shader,
+            compute: layer_pipeline,
+            bindings: layer_bind_group_layout,
+            parameters: layer_parameters,
+        } = LayerPipeline::create(&device);
         let padded_row_bytes = requirements.padded_row_bytes;
         let readback_size = requirements.copy_bytes;
         let output = device.create_texture(&wgpu::TextureDescriptor {
@@ -166,12 +117,6 @@ impl WgpuBackend {
             label: Some("video-editor layer accumulation"),
             size: readback_size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let layer_parameters = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("video-editor layer parameters"),
-            size: std::mem::size_of::<LayerParameters>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let pipeline_creation = pipeline_creation_started.elapsed();

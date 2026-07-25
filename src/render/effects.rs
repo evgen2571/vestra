@@ -53,7 +53,7 @@ impl CpuEffectPassPlan {
 /// effects return no passes, so callers can avoid allocating intermediates.
 #[must_use]
 pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> CpuEffectPassPlan {
-    if evaluated_effect_is_noop(effect) {
+    if effect.is_identity() {
         return CpuEffectPassPlan::new(&[]);
     }
     match effect {
@@ -83,33 +83,6 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> CpuEffectPassPlan {
             CpuEffectPass::UnsharpComposite { amount: *amount },
         ]),
         _ => CpuEffectPassPlan::new(&[CpuEffectPass::Single]),
-    }
-}
-
-fn evaluated_effect_is_noop(effect: &EvaluatedEffect) -> bool {
-    match effect {
-        EvaluatedEffect::Brightness { amount } => *amount == 0.0,
-        EvaluatedEffect::Contrast { amount } | EvaluatedEffect::Saturation { amount } => {
-            *amount == 1.0
-        }
-        EvaluatedEffect::Tint { amount, .. }
-        | EvaluatedEffect::ChromaticAberration { amount, .. }
-        | EvaluatedEffect::Vignette { amount, .. }
-        | EvaluatedEffect::Sharpen { amount, .. } => *amount == 0.0,
-        EvaluatedEffect::GaussianBlur { radius }
-        | EvaluatedEffect::DirectionalBlur { radius, .. }
-        | EvaluatedEffect::ZoomBlur { radius, .. }
-        | EvaluatedEffect::MotionBlur { radius, .. } => *radius == 0.0,
-        EvaluatedEffect::Glow {
-            radius, intensity, ..
-        } => *radius == 0.0 || *intensity == 0.0,
-        EvaluatedEffect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-        } => *exposure == 0.0 && *gamma == 1.0 && *black_point == 0.0 && *white_point == 1.0,
-        EvaluatedEffect::CameraShake { .. } => true,
     }
 }
 

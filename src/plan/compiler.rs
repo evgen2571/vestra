@@ -15,13 +15,17 @@ use crate::{
         CompiledVisualSource, DrawKey, ImageAsset, RenderPlan, TransformContribution,
     },
     project::{Sizing, ValidatedProject, parse_colour},
-    timeline::{NANOS_PER_SECOND, seconds_to_nanos},
 };
 
+mod effects;
 mod flashes;
+mod metrics;
 mod presets;
+mod time;
+mod tracks;
 mod transitions;
 
+use time::{effective_dimensions, first_frame_at_or_after, to_nanos};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,
@@ -111,7 +115,7 @@ fn compile_canonical(
                     .as_ref()
                     .is_none_or(|track| track.keyframes.is_empty()),
                 crop: match &clip.crop {
-                    Some(track) => compile_track(track, &clip.id)?,
+                    Some(track) => tracks::compile(track, &clip.id)?,
                     None => Track::new(Crop {
                         x: 0.0,
                         y: 0.0,
@@ -141,7 +145,7 @@ fn compile_canonical(
         let effects = clip
             .effects
             .iter()
-            .map(|effect| compile_timed_effect(effect, &clip.id, clip.duration))
+            .map(|effect| effects::compile_timed(effect, &clip.id, clip.duration))
             .collect::<Result<Vec<_>, _>>()?;
         layers.push(CompiledLayer {
             id: clip.id.clone(),
@@ -158,7 +162,7 @@ fn compile_canonical(
             source,
             transform: compile_transform(clip)?,
             transform_contributions: Vec::new(),
-            opacity: compile_track(&clip.opacity, &clip.id)?,
+            opacity: tracks::compile(&clip.opacity, &clip.id)?,
             opacity_contributions: Vec::new(),
             effects,
             blend_mode: clip.blend_mode,
@@ -200,9 +204,9 @@ fn compile_canonical(
         .visual
         .post_effects
         .iter()
-        .map(|effect| compile_timed_effect(effect, "global post effect", validated.duration))
+        .map(|effect| effects::compile_timed(effect, "global post effect", validated.duration))
         .collect::<Result<Vec<_>, _>>()?;
-    record_compilation_workload(&mut compilation, &layers, &post_effects);
+    metrics::record(&mut compilation, &layers, &post_effects);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     Ok(RenderPlan {
         configured_output: resolved_output_path(validated),
@@ -236,10 +240,10 @@ fn compile_canonical(
 fn compile_transform(clip: &crate::project::Clip) -> Result<CompiledTransformTracks, Diagnostic> {
     match (&clip.source, &clip.transform) {
         (_, Some(transform)) => Ok(CompiledTransformTracks {
-            position: compile_track(&transform.position, &clip.id)?,
-            anchor: compile_track(&transform.anchor, &clip.id)?,
-            scale: compile_track(&transform.scale, &clip.id)?,
-            rotation_radians: degrees_track_to_radians(compile_track(
+            position: tracks::compile(&transform.position, &clip.id)?,
+            anchor: tracks::compile(&transform.anchor, &clip.id)?,
+            scale: tracks::compile(&transform.scale, &clip.id)?,
+            rotation_radians: tracks::degrees_to_radians(tracks::compile(
                 &transform.rotation_degrees,
                 &clip.id,
             )?),
@@ -298,218 +302,6 @@ fn enforce_active_layer_limit(
     Ok(())
 }
 
-fn compile_track<T: Copy>(
-    track: &crate::project::Track<T>,
-    id: &str,
-) -> Result<Track<T>, Diagnostic> {
-    let mut keyframes = Vec::with_capacity(track.keyframes.len());
-    for keyframe in &track.keyframes {
-        keyframes.push(Keyframe {
-            time: to_nanos(keyframe.time, id)?,
-            value: keyframe.value,
-            interpolation: project_interpolation(&keyframe.interpolation),
-        });
-    }
-    Ok(Track {
-        base_value: track.base_value,
-        keyframes,
-    })
-}
-
-fn degrees_track_to_radians(mut track: Track<f64>) -> Track<f64> {
-    track.base_value = track.base_value.to_radians();
-    for keyframe in &mut track.keyframes {
-        keyframe.value = keyframe.value.to_radians();
-    }
-    track
-}
-
-fn project_interpolation(interpolation: &crate::project::Interpolation) -> Interpolation {
-    match interpolation {
-        crate::project::Interpolation::Named(name) => match name {
-            crate::project::InterpolationName::Linear => Interpolation::Linear,
-            crate::project::InterpolationName::Hold => Interpolation::Hold,
-            crate::project::InterpolationName::EaseIn => Interpolation::EaseIn,
-            crate::project::InterpolationName::EaseOut => Interpolation::EaseOut,
-            crate::project::InterpolationName::EaseInOut => Interpolation::EaseInOut,
-        },
-        crate::project::Interpolation::CubicBezier(bezier) => {
-            Interpolation::CubicBezier(crate::animation::CubicBezier {
-                x1: bezier.x1,
-                y1: bezier.y1,
-                x2: bezier.x2,
-                y2: bezier.y2,
-            })
-        }
-    }
-}
-
-fn compile_effect(
-    effect: &crate::project::Effect,
-    id: &str,
-) -> Result<crate::plan::CompiledEffect, Diagnostic> {
-    Ok(match effect {
-        crate::project::Effect::Brightness { amount, .. } => {
-            crate::plan::CompiledEffect::Brightness {
-                amount: compile_track(amount, id)?,
-            }
-        }
-        crate::project::Effect::Contrast { amount, .. } => crate::plan::CompiledEffect::Contrast {
-            amount: compile_track(amount, id)?,
-        },
-        crate::project::Effect::Saturation { amount, .. } => {
-            crate::plan::CompiledEffect::Saturation {
-                amount: compile_track(amount, id)?,
-            }
-        }
-        crate::project::Effect::Tint { colour, amount, .. } => crate::plan::CompiledEffect::Tint {
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated tint color is invalid",
-                    "",
-                )
-            })?,
-            amount: compile_track(amount, id)?,
-        },
-        crate::project::Effect::GaussianBlur { radius, .. } => {
-            crate::plan::CompiledEffect::GaussianBlur {
-                radius: compile_track(radius, id)?,
-            }
-        }
-        crate::project::Effect::DirectionalBlur {
-            radius,
-            angle_degrees,
-            ..
-        } => crate::plan::CompiledEffect::DirectionalBlur {
-            radius: compile_track(radius, id)?,
-            angle_degrees: compile_track(angle_degrees, id)?,
-        },
-        crate::project::Effect::ZoomBlur {
-            radius,
-            samples,
-            anchor,
-            direction,
-            ..
-        } => crate::plan::CompiledEffect::ZoomBlur {
-            radius: compile_track(radius, id)?,
-            samples: *samples,
-            anchor: *anchor,
-            direction: *direction,
-        },
-        crate::project::Effect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-            ..
-        } => crate::plan::CompiledEffect::Glow {
-            threshold: compile_track(threshold, id)?,
-            radius: compile_track(radius, id)?,
-            intensity: compile_track(intensity, id)?,
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated glow color is invalid",
-                    "",
-                )
-            })?,
-        },
-        crate::project::Effect::ChromaticAberration {
-            amount,
-            angle_degrees,
-            ..
-        } => crate::plan::CompiledEffect::ChromaticAberration {
-            amount: compile_track(amount, id)?,
-            angle_degrees: compile_track(angle_degrees, id)?,
-        },
-        crate::project::Effect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-            ..
-        } => crate::plan::CompiledEffect::Vignette {
-            amount: compile_track(amount, id)?,
-            radius: compile_track(radius, id)?,
-            softness: compile_track(softness, id)?,
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated vignette color is invalid",
-                    "",
-                )
-            })?,
-        },
-        crate::project::Effect::Sharpen { amount, radius, .. } => {
-            crate::plan::CompiledEffect::Sharpen {
-                amount: compile_track(amount, id)?,
-                radius: compile_track(radius, id)?,
-            }
-        }
-        crate::project::Effect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-            ..
-        } => crate::plan::CompiledEffect::ColorAdjust {
-            exposure: compile_track(exposure, id)?,
-            gamma: compile_track(gamma, id)?,
-            black_point: compile_track(black_point, id)?,
-            white_point: compile_track(white_point, id)?,
-        },
-        crate::project::Effect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            seed,
-            attack,
-            decay,
-            ..
-        } => crate::plan::CompiledEffect::CameraShake {
-            position_amount: compile_track(position_amount, id)?,
-            rotation_degrees: compile_track(rotation_degrees, id)?,
-            scale_amount: compile_track(scale_amount, id)?,
-            frequency: compile_track(frequency, id)?,
-            seed: *seed,
-            attack: *attack,
-            decay: *decay,
-        },
-        crate::project::Effect::MotionBlur {
-            intensity,
-            shutter_angle,
-            max_radius,
-            samples,
-            ..
-        } => crate::plan::CompiledEffect::MotionBlur {
-            intensity: compile_track(intensity, id)?,
-            shutter_angle: compile_track(shutter_angle, id)?,
-            max_radius: compile_track(max_radius, id)?,
-            samples: *samples,
-        },
-    })
-}
-
-fn compile_timed_effect(
-    effect: &crate::project::Effect,
-    id: &str,
-    owner_duration: f64,
-) -> Result<crate::plan::TimedEffect, Diagnostic> {
-    let timing = effect.timing();
-    let start = to_nanos(timing.start, id)?;
-    let duration = to_nanos(timing.duration.unwrap_or(owner_duration - timing.start), id)?;
-    Ok(crate::plan::TimedEffect {
-        start,
-        end: start.saturating_add(duration),
-        effect: compile_effect(effect, id)?,
-    })
-}
-
 fn compile_transitions(
     transitions: &[crate::project::Transition],
     indices: &BTreeMap<String, usize>,
@@ -566,7 +358,7 @@ fn compile_transitions(
         };
         let start = to_nanos(start, id)?;
         let end = start.saturating_add(to_nanos(duration, id)?);
-        let interpolation = project_interpolation(interpolation);
+        let interpolation = tracks::interpolation(interpolation);
         if !matches!(transition, crate::project::Transition::FlashCut { .. }) {
             for (clip, incoming) in [(outgoing, false), (incoming, true)] {
                 if let Some(index) = indices.get(clip) {
@@ -895,87 +687,6 @@ fn push_transition_layer(
     });
 }
 
-/// Test-only reference implementation for the extracted flash compiler.
-#[cfg(test)]
-fn compile_flash_overlay(
-    flash: &crate::project::Flash,
-    rate: (u64, u64),
-    frame_count: u64,
-) -> Result<CompiledLayer, Diagnostic> {
-    let start_nanos = to_nanos(flash.start, &flash.id)?;
-    let duration_nanos = to_nanos(flash.duration, &flash.id)?;
-    let colour = parse_colour(&flash.colour).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-FLASH",
-            Category::Internal,
-            "validated flash has invalid colour",
-            "",
-        )
-    })?;
-    let fade_in = to_nanos(flash.fade_in, &flash.id)?;
-    let fade_out = to_nanos(flash.fade_out, &flash.id)?;
-    let mut opacity = Track::new(if fade_in == 0 { flash.opacity } else { 0.0 });
-    if fade_in > 0 {
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: 0,
-                value: 0.0,
-                interpolation: Interpolation::Hold,
-            },
-        );
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: fade_in,
-                value: flash.opacity,
-                interpolation: Interpolation::Linear,
-            },
-        );
-    }
-    if fade_out > 0 {
-        let fade_out_start = duration_nanos.saturating_sub(fade_out);
-        if fade_out_start != fade_in {
-            insert_keyframe(
-                &mut opacity.keyframes,
-                Keyframe {
-                    time: fade_out_start,
-                    value: flash.opacity,
-                    interpolation: Interpolation::Hold,
-                },
-            );
-        }
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: duration_nanos,
-                value: 0.0,
-                interpolation: Interpolation::Linear,
-            },
-        );
-    }
-    Ok(CompiledLayer {
-        id: flash.id.clone(),
-        start_nanos,
-        duration_nanos,
-        start_frame: first_frame_at_or_after(start_nanos, rate)?,
-        end_frame: first_frame_at_or_after(start_nanos.saturating_add(duration_nanos), rate)?
-            .min(frame_count),
-        draw_key: DrawKey {
-            layer: flash.layer,
-            start_nanos,
-            id: flash.id.clone(),
-        },
-        source: CompiledVisualSource::SolidColor { colour },
-        transform: canvas_transform(),
-        transform_contributions: Vec::new(),
-        opacity,
-        opacity_contributions: Vec::new(),
-        effects: Vec::new(),
-        blend_mode: crate::project::BlendMode::Normal,
-    })
-}
-
 fn insert_keyframe<T>(keyframes: &mut Vec<Keyframe<T>>, keyframe: Keyframe<T>) {
     match keyframes.binary_search_by_key(&keyframe.time, |existing| existing.time) {
         Ok(index) => keyframes[index] = keyframe,
@@ -1036,186 +747,6 @@ fn compile_audio(validated: &ValidatedProject) -> Result<Option<AudioSettings>, 
     }))
 }
 
-fn record_compilation_workload(
-    compilation: &mut CompilationStats,
-    layers: &[CompiledLayer],
-    post_effects: &[crate::plan::TimedEffect],
-) {
-    for layer in layers {
-        compilation.local_effect_count += layer.effects.len();
-        compilation.generated_transform_contribution_count += layer.transform_contributions.len();
-        compilation.keyframe_count += track_keyframe_count(&layer.opacity)
-            + layer
-                .opacity_contributions
-                .iter()
-                .map(track_keyframe_count)
-                .sum::<u64>()
-            + track_keyframe_count(&layer.transform.position)
-            + track_keyframe_count(&layer.transform.anchor)
-            + track_keyframe_count(&layer.transform.scale)
-            + track_keyframe_count(&layer.transform.rotation_radians)
-            + layer
-                .transform_contributions
-                .iter()
-                .map(transform_contribution_keyframe_count)
-                .sum::<u64>();
-        match &layer.source {
-            CompiledVisualSource::Image { crop, .. } => {
-                compilation.image_source_count += 1;
-                compilation.keyframe_count += track_keyframe_count(crop);
-            }
-            CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
-        }
-        for effect in &layer.effects {
-            compilation.keyframe_count += compiled_effect_keyframe_count(&effect.effect);
-            compilation.effect_pass_count += effect_passes(&effect.effect);
-            match &effect.effect {
-                crate::plan::CompiledEffect::Brightness { .. } => {
-                    compilation.brightness_effect_count += 1;
-                }
-                crate::plan::CompiledEffect::Contrast { .. } => {
-                    compilation.contrast_effect_count += 1;
-                }
-                crate::plan::CompiledEffect::Saturation { .. } => {
-                    compilation.saturation_effect_count += 1;
-                }
-                crate::plan::CompiledEffect::Tint { .. } => compilation.tint_effect_count += 1,
-                crate::plan::CompiledEffect::GaussianBlur { .. }
-                | crate::plan::CompiledEffect::DirectionalBlur { .. }
-                | crate::plan::CompiledEffect::ZoomBlur { .. }
-                | crate::plan::CompiledEffect::Glow { .. }
-                | crate::plan::CompiledEffect::ChromaticAberration { .. }
-                | crate::plan::CompiledEffect::Vignette { .. }
-                | crate::plan::CompiledEffect::Sharpen { .. }
-                | crate::plan::CompiledEffect::ColorAdjust { .. }
-                | crate::plan::CompiledEffect::CameraShake { .. }
-                | crate::plan::CompiledEffect::MotionBlur { .. } => {
-                    compilation.advanced_effect_count += 1;
-                }
-            }
-        }
-    }
-    compilation.global_effect_count = post_effects.len();
-    compilation.keyframe_count += post_effects
-        .iter()
-        .map(|effect| compiled_effect_keyframe_count(&effect.effect))
-        .sum::<u64>();
-    compilation.advanced_effect_count += post_effects
-        .iter()
-        .filter(|effect| {
-            !matches!(
-                effect.effect,
-                crate::plan::CompiledEffect::Brightness { .. }
-                    | crate::plan::CompiledEffect::Contrast { .. }
-                    | crate::plan::CompiledEffect::Saturation { .. }
-                    | crate::plan::CompiledEffect::Tint { .. }
-            )
-        })
-        .count();
-    compilation.effect_pass_count += post_effects
-        .iter()
-        .map(|effect| effect_passes(&effect.effect))
-        .sum::<usize>();
-}
-
-fn effect_passes(effect: &crate::plan::CompiledEffect) -> usize {
-    match effect {
-        crate::plan::CompiledEffect::GaussianBlur { .. } => 2,
-        crate::plan::CompiledEffect::ZoomBlur { .. } => 1,
-        crate::plan::CompiledEffect::Glow { .. } => 4,
-        crate::plan::CompiledEffect::Sharpen { .. } => 3,
-        crate::plan::CompiledEffect::CameraShake { .. } => 0,
-        _ => 1,
-    }
-}
-
-fn transform_contribution_keyframe_count(contribution: &TransformContribution) -> u64 {
-    track_keyframe_count(&contribution.position_offset)
-        + track_keyframe_count(&contribution.scale_multiplier)
-        + track_keyframe_count(&contribution.rotation_radians_offset)
-}
-
-fn compiled_effect_keyframe_count(effect: &crate::plan::CompiledEffect) -> u64 {
-    match effect {
-        crate::plan::CompiledEffect::Brightness { amount }
-        | crate::plan::CompiledEffect::Contrast { amount }
-        | crate::plan::CompiledEffect::Saturation { amount }
-        | crate::plan::CompiledEffect::Tint { amount, .. }
-        | crate::plan::CompiledEffect::GaussianBlur { radius: amount }
-        | crate::plan::CompiledEffect::ZoomBlur { radius: amount, .. } => {
-            track_keyframe_count(amount)
-        }
-        crate::plan::CompiledEffect::Sharpen { amount, radius } => {
-            track_keyframe_count(amount) + track_keyframe_count(radius)
-        }
-        crate::plan::CompiledEffect::DirectionalBlur {
-            radius,
-            angle_degrees,
-        } => track_keyframe_count(radius) + track_keyframe_count(angle_degrees),
-        crate::plan::CompiledEffect::ChromaticAberration {
-            amount,
-            angle_degrees,
-        } => track_keyframe_count(amount) + track_keyframe_count(angle_degrees),
-        crate::plan::CompiledEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            ..
-        } => {
-            track_keyframe_count(threshold)
-                + track_keyframe_count(radius)
-                + track_keyframe_count(intensity)
-        }
-        crate::plan::CompiledEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            ..
-        } => {
-            track_keyframe_count(amount)
-                + track_keyframe_count(radius)
-                + track_keyframe_count(softness)
-        }
-        crate::plan::CompiledEffect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-        } => {
-            track_keyframe_count(exposure)
-                + track_keyframe_count(gamma)
-                + track_keyframe_count(black_point)
-                + track_keyframe_count(white_point)
-        }
-        crate::plan::CompiledEffect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            ..
-        } => {
-            track_keyframe_count(position_amount)
-                + track_keyframe_count(rotation_degrees)
-                + track_keyframe_count(scale_amount)
-                + track_keyframe_count(frequency)
-        }
-        crate::plan::CompiledEffect::MotionBlur {
-            intensity,
-            shutter_angle,
-            max_radius,
-            ..
-        } => {
-            track_keyframe_count(intensity)
-                + track_keyframe_count(shutter_angle)
-                + track_keyframe_count(max_radius)
-        }
-    }
-}
-
-fn track_keyframe_count<T>(track: &Track<T>) -> u64 {
-    track.keyframes.len() as u64
-}
-
 fn compile_sizing(sizing: &Sizing) -> CompiledSizing {
     match sizing {
         Sizing::Original => CompiledSizing::Original,
@@ -1227,42 +758,6 @@ fn compile_sizing(sizing: &Sizing) -> CompiledSizing {
             height: *height,
         },
     }
-}
-
-fn to_nanos(value: f64, id: &str) -> Result<u128, Diagnostic> {
-    seconds_to_nanos(value).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-TIME",
-            Category::Internal,
-            format!("validated item '{id}' has invalid time"),
-            "",
-        )
-    })
-}
-
-fn first_frame_at_or_after(nanos: u128, rate: (u64, u64)) -> Result<u64, Diagnostic> {
-    let numerator = nanos.saturating_mul(u128::from(rate.0));
-    let denominator = NANOS_PER_SECOND.saturating_mul(u128::from(rate.1));
-    numerator.div_ceil(denominator).try_into().map_err(|_| {
-        Diagnostic::error(
-            "MVP-PLAN-FRAME-RANGE",
-            Category::Internal,
-            "validated timeline cannot be represented as a frame index",
-            "",
-        )
-    })
-}
-
-#[must_use]
-pub fn effective_dimensions(width: u32, height: u32, preview: bool) -> (u32, u32) {
-    if !preview || width.max(height) <= 640 {
-        return (width, height);
-    }
-    let scale = 640.0 / f64::from(width.max(height));
-    (
-        ((f64::from(width) * scale).round() as u32).max(2) / 2 * 2,
-        ((f64::from(height) * scale).round() as u32).max(2) / 2 * 2,
-    )
 }
 
 #[cfg(test)]
@@ -1327,21 +822,21 @@ mod tests {
 
     #[test]
     fn flash_without_fade_out_keeps_constant_opacity_until_its_end() {
-        let layer = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash compiles");
+        let layer = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash compiles");
         assert_eq!(layer.opacity.base_value, 0.7);
         assert!(layer.opacity.keyframes.is_empty());
     }
 
     #[test]
     fn flash_fade_out_holds_then_reaches_zero_at_end() {
-        let layer = compile_flash_overlay(&flash(0.0, 0.5), (24, 1), 100).expect("flash compiles");
+        let layer = flashes::compile(&flash(0.0, 0.5), (24, 1), 100).expect("flash compiles");
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
     }
 
     #[test]
     fn flash_fade_in_only_reaches_and_holds_configured_opacity() {
-        let layer = compile_flash_overlay(&flash(0.5, 0.0), (24, 1), 100).expect("flash");
+        let layer = flashes::compile(&flash(0.5, 0.0), (24, 1), 100).expect("flash");
         assert_eq!(layer.opacity.evaluate(0), 0.0);
         assert_eq!(layer.opacity.evaluate(250_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(500_000_000), 0.7);
@@ -1350,7 +845,7 @@ mod tests {
 
     #[test]
     fn flash_with_both_fades_holds_between_their_boundaries() {
-        let layer = compile_flash_overlay(&flash(0.5, 0.5), (24, 1), 100).expect("flash");
+        let layer = flashes::compile(&flash(0.5, 0.5), (24, 1), 100).expect("flash");
         assert_eq!(layer.opacity.evaluate(250_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(500_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.7);
@@ -1360,7 +855,7 @@ mod tests {
 
     #[test]
     fn flash_fades_can_fill_the_entire_interval() {
-        let layer = compile_flash_overlay(&flash(1.0, 1.0), (24, 1), 100).expect("flash");
+        let layer = flashes::compile(&flash(1.0, 1.0), (24, 1), 100).expect("flash");
         assert_eq!(layer.opacity.evaluate(1_000_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
@@ -1369,7 +864,7 @@ mod tests {
 
     #[test]
     fn zero_frame_layers_do_not_count_toward_active_layer_limit() {
-        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        let mut layer = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         layer.start_frame = 12;
         layer.end_frame = 12;
         enforce_active_layer_limit(&[layer], 0).expect("zero-frame layer is never active");
@@ -1377,7 +872,7 @@ mod tests {
 
     #[test]
     fn directional_push_keeps_authored_tracks_and_has_correct_endpoints() {
-        let mut outgoing = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        let mut outgoing = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         outgoing.start_nanos = 0;
         push_transition_layer(
             &mut outgoing,
@@ -1405,7 +900,7 @@ mod tests {
         );
         assert!(outgoing.transform.position.keyframes.is_empty());
 
-        let mut incoming = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        let mut incoming = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         incoming.start_nanos = 0;
         push_transition_layer(
             &mut incoming,
@@ -1436,7 +931,7 @@ mod tests {
 
     #[test]
     fn transient_preset_uses_its_own_interval_on_a_long_clip() {
-        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
+        let mut layer = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.id = "clip".to_owned();
         let preset = crate::project::Preset::Impact {
             timing: crate::project::ActiveInterval {
@@ -1491,10 +986,10 @@ mod tests {
 
     #[test]
     fn flash_cut_holds_visibility_until_its_peak_then_switches() {
-        let mut outgoing = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("out");
+        let mut outgoing = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("out");
         outgoing.id = "out".to_owned();
         outgoing.start_nanos = 0;
-        let mut incoming = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("in");
+        let mut incoming = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("in");
         incoming.id = "in".to_owned();
         incoming.start_nanos = 0;
         let mut layers = vec![outgoing, incoming];
@@ -1527,7 +1022,7 @@ mod tests {
 
     #[test]
     fn zoom_blur_transition_compiles_to_a_radial_blur_effect() {
-        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
+        let mut layer = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.start_nanos = 0;
         zoom_transition_layer(
             &mut layer,

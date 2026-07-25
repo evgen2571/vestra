@@ -13,7 +13,8 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         compositor,
-        prepared::{DecodedAssets, PreparationStats, PreparationTimings, PreparedAssets},
+        metrics::{PreparationStats, PreparationTimings},
+        prepared::{DecodedAssets, PreparedAssets},
     },
 };
 

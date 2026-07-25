@@ -307,3 +307,244 @@ pub(super) fn validate_parameters(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::{ActiveInterval, Effect, Point, Track};
+
+    fn scalar(value: f64) -> Track<f64> {
+        Track::constant(value)
+    }
+
+    fn camera_shake(decay: f64) -> Effect {
+        Effect::CameraShake {
+            id: "camera".to_owned(),
+            timing: ActiveInterval {
+                start: 0.0,
+                duration: Some(1.0),
+            },
+            position_amount: scalar(0.1),
+            rotation_degrees: scalar(1.0),
+            scale_amount: scalar(0.05),
+            frequency: scalar(8.0),
+            seed: 7,
+            attack: 0.0,
+            decay,
+        }
+    }
+
+    fn motion_blur(samples: u8) -> Effect {
+        Effect::MotionBlur {
+            id: "motion".to_owned(),
+            intensity: scalar(1.0),
+            shutter_angle: scalar(180.0),
+            max_radius: scalar(4.0),
+            samples,
+        }
+    }
+
+    fn validation_errors(effect: &Effect) -> Vec<Diagnostic> {
+        let mut errors = Vec::new();
+        validate_parameters(effect, 2.0, "/effect", 16, &mut errors);
+        errors
+    }
+
+    #[test]
+    fn every_effect_variant_accepts_valid_parameters() {
+        let cases = [
+            Effect::Brightness {
+                id: "brightness".to_owned(),
+                amount: scalar(0.1),
+            },
+            Effect::Contrast {
+                id: "contrast".to_owned(),
+                amount: scalar(1.1),
+            },
+            Effect::Saturation {
+                id: "saturation".to_owned(),
+                amount: scalar(0.8),
+            },
+            Effect::Tint {
+                id: "tint".to_owned(),
+                colour: "#336699".to_owned(),
+                amount: scalar(0.5),
+            },
+            Effect::GaussianBlur {
+                id: "gaussian".to_owned(),
+                radius: scalar(4.0),
+            },
+            Effect::DirectionalBlur {
+                id: "directional".to_owned(),
+                radius: scalar(4.0),
+                angle_degrees: scalar(30.0),
+            },
+            Effect::ZoomBlur {
+                id: "zoom".to_owned(),
+                radius: scalar(4.0),
+                samples: 8,
+                anchor: Point { x: 0.5, y: 0.5 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            Effect::Glow {
+                id: "glow".to_owned(),
+                threshold: scalar(0.6),
+                radius: scalar(4.0),
+                intensity: scalar(0.5),
+                colour: "#ff8899".to_owned(),
+            },
+            Effect::ChromaticAberration {
+                id: "chromatic".to_owned(),
+                amount: scalar(2.0),
+                angle_degrees: scalar(45.0),
+            },
+            Effect::Vignette {
+                id: "vignette".to_owned(),
+                amount: scalar(0.5),
+                radius: scalar(1.0),
+                softness: scalar(1.0),
+                colour: "#000000".to_owned(),
+            },
+            Effect::Sharpen {
+                id: "sharpen".to_owned(),
+                amount: scalar(1.0),
+                radius: scalar(2.0),
+            },
+            Effect::ColorAdjust {
+                id: "colour".to_owned(),
+                exposure: scalar(0.0),
+                gamma: scalar(1.0),
+                black_point: scalar(0.0),
+                white_point: scalar(1.0),
+            },
+            camera_shake(0.5),
+            motion_blur(8),
+        ];
+
+        for effect in &cases {
+            assert!(
+                validation_errors(effect).is_empty(),
+                "valid {} parameters were rejected",
+                effect.id()
+            );
+        }
+    }
+
+    #[test]
+    fn every_effect_variant_rejects_a_parameter_violation() {
+        let cases = [
+            (
+                Effect::Brightness {
+                    id: "brightness".to_owned(),
+                    amount: scalar(f64::NAN),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::Contrast {
+                    id: "contrast".to_owned(),
+                    amount: scalar(f64::NAN),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::Saturation {
+                    id: "saturation".to_owned(),
+                    amount: scalar(f64::NAN),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::Tint {
+                    id: "tint".to_owned(),
+                    colour: "red".to_owned(),
+                    amount: scalar(0.5),
+                },
+                "MVP-TINT-COLOUR",
+            ),
+            (
+                Effect::GaussianBlur {
+                    id: "gaussian".to_owned(),
+                    radius: scalar(33.0),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::DirectionalBlur {
+                    id: "directional".to_owned(),
+                    radius: scalar(4.0),
+                    angle_degrees: scalar(f64::NAN),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::ZoomBlur {
+                    id: "zoom".to_owned(),
+                    radius: scalar(4.0),
+                    samples: 1,
+                    anchor: Point { x: 0.5, y: 0.5 },
+                    direction: crate::project::ZoomBlurDirection::Centered,
+                },
+                "MVP-ZOOM-BLUR-SAMPLES",
+            ),
+            (
+                Effect::Glow {
+                    id: "glow".to_owned(),
+                    threshold: scalar(0.6),
+                    radius: scalar(4.0),
+                    intensity: scalar(5.0),
+                    colour: "#ff8899".to_owned(),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::ChromaticAberration {
+                    id: "chromatic".to_owned(),
+                    amount: scalar(33.0),
+                    angle_degrees: scalar(45.0),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::Vignette {
+                    id: "vignette".to_owned(),
+                    amount: scalar(0.5),
+                    radius: scalar(1.0),
+                    softness: scalar(0.0),
+                    colour: "#000000".to_owned(),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::Sharpen {
+                    id: "sharpen".to_owned(),
+                    amount: scalar(1.0),
+                    radius: scalar(17.0),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (
+                Effect::ColorAdjust {
+                    id: "colour".to_owned(),
+                    exposure: scalar(0.0),
+                    gamma: scalar(0.0),
+                    black_point: scalar(0.0),
+                    white_point: scalar(1.0),
+                },
+                "MVP-TRACK-VALUE",
+            ),
+            (camera_shake(0.0), "MVP-SHAKE-ENVELOPE"),
+            (motion_blur(1), "MVP-MOTION-BLUR-SAMPLES"),
+        ];
+
+        for (effect, expected_code) in &cases {
+            assert!(
+                validation_errors(effect)
+                    .iter()
+                    .any(|error| error.code == *expected_code),
+                "{} did not report {expected_code}",
+                effect.id()
+            );
+        }
+    }
+}

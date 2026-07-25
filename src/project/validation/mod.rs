@@ -6,11 +6,12 @@ use crate::{
 };
 
 use crate::project::{
-    DurationMode, LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
+    LoadError, Output, Project, ValidatedProject, ValidationOptions, parse_colour,
 };
 
 pub(super) mod assets;
 pub(super) mod audio;
+pub(super) mod duration;
 pub(super) mod effects;
 pub(super) mod output;
 pub(super) mod presets;
@@ -56,7 +57,8 @@ pub(crate) fn validate(
         &assets.audio_durations,
         &mut errors,
     );
-    let duration = duration(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+    let duration =
+        duration::resolve(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     validate_global_effects(
         &project.visual.post_effects,
         duration,
@@ -764,57 +766,6 @@ fn add_unused_asset_warnings(project: &Project, warnings: &mut Vec<Diagnostic>) 
                 )
                 .with_related_id(&asset.id),
             );
-        }
-    }
-}
-
-pub(super) fn duration(
-    project: &Project,
-    audio_end: Option<f64>,
-    warnings: &mut Vec<Diagnostic>,
-    errors: &mut Vec<Diagnostic>,
-) -> Option<f64> {
-    let visual_end = project
-        .visual
-        .clips
-        .iter()
-        .map(|clip| clip.start + clip.duration)
-        .chain(
-            project
-                .visual
-                .flashes
-                .iter()
-                .map(|flash| flash.start + flash.duration),
-        )
-        .fold(0.0, f64::max);
-    match project.output.duration_mode {
-        DurationMode::Automatic => {
-            let duration = visual_end.max(audio_end.unwrap_or(0.0));
-            if !positive(duration) {
-                errors.push(Diagnostic::error("MVP-DURATION-EMPTY", Category::Semantic, "automatic-duration project needs positive visual, flash, or enabled audio content", "/output/duration_mode"));
-                None
-            } else {
-                Some(duration)
-            }
-        }
-        DurationMode::Explicit => {
-            let Some(duration) = project.output.duration else {
-                errors.push(Diagnostic::error(
-                    "MVP-DURATION-EXPLICIT",
-                    Category::Internal,
-                    "validated explicit duration is missing",
-                    "/output/duration",
-                ));
-                return None;
-            };
-            if visual_end > duration || audio_end.is_some_and(|end| end > duration) {
-                warnings.push(Diagnostic::warning(
-                    "MVP-DURATION-TRUNCATED",
-                    "content after explicit project duration will be clipped",
-                    "/output/duration",
-                ));
-            }
-            Some(duration)
         }
     }
 }

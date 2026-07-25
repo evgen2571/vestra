@@ -1,17 +1,19 @@
 use image::{GenericImage, Rgba, RgbaImage};
 
+use crate::plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer};
 use crate::render::{
     blend::blend_surface,
-    effects::{CpuEffectPass, effect_pass_plan},
-    raster::{draw_layer, sample_edge},
-};
-use crate::{
-    plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer},
-    render::cpu_assets::PreparedAssets,
+    cpu::{
+        assets::PreparedAssets,
+        effects::{CpuEffectPass, effect_pass_plan},
+        raster::{draw_layer, sample_edge},
+    },
 };
 
 #[cfg(test)]
-use crate::render::raster::{apply_colour_transform, draw_image, sample_bilinear, visible_bounds};
+use crate::render::cpu::raster::{
+    apply_colour_transform, draw_image, sample_bilinear, visible_bounds,
+};
 #[cfg(test)]
 use crate::{animation::Transform2D, domain::Crop, plan::EvaluatedSource, render::geometry};
 
@@ -127,15 +129,18 @@ impl EffectSurfacePool {
             [
                 CpuEffectPass::GaussianHorizontal { radius },
                 CpuEffectPass::GaussianVertical { .. },
-            ] => {
-                crate::render::effects::gaussian_blur(source, &mut self.horizontal, target, *radius)
-            }
+            ] => crate::render::cpu::effects::gaussian_blur(
+                source,
+                &mut self.horizontal,
+                target,
+                *radius,
+            ),
             [
                 CpuEffectPass::HighlightExtract { threshold, colour },
                 CpuEffectPass::GaussianHorizontal { radius },
                 CpuEffectPass::GaussianVertical { .. },
                 CpuEffectPass::GlowComposite { intensity },
-            ] => crate::render::effects::glow(
+            ] => crate::render::cpu::effects::glow(
                 source,
                 &mut self.horizontal,
                 target,
@@ -148,7 +153,7 @@ impl EffectSurfacePool {
                 CpuEffectPass::GaussianHorizontal { radius },
                 CpuEffectPass::GaussianVertical { .. },
                 CpuEffectPass::UnsharpComposite { amount },
-            ] => crate::render::effects::sharpen(
+            ] => crate::render::cpu::effects::sharpen(
                 source,
                 &mut self.horizontal,
                 target,
@@ -211,9 +216,9 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
             samples,
             anchor,
             direction,
-        } => {
-            crate::render::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction)
-        }
+        } => crate::render::cpu::zoom_blur::apply(
+            source, target, *radius, *samples, *anchor, *direction,
+        ),
         EvaluatedEffect::MotionBlur {
             radius,
             angle_degrees,
@@ -229,19 +234,21 @@ fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEf
         EvaluatedEffect::ChromaticAberration {
             amount,
             angle_degrees,
-        } => crate::render::chromatic::apply(source, target, *amount, *angle_degrees),
+        } => crate::render::cpu::chromatic::apply(source, target, *amount, *angle_degrees),
         EvaluatedEffect::Vignette {
             amount,
             radius,
             softness,
             colour,
-        } => crate::render::vignette::apply(source, target, *amount, *radius, *softness, *colour),
+        } => crate::render::cpu::vignette::apply(
+            source, target, *amount, *radius, *softness, *colour,
+        ),
         EvaluatedEffect::ColorAdjust {
             exposure,
             gamma,
             black_point,
             white_point,
-        } => crate::render::colour_adjust::apply(
+        } => crate::render::cpu::colour_adjust::apply(
             source,
             target,
             *exposure,
@@ -474,7 +481,7 @@ mod tests {
     fn vignette_normalizes_each_frame_axis_independently() {
         let source = RgbaImage::from_pixel(10, 100, Rgba([255, 255, 255, 255]));
         let mut target = RgbaImage::new(10, 100);
-        crate::render::vignette::apply(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
+        crate::render::cpu::vignette::apply(&source, &mut target, 1.0, 0.0, 1.0, [0, 0, 0, 255]);
         let top = target.get_pixel(5, 0)[0];
         let side = target.get_pixel(0, 50)[0];
         assert!(top.abs_diff(side) <= 32);
@@ -485,7 +492,7 @@ mod tests {
     fn vertical_vignette_matches_the_pixel_golden_fixture() {
         let source = RgbaImage::from_pixel(3, 5, Rgba([200, 160, 120, 255]));
         let mut target = RgbaImage::new(3, 5);
-        crate::render::vignette::apply(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
+        crate::render::cpu::vignette::apply(&source, &mut target, 0.8, 0.25, 0.5, [0, 0, 0, 255]);
         assert_eq!(
             target.as_raw(),
             &[
@@ -673,7 +680,7 @@ mod tests {
     fn chromatic_zero_amount_is_an_exact_noop() {
         let source = RgbaImage::from_pixel(2, 2, Rgba([17, 83, 201, 129]));
         let mut target = RgbaImage::new(2, 2);
-        crate::render::chromatic::apply(&source, &mut target, 0.0, 0.0);
+        crate::render::cpu::chromatic::apply(&source, &mut target, 0.0, 0.0);
         assert_eq!(source, target);
     }
 

@@ -3,12 +3,8 @@
 mod backend;
 mod blend;
 mod cache;
-pub(crate) mod chromatic;
-pub(crate) mod colour_adjust;
-mod compositor;
-mod cpu_assets;
+mod cpu;
 mod decoded;
-mod effects;
 mod engine;
 mod engine_events;
 mod engine_failure;
@@ -16,10 +12,7 @@ mod engine_selection;
 mod engine_types;
 pub(crate) mod geometry;
 mod metrics;
-mod raster;
-pub(crate) mod vignette;
 mod wgpu;
-pub(crate) mod zoom_blur;
 
 pub use backend::{AdapterMetadata, CpuBackend, RenderBackend, RenderBackendKind};
 pub use cache::{ByteLruCache, CacheStats};

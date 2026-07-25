@@ -12,8 +12,7 @@ use crate::{
     Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
-        compositor,
-        cpu_assets::PreparedAssets,
+        cpu::{assets::PreparedAssets, compositor},
         decoded::DecodedAssets,
         metrics::{PreparationStats, PreparationTimings},
     },

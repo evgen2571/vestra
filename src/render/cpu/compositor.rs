@@ -6,13 +6,15 @@ use crate::render::{
     cpu::{
         assets::PreparedAssets,
         effects::{CpuEffectPass, effect_pass_plan},
-        raster::{draw_layer, sample_edge},
+        raster::draw_layer,
     },
 };
 
 #[cfg(test)]
+use crate::render::cpu::effects::blur;
+#[cfg(test)]
 use crate::render::cpu::raster::{
-    apply_colour_transform, draw_image, sample_bilinear, visible_bounds,
+    apply_colour_transform, draw_image, sample_bilinear, sample_edge, visible_bounds,
 };
 #[cfg(test)]
 use crate::{animation::Transform2D, domain::Crop, plan::EvaluatedSource, render::geometry};
@@ -169,163 +171,7 @@ impl EffectSurfacePool {
 }
 
 fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEffect) {
-    match effect {
-        EvaluatedEffect::Brightness { amount } => map_pixels(source, target, |mut p, _x, _y| {
-            for channel in 0..3 {
-                p[channel] = (f64::from(p[channel]) + amount * 255.0)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-            p
-        }),
-        EvaluatedEffect::Contrast { amount } => map_pixels(source, target, |mut p, _x, _y| {
-            for channel in 0..3 {
-                p[channel] = ((f64::from(p[channel]) - 128.0) * amount + 128.0)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-            p
-        }),
-        EvaluatedEffect::Saturation { amount } => map_pixels(source, target, |mut p, _x, _y| {
-            let l = f64::from(p[0]) * 0.2126 + f64::from(p[1]) * 0.7152 + f64::from(p[2]) * 0.0722;
-            for c in 0..3 {
-                p[c] = (l * (1.0 - amount) + f64::from(p[c]) * amount)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-            p
-        }),
-        EvaluatedEffect::Tint { colour, amount } => map_pixels(source, target, |mut p, _x, _y| {
-            let t = amount.clamp(0.0, 1.0);
-            for c in 0..3 {
-                p[c] = (f64::from(p[c]) * (1.0 - t) + f64::from(colour[c]) * t).round() as u8;
-            }
-            p
-        }),
-        EvaluatedEffect::GaussianBlur { .. }
-        | EvaluatedEffect::Glow { .. }
-        | EvaluatedEffect::Sharpen { .. } => {
-            unreachable!("multi-pass effects are dispatched by the surface pool")
-        }
-        EvaluatedEffect::DirectionalBlur {
-            radius,
-            angle_degrees,
-        } => blur(source, target, *radius, Some(*angle_degrees), None),
-        EvaluatedEffect::ZoomBlur {
-            radius,
-            samples,
-            anchor,
-            direction,
-        } => crate::render::cpu::zoom_blur::apply(
-            source, target, *radius, *samples, *anchor, *direction,
-        ),
-        EvaluatedEffect::MotionBlur {
-            radius,
-            angle_degrees,
-            samples,
-            ..
-        } => blur(
-            source,
-            target,
-            *radius,
-            Some(*angle_degrees),
-            Some(*samples),
-        ),
-        EvaluatedEffect::ChromaticAberration {
-            amount,
-            angle_degrees,
-        } => crate::render::cpu::chromatic::apply(source, target, *amount, *angle_degrees),
-        EvaluatedEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-        } => crate::render::cpu::vignette::apply(
-            source, target, *amount, *radius, *softness, *colour,
-        ),
-        EvaluatedEffect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-        } => crate::render::cpu::colour_adjust::apply(
-            source,
-            target,
-            *exposure,
-            *gamma,
-            *black_point,
-            *white_point,
-        ),
-        EvaluatedEffect::CameraShake { .. } => {
-            target.copy_from(source, 0, 0).expect("same dimensions")
-        }
-    }
-}
-
-fn map_pixels(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    mut map: impl FnMut(Rgba<u8>, u32, u32) -> Rgba<u8>,
-) {
-    for (x, y, pixel) in source.enumerate_pixels() {
-        target.put_pixel(x, y, map(*pixel, x, y));
-    }
-}
-fn blur(
-    source: &RgbaImage,
-    target: &mut RgbaImage,
-    radius: f64,
-    direction: Option<f64>,
-    configured_samples: Option<u8>,
-) {
-    if radius <= 0.01 {
-        target.copy_from(source, 0, 0).expect("same dimensions");
-        return;
-    }
-    let radius = radius.clamp(0.0, 32.0);
-    let samples =
-        configured_samples.map_or_else(|| (radius.ceil() as i32 * 2 + 1).clamp(3, 33), i32::from);
-    let (dx, dy) = direction.map_or((1.0, 0.0), |degrees| {
-        let radians = degrees.to_radians();
-        (radians.cos(), radians.sin())
-    });
-    for (x, y, _) in source.enumerate_pixels() {
-        let mut premultiplied = [0.0; 3];
-        let mut alpha = 0.0;
-        for index in 0..samples {
-            let offset = (f64::from(index) / f64::from(samples - 1) - 0.5) * 2.0 * radius;
-            let (sx, sy) = if direction.is_some() {
-                (f64::from(x) + dx * offset, f64::from(y) + dy * offset)
-            } else {
-                let angle = f64::from(index) / f64::from(samples) * std::f64::consts::TAU;
-                (
-                    f64::from(x) + angle.cos() * offset.abs(),
-                    f64::from(y) + angle.sin() * offset.abs(),
-                )
-            };
-            let pixel = sample_edge(source, sx + 0.5, sy + 0.5);
-            let sample_alpha = f64::from(pixel[3]) / 255.0;
-            alpha += sample_alpha;
-            for c in 0..3 {
-                premultiplied[c] += f64::from(pixel[c]) / 255.0 * sample_alpha;
-            }
-        }
-        alpha /= f64::from(samples);
-        let rgb = if alpha <= 0.000_000_1 {
-            [0; 3]
-        } else {
-            premultiplied.map(|value| {
-                (value / f64::from(samples) / alpha * 255.0)
-                    .round()
-                    .clamp(0.0, 255.0) as u8
-            })
-        };
-        target.put_pixel(
-            x,
-            y,
-            Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]),
-        );
-    }
+    crate::render::cpu::effects::apply_single(source, target, effect);
 }
 
 /// Samples along the ray through each pixel instead of applying a spatial

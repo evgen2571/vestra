@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::Diagnostic;
 
-use super::engine_types::RenderEvent;
+use super::types::RenderEvent;
 
 pub(super) fn started(total_frames: u64, output_path: &Path) -> RenderEvent {
     RenderEvent {

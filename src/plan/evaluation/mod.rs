@@ -6,13 +6,13 @@ use crate::{
     plan::{CompiledSizing, CompiledVisualSource, RenderPlan, ScheduledItem},
 };
 
-use super::colour_transform::ColourTransform;
-
+mod colour;
 mod effects;
 mod motion;
 mod shake;
 mod transform;
 
+pub use colour::ColourTransform;
 pub use effects::EvaluatedEffect;
 
 #[derive(Clone, Debug)]

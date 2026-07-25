@@ -13,6 +13,7 @@ use crate::{
 };
 use image::RgbaImage;
 
+use super::engine_failure::cleanup_error;
 pub use super::engine_types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings,
@@ -352,87 +353,16 @@ fn milliseconds(duration: Duration) -> u128 {
 fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
     &plan.layers[item.0].draw_key
 }
-fn cleanup_error(
-    output: &OutputTarget,
-    plan: &RenderPlan,
-    stage: RenderFailureStage,
-    completed_frames: u64,
-    attempted_frame: Option<u64>,
-    diagnostic: Diagnostic,
-) -> RenderError {
-    RenderError {
-        diagnostic,
-        temporary_removed: output.cleanup(),
-        context: RenderFailureContext::at_output(
-            stage,
-            plan,
-            completed_frames,
-            attempted_frame,
-            output,
-        ),
-    }
-}
-
-impl RenderFailureContext {
-    fn before_render(stage: RenderFailureStage, plan: &RenderPlan) -> Self {
-        Self {
-            stage,
-            last_completed_frame_index: None,
-            completed_frames: 0,
-            attempted_frame: None,
-            total_frames: plan.frame_count,
-            timeline_position: None,
-            progress: Some(0.0),
-            output_path: None,
-            temporary_output_path: None,
-        }
-    }
-
-    fn at_output(
-        stage: RenderFailureStage,
-        plan: &RenderPlan,
-        completed_frames: u64,
-        attempted_frame: Option<u64>,
-        output: &OutputTarget,
-    ) -> Self {
-        let (last_completed_frame_index, progress) =
-            completed_frame_state(completed_frames, plan.frame_count);
-        Self {
-            stage,
-            last_completed_frame_index,
-            completed_frames,
-            attempted_frame,
-            total_frames: plan.frame_count,
-            timeline_position: attempted_frame
-                .map(|frame| frame as f64 * plan.frame_rate.1 as f64 / plan.frame_rate.0 as f64),
-            progress,
-            output_path: Some(output.final_path.clone()),
-            temporary_output_path: Some(output.temporary_path.clone()),
-        }
-    }
-}
-
-fn completed_frame_state(completed_frames: u64, total_frames: u64) -> (Option<u64>, Option<f64>) {
-    (
-        completed_frames.checked_sub(1),
-        failure_progress(completed_frames, total_frames),
-    )
-}
-
-fn failure_progress(completed_frames: u64, total_frames: u64) -> Option<f64> {
-    (completed_frames < total_frames).then(|| completed_frames as f64 / total_frames as f64)
-}
-
 #[cfg(test)]
 #[allow(
     clippy::result_large_err,
     reason = "test-only backend builders mirror the production diagnostic contract"
 )]
 mod tests {
+    use super::super::engine_failure::{completed_frame_state, failure_progress};
     use super::{
         BackendFallback, RenderBackendPreference, RenderFailureContext, RenderFailureStage,
-        RenderOptions, completed_frame_state, create_backend_with, failure_progress, milliseconds,
-        render_with_backend_builder,
+        RenderOptions, create_backend_with, milliseconds, render_with_backend_builder,
     };
     use std::{
         path::Path,

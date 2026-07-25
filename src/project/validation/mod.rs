@@ -5,18 +5,20 @@ use crate::{
     timeline::{frame_count, seconds_to_nanos},
 };
 
-use crate::project::{LoadError, Output, Project, ValidatedProject, ValidationOptions};
+use crate::project::{LoadError, Project, ValidatedProject, ValidationOptions};
 
 pub(super) mod assets;
 pub(super) mod audio;
 pub(super) mod duration;
 pub(super) mod effects;
 pub(super) mod flashes;
+pub(super) mod limits;
 pub(super) mod output;
 pub(super) mod presets;
 pub(super) mod tracks;
 pub(super) mod transitions;
 pub(super) mod visual;
+pub(super) mod warnings;
 
 use output::validate as validate_output;
 use tracks::validate_track;
@@ -68,7 +70,7 @@ pub(crate) fn validate(
         &mut errors,
     );
     let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
-    enforce_limits(
+    limits::enforce(
         &project.output,
         project.visual.clips.len(),
         total_frames,
@@ -86,7 +88,7 @@ pub(crate) fn validate(
             ));
         }
     }
-    add_unused_asset_warnings(&project, &mut warnings);
+    warnings::add_unused_assets(&project, &mut warnings);
     if options.check_backend
         && let Err(message) = media::backend_available()
     {
@@ -277,65 +279,6 @@ fn evaluate_scalar_track(track: &crate::project::Track<f64>, time: f64) -> f64 {
         }
     };
     start.value + (end.value - start.value) * crate::animation::eased(interpolation, progress)
-}
-
-fn enforce_limits(
-    output: &Output,
-    clips: usize,
-    frame_count: u64,
-    duration: f64,
-    limits: crate::project::ResourceLimits,
-    errors: &mut Vec<Diagnostic>,
-) {
-    if output.width > limits.maximum_width || output.height > limits.maximum_height {
-        errors.push(Diagnostic::error(
-            "MVP-LIMIT-DIMENSIONS",
-            Category::Semantic,
-            "output dimensions exceed configured resource limits",
-            "/output",
-        ));
-    }
-    if frame_count > limits.maximum_frames || duration > limits.maximum_duration_seconds {
-        errors.push(Diagnostic::error(
-            "MVP-LIMIT-TIMELINE",
-            Category::Semantic,
-            "project duration or frame count exceeds configured resource limits",
-            "/output/duration",
-        ));
-    }
-    if clips > limits.maximum_clips {
-        errors.push(Diagnostic::error(
-            "MVP-LIMIT-CLIPS",
-            Category::Semantic,
-            "project exceeds the clip limit",
-            "/visual/clips",
-        ));
-    }
-}
-
-fn add_unused_asset_warnings(project: &Project, warnings: &mut Vec<Diagnostic>) {
-    let used_assets: BTreeSet<&str> = project
-        .visual
-        .clips
-        .iter()
-        .filter_map(|clip| match &clip.source {
-            crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
-            crate::project::VisualSource::SolidColor { .. } => None,
-        })
-        .chain(project.audio.iter().map(|track| track.asset.as_str()))
-        .collect();
-    for (index, asset) in project.assets.iter().enumerate() {
-        if !used_assets.contains(asset.id.as_str()) {
-            warnings.push(
-                Diagnostic::warning(
-                    "MVP-ASSET-UNUSED",
-                    format!("asset '{}' is never used", asset.id),
-                    format!("/assets/{index}"),
-                )
-                .with_related_id(&asset.id),
-            );
-        }
-    }
 }
 
 pub(super) fn duration_nanos(duration: f64) -> u128 {

@@ -18,6 +18,7 @@ use crate::{
     timeline::{NANOS_PER_SECOND, seconds_to_nanos},
 };
 
+mod effects;
 mod flashes;
 mod presets;
 mod transitions;
@@ -141,7 +142,7 @@ fn compile_canonical(
         let effects = clip
             .effects
             .iter()
-            .map(|effect| compile_timed_effect(effect, &clip.id, clip.duration))
+            .map(|effect| effects::compile_timed(effect, &clip.id, clip.duration))
             .collect::<Result<Vec<_>, _>>()?;
         layers.push(CompiledLayer {
             id: clip.id.clone(),
@@ -200,7 +201,7 @@ fn compile_canonical(
         .visual
         .post_effects
         .iter()
-        .map(|effect| compile_timed_effect(effect, "global post effect", validated.duration))
+        .map(|effect| effects::compile_timed(effect, "global post effect", validated.duration))
         .collect::<Result<Vec<_>, _>>()?;
     record_compilation_workload(&mut compilation, &layers, &post_effects);
     enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
@@ -342,172 +343,6 @@ fn project_interpolation(interpolation: &crate::project::Interpolation) -> Inter
             })
         }
     }
-}
-
-fn compile_effect(
-    effect: &crate::project::Effect,
-    id: &str,
-) -> Result<crate::plan::CompiledEffect, Diagnostic> {
-    Ok(match effect {
-        crate::project::Effect::Brightness { amount, .. } => {
-            crate::plan::CompiledEffect::Brightness {
-                amount: compile_track(amount, id)?,
-            }
-        }
-        crate::project::Effect::Contrast { amount, .. } => crate::plan::CompiledEffect::Contrast {
-            amount: compile_track(amount, id)?,
-        },
-        crate::project::Effect::Saturation { amount, .. } => {
-            crate::plan::CompiledEffect::Saturation {
-                amount: compile_track(amount, id)?,
-            }
-        }
-        crate::project::Effect::Tint { colour, amount, .. } => crate::plan::CompiledEffect::Tint {
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated tint color is invalid",
-                    "",
-                )
-            })?,
-            amount: compile_track(amount, id)?,
-        },
-        crate::project::Effect::GaussianBlur { radius, .. } => {
-            crate::plan::CompiledEffect::GaussianBlur {
-                radius: compile_track(radius, id)?,
-            }
-        }
-        crate::project::Effect::DirectionalBlur {
-            radius,
-            angle_degrees,
-            ..
-        } => crate::plan::CompiledEffect::DirectionalBlur {
-            radius: compile_track(radius, id)?,
-            angle_degrees: compile_track(angle_degrees, id)?,
-        },
-        crate::project::Effect::ZoomBlur {
-            radius,
-            samples,
-            anchor,
-            direction,
-            ..
-        } => crate::plan::CompiledEffect::ZoomBlur {
-            radius: compile_track(radius, id)?,
-            samples: *samples,
-            anchor: *anchor,
-            direction: *direction,
-        },
-        crate::project::Effect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-            ..
-        } => crate::plan::CompiledEffect::Glow {
-            threshold: compile_track(threshold, id)?,
-            radius: compile_track(radius, id)?,
-            intensity: compile_track(intensity, id)?,
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated glow color is invalid",
-                    "",
-                )
-            })?,
-        },
-        crate::project::Effect::ChromaticAberration {
-            amount,
-            angle_degrees,
-            ..
-        } => crate::plan::CompiledEffect::ChromaticAberration {
-            amount: compile_track(amount, id)?,
-            angle_degrees: compile_track(angle_degrees, id)?,
-        },
-        crate::project::Effect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-            ..
-        } => crate::plan::CompiledEffect::Vignette {
-            amount: compile_track(amount, id)?,
-            radius: compile_track(radius, id)?,
-            softness: compile_track(softness, id)?,
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated vignette color is invalid",
-                    "",
-                )
-            })?,
-        },
-        crate::project::Effect::Sharpen { amount, radius, .. } => {
-            crate::plan::CompiledEffect::Sharpen {
-                amount: compile_track(amount, id)?,
-                radius: compile_track(radius, id)?,
-            }
-        }
-        crate::project::Effect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-            ..
-        } => crate::plan::CompiledEffect::ColorAdjust {
-            exposure: compile_track(exposure, id)?,
-            gamma: compile_track(gamma, id)?,
-            black_point: compile_track(black_point, id)?,
-            white_point: compile_track(white_point, id)?,
-        },
-        crate::project::Effect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            seed,
-            attack,
-            decay,
-            ..
-        } => crate::plan::CompiledEffect::CameraShake {
-            position_amount: compile_track(position_amount, id)?,
-            rotation_degrees: compile_track(rotation_degrees, id)?,
-            scale_amount: compile_track(scale_amount, id)?,
-            frequency: compile_track(frequency, id)?,
-            seed: *seed,
-            attack: *attack,
-            decay: *decay,
-        },
-        crate::project::Effect::MotionBlur {
-            intensity,
-            shutter_angle,
-            max_radius,
-            samples,
-            ..
-        } => crate::plan::CompiledEffect::MotionBlur {
-            intensity: compile_track(intensity, id)?,
-            shutter_angle: compile_track(shutter_angle, id)?,
-            max_radius: compile_track(max_radius, id)?,
-            samples: *samples,
-        },
-    })
-}
-
-fn compile_timed_effect(
-    effect: &crate::project::Effect,
-    id: &str,
-    owner_duration: f64,
-) -> Result<crate::plan::TimedEffect, Diagnostic> {
-    let timing = effect.timing();
-    let start = to_nanos(timing.start, id)?;
-    let duration = to_nanos(timing.duration.unwrap_or(owner_duration - timing.start), id)?;
-    Ok(crate::plan::TimedEffect {
-        start,
-        end: start.saturating_add(duration),
-        effect: compile_effect(effect, id)?,
-    })
 }
 
 fn compile_transitions(

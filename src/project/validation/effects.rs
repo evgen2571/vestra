@@ -1,6 +1,49 @@
 //! Shared parameter validation for clip-local and global effects.
 
-use crate::{Diagnostic, project::parse_colour};
+use std::collections::BTreeSet;
+
+use crate::{Category, Diagnostic, project::parse_colour};
+
+pub(super) fn validate_global(
+    effects: &[crate::project::Effect],
+    duration: f64,
+    maximum_effects: usize,
+    maximum_keyframes: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if effects.len() > maximum_effects {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-POST-EFFECTS",
+            Category::Semantic,
+            "global post-effect chain exceeds the effect limit",
+            "/visual/post_effects",
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for (index, effect) in effects.iter().enumerate() {
+        let path = format!("/visual/post_effects/{index}");
+        if effect.id().trim().is_empty() || !ids.insert(effect.id()) {
+            errors.push(Diagnostic::error(
+                "MVP-POST-EFFECT-ID",
+                Category::Semantic,
+                "post-effect ids must be non-empty and unique",
+                format!("{path}/id"),
+            ));
+        }
+        if matches!(
+            effect,
+            crate::project::Effect::CameraShake { .. } | crate::project::Effect::MotionBlur { .. }
+        ) {
+            errors.push(Diagnostic::error(
+                "MVP-POST-EFFECT-SCOPE",
+                Category::Semantic,
+                "camera shake and transform-aware motion blur are clip-local effects",
+                path.clone(),
+            ));
+        }
+        validate_parameters(effect, duration, &path, maximum_keyframes, errors);
+    }
+}
 
 /// Validates an effect independently of where it is attached. Global effects
 /// use project-time tracks; clip-local effects use the same rules with their

@@ -8,7 +8,7 @@ use crate::{
     render::{CpuBackend, DecodedAssets, RenderBackend, WgpuBackend},
 };
 
-use super::engine_types::{BackendFallback, RenderBackendPreference};
+use super::types::{BackendFallback, RenderBackendPreference};
 
 #[expect(
     clippy::result_large_err,
@@ -19,7 +19,7 @@ pub(super) fn create_backend(
     plan: &RenderPlan,
     decoded: &Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
-    if let Err(error) = super::wgpu::support::validate_plan(plan) {
+    if let Err(error) = super::super::wgpu::support::validate_plan(plan) {
         return match preference {
             RenderBackendPreference::Wgpu => Err(error),
             RenderBackendPreference::Auto => Ok((

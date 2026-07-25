@@ -13,10 +13,14 @@ use crate::{
 };
 use image::RgbaImage;
 
-use super::engine_events;
-use super::engine_failure::cleanup_error;
-use super::engine_selection::create_backend;
-pub use super::engine_types::{
+mod events;
+mod failure;
+mod selection;
+mod types;
+
+use failure::cleanup_error;
+use selection::create_backend;
+pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings,
 };
@@ -112,7 +116,7 @@ where
             .then(|| milliseconds(backend_timings.row_repack)),
         ..RenderTimings::default()
     };
-    emit(engine_events::started(plan.frame_count, &output.final_path));
+    emit(events::started(plan.frame_count, &output.final_path));
     let mut encoder =
         FfmpegEncoder::start(&plan.encoder, &output.temporary_path).map_err(|message| {
             cleanup_error(
@@ -199,7 +203,7 @@ where
         completed_frames += 1;
         performance.rendered_frame_count = completed_frames;
         if completed_frames < plan.frame_count {
-            emit(engine_events::progress(completed_frames, plan.frame_count));
+            emit(events::progress(completed_frames, plan.frame_count));
         }
     }
     let finish_started = Instant::now();
@@ -234,7 +238,7 @@ where
     timings.track_evaluation_ms = milliseconds(track_evaluation);
     timings.encoder_write_ms = milliseconds(encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
-    emit(engine_events::completed(
+    emit(events::completed(
         plan.frame_count,
         &output.final_path,
         plan.warnings.clone(),
@@ -280,8 +284,8 @@ fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
     reason = "test-only backend builders mirror the production diagnostic contract"
 )]
 mod tests {
-    use super::super::engine_failure::{completed_frame_state, failure_progress};
-    use super::super::engine_selection::create_backend_with;
+    use super::failure::{completed_frame_state, failure_progress};
+    use super::selection::create_backend_with;
     use super::{
         BackendFallback, RenderBackendPreference, RenderFailureContext, RenderFailureStage,
         RenderOptions, milliseconds, render_with_backend_builder,

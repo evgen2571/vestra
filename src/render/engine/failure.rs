@@ -2,7 +2,7 @@
 
 use crate::{Diagnostic, output::OutputTarget, plan::RenderPlan};
 
-use super::engine_types::{RenderError, RenderFailureContext, RenderFailureStage};
+use super::types::{RenderError, RenderFailureContext, RenderFailureStage};
 
 pub(super) fn cleanup_error(
     output: &OutputTarget,

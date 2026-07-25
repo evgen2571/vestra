@@ -11,9 +11,8 @@ use crate::{
     Category, Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
-        AdapterMetadata, RenderBackend, RenderBackendKind,
+        AdapterMetadata, DecodedAssets, RenderBackend, RenderBackendKind,
         metrics::{PreparationStats, PreparationTimings},
-        prepared::DecodedAssets,
     },
 };
 use bytemuck::Zeroable;

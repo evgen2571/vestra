@@ -7,7 +7,7 @@ use crate::render::{
 };
 use crate::{
     plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer},
-    render::prepared::PreparedAssets,
+    render::cpu_assets::PreparedAssets,
 };
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use crate::{
     media::FfmpegEncoder,
     output::OutputTarget,
     plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
-    render::{RenderBackend, RenderBackendKind, prepared::DecodedAssets},
+    render::{DecodedAssets, RenderBackend, RenderBackendKind},
     timeline::frame_time_nanos,
 };
 use image::RgbaImage;

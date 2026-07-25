@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{
     Diagnostic,
     plan::RenderPlan,
-    render::{CpuBackend, RenderBackend, WgpuBackend, prepared::DecodedAssets},
+    render::{CpuBackend, DecodedAssets, RenderBackend, WgpuBackend},
 };
 
 use super::engine_types::{BackendFallback, RenderBackendPreference};

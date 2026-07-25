@@ -18,13 +18,15 @@ use crate::{
 use bytemuck::Zeroable;
 use image::RgbaImage;
 
+mod context;
 mod diagnostics;
 mod parameters;
 mod parity;
 mod requirements;
 pub(crate) mod support;
 
-use diagnostics::{diagnostic, finish_error_scopes, requested_backends};
+use context::GpuContext;
+use diagnostics::{diagnostic, finish_error_scopes};
 use parameters::LayerParameters;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
 use requirements::GpuRequirements;
@@ -64,51 +66,17 @@ impl WgpuBackend {
             &decoded,
             std::mem::size_of::<LayerParameters>() as u32,
         )?;
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: requested_backends(),
-            ..wgpu::InstanceDescriptor::default()
-        });
-        let adapter_request_started = Instant::now();
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: std::env::var_os("VIDEO_EDITOR_WGPU_FORCE_FALLBACK").is_some(),
-            compatible_surface: None,
-        }))
-        .ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-ADAPTER-NOT-FOUND",
-                Category::Backend,
-                "WGPU adapter request returned no compatible adapter",
-                "",
-            )
-        })?;
-        let adapter_request = adapter_request_started.elapsed();
-        let info = adapter.get_info();
-        let adapter_metadata = AdapterMetadata {
-            adapter_name: info.name,
-            device_type: format!("{:?}", info.device_type).to_lowercase(),
-            graphics_backend: format!("{:?}", info.backend).to_lowercase(),
-            driver_name: info.driver,
-            driver_info: info.driver_info,
-            vendor_id: info.vendor,
-            device_id: info.device,
-        };
-        let limits = adapter.limits();
-        requirements.validate(&limits, plan)?;
-        let requested_limits = requirements.requested_device_limits(plan)?;
-        let device_request_started = Instant::now();
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("video-editor headless renderer"),
-                required_features: wgpu::Features::empty(),
-                required_limits: requested_limits,
-                memory_hints: wgpu::MemoryHints::Performance,
-            },
-            None,
-        ))
-        .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
-        let device_request = device_request_started.elapsed();
-        requirements.validate(&device.limits(), plan)?;
+        let context = GpuContext::create(plan, requirements)?;
+        let GpuContext {
+            instance,
+            adapter,
+            device,
+            queue,
+            adapter_metadata,
+            adapter_limits: limits,
+            adapter_request,
+            device_request,
+        } = context;
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         device.push_error_scope(wgpu::ErrorFilter::Internal);
         let pipeline_creation_started = Instant::now();

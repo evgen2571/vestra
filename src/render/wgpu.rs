@@ -602,14 +602,6 @@ impl RenderBackend for WgpuBackend {
         RenderBackendKind::Wgpu
     }
 
-    fn prepare(
-        &mut self,
-        _plan: &RenderPlan,
-        _decoded: Arc<DecodedAssets>,
-    ) -> Result<(), Diagnostic> {
-        Ok(())
-    }
-
     fn render_frame(
         &mut self,
         frame: &EvaluatedFrame,
@@ -1218,9 +1210,7 @@ mod tests {
         .expect("canonical fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
-        let mut cpu = CpuBackend::default();
-        cpu.prepare(&plan, Arc::clone(&decoded))
-            .expect("CPU prepares");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
         };
@@ -1258,9 +1248,7 @@ mod tests {
         .expect("canonical fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
-        let mut cpu = CpuBackend::default();
-        cpu.prepare(&plan, Arc::clone(&decoded))
-            .expect("CPU prepares");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
         };
@@ -1359,9 +1347,7 @@ mod tests {
             })
             .collect();
             let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
-            let mut cpu = CpuBackend::default();
-            cpu.prepare(&plan, Arc::clone(&decoded))
-                .expect("CPU prepares");
+            let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
             let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
                 return;
             };
@@ -1386,9 +1372,7 @@ mod tests {
             &[ScheduledItem(*red), ScheduledItem(*blue)],
             1_750_000_000,
         );
-        let mut cpu = CpuBackend::default();
-        cpu.prepare(&plan, Arc::clone(&decoded))
-            .expect("CPU prepares");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
         };
@@ -1417,9 +1401,7 @@ mod tests {
         .expect("canonical fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
-        let mut cpu = CpuBackend::default();
-        cpu.prepare(&plan, Arc::clone(&decoded))
-            .expect("CPU prepares");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
         };
@@ -1491,9 +1473,7 @@ mod tests {
             plan.canvas.width = width;
             plan.canvas.height = 18;
             let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
-            let mut cpu = CpuBackend::default();
-            cpu.prepare(&plan, Arc::clone(&decoded))
-                .expect("CPU prepares");
+            let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
             let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
                 return;
             };
@@ -1655,9 +1635,7 @@ mod tests {
             *track = Track::new(crop);
             *cacheable_crop = true;
             let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
-            let mut cpu = CpuBackend::default();
-            cpu.prepare(&plan, Arc::clone(&decoded))
-                .expect("CPU prepares");
+            let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
             let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
                 return;
             };
@@ -1729,9 +1707,7 @@ mod tests {
             &[crate::plan::ScheduledItem(image_layer)],
             500_000_000,
         );
-        let mut cpu = CpuBackend::default();
-        cpu.prepare(&plan, Arc::clone(&decoded))
-            .expect("CPU prepares");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
         };

@@ -49,8 +49,6 @@ pub struct AdapterMetadata {
 /// backends consume already evaluated frames and shared decoded source bytes.
 pub trait RenderBackend {
     fn kind(&self) -> RenderBackendKind;
-    fn prepare(&mut self, plan: &RenderPlan, decoded: Arc<DecodedAssets>)
-    -> Result<(), Diagnostic>;
     fn render_frame(
         &mut self,
         frame: &EvaluatedFrame,
@@ -61,22 +59,18 @@ pub trait RenderBackend {
     fn adapter(&self) -> Option<AdapterMetadata>;
 }
 
-#[derive(Default)]
 pub struct CpuBackend {
-    assets: Option<PreparedAssets>,
-    effects: Option<compositor::EffectSurfacePool>,
+    assets: PreparedAssets,
+    effects: compositor::EffectSurfacePool,
 }
 
 impl CpuBackend {
-    fn prepared_assets(&mut self) -> Result<&mut PreparedAssets, Diagnostic> {
-        self.assets.as_mut().ok_or_else(|| {
-            Diagnostic::error(
-                "MVP-BACKEND-PREPARE",
-                crate::Category::Internal,
-                "CPU backend was not prepared",
-                "",
-            )
-        })
+    #[must_use]
+    pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
+        Self {
+            assets: PreparedAssets::from_decoded(plan, decoded),
+            effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
+        }
     }
 }
 
@@ -85,56 +79,21 @@ impl RenderBackend for CpuBackend {
         RenderBackendKind::Cpu
     }
 
-    fn prepare(
-        &mut self,
-        plan: &RenderPlan,
-        decoded: Arc<DecodedAssets>,
-    ) -> Result<(), Diagnostic> {
-        self.assets = Some(PreparedAssets::from_decoded(plan, decoded));
-        self.effects = Some(compositor::EffectSurfacePool::new(
-            plan.canvas.width,
-            plan.canvas.height,
-        ));
-        Ok(())
-    }
-
     fn render_frame(
         &mut self,
         frame: &EvaluatedFrame,
         destination: &mut RgbaImage,
     ) -> Result<(), Diagnostic> {
-        let (assets, effects) = (&mut self.assets, &mut self.effects);
-        let assets = assets.as_mut().ok_or_else(|| {
-            Diagnostic::error(
-                "MVP-BACKEND-PREPARE",
-                crate::Category::Internal,
-                "CPU backend was not prepared",
-                "",
-            )
-        })?;
-        let effects = effects.as_mut().ok_or_else(|| {
-            Diagnostic::error(
-                "MVP-BACKEND-PREPARE",
-                crate::Category::Internal,
-                "CPU effect surfaces were not prepared",
-                "",
-            )
-        })?;
-        compositor::compose(frame, assets, destination, effects);
+        compositor::compose(frame, &mut self.assets, destination, &mut self.effects);
         Ok(())
     }
 
     fn stats(&mut self) -> PreparationStats {
-        self.prepared_assets().map_or_else(
-            |_| PreparationStats::default(),
-            |assets| assets.stats().clone(),
-        )
+        self.assets.stats().clone()
     }
 
     fn timings(&self) -> PreparationTimings {
-        self.assets
-            .as_ref()
-            .map_or_else(PreparationTimings::default, PreparedAssets::timings)
+        self.assets.timings()
     }
 
     fn adapter(&self) -> Option<AdapterMetadata> {

@@ -215,18 +215,6 @@ where
                 diagnostic,
             )
         })?;
-    backend
-        .prepare(plan, Arc::clone(&decoded))
-        .map_err(|diagnostic| {
-            cleanup_error(
-                &output,
-                plan,
-                RenderFailureStage::AssetPreparation,
-                0,
-                None,
-                diagnostic,
-            )
-        })?;
     let mut performance = backend.stats();
     performance.compiled_transition_association_count =
         plan.compilation.compiled_transition_association_count;
@@ -483,19 +471,23 @@ fn create_backend(
         return match preference {
             RenderBackendPreference::Wgpu => Err(error),
             RenderBackendPreference::Auto => Ok((
-                Box::new(CpuBackend::default()),
+                Box::new(CpuBackend::new(plan, Arc::clone(decoded))),
                 Some(BackendFallback {
                     code: error.code,
                     stage: "effect_capability".to_owned(),
                     message: error.message,
                 }),
             )),
-            RenderBackendPreference::Cpu => Ok((Box::new(CpuBackend::default()), None)),
+            RenderBackendPreference::Cpu => {
+                Ok((Box::new(CpuBackend::new(plan, Arc::clone(decoded))), None))
+            }
         };
     }
-    create_backend_with(preference, || {
-        WgpuBackend::new(plan, Arc::clone(decoded)).map(|backend| Box::new(backend) as _)
-    })
+    create_backend_with(
+        preference,
+        Box::new(CpuBackend::new(plan, Arc::clone(decoded))),
+        || WgpuBackend::new(plan, Arc::clone(decoded)).map(|backend| Box::new(backend) as _),
+    )
 }
 
 #[expect(
@@ -504,18 +496,19 @@ fn create_backend(
 )]
 fn create_backend_with<F>(
     preference: RenderBackendPreference,
+    cpu: Box<dyn RenderBackend>,
     create_wgpu: F,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>
 where
     F: FnOnce() -> Result<Box<dyn RenderBackend>, Diagnostic>,
 {
     match preference {
-        RenderBackendPreference::Cpu => Ok((Box::new(CpuBackend::default()), None)),
+        RenderBackendPreference::Cpu => Ok((cpu, None)),
         RenderBackendPreference::Wgpu => Ok((create_wgpu()?, None)),
         RenderBackendPreference::Auto => match create_wgpu() {
             Ok(backend) => Ok((backend, None)),
             Err(error) => Ok((
-                Box::new(CpuBackend::default()),
+                cpu,
                 Some(BackendFallback {
                     code: error.code,
                     stage: "wgpu_preparation".to_owned(),
@@ -628,7 +621,7 @@ mod tests {
         Category, Diagnostic,
         plan::{CompileOptions, EvaluatedFrame, RenderPlan, compile},
         project::{ValidationOptions, load_and_validate},
-        render::prepared::{DecodedAssets, PreparationStats, PreparationTimings},
+        render::prepared::{PreparationStats, PreparationTimings},
         render::{AdapterMetadata, RenderBackend, RenderBackendKind},
     };
 
@@ -642,14 +635,6 @@ mod tests {
     impl RenderBackend for FailingBackend {
         fn kind(&self) -> RenderBackendKind {
             RenderBackendKind::Wgpu
-        }
-
-        fn prepare(
-            &mut self,
-            _plan: &RenderPlan,
-            _decoded: Arc<DecodedAssets>,
-        ) -> Result<(), Diagnostic> {
-            Ok(())
         }
 
         fn render_frame(
@@ -683,6 +668,38 @@ mod tests {
         fn adapter(&self) -> Option<AdapterMetadata> {
             None
         }
+    }
+
+    struct SelectionBackend;
+
+    impl RenderBackend for SelectionBackend {
+        fn kind(&self) -> RenderBackendKind {
+            RenderBackendKind::Cpu
+        }
+
+        fn render_frame(
+            &mut self,
+            _frame: &EvaluatedFrame,
+            _destination: &mut RgbaImage,
+        ) -> Result<(), Diagnostic> {
+            Ok(())
+        }
+
+        fn stats(&mut self) -> PreparationStats {
+            PreparationStats::default()
+        }
+
+        fn timings(&self) -> PreparationTimings {
+            PreparationTimings::default()
+        }
+
+        fn adapter(&self) -> Option<AdapterMetadata> {
+            None
+        }
+    }
+
+    fn selection_backend() -> Box<dyn RenderBackend> {
+        Box::new(SelectionBackend)
     }
 
     fn example_plan() -> RenderPlan {
@@ -749,10 +766,11 @@ mod tests {
 
     #[test]
     fn cpu_selection_never_attempts_wgpu_initialization() {
-        let (backend, fallback) = create_backend_with(RenderBackendPreference::Cpu, || {
-            panic!("CPU selection must not initialize WGPU")
-        })
-        .expect("CPU backend selection succeeds");
+        let (backend, fallback) =
+            create_backend_with(RenderBackendPreference::Cpu, selection_backend(), || {
+                panic!("CPU selection must not initialize WGPU")
+            })
+            .expect("CPU backend selection succeeds");
 
         assert_eq!(backend.kind(), RenderBackendKind::Cpu);
         assert!(fallback.is_none());
@@ -760,15 +778,16 @@ mod tests {
 
     #[test]
     fn auto_selection_falls_back_with_the_wgpu_diagnostic() {
-        let (backend, fallback) = create_backend_with(RenderBackendPreference::Auto, || {
-            Err(Diagnostic::error(
-                "WGPU-ADAPTER-NOT-FOUND",
-                Category::Backend,
-                "injected adapter failure",
-                "",
-            ))
-        })
-        .expect("automatic selection falls back");
+        let (backend, fallback) =
+            create_backend_with(RenderBackendPreference::Auto, selection_backend(), || {
+                Err(Diagnostic::error(
+                    "WGPU-ADAPTER-NOT-FOUND",
+                    Category::Backend,
+                    "injected adapter failure",
+                    "",
+                ))
+            })
+            .expect("automatic selection falls back");
 
         assert_eq!(backend.kind(), RenderBackendKind::Cpu);
         assert!(matches!(
@@ -782,14 +801,15 @@ mod tests {
 
     #[test]
     fn explicit_wgpu_selection_propagates_the_wgpu_diagnostic() {
-        let result = create_backend_with(RenderBackendPreference::Wgpu, || {
-            Err(Diagnostic::error(
-                "WGPU-ADAPTER-NOT-FOUND",
-                Category::Backend,
-                "injected adapter failure",
-                "",
-            ))
-        });
+        let result =
+            create_backend_with(RenderBackendPreference::Wgpu, selection_backend(), || {
+                Err(Diagnostic::error(
+                    "WGPU-ADAPTER-NOT-FOUND",
+                    Category::Backend,
+                    "injected adapter failure",
+                    "",
+                ))
+            });
         let error = match result {
             Ok(_) => panic!("explicit WGPU selection must not fall back"),
             Err(error) => error,
@@ -822,9 +842,10 @@ mod tests {
                 "injected output allocation failure",
             ),
         ] {
-            let explicit = create_backend_with(RenderBackendPreference::Wgpu, || {
-                Err(Diagnostic::error(code, Category::Backend, message, ""))
-            });
+            let explicit =
+                create_backend_with(RenderBackendPreference::Wgpu, selection_backend(), || {
+                    Err(Diagnostic::error(code, Category::Backend, message, ""))
+                });
             let error = match explicit {
                 Ok(_) => panic!("explicit WGPU must not fall back"),
                 Err(error) => error,
@@ -832,10 +853,11 @@ mod tests {
             assert_eq!(error.code, code);
             assert_eq!(error.message, message);
 
-            let (backend, fallback) = create_backend_with(RenderBackendPreference::Auto, || {
-                Err(Diagnostic::error(code, Category::Backend, message, ""))
-            })
-            .expect("automatic mode falls back before rendering");
+            let (backend, fallback) =
+                create_backend_with(RenderBackendPreference::Auto, selection_backend(), || {
+                    Err(Diagnostic::error(code, Category::Backend, message, ""))
+                })
+                .expect("automatic mode falls back before rendering");
             assert_eq!(backend.kind(), RenderBackendKind::Cpu, "{code}");
             assert!(matches!(
                 fallback,

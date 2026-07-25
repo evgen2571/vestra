@@ -9,6 +9,7 @@ mod compositor;
 mod effects;
 mod engine;
 mod engine_types;
+pub(crate) mod geometry;
 mod metrics;
 mod prepared;
 pub(crate) mod vignette;

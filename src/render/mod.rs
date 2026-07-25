@@ -8,6 +8,7 @@ pub(crate) mod colour_adjust;
 mod compositor;
 mod effects;
 mod engine;
+mod engine_types;
 mod prepared;
 pub(crate) mod vignette;
 mod wgpu;

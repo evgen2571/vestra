@@ -4,6 +4,8 @@ use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::plan::EvaluatedEffect;
 
+use super::surfaces::EffectSurfacePool;
+
 /// Low-level CPU work produced by one evaluated project effect.
 ///
 /// The pass plan is deliberately independent of the project format.  It makes
@@ -84,6 +86,55 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> CpuEffectPassPlan {
         ]),
         _ => CpuEffectPassPlan::new(&[CpuEffectPass::Single]),
     }
+}
+
+/// Executes the logical CPU pass plan against reusable ping-pong surfaces.
+pub(super) fn apply_chain(surfaces: &mut EffectSurfacePool, effects: &[EvaluatedEffect]) {
+    for effect in effects {
+        if effect_pass_plan(effect).is_empty() {
+            continue;
+        }
+        surfaces.run(
+            |source, target, horizontal| match effect_pass_plan(effect).as_slice() {
+                [
+                    CpuEffectPass::GaussianHorizontal { radius },
+                    CpuEffectPass::GaussianVertical { .. },
+                ] => gaussian_blur(source, horizontal, target, *radius),
+                [
+                    CpuEffectPass::HighlightExtract { threshold, colour },
+                    CpuEffectPass::GaussianHorizontal { radius },
+                    CpuEffectPass::GaussianVertical { .. },
+                    CpuEffectPass::GlowComposite { intensity },
+                ] => glow(
+                    source, horizontal, target, *threshold, *radius, *intensity, *colour,
+                ),
+                [
+                    CpuEffectPass::GaussianHorizontal { radius },
+                    CpuEffectPass::GaussianVertical { .. },
+                    CpuEffectPass::UnsharpComposite { amount },
+                ] => sharpen(source, horizontal, target, *amount, *radius),
+                [CpuEffectPass::Single] => apply_single(source, target, effect),
+                [] => unreachable!("identity effects are skipped before execution"),
+                _ => unreachable!("effect pass plans must be complete"),
+            },
+        );
+    }
+}
+
+pub(super) fn apply_to(
+    surfaces: &mut EffectSurfacePool,
+    destination: &mut RgbaImage,
+    effects: &[EvaluatedEffect],
+) {
+    if effects
+        .iter()
+        .all(|effect| effect_pass_plan(effect).is_empty())
+    {
+        return;
+    }
+    surfaces.begin_from(destination);
+    apply_chain(surfaces, effects);
+    surfaces.copy_to(destination);
 }
 
 /// Applies a separable Gaussian blur using premultiplied-alpha accumulation.

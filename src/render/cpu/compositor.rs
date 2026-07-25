@@ -1,14 +1,12 @@
-use image::{GenericImage, Rgba, RgbaImage};
+use image::{Rgba, RgbaImage};
 
 use crate::plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer};
 use crate::render::{
     blend::blend_surface,
-    cpu::{
-        assets::PreparedAssets,
-        effects::{CpuEffectPass, effect_pass_plan},
-        raster::draw_layer,
-    },
+    cpu::{assets::PreparedAssets, effects, raster::draw_layer},
 };
+
+pub(crate) use super::surfaces::EffectSurfacePool;
 
 #[cfg(test)]
 use crate::render::cpu::effects::blur;
@@ -18,6 +16,8 @@ use crate::render::cpu::raster::{
 };
 #[cfg(test)]
 use crate::{animation::Transform2D, domain::Crop, plan::EvaluatedSource, render::geometry};
+#[cfg(test)]
+use image::GenericImage;
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
 pub fn compose(
@@ -48,10 +48,10 @@ pub fn compose(
             1.0,
             ColourTransform::default(),
         );
-        surfaces.apply(&layer.effects);
+        effects::apply_chain(surfaces, &layer.effects);
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
     }
-    surfaces.apply_to(canvas, &frame.post_effects);
+    effects::apply_to(surfaces, canvas, &frame.post_effects);
 }
 
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
@@ -60,118 +60,6 @@ fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
             .effects
             .iter()
             .all(EvaluatedEffect::is_basic_colour_effect)
-}
-
-pub struct EffectSurfacePool {
-    first: RgbaImage,
-    second: RgbaImage,
-    horizontal: RgbaImage,
-    first_is_current: bool,
-}
-impl EffectSurfacePool {
-    #[must_use]
-    pub fn new(width: u32, height: u32) -> Self {
-        Self {
-            first: RgbaImage::new(width, height),
-            second: RgbaImage::new(width, height),
-            horizontal: RgbaImage::new(width, height),
-            first_is_current: true,
-        }
-    }
-    fn resize(&mut self, width: u32, height: u32) {
-        if self.first.width() != width || self.first.height() != height {
-            self.first = RgbaImage::new(width, height);
-            self.second = RgbaImage::new(width, height);
-            self.horizontal = RgbaImage::new(width, height);
-            self.first_is_current = true;
-        }
-    }
-    fn current(&mut self) -> &mut RgbaImage {
-        if self.first_is_current {
-            &mut self.first
-        } else {
-            &mut self.second
-        }
-    }
-    fn clear(&mut self) {
-        for pixel in self.current().pixels_mut() {
-            *pixel = Rgba([0, 0, 0, 0]);
-        }
-    }
-    fn apply(&mut self, effects: &[EvaluatedEffect]) {
-        for effect in effects {
-            if !effect_pass_plan(effect).is_empty() {
-                self.run(effect);
-            }
-        }
-    }
-    fn apply_to(&mut self, destination: &mut RgbaImage, effects: &[EvaluatedEffect]) {
-        if effects
-            .iter()
-            .all(|effect| effect_pass_plan(effect).is_empty())
-        {
-            return;
-        }
-        self.first
-            .copy_from(destination, 0, 0)
-            .expect("matching effect surface dimensions");
-        self.first_is_current = true;
-        self.apply(effects);
-        destination
-            .copy_from(self.current(), 0, 0)
-            .expect("matching effect surface dimensions");
-    }
-    fn run(&mut self, effect: &EvaluatedEffect) {
-        let (source, target) = if self.first_is_current {
-            (&self.first, &mut self.second)
-        } else {
-            (&self.second, &mut self.first)
-        };
-        match effect_pass_plan(effect).as_slice() {
-            [
-                CpuEffectPass::GaussianHorizontal { radius },
-                CpuEffectPass::GaussianVertical { .. },
-            ] => crate::render::cpu::effects::gaussian_blur(
-                source,
-                &mut self.horizontal,
-                target,
-                *radius,
-            ),
-            [
-                CpuEffectPass::HighlightExtract { threshold, colour },
-                CpuEffectPass::GaussianHorizontal { radius },
-                CpuEffectPass::GaussianVertical { .. },
-                CpuEffectPass::GlowComposite { intensity },
-            ] => crate::render::cpu::effects::glow(
-                source,
-                &mut self.horizontal,
-                target,
-                *threshold,
-                *radius,
-                *intensity,
-                *colour,
-            ),
-            [
-                CpuEffectPass::GaussianHorizontal { radius },
-                CpuEffectPass::GaussianVertical { .. },
-                CpuEffectPass::UnsharpComposite { amount },
-            ] => crate::render::cpu::effects::sharpen(
-                source,
-                &mut self.horizontal,
-                target,
-                *amount,
-                *radius,
-            ),
-            [CpuEffectPass::Single] => apply_effect(source, target, effect),
-            [] => unreachable!("effect passes are skipped before execution"),
-            _ => unreachable!("effect pass plans must be complete"),
-        }
-        self.first_is_current = !self.first_is_current;
-    }
-}
-
-fn apply_effect(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEffect) {
-    crate::render::cpu::effects::apply_single(source, target, effect);
 }
 
 /// Samples along the ray through each pixel instead of applying a spatial
@@ -240,6 +128,7 @@ mod tests {
     use super::*;
     use crate::plan::EvaluatedEffect;
     use crate::render::blend::{blend_pixel, source_over};
+    use crate::render::cpu::effects::effect_pass_plan;
 
     fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
         for effect in effects {

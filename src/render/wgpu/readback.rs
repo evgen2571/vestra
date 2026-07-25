@@ -115,7 +115,8 @@ pub(super) fn read_frame(
     drop(mapped);
     frame.readback.unmap();
     let row_repack = row_repack_started.elapsed();
-    destination.as_mut().copy_from_slice(&frame.frame_bytes);
+    let destination_bytes: &mut [u8] = destination.as_mut();
+    destination_bytes.copy_from_slice(&frame.frame_bytes);
     Ok(ReadbackTimings {
         command_encode,
         submission,

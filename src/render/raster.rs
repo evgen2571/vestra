@@ -6,7 +6,7 @@ use crate::{
     animation::Transform2D,
     domain::Crop,
     plan::{ColourTransform, EvaluatedLayer, EvaluatedSource},
-    render::{blend::source_over, geometry, prepared::PreparedAssets},
+    render::{blend::source_over, cpu_assets::PreparedAssets, geometry},
 };
 
 pub(crate) fn draw_layer(

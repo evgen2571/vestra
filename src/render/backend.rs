@@ -13,9 +13,9 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         compositor,
+        cpu_assets::PreparedAssets,
         decoded::DecodedAssets,
         metrics::{PreparationStats, PreparationTimings},
-        prepared::PreparedAssets,
     },
 };
 

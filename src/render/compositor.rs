@@ -8,7 +8,7 @@ use crate::{
     animation::Transform2D,
     domain::Crop,
     plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource},
-    render::prepared::PreparedAssets,
+    render::{geometry, prepared::PreparedAssets},
 };
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
@@ -191,7 +191,7 @@ fn draw_layer(
                 } else {
                     (assets.image(*asset_index), *crop)
                 };
-            let (source_width, source_height) = sizing_dimensions(
+            let (source_width, source_height) = geometry::effective_dimensions(
                 sizing,
                 crop.width * f64::from(source.width()),
                 crop.height * f64::from(source.height()),
@@ -244,7 +244,7 @@ fn draw_image(
         canvas.width(),
         canvas.height(),
     );
-    let inverse = InverseAffine::for_transform(
+    let inverse = geometry::InverseAffine::for_transform(
         transform,
         canvas.width(),
         canvas.height(),
@@ -272,53 +272,6 @@ fn draw_image(
             }
             mapped.x += inverse.m00;
             mapped.y += inverse.m10;
-        }
-    }
-}
-
-/// Inverse transform from canvas coordinates to an unscaled image coordinate.
-/// It is built once per layer and lets a scanline advance with two additions.
-#[derive(Clone, Copy, Debug)]
-struct InverseAffine {
-    m00: f64,
-    m01: f64,
-    m02: f64,
-    m10: f64,
-    m11: f64,
-    m12: f64,
-}
-
-impl InverseAffine {
-    fn for_transform(
-        transform: Transform2D,
-        canvas_width: u32,
-        canvas_height: u32,
-        source_width: f64,
-        source_height: f64,
-    ) -> Self {
-        let (sine, cosine) = transform.rotation_radians.sin_cos();
-        let destination_x = transform.position.x * f64::from(canvas_width);
-        let destination_y = transform.position.y * f64::from(canvas_height);
-        let anchor_x = transform.anchor.x * source_width;
-        let anchor_y = transform.anchor.y * source_height;
-        let m00 = cosine / transform.scale.x;
-        let m01 = sine / transform.scale.x;
-        let m10 = -sine / transform.scale.y;
-        let m11 = cosine / transform.scale.y;
-        Self {
-            m00,
-            m01,
-            m02: anchor_x - m00 * destination_x - m01 * destination_y,
-            m10,
-            m11,
-            m12: anchor_y - m10 * destination_x - m11 * destination_y,
-        }
-    }
-
-    fn map(self, x: f64, y: f64) -> crate::domain::Point {
-        crate::domain::Point {
-            x: self.m00 * x + self.m01 * y + self.m02,
-            y: self.m10 * x + self.m11 * y + self.m12,
         }
     }
 }
@@ -360,32 +313,6 @@ fn visible_bounds(
         minimum_y.floor().max(0.0) as u32,
         maximum_y.ceil().clamp(0.0, f64::from(canvas_height)) as u32,
     )
-}
-
-fn sizing_dimensions(
-    sizing: &crate::plan::CompiledSizing,
-    source_width: f64,
-    source_height: f64,
-    canvas_width: u32,
-    canvas_height: u32,
-) -> (f64, f64) {
-    match sizing {
-        crate::plan::CompiledSizing::Original => (source_width, source_height),
-        crate::plan::CompiledSizing::Stretch { width, height } => {
-            (f64::from(*width), f64::from(*height))
-        }
-        crate::plan::CompiledSizing::Scale(scale) => (source_width * scale, source_height * scale),
-        crate::plan::CompiledSizing::Fit | crate::plan::CompiledSizing::Cover => {
-            let horizontal = f64::from(canvas_width) / source_width;
-            let vertical = f64::from(canvas_height) / source_height;
-            let factor = if matches!(sizing, crate::plan::CompiledSizing::Fit) {
-                horizontal.min(vertical)
-            } else {
-                horizontal.max(vertical)
-            };
-            (source_width * factor, source_height * factor)
-        }
-    }
 }
 
 fn sample_bilinear(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
@@ -921,7 +848,7 @@ mod tests {
             scale: crate::domain::Point { x: 1.3, y: 0.8 },
             rotation_radians: 0.42,
         };
-        let inverse = InverseAffine::for_transform(transform, 320, 180, 140.0, 90.0);
+        let inverse = geometry::InverseAffine::for_transform(transform, 320, 180, 140.0, 90.0);
         let mapped = inverse.map(81.5, 44.5);
         let reference = transform.destination_to_source(81.5, 44.5, 320, 180, 140, 90);
         assert!((mapped.x - reference.x).abs() < 1e-10 && (mapped.y - reference.y).abs() < 1e-10);
@@ -974,7 +901,7 @@ mod tests {
             rotation_radians: 0.7,
         };
         let (min_x, max_x, min_y, max_y) = visible_bounds(transform, 4.0, 2.0, 12, 12);
-        let inverse = InverseAffine::for_transform(transform, 12, 12, 4.0, 2.0);
+        let inverse = geometry::InverseAffine::for_transform(transform, 12, 12, 4.0, 2.0);
         let entering_row = (min_y..max_y)
             .find(|y| {
                 let first = inverse.map(f64::from(min_x) + 0.5, f64::from(*y) + 0.5);

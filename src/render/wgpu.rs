@@ -16,7 +16,7 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, RenderBackend, RenderBackendKind,
-        geometry::crop_bounds,
+        geometry::{self, crop_bounds},
         metrics::{PreparationStats, PreparationTimings},
         prepared::DecodedAssets,
     },
@@ -927,34 +927,20 @@ fn image_parameters(
     };
     let cropped_width = virtual_crop.width * f64::from(virtual_width);
     let cropped_height = virtual_crop.height * f64::from(virtual_height);
-    let (effective_width, effective_height) = match sizing {
-        crate::plan::CompiledSizing::Original => (cropped_width, cropped_height),
-        crate::plan::CompiledSizing::Stretch { width, height } => {
-            (f64::from(*width), f64::from(*height))
-        }
-        crate::plan::CompiledSizing::Scale(scale) => {
-            (cropped_width * scale, cropped_height * scale)
-        }
-        crate::plan::CompiledSizing::Fit | crate::plan::CompiledSizing::Cover => {
-            let horizontal = f64::from(frame.width) / cropped_width;
-            let vertical = f64::from(frame.height) / cropped_height;
-            let factor = if matches!(sizing, crate::plan::CompiledSizing::Fit) {
-                horizontal.min(vertical)
-            } else {
-                horizontal.max(vertical)
-            };
-            (cropped_width * factor, cropped_height * factor)
-        }
-    };
-    let (sine, cosine) = transform.rotation_radians.sin_cos();
-    let destination_x = transform.position.x * f64::from(frame.width);
-    let destination_y = transform.position.y * f64::from(frame.height);
-    let anchor_x = transform.anchor.x * effective_width;
-    let anchor_y = transform.anchor.y * effective_height;
-    let m00 = cosine / transform.scale.x;
-    let m01 = sine / transform.scale.x;
-    let m10 = -sine / transform.scale.y;
-    let m11 = cosine / transform.scale.y;
+    let (effective_width, effective_height) = geometry::effective_dimensions(
+        sizing,
+        cropped_width,
+        cropped_height,
+        frame.width,
+        frame.height,
+    );
+    let inverse = geometry::InverseAffine::for_transform(
+        transform,
+        frame.width,
+        frame.height,
+        effective_width,
+        effective_height,
+    );
     LayerParameters {
         header: [
             frame.width,
@@ -976,15 +962,15 @@ fn image_parameters(
             0.0,
         ],
         inverse_row0: [
-            m00 as f32,
-            m01 as f32,
-            (anchor_x - m00 * destination_x - m01 * destination_y) as f32,
+            inverse.m00 as f32,
+            inverse.m01 as f32,
+            inverse.m02 as f32,
             0.0,
         ],
         inverse_row1: [
-            m10 as f32,
-            m11 as f32,
-            (anchor_y - m10 * destination_x - m11 * destination_y) as f32,
+            inverse.m10 as f32,
+            inverse.m11 as f32,
+            inverse.m12 as f32,
             0.0,
         ],
         colour_row0: [

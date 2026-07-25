@@ -9,6 +9,7 @@ use crate::{
 use super::colour_transform::ColourTransform;
 
 mod effects;
+mod transform;
 
 pub use effects::EvaluatedEffect;
 
@@ -80,7 +81,7 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                     crop: crop.evaluate(relative),
                     sizing: sizing.clone(),
                     cacheable_crop: *cacheable_crop,
-                    transform: evaluate_transform(layer, relative, &mut evaluated_track_count),
+                    transform: transform::evaluate(layer, relative, &mut evaluated_track_count),
                 }
             }
             CompiledVisualSource::SolidColor { colour } => {
@@ -114,8 +115,8 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
                 let before = relative.saturating_sub(half_window).max(lower);
                 let after = relative.saturating_add(half_window).min(upper);
                 let mut ignored_tracks = 0;
-                let start = evaluate_transform(layer, before, &mut ignored_tracks).position;
-                let end = evaluate_transform(layer, after, &mut ignored_tracks).position;
+                let start = transform::evaluate(layer, before, &mut ignored_tracks).position;
+                let end = transform::evaluate(layer, after, &mut ignored_tracks).position;
                 let dx = (end.x - start.x) * f64::from(plan.canvas.width);
                 let dy = (end.y - start.y) * f64::from(plan.canvas.height);
                 let displacement = (dx * dx + dy * dy).sqrt();
@@ -178,38 +179,11 @@ pub(crate) fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) 
     }
 }
 
-fn evaluate_transform(
-    layer: &crate::plan::CompiledLayer,
-    relative: u128,
-    evaluated_track_count: &mut u64,
-) -> Transform2D {
-    *evaluated_track_count += 4;
-    let mut transform = Transform2D {
-        position: layer.transform.position.evaluate(relative),
-        anchor: layer.transform.anchor.evaluate(relative),
-        scale: layer.transform.scale.evaluate(relative),
-        rotation_radians: layer.transform.rotation_radians.evaluate(relative),
-    };
-    for contribution in &layer.transform_contributions {
-        if relative < contribution.start || relative >= contribution.end {
-            continue;
-        }
-        *evaluated_track_count += 3;
-        let position = contribution.position_offset.evaluate(relative);
-        let scale = contribution.scale_multiplier.evaluate(relative);
-        transform.position.x += position.x;
-        transform.position.y += position.y;
-        transform.scale.x *= scale.x;
-        transform.scale.y *= scale.y;
-        transform.rotation_radians += contribution.rotation_radians_offset.evaluate(relative);
-    }
-    transform
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
+        animation::Transform2D,
         plan::{CompileOptions, compile},
         project::{ValidationOptions, load_and_validate},
     };

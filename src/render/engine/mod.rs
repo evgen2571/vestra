@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, atomic::Ordering},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -7,18 +7,18 @@ use crate::{
     Category, Diagnostic,
     media::FfmpegEncoder,
     output::OutputTarget,
-    plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
+    plan::{ActiveSchedule, RenderPlan},
     render::{DecodedAssets, RenderBackend, RenderBackendKind},
-    timeline::frame_time_nanos,
 };
-use image::RgbaImage;
 
 mod events;
 mod failure;
+mod frame_loop;
 mod selection;
 mod types;
 
 use failure::cleanup_error;
+use frame_loop::run as run_frame_loop;
 use selection::create_backend;
 pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
@@ -78,7 +78,6 @@ where
         )
     })?;
     let schedule = ActiveSchedule::compile(plan);
-    let mut schedule_cursor = schedule.cursor();
     let (mut backend, backend_fallback) = build_backend(options.backend_preference, plan, &decoded)
         .map_err(|diagnostic| {
             cleanup_error(
@@ -128,84 +127,17 @@ where
                 Diagnostic::error("MVP-BACKEND-START", Category::Backend, message, ""),
             )
         })?;
-    let mut active = Vec::new();
-    let mut frame_composition = Duration::ZERO;
-    let mut track_evaluation = Duration::ZERO;
-    let mut encoder_write = Duration::ZERO;
-    let mut completed_frames = 0;
-    let mut image = RgbaImage::new(plan.canvas.width, plan.canvas.height);
-    for frame in 0..plan.frame_count {
-        if options.cancelled.load(Ordering::Relaxed) {
-            encoder.cancel();
-            return Err(cleanup_error(
-                &output,
-                plan,
-                RenderFailureStage::Cancellation,
-                completed_frames,
-                Some(frame),
-                Diagnostic::error(
-                    "MVP-CANCELLED",
-                    Category::Cancellation,
-                    "render cancelled",
-                    "",
-                ),
-            ));
-        }
-        let events = schedule_cursor.events_at(frame);
-        if !events.is_empty() {
-            for event in events {
-                match event.action {
-                    ScheduleAction::Deactivate => active.retain(|item| *item != event.item),
-                    ScheduleAction::Activate => active.push(event.item),
-                }
-            }
-            active.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
-        }
-        performance.active_item_consideration_count += active.len() as u64;
-        performance.maximum_active_layers = performance.maximum_active_layers.max(active.len());
-        let time = frame_time_nanos(frame, plan.frame_rate.0, plan.frame_rate.1);
-        let evaluation_started = Instant::now();
-        let evaluated = evaluate(plan, &active, time);
-        performance.evaluated_track_count += evaluated.evaluated_track_count;
-        track_evaluation += evaluation_started.elapsed();
-        let compose_started = Instant::now();
-        if let Err(diagnostic) = backend.render_frame(&evaluated, &mut image) {
-            // The explicit normal-path cleanup preserves the backend failure as
-            // primary evidence; Drop remains only a last-resort safeguard.
-            let cleanup = encoder.abort_after_backend_failure();
-            let diagnostic = match cleanup {
-                Some(detail) => diagnostic.with_hint(format!("encoder cleanup: {detail}")),
-                None => diagnostic,
-            };
-            return Err(cleanup_error(
-                &output,
-                plan,
-                RenderFailureStage::FrameComposition,
-                completed_frames,
-                Some(frame),
-                diagnostic,
-            ));
-        }
-        frame_composition += compose_started.elapsed();
-        let write_started = Instant::now();
-        if let Err(message) = encoder.write_frame(image.as_raw()) {
-            let message = encoder.abort_after_write_failure(message);
-            return Err(cleanup_error(
-                &output,
-                plan,
-                RenderFailureStage::FrameWrite,
-                completed_frames,
-                Some(frame),
-                Diagnostic::error("MVP-RENDER-WRITE", Category::Render, message, ""),
-            ));
-        }
-        encoder_write += write_started.elapsed();
-        completed_frames += 1;
-        performance.rendered_frame_count = completed_frames;
-        if completed_frames < plan.frame_count {
-            emit(events::progress(completed_frames, plan.frame_count));
-        }
-    }
+    let frame_loop = run_frame_loop(
+        plan,
+        options,
+        &output,
+        &schedule,
+        backend.as_mut(),
+        &mut encoder,
+        &mut performance,
+        emit,
+    )?;
+    let completed_frames = frame_loop.completed_frames;
     let finish_started = Instant::now();
     if let Err(message) = encoder.finish() {
         return Err(cleanup_error(
@@ -234,9 +166,9 @@ where
         }
     })?;
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
-    timings.frame_render_ms = milliseconds(frame_composition);
-    timings.track_evaluation_ms = milliseconds(track_evaluation);
-    timings.encoder_write_ms = milliseconds(encoder_write);
+    timings.frame_render_ms = milliseconds(frame_loop.frame_composition);
+    timings.track_evaluation_ms = milliseconds(frame_loop.track_evaluation);
+    timings.encoder_write_ms = milliseconds(frame_loop.encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
     emit(events::completed(
         plan.frame_count,
@@ -275,9 +207,6 @@ fn milliseconds(duration: Duration) -> u128 {
     duration.as_millis()
 }
 
-fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
-    &plan.layers[item.0].draw_key
-}
 #[cfg(test)]
 #[allow(
     clippy::result_large_err,

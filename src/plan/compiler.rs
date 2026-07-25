@@ -7,12 +7,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     Category, Diagnostic,
-    animation::{Interpolation, Keyframe, Track},
+    animation::Track,
     domain::{Crop, Point},
     media::EncoderSettings,
     plan::{
         Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
-        CompiledVisualSource, DrawKey, ImageAsset, RenderPlan, TransformContribution,
+        CompiledVisualSource, DrawKey, ImageAsset, RenderPlan,
     },
     project::{ValidatedProject, parse_colour},
 };
@@ -188,7 +188,7 @@ fn compile_canonical(
         .enumerate()
         .map(|(index, layer)| (layer.id.clone(), index))
         .collect();
-    compile_transitions(
+    transitions::compile(
         &project.visual.transitions,
         &indices,
         &mut layers,
@@ -302,398 +302,6 @@ fn enforce_active_layer_limit(
         }
     }
     Ok(())
-}
-
-fn compile_transitions(
-    transitions: &[crate::project::Transition],
-    indices: &BTreeMap<String, usize>,
-    layers: &mut [CompiledLayer],
-    compilation: &mut CompilationStats,
-) -> Result<(), Diagnostic> {
-    let mut curves: BTreeMap<usize, Vec<(u128, u128, bool, Interpolation)>> = BTreeMap::new();
-    for transition in transitions {
-        let (id, outgoing, incoming, start, duration, interpolation) = match transition {
-            crate::project::Transition::Crossfade {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-            } => (id, outgoing, incoming, *start, *duration, interpolation),
-            crate::project::Transition::ZoomCrossfade {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-                ..
-            }
-            | crate::project::Transition::FlashCut {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-                ..
-            }
-            | crate::project::Transition::DirectionalPush {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-                ..
-            }
-            | crate::project::Transition::ZoomBlur {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                interpolation,
-                ..
-            } => (id, outgoing, incoming, *start, *duration, interpolation),
-        };
-        let start = to_nanos(start, id)?;
-        let end = start.saturating_add(to_nanos(duration, id)?);
-        let interpolation = tracks::interpolation(interpolation);
-        if !matches!(transition, crate::project::Transition::FlashCut { .. }) {
-            for (clip, incoming) in [(outgoing, false), (incoming, true)] {
-                if let Some(index) = indices.get(clip) {
-                    curves
-                        .entry(*index)
-                        .or_default()
-                        .push((start, end, incoming, interpolation));
-                    compilation.compiled_transition_association_count += 1;
-                }
-            }
-        }
-    }
-    transitions::add_opacity_tracks(curves, layers);
-    for transition in transitions {
-        add_transition_style(transition, indices, layers)?;
-    }
-    Ok(())
-}
-
-fn add_transition_style(
-    transition: &crate::project::Transition,
-    indices: &BTreeMap<String, usize>,
-    layers: &mut [CompiledLayer],
-) -> Result<(), Diagnostic> {
-    let (outgoing, incoming, start, duration, style) = match transition {
-        crate::project::Transition::Crossfade { .. } => return Ok(()),
-        crate::project::Transition::ZoomCrossfade {
-            outgoing,
-            incoming,
-            start,
-            duration,
-            outgoing_zoom,
-            incoming_start_zoom,
-            ..
-        } => (
-            outgoing,
-            incoming,
-            *start,
-            *duration,
-            TransitionStyle::Zoom(*outgoing_zoom, *incoming_start_zoom, None),
-        ),
-        crate::project::Transition::FlashCut {
-            outgoing,
-            incoming,
-            start,
-            duration,
-            colour,
-            intensity,
-            ..
-        } => (
-            outgoing,
-            incoming,
-            *start,
-            *duration,
-            TransitionStyle::Flash(
-                parse_colour(colour).ok_or_else(|| {
-                    Diagnostic::error(
-                        "MVP-PLAN-COLOUR",
-                        Category::Internal,
-                        "validated flash colour is invalid",
-                        "",
-                    )
-                })?,
-                *intensity,
-            ),
-        ),
-        crate::project::Transition::DirectionalPush {
-            outgoing,
-            incoming,
-            start,
-            duration,
-            angle_degrees,
-            distance,
-            blur_radius,
-            ..
-        } => (
-            outgoing,
-            incoming,
-            *start,
-            *duration,
-            TransitionStyle::Push(*angle_degrees, *distance, *blur_radius),
-        ),
-        crate::project::Transition::ZoomBlur {
-            outgoing,
-            incoming,
-            start,
-            duration,
-            outgoing_zoom,
-            incoming_start_zoom,
-            blur_radius,
-            ..
-        } => (
-            outgoing,
-            incoming,
-            *start,
-            *duration,
-            TransitionStyle::Zoom(*outgoing_zoom, *incoming_start_zoom, Some(*blur_radius)),
-        ),
-    };
-    let start = to_nanos(start, "transition")?;
-    let end = start.saturating_add(to_nanos(duration, "transition")?);
-    let outgoing = *indices.get(outgoing).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-TRANSITION",
-            Category::Internal,
-            "validated outgoing clip is missing",
-            "",
-        )
-    })?;
-    let incoming = *indices.get(incoming).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-TRANSITION",
-            Category::Internal,
-            "validated incoming clip is missing",
-            "",
-        )
-    })?;
-    match style {
-        TransitionStyle::Zoom(out_zoom, in_zoom, blur) => {
-            zoom_transition_layer(&mut layers[outgoing], start, end, 1.0, out_zoom, blur);
-            zoom_transition_layer(&mut layers[incoming], start, end, in_zoom, 1.0, blur);
-        }
-        TransitionStyle::Flash(colour, intensity) => {
-            let peak = start + (end - start) / 2;
-            for (index, incoming) in [(outgoing, false), (incoming, true)] {
-                let layer = &mut layers[index];
-                let relative_start = start.saturating_sub(layer.start_nanos);
-                let relative_end = end.saturating_sub(layer.start_nanos);
-                let relative_peak = peak.saturating_sub(layer.start_nanos);
-                layer.opacity_contributions.push(Track {
-                    base_value: if incoming { 0.0 } else { 1.0 },
-                    keyframes: vec![
-                        Keyframe {
-                            time: relative_start,
-                            value: if incoming { 0.0 } else { 1.0 },
-                            interpolation: Interpolation::Hold,
-                        },
-                        Keyframe {
-                            time: relative_peak,
-                            value: if incoming { 1.0 } else { 0.0 },
-                            interpolation: Interpolation::Hold,
-                        },
-                        Keyframe {
-                            time: relative_end,
-                            value: if incoming { 1.0 } else { 0.0 },
-                            interpolation: Interpolation::Hold,
-                        },
-                    ],
-                });
-                layer.effects.push(crate::plan::TimedEffect {
-                    start: relative_start,
-                    end: relative_end,
-                    effect: crate::plan::CompiledEffect::Tint {
-                        colour,
-                        amount: Track {
-                            base_value: 0.0,
-                            keyframes: vec![
-                                Keyframe {
-                                    time: 0,
-                                    value: 0.0,
-                                    interpolation: Interpolation::Linear,
-                                },
-                                Keyframe {
-                                    time: (relative_end - relative_start) / 2,
-                                    value: intensity,
-                                    interpolation: Interpolation::Linear,
-                                },
-                                Keyframe {
-                                    time: relative_end - relative_start,
-                                    value: 0.0,
-                                    interpolation: Interpolation::Linear,
-                                },
-                            ],
-                        },
-                    },
-                });
-            }
-        }
-        TransitionStyle::Push(angle, distance, blur) => {
-            let radians = angle.to_radians();
-            push_transition_layer(
-                &mut layers[outgoing],
-                start,
-                end,
-                radians,
-                distance,
-                blur,
-                false,
-            );
-            push_transition_layer(
-                &mut layers[incoming],
-                start,
-                end,
-                radians,
-                distance,
-                blur,
-                true,
-            );
-        }
-    }
-    Ok(())
-}
-enum TransitionStyle {
-    Zoom(f64, f64, Option<f64>),
-    Flash([u8; 4], f64),
-    Push(f64, f64, f64),
-}
-fn zoom_transition_layer(
-    layer: &mut CompiledLayer,
-    start: u128,
-    end: u128,
-    from: f64,
-    to: f64,
-    blur: Option<f64>,
-) {
-    let a = start.saturating_sub(layer.start_nanos);
-    let b = end.saturating_sub(layer.start_nanos);
-    let mut contribution = TransformContribution::identity();
-    contribution.start = a;
-    contribution.end = b;
-    contribution.scale_multiplier = Track {
-        base_value: Point { x: from, y: from },
-        keyframes: vec![Keyframe {
-            time: b,
-            value: Point { x: to, y: to },
-            interpolation: Interpolation::EaseInOut,
-        }],
-    };
-    layer.transform_contributions.push(contribution);
-    if let Some(radius) = blur {
-        layer.effects.push(crate::plan::TimedEffect {
-            start: a,
-            end: b,
-            effect: crate::plan::CompiledEffect::ZoomBlur {
-                radius: Track {
-                    base_value: 0.0,
-                    keyframes: vec![
-                        Keyframe {
-                            time: 0,
-                            value: 0.0,
-                            interpolation: Interpolation::Linear,
-                        },
-                        Keyframe {
-                            time: (b - a) / 2,
-                            value: radius,
-                            interpolation: Interpolation::Linear,
-                        },
-                        Keyframe {
-                            time: b - a,
-                            value: 0.0,
-                            interpolation: Interpolation::Linear,
-                        },
-                    ],
-                },
-                samples: 12,
-                anchor: Point { x: 0.5, y: 0.5 },
-                direction: crate::project::ZoomBlurDirection::Centered,
-            },
-        });
-    }
-}
-fn push_transition_layer(
-    layer: &mut CompiledLayer,
-    start: u128,
-    end: u128,
-    angle: f64,
-    distance: f64,
-    blur: f64,
-    incoming: bool,
-) {
-    let a = start.saturating_sub(layer.start_nanos);
-    let b = end.saturating_sub(layer.start_nanos);
-    let delta = Point {
-        x: angle.cos() * distance,
-        y: angle.sin() * distance,
-    };
-    let mut contribution = TransformContribution::identity();
-    contribution.start = a;
-    contribution.end = b;
-    contribution.position_offset = Track {
-        base_value: if incoming {
-            Point {
-                x: -delta.x,
-                y: -delta.y,
-            }
-        } else {
-            Point { x: 0.0, y: 0.0 }
-        },
-        keyframes: vec![Keyframe {
-            time: b,
-            value: if incoming {
-                Point { x: 0.0, y: 0.0 }
-            } else {
-                delta
-            },
-            interpolation: Interpolation::EaseInOut,
-        }],
-    };
-    layer.transform_contributions.push(contribution);
-    layer.effects.push(crate::plan::TimedEffect {
-        start: a,
-        end: b,
-        effect: crate::plan::CompiledEffect::DirectionalBlur {
-            radius: Track {
-                base_value: 0.0,
-                keyframes: vec![
-                    Keyframe {
-                        time: 0,
-                        value: 0.0,
-                        interpolation: Interpolation::Linear,
-                    },
-                    Keyframe {
-                        time: (b - a) / 2,
-                        value: blur,
-                        interpolation: Interpolation::Linear,
-                    },
-                    Keyframe {
-                        time: b - a,
-                        value: 0.0,
-                        interpolation: Interpolation::Linear,
-                    },
-                ],
-            },
-            angle_degrees: Track::new(angle.to_degrees()),
-        },
-    });
-}
-
-fn insert_keyframe<T>(keyframes: &mut Vec<Keyframe<T>>, keyframe: Keyframe<T>) {
-    match keyframes.binary_search_by_key(&keyframe.time, |existing| existing.time) {
-        Ok(index) => keyframes[index] = keyframe,
-        Err(index) => keyframes.insert(index, keyframe),
-    }
 }
 
 #[cfg(test)]
@@ -810,7 +418,7 @@ mod tests {
     fn directional_push_keeps_authored_tracks_and_has_correct_endpoints() {
         let mut outgoing = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         outgoing.start_nanos = 0;
-        push_transition_layer(
+        transitions::push_layer(
             &mut outgoing,
             1_000_000_000,
             2_000_000_000,
@@ -838,7 +446,7 @@ mod tests {
 
         let mut incoming = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         incoming.start_nanos = 0;
-        push_transition_layer(
+        transitions::push_layer(
             &mut incoming,
             1_000_000_000,
             2_000_000_000,
@@ -930,7 +538,7 @@ mod tests {
         incoming.start_nanos = 0;
         let mut layers = vec![outgoing, incoming];
         let indices = BTreeMap::from([("out".to_owned(), 0), ("in".to_owned(), 1)]);
-        compile_transitions(
+        transitions::compile(
             &[crate::project::Transition::FlashCut {
                 id: "cut".to_owned(),
                 outgoing: "out".to_owned(),
@@ -960,7 +568,7 @@ mod tests {
     fn zoom_blur_transition_compiles_to_a_radial_blur_effect() {
         let mut layer = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.start_nanos = 0;
-        zoom_transition_layer(
+        transitions::zoom_layer(
             &mut layer,
             1_000_000_000,
             1_200_000_000,

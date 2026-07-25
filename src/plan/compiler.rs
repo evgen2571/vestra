@@ -687,87 +687,6 @@ fn push_transition_layer(
     });
 }
 
-/// Test-only reference implementation for the extracted flash compiler.
-#[cfg(test)]
-fn compile_flash_overlay(
-    flash: &crate::project::Flash,
-    rate: (u64, u64),
-    frame_count: u64,
-) -> Result<CompiledLayer, Diagnostic> {
-    let start_nanos = to_nanos(flash.start, &flash.id)?;
-    let duration_nanos = to_nanos(flash.duration, &flash.id)?;
-    let colour = parse_colour(&flash.colour).ok_or_else(|| {
-        Diagnostic::error(
-            "MVP-PLAN-FLASH",
-            Category::Internal,
-            "validated flash has invalid colour",
-            "",
-        )
-    })?;
-    let fade_in = to_nanos(flash.fade_in, &flash.id)?;
-    let fade_out = to_nanos(flash.fade_out, &flash.id)?;
-    let mut opacity = Track::new(if fade_in == 0 { flash.opacity } else { 0.0 });
-    if fade_in > 0 {
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: 0,
-                value: 0.0,
-                interpolation: Interpolation::Hold,
-            },
-        );
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: fade_in,
-                value: flash.opacity,
-                interpolation: Interpolation::Linear,
-            },
-        );
-    }
-    if fade_out > 0 {
-        let fade_out_start = duration_nanos.saturating_sub(fade_out);
-        if fade_out_start != fade_in {
-            insert_keyframe(
-                &mut opacity.keyframes,
-                Keyframe {
-                    time: fade_out_start,
-                    value: flash.opacity,
-                    interpolation: Interpolation::Hold,
-                },
-            );
-        }
-        insert_keyframe(
-            &mut opacity.keyframes,
-            Keyframe {
-                time: duration_nanos,
-                value: 0.0,
-                interpolation: Interpolation::Linear,
-            },
-        );
-    }
-    Ok(CompiledLayer {
-        id: flash.id.clone(),
-        start_nanos,
-        duration_nanos,
-        start_frame: first_frame_at_or_after(start_nanos, rate)?,
-        end_frame: first_frame_at_or_after(start_nanos.saturating_add(duration_nanos), rate)?
-            .min(frame_count),
-        draw_key: DrawKey {
-            layer: flash.layer,
-            start_nanos,
-            id: flash.id.clone(),
-        },
-        source: CompiledVisualSource::SolidColor { colour },
-        transform: canvas_transform(),
-        transform_contributions: Vec::new(),
-        opacity,
-        opacity_contributions: Vec::new(),
-        effects: Vec::new(),
-        blend_mode: crate::project::BlendMode::Normal,
-    })
-}
-
 fn insert_keyframe<T>(keyframes: &mut Vec<Keyframe<T>>, keyframe: Keyframe<T>) {
     match keyframes.binary_search_by_key(&keyframe.time, |existing| existing.time) {
         Ok(index) => keyframes[index] = keyframe,
@@ -903,21 +822,21 @@ mod tests {
 
     #[test]
     fn flash_without_fade_out_keeps_constant_opacity_until_its_end() {
-        let layer = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash compiles");
+        let layer = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash compiles");
         assert_eq!(layer.opacity.base_value, 0.7);
         assert!(layer.opacity.keyframes.is_empty());
     }
 
     #[test]
     fn flash_fade_out_holds_then_reaches_zero_at_end() {
-        let layer = compile_flash_overlay(&flash(0.0, 0.5), (24, 1), 100).expect("flash compiles");
+        let layer = flashes::compile(&flash(0.0, 0.5), (24, 1), 100).expect("flash compiles");
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
     }
 
     #[test]
     fn flash_fade_in_only_reaches_and_holds_configured_opacity() {
-        let layer = compile_flash_overlay(&flash(0.5, 0.0), (24, 1), 100).expect("flash");
+        let layer = flashes::compile(&flash(0.5, 0.0), (24, 1), 100).expect("flash");
         assert_eq!(layer.opacity.evaluate(0), 0.0);
         assert_eq!(layer.opacity.evaluate(250_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(500_000_000), 0.7);
@@ -926,7 +845,7 @@ mod tests {
 
     #[test]
     fn flash_with_both_fades_holds_between_their_boundaries() {
-        let layer = compile_flash_overlay(&flash(0.5, 0.5), (24, 1), 100).expect("flash");
+        let layer = flashes::compile(&flash(0.5, 0.5), (24, 1), 100).expect("flash");
         assert_eq!(layer.opacity.evaluate(250_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(500_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.7);
@@ -936,7 +855,7 @@ mod tests {
 
     #[test]
     fn flash_fades_can_fill_the_entire_interval() {
-        let layer = compile_flash_overlay(&flash(1.0, 1.0), (24, 1), 100).expect("flash");
+        let layer = flashes::compile(&flash(1.0, 1.0), (24, 1), 100).expect("flash");
         assert_eq!(layer.opacity.evaluate(1_000_000_000), 0.7);
         assert_eq!(layer.opacity.evaluate(1_500_000_000), 0.35);
         assert_eq!(layer.opacity.evaluate(2_000_000_000), 0.0);
@@ -945,7 +864,7 @@ mod tests {
 
     #[test]
     fn zero_frame_layers_do_not_count_toward_active_layer_limit() {
-        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        let mut layer = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         layer.start_frame = 12;
         layer.end_frame = 12;
         enforce_active_layer_limit(&[layer], 0).expect("zero-frame layer is never active");
@@ -953,7 +872,7 @@ mod tests {
 
     #[test]
     fn directional_push_keeps_authored_tracks_and_has_correct_endpoints() {
-        let mut outgoing = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        let mut outgoing = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         outgoing.start_nanos = 0;
         push_transition_layer(
             &mut outgoing,
@@ -981,7 +900,7 @@ mod tests {
         );
         assert!(outgoing.transform.position.keyframes.is_empty());
 
-        let mut incoming = compile_flash_overlay(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
+        let mut incoming = flashes::compile(&flash(0.0, 0.0), (24, 1), 100).expect("flash");
         incoming.start_nanos = 0;
         push_transition_layer(
             &mut incoming,
@@ -1012,7 +931,7 @@ mod tests {
 
     #[test]
     fn transient_preset_uses_its_own_interval_on_a_long_clip() {
-        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
+        let mut layer = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.id = "clip".to_owned();
         let preset = crate::project::Preset::Impact {
             timing: crate::project::ActiveInterval {
@@ -1067,10 +986,10 @@ mod tests {
 
     #[test]
     fn flash_cut_holds_visibility_until_its_peak_then_switches() {
-        let mut outgoing = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("out");
+        let mut outgoing = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("out");
         outgoing.id = "out".to_owned();
         outgoing.start_nanos = 0;
-        let mut incoming = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("in");
+        let mut incoming = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("in");
         incoming.id = "in".to_owned();
         incoming.start_nanos = 0;
         let mut layers = vec![outgoing, incoming];
@@ -1103,7 +1022,7 @@ mod tests {
 
     #[test]
     fn zoom_blur_transition_compiles_to_a_radial_blur_effect() {
-        let mut layer = compile_flash_overlay(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
+        let mut layer = flashes::compile(&flash(0.0, 0.0), (30, 1), 300).expect("layer");
         layer.start_nanos = 0;
         zoom_transition_layer(
             &mut layer,

@@ -13,6 +13,7 @@ use crate::{
 };
 use image::RgbaImage;
 
+use super::engine_events;
 use super::engine_failure::cleanup_error;
 use super::engine_selection::create_backend;
 pub use super::engine_types::{
@@ -111,15 +112,7 @@ where
             .then(|| milliseconds(backend_timings.row_repack)),
         ..RenderTimings::default()
     };
-    emit(RenderEvent {
-        event_schema_version: 1,
-        kind: "started".to_owned(),
-        frame: 0,
-        total_frames: plan.frame_count,
-        progress: Some(0.0),
-        output_path: Some(output.final_path.clone()),
-        warnings: None,
-    });
+    emit(engine_events::started(plan.frame_count, &output.final_path));
     let mut encoder =
         FfmpegEncoder::start(&plan.encoder, &output.temporary_path).map_err(|message| {
             cleanup_error(
@@ -206,15 +199,7 @@ where
         completed_frames += 1;
         performance.rendered_frame_count = completed_frames;
         if completed_frames < plan.frame_count {
-            emit(RenderEvent {
-                event_schema_version: 1,
-                kind: "progress".to_owned(),
-                frame: completed_frames,
-                total_frames: plan.frame_count,
-                progress: Some(completed_frames as f64 / plan.frame_count as f64),
-                output_path: None,
-                warnings: None,
-            });
+            emit(engine_events::progress(completed_frames, plan.frame_count));
         }
     }
     let finish_started = Instant::now();
@@ -249,15 +234,11 @@ where
     timings.track_evaluation_ms = milliseconds(track_evaluation);
     timings.encoder_write_ms = milliseconds(encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
-    emit(RenderEvent {
-        event_schema_version: 1,
-        kind: "completed".to_owned(),
-        frame: plan.frame_count,
-        total_frames: plan.frame_count,
-        progress: Some(1.0),
-        output_path: Some(output.final_path.clone()),
-        warnings: Some(plan.warnings.clone()),
-    });
+    emit(engine_events::completed(
+        plan.frame_count,
+        &output.final_path,
+        plan.warnings.clone(),
+    ));
     let preparation = backend.stats();
     performance.absorb_backend_snapshot(&preparation);
     if backend.kind() == RenderBackendKind::Wgpu {

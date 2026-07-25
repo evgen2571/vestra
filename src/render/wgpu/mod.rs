@@ -20,6 +20,7 @@ use image::RgbaImage;
 
 mod context;
 mod diagnostics;
+mod executor;
 mod parameters;
 mod parity;
 mod pipeline;
@@ -29,6 +30,7 @@ pub(crate) mod support;
 
 use context::GpuContext;
 use diagnostics::{diagnostic, finish_error_scopes};
+use executor::dispatch_layer;
 use parameters::LayerParameters;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
 use pipeline::LayerPipeline;
@@ -169,7 +171,11 @@ impl RenderBackend for WgpuBackend {
             solid_or_background: frame.background.map(f64::from).map(|value| value as f32),
             ..LayerParameters::zeroed()
         };
-        self.dispatch_layer(
+        dispatch_layer(
+            &self.device,
+            &self.queue,
+            &self._layer_pipeline,
+            &self._layer_parameters,
             &self.sources.solid_bind_group,
             clear,
             frame.width,
@@ -197,7 +203,11 @@ impl RenderBackend for WgpuBackend {
                     layer.opacity,
                     layer.colour_transform,
                 );
-                self.dispatch_layer(
+                dispatch_layer(
+                    &self.device,
+                    &self.queue,
+                    &self._layer_pipeline,
+                    &self._layer_parameters,
                     &self.sources.bind_groups[*asset_index],
                     parameters,
                     frame.width,
@@ -239,7 +249,11 @@ impl RenderBackend for WgpuBackend {
                     solid_or_background: colour.map(f64::from).map(|value| value as f32),
                     ..LayerParameters::zeroed()
                 };
-                self.dispatch_layer(
+                dispatch_layer(
+                    &self.device,
+                    &self.queue,
+                    &self._layer_pipeline,
+                    &self._layer_parameters,
                     &self.sources.solid_bind_group,
                     parameters,
                     frame.width,
@@ -354,34 +368,6 @@ impl RenderBackend for WgpuBackend {
     }
     fn adapter(&self) -> Option<AdapterMetadata> {
         Some(self.adapter.clone())
-    }
-}
-
-impl WgpuBackend {
-    fn dispatch_layer(
-        &self,
-        bind_group: &wgpu::BindGroup,
-        parameters: LayerParameters,
-        width: u32,
-        height: u32,
-    ) {
-        self.queue
-            .write_buffer(&self._layer_parameters, 0, bytemuck::bytes_of(&parameters));
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("video-editor layer dispatch"),
-            });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("video-editor layer pass"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&self._layer_pipeline);
-            pass.set_bind_group(0, bind_group, &[]);
-            pass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
-        }
-        self.queue.submit(Some(encoder.finish()));
     }
 }
 

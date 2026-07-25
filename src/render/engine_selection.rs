@@ -19,7 +19,7 @@ pub(super) fn create_backend(
     plan: &RenderPlan,
     decoded: &Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
-    if let Err(error) = super::wgpu_support::validate_plan(plan) {
+    if let Err(error) = super::wgpu::support::validate_plan(plan) {
         return match preference {
             RenderBackendPreference::Wgpu => Err(error),
             RenderBackendPreference::Auto => Ok((

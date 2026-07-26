@@ -13,70 +13,15 @@ use super::{
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct ReadbackTimings {
-    pub(super) command_encode: Duration,
-    pub(super) submission: Duration,
     pub(super) wait: Duration,
     pub(super) row_repack: Duration,
 }
 
-pub(super) fn read_frame(
+pub(super) fn map_frame(
     device: &wgpu::Device,
-    queue: &wgpu::Queue,
     frame: &mut FrameResources,
-    width: u32,
-    height: u32,
     destination: &mut RgbaImage,
 ) -> Result<ReadbackTimings, Diagnostic> {
-    let command_encode_started = Instant::now();
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("video-editor readback copy"),
-    });
-    encoder.copy_buffer_to_texture(
-        wgpu::ImageCopyBuffer {
-            buffer: &frame.accumulation,
-            layout: wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(frame.padded_row_bytes),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::ImageCopyTexture {
-            texture: &frame.output,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    encoder.copy_texture_to_buffer(
-        wgpu::ImageCopyTexture {
-            texture: &frame.output,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::ImageCopyBuffer {
-            buffer: &frame.readback,
-            layout: wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(frame.padded_row_bytes),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    let command_encode = command_encode_started.elapsed();
-    let submission_started = Instant::now();
-    queue.submit(Some(encoder.finish()));
-    let submission = submission_started.elapsed();
     let slice = frame.readback.slice(..);
     let (sender, receiver) = std::sync::mpsc::channel();
     let readback_wait_started = Instant::now();
@@ -117,10 +62,5 @@ pub(super) fn read_frame(
     let row_repack = row_repack_started.elapsed();
     let destination_bytes: &mut [u8] = destination.as_mut();
     destination_bytes.copy_from_slice(&frame.frame_bytes);
-    Ok(ReadbackTimings {
-        command_encode,
-        submission,
-        wait,
-        row_repack,
-    })
+    Ok(ReadbackTimings { wait, row_repack })
 }

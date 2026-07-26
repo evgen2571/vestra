@@ -2,7 +2,7 @@
 
 use crate::{Category, Diagnostic, plan::RenderPlan, project::BlendMode};
 
-/// Rejects plan features that the current single-pass WGPU renderer cannot run.
+/// Rejects features without a declared texture-frame shader and parity suite.
 #[expect(
     clippy::result_large_err,
     reason = "backend selection preserves the existing structured diagnostic"

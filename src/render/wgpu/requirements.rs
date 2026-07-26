@@ -17,6 +17,8 @@ pub(super) struct GpuRequirements {
     pub(super) padded_row_bytes: u32,
     pub(super) copy_bytes: u64,
     pub(super) uniform_bytes: u32,
+    parameter_record_count: u32,
+    parameter_buffer_bytes: u64,
 }
 
 impl GpuRequirements {
@@ -56,6 +58,11 @@ impl GpuRequirements {
             .flat_map(|asset| [decoded.image(asset).width(), decoded.image(asset).height()])
             .max()
             .unwrap_or(1);
+        let parameter_record_count = 1 + plan.layers.len() as u32 * 2;
+        let parameter_buffer_bytes = u64::from(align_up(
+            uniform_bytes,
+            wgpu::Limits::downlevel_defaults().min_uniform_buffer_offset_alignment,
+        )) * u64::from(parameter_record_count);
         Ok(Self {
             max_texture_dimension_2d: plan
                 .canvas
@@ -66,6 +73,8 @@ impl GpuRequirements {
             padded_row_bytes,
             copy_bytes,
             uniform_bytes,
+            parameter_record_count,
+            parameter_buffer_bytes,
         })
     }
 
@@ -98,12 +107,12 @@ impl GpuRequirements {
                 "output/readback buffer",
             ));
         }
-        if self.copy_bytes > u64::from(limits.max_storage_buffer_binding_size) {
+        if self.parameter_buffer_bytes > limits.max_buffer_size {
             return Err(limit_error(
-                "WGPU-STORAGE-LIMIT",
-                self.copy_bytes,
-                u64::from(limits.max_storage_buffer_binding_size),
-                "accumulation storage binding",
+                "WGPU-BUFFER-LIMIT",
+                self.parameter_buffer_bytes,
+                limits.max_buffer_size,
+                "frame parameter buffer",
             ));
         }
         if self.uniform_bytes > limits.max_uniform_buffer_binding_size {
@@ -115,15 +124,16 @@ impl GpuRequirements {
             ));
         }
         if limits.max_bind_groups < 1
-            || limits.max_bindings_per_bind_group < 3
-            || limits.max_sampled_textures_per_shader_stage < 1
-            || limits.max_storage_buffers_per_shader_stage < 1
+            || limits.max_bindings_per_bind_group < 4
+            || limits.max_sampled_textures_per_shader_stage < 2
+            || limits.max_storage_textures_per_shader_stage < 1
             || limits.max_uniform_buffers_per_shader_stage < 1
+            || limits.max_dynamic_uniform_buffers_per_pipeline_layout < 1
         {
             return Err(Diagnostic::error(
                 "WGPU-BINDING-LIMIT",
                 Category::Backend,
-                "WGPU adapter cannot provide the renderer's one bind group with texture, storage, and uniform bindings",
+                "WGPU adapter cannot provide the renderer's texture and dynamic-uniform bindings",
                 "",
             ));
         }
@@ -147,24 +157,16 @@ impl GpuRequirements {
         self,
         plan: &RenderPlan,
     ) -> Result<wgpu::Limits, Diagnostic> {
-        let storage_binding_size = u32::try_from(self.copy_bytes).map_err(|_| {
-            Diagnostic::error(
-                "WGPU-STORAGE-LIMIT",
-                Category::Backend,
-                "output/readback buffer exceeds WGPU storage binding address space",
-                "",
-            )
-        })?;
         let mut limits = wgpu::Limits::downlevel_defaults();
         limits.max_texture_dimension_2d = self.max_texture_dimension_2d;
         limits.max_bind_groups = 1;
-        limits.max_bindings_per_bind_group = 3;
-        limits.max_sampled_textures_per_shader_stage = 1;
-        limits.max_storage_buffers_per_shader_stage = 1;
+        limits.max_bindings_per_bind_group = 4;
+        limits.max_sampled_textures_per_shader_stage = 2;
+        limits.max_storage_textures_per_shader_stage = 1;
         limits.max_uniform_buffers_per_shader_stage = 1;
+        limits.max_dynamic_uniform_buffers_per_pipeline_layout = 1;
         limits.max_uniform_buffer_binding_size = self.uniform_bytes;
-        limits.max_storage_buffer_binding_size = storage_binding_size;
-        limits.max_buffer_size = self.copy_bytes;
+        limits.max_buffer_size = self.copy_bytes.max(self.parameter_buffer_bytes);
         limits.max_compute_invocations_per_workgroup = 64;
         limits.max_compute_workgroup_size_x = 8;
         limits.max_compute_workgroup_size_y = 8;
@@ -175,6 +177,20 @@ impl GpuRequirements {
             .div_ceil(8)
             .max(plan.canvas.height.div_ceil(8));
         Ok(limits)
+    }
+
+    pub(super) fn parameter_buffer_bytes(self, alignment: u32) -> Result<u64, Diagnostic> {
+        let stride = u64::from(align_up(self.uniform_bytes, alignment));
+        stride
+            .checked_mul(u64::from(self.parameter_record_count))
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-PARAMETER-OVERFLOW",
+                    Category::Backend,
+                    "frame parameter buffer size overflow",
+                    "",
+                )
+            })
     }
 }
 

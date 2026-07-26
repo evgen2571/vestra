@@ -37,7 +37,7 @@ pub(super) fn create_backend(
     }
     create_backend_with(
         preference,
-        Box::new(CpuBackend::new(plan, Arc::clone(decoded))),
+        || Box::new(CpuBackend::new(plan, Arc::clone(decoded))),
         || WgpuBackend::new(plan, Arc::clone(decoded)).map(|backend| Box::new(backend) as _),
     )
 }
@@ -46,21 +46,22 @@ pub(super) fn create_backend(
     clippy::result_large_err,
     reason = "backend selection preserves structured diagnostics for auto fallback and explicit requests"
 )]
-pub(super) fn create_backend_with<F>(
+pub(super) fn create_backend_with<CF, WF>(
     preference: RenderBackendPreference,
-    cpu: Box<dyn RenderBackend>,
-    create_wgpu: F,
+    create_cpu: CF,
+    create_wgpu: WF,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>
 where
-    F: FnOnce() -> Result<Box<dyn RenderBackend>, Diagnostic>,
+    CF: FnOnce() -> Box<dyn RenderBackend>,
+    WF: FnOnce() -> Result<Box<dyn RenderBackend>, Diagnostic>,
 {
     match preference {
-        RenderBackendPreference::Cpu => Ok((cpu, None)),
+        RenderBackendPreference::Cpu => Ok((create_cpu(), None)),
         RenderBackendPreference::Wgpu => Ok((create_wgpu()?, None)),
         RenderBackendPreference::Auto => match create_wgpu() {
             Ok(backend) => Ok((backend, None)),
             Err(error) => Ok((
-                cpu,
+                create_cpu(),
                 Some(BackendFallback {
                     code: error.code,
                     stage: "wgpu_preparation".to_owned(),

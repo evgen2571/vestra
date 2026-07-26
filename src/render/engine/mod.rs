@@ -27,6 +27,7 @@ mod tests {
         RenderOptions,
     };
     use std::{
+        cell::Cell,
         path::Path,
         sync::{Arc, atomic::AtomicBool},
         time::Duration,
@@ -120,6 +121,38 @@ mod tests {
         Box::new(SelectionBackend)
     }
 
+    struct WgpuSelectionBackend;
+
+    impl RenderBackend for WgpuSelectionBackend {
+        fn kind(&self) -> RenderBackendKind {
+            RenderBackendKind::Wgpu
+        }
+
+        fn render_frame(
+            &mut self,
+            _frame: &EvaluatedFrame,
+            _destination: &mut RgbaImage,
+        ) -> Result<(), Diagnostic> {
+            Ok(())
+        }
+
+        fn stats(&mut self) -> PreparationStats {
+            PreparationStats::default()
+        }
+
+        fn timings(&self) -> PreparationTimings {
+            PreparationTimings::default()
+        }
+
+        fn adapter(&self) -> Option<AdapterMetadata> {
+            None
+        }
+    }
+
+    fn selection_wgpu_backend() -> Box<dyn RenderBackend> {
+        Box::new(WgpuSelectionBackend)
+    }
+
     fn example_plan() -> RenderPlan {
         let validated = load_and_validate(
             Path::new("examples/projects/animation-effects.json"),
@@ -185,7 +218,7 @@ mod tests {
     #[test]
     fn cpu_selection_never_attempts_wgpu_initialization() {
         let (backend, fallback) =
-            create_backend_with(RenderBackendPreference::Cpu, selection_backend(), || {
+            create_backend_with(RenderBackendPreference::Cpu, selection_backend, || {
                 panic!("CPU selection must not initialize WGPU")
             })
             .expect("CPU backend selection succeeds");
@@ -197,7 +230,7 @@ mod tests {
     #[test]
     fn auto_selection_falls_back_with_the_wgpu_diagnostic() {
         let (backend, fallback) =
-            create_backend_with(RenderBackendPreference::Auto, selection_backend(), || {
+            create_backend_with(RenderBackendPreference::Auto, selection_backend, || {
                 Err(Diagnostic::error(
                     "WGPU-ADAPTER-NOT-FOUND",
                     Category::Backend,
@@ -219,15 +252,14 @@ mod tests {
 
     #[test]
     fn explicit_wgpu_selection_propagates_the_wgpu_diagnostic() {
-        let result =
-            create_backend_with(RenderBackendPreference::Wgpu, selection_backend(), || {
-                Err(Diagnostic::error(
-                    "WGPU-ADAPTER-NOT-FOUND",
-                    Category::Backend,
-                    "injected adapter failure",
-                    "",
-                ))
-            });
+        let result = create_backend_with(RenderBackendPreference::Wgpu, selection_backend, || {
+            Err(Diagnostic::error(
+                "WGPU-ADAPTER-NOT-FOUND",
+                Category::Backend,
+                "injected adapter failure",
+                "",
+            ))
+        });
         let error = match result {
             Ok(_) => panic!("explicit WGPU selection must not fall back"),
             Err(error) => error,
@@ -261,7 +293,7 @@ mod tests {
             ),
         ] {
             let explicit =
-                create_backend_with(RenderBackendPreference::Wgpu, selection_backend(), || {
+                create_backend_with(RenderBackendPreference::Wgpu, selection_backend, || {
                     Err(Diagnostic::error(code, Category::Backend, message, ""))
                 });
             let error = match explicit {
@@ -272,7 +304,7 @@ mod tests {
             assert_eq!(error.message, message);
 
             let (backend, fallback) =
-                create_backend_with(RenderBackendPreference::Auto, selection_backend(), || {
+                create_backend_with(RenderBackendPreference::Auto, selection_backend, || {
                     Err(Diagnostic::error(code, Category::Backend, message, ""))
                 })
                 .expect("automatic mode falls back before rendering");
@@ -283,6 +315,118 @@ mod tests {
                     if fallback_code == code && fallback_message == message
             ));
         }
+    }
+
+    #[test]
+    fn backend_selection_constructs_only_the_selected_backend() {
+        for preference in [RenderBackendPreference::Cpu, RenderBackendPreference::Wgpu] {
+            let cpu_calls = Cell::new(0);
+            let wgpu_calls = Cell::new(0);
+            let (backend, fallback) = create_backend_with(
+                preference,
+                || {
+                    cpu_calls.set(cpu_calls.get() + 1);
+                    selection_backend()
+                },
+                || {
+                    wgpu_calls.set(wgpu_calls.get() + 1);
+                    Ok(selection_wgpu_backend())
+                },
+            )
+            .expect("injected selection succeeds");
+
+            assert!(fallback.is_none());
+            match preference {
+                RenderBackendPreference::Cpu => {
+                    assert_eq!(backend.kind(), RenderBackendKind::Cpu);
+                    assert_eq!(cpu_calls.get(), 1);
+                    assert_eq!(wgpu_calls.get(), 0);
+                }
+                RenderBackendPreference::Wgpu => {
+                    assert_eq!(backend.kind(), RenderBackendKind::Wgpu);
+                    assert_eq!(cpu_calls.get(), 0);
+                    assert_eq!(wgpu_calls.get(), 1);
+                }
+                RenderBackendPreference::Auto => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn automatic_wgpu_success_does_not_construct_cpu() {
+        let cpu_calls = Cell::new(0);
+        let wgpu_calls = Cell::new(0);
+        let (backend, fallback) = create_backend_with(
+            RenderBackendPreference::Auto,
+            || {
+                cpu_calls.set(cpu_calls.get() + 1);
+                selection_backend()
+            },
+            || {
+                wgpu_calls.set(wgpu_calls.get() + 1);
+                Ok(selection_wgpu_backend())
+            },
+        )
+        .expect("automatic WGPU selection succeeds");
+
+        assert_eq!(backend.kind(), RenderBackendKind::Wgpu);
+        assert!(fallback.is_none());
+        assert_eq!(cpu_calls.get(), 0);
+        assert_eq!(wgpu_calls.get(), 1);
+    }
+
+    #[test]
+    fn explicit_wgpu_failure_does_not_construct_cpu() {
+        let cpu_calls = Cell::new(0);
+        let wgpu_calls = Cell::new(0);
+        let result = create_backend_with(
+            RenderBackendPreference::Wgpu,
+            || {
+                cpu_calls.set(cpu_calls.get() + 1);
+                selection_backend()
+            },
+            || {
+                wgpu_calls.set(wgpu_calls.get() + 1);
+                Err(Diagnostic::error(
+                    "WGPU-FAIL",
+                    Category::Backend,
+                    "injected",
+                    "",
+                ))
+            },
+        );
+
+        assert!(result.is_err());
+        assert_eq!(cpu_calls.get(), 0);
+        assert_eq!(wgpu_calls.get(), 1);
+    }
+
+    #[test]
+    fn automatic_wgpu_failure_constructs_cpu_once() {
+        let cpu_calls = Cell::new(0);
+        let wgpu_calls = Cell::new(0);
+        let (backend, fallback) = create_backend_with(
+            RenderBackendPreference::Auto,
+            || {
+                cpu_calls.set(cpu_calls.get() + 1);
+                selection_backend()
+            },
+            || {
+                wgpu_calls.set(wgpu_calls.get() + 1);
+                Err(Diagnostic::error(
+                    "WGPU-FAIL",
+                    Category::Backend,
+                    "injected",
+                    "",
+                ))
+            },
+        )
+        .expect("automatic WGPU failure falls back");
+
+        assert_eq!(backend.kind(), RenderBackendKind::Cpu);
+        assert!(fallback.is_some());
+        assert_eq!(cpu_calls.get(), 1);
+        assert_eq!(wgpu_calls.get(), 1);
     }
 
     #[test]

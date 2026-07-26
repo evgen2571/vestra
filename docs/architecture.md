@@ -53,17 +53,25 @@ shake, and motion calculations.
 
 ## Rendering
 
-`render/geometry` owns pure crop bounds, image sizing, and inverse-affine
-calculations. CPU rasterization and WGPU parameter packing use those calculations
-instead of maintaining separate formulas.
+`render/geometry` owns crop materialization, image sizing, and resolved forward
+and inverse affine transforms. It also materializes transformed image corners.
+CPU rasterization uses those corners for visible bounds and the inverse mapping
+for sampling. WGPU parameter packing uses the same source region, dimensions,
+and inverse mapping, converting only final uniform values to `f32`.
 
 `render/metrics` owns the flat preparation and timing report types. The engine
 uses its merge methods for compiler, schedule, and backend data.
 
 `render/decoded` eagerly decodes image assets once. `render/cpu/assets` owns the
-CPU-only static-crop cache. `render/cpu` contains its prepared backend,
-composition, rasterization, surface reuse, and CPU effect algorithms. The CPU
-backend is ready when its constructor returns.
+CPU-only static-crop cache. `render/effects` turns evaluated effects into
+backend-neutral logical passes. It owns identity elimination, multipass
+decomposition, and pass order. The CPU effect executor consumes those passes
+with its established surface pool and algorithms. A future WGPU executor can
+consume the same logical pass plan.
+
+`render/cpu` contains its prepared backend, composition, rasterization, surface
+reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
+returns.
 
 `render/wgpu/backend` owns prepared WGPU state and frame rendering. `context`
 creates the adapter and device. `requirements` validates limits before resources
@@ -75,10 +83,11 @@ the current one-pass WGPU renderer accepts a plan. That policy is outside the
 engine so future GPU effect work changes the WGPU module rather than selection
 logic.
 
-`RenderBackend` accepts evaluated frames only. The engine selects a fully
-prepared backend before starting frame rendering. Auto selection may fall back
-to CPU during preparation, but a failure after frame rendering begins aborts the
-render instead of changing backends mid-stream.
+`RenderBackend` accepts evaluated frames only. The engine creates CPU and WGPU
+backends lazily and returns a fully prepared backend before frame rendering
+starts. CPU preference never initializes WGPU. Auto selection tries WGPU first
+and constructs CPU only when WGPU preparation fails. A failure after frame
+rendering begins aborts the render instead of changing backends mid-stream.
 
 ## Engine, failures, and output
 
@@ -92,12 +101,32 @@ Failure handling cleans temporary output and aborts FFmpeg when needed. It keeps
 completed-frame and attempted-frame accounting separate so progress and failure
 reports preserve their existing meaning.
 
+## Effect and geometry flow
+
+```text
+project effect
+  -> validation
+  -> compiled effect
+  -> evaluated effect
+  -> backend-neutral logical passes
+  -> CPU pass executor
+```
+
+```text
+evaluated source and transform
+  -> shared crop and sizing resolution
+  -> shared forward/inverse affine geometry
+  -> CPU raster bounds and sampling
+  -> WGPU parameter packing
+```
+
 ## Extending effects
 
-To add a project effect, update the model, shared parameter validator, compiler,
-evaluator, CPU pass planning or algorithm, and compatibility tests. If WGPU
-does not implement it, update `render/wgpu/support.rs` so explicit WGPU renders
-fail and automatic selection falls back before the first frame.
+To add a project effect, update the project model and schema, validation,
+compiler, compiled-effect metadata, evaluation, `render/effects` pass planning,
+CPU execution, and compatibility tests. If WGPU does not implement it, update
+`render/wgpu/support.rs` so explicit WGPU renders fail and automatic selection
+falls back before the first frame.
 
 To implement WGPU support later, keep the effect's plan and evaluation behavior
 unchanged, add its shader and parameter or resource needs under `render/wgpu`,

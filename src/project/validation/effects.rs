@@ -4,6 +4,78 @@ use std::collections::BTreeSet;
 
 use crate::{Category, Diagnostic, project::parse_colour};
 
+use super::tracks;
+
+fn valid_blur_radius(value: &f64) -> bool {
+    value.is_finite() && (0.0..=32.0).contains(value)
+}
+
+fn finite(value: &f64) -> bool {
+    value.is_finite()
+}
+
+fn unit_value(value: &f64) -> bool {
+    unit(*value)
+}
+
+const fn positive(value: f64) -> bool {
+    value.is_finite() && value > 0.0
+}
+
+const fn nonnegative(value: f64) -> bool {
+    value.is_finite() && value >= 0.0
+}
+
+const fn unit(value: f64) -> bool {
+    value.is_finite() && value >= 0.0 && value <= 1.0
+}
+
+fn invalid_effect(
+    errors: &mut Vec<Diagnostic>,
+    code: &'static str,
+    message: &'static str,
+    path: &str,
+    field: &str,
+) {
+    let path = if field.is_empty() {
+        path.to_owned()
+    } else {
+        format!("{path}/{field}")
+    };
+    errors.push(Diagnostic::error(code, Category::Semantic, message, path));
+}
+
+pub(super) fn validate_colour_points(
+    black_point: &crate::project::Track<f64>,
+    white_point: &crate::project::Track<f64>,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    let mut times = vec![0.0];
+    times.extend(black_point.keyframes.iter().map(|keyframe| keyframe.time));
+    times.extend(white_point.keyframes.iter().map(|keyframe| keyframe.time));
+    times.sort_by(f64::total_cmp);
+    times.dedup_by(|left, right| (*left - *right).abs() <= f64::EPSILON);
+    let samples = times
+        .windows(2)
+        .flat_map(|window| {
+            (1..32).map(move |step| window[0] + (window[1] - window[0]) * f64::from(step) / 32.0)
+        })
+        .collect::<Vec<_>>();
+    times.extend(samples);
+    if times.into_iter().any(|time| {
+        tracks::evaluate_scalar(black_point, time) >= tracks::evaluate_scalar(white_point, time)
+    }) {
+        invalid_effect(
+            errors,
+            "MVP-COLOR-POINTS",
+            "color adjustment requires black_point < white_point",
+            path,
+            "black_point",
+        );
+    }
+}
+
 pub(super) fn validate_global(
     effects: &[crate::project::Effect],
     duration: f64,
@@ -56,9 +128,9 @@ pub(super) fn validate_parameters(
     maximum_keyframes: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
-    let active_duration = super::validate_active_interval(effect.timing(), duration, path, errors);
+    let active_duration = super::intervals::validate(effect.timing(), duration, path, errors);
     let track = |track, field, valid: fn(&f64) -> bool, errors: &mut Vec<Diagnostic>| {
-        super::validate_track(
+        tracks::validate_track(
             track,
             active_duration,
             &format!("{path}/{field}"),
@@ -71,11 +143,11 @@ pub(super) fn validate_parameters(
         crate::project::Effect::Brightness { amount, .. }
         | crate::project::Effect::Contrast { amount, .. }
         | crate::project::Effect::Saturation { amount, .. } => {
-            track(amount, "amount", super::finite, errors)
+            track(amount, "amount", finite, errors)
         }
         crate::project::Effect::Tint { colour, amount, .. } => {
             if parse_colour(colour).is_none() {
-                super::invalid_effect(
+                invalid_effect(
                     errors,
                     "MVP-TINT-COLOUR",
                     "tint must use #RRGGBB or #RRGGBBAA",
@@ -83,18 +155,18 @@ pub(super) fn validate_parameters(
                     "colour",
                 );
             }
-            track(amount, "amount", super::unit_value, errors);
+            track(amount, "amount", unit_value, errors);
         }
         crate::project::Effect::GaussianBlur { radius, .. } => {
-            track(radius, "radius", super::valid_blur_radius, errors)
+            track(radius, "radius", valid_blur_radius, errors)
         }
         crate::project::Effect::DirectionalBlur {
             radius,
             angle_degrees,
             ..
         } => {
-            track(radius, "radius", super::valid_blur_radius, errors);
-            track(angle_degrees, "angle_degrees", super::finite, errors);
+            track(radius, "radius", valid_blur_radius, errors);
+            track(angle_degrees, "angle_degrees", finite, errors);
         }
         crate::project::Effect::ZoomBlur {
             radius,
@@ -102,9 +174,9 @@ pub(super) fn validate_parameters(
             anchor,
             ..
         } => {
-            track(radius, "radius", super::valid_blur_radius, errors);
+            track(radius, "radius", valid_blur_radius, errors);
             if !(2..=32).contains(samples) {
-                super::invalid_effect(
+                invalid_effect(
                     errors,
                     "MVP-ZOOM-BLUR-SAMPLES",
                     "zoom blur samples must be between 2 and 32",
@@ -112,8 +184,8 @@ pub(super) fn validate_parameters(
                     "samples",
                 );
             }
-            if !super::unit(anchor.x) || !super::unit(anchor.y) {
-                super::invalid_effect(
+            if !unit(anchor.x) || !unit(anchor.y) {
+                invalid_effect(
                     errors,
                     "MVP-ZOOM-BLUR-ANCHOR",
                     "zoom blur anchor must be in the unit square",
@@ -130,7 +202,7 @@ pub(super) fn validate_parameters(
             ..
         } => {
             if parse_colour(colour).is_none() {
-                super::invalid_effect(
+                invalid_effect(
                     errors,
                     "MVP-GLOW-COLOUR",
                     "glow colour must use #RRGGBB or #RRGGBBAA",
@@ -138,8 +210,8 @@ pub(super) fn validate_parameters(
                     "colour",
                 );
             }
-            track(threshold, "threshold", super::unit_value, errors);
-            track(radius, "radius", super::valid_blur_radius, errors);
+            track(threshold, "threshold", unit_value, errors);
+            track(radius, "radius", valid_blur_radius, errors);
             track(
                 intensity,
                 "intensity",
@@ -152,8 +224,8 @@ pub(super) fn validate_parameters(
             angle_degrees,
             ..
         } => {
-            track(amount, "amount", super::valid_blur_radius, errors);
-            track(angle_degrees, "angle_degrees", super::finite, errors);
+            track(amount, "amount", valid_blur_radius, errors);
+            track(angle_degrees, "angle_degrees", finite, errors);
         }
         crate::project::Effect::Vignette {
             amount,
@@ -163,7 +235,7 @@ pub(super) fn validate_parameters(
             ..
         } => {
             if parse_colour(colour).is_none() {
-                super::invalid_effect(
+                invalid_effect(
                     errors,
                     "MVP-VIGNETTE-COLOUR",
                     "vignette colour must use #RRGGBB or #RRGGBBAA",
@@ -171,7 +243,7 @@ pub(super) fn validate_parameters(
                     "colour",
                 );
             }
-            track(amount, "amount", super::unit_value, errors);
+            track(amount, "amount", unit_value, errors);
             track(
                 radius,
                 "radius",
@@ -230,7 +302,7 @@ pub(super) fn validate_parameters(
                 |value| value.is_finite() && *value > 0.0 && *value <= 1.0,
                 errors,
             );
-            super::validate_colour_points(black_point, white_point, path, errors);
+            validate_colour_points(black_point, white_point, path, errors);
         }
         crate::project::Effect::CameraShake {
             position_amount,
@@ -265,8 +337,8 @@ pub(super) fn validate_parameters(
                 |value| value.is_finite() && *value > 0.0,
                 errors,
             );
-            if !super::nonnegative(*attack) || !super::positive(*decay) {
-                super::invalid_effect(
+            if !nonnegative(*attack) || !positive(*decay) {
+                invalid_effect(
                     errors,
                     "MVP-SHAKE-ENVELOPE",
                     "camera shake attack must be non-negative and decay positive",
@@ -294,9 +366,9 @@ pub(super) fn validate_parameters(
                 |value| value.is_finite() && (0.0..=360.0).contains(value),
                 errors,
             );
-            track(max_radius, "max_radius", super::valid_blur_radius, errors);
+            track(max_radius, "max_radius", valid_blur_radius, errors);
             if !(2..=32).contains(samples) {
-                super::invalid_effect(
+                invalid_effect(
                     errors,
                     "MVP-MOTION-BLUR-SAMPLES",
                     "motion blur samples must be between 2 and 32",

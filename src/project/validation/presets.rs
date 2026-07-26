@@ -5,7 +5,7 @@ use crate::{
     project::{Preset, VisualSource},
 };
 
-use super::validate_active_interval;
+use super::intervals;
 
 pub(super) fn validate(
     preset: &Preset,
@@ -53,5 +53,5 @@ pub(super) fn validate(
                 .unwrap_or(preferred_duration.min((clip_duration - timing.start).max(0.0))),
         ),
     };
-    let _ = validate_active_interval(resolved_timing, clip_duration, path, errors);
+    let _ = intervals::validate(resolved_timing, clip_duration, path, errors);
 }

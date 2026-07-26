@@ -32,21 +32,5 @@ pub(super) fn degrees_to_radians(mut track: Track<f64>) -> Track<f64> {
 }
 
 pub(super) fn interpolation(interpolation: &crate::project::Interpolation) -> Interpolation {
-    match interpolation {
-        crate::project::Interpolation::Named(name) => match name {
-            crate::project::InterpolationName::Linear => Interpolation::Linear,
-            crate::project::InterpolationName::Hold => Interpolation::Hold,
-            crate::project::InterpolationName::EaseIn => Interpolation::EaseIn,
-            crate::project::InterpolationName::EaseOut => Interpolation::EaseOut,
-            crate::project::InterpolationName::EaseInOut => Interpolation::EaseInOut,
-        },
-        crate::project::Interpolation::CubicBezier(bezier) => {
-            Interpolation::CubicBezier(crate::animation::CubicBezier {
-                x1: bezier.x1,
-                y1: bezier.y1,
-                x2: bezier.x2,
-                y2: bezier.y2,
-            })
-        }
-    }
+    interpolation.to_animation()
 }

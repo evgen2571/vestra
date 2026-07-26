@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Crop, Point, optional_non_null};
+use super::optional_non_null;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +55,29 @@ pub enum Interpolation {
     CubicBezier(CubicBezier),
 }
 
+impl Interpolation {
+    #[must_use]
+    pub(crate) fn to_animation(&self) -> crate::animation::Interpolation {
+        match self {
+            Self::Named(name) => match name {
+                InterpolationName::Linear => crate::animation::Interpolation::Linear,
+                InterpolationName::Hold => crate::animation::Interpolation::Hold,
+                InterpolationName::EaseIn => crate::animation::Interpolation::EaseIn,
+                InterpolationName::EaseOut => crate::animation::Interpolation::EaseOut,
+                InterpolationName::EaseInOut => crate::animation::Interpolation::EaseInOut,
+            },
+            Self::CubicBezier(bezier) => {
+                crate::animation::Interpolation::CubicBezier(crate::animation::CubicBezier {
+                    x1: bezier.x1,
+                    y1: bezier.y1,
+                    x2: bezier.x2,
+                    y2: bezier.y2,
+                })
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InterpolationName {
@@ -81,6 +104,3 @@ pub struct CubicBezier {
 pub enum CubicBezierKind {
     CubicBezier,
 }
-
-#[allow(dead_code)]
-fn _project_track_types_stay_linked(_: Track<Crop>, _: Track<Point>) {}

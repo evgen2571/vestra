@@ -2,6 +2,10 @@
 
 use crate::{Category, Diagnostic};
 
+const fn nonnegative(value: f64) -> bool {
+    value.is_finite() && value >= 0.0
+}
+
 pub(super) fn validate_track<T>(
     track: &crate::project::Track<T>,
     duration: f64,
@@ -28,7 +32,7 @@ pub(super) fn validate_track<T>(
     }
     let mut previous = None;
     for (index, keyframe) in track.keyframes.iter().enumerate() {
-        if !super::nonnegative(keyframe.time)
+        if !nonnegative(keyframe.time)
             || keyframe.time > duration
             || previous.is_some_and(|time| keyframe.time <= time)
         {
@@ -64,4 +68,25 @@ pub(super) fn validate_track<T>(
         }
         previous = Some(keyframe.time);
     }
+}
+
+/// Samples a scalar project track using the same interpolation conversion as
+/// compilation. Relationship validators use this without owning track logic.
+#[must_use]
+pub(super) fn evaluate_scalar(track: &crate::project::Track<f64>, time: f64) -> f64 {
+    let next = track
+        .keyframes
+        .partition_point(|keyframe| keyframe.time <= time);
+    if next == 0 {
+        return track.base_value;
+    }
+    if next == track.keyframes.len() {
+        return track.keyframes[next - 1].value;
+    }
+    let start = &track.keyframes[next - 1];
+    let end = &track.keyframes[next];
+    let progress = (time - start.time) / (end.time - start.time);
+    start.value
+        + (end.value - start.value)
+            * crate::animation::eased(end.interpolation.to_animation(), progress)
 }

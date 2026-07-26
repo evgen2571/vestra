@@ -9,6 +9,7 @@ mod backend;
 mod context;
 mod diagnostics;
 mod executor;
+mod frame_plan;
 mod parameters;
 mod parity;
 mod pipeline;
@@ -16,6 +17,7 @@ mod readback;
 mod requirements;
 mod resources;
 pub(crate) mod support;
+mod texture_pool;
 
 #[cfg(test)]
 #[path = "tests/parity.rs"]

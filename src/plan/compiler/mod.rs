@@ -3,7 +3,7 @@
     reason = "plan compilation preserves machine-readable diagnostics"
 )]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::{
     Category, Diagnostic,
@@ -12,11 +12,12 @@ use crate::{
     media::EncoderSettings,
     plan::{
         Canvas, CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
-        CompiledVisualSource, DrawKey, ImageAsset, RenderPlan,
+        CompiledVisualSource, DrawKey, RenderPlan,
     },
     project::{ValidatedProject, parse_colour},
 };
 
+mod assets;
 mod audio;
 mod effects;
 mod flashes;
@@ -58,35 +59,7 @@ fn compile_canonical(
             "/output/background",
         )
     })?;
-    let image_ids: BTreeSet<&str> = project
-        .visual
-        .clips
-        .iter()
-        .filter(|clip| clip.visible)
-        .filter_map(|clip| match &clip.source {
-            crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
-            crate::project::VisualSource::SolidColor { .. } => None,
-        })
-        .collect();
-    let images: Vec<_> = project
-        .assets
-        .iter()
-        .filter(|asset| {
-            matches!(asset.kind, crate::project::AssetType::Image)
-                && image_ids.contains(asset.id.as_str())
-        })
-        .filter_map(|asset| {
-            validated.asset_paths.get(&asset.id).map(|path| ImageAsset {
-                id: asset.id.clone(),
-                path: path.clone(),
-            })
-        })
-        .collect();
-    let indices: BTreeMap<String, usize> = images
-        .iter()
-        .enumerate()
-        .map(|(index, image)| (image.id.clone(), index))
-        .collect();
+    let image_table = assets::build(validated, project);
     let mut layers = Vec::new();
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
@@ -104,14 +77,7 @@ fn compile_canonical(
         let end_nanos = start_nanos.saturating_add(to_nanos(clip.duration, &clip.id)?);
         let source = match &clip.source {
             crate::project::VisualSource::Image { asset } => CompiledVisualSource::Image {
-                asset_index: *indices.get(asset).ok_or_else(|| {
-                    Diagnostic::error(
-                        "MVP-PLAN-ASSET",
-                        Category::Internal,
-                        format!("validated clip '{}' has no image asset", clip.id),
-                        "",
-                    )
-                })?,
+                asset_index: assets::lookup(&image_table.indices, asset, &clip.id)?,
                 cacheable_crop: clip
                     .crop
                     .as_ref()
@@ -231,7 +197,7 @@ fn compile_canonical(
             audio: audio::compile(validated)?,
         },
         limits: validated.limits,
-        images,
+        images: image_table.images,
         layers,
         post_effects,
         compilation,

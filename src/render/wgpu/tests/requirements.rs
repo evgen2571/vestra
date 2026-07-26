@@ -50,22 +50,20 @@ fn project_requirements_construct_the_requested_device_limits() {
     let (plan, _decoded, requirements) = fixture_requirements();
     let requested = requirements
         .requested_device_limits(&plan)
-        .expect("canonical requirements fit WGPU storage binding limits");
+        .expect("canonical requirements fit WGPU texture compositor limits");
     assert_eq!(
         requested.max_texture_dimension_2d,
         requirements.max_texture_dimension_2d
     );
     assert_eq!(requested.max_buffer_size, requirements.copy_bytes);
     assert_eq!(
-        requested.max_storage_buffer_binding_size,
-        u32::try_from(requirements.copy_bytes).expect("fixture size fits u32")
-    );
-    assert_eq!(
         requested.max_uniform_buffer_binding_size,
         requirements.uniform_bytes
     );
     assert_eq!(requested.max_bind_groups, 1);
-    assert_eq!(requested.max_bindings_per_bind_group, 3);
+    assert_eq!(requested.max_bindings_per_bind_group, 4);
+    assert_eq!(requested.max_sampled_textures_per_shader_stage, 2);
+    assert_eq!(requested.max_storage_textures_per_shader_stage, 1);
     assert_eq!(requested.max_compute_workgroup_size_x, 8);
     assert_eq!(requested.max_compute_workgroup_size_y, 8);
 }

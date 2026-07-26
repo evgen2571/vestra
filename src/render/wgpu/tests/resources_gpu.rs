@@ -88,14 +88,14 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         return;
     };
     let initial = gpu.stats();
-    assert_eq!(initial.shader_module_count, 1);
-    assert_eq!(initial.pipeline_count, 1);
+    assert_eq!(initial.shader_module_count, 2);
+    assert_eq!(initial.pipeline_count, 2);
     assert_eq!(initial.uploaded_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);
     assert_eq!(initial.sampler_count, 0);
-    assert_eq!(initial.output_texture_count, 1);
-    assert_eq!(initial.accumulation_buffer_count, 1);
+    assert_eq!(initial.output_texture_count, 2);
+    assert_eq!(initial.accumulation_buffer_count, 0);
     assert_eq!(initial.readback_buffer_count, 1);
 
     for time in [0, 500_000_000, 1_000_000_000] {
@@ -103,6 +103,9 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         let mut output = RgbaImage::new(frame.width, frame.height);
         gpu.render_frame(&frame, &mut output)
             .expect("GPU frame renders");
+        let execution = gpu.last_execution_metrics();
+        assert_eq!(execution.command_encoders, 1);
+        assert_eq!(execution.queue_submissions, 1);
     }
     let final_stats = gpu.stats();
     assert_eq!(
@@ -131,5 +134,5 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         final_stats.readback_buffer_count,
         initial.readback_buffer_count
     );
-    assert_eq!(final_stats.command_submission_count, 9);
+    assert_eq!(final_stats.command_submission_count, 3);
 }

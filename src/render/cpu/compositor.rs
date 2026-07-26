@@ -77,7 +77,7 @@ mod tests {
     use super::*;
     use crate::plan::EvaluatedEffect;
     use crate::render::blend::{blend_pixel, source_over};
-    use crate::render::cpu::effects::effect_pass_plan;
+    use crate::render::effects::effect_pass_plan;
 
     fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
         for effect in effects {

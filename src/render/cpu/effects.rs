@@ -2,93 +2,14 @@ use std::cell::RefCell;
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::plan::EvaluatedEffect;
+use crate::{
+    plan::EvaluatedEffect,
+    render::effects::{EffectPass, effect_pass_plan},
+};
 
 use super::surfaces::EffectSurfacePool;
 
-/// Low-level CPU work produced by one evaluated project effect.
-///
-/// The pass plan is deliberately independent of the project format.  It makes
-/// resource requirements and ordering explicit, while leaving the renderer
-/// free to use the same plan on a future GPU backend.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum CpuEffectPass {
-    Single,
-    GaussianHorizontal { radius: f64 },
-    GaussianVertical { radius: f64 },
-    HighlightExtract { threshold: f64, colour: [u8; 4] },
-    GlowComposite { intensity: f64 },
-    UnsharpComposite { amount: f64 },
-}
-
-/// The largest built-in chain (glow) has four passes. Keeping this on the
-/// stack avoids per-frame heap allocation while still preserving pass order.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct CpuEffectPassPlan {
-    passes: [CpuEffectPass; 4],
-    len: usize,
-}
-
-impl CpuEffectPassPlan {
-    fn new(passes: &[CpuEffectPass]) -> Self {
-        debug_assert!(passes.len() <= 4);
-        let mut planned = [CpuEffectPass::Single; 4];
-        planned[..passes.len()].copy_from_slice(passes);
-        Self {
-            passes: planned,
-            len: passes.len(),
-        }
-    }
-
-    #[must_use]
-    pub(crate) fn is_empty(self) -> bool {
-        self.len == 0
-    }
-
-    #[must_use]
-    pub(crate) fn as_slice(&self) -> &[CpuEffectPass] {
-        &self.passes[..self.len]
-    }
-}
-
-/// Expands one evaluated effect into the CPU passes it requires. Identity
-/// effects return no passes, so callers can avoid allocating intermediates.
-#[must_use]
-pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> CpuEffectPassPlan {
-    if effect.is_identity() {
-        return CpuEffectPassPlan::new(&[]);
-    }
-    match effect {
-        EvaluatedEffect::GaussianBlur { radius } => CpuEffectPassPlan::new(&[
-            CpuEffectPass::GaussianHorizontal { radius: *radius },
-            CpuEffectPass::GaussianVertical { radius: *radius },
-        ]),
-        EvaluatedEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-        } => CpuEffectPassPlan::new(&[
-            CpuEffectPass::HighlightExtract {
-                threshold: *threshold,
-                colour: *colour,
-            },
-            CpuEffectPass::GaussianHorizontal { radius: *radius },
-            CpuEffectPass::GaussianVertical { radius: *radius },
-            CpuEffectPass::GlowComposite {
-                intensity: *intensity,
-            },
-        ]),
-        EvaluatedEffect::Sharpen { amount, radius } => CpuEffectPassPlan::new(&[
-            CpuEffectPass::GaussianHorizontal { radius: *radius },
-            CpuEffectPass::GaussianVertical { radius: *radius },
-            CpuEffectPass::UnsharpComposite { amount: *amount },
-        ]),
-        _ => CpuEffectPassPlan::new(&[CpuEffectPass::Single]),
-    }
-}
-
-/// Executes the logical CPU pass plan against reusable ping-pong surfaces.
+/// Executes the backend-neutral logical pass plan against CPU surfaces.
 pub(super) fn apply_chain(surfaces: &mut EffectSurfacePool, effects: &[EvaluatedEffect]) {
     for effect in effects {
         if effect_pass_plan(effect).is_empty() {
@@ -97,23 +18,23 @@ pub(super) fn apply_chain(surfaces: &mut EffectSurfacePool, effects: &[Evaluated
         surfaces.run(
             |source, target, horizontal| match effect_pass_plan(effect).as_slice() {
                 [
-                    CpuEffectPass::GaussianHorizontal { radius },
-                    CpuEffectPass::GaussianVertical { .. },
+                    EffectPass::GaussianHorizontal { radius },
+                    EffectPass::GaussianVertical { .. },
                 ] => gaussian_blur(source, horizontal, target, *radius),
                 [
-                    CpuEffectPass::HighlightExtract { threshold, colour },
-                    CpuEffectPass::GaussianHorizontal { radius },
-                    CpuEffectPass::GaussianVertical { .. },
-                    CpuEffectPass::GlowComposite { intensity },
+                    EffectPass::HighlightExtract { threshold, colour },
+                    EffectPass::GaussianHorizontal { radius },
+                    EffectPass::GaussianVertical { .. },
+                    EffectPass::GlowComposite { intensity },
                 ] => glow(
                     source, horizontal, target, *threshold, *radius, *intensity, *colour,
                 ),
                 [
-                    CpuEffectPass::GaussianHorizontal { radius },
-                    CpuEffectPass::GaussianVertical { .. },
-                    CpuEffectPass::UnsharpComposite { amount },
+                    EffectPass::GaussianHorizontal { radius },
+                    EffectPass::GaussianVertical { .. },
+                    EffectPass::UnsharpComposite { amount },
                 ] => sharpen(source, horizontal, target, *amount, *radius),
-                [CpuEffectPass::Single] => apply_single(source, target, effect),
+                [EffectPass::Single] => apply_single(source, target, effect),
                 [] => unreachable!("identity effects are skipped before execution"),
                 _ => unreachable!("effect pass plans must be complete"),
             },
@@ -492,36 +413,6 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn complex_effects_expand_into_explicit_ordered_passes() {
-        assert_eq!(
-            effect_pass_plan(&EvaluatedEffect::Glow {
-                threshold: 0.6,
-                radius: 3.0,
-                intensity: 0.75,
-                colour: [255, 128, 64, 255],
-            })
-            .as_slice(),
-            &[
-                CpuEffectPass::HighlightExtract {
-                    threshold: 0.6,
-                    colour: [255, 128, 64, 255],
-                },
-                CpuEffectPass::GaussianHorizontal { radius: 3.0 },
-                CpuEffectPass::GaussianVertical { radius: 3.0 },
-                CpuEffectPass::GlowComposite { intensity: 0.75 },
-            ]
-        );
-        assert_eq!(
-            effect_pass_plan(&EvaluatedEffect::Sharpen {
-                amount: 0.0,
-                radius: 2.0,
-            })
-            .as_slice(),
-            &[]
-        );
-    }
 
     #[test]
     fn gaussian_spreads_symmetrically_without_transparent_colour_halos() {

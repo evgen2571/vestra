@@ -313,3 +313,106 @@ pub(crate) fn visible_bounds(
         maximum_y.ceil().clamp(0.0, f64::from(canvas_height)) as u32,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_image_geometry, visible_bounds};
+    use crate::{
+        animation::Transform2D,
+        domain::{Crop, Point},
+        plan::CompiledSizing,
+    };
+
+    fn transform(scale: Point, rotation_radians: f64, anchor: Point) -> Transform2D {
+        Transform2D {
+            position: Point { x: 0.4, y: 0.6 },
+            anchor,
+            scale,
+            rotation_radians,
+        }
+    }
+
+    #[test]
+    fn resolved_geometry_round_trips_and_preserves_sizing_modes() {
+        let cases = [
+            (CompiledSizing::Original, 640, 360),
+            (CompiledSizing::Fit, 640, 360),
+            (CompiledSizing::Cover, 640, 360),
+            (CompiledSizing::Scale(1.25), 640, 360),
+            (
+                CompiledSizing::Stretch {
+                    width: 400,
+                    height: 160,
+                },
+                640,
+                360,
+            ),
+        ];
+        for (sizing, canvas_width, canvas_height) in cases {
+            let geometry = resolve_image_geometry(
+                320,
+                200,
+                Crop {
+                    x: 0.1,
+                    y: 0.2,
+                    width: 0.75,
+                    height: 0.6,
+                },
+                false,
+                &sizing,
+                transform(Point { x: -1.2, y: 0.8 }, -0.37, Point { x: 0.2, y: 0.8 }),
+                canvas_width,
+                canvas_height,
+            );
+            for source in [
+                Point { x: 0.0, y: 0.0 },
+                Point {
+                    x: geometry.effective_width * 0.4,
+                    y: geometry.effective_height * 0.7,
+                },
+                Point {
+                    x: geometry.effective_width,
+                    y: geometry.effective_height,
+                },
+            ] {
+                let destination = geometry.forward.map(source.x, source.y);
+                let round_trip = geometry.inverse.map(destination.x, destination.y);
+                assert!((round_trip.x - source.x).abs() < 1e-9, "{sizing:?}");
+                assert!((round_trip.y - source.y).abs() < 1e-9, "{sizing:?}");
+            }
+            assert_eq!(
+                geometry.visible_bounds(canvas_width, canvas_height),
+                visible_bounds(&geometry.transformed_corners, canvas_width, canvas_height)
+            );
+        }
+    }
+
+    #[test]
+    fn cacheable_crop_uses_the_same_materialized_region_as_wgpu_parameters() {
+        let geometry = resolve_image_geometry(
+            101,
+            79,
+            Crop {
+                x: 0.13,
+                y: 0.21,
+                width: 0.62,
+                height: 0.57,
+            },
+            true,
+            &CompiledSizing::Fit,
+            transform(Point { x: 1.0, y: -1.0 }, 0.51, Point { x: 0.5, y: 0.5 }),
+            320,
+            180,
+        );
+        assert_eq!(geometry.source.origin_x, 13);
+        assert_eq!(geometry.source.origin_y, 16);
+        assert_eq!(geometry.source.normalized_crop.width, 1.0);
+        assert_eq!(geometry.source.normalized_crop.height, 1.0);
+        assert!(
+            geometry
+                .transformed_corners
+                .iter()
+                .all(|point| point.x.is_finite() && point.y.is_finite())
+        );
+    }
+}

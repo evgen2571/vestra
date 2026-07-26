@@ -1,6 +1,10 @@
 //! Backend-neutral logical effect planning.
 
-use crate::plan::EvaluatedEffect;
+use crate::{
+    domain::Point,
+    plan::{ColourTransform, EvaluatedEffect},
+    project::ZoomBlurDirection,
+};
 
 /// One logical rendering operation required by an evaluated effect.
 ///
@@ -8,12 +12,57 @@ use crate::plan::EvaluatedEffect;
 /// groups the established multi-pass algorithms into surface-pool operations.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum EffectPass {
-    Single,
-    GaussianHorizontal { radius: f64 },
-    GaussianVertical { radius: f64 },
-    HighlightExtract { threshold: f64, colour: [u8; 4] },
-    GlowComposite { intensity: f64 },
-    UnsharpComposite { amount: f64 },
+    /// An affine RGB transform in the renderer's existing encoded byte space.
+    ApplyColourTransform {
+        transform: ColourTransform,
+    },
+    GaussianHorizontal {
+        radius: f64,
+    },
+    GaussianVertical {
+        radius: f64,
+    },
+    HighlightExtract {
+        threshold: f64,
+        colour: [u8; 4],
+    },
+    GlowComposite {
+        intensity: f64,
+    },
+    UnsharpComposite {
+        amount: f64,
+    },
+    DirectionalBlur {
+        radius: f64,
+        angle_degrees: f64,
+    },
+    ZoomBlur {
+        radius: f64,
+        samples: u8,
+        anchor: Point,
+        direction: ZoomBlurDirection,
+    },
+    ChromaticAberration {
+        amount: f64,
+        angle_degrees: f64,
+    },
+    Vignette {
+        amount: f64,
+        radius: f64,
+        softness: f64,
+        colour: [u8; 4],
+    },
+    ColorAdjust {
+        exposure: f64,
+        gamma: f64,
+        black_point: f64,
+        white_point: f64,
+    },
+    MotionBlur {
+        radius: f64,
+        angle_degrees: f64,
+        samples: u8,
+    },
 }
 
 /// The largest built-in chain, glow, has four passes. A stack-backed plan
@@ -27,7 +76,9 @@ pub(crate) struct EffectPassPlan {
 impl EffectPassPlan {
     fn new(passes: &[EffectPass]) -> Self {
         debug_assert!(passes.len() <= 4);
-        let mut planned = [EffectPass::Single; 4];
+        let mut planned = [EffectPass::ApplyColourTransform {
+            transform: ColourTransform::default(),
+        }; 4];
         planned[..passes.len()].copy_from_slice(passes);
         Self {
             passes: planned,
@@ -79,14 +130,83 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             EffectPass::GaussianVertical { radius: *radius },
             EffectPass::UnsharpComposite { amount: *amount },
         ]),
-        _ => EffectPassPlan::new(&[EffectPass::Single]),
+        EvaluatedEffect::Brightness { .. }
+        | EvaluatedEffect::Contrast { .. }
+        | EvaluatedEffect::Saturation { .. }
+        | EvaluatedEffect::Tint { .. } => {
+            EffectPassPlan::new(&[EffectPass::ApplyColourTransform {
+                transform: ColourTransform::from_effects([effect.clone()]),
+            }])
+        }
+        EvaluatedEffect::DirectionalBlur {
+            radius,
+            angle_degrees,
+        } => EffectPassPlan::new(&[EffectPass::DirectionalBlur {
+            radius: *radius,
+            angle_degrees: *angle_degrees,
+        }]),
+        EvaluatedEffect::ZoomBlur {
+            radius,
+            samples,
+            anchor,
+            direction,
+        } => EffectPassPlan::new(&[EffectPass::ZoomBlur {
+            radius: *radius,
+            samples: *samples,
+            anchor: *anchor,
+            direction: *direction,
+        }]),
+        EvaluatedEffect::ChromaticAberration {
+            amount,
+            angle_degrees,
+        } => EffectPassPlan::new(&[EffectPass::ChromaticAberration {
+            amount: *amount,
+            angle_degrees: *angle_degrees,
+        }]),
+        EvaluatedEffect::Vignette {
+            amount,
+            radius,
+            softness,
+            colour,
+        } => EffectPassPlan::new(&[EffectPass::Vignette {
+            amount: *amount,
+            radius: *radius,
+            softness: *softness,
+            colour: *colour,
+        }]),
+        EvaluatedEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => EffectPassPlan::new(&[EffectPass::ColorAdjust {
+            exposure: *exposure,
+            gamma: *gamma,
+            black_point: *black_point,
+            white_point: *white_point,
+        }]),
+        EvaluatedEffect::MotionBlur {
+            radius,
+            angle_degrees,
+            samples,
+            ..
+        } => EffectPassPlan::new(&[EffectPass::MotionBlur {
+            radius: *radius,
+            angle_degrees: *angle_degrees,
+            samples: *samples,
+        }]),
+        EvaluatedEffect::CameraShake { .. } => EffectPassPlan::new(&[]),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{EffectPass, effect_pass_plan};
-    use crate::plan::EvaluatedEffect;
+    use crate::{
+        domain::Point,
+        plan::{ColourTransform, EvaluatedEffect},
+        project::ZoomBlurDirection,
+    };
 
     #[test]
     fn complex_effects_expand_into_explicit_ordered_passes() {
@@ -134,7 +254,69 @@ mod tests {
         assert!(effect_pass_plan(&EvaluatedEffect::Brightness { amount: 0.0 }).is_empty());
         assert_eq!(
             effect_pass_plan(&EvaluatedEffect::Brightness { amount: 0.25 }).as_slice(),
-            &[EffectPass::Single]
+            &[EffectPass::ApplyColourTransform {
+                transform: ColourTransform::from_effects([EvaluatedEffect::Brightness {
+                    amount: 0.25,
+                }]),
+            }]
+        );
+    }
+
+    #[test]
+    fn every_pixel_effect_has_an_explicit_operation() {
+        let effects = [
+            EvaluatedEffect::DirectionalBlur {
+                radius: 1.0,
+                angle_degrees: 20.0,
+            },
+            EvaluatedEffect::ZoomBlur {
+                radius: 1.0,
+                samples: 4,
+                anchor: Point { x: 0.5, y: 0.5 },
+                direction: ZoomBlurDirection::Centered,
+            },
+            EvaluatedEffect::ChromaticAberration {
+                amount: 1.0,
+                angle_degrees: 0.0,
+            },
+            EvaluatedEffect::Vignette {
+                amount: 1.0,
+                radius: 0.5,
+                softness: 0.5,
+                colour: [0; 4],
+            },
+            EvaluatedEffect::ColorAdjust {
+                exposure: 0.1,
+                gamma: 1.0,
+                black_point: 0.0,
+                white_point: 1.0,
+            },
+            EvaluatedEffect::MotionBlur {
+                radius: 1.0,
+                angle_degrees: 0.0,
+                intensity: 1.0,
+                shutter_angle: 1.0,
+                max_radius: 1.0,
+                samples: 4,
+            },
+        ];
+        assert!(
+            effects
+                .into_iter()
+                .all(|effect| effect_pass_plan(&effect).as_slice().len() == 1)
+        );
+        assert!(
+            effect_pass_plan(&EvaluatedEffect::CameraShake {
+                local_time: 0,
+                position_amount: 1.0,
+                rotation_radians: 0.0,
+                scale_amount: 0.0,
+                frequency: 1.0,
+                seed: 0,
+                attack: 0.0,
+                decay: 0.0
+            })
+            .is_empty()
         );
     }
 }

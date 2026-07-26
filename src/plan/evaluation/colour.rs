@@ -3,7 +3,7 @@
 use super::EvaluatedEffect;
 
 /// An affine RGB operation in byte colour space: `matrix * rgb + offset`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ColourTransform {
     pub(crate) matrix: [[f64; 3]; 3],
     pub(crate) offset: [f64; 3],

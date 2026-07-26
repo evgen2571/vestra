@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::{
-    plan::EvaluatedEffect,
+    plan::{ColourTransform, EvaluatedEffect},
     render::effects::{EffectPass, effect_pass_plan},
 };
 
@@ -12,33 +12,90 @@ use super::surfaces::EffectSurfacePool;
 /// Executes the backend-neutral logical pass plan against CPU surfaces.
 pub(super) fn apply_chain(surfaces: &mut EffectSurfacePool, effects: &[EvaluatedEffect]) {
     for effect in effects {
-        if effect_pass_plan(effect).is_empty() {
+        let plan = effect_pass_plan(effect);
+        if plan.is_empty() {
             continue;
         }
-        surfaces.run(
-            |source, target, horizontal| match effect_pass_plan(effect).as_slice() {
-                [
-                    EffectPass::GaussianHorizontal { radius },
-                    EffectPass::GaussianVertical { .. },
-                ] => gaussian_blur(source, horizontal, target, *radius),
-                [
-                    EffectPass::HighlightExtract { threshold, colour },
-                    EffectPass::GaussianHorizontal { radius },
-                    EffectPass::GaussianVertical { .. },
-                    EffectPass::GlowComposite { intensity },
-                ] => glow(
-                    source, horizontal, target, *threshold, *radius, *intensity, *colour,
-                ),
-                [
-                    EffectPass::GaussianHorizontal { radius },
-                    EffectPass::GaussianVertical { .. },
-                    EffectPass::UnsharpComposite { amount },
-                ] => sharpen(source, horizontal, target, *amount, *radius),
-                [EffectPass::Single] => apply_single(source, target, effect),
-                [] => unreachable!("identity effects are skipped before execution"),
-                _ => unreachable!("effect pass plans must be complete"),
-            },
-        );
+        surfaces.run(|source, target, horizontal| match plan.as_slice() {
+            [
+                EffectPass::GaussianHorizontal { radius },
+                EffectPass::GaussianVertical { .. },
+            ] => gaussian_blur(source, horizontal, target, *radius),
+            [
+                EffectPass::HighlightExtract { threshold, colour },
+                EffectPass::GaussianHorizontal { radius },
+                EffectPass::GaussianVertical { .. },
+                EffectPass::GlowComposite { intensity },
+            ] => glow(
+                source, horizontal, target, *threshold, *radius, *intensity, *colour,
+            ),
+            [
+                EffectPass::GaussianHorizontal { radius },
+                EffectPass::GaussianVertical { .. },
+                EffectPass::UnsharpComposite { amount },
+            ] => sharpen(source, horizontal, target, *amount, *radius),
+            [EffectPass::ApplyColourTransform { transform }] => {
+                apply_colour_transform(source, target, *transform)
+            }
+            [
+                EffectPass::DirectionalBlur {
+                    radius,
+                    angle_degrees,
+                },
+            ] => blur(source, target, *radius, Some(*angle_degrees), None),
+            [
+                EffectPass::ZoomBlur {
+                    radius,
+                    samples,
+                    anchor,
+                    direction,
+                },
+            ] => super::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction),
+            [
+                EffectPass::ChromaticAberration {
+                    amount,
+                    angle_degrees,
+                },
+            ] => super::chromatic::apply(source, target, *amount, *angle_degrees),
+            [
+                EffectPass::Vignette {
+                    amount,
+                    radius,
+                    softness,
+                    colour,
+                },
+            ] => super::vignette::apply(source, target, *amount, *radius, *softness, *colour),
+            [
+                EffectPass::ColorAdjust {
+                    exposure,
+                    gamma,
+                    black_point,
+                    white_point,
+                },
+            ] => super::colour_adjust::apply(
+                source,
+                target,
+                *exposure,
+                *gamma,
+                *black_point,
+                *white_point,
+            ),
+            [
+                EffectPass::MotionBlur {
+                    radius,
+                    angle_degrees,
+                    samples,
+                },
+            ] => blur(
+                source,
+                target,
+                *radius,
+                Some(*angle_degrees),
+                Some(*samples),
+            ),
+            [] => unreachable!("identity effects are skipped before execution"),
+            _ => unreachable!("effect pass plans must be complete"),
+        });
     }
 }
 
@@ -157,99 +214,23 @@ pub(crate) fn sharpen(
     }
 }
 
-/// Runs an effect that requires one source and destination surface.
-pub(crate) fn apply_single(source: &RgbaImage, target: &mut RgbaImage, effect: &EvaluatedEffect) {
-    match effect {
-        EvaluatedEffect::Brightness { amount } => map_pixels(source, target, |mut pixel| {
-            for channel in 0..3 {
-                pixel[channel] = (f64::from(pixel[channel]) + amount * 255.0)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-            pixel
-        }),
-        EvaluatedEffect::Contrast { amount } => map_pixels(source, target, |mut pixel| {
-            for channel in 0..3 {
-                pixel[channel] = ((f64::from(pixel[channel]) - 128.0) * amount + 128.0)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-            pixel
-        }),
-        EvaluatedEffect::Saturation { amount } => map_pixels(source, target, |mut pixel| {
-            let l = f64::from(pixel[0]) * 0.2126
-                + f64::from(pixel[1]) * 0.7152
-                + f64::from(pixel[2]) * 0.0722;
-            for channel in 0..3 {
-                pixel[channel] = (l * (1.0 - amount) + f64::from(pixel[channel]) * amount)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-            pixel
-        }),
-        EvaluatedEffect::Tint { colour, amount } => map_pixels(source, target, |mut pixel| {
-            let amount = amount.clamp(0.0, 1.0);
-            for channel in 0..3 {
-                pixel[channel] = (f64::from(pixel[channel]) * (1.0 - amount)
-                    + f64::from(colour[channel]) * amount)
-                    .round() as u8;
-            }
-            pixel
-        }),
-        EvaluatedEffect::GaussianBlur { .. }
-        | EvaluatedEffect::Glow { .. }
-        | EvaluatedEffect::Sharpen { .. } => {
-            unreachable!("multi-pass effects are dispatched by the surface pool")
+fn apply_colour_transform(source: &RgbaImage, target: &mut RgbaImage, transform: ColourTransform) {
+    map_pixels(source, target, |mut pixel| {
+        let rgb = [
+            f64::from(pixel[0]),
+            f64::from(pixel[1]),
+            f64::from(pixel[2]),
+        ];
+        for channel in 0..3 {
+            pixel[channel] = (transform.matrix[channel][0] * rgb[0]
+                + transform.matrix[channel][1] * rgb[1]
+                + transform.matrix[channel][2] * rgb[2]
+                + transform.offset[channel])
+                .round()
+                .clamp(0.0, 255.0) as u8;
         }
-        EvaluatedEffect::DirectionalBlur {
-            radius,
-            angle_degrees,
-        } => blur(source, target, *radius, Some(*angle_degrees), None),
-        EvaluatedEffect::ZoomBlur {
-            radius,
-            samples,
-            anchor,
-            direction,
-        } => super::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction),
-        EvaluatedEffect::MotionBlur {
-            radius,
-            angle_degrees,
-            samples,
-            ..
-        } => blur(
-            source,
-            target,
-            *radius,
-            Some(*angle_degrees),
-            Some(*samples),
-        ),
-        EvaluatedEffect::ChromaticAberration {
-            amount,
-            angle_degrees,
-        } => super::chromatic::apply(source, target, *amount, *angle_degrees),
-        EvaluatedEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-        } => super::vignette::apply(source, target, *amount, *radius, *softness, *colour),
-        EvaluatedEffect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-        } => super::colour_adjust::apply(
-            source,
-            target,
-            *exposure,
-            *gamma,
-            *black_point,
-            *white_point,
-        ),
-        EvaluatedEffect::CameraShake { .. } => {
-            target.copy_from(source, 0, 0).expect("same dimensions")
-        }
-    }
+        pixel
+    });
 }
 
 fn map_pixels(

@@ -45,6 +45,21 @@ impl GpuContext {
             )
         })?;
         let adapter_request = adapter_request_started.elapsed();
+        let required_texture_usage = wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::STORAGE_BINDING
+            | wgpu::TextureUsages::COPY_SRC;
+        if !adapter
+            .get_texture_format_features(WORKING_FORMAT)
+            .allowed_usages
+            .contains(required_texture_usage)
+        {
+            return Err(Diagnostic::error(
+                "WGPU-TEXTURE-FORMAT",
+                Category::Backend,
+                "WGPU adapter does not support Rgba8Unorm sampled storage working textures",
+                "",
+            ));
+        }
         let info = adapter.get_info();
         let adapter_metadata = AdapterMetadata {
             adapter_name: info.name,

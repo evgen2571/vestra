@@ -25,15 +25,13 @@ pub(super) struct WorkingTexture {
     pub(super) estimated_bytes: u64,
 }
 
-/// The Phase 1 maximum is five full-frame textures: two canvases, one layer,
-/// and two future effect slots. The slots live for the backend lifetime and
-/// never alias a simultaneous input and storage destination.
+/// Phase 1 prepares two canvases and one layer texture. Advanced effect plans
+/// are rejected before resource preparation, so their future slots do not
+/// consume memory until Phase 2 supplies an executable pass and requests them.
 pub(super) struct TexturePool {
     canvas_a: WorkingTexture,
     canvas_b: WorkingTexture,
     layer: WorkingTexture,
-    effect_a: WorkingTexture,
-    effect_b: WorkingTexture,
 }
 
 impl TexturePool {
@@ -50,8 +48,6 @@ impl TexturePool {
             canvas_a: create_texture(device, descriptor, "video-editor canvas A"),
             canvas_b: create_texture(device, descriptor, "video-editor canvas B"),
             layer: create_texture(device, descriptor, "video-editor layer"),
-            effect_a: create_texture(device, descriptor, "video-editor effect A"),
-            effect_b: create_texture(device, descriptor, "video-editor effect B"),
         }
     }
 
@@ -60,22 +56,17 @@ impl TexturePool {
             TextureSlot::CanvasA => &self.canvas_a,
             TextureSlot::CanvasB => &self.canvas_b,
             TextureSlot::Layer => &self.layer,
-            TextureSlot::EffectA => &self.effect_a,
-            TextureSlot::EffectB => &self.effect_b,
+            TextureSlot::EffectA | TextureSlot::EffectB => {
+                unreachable!("Phase 1 rejects effect operations before WGPU resource preparation")
+            }
         }
     }
 
     pub(super) fn estimated_bytes(&self) -> u64 {
-        [
-            &self.canvas_a,
-            &self.canvas_b,
-            &self.layer,
-            &self.effect_a,
-            &self.effect_b,
-        ]
-        .into_iter()
-        .map(|texture| texture.estimated_bytes)
-        .sum()
+        [&self.canvas_a, &self.canvas_b, &self.layer]
+            .into_iter()
+            .map(|texture| texture.estimated_bytes)
+            .sum()
     }
 }
 
@@ -110,8 +101,8 @@ fn create_texture(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn working_texture_memory_is_bounded_to_five_full_frame_slots() {
+    fn phase_one_working_texture_memory_uses_three_full_frame_slots() {
         let bytes = u64::from(1920_u32) * 1080 * 4;
-        assert_eq!(bytes * 5, 41_472_000);
+        assert_eq!(bytes * 3, 24_883_200);
     }
 }

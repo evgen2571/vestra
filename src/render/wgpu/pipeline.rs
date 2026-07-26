@@ -1,6 +1,6 @@
 //! Prepared texture pipelines and bind-group layouts.
 
-use super::parameters::LayerParameters;
+use super::parameters::PARAMETER_RECORD_BYTES;
 
 pub(super) struct GpuPipelines {
     pub(super) _layer_shader: wgpu::ShaderModule,
@@ -30,9 +30,7 @@ impl GpuPipelines {
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Uniform,
                 has_dynamic_offset: true,
-                min_binding_size: wgpu::BufferSize::new(
-                    std::mem::size_of::<LayerParameters>() as u64
-                ),
+                min_binding_size: wgpu::BufferSize::new(PARAMETER_RECORD_BYTES),
             },
             count: None,
         };

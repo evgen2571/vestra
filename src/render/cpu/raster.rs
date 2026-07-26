@@ -3,11 +3,14 @@
 use image::{Rgba, RgbaImage};
 
 use crate::{
-    animation::Transform2D,
-    domain::Crop,
     plan::{ColourTransform, EvaluatedLayer, EvaluatedSource},
     render::{blend::source_over, cpu::assets::PreparedAssets, geometry},
 };
+
+#[cfg(test)]
+use crate::animation::Transform2D;
+#[cfg(test)]
+use crate::domain::Crop;
 
 pub(crate) fn draw_layer(
     canvas: &mut RgbaImage,
@@ -27,38 +30,26 @@ pub(crate) fn draw_layer(
             cacheable_crop,
             transform,
         } => {
-            let (source, crop) =
-                if *cacheable_crop && let Some(source) = assets.crop(*asset_index, *crop) {
-                    (
-                        source,
-                        Crop {
-                            x: 0.0,
-                            y: 0.0,
-                            width: 1.0,
-                            height: 1.0,
-                        },
-                    )
-                } else {
-                    (assets.image(*asset_index), *crop)
-                };
-            let (source_width, source_height) = geometry::effective_dimensions(
+            let original = assets.image(*asset_index);
+            let resolved = geometry::resolve_image_geometry(
+                original.width(),
+                original.height(),
+                *crop,
+                *cacheable_crop,
                 sizing,
-                crop.width * f64::from(source.width()),
-                crop.height * f64::from(source.height()),
+                *transform,
                 canvas.width(),
                 canvas.height(),
             );
+            let source = if *cacheable_crop {
+                assets
+                    .crop(*asset_index, *crop)
+                    .expect("crop cache can always retain a valid crop")
+            } else {
+                assets.image(*asset_index)
+            };
             if transform.is_valid() {
-                draw_image(
-                    canvas,
-                    source,
-                    crop,
-                    source_width,
-                    source_height,
-                    *transform,
-                    opacity,
-                    colour_transform,
-                );
+                draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
             }
         }
     }
@@ -76,6 +67,7 @@ pub(crate) fn fill_solid(
     }
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_image(
     canvas: &mut RgbaImage,
@@ -87,32 +79,47 @@ pub(crate) fn draw_image(
     opacity: f64,
     colour_transform: ColourTransform,
 ) {
-    let (min_x, max_x, min_y, max_y) = visible_bounds(
+    let resolved = geometry::resolve_image_geometry(
+        source.width(),
+        source.height(),
+        crop,
+        false,
+        &crate::plan::CompiledSizing::Stretch {
+            width: effective_width as u32,
+            height: effective_height as u32,
+        },
         transform,
-        effective_width,
-        effective_height,
         canvas.width(),
         canvas.height(),
     );
-    let inverse = geometry::InverseAffine::for_transform(
-        transform,
-        canvas.width(),
-        canvas.height(),
-        effective_width,
-        effective_height,
-    );
+    draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
+}
+
+fn draw_resolved_image(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    geometry: &geometry::ResolvedImageGeometry,
+    opacity: f64,
+    colour_transform: ColourTransform,
+) {
+    let (min_x, max_x, min_y, max_y) = geometry.visible_bounds(canvas.width(), canvas.height());
+    let inverse = geometry.inverse;
     for y in min_y..max_y {
         let mut mapped = inverse.map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
         for x in min_x..max_x {
             if mapped.x >= 0.0
                 && mapped.y >= 0.0
-                && mapped.x < effective_width
-                && mapped.y < effective_height
+                && mapped.x < geometry.effective_width
+                && mapped.y < geometry.effective_height
             {
-                let source_x = crop.x * f64::from(source.width())
-                    + mapped.x / effective_width * crop.width * f64::from(source.width());
-                let source_y = crop.y * f64::from(source.height())
-                    + mapped.y / effective_height * crop.height * f64::from(source.height());
+                let source_x = geometry.source.normalized_crop.x * f64::from(source.width())
+                    + mapped.x / geometry.effective_width
+                        * geometry.source.normalized_crop.width
+                        * f64::from(source.width());
+                let source_y = geometry.source.normalized_crop.y * f64::from(source.height())
+                    + mapped.y / geometry.effective_height
+                        * geometry.source.normalized_crop.height
+                        * f64::from(source.height());
                 let sampled = apply_colour_transform(
                     sample_bilinear(source, source_x, source_y),
                     colour_transform,
@@ -126,6 +133,7 @@ pub(crate) fn draw_image(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn visible_bounds(
     transform: Transform2D,
     source_width: f64,
@@ -133,36 +141,22 @@ pub(crate) fn visible_bounds(
     canvas_width: u32,
     canvas_height: u32,
 ) -> (u32, u32, u32, u32) {
-    let (sine, cosine) = transform.rotation_radians.sin_cos();
-    let anchor_x = transform.anchor.x * source_width;
-    let anchor_y = transform.anchor.y * source_height;
-    let destination_x = transform.position.x * f64::from(canvas_width);
-    let destination_y = transform.position.y * f64::from(canvas_height);
-    let mut minimum_x = f64::INFINITY;
-    let mut maximum_x = f64::NEG_INFINITY;
-    let mut minimum_y = f64::INFINITY;
-    let mut maximum_y = f64::NEG_INFINITY;
-    for (x, y) in [
-        (0.0, 0.0),
-        (source_width, 0.0),
-        (0.0, source_height),
-        (source_width, source_height),
-    ] {
-        let local_x = (x - anchor_x) * transform.scale.x;
-        let local_y = (y - anchor_y) * transform.scale.y;
-        let x = destination_x + cosine * local_x - sine * local_y;
-        let y = destination_y + sine * local_x + cosine * local_y;
-        minimum_x = minimum_x.min(x);
-        maximum_x = maximum_x.max(x);
-        minimum_y = minimum_y.min(y);
-        maximum_y = maximum_y.max(y);
-    }
-    (
-        minimum_x.floor().max(0.0) as u32,
-        maximum_x.ceil().clamp(0.0, f64::from(canvas_width)) as u32,
-        minimum_y.floor().max(0.0) as u32,
-        maximum_y.ceil().clamp(0.0, f64::from(canvas_height)) as u32,
-    )
+    let geometry = geometry::resolve_image_geometry(
+        source_width as u32,
+        source_height as u32,
+        Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        },
+        false,
+        &crate::plan::CompiledSizing::Original,
+        transform,
+        canvas_width,
+        canvas_height,
+    );
+    geometry::visible_bounds(&geometry.transformed_corners, canvas_width, canvas_height)
 }
 
 pub(crate) fn sample_bilinear(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {

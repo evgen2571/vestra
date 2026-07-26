@@ -47,8 +47,9 @@ values, so fixture failures can report compact context rather than frame content
 ## Resources and readback
 
 WGPU owns persistent source textures, two canvas textures, a layer texture,
-two effect slots, shaders, compute pipelines, a bounded dynamic-uniform buffer,
-and a readback buffer. `Rgba8Unorm` working textures store encoded
+shaders, compute pipelines, a bounded dynamic-uniform buffer, and a readback
+buffer. Phase 1 does not allocate effect textures because support checks reject
+advanced effects before preparation. `Rgba8Unorm` working textures store encoded
 straight-alpha channel values. This deliberately matches the CPU's byte-space
 colour semantics. Shaders clamp each write. They do not perform linear-light
 compositing or use sRGB storage textures.
@@ -67,14 +68,32 @@ evaluated frame
 
 Canvas A and B ping-pong, so no compute pass reads and writes the same texture.
 The final slot is explicit in the plan, including empty, odd-layer, and
-even-layer frames. The five working textures are allocated during preparation
-and retained for the backend lifetime. Phase 1 accepts the bounded cost of five
-full-output-size textures rather than adding variable-resolution pooling.
+even-layer frames. `ApplyEffect` also carries the exact logical `EffectPass`,
+source, destination, auxiliary slot, and pass index. The current executor still
+rejects those operations. It does not encode advanced effects.
 
 The frame parameter arena writes every operation record before command encoding.
-Records are padded to `min_uniform_buffer_offset_alignment`, uploaded once, and
-selected with dynamic offsets. Bind groups describe the operation's source and
-destination views. Output rows are aligned to WGPU's copy-row requirement, then
+`LayerParameters` is 176 bytes. Each bind group uses an explicit 176-byte
+uniform binding range at buffer offset zero, and dynamic offsets select one
+aligned record. The arena checks alignment, arithmetic, final-record bounds,
+and the `u32` dynamic-offset conversion before upload. It prepares the maximum
+frame capacity up front, so Phase 1 never grows the buffer. If a later backend
+replaces that allocation, it must rebuild only bind groups that reference that
+buffer.
+
+Bind groups have clear ownership. Pipeline layouts and pipelines live for the
+backend. Source-to-Layer groups live per uploaded source asset. Clear, solid
+Layer, and the two Canvas-plus-Layer composite combinations live for the fixed
+working textures. No normal frame creates a bind group. Internal metrics count
+groups created during preparation, capacity-growth rebuilds, per-frame groups,
+cache hits, and cache misses.
+
+The requirements calculation retains estimates for source textures, Canvas A
+and B, Layer, effects, readback, and the parameter buffer. Phase 1 has zero
+effect-texture bytes. The total is an estimate, not a driver VRAM measurement.
+It excludes texture row padding, driver allocation overhead, mip levels,
+implementation alignment, and temporary source staging allocations. Output rows
+in the readback buffer do include WGPU's copy-row padding. Output rows are then
 repacked into a contiguous RGBA buffer before streaming to FFmpeg.
 
 The compute shader samples with `textureLoad`, so source texture and byte

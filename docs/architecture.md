@@ -46,10 +46,11 @@ checks semantic rules and produces a validated project. Effect parameter validat
 has one owner, while clip-local and post-effect scope rules remain separate.
 
 `plan/compiler` turns a validated project into a `RenderPlan`. Its modules own
-assets, tracks, effects, presets, transitions, flashes, audio, output settings,
-time conversion, and workload metrics. `plan/evaluation` evaluates the plan for
-one frame. It owns transform contributions, effects, colour transforms, camera
-shake, and motion calculations.
+asset-table construction, one visible clip's source and track compilation,
+compiled-plan limits, effects, presets, transitions, flashes, audio, output
+settings, time conversion, and workload metrics. `plan/evaluation` evaluates
+the plan for one frame. It owns transform contributions, effects, colour
+transforms, camera shake, and motion calculations.
 
 ## Rendering
 

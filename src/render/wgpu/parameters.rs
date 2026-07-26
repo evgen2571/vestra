@@ -11,6 +11,8 @@ use crate::{
 
 use super::requirements::align_up;
 
+pub(super) const PARAMETER_RECORD_BYTES: u64 = std::mem::size_of::<LayerParameters>() as u64;
+
 /// CPU-side frame parameter upload. Records are padded to the device's dynamic
 /// uniform offset alignment, then uploaded once before the frame encoder is
 /// submitted. Coordinates remain pixel-space and colours remain straight RGBA.
@@ -37,23 +39,16 @@ impl FrameParameterArena {
     }
 
     pub(super) fn push(&mut self, parameters: LayerParameters) -> Result<u32, crate::Diagnostic> {
-        let offset = align_up_u64(self.bytes.len() as u64, self.alignment);
-        let end = offset + std::mem::size_of::<LayerParameters>() as u64;
-        if end > self.capacity || offset > u64::from(u32::MAX) {
-            return Err(crate::Diagnostic::error(
-                "WGPU-PARAMETER-OVERFLOW",
-                crate::Category::Backend,
-                format!(
-                    "frame parameter upload requires {end} bytes but the prepared buffer holds {}",
-                    self.capacity
-                ),
-                "",
-            ));
-        }
-        self.bytes.resize(end as usize, 0);
-        self.bytes[offset as usize..end as usize].copy_from_slice(bytemuck::bytes_of(&parameters));
-        self.offsets.push(offset as u32);
-        Ok(offset as u32)
+        let range = parameter_record_range(self.alignment, self.bytes.len() as u64, self.capacity)?;
+        let offset = dynamic_uniform_offset(range.start)?;
+        let end = usize::try_from(range.end)
+            .map_err(|_| parameter_overflow("parameter record does not fit this platform"))?;
+        let start = usize::try_from(range.start)
+            .map_err(|_| parameter_overflow("parameter record does not fit this platform"))?;
+        self.bytes.resize(end, 0);
+        self.bytes[start..end].copy_from_slice(bytemuck::bytes_of(&parameters));
+        self.offsets.push(offset);
+        Ok(offset)
     }
 
     pub(super) fn offset(&self, index: u32) -> Result<u32, crate::Diagnostic> {
@@ -70,8 +65,43 @@ impl FrameParameterArena {
     }
 }
 
-fn align_up_u64(value: u64, alignment: u64) -> u64 {
-    value.div_ceil(alignment) * alignment
+pub(super) fn parameter_record_range(
+    alignment: u64,
+    used_bytes: u64,
+    capacity: u64,
+) -> Result<std::ops::Range<u64>, crate::Diagnostic> {
+    if alignment == 0 {
+        return Err(parameter_overflow(
+            "dynamic uniform alignment must be nonzero",
+        ));
+    }
+    let aligned = used_bytes
+        .checked_add(alignment - 1)
+        .map(|value| value / alignment * alignment)
+        .ok_or_else(|| parameter_overflow("parameter record offset overflow"))?;
+    let end = aligned
+        .checked_add(PARAMETER_RECORD_BYTES)
+        .ok_or_else(|| parameter_overflow("parameter record size overflow"))?;
+    if end > capacity {
+        return Err(parameter_overflow(&format!(
+            "frame parameter upload requires {end} bytes but the prepared buffer holds {capacity}"
+        )));
+    }
+    Ok(aligned..end)
+}
+
+fn parameter_overflow(message: &str) -> crate::Diagnostic {
+    crate::Diagnostic::error(
+        "WGPU-PARAMETER-OVERFLOW",
+        crate::Category::Backend,
+        message,
+        "",
+    )
+}
+
+pub(super) fn dynamic_uniform_offset(offset: u64) -> Result<u32, crate::Diagnostic> {
+    u32::try_from(offset)
+        .map_err(|_| parameter_overflow("dynamic uniform offset exceeds WGPU's u32 range"))
 }
 
 #[cfg(test)]
@@ -101,6 +131,56 @@ mod tests {
         let error = arena
             .push(LayerParameters::zeroed())
             .expect_err("capacity exceeded");
+        assert_eq!(error.code, "WGPU-PARAMETER-OVERFLOW");
+    }
+
+    #[test]
+    fn parameter_record_range_covers_exactly_one_record() {
+        let range = parameter_record_range(256, 176, 512).expect("second record fits");
+        assert_eq!(range, 256..432);
+        assert_eq!(PARAMETER_RECORD_BYTES, 176);
+    }
+
+    #[test]
+    fn parameter_record_range_rejects_overflow_and_invalid_alignment() {
+        assert!(parameter_record_range(0, 176, 512).is_err());
+        assert!(parameter_record_range(256, u64::MAX - 1, u64::MAX).is_err());
+        assert!(parameter_record_range(256, 512, 600).is_err());
+    }
+
+    #[test]
+    fn arena_pads_many_records_for_different_adapter_alignments() {
+        for alignment in [16, 256, 512] {
+            let stride = u64::from(alignment).max(std::mem::size_of::<LayerParameters>() as u64);
+            let mut arena = FrameParameterArena::new(
+                alignment,
+                stride * 9 + std::mem::size_of::<LayerParameters>() as u64,
+            );
+            for index in 0..10 {
+                assert_eq!(
+                    arena.push(LayerParameters::zeroed()).expect("record fits"),
+                    index * stride as u32
+                );
+            }
+            assert_eq!(arena.bytes().len(), (9 * stride + 176) as usize);
+        }
+    }
+
+    #[test]
+    fn final_record_can_exactly_fill_the_prepared_buffer() {
+        let mut arena = FrameParameterArena::new(256, 432);
+        arena.push(LayerParameters::zeroed()).expect("first record");
+        assert_eq!(
+            arena.push(LayerParameters::zeroed()).expect("final record"),
+            256
+        );
+        assert_eq!(arena.bytes().len(), 432);
+    }
+
+    #[test]
+    fn dynamic_offset_conversion_rejects_values_outside_wgpu_range() {
+        let error = dynamic_uniform_offset(u64::from(u32::MAX) + 1)
+            .expect_err("WGPU dynamic offsets are u32 values");
         assert_eq!(error.code, "WGPU-PARAMETER-OVERFLOW");
     }
 }

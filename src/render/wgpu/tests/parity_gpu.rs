@@ -94,6 +94,92 @@ fn gpu_image_layer_matches_cpu_within_two_channels_when_an_adapter_is_available(
 }
 
 #[test]
+fn gpu_multilayer_frame_uses_nonzero_dynamic_offsets_without_validation_errors() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("canonical fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let image_layers = plan
+        .layers
+        .iter()
+        .enumerate()
+        .filter_map(|(index, layer)| {
+            matches!(layer.source, CompiledVisualSource::Image { .. }).then_some(index)
+        })
+        .collect::<Vec<_>>();
+    let [first, second] = image_layers.as_slice() else {
+        panic!("canonical fixture must contain two visible image layers");
+    };
+    let frame = crate::plan::evaluate(
+        &plan,
+        &[ScheduledItem(*first), ScheduledItem(*second)],
+        1_750_000_000,
+    );
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU frame renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("WGPU validation scopes accept the complete multi-offset frame");
+    let execution = gpu.last_execution_metrics();
+    assert_eq!(execution.command_encoders, 1);
+    assert_eq!(execution.queue_submissions, 1);
+    assert_eq!(execution.compute_passes, 5); // clear + two layers + two composites
+    assert_eq!(execution.dispatches, 5);
+    assert_eq!(execution.texture_copies, 1);
+    assert_eq!(execution.parameter_uploads, 1);
+    assert_eq!(execution.bind_groups_created, 0);
+    assert_eq!(execution.bind_groups_recreated_for_parameter_growth, 0);
+    assert_eq!(execution.bind_group_cache_hits, 5);
+    assert_eq!(execution.bind_group_cache_misses, 0);
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+    assert!(
+        difference.maximum_absolute_channel_error <= 2,
+        "multi-offset GPU parity exceeded tolerance: {difference:?}"
+    );
+}
+
+#[test]
+fn gpu_rgba_fixture_matches_cpu_with_transparent_edges_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("RGBA parity fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU fixture renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("WGPU fixture renders");
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+    assert!(
+        difference.maximum_absolute_channel_error <= 2,
+        "RGBA fixture parity exceeded tolerance: {difference:?}"
+    );
+}
+
+#[test]
 fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),

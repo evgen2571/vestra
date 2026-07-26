@@ -20,6 +20,137 @@ pub(super) struct FrameExecutionMetrics {
     pub(super) compute_passes: u64,
     pub(super) dispatches: u64,
     pub(super) texture_copies: u64,
+    pub(super) parameter_uploads: u64,
+    pub(super) parameter_uploaded_bytes: u64,
+    pub(super) bind_groups_created: u64,
+    pub(super) bind_groups_recreated_for_parameter_growth: u64,
+    pub(super) bind_group_cache_hits: u64,
+    pub(super) bind_group_cache_misses: u64,
+}
+
+/// Bind groups reference backend-lifetime textures and the fixed parameter
+/// allocation. They are created once during backend preparation, then reused
+/// with a different dynamic parameter offset for every frame operation.
+pub(super) struct FrameBindGroups {
+    clear_canvas_a: wgpu::BindGroup,
+    solid_layer: wgpu::BindGroup,
+    image_layers: Vec<wgpu::BindGroup>,
+    composite_a_to_b: wgpu::BindGroup,
+    composite_b_to_a: wgpu::BindGroup,
+    persistent_created: usize,
+}
+
+impl FrameBindGroups {
+    pub(super) fn create(
+        device: &wgpu::Device,
+        pipelines: &GpuPipelines,
+        frame: &FrameResources,
+        sources: &SourceResources,
+    ) -> Self {
+        let clear_canvas_a = layer_group(
+            device,
+            &pipelines.layer_bindings,
+            &sources.solid_texture.view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::CanvasA)
+                .view,
+            &pipelines.parameters,
+        );
+        let solid_layer = layer_group(
+            device,
+            &pipelines.layer_bindings,
+            &sources.solid_texture.view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::Layer)
+                .view,
+            &pipelines.parameters,
+        );
+        let image_layers = sources
+            .textures
+            .iter()
+            .map(|source| {
+                layer_group(
+                    device,
+                    &pipelines.layer_bindings,
+                    &source.view,
+                    &frame
+                        .working
+                        .get(super::frame_plan::TextureSlot::Layer)
+                        .view,
+                    &pipelines.parameters,
+                )
+            })
+            .collect::<Vec<_>>();
+        let composite_a_to_b = composite_group(
+            device,
+            &pipelines.composite_bindings,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::CanvasA)
+                .view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::Layer)
+                .view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::CanvasB)
+                .view,
+            &pipelines.parameters,
+        );
+        let composite_b_to_a = composite_group(
+            device,
+            &pipelines.composite_bindings,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::CanvasB)
+                .view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::Layer)
+                .view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::CanvasA)
+                .view,
+            &pipelines.parameters,
+        );
+        Self {
+            clear_canvas_a,
+            solid_layer,
+            image_layers,
+            composite_a_to_b,
+            composite_b_to_a,
+            persistent_created: sources.textures.len() + 4,
+        }
+    }
+
+    pub(super) fn persistent_created(&self) -> usize {
+        self.persistent_created
+    }
+
+    fn image_layer(&self, source_asset_index: usize) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.image_layers.get(source_asset_index).ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-FRAME-PLAN",
+                crate::Category::Backend,
+                format!(
+                    "GPU frame operation references missing source bind group {source_asset_index}"
+                ),
+                "",
+            )
+        })
+    }
+
+    fn composite(&self, canvas_source: super::frame_plan::TextureSlot) -> &wgpu::BindGroup {
+        match canvas_source {
+            super::frame_plan::TextureSlot::CanvasA => &self.composite_a_to_b,
+            super::frame_plan::TextureSlot::CanvasB => &self.composite_b_to_a,
+            _ => unreachable!("frame-plan validation requires a canvas source"),
+        }
+    }
 }
 
 #[expect(
@@ -31,7 +162,7 @@ pub(super) fn encode_and_submit(
     queue: &wgpu::Queue,
     pipelines: &GpuPipelines,
     frame: &FrameResources,
-    sources: &SourceResources,
+    bind_groups: &FrameBindGroups,
     plan: &GpuFramePlan,
     parameters: &FrameParameterArena,
     width: u32,
@@ -41,6 +172,8 @@ pub(super) fn encode_and_submit(
     let started = Instant::now();
     let mut metrics = FrameExecutionMetrics {
         command_encoders: 1,
+        parameter_uploads: 1,
+        parameter_uploaded_bytes: parameters.bytes().len() as u64,
         ..FrameExecutionMetrics::default()
     };
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -57,23 +190,23 @@ pub(super) fn encode_and_submit(
                 parameters_index,
                 ..
             } => {
-                let group = layer_group(
-                    device,
-                    &pipelines.layer_bindings,
-                    &sources.solid_texture.view,
-                    &frame.working.get(*destination).view,
-                    &pipelines.parameters,
-                );
+                let group = if matches!(operation, GpuOperation::ClearCanvas { .. }) {
+                    &bind_groups.clear_canvas_a
+                } else {
+                    debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
+                    &bind_groups.solid_layer
+                };
                 dispatch(
                     &mut encoder,
                     &pipelines.layer,
-                    &group,
+                    group,
                     parameters.offset(*parameters_index)?,
                     width,
                     height,
                 );
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
             }
             GpuOperation::RenderImageLayer {
                 source_asset_index,
@@ -81,23 +214,19 @@ pub(super) fn encode_and_submit(
                 parameters_index,
                 ..
             } => {
-                let group = layer_group(
-                    device,
-                    &pipelines.layer_bindings,
-                    &sources.textures[*source_asset_index].view,
-                    &frame.working.get(*destination).view,
-                    &pipelines.parameters,
-                );
+                debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
+                let group = bind_groups.image_layer(*source_asset_index)?;
                 dispatch(
                     &mut encoder,
                     &pipelines.layer,
-                    &group,
+                    group,
                     parameters.offset(*parameters_index)?,
                     width,
                     height,
                 );
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
             }
             GpuOperation::CompositeLayer {
                 layer_source,
@@ -106,24 +235,29 @@ pub(super) fn encode_and_submit(
                 parameters_index,
                 ..
             } => {
-                let group = composite_group(
-                    device,
-                    &pipelines.composite_bindings,
-                    &frame.working.get(*canvas_source).view,
-                    &frame.working.get(*layer_source).view,
-                    &frame.working.get(*canvas_destination).view,
-                    &pipelines.parameters,
+                debug_assert_eq!(*layer_source, super::frame_plan::TextureSlot::Layer);
+                debug_assert_eq!(
+                    *canvas_destination,
+                    match canvas_source {
+                        super::frame_plan::TextureSlot::CanvasA =>
+                            super::frame_plan::TextureSlot::CanvasB,
+                        super::frame_plan::TextureSlot::CanvasB =>
+                            super::frame_plan::TextureSlot::CanvasA,
+                        _ => unreachable!("frame-plan validation requires a canvas source"),
+                    }
                 );
+                let group = bind_groups.composite(*canvas_source);
                 dispatch(
                     &mut encoder,
                     &pipelines.composite,
-                    &group,
+                    group,
                     parameters.offset(*parameters_index)?,
                     width,
                     height,
                 );
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
             }
             GpuOperation::ApplyEffect { .. } => {
                 return Err(Diagnostic::error(
@@ -204,7 +338,7 @@ fn layer_group<'a>(
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: parameters.as_entire_binding(),
+                resource: parameter_binding(parameters),
             },
         ],
     })
@@ -235,8 +369,16 @@ fn composite_group<'a>(
             },
             wgpu::BindGroupEntry {
                 binding: 3,
-                resource: parameters.as_entire_binding(),
+                resource: parameter_binding(parameters),
             },
         ],
+    })
+}
+
+fn parameter_binding(buffer: &wgpu::Buffer) -> wgpu::BindingResource<'_> {
+    wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+        buffer,
+        offset: 0,
+        size: wgpu::BufferSize::new(super::parameters::PARAMETER_RECORD_BYTES),
     })
 }

@@ -1,0 +1,60 @@
+{
+  "name": "WGPU RGBA parity fixture",
+  "output": {
+    "path": "../output/wgpu-small-rgba.mp4",
+    "width": 174,
+    "height": 130,
+    "frame_rate": "1/1",
+    "background": "#1A1A28",
+    "quality": "balanced",
+    "audio": false,
+    "duration_mode": "automatic"
+  },
+  "assets": [
+    {
+      "id": "fixture",
+      "type": "image",
+      "source": "../assets/wgpu-small-rgba.png"
+    }
+  ],
+  "visual": {
+    "clips": [
+      {
+        "id": "fixture-layer",
+        "source": {
+          "type": "image",
+          "asset": "fixture"
+        },
+        "start": 0,
+        "duration": 1,
+        "layer": 0,
+        "sizing": {
+          "mode": "fit"
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 0.87
+        }
+      }
+    ]
+  }
+}

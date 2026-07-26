@@ -75,15 +75,17 @@ reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
 returns.
 
 `render/wgpu/backend` owns prepared WGPU state and frame rendering. `context`
-creates the adapter and device. `requirements` validates limits before resources
-exist. `frame_plan` creates and validates adapter-independent canvas ping-pong
-operations. `texture_pool` owns Canvas A, Canvas B, Layer, Effect A, and Effect
-B for the backend lifetime. `pipeline` creates texture compute pipelines and
-layouts. `parameters` stores aligned per-operation records. `executor` encodes
-one complete frame into one command buffer and submits it once. `readback` keeps
-synchronous mapping and row repacking. Support checks decide whether the current
-WGPU renderer accepts a plan. That policy is outside the engine so future GPU
-effect work changes the WGPU module rather than selection logic.
+creates the adapter and device. `requirements` validates limits and estimates
+allocation sizes before resources exist. `frame_plan` creates and validates
+adapter-independent canvas ping-pong operations. `texture_pool` owns Canvas A,
+Canvas B, and Layer for the backend lifetime. It only allocates effect textures
+when executable effect support requests them. `pipeline` creates texture compute
+pipelines and layouts. `parameters` stores aligned per-operation records.
+`executor` reuses prepared bind groups, encodes one complete frame into one
+command buffer, and submits it once. `readback` keeps synchronous mapping and
+row repacking. Support checks decide whether the current WGPU renderer accepts
+a plan. That policy is outside the engine so future GPU effect work changes the
+WGPU module rather than selection logic.
 
 `RenderBackend` accepts evaluated frames only. The engine creates CPU and WGPU
 backends lazily and returns a fully prepared backend before frame rendering
@@ -131,6 +133,8 @@ CPU execution, and compatibility tests. If WGPU does not implement it, update
 falls back before the first frame.
 
 To implement WGPU support later, keep the effect's plan and evaluation behavior
-unchanged, add its shader and parameter or resource needs under `render/wgpu`,
-then adjust only the support checker and parity tests. This keeps GPU capability
-policy in one place and avoids making the engine understand individual effects.
+unchanged. Add the shared `EffectPass` to a self-describing `GpuOperation`, then
+add typed GPU parameters, a shader, a pipeline, a prepared resource bind group,
+an executor branch, a support declaration, a parity test, and a benchmark.
+This keeps GPU capability policy in one place and avoids making the engine
+rediscover effect semantics from an evaluated layer.

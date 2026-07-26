@@ -17,12 +17,12 @@ use crate::{
 use super::{
     context::GpuContext,
     diagnostics::finish_error_scopes,
-    executor::{FrameExecutionMetrics, encode_and_submit},
+    executor::{FrameBindGroups, FrameExecutionMetrics, encode_and_submit},
     frame_plan::{GpuFramePlan, GpuOperation},
     parameters::{self, FrameParameterArena, LayerParameters},
     pipeline::GpuPipelines,
     readback::map_frame,
-    requirements::GpuRequirements,
+    requirements::{GpuRequirements, ResourceEstimates},
     resources::{FrameResources, SourceResources},
 };
 
@@ -34,7 +34,9 @@ pub struct WgpuBackend {
     pipelines: GpuPipelines,
     frame: FrameResources,
     sources: SourceResources,
+    bind_groups: FrameBindGroups,
     parameters: FrameParameterArena,
+    resource_estimates: ResourceEstimates,
     last_execution: FrameExecutionMetrics,
     stats: PreparationStats,
     timings: PreparationTimings,
@@ -55,6 +57,7 @@ impl WgpuBackend {
         context.device.push_error_scope(wgpu::ErrorFilter::Internal);
         let alignment = context.device.limits().min_uniform_buffer_offset_alignment;
         let parameter_buffer_bytes = requirements.parameter_buffer_bytes(alignment)?;
+        let resource_estimates = requirements.resource_estimates(alignment)?;
         let pipeline_started = Instant::now();
         let pipelines = GpuPipelines::create(&context.device, parameter_buffer_bytes);
         let frame = FrameResources::create(
@@ -64,7 +67,10 @@ impl WgpuBackend {
             requirements.padded_row_bytes,
             requirements.copy_bytes,
         );
-        let _working_texture_bytes = frame.working.estimated_bytes();
+        debug_assert_eq!(
+            frame.working.estimated_bytes(),
+            resource_estimates.working_texture_bytes
+        );
         let pipeline_creation = pipeline_started.elapsed();
         let upload_started = Instant::now();
         let sources = SourceResources::create(
@@ -74,6 +80,7 @@ impl WgpuBackend {
             &decoded,
             context.adapter_limits.max_texture_dimension_2d,
         )?;
+        let bind_groups = FrameBindGroups::create(&context.device, &pipelines, &frame, &sources);
         let mut stats = decoded.stats().clone();
         stats.source_texture_count = sources.textures.len();
         stats.source_texture_bytes = sources.uploaded_texture_bytes;
@@ -84,9 +91,9 @@ impl WgpuBackend {
         stats.readback_buffer_bytes = requirements.copy_bytes;
         stats.shader_module_count = 2;
         stats.pipeline_count = 2;
-        stats.output_texture_count = 2; // the two persistent canvas textures
+        stats.output_texture_count = 3; // Canvas A, Canvas B, and Layer
         stats.accumulation_buffer_count = 0;
-        stats.bind_group_count = 0;
+        stats.bind_group_count = bind_groups.persistent_created();
         let mut timings = decoded.timings();
         timings.gpu_adapter_request = context.adapter_request;
         timings.gpu_device_request = context.device_request;
@@ -100,7 +107,9 @@ impl WgpuBackend {
             pipelines,
             frame,
             sources,
+            bind_groups,
             parameters: FrameParameterArena::new(alignment, parameter_buffer_bytes),
+            resource_estimates,
             last_execution: FrameExecutionMetrics::default(),
             stats,
             timings,
@@ -133,7 +142,7 @@ impl RenderBackend for WgpuBackend {
             &self.context.queue,
             &self.pipelines,
             &self.frame,
-            &self.sources,
+            &self.bind_groups,
             &plan,
             &self.parameters,
             evaluated.width,
@@ -141,6 +150,12 @@ impl RenderBackend for WgpuBackend {
         )?;
         debug_assert_eq!(execution.command_encoders, 1);
         debug_assert_eq!(execution.queue_submissions, 1);
+        debug_assert_eq!(execution.parameter_uploads, 1);
+        debug_assert_eq!(execution.bind_groups_created, 0);
+        debug_assert_eq!(execution.bind_groups_recreated_for_parameter_growth, 0);
+        debug_assert_eq!(execution.bind_group_cache_misses, 0);
+        debug_assert_eq!(execution.bind_group_cache_hits, execution.dispatches);
+        debug_assert!(execution.parameter_uploaded_bytes <= self.parameters.bytes().len() as u64);
         let readback = map_frame(&self.context.device, &mut self.frame, destination)?;
         self.last_execution = execution;
         self.timings.gpu_frame_command_encode += execution.command_encode;
@@ -151,6 +166,14 @@ impl RenderBackend for WgpuBackend {
         Ok(())
     }
     fn stats(&mut self) -> PreparationStats {
+        debug_assert_eq!(
+            self.stats.source_texture_bytes,
+            self.resource_estimates.source_texture_bytes
+        );
+        debug_assert_eq!(
+            self.stats.readback_buffer_bytes,
+            self.resource_estimates.readback_buffer_bytes
+        );
         self.stats.clone()
     }
     fn timings(&self) -> PreparationTimings {
@@ -165,6 +188,10 @@ impl RenderBackend for WgpuBackend {
 impl WgpuBackend {
     pub(super) fn last_execution_metrics(&self) -> FrameExecutionMetrics {
         self.last_execution
+    }
+
+    pub(super) fn resource_estimates(&self) -> ResourceEstimates {
+        self.resource_estimates
     }
 }
 

@@ -197,6 +197,133 @@ pub enum CompiledEffect {
     },
 }
 
+/// Phase-independent effect classification used by reporting and backend policy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EffectClass {
+    BasicColour,
+    Advanced,
+    Transform,
+}
+
+impl CompiledEffect {
+    #[must_use]
+    pub(crate) const fn class(&self) -> EffectClass {
+        match self {
+            Self::Brightness { .. }
+            | Self::Contrast { .. }
+            | Self::Saturation { .. }
+            | Self::Tint { .. } => EffectClass::BasicColour,
+            Self::CameraShake { .. } => EffectClass::Transform,
+            Self::GaussianBlur { .. }
+            | Self::DirectionalBlur { .. }
+            | Self::ZoomBlur { .. }
+            | Self::Glow { .. }
+            | Self::ChromaticAberration { .. }
+            | Self::Vignette { .. }
+            | Self::Sharpen { .. }
+            | Self::ColorAdjust { .. }
+            | Self::MotionBlur { .. } => EffectClass::Advanced,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn keyframe_count(&self) -> u64 {
+        match self {
+            Self::Brightness { amount }
+            | Self::Contrast { amount }
+            | Self::Saturation { amount }
+            | Self::Tint { amount, .. }
+            | Self::GaussianBlur { radius: amount }
+            | Self::ZoomBlur { radius: amount, .. } => amount.keyframes.len() as u64,
+            Self::Sharpen { amount, radius } => {
+                amount.keyframes.len() as u64 + radius.keyframes.len() as u64
+            }
+            Self::DirectionalBlur {
+                radius,
+                angle_degrees,
+            }
+            | Self::ChromaticAberration {
+                amount: radius,
+                angle_degrees,
+            } => radius.keyframes.len() as u64 + angle_degrees.keyframes.len() as u64,
+            Self::Glow {
+                threshold,
+                radius,
+                intensity,
+                ..
+            } => {
+                threshold.keyframes.len() as u64
+                    + radius.keyframes.len() as u64
+                    + intensity.keyframes.len() as u64
+            }
+            Self::Vignette {
+                amount,
+                radius,
+                softness,
+                ..
+            } => {
+                amount.keyframes.len() as u64
+                    + radius.keyframes.len() as u64
+                    + softness.keyframes.len() as u64
+            }
+            Self::ColorAdjust {
+                exposure,
+                gamma,
+                black_point,
+                white_point,
+            } => {
+                exposure.keyframes.len() as u64
+                    + gamma.keyframes.len() as u64
+                    + black_point.keyframes.len() as u64
+                    + white_point.keyframes.len() as u64
+            }
+            Self::CameraShake {
+                position_amount,
+                rotation_degrees,
+                scale_amount,
+                frequency,
+                ..
+            } => {
+                position_amount.keyframes.len() as u64
+                    + rotation_degrees.keyframes.len() as u64
+                    + scale_amount.keyframes.len() as u64
+                    + frequency.keyframes.len() as u64
+            }
+            Self::MotionBlur {
+                intensity,
+                shutter_angle,
+                max_radius,
+                ..
+            } => {
+                intensity.keyframes.len() as u64
+                    + shutter_angle.keyframes.len() as u64
+                    + max_radius.keyframes.len() as u64
+            }
+        }
+    }
+
+    /// Conservative logical pass count before effect tracks are evaluated.
+    #[must_use]
+    pub(crate) const fn estimated_pass_count(&self) -> usize {
+        match self {
+            Self::GaussianBlur { .. } => 2,
+            Self::Glow { .. } => 4,
+            Self::Sharpen { .. } => 3,
+            Self::CameraShake { .. } => 0,
+            Self::Brightness { .. }
+            | Self::Contrast { .. }
+            | Self::Saturation { .. }
+            | Self::Tint { .. }
+            | Self::DirectionalBlur { .. }
+            | Self::ZoomBlur { .. }
+            | Self::ChromaticAberration { .. }
+            | Self::Vignette { .. }
+            | Self::ColorAdjust { .. }
+            | Self::MotionBlur { .. } => 1,
+        }
+    }
+}
+
 /// A compiled effect whose tracks use time relative to its active interval.
 /// The interval is half-open, matching scheduled layers and transitions.
 #[derive(Clone, Debug)]

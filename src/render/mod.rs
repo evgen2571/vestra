@@ -5,6 +5,7 @@ mod blend;
 mod cache;
 mod cpu;
 mod decoded;
+pub(crate) mod effects;
 mod engine;
 pub(crate) mod geometry;
 mod metrics;

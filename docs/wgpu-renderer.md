@@ -5,7 +5,7 @@ The renderer consumes the same compiled plan, decoded assets, and
 
 ```text
 EvaluatedFrame → CPU compositor → RGBA → FFmpeg
-               → WGPU compute compositor → output texture → readback → RGBA → FFmpeg
+               → GPU frame plan → texture frame graph → readback → RGBA → FFmpeg
 ```
 
 Backend selection is runtime-only:
@@ -46,17 +46,44 @@ values, so fixture failures can report compact context rather than frame content
 
 ## Resources and readback
 
-WGPU owns persistent source textures, shader, compute pipeline, bind groups,
-accumulation buffer, output texture, and readback buffer. Output rows are
-aligned to WGPU's copy-row requirement, then repacked into a contiguous RGBA
-buffer before streaming to FFmpeg. Renderer-owned resource counters and GPU
-preparation timings are exposed in reports.
+WGPU owns persistent source textures, two canvas textures, a layer texture,
+two effect slots, shaders, compute pipelines, a bounded dynamic-uniform buffer,
+and a readback buffer. `Rgba8Unorm` working textures store encoded
+straight-alpha channel values. This deliberately matches the CPU's byte-space
+colour semantics. Shaders clamp each write. They do not perform linear-light
+compositing or use sRGB storage textures.
+
+Each frame has an adapter-independent plan:
+
+```text
+evaluated frame
+  -> clear Canvas A
+  -> render Layer texture
+  -> future Effect A / Effect B chain
+  -> composite Layer with Canvas A or B into the other canvas
+  -> final canvas texture
+  -> copy to readback buffer
+```
+
+Canvas A and B ping-pong, so no compute pass reads and writes the same texture.
+The final slot is explicit in the plan, including empty, odd-layer, and
+even-layer frames. The five working textures are allocated during preparation
+and retained for the backend lifetime. Phase 1 accepts the bounded cost of five
+full-output-size textures rather than adding variable-resolution pooling.
+
+The frame parameter arena writes every operation record before command encoding.
+Records are padded to `min_uniform_buffer_offset_alignment`, uploaded once, and
+selected with dynamic offsets. Bind groups describe the operation's source and
+destination views. Output rows are aligned to WGPU's copy-row requirement, then
+repacked into a contiguous RGBA buffer before streaming to FFmpeg.
 
 The compute shader samples with `textureLoad`, so source texture and byte
 counters are reported separately and `sampler_count` is intentionally zero.
 
-Every frame still transfers back to CPU. There is no zero-copy encoder path,
-hardware video encoding, windowed preview, or advanced GPU effects.
+Every normal frame creates one command encoder and one queue submission. Clear,
+layer work, ping-pong composition, and the final texture-to-readback copy all
+live in that command buffer. Readback remains synchronous. There is no zero-copy
+encoder path, hardware video encoding, windowed preview, or advanced GPU effects.
 
 ## Headless setup and diagnostics
 
@@ -70,8 +97,8 @@ VIDEO_EDITOR_REQUIRE_WGPU=1
 ```
 
 The backend derives and validates output and source texture dimensions, padded
-row/copy sizes, buffer and storage-binding sizes, uniform size, bind-group
-bindings, and compute workgroup limits before creating render resources. It
+row/copy sizes, uniform size, texture bindings, and compute workgroup limits
+before creating render resources. It
 requests those project-derived limits on top of WGPU's downlevel baseline, then
 checks the limits returned by the requested device again. Initialization, limit, and readback failures
 are returned as structured diagnostics. Per-frame WGPU validation and internal
@@ -109,9 +136,12 @@ readback wait are not GPU execution timestamps.
 pipeline creation sub-stages are reported separately. Texture upload and all
 per-frame stages are likewise CPU-observed durations, not hardware timestamps.
 
-Each layer currently has its own queue submission. The uniform parameter buffer
-is overwritten for every layer, so coalescing these dispatches would make all
-dispatches observe the final parameters unless the renderer first introduces a
-persisted, correctly aligned parameter ring. The current bounded strategy
-preserves exact layer ordering and CPU rounding parity; the submission count is
-reported so that trade-off remains visible.
+The texture frame graph replaced the old full-frame accumulation storage buffer.
+Clear and layer dispatches no longer submit independently. The dynamic-uniform
+arena preserves each operation's parameters until GPU completion, so all normal
+work can be submitted together.
+
+Phase 2 adds an effect by extending the shared `EffectPass`, adding a parameter
+record, shader, pipeline dispatch, capability declaration, CPU/WGPU parity test,
+and benchmark. Advanced effects and blend modes remain unsupported in WGPU until
+that sequence is complete.

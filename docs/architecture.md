@@ -76,13 +76,14 @@ returns.
 
 `render/wgpu/backend` owns prepared WGPU state and frame rendering. `context`
 creates the adapter and device. `requirements` validates limits before resources
-exist. `pipeline` creates the shader and bindings. `resources` owns source
-textures and persistent frame buffers. `executor` keeps the current per-layer
-submission behavior, and `readback` keeps synchronous mapping and row repacking.
-Parameters pack shared geometry for the shader. Support checks decide whether
-the current one-pass WGPU renderer accepts a plan. That policy is outside the
-engine so future GPU effect work changes the WGPU module rather than selection
-logic.
+exist. `frame_plan` creates and validates adapter-independent canvas ping-pong
+operations. `texture_pool` owns Canvas A, Canvas B, Layer, Effect A, and Effect
+B for the backend lifetime. `pipeline` creates texture compute pipelines and
+layouts. `parameters` stores aligned per-operation records. `executor` encodes
+one complete frame into one command buffer and submits it once. `readback` keeps
+synchronous mapping and row repacking. Support checks decide whether the current
+WGPU renderer accepts a plan. That policy is outside the engine so future GPU
+effect work changes the WGPU module rather than selection logic.
 
 `RenderBackend` accepts evaluated frames only. The engine creates CPU and WGPU
 backends lazily and returns a fully prepared backend before frame rendering

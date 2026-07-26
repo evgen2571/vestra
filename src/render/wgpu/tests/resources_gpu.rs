@@ -94,9 +94,27 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
     assert_eq!(initial.source_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);
     assert_eq!(initial.sampler_count, 0);
-    assert_eq!(initial.output_texture_count, 2);
+    assert_eq!(initial.output_texture_count, 3);
     assert_eq!(initial.accumulation_buffer_count, 0);
     assert_eq!(initial.readback_buffer_count, 1);
+    let estimates = gpu.resource_estimates();
+    assert_eq!(estimates.source_texture_bytes, initial.source_texture_bytes);
+    assert_eq!(
+        estimates.readback_buffer_bytes,
+        initial.readback_buffer_bytes
+    );
+    assert_eq!(estimates.effect_texture_bytes, 0);
+    assert_eq!(
+        estimates.working_texture_bytes,
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes
+    );
+    assert_eq!(
+        estimates.total_persistent_bytes,
+        estimates.source_texture_bytes
+            + estimates.working_texture_bytes
+            + estimates.readback_buffer_bytes
+            + estimates.parameter_buffer_bytes
+    );
 
     for time in [0, 500_000_000, 1_000_000_000] {
         let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], time);
@@ -106,6 +124,12 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         let execution = gpu.last_execution_metrics();
         assert_eq!(execution.command_encoders, 1);
         assert_eq!(execution.queue_submissions, 1);
+        assert_eq!(execution.parameter_uploads, 1);
+        assert!(execution.parameter_uploaded_bytes > 0);
+        assert_eq!(execution.bind_groups_created, 0);
+        assert_eq!(execution.bind_groups_recreated_for_parameter_growth, 0);
+        assert_eq!(execution.bind_group_cache_misses, 0);
+        assert_eq!(execution.bind_group_cache_hits, 3);
     }
     let final_stats = gpu.stats();
     assert_eq!(

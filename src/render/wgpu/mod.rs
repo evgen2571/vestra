@@ -20,6 +20,9 @@ pub(crate) mod support;
 mod texture_pool;
 
 #[cfg(test)]
+#[path = "tests/fixtures.rs"]
+mod fixture_tests;
+#[cfg(test)]
 #[path = "tests/parity.rs"]
 mod parity_tests;
 #[cfg(test)]

@@ -30,24 +30,29 @@ pub(crate) fn draw_layer(
             cacheable_crop,
             transform,
         } => {
-            let original = assets.image(*asset_index);
+            let (original_width, original_height) = {
+                let original = assets.image(*asset_index);
+                (original.width(), original.height())
+            };
+            let (source, resolved_cacheable_crop) = if *cacheable_crop {
+                if let Some(source) = assets.crop(*asset_index, *crop) {
+                    (source, true)
+                } else {
+                    (assets.image(*asset_index), false)
+                }
+            } else {
+                (assets.image(*asset_index), false)
+            };
             let resolved = geometry::resolve_image_geometry(
-                original.width(),
-                original.height(),
+                original_width,
+                original_height,
                 *crop,
-                *cacheable_crop,
+                resolved_cacheable_crop,
                 sizing,
                 *transform,
                 canvas.width(),
                 canvas.height(),
             );
-            let source = if *cacheable_crop {
-                assets
-                    .crop(*asset_index, *crop)
-                    .expect("crop cache can always retain a valid crop")
-            } else {
-                assets.image(*asset_index)
-            };
             if transform.is_valid() {
                 draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
             }

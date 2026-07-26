@@ -25,6 +25,16 @@ fn compiles_transitions_and_flashes_to_normal_layers() {
     );
     assert_eq!(plan.compilation.keyframe_count, 12);
     assert_eq!(plan.compilation.compiled_transition_association_count, 2);
+    assert_eq!(plan.compilation.effect_pass_count, 1);
+    assert_eq!(plan.layers[0].id, "red-pan");
+    assert_eq!(plan.layers[1].id, "blue-in");
+    assert!(matches!(
+        plan.layers[0].effects.as_slice(),
+        [crate::plan::TimedEffect {
+            effect: crate::plan::CompiledEffect::Saturation { .. },
+            ..
+        }]
+    ));
 }
 
 #[test]

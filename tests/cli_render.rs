@@ -44,5 +44,26 @@ fn canonical_example_renders_an_h264_frame_sequence() {
             .get("project_load_and_validation_ms")
             .is_none()
     );
+    let timings = report["timings"].as_object().expect("flat timings object");
+    assert!(timings.values().all(Value::is_u64));
+    let performance = report["performance"]
+        .as_object()
+        .expect("flat performance object");
+    for key in [
+        "declared_clip_count",
+        "keyframe_count",
+        "effect_pass_count",
+        "rendered_frame_count",
+        "bitmap_cache_requests",
+        "decoded_source_bytes",
+    ] {
+        assert!(performance[key].is_u64(), "missing flat metric {key}");
+    }
+    assert!(
+        performance
+            .values()
+            .all(|value| { value.is_u64() || value.is_f64() || value.is_null() })
+    );
+    assert!(report.get("backend_fallback").is_none());
     assert!(output.is_file());
 }

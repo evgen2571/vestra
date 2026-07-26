@@ -6,7 +6,7 @@ use crate::{
     animation::Transform2D,
     domain::Crop,
     plan::{ColourTransform, CompiledSizing, EvaluatedFrame},
-    render::geometry::{self, crop_bounds},
+    render::geometry::{self},
 };
 
 use super::requirements::align_up;
@@ -43,38 +43,15 @@ pub(super) fn image(
     opacity: f64,
     colour: ColourTransform,
 ) -> LayerParameters {
-    let (virtual_width, virtual_height, origin_x, origin_y, virtual_crop) = if cacheable_crop {
-        let bounds = crop_bounds(source_width, source_height, crop);
-        (
-            bounds.width,
-            bounds.height,
-            bounds.x,
-            bounds.y,
-            Crop {
-                x: 0.0,
-                y: 0.0,
-                width: 1.0,
-                height: 1.0,
-            },
-        )
-    } else {
-        (source_width, source_height, 0, 0, crop)
-    };
-    let cropped_width = virtual_crop.width * f64::from(virtual_width);
-    let cropped_height = virtual_crop.height * f64::from(virtual_height);
-    let (effective_width, effective_height) = geometry::effective_dimensions(
+    let geometry = geometry::resolve_image_geometry(
+        source_width,
+        source_height,
+        crop,
+        cacheable_crop,
         sizing,
-        cropped_width,
-        cropped_height,
-        frame.width,
-        frame.height,
-    );
-    let inverse = geometry::InverseAffine::for_transform(
         transform,
         frame.width,
         frame.height,
-        effective_width,
-        effective_height,
     );
     LayerParameters {
         header: [
@@ -83,29 +60,34 @@ pub(super) fn image(
             align_up(frame.width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) / 4,
             1,
         ],
-        source: [virtual_width, virtual_height, origin_x, origin_y],
+        source: [
+            geometry.source.width,
+            geometry.source.height,
+            geometry.source.origin_x,
+            geometry.source.origin_y,
+        ],
         crop: [
-            virtual_crop.x as f32,
-            virtual_crop.y as f32,
-            virtual_crop.width as f32,
-            virtual_crop.height as f32,
+            geometry.source.normalized_crop.x as f32,
+            geometry.source.normalized_crop.y as f32,
+            geometry.source.normalized_crop.width as f32,
+            geometry.source.normalized_crop.height as f32,
         ],
         effective: [
-            effective_width as f32,
-            effective_height as f32,
+            geometry.effective_width as f32,
+            geometry.effective_height as f32,
             opacity as f32,
             0.0,
         ],
         inverse_row0: [
-            inverse.m00 as f32,
-            inverse.m01 as f32,
-            inverse.m02 as f32,
+            geometry.inverse.m00 as f32,
+            geometry.inverse.m01 as f32,
+            geometry.inverse.m02 as f32,
             0.0,
         ],
         inverse_row1: [
-            inverse.m10 as f32,
-            inverse.m11 as f32,
-            inverse.m12 as f32,
+            geometry.inverse.m10 as f32,
+            geometry.inverse.m11 as f32,
+            geometry.inverse.m12 as f32,
             0.0,
         ],
         colour_row0: [

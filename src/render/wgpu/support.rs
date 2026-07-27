@@ -1,19 +1,60 @@
-//! WGPU plan compatibility policy.
+//! Exhaustive WGPU plan compatibility policy.
 
-use crate::{Diagnostic, plan::RenderPlan};
+use crate::{
+    Diagnostic,
+    plan::{CompiledEffect, RenderPlan},
+    project::BlendMode,
+};
 
-/// All effects currently express themselves as backend-neutral `EffectPass`
-/// values, and every current blend mode is represented by the shared blend
-/// pipeline.  Keep this check deliberately narrow: adapter features and
-/// concrete resource limits are checked during WGPU preparation, where their
-/// diagnostics can name the unavailable capability.
+/// Validate the renderer-owned mappings before adapter creation.  Adapter
+/// limits remain the responsibility of `GpuRequirements`, but a future effect
+/// or blend variant cannot silently enter the WGPU path without a mapping.
 #[expect(
     clippy::result_large_err,
     reason = "backend selection preserves the existing structured diagnostic"
 )]
 pub(crate) fn validate_plan(plan: &RenderPlan) -> Result<(), Diagnostic> {
-    let _ = plan;
+    for layer in &plan.layers {
+        validate_blend_mode(layer.blend_mode)?;
+        for timed in &layer.effects {
+            validate_effect(&timed.effect)?;
+        }
+    }
+    for timed in &plan.post_effects {
+        validate_effect(&timed.effect)?;
+    }
     Ok(())
+}
+
+fn validate_effect(effect: &CompiledEffect) -> Result<(), Diagnostic> {
+    // This match intentionally has no wildcard.  Adding an effect requires an
+    // explicit WGPU parameter/shader declaration instead of inheriting success.
+    match effect {
+        CompiledEffect::Brightness { .. }
+        | CompiledEffect::Contrast { .. }
+        | CompiledEffect::Saturation { .. }
+        | CompiledEffect::Tint { .. }
+        | CompiledEffect::GaussianBlur { .. }
+        | CompiledEffect::DirectionalBlur { .. }
+        | CompiledEffect::ZoomBlur { .. }
+        | CompiledEffect::Glow { .. }
+        | CompiledEffect::ChromaticAberration { .. }
+        | CompiledEffect::Vignette { .. }
+        | CompiledEffect::Sharpen { .. }
+        | CompiledEffect::ColorAdjust { .. }
+        | CompiledEffect::CameraShake { .. }
+        | CompiledEffect::MotionBlur { .. } => Ok(()),
+    }
+}
+
+fn validate_blend_mode(mode: BlendMode) -> Result<(), Diagnostic> {
+    match mode {
+        BlendMode::Normal
+        | BlendMode::Add
+        | BlendMode::Screen
+        | BlendMode::Multiply
+        | BlendMode::Overlay => Ok(()),
+    }
 }
 
 #[cfg(test)]

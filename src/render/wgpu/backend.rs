@@ -75,6 +75,10 @@ impl WgpuBackend {
             frame.working.estimated_bytes(),
             resource_estimates.working_texture_bytes
         );
+        debug_assert_eq!(
+            frame.working.texture_count() as u64,
+            resource_estimates.working_texture_count
+        );
         let pipeline_creation = pipeline_started.elapsed();
         let upload_started = Instant::now();
         let sources = SourceResources::create(

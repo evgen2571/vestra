@@ -5,7 +5,8 @@ use super::{
     requirements::{GpuRequirements, estimated_texture_bytes},
 };
 use crate::{
-    plan::{CompileOptions, compile},
+    animation::Track,
+    plan::{CompileOptions, CompiledEffect, TimedEffect, compile},
     project::{ValidationOptions, load_and_validate},
 };
 
@@ -180,5 +181,55 @@ fn one_pass_plan_reserves_only_effect_a() {
     assert_eq!(
         estimates.working_texture_bytes,
         estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture
+    );
+}
+
+#[test]
+fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles() {
+    let (mut plan, decoded, _) = fixture_requirements();
+    for layer in &mut plan.layers {
+        layer.effects.clear();
+    }
+    plan.post_effects = vec![TimedEffect {
+        start: 0,
+        end: u128::MAX,
+        effect: CompiledEffect::Glow {
+            threshold: Track::new(0.4),
+            radius: Track::new(2.0),
+            intensity: Track::new(0.8),
+            colour: [255, 180, 60, 255],
+        },
+    }];
+    plan.compilation.effect_pass_count = 4;
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("glow requirements calculate");
+    let estimates = requirements
+        .resource_estimates(256)
+        .expect("glow resource estimates calculate");
+    let full_frame = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
+        .expect("full frame estimate");
+    assert_eq!(estimates.source_texture_count, plan.images.len() as u64);
+    assert_eq!(estimates.effect_texture_count, 2);
+    assert_eq!(estimates.auxiliary_texture_count, 1);
+    assert_eq!(estimates.working_texture_count, 6);
+    assert_eq!(estimates.effect_texture_bytes, full_frame * 2);
+    assert_eq!(estimates.auxiliary_texture_bytes, full_frame);
+    assert_eq!(
+        estimates.working_texture_bytes,
+        estimates.canvas_texture_bytes
+            + estimates.layer_texture_bytes
+            + estimates.effect_texture_bytes
+            + estimates.auxiliary_texture_bytes
+    );
+    assert_eq!(
+        estimates.total_persistent_bytes,
+        estimates.source_texture_bytes
+            + estimates.working_texture_bytes
+            + estimates.readback_buffer_bytes
+            + estimates.parameter_buffer_bytes
     );
 }

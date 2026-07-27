@@ -2,10 +2,10 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::render::cpu::raster::sample_edge;
+use crate::render::{cpu::raster::sample_edge, effects::effect_amount_is_identity};
 
 pub(crate) fn apply(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
-    if amount <= 0.0 {
+    if effect_amount_is_identity(amount) {
         target.copy_from(source, 0, 0).expect("same dimensions");
         return;
     }

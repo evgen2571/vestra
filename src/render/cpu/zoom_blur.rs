@@ -2,7 +2,11 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::{domain::Point, project::ZoomBlurDirection, render::cpu::raster::sample_edge};
+use crate::{
+    domain::Point,
+    project::ZoomBlurDirection,
+    render::{cpu::raster::sample_edge, effects::blur_radius_is_identity},
+};
 
 pub(crate) fn apply(
     source: &RgbaImage,
@@ -12,7 +16,7 @@ pub(crate) fn apply(
     anchor: Point,
     direction: ZoomBlurDirection,
 ) {
-    if radius <= 0.01 {
+    if blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("same dimensions");
         return;
     }

@@ -9,6 +9,10 @@ use crate::plan::RenderPlan;
 use super::frame_plan::{TextureSlot, plan_requires_auxiliary};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
+    .union(wgpu::TextureUsages::STORAGE_BINDING)
+    .union(wgpu::TextureUsages::COPY_SRC)
+    .union(wgpu::TextureUsages::COPY_DST);
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct WorkingTextureDescriptor {
@@ -42,10 +46,7 @@ impl TexturePool {
             width: plan.canvas.width,
             height: plan.canvas.height,
             format: WORKING_FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
+            usage: WORKING_TEXTURE_USAGE,
         };
         let effect_pass_count = plan.compilation.effect_pass_count;
         Self {
@@ -149,6 +150,16 @@ fn create_texture(
 
 #[cfg(test)]
 mod tests {
+    use super::WORKING_TEXTURE_USAGE;
+
+    #[test]
+    fn retained_originals_require_copy_destination_usage() {
+        assert!(WORKING_TEXTURE_USAGE.contains(wgpu::TextureUsages::COPY_DST));
+        assert!(WORKING_TEXTURE_USAGE.contains(wgpu::TextureUsages::COPY_SRC));
+        assert!(WORKING_TEXTURE_USAGE.contains(wgpu::TextureUsages::TEXTURE_BINDING));
+        assert!(WORKING_TEXTURE_USAGE.contains(wgpu::TextureUsages::STORAGE_BINDING));
+    }
+
     #[test]
     fn effect_pipeline_working_texture_memory_uses_five_full_frame_slots() {
         let bytes = u64::from(1920_u32) * 1080 * 4;

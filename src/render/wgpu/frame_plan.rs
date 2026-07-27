@@ -960,4 +960,49 @@ mod tests {
             "WGPU-FRAME-PLAN"
         );
     }
+
+    #[test]
+    fn global_glow_then_sharpen_reuses_auxiliary_only_after_consumption() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [10, 20, 40, 255],
+            width: 7,
+            height: 5,
+            layers: vec![],
+            post_effects: vec![
+                EvaluatedEffect::Glow {
+                    threshold: 0.4,
+                    radius: 2.0,
+                    intensity: 0.8,
+                    colour: [255, 200, 100, 255],
+                },
+                EvaluatedEffect::Sharpen {
+                    amount: 0.5,
+                    radius: 2.0,
+                },
+            ],
+            evaluated_track_count: 0,
+        };
+        let plan = GpuFramePlan::build(&frame);
+        assert_eq!(plan.final_canvas, TextureSlot::EffectA);
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(operation, GpuOperation::CopyForEffect { .. }))
+                .count(),
+            2
+        );
+        assert!(plan.operations.iter().all(|operation| match operation {
+            GpuOperation::ApplyEffect {
+                scope,
+                pass,
+                auxiliary,
+                ..
+            } if pass.requires_original() => {
+                *scope == EffectScope::Global && *auxiliary == Some(TextureSlot::Auxiliary)
+            }
+            _ => true,
+        }));
+        plan.validate(0).expect("global retained values stay live");
+    }
 }

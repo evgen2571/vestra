@@ -40,6 +40,66 @@ pub struct AdapterMetadata {
     pub device_id: u32,
 }
 
+/// Conservative performance classification for benchmark reporting. An
+/// unknown adapter is intentionally not treated as hardware: adapter names
+/// vary by driver and an optimistic label would make results misleading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdapterPerformanceClass {
+    Hardware,
+    Software,
+    Unknown,
+}
+
+impl AdapterPerformanceClass {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hardware => "hardware",
+            Self::Software => "software",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl AdapterMetadata {
+    #[must_use]
+    pub fn performance_class(&self) -> AdapterPerformanceClass {
+        if self.device_type.eq_ignore_ascii_case("cpu")
+            || [
+                self.adapter_name.as_str(),
+                self.driver_name.as_str(),
+                self.driver_info.as_str(),
+            ]
+            .iter()
+            .any(|field| is_known_software_adapter(field))
+        {
+            return AdapterPerformanceClass::Software;
+        }
+        if self.device_type.eq_ignore_ascii_case("integratedgpu")
+            || self.device_type.eq_ignore_ascii_case("discretegpu")
+        {
+            return AdapterPerformanceClass::Hardware;
+        }
+        AdapterPerformanceClass::Unknown
+    }
+}
+
+fn is_known_software_adapter(field: &str) -> bool {
+    let field = field.to_ascii_lowercase();
+    [
+        "lavapipe",
+        "llvmpipe",
+        "softpipe",
+        "openswr",
+        "swiftshader",
+        "software rasterizer",
+        "microsoft basic render driver",
+        "warp",
+    ]
+    .iter()
+    .any(|marker| field.contains(marker))
+}
+
 /// Backend-neutral rendering lifecycle. The engine owns scheduling and encoding;
 /// backends consume already evaluated frames and shared decoded source bytes.
 pub trait RenderBackend {
@@ -52,4 +112,57 @@ pub trait RenderBackend {
     fn stats(&mut self) -> PreparationStats;
     fn timings(&self) -> PreparationTimings;
     fn adapter(&self) -> Option<AdapterMetadata>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn metadata(device_type: &str, adapter_name: &str) -> AdapterMetadata {
+        AdapterMetadata {
+            adapter_name: adapter_name.to_owned(),
+            device_type: device_type.to_owned(),
+            graphics_backend: "vulkan".to_owned(),
+            driver_name: String::new(),
+            driver_info: String::new(),
+            vendor_id: 0,
+            device_id: 0,
+        }
+    }
+
+    #[test]
+    fn classifies_known_software_adapter_markers_without_adapter_discovery() {
+        for (device_type, name) in [
+            ("cpu", "Unknown CPU Adapter"),
+            ("other", "lavapipe (Mesa 24.0.0)"),
+            ("other", "llvmpipe (LLVM 18.1.0)"),
+            ("other", "SwiftShader Device (Subzero)"),
+            ("other", "Microsoft Basic Render Driver"),
+        ] {
+            assert_eq!(
+                metadata(device_type, name).performance_class(),
+                AdapterPerformanceClass::Software,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn classifies_gpu_device_types_as_hardware_without_name_assumptions() {
+        for device_type in ["integratedgpu", "discretegpu"] {
+            assert_eq!(
+                metadata(device_type, "adapter name need not reveal its driver")
+                    .performance_class(),
+                AdapterPerformanceClass::Hardware
+            );
+        }
+    }
+
+    #[test]
+    fn leaves_unrecognized_virtual_or_other_adapters_unclassified() {
+        assert_eq!(
+            metadata("virtualgpu", "opaque remote GPU").performance_class(),
+            AdapterPerformanceClass::Unknown
+        );
+    }
 }

@@ -380,7 +380,7 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
             }
-            GpuOperation::CopyForReadback { source } => {
+            GpuOperation::CopyForReadback { source, .. } => {
                 encoder.copy_texture_to_buffer(
                     wgpu::ImageCopyTexture {
                         texture: &frame.working.get(*source).texture,

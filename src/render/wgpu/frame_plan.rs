@@ -75,12 +75,16 @@ pub(super) enum GpuOperation {
     CompositeLayer {
         layer_index: usize,
         layer_source: TextureSlot,
+        expected_layer_value: u64,
         canvas_source: TextureSlot,
+        expected_canvas_value: u64,
         canvas_destination: TextureSlot,
+        result_value: u64,
         parameters_index: u32,
     },
     CopyForReadback {
         source: TextureSlot,
+        expected_value: u64,
     },
 }
 
@@ -148,8 +152,11 @@ impl GpuFramePlan {
             operations.push(GpuOperation::CompositeLayer {
                 layer_index,
                 layer_source: layer_result,
+                expected_layer_value: layer_value,
                 canvas_source: canvas,
+                expected_canvas_value: canvas_value,
                 canvas_destination: destination,
+                result_value: next_value,
                 parameters_index: parameter_count,
             });
             parameter_count += 1;
@@ -174,6 +181,7 @@ impl GpuFramePlan {
         }
         operations.push(GpuOperation::CopyForReadback {
             source: final_texture,
+            expected_value: final_value,
         });
         Self {
             operations,
@@ -307,8 +315,11 @@ impl GpuFramePlan {
                 }
                 GpuOperation::CompositeLayer {
                     layer_source,
+                    expected_layer_value,
                     canvas_source,
+                    expected_canvas_value,
                     canvas_destination,
+                    result_value,
                     ..
                 } => {
                     if !matches!(
@@ -319,19 +330,26 @@ impl GpuFramePlan {
                         || canvas_source == canvas_destination
                         || !states[index(*layer_source)].initialized
                         || !states[index(*canvas_source)].initialized
+                        || states[index(*layer_source)].value != Some(*expected_layer_value)
+                        || states[index(*canvas_source)].value != Some(*expected_canvas_value)
+                        || *result_value != next_value
                     {
                         return Err(invalid(
                             operation_index,
                             "has invalid canvas ping-pong sequencing",
                         ));
                     }
-                    states[index(*canvas_destination)] = TextureState::written(next_value);
+                    states[index(*canvas_destination)] = TextureState::written(*result_value);
                     next_value += 1;
                     expected_canvas = *canvas_destination;
                 }
-                GpuOperation::CopyForReadback { source } => {
+                GpuOperation::CopyForReadback {
+                    source,
+                    expected_value,
+                } => {
                     if operation_index + 1 != self.operations.len()
                         || !states[index(*source)].initialized
+                        || states[index(*source)].value != Some(*expected_value)
                     {
                         return Err(invalid(operation_index, "has an invalid readback source"));
                     }
@@ -508,10 +526,10 @@ mod tests {
                 TextureSlot::CanvasB
             };
             assert_eq!(gpu.final_canvas, expected);
-            assert_eq!(
+            assert!(matches!(
                 gpu.operations.last(),
-                Some(&GpuOperation::CopyForReadback { source: expected })
-            );
+                Some(GpuOperation::CopyForReadback { source, .. }) if *source == expected
+            ));
         }
     }
 
@@ -529,6 +547,49 @@ mod tests {
         assert_eq!(
             gpu.validate(plan.images.len())
                 .expect_err("invalid asset")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
+    }
+
+    #[test]
+    fn validation_rejects_stale_composition_and_readback_values() {
+        let plan = fixture();
+        let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+        let mut stale_composition = GpuFramePlan::build(&frame);
+        let GpuOperation::CompositeLayer {
+            expected_layer_value,
+            ..
+        } = stale_composition
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::CompositeLayer { .. }))
+            .expect("frame contains a composite")
+        else {
+            unreachable!("the match above selected a composite")
+        };
+        *expected_layer_value = 0;
+        assert_eq!(
+            stale_composition
+                .validate(plan.images.len())
+                .expect_err("stale layer value must be rejected")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
+
+        let mut stale_readback = GpuFramePlan::build(&frame);
+        let GpuOperation::CopyForReadback { expected_value, .. } = stale_readback
+            .operations
+            .last_mut()
+            .expect("frame always ends with readback")
+        else {
+            unreachable!("the builder always appends readback")
+        };
+        *expected_value = 0;
+        assert_eq!(
+            stale_readback
+                .validate(plan.images.len())
+                .expect_err("stale readback value must be rejected")
                 .code,
             "WGPU-FRAME-PLAN"
         );
@@ -602,12 +663,16 @@ mod tests {
                 GpuOperation::CompositeLayer {
                     layer_index: 0,
                     layer_source: TextureSlot::EffectB,
+                    expected_layer_value: 4,
                     canvas_source: TextureSlot::CanvasA,
+                    expected_canvas_value: 1,
                     canvas_destination: TextureSlot::CanvasB,
+                    result_value: 5,
                     parameters_index: 4,
                 },
                 GpuOperation::CopyForReadback {
                     source: TextureSlot::CanvasB,
+                    expected_value: 5,
                 },
             ],
             parameter_count: 5,
@@ -642,8 +707,11 @@ mod tests {
                 GpuOperation::CompositeLayer {
                     layer_index: 0,
                     layer_source: TextureSlot::Layer,
+                    expected_layer_value: 2,
                     canvas_source: TextureSlot::CanvasA,
+                    expected_canvas_value: 1,
                     canvas_destination: TextureSlot::CanvasB,
+                    result_value: 3,
                     parameters_index: 2,
                 },
                 effect_operation(
@@ -663,6 +731,7 @@ mod tests {
                 ),
                 GpuOperation::CopyForReadback {
                     source: TextureSlot::EffectA,
+                    expected_value: 4,
                 },
             ],
             parameter_count: 4,
@@ -798,7 +867,8 @@ mod tests {
         assert_eq!(
             plan.operations.last(),
             Some(&GpuOperation::CopyForReadback {
-                source: TextureSlot::EffectB
+                source: TextureSlot::EffectB,
+                expected_value: 9,
             })
         );
     }
@@ -830,6 +900,7 @@ mod tests {
                 },
                 GpuOperation::CopyForReadback {
                     source: TextureSlot::CanvasA,
+                    expected_value: 1,
                 },
             ],
             parameter_count: 2,

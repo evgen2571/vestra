@@ -26,7 +26,11 @@ median wall and render timing, frame composition time, encoding time, and
 cache/decoded-resource peaks. Use the original color-only fixture as the
 baseline. To measure an advanced chain, replace its clip effect array with the
 ordered chain from `examples/projects/effects-ready-v1.json` and record the
-same fields. CPU is the supported backend for advanced effects in v1.
+same fields. Both CPU and WGPU support the advanced scenarios. On a compatible
+adapter, run the same matrix with `VIDEO_EDITOR_BENCH_BACKEND=wgpu` and
+`VIDEO_EDITOR_REQUIRE_WGPU=1`; record the selected adapter and the command,
+submission, readback, and row-repack timings printed by the harness. Do not
+compare Lavapipe measurements with a discrete GPU as performance evidence.
 
 Gaussian blur, glow, sharpen, and combined chains are expected to dominate
 frame composition time. Record the median wall time, frame-render time, and

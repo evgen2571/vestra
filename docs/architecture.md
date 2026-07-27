@@ -66,9 +66,9 @@ uses its merge methods for compiler, schedule, and backend data.
 `render/decoded` eagerly decodes image assets once. `render/cpu/assets` owns the
 CPU-only static-crop cache. `render/effects` turns evaluated effects into
 backend-neutral logical passes. It owns identity elimination, multipass
-decomposition, and pass order. The CPU effect executor consumes those passes
-with its established surface pool and algorithms. A future WGPU executor can
-consume the same logical pass plan.
+decomposition, and pass order. Both the CPU executor and WGPU frame planner
+consume those passes; the WGPU executor receives only self-describing planned
+passes and never rediscovers semantics from an evaluated effect.
 
 `render/cpu` contains its prepared backend, composition, rasterization, surface
 reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
@@ -77,9 +77,9 @@ returns.
 `render/wgpu/backend` owns prepared WGPU state and frame rendering. `context`
 creates the adapter and device. `requirements` validates limits and estimates
 allocation sizes before resources exist. `frame_plan` creates and validates
-adapter-independent canvas ping-pong operations. `texture_pool` owns Canvas A,
-Canvas B, and Layer for the backend lifetime. It only allocates effect textures
-when executable effect support requests them. `pipeline` creates texture compute
+adapter-independent canvas and effect ping-pong operations. `texture_pool` owns
+Canvas A, Canvas B, Layer, Effect A, and Effect B for the backend lifetime.
+`pipeline` creates texture compute
 pipelines and layouts. `parameters` stores aligned per-operation records.
 `executor` reuses prepared bind groups, encodes one complete frame into one
 command buffer, and submits it once. `readback` keeps synchronous mapping and
@@ -128,13 +128,6 @@ evaluated source and transform
 
 To add a project effect, update the project model and schema, validation,
 compiler, compiled-effect metadata, evaluation, `render/effects` pass planning,
-CPU execution, and compatibility tests. If WGPU does not implement it, update
-`render/wgpu/support.rs` so explicit WGPU renders fail and automatic selection
-falls back before the first frame.
-
-To implement WGPU support later, keep the effect's plan and evaluation behavior
-unchanged. Add the shared `EffectPass` to a self-describing `GpuOperation`, then
-add typed GPU parameters, a shader, a pipeline, a prepared resource bind group,
-an executor branch, a support declaration, a parity test, and a benchmark.
-This keeps GPU capability policy in one place and avoids making the engine
-rediscover effect semantics from an evaluated layer.
+CPU execution, WGPU parameter encoding, shader/pipeline mapping, prepared bind
+groups, capability coverage, a parity fixture, and a benchmark. Keep the effect
+plan and evaluation behavior unchanged so neither renderer rediscovers ordering.

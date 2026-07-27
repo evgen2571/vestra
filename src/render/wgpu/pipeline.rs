@@ -5,10 +5,13 @@ use super::parameters::PARAMETER_RECORD_BYTES;
 pub(super) struct GpuPipelines {
     pub(super) _layer_shader: wgpu::ShaderModule,
     pub(super) _composite_shader: wgpu::ShaderModule,
+    pub(super) _effect_shader: wgpu::ShaderModule,
     pub(super) layer: wgpu::ComputePipeline,
     pub(super) composite: wgpu::ComputePipeline,
+    pub(super) effect: wgpu::ComputePipeline,
     pub(super) layer_bindings: wgpu::BindGroupLayout,
     pub(super) composite_bindings: wgpu::BindGroupLayout,
+    pub(super) effect_bindings: wgpu::BindGroupLayout,
     pub(super) parameters: wgpu::Buffer,
 }
 
@@ -23,6 +26,11 @@ impl GpuPipelines {
             device,
             "video-editor composite shader",
             include_str!("../shaders/composite_normal.wgsl"),
+        );
+        let effect_shader = shader(
+            device,
+            "video-editor effect shader",
+            include_str!("../shaders/effects.wgsl"),
         );
         let uniform = wgpu::BindGroupLayoutEntry {
             binding: 2,
@@ -63,6 +71,24 @@ impl GpuPipelines {
             &composite_shader,
             &composite_bindings,
         );
+        let effect_bindings = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("video-editor effect texture bindings"),
+            entries: &[
+                sampled(0),
+                sampled(1),
+                storage_texture(2),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    ..uniform
+                },
+            ],
+        });
+        let effect = pipeline(
+            device,
+            "video-editor effect pipeline",
+            &effect_shader,
+            &effect_bindings,
+        );
         let parameters = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("video-editor frame parameters"),
             size: parameter_buffer_bytes,
@@ -72,10 +98,13 @@ impl GpuPipelines {
         Self {
             _layer_shader: layer_shader,
             _composite_shader: composite_shader,
+            _effect_shader: effect_shader,
             layer,
             composite,
+            effect,
             layer_bindings,
             composite_bindings,
+            effect_bindings,
             parameters,
         }
     }

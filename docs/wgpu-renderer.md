@@ -47,9 +47,8 @@ values, so fixture failures can report compact context rather than frame content
 ## Resources and readback
 
 WGPU owns persistent source textures, two canvas textures, a layer texture,
-shaders, compute pipelines, a bounded dynamic-uniform buffer, and a readback
-buffer. Phase 1 does not allocate effect textures because support checks reject
-advanced effects before preparation. `Rgba8Unorm` working textures store encoded
+Effect A and Effect B textures, shaders, compute pipelines, a bounded
+dynamic-uniform buffer, and a readback buffer. `Rgba8Unorm` working textures store encoded
 straight-alpha channel values. This deliberately matches the CPU's byte-space
 colour semantics. Shaders clamp each write. They do not perform linear-light
 compositing or use sRGB storage textures.
@@ -60,17 +59,21 @@ Each frame has an adapter-independent plan:
 evaluated frame
   -> clear Canvas A
   -> render Layer texture
-  -> future Effect A / Effect B chain
-  -> composite Layer with Canvas A or B into the other canvas
-  -> final canvas texture
+  -> ordered local passes through Effect A / Effect B
+  -> composite affected Layer with Canvas A or B into the other canvas
+  -> ordered global passes through Effect A / Effect B
+  -> final canvas or effect texture
   -> copy to readback buffer
 ```
 
-Canvas A and B ping-pong, so no compute pass reads and writes the same texture.
-The final slot is explicit in the plan, including empty, odd-layer, and
-even-layer frames. `ApplyEffect` also carries the exact logical `EffectPass`,
-source, destination, auxiliary slot, and pass index. The current executor still
-rejects those operations. It does not encode advanced effects.
+Canvas A and B ping-pong, and effect slots alternate, so no compute pass reads
+and writes the same texture. Glow and sharpen retain the pre-effect input as an
+auxiliary read while their composite pass writes the alternate effect texture.
+The final slot is explicit in the plan, including empty, odd-layer, even-layer,
+and global-effect frames. `ApplyEffect` carries local/global scope, optional
+layer index, exact logical `EffectPass`, source, destination, auxiliary slot,
+and pass index. The executor selects an already-prepared effect pipeline and
+cached bind group from that operation; it never reinterprets an evaluated effect.
 
 The frame parameter arena writes every operation record before command encoding.
 `LayerParameters` is 176 bytes. Each bind group uses an explicit 176-byte
@@ -83,14 +86,15 @@ buffer.
 
 Bind groups have clear ownership. Pipeline layouts and pipelines live for the
 backend. Source-to-Layer groups live per uploaded source asset. Clear, solid
-Layer, and the two Canvas-plus-Layer composite combinations live for the fixed
-working textures. No normal frame creates a bind group. Internal metrics count
+Layer, all usable Canvas-plus-Layer/Effect composite combinations, and all valid
+source/auxiliary/destination effect combinations live for the fixed working
+textures. No normal frame creates a bind group. Internal metrics count
 groups created during preparation, capacity-growth rebuilds, per-frame groups,
 cache hits, and cache misses.
 
 The requirements calculation retains estimates for source textures, Canvas A
-and B, Layer, effects, readback, and the parameter buffer. Phase 1 has zero
-effect-texture bytes. The total is an estimate, not a driver VRAM measurement.
+and B, Layer, Effect A and B, readback, and the parameter buffer. The total is
+an estimate, not a driver VRAM measurement.
 It excludes texture row padding, driver allocation overhead, mip levels,
 implementation alignment, and temporary source staging allocations. Output rows
 in the readback buffer do include WGPU's copy-row padding. Output rows are then
@@ -100,9 +104,9 @@ The compute shader samples with `textureLoad`, so source texture and byte
 counters are reported separately and `sampler_count` is intentionally zero.
 
 Every normal frame creates one command encoder and one queue submission. Clear,
-layer work, ping-pong composition, and the final texture-to-readback copy all
+layer work, effect passes, ping-pong composition, and the final texture-to-readback copy all
 live in that command buffer. Readback remains synchronous. There is no zero-copy
-encoder path, hardware video encoding, windowed preview, or advanced GPU effects.
+encoder path, hardware video encoding, windowed preview, or asynchronous readback.
 
 ## Headless setup and diagnostics
 
@@ -160,7 +164,19 @@ Clear and layer dispatches no longer submit independently. The dynamic-uniform
 arena preserves each operation's parameters until GPU completion, so all normal
 work can be submitted together.
 
-Phase 2 adds an effect by extending the shared `EffectPass`, adding a parameter
-record, shader, pipeline dispatch, capability declaration, CPU/WGPU parity test,
-and benchmark. Advanced effects and blend modes remain unsupported in WGPU until
-that sequence is complete.
+Current WGPU effects use the same 176-byte dynamically bound record as layer
+operations, with a typed operation discriminator and dedicated fields for
+colour transforms, Gaussian direction/radius, sampling, spatial coordinates,
+colour adjustment, and compositing controls. The effect shader implements the
+current CPU catalogue: colour transforms, Gaussian blur, glow, sharpen,
+directional and motion blur, zoom blur, chromatic aberration, vignette, and
+colour adjustment. The blend shader implements normal, add, screen, multiply,
+and overlay with the CPU's straight-alpha formulas and layer-opacity ordering.
+Camera shake only changes evaluated geometry and therefore produces no pixel
+pass. Presets and transitions are ordinary evaluated effects by this stage; no
+WGPU-specific expansion exists.
+
+To add a future effect, extend the shared `EffectPass`, its CPU executor,
+WGPU parameter encoding, shader/pipeline mapping, frame-plan tests, capability
+diagnostics, parity fixture, and benchmark. Do not add a backend-specific
+interpretation of effect ordering.

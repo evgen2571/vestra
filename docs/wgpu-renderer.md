@@ -47,7 +47,8 @@ values, so fixture failures can report compact context rather than frame content
 ## Resources and readback
 
 WGPU owns persistent source textures, two canvas textures, a layer texture,
-Effect A and Effect B textures, shaders, compute pipelines, a bounded
+Effect A and Effect B textures, and an Auxiliary texture only for projects
+that contain glow or sharpen, plus shaders, compute pipelines, a bounded
 dynamic-uniform buffer, and a readback buffer. `Rgba8Unorm` working textures store encoded
 straight-alpha channel values. This deliberately matches the CPU's byte-space
 colour semantics. Shaders clamp each write. They do not perform linear-light
@@ -67,8 +68,18 @@ evaluated frame
 ```
 
 Canvas A and B ping-pong, and effect slots alternate, so no compute pass reads
-and writes the same texture. Glow and sharpen retain the pre-effect input as an
-auxiliary read while their composite pass writes the alternate effect texture.
+and writes the same texture. The layer shader always writes raw layer pixels:
+basic colour effects now execute only as ordered `ApplyColourTransform` passes,
+before layer opacity is applied during composition. This prevents the former
+direct-colour path from applying the same logical transform twice.
+
+Glow and sharpen copy their pre-effect logical value to Auxiliary before their
+working passes start. Their final composite reads that retained value while
+writing the alternate effect texture. The frame-plan validator tracks each
+texture's initialized state and monotonically assigned logical value, rejecting
+stale retained reads, invalid overwrites, source/destination aliasing, and a
+readback of anything other than the final value. Auxiliary is reused only after
+the preceding effect's final composite consumes it.
 The final slot is explicit in the plan, including empty, odd-layer, even-layer,
 and global-effect frames. `ApplyEffect` carries local/global scope, optional
 layer index, exact logical `EffectPass`, source, destination, auxiliary slot,
@@ -98,6 +109,8 @@ an estimate, not a driver VRAM measurement.
 Effect A is allocated only when the compiled plan has a visual pass; Effect B
 is allocated only when it has more than one possible pass and can therefore
 need ping-pong. Transform-only projects reserve neither effect texture.
+Auxiliary is allocated only when a compiled local or global glow/sharpen may be
+active. These are allocation estimates, not exact VRAM measurements.
 It excludes texture row padding, driver allocation overhead, mip levels,
 implementation alignment, and temporary source staging allocations. Output rows
 in the readback buffer do include WGPU's copy-row padding. Output rows are then
@@ -178,6 +191,26 @@ and overlay with the CPU's straight-alpha formulas and layer-opacity ordering.
 Camera shake only changes evaluated geometry and therefore produces no pixel
 pass. Presets and transitions are ordinary evaluated effects by this stage; no
 WGPU-specific expansion exists.
+
+Gaussian radius has one backend-neutral representation:
+`(clamp(radius, 0, 32) * 4).round() / 4`. Gaussian, directional, zoom, and
+motion blur treat a canonical radius at or below `0.01` as identity; glow also
+requires nonzero intensity, and sharpen requires nonzero amount. The same
+predicates drive evaluated pass planning and CPU execution, while WGPU receives
+the canonical Gaussian value in its parameter record.
+
+Run the strict real-GPU verification sequence with:
+
+```bash
+VIDEO_EDITOR_WGPU_BACKEND=vulkan ./scripts/verify-wgpu-phase2.sh
+VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 \
+  ./scripts/verify-wgpu-phase2.sh
+```
+
+The script fails if no compatible adapter is available; its optional benchmark
+matrix covers 320x180, 720x1280, and 1920x1080. Software adapters validate
+correctness only. Real-hardware CPU/WGPU performance benchmarking was deferred
+because this environment has no suitable GPU.
 
 To add a future effect, extend the shared `EffectPass`, its CPU executor,
 WGPU parameter encoding, shader/pipeline mapping, frame-plan tests, capability

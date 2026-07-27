@@ -45,14 +45,14 @@ impl TexturePool {
                 | wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
         };
-        let has_effects = plan.compilation.effect_pass_count > 0;
+        let effect_pass_count = plan.compilation.effect_pass_count;
         Self {
             canvas_a: create_texture(device, descriptor, "video-editor canvas A"),
             canvas_b: create_texture(device, descriptor, "video-editor canvas B"),
             layer: create_texture(device, descriptor, "video-editor layer"),
-            effect_a: has_effects
+            effect_a: (effect_pass_count > 0)
                 .then(|| create_texture(device, descriptor, "video-editor effect A")),
-            effect_b: has_effects
+            effect_b: (effect_pass_count > 1)
                 .then(|| create_texture(device, descriptor, "video-editor effect B")),
         }
     }
@@ -89,6 +89,10 @@ impl TexturePool {
 
     pub(super) fn has_effects(&self) -> bool {
         self.effect_a.is_some()
+    }
+
+    pub(super) fn has_effect_b(&self) -> bool {
+        self.effect_b.is_some()
     }
 }
 

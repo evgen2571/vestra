@@ -96,7 +96,11 @@ impl GpuRequirements {
         let canvas_texture_bytes =
             estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2)?;
         let layer_texture_bytes = full_frame_bytes;
-        let effect_texture_count = u64::from(plan.compilation.effect_pass_count > 0) * 2;
+        let effect_texture_count = match plan.compilation.effect_pass_count {
+            0 => 0,
+            1 => 1,
+            _ => 2,
+        };
         let working_texture_bytes = estimated_texture_bytes(
             plan.canvas.width,
             plan.canvas.height,

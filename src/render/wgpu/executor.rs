@@ -84,11 +84,11 @@ impl FrameBindGroups {
             })
             .collect::<Vec<_>>();
         let layer_slots = if frame.working.has_effects() {
-            vec![
-                TextureSlot::Layer,
-                TextureSlot::EffectA,
-                TextureSlot::EffectB,
-            ]
+            let mut slots = vec![TextureSlot::Layer, TextureSlot::EffectA];
+            if frame.working.has_effect_b() {
+                slots.push(TextureSlot::EffectB);
+            }
+            slots
         } else {
             vec![TextureSlot::Layer]
         };
@@ -116,19 +116,21 @@ impl FrameBindGroups {
         }
         let mut effects = Vec::new();
         if frame.working.has_effects() {
-            let slots = [
+            let mut slots = vec![
                 TextureSlot::CanvasA,
                 TextureSlot::CanvasB,
                 TextureSlot::Layer,
                 TextureSlot::EffectA,
-                TextureSlot::EffectB,
             ];
-            for source in slots {
-                for destination in slots {
+            if frame.working.has_effect_b() {
+                slots.push(TextureSlot::EffectB);
+            }
+            for source in slots.iter().copied() {
+                for destination in slots.iter().copied() {
                     if source == destination {
                         continue;
                     }
-                    for auxiliary in slots {
+                    for auxiliary in slots.iter().copied() {
                         if auxiliary == destination {
                             continue;
                         }

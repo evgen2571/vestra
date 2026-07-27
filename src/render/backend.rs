@@ -45,8 +45,11 @@ pub struct AdapterMetadata {
 /// vary by driver and an optimistic label would make results misleading.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdapterPerformanceClass {
-    Hardware,
     Software,
+    IntegratedGpu,
+    DiscreteGpu,
+    VirtualGpu,
+    Cpu,
     Unknown,
 }
 
@@ -54,31 +57,45 @@ impl AdapterPerformanceClass {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Hardware => "hardware",
             Self::Software => "software",
+            Self::IntegratedGpu => "integrated_gpu",
+            Self::DiscreteGpu => "discrete_gpu",
+            Self::VirtualGpu => "virtual_gpu",
+            Self::Cpu => "cpu",
             Self::Unknown => "unknown",
         }
+    }
+
+    #[must_use]
+    pub const fn is_software(self) -> bool {
+        matches!(self, Self::Software | Self::Cpu)
     }
 }
 
 impl AdapterMetadata {
     #[must_use]
     pub fn performance_class(&self) -> AdapterPerformanceClass {
-        if self.device_type.eq_ignore_ascii_case("cpu")
-            || [
-                self.adapter_name.as_str(),
-                self.driver_name.as_str(),
-                self.driver_info.as_str(),
-            ]
-            .iter()
-            .any(|field| is_known_software_adapter(field))
+        if [
+            self.adapter_name.as_str(),
+            self.driver_name.as_str(),
+            self.driver_info.as_str(),
+        ]
+        .iter()
+        .any(|field| is_known_software_adapter(field))
         {
             return AdapterPerformanceClass::Software;
         }
-        if self.device_type.eq_ignore_ascii_case("integratedgpu")
-            || self.device_type.eq_ignore_ascii_case("discretegpu")
-        {
-            return AdapterPerformanceClass::Hardware;
+        if self.device_type.eq_ignore_ascii_case("integratedgpu") {
+            return AdapterPerformanceClass::IntegratedGpu;
+        }
+        if self.device_type.eq_ignore_ascii_case("discretegpu") {
+            return AdapterPerformanceClass::DiscreteGpu;
+        }
+        if self.device_type.eq_ignore_ascii_case("virtualgpu") {
+            return AdapterPerformanceClass::VirtualGpu;
+        }
+        if self.device_type.eq_ignore_ascii_case("cpu") {
+            return AdapterPerformanceClass::Cpu;
         }
         AdapterPerformanceClass::Unknown
     }
@@ -133,7 +150,6 @@ mod tests {
     #[test]
     fn classifies_known_software_adapter_markers_without_adapter_discovery() {
         for (device_type, name) in [
-            ("cpu", "Unknown CPU Adapter"),
             ("other", "lavapipe (Mesa 24.0.0)"),
             ("other", "llvmpipe (LLVM 18.1.0)"),
             ("other", "SwiftShader Device (Subzero)"),
@@ -148,12 +164,50 @@ mod tests {
     }
 
     #[test]
-    fn classifies_gpu_device_types_as_hardware_without_name_assumptions() {
-        for device_type in ["integratedgpu", "discretegpu"] {
+    fn classifies_cpu_adapters_as_software_without_adapter_discovery() {
+        let class = metadata("cpu", "Unknown CPU Adapter").performance_class();
+        assert_eq!(class, AdapterPerformanceClass::Cpu);
+        assert!(class.is_software());
+    }
+
+    #[test]
+    fn classifies_hardware_device_types_without_name_assumptions() {
+        for (device_type, expected) in [
+            ("discretegpu", AdapterPerformanceClass::DiscreteGpu),
+            ("integratedgpu", AdapterPerformanceClass::IntegratedGpu),
+            ("virtualgpu", AdapterPerformanceClass::VirtualGpu),
+        ] {
             assert_eq!(
                 metadata(device_type, "adapter name need not reveal its driver")
                     .performance_class(),
-                AdapterPerformanceClass::Hardware
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn classifies_common_vendor_metadata_without_adapter_discovery() {
+        for (name, device_type, expected) in [
+            (
+                "NVIDIA GeForce RTX 4080",
+                "discretegpu",
+                AdapterPerformanceClass::DiscreteGpu,
+            ),
+            (
+                "AMD Radeon RX 7900 XT",
+                "discretegpu",
+                AdapterPerformanceClass::DiscreteGpu,
+            ),
+            (
+                "Intel(R) Iris(R) Xe",
+                "integratedgpu",
+                AdapterPerformanceClass::IntegratedGpu,
+            ),
+        ] {
+            assert_eq!(
+                metadata(device_type, name).performance_class(),
+                expected,
+                "{name}"
             );
         }
     }
@@ -161,7 +215,7 @@ mod tests {
     #[test]
     fn leaves_unrecognized_virtual_or_other_adapters_unclassified() {
         assert_eq!(
-            metadata("virtualgpu", "opaque remote GPU").performance_class(),
+            metadata("other", "opaque remote GPU").performance_class(),
             AdapterPerformanceClass::Unknown
         );
     }

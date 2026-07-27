@@ -493,4 +493,89 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             "{name} parity exceeded tolerance {tolerance}: {difference:?}"
         );
     }
+
+    let chains = [
+        (
+            "basic colour plus gaussian",
+            vec![
+                EvaluatedEffect::Brightness { amount: 0.12 },
+                EvaluatedEffect::Contrast { amount: 1.18 },
+                EvaluatedEffect::GaussianBlur { radius: 2.25 },
+            ],
+            vec![],
+            crate::project::BlendMode::Normal,
+            5,
+        ),
+        (
+            "gaussian plus glow",
+            vec![
+                EvaluatedEffect::GaussianBlur { radius: 2.25 },
+                EvaluatedEffect::Glow {
+                    threshold: 0.4,
+                    radius: 2.25,
+                    intensity: 0.8,
+                    colour: [255, 170, 60, 255],
+                },
+            ],
+            vec![],
+            crate::project::BlendMode::Normal,
+            6,
+        ),
+        (
+            "glow plus sharpen",
+            vec![
+                EvaluatedEffect::Glow {
+                    threshold: 0.4,
+                    radius: 2.25,
+                    intensity: 0.8,
+                    colour: [255, 170, 60, 255],
+                },
+                EvaluatedEffect::Sharpen {
+                    amount: 0.65,
+                    radius: 2.25,
+                },
+            ],
+            vec![],
+            crate::project::BlendMode::Overlay,
+            7,
+        ),
+        (
+            "sharpen plus glow and global sharpen",
+            vec![
+                EvaluatedEffect::Sharpen {
+                    amount: 0.65,
+                    radius: 2.25,
+                },
+                EvaluatedEffect::Glow {
+                    threshold: 0.4,
+                    radius: 2.25,
+                    intensity: 0.8,
+                    colour: [255, 170, 60, 255],
+                },
+            ],
+            vec![EvaluatedEffect::Sharpen {
+                amount: 0.45,
+                radius: 2.25,
+            }],
+            crate::project::BlendMode::Screen,
+            7,
+        ),
+    ];
+    for (name, effects, post_effects, blend_mode, tolerance) in chains {
+        let mut frame = base.clone();
+        frame.layers[0].effects = effects;
+        frame.layers[0].blend_mode = blend_mode;
+        frame.post_effects = post_effects;
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU chain frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU chain frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
+        assert!(
+            difference.maximum_absolute_channel_error <= tolerance,
+            "{name} parity exceeded tolerance {tolerance}: {difference:?}"
+        );
+    }
 }

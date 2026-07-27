@@ -95,7 +95,7 @@ impl WgpuBackend {
         stats.readback_buffer_bytes = requirements.copy_bytes;
         stats.shader_module_count = 3;
         stats.pipeline_count = 3;
-        stats.output_texture_count = 5; // Canvas A/B, Layer, Effect A/B
+        stats.output_texture_count = frame.working.texture_count();
         stats.accumulation_buffer_count = 0;
         stats.bind_group_count = bind_groups.persistent_created();
         let mut timings = decoded.timings();
@@ -228,7 +228,6 @@ fn encode_parameters(
                     unreachable!("image frame operation must reference image source")
                 };
                 let (width, height) = sources.dimensions[*source_asset_index];
-                let direct_colour = uses_direct_colour_path(&frame.layers[*layer_index]);
                 parameters::image(
                     frame,
                     width,
@@ -237,16 +236,8 @@ fn encode_parameters(
                     *cacheable_crop,
                     sizing,
                     *transform,
-                    if direct_colour {
-                        frame.layers[*layer_index].opacity
-                    } else {
-                        1.0
-                    },
-                    if direct_colour {
-                        frame.layers[*layer_index].colour_transform
-                    } else {
-                        crate::plan::ColourTransform::default()
-                    },
+                    1.0,
+                    crate::plan::ColourTransform::default(),
                 )
             }
             GpuOperation::RenderSolidLayer { layer_index, .. } => {
@@ -254,48 +245,13 @@ fn encode_parameters(
                 else {
                     unreachable!("solid frame operation must reference solid source")
                 };
-                let direct_colour = uses_direct_colour_path(&frame.layers[*layer_index]);
-                let transform = if direct_colour {
-                    frame.layers[*layer_index].colour_transform
-                } else {
-                    crate::plan::ColourTransform::default()
-                };
                 LayerParameters {
                     header: [frame.width, frame.height, 0, 2],
-                    effective: [
-                        0.0,
-                        0.0,
-                        if direct_colour {
-                            frame.layers[*layer_index].opacity as f32
-                        } else {
-                            1.0
-                        },
-                        0.0,
-                    ],
-                    colour_row0: [
-                        transform.matrix[0][0] as f32,
-                        transform.matrix[0][1] as f32,
-                        transform.matrix[0][2] as f32,
-                        0.0,
-                    ],
-                    colour_row1: [
-                        transform.matrix[1][0] as f32,
-                        transform.matrix[1][1] as f32,
-                        transform.matrix[1][2] as f32,
-                        0.0,
-                    ],
-                    colour_row2: [
-                        transform.matrix[2][0] as f32,
-                        transform.matrix[2][1] as f32,
-                        transform.matrix[2][2] as f32,
-                        0.0,
-                    ],
-                    colour_offset: [
-                        transform.offset[0] as f32,
-                        transform.offset[1] as f32,
-                        transform.offset[2] as f32,
-                        0.0,
-                    ],
+                    effective: [0.0, 0.0, 1.0, 0.0],
+                    colour_row0: [1.0, 0.0, 0.0, 0.0],
+                    colour_row1: [0.0, 1.0, 0.0, 0.0],
+                    colour_row2: [0.0, 0.0, 1.0, 0.0],
+                    colour_offset: [0.0, 0.0, 0.0, 0.0],
                     solid_or_background: colour.map(f64::from).map(|value| value as f32),
                     ..LayerParameters::zeroed()
                 }
@@ -307,34 +263,19 @@ fn encode_parameters(
                     0,
                     blend_mode(frame.layers[*layer_index].blend_mode),
                 ],
-                effective: [
-                    0.0,
-                    0.0,
-                    if uses_direct_colour_path(&frame.layers[*layer_index]) {
-                        1.0
-                    } else {
-                        frame.layers[*layer_index].opacity as f32
-                    },
-                    0.0,
-                ],
+                effective: [0.0, 0.0, frame.layers[*layer_index].opacity as f32, 0.0],
                 ..LayerParameters::zeroed()
             },
             GpuOperation::ApplyEffect { pass, .. } => {
                 effect_parameters(frame.width, frame.height, *pass)
             }
-            GpuOperation::CopyForReadback { .. } => continue,
+            GpuOperation::CopyForEffect { .. } | GpuOperation::CopyForReadback { .. } => {
+                continue;
+            }
         };
         arena.push(parameters)?;
     }
     Ok(())
-}
-
-fn uses_direct_colour_path(layer: &crate::plan::EvaluatedLayer) -> bool {
-    matches!(layer.blend_mode, BlendMode::Normal)
-        && layer
-            .effects
-            .iter()
-            .all(crate::plan::EvaluatedEffect::is_basic_colour_effect)
 }
 
 const fn blend_mode(mode: BlendMode) -> u32 {

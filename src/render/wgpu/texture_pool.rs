@@ -6,7 +6,7 @@
 
 use crate::plan::RenderPlan;
 
-use super::frame_plan::TextureSlot;
+use super::frame_plan::{TextureSlot, plan_requires_auxiliary};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
@@ -33,6 +33,7 @@ pub(super) struct TexturePool {
     layer: WorkingTexture,
     effect_a: Option<WorkingTexture>,
     effect_b: Option<WorkingTexture>,
+    auxiliary: Option<WorkingTexture>,
 }
 
 impl TexturePool {
@@ -43,7 +44,8 @@ impl TexturePool {
             format: WORKING_FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
         };
         let effect_pass_count = plan.compilation.effect_pass_count;
         Self {
@@ -54,6 +56,9 @@ impl TexturePool {
                 .then(|| create_texture(device, descriptor, "video-editor effect A")),
             effect_b: (effect_pass_count > 1)
                 .then(|| create_texture(device, descriptor, "video-editor effect B")),
+            auxiliary: plan_requires_auxiliary(plan).then(|| {
+                create_texture(device, descriptor, "video-editor retained effect original")
+            }),
         }
     }
 
@@ -70,6 +75,10 @@ impl TexturePool {
                 .effect_b
                 .as_ref()
                 .expect("effect plan requires prepared Effect B"),
+            TextureSlot::Auxiliary => self
+                .auxiliary
+                .as_ref()
+                .expect("effect plan requires prepared Auxiliary texture"),
         }
     }
 
@@ -85,6 +94,10 @@ impl TexturePool {
                 .effect_b
                 .as_ref()
                 .map_or(0, |texture| texture.estimated_bytes)
+            + self
+                .auxiliary
+                .as_ref()
+                .map_or(0, |texture| texture.estimated_bytes)
     }
 
     pub(super) fn has_effects(&self) -> bool {
@@ -93,6 +106,16 @@ impl TexturePool {
 
     pub(super) fn has_effect_b(&self) -> bool {
         self.effect_b.is_some()
+    }
+
+    pub(super) fn has_auxiliary(&self) -> bool {
+        self.auxiliary.is_some()
+    }
+
+    pub(super) fn texture_count(&self) -> usize {
+        3 + usize::from(self.effect_a.is_some())
+            + usize::from(self.effect_b.is_some())
+            + usize::from(self.auxiliary.is_some())
     }
 }
 

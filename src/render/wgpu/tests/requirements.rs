@@ -114,7 +114,16 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
     );
     assert_eq!(
         estimates.effect_texture_bytes,
-        estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2).expect("effect bytes")
+        estimated_texture_bytes(
+            plan.canvas.width,
+            plan.canvas.height,
+            match plan.compilation.effect_pass_count {
+                0 => 0,
+                1 => 1,
+                _ => 2,
+            },
+        )
+        .expect("effect bytes")
     );
     assert_eq!(
         estimates.working_texture_bytes,
@@ -149,5 +158,27 @@ fn plans_without_visual_effect_passes_do_not_reserve_effect_textures() {
     assert_eq!(
         estimates.working_texture_bytes,
         estimates.canvas_texture_bytes + estimates.layer_texture_bytes
+    );
+}
+
+#[test]
+fn one_pass_plan_reserves_only_effect_a() {
+    let (mut plan, decoded, _) = fixture_requirements();
+    plan.compilation.effect_pass_count = 1;
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("single-pass requirements calculate");
+    let estimates = requirements
+        .resource_estimates(256)
+        .expect("single-pass estimate calculates");
+    let one_texture = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
+        .expect("one texture estimate");
+    assert_eq!(estimates.effect_texture_bytes, one_texture);
+    assert_eq!(
+        estimates.working_texture_bytes,
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture
     );
 }

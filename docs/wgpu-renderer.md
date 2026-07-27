@@ -95,6 +95,9 @@ cache hits, and cache misses.
 The requirements calculation retains estimates for source textures, Canvas A
 and B, Layer, Effect A and B, readback, and the parameter buffer. The total is
 an estimate, not a driver VRAM measurement.
+Effect A is allocated only when the compiled plan has a visual pass; Effect B
+is allocated only when it has more than one possible pass and can therefore
+need ping-pong. Transform-only projects reserve neither effect texture.
 It excludes texture row padding, driver allocation overhead, mip levels,
 implementation alignment, and temporary source staging allocations. Output rows
 in the readback buffer do include WGPU's copy-row padding. Output rows are then

@@ -7,7 +7,7 @@ use std::{
 
 use video_editor::{
     application::{RenderRequest, render_project},
-    render::{RenderBackendPreference, RenderSummary},
+    render::{AdapterPerformanceClass, RenderBackendPreference, RenderSummary},
 };
 
 const WARMUP_RUNS: usize = 5;
@@ -174,14 +174,29 @@ fn main() {
     } else {
         summary.frame_count as f64 * 1_000.0 / wall_samples[median_index] as f64
     };
-    if selected_backend == video_editor::render::RenderBackendKind::Wgpu {
-        println!(
-            "Software Vulkan / Lavapipe benchmark. This result verifies execution and measurement infrastructure. It is not representative of discrete-GPU performance."
-        );
+    let adapter_class = summary
+        .adapter
+        .as_ref()
+        .map(|adapter| adapter.performance_class());
+    match adapter_class {
+        Some(AdapterPerformanceClass::Software) => println!(
+            "Software WGPU adapter benchmark. This result verifies execution and measurement infrastructure; it is not representative of hardware-GPU performance."
+        ),
+        Some(AdapterPerformanceClass::Hardware) => println!(
+            "Hardware WGPU adapter benchmark. Adapter metadata below identifies the measured device."
+        ),
+        Some(AdapterPerformanceClass::Unknown) => println!(
+            "WGPU adapter class is unknown. Performance status is not inferred; adapter metadata below identifies the measured device."
+        ),
+        None if selected_backend == video_editor::render::RenderBackendKind::Wgpu => println!(
+            "WGPU benchmark did not report adapter metadata; performance status is unknown."
+        ),
+        None => {}
     }
     println!(
-        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend.as_str(),
+        adapter_class.map_or("none", AdapterPerformanceClass::as_str),
         wall_samples[median_index],
         wall_samples[0],
         wall_samples[measured_runs - 1],

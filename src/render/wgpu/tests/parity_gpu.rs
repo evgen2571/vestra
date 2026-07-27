@@ -2,18 +2,160 @@
 
 use std::sync::Arc;
 
-use super::{compare_rgba, gpu::wgpu_backend_or_skip};
+use super::{
+    compare_rgba,
+    frame_plan::GpuFramePlan,
+    gpu::wgpu_backend_or_skip,
+    parameters::{FrameParameterArena, LayerParameters},
+    requirements::GpuRequirements,
+};
 use crate::{
     animation::Track,
     domain::Point,
     plan::{
         ActiveSchedule, CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource,
-        EvaluatedEffect, EvaluatedFrame, ScheduleAction, ScheduledItem, TimedEffect, compile,
+        EvaluatedEffect, EvaluatedFrame, RenderPlan, ScheduleAction, ScheduledItem, TimedEffect,
+        compile,
     },
     project::{ValidationOptions, load_and_validate},
-    render::{CpuBackend, RenderBackend},
+    render::{CpuBackend, RenderBackend, effects::effect_pass_plan},
 };
+use bytemuck::Zeroable;
 use image::RgbaImage;
+
+fn evaluated_effect_pass_count(frame: &EvaluatedFrame) -> usize {
+    frame
+        .layers
+        .iter()
+        .flat_map(|layer| &layer.effects)
+        .chain(&frame.post_effects)
+        .map(|effect| effect_pass_plan(effect).as_slice().len())
+        .sum()
+}
+
+/// Prepares exactly the parameter capacity an evaluated catalogue case uses.
+/// The fixture retains a compiled glow so every case has the reusable
+/// auxiliary role available; only the declared pass count changes per case.
+fn plan_for_evaluated_effect_case(base: &RenderPlan, frame: &EvaluatedFrame) -> RenderPlan {
+    let mut plan = base.clone();
+    let effect_pass_count = evaluated_effect_pass_count(frame);
+    let frame_plan = GpuFramePlan::build(frame);
+    assert_eq!(
+        frame_plan.parameter_count,
+        (frame.layers.len() as u32 * 2) + effect_pass_count as u32 + 1,
+        "evaluated frame parameter count must match the prepared capacity formula"
+    );
+    plan.compilation.effect_pass_count = effect_pass_count;
+    plan
+}
+
+fn gpu_effect_case_matches_cpu(
+    base_plan: &RenderPlan,
+    decoded: &Arc<crate::render::DecodedAssets>,
+    frame: &EvaluatedFrame,
+    name: &str,
+    tolerance: u8,
+) -> bool {
+    let plan = plan_for_evaluated_effect_case(base_plan, frame);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(decoded)) else {
+        return false;
+    };
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    cpu.render_frame(frame, &mut cpu_output)
+        .expect("CPU effect frame renders");
+    gpu.render_frame(frame, &mut gpu_output)
+        .expect("GPU effect frame renders");
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
+    assert!(
+        difference.maximum_absolute_channel_error <= tolerance,
+        "{name} parity exceeded tolerance {tolerance}: {difference:?}"
+    );
+    true
+}
+
+fn active_items_at(plan: &RenderPlan, time: u128) -> Vec<ScheduledItem> {
+    let mut active = plan
+        .layers
+        .iter()
+        .enumerate()
+        .filter_map(|(index, layer)| {
+            (layer.start_nanos <= time && time < layer.start_nanos + layer.duration_nanos)
+                .then_some(ScheduledItem(index))
+        })
+        .collect::<Vec<_>>();
+    active.sort_by(|left, right| {
+        plan.layers[left.0]
+            .draw_key
+            .cmp(&plan.layers[right.0].draw_key)
+    });
+    active
+}
+
+#[test]
+fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("RGBA parity fixture validates");
+    let mut base = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    base.layers[0].effects = vec![TimedEffect {
+        start: 0,
+        end: u128::MAX,
+        effect: CompiledEffect::Glow {
+            threshold: Track::new(0.4),
+            radius: Track::new(2.0),
+            intensity: Track::new(0.8),
+            colour: [255, 170, 60, 255],
+        },
+    }];
+    let mut frame = crate::plan::evaluate(&base, &[ScheduledItem(0)], 0);
+    frame.layers[0].effects = vec![
+        EvaluatedEffect::Sharpen {
+            amount: 0.65,
+            radius: 2.25,
+        },
+        EvaluatedEffect::Glow {
+            threshold: 0.4,
+            radius: 2.25,
+            intensity: 0.8,
+            colour: [255, 170, 60, 255],
+        },
+    ];
+    frame.post_effects = vec![EvaluatedEffect::Sharpen {
+        amount: 0.45,
+        radius: 2.25,
+    }];
+    let plan = plan_for_evaluated_effect_case(&base, &frame);
+    let frame_plan = GpuFramePlan::build(&frame);
+    assert_eq!(evaluated_effect_pass_count(&frame), 10);
+    assert_eq!(frame_plan.parameter_count, 13);
+    assert!(plan.compilation.effect_pass_count > 4);
+
+    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("requirements calculate");
+    let mut arena = FrameParameterArena::new(
+        256,
+        requirements
+            .parameter_buffer_bytes(256)
+            .expect("prepared parameter capacity calculates"),
+    );
+    for _ in 0..frame_plan.parameter_count {
+        arena
+            .push(LayerParameters::zeroed())
+            .expect("every planned parameter record fits the prepared capacity");
+    }
+}
 
 #[test]
 fn gpu_background_frame_matches_cpu_when_an_adapter_is_available() {
@@ -177,6 +319,125 @@ fn gpu_rgba_fixture_matches_cpu_with_transparent_edges_when_an_adapter_is_availa
         difference.maximum_absolute_channel_error <= 2,
         "RGBA fixture parity exceeded tolerance: {difference:?}"
     );
+}
+
+#[test]
+fn gpu_matches_cpu_for_every_blend_mode_with_overlapping_partial_alpha_rgba_layers() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("RGBA parity fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut upper = plan.layers[0].clone();
+    upper.id = "overlapping-rgba-layer".to_owned();
+    upper.opacity = Track::new(0.61);
+    upper.transform.position = Track::new(Point { x: 0.56, y: 0.46 });
+    plan.layers[0].opacity = Track::new(0.73);
+    plan.layers.push(upper);
+    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+        return;
+    };
+    let mut cpu = CpuBackend::new(&plan, decoded);
+    for mode in [
+        crate::project::BlendMode::Normal,
+        crate::project::BlendMode::Add,
+        crate::project::BlendMode::Screen,
+        crate::project::BlendMode::Multiply,
+        crate::project::BlendMode::Overlay,
+    ] {
+        let mut frame = crate::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 0);
+        frame.layers[1].blend_mode = mode;
+        assert!(frame.layers.iter().all(|layer| layer.opacity < 1.0));
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU blend frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU blend frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "{mode:?} blend parity exceeded tolerance: {difference:?}"
+        );
+    }
+}
+
+#[test]
+fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames() {
+    let cases = [
+        (
+            "heavy-impact preset and camera shake",
+            "examples/presets/heavy-impact.json",
+            1_550_000_000,
+            4,
+        ),
+        (
+            "flash-cut transition",
+            "examples/transitions/flash-cut.json",
+            2_500_000_000,
+            2,
+        ),
+        (
+            "flash overlay",
+            "examples/projects/animation-effects.json",
+            1_150_000_000,
+            2,
+        ),
+    ];
+    for (name, path, time, tolerance) in cases {
+        let validated = load_and_validate(
+            std::path::Path::new(path),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("generated feature fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let active = active_items_at(&plan, time);
+        let frame = crate::plan::evaluate(&plan, &active, time);
+        match name {
+            "heavy-impact preset and camera shake" => assert!(
+                frame.layers[0]
+                    .effects
+                    .iter()
+                    .any(|effect| matches!(effect, EvaluatedEffect::CameraShake { .. }))
+            ),
+            "flash-cut transition" => assert!(
+                frame
+                    .layers
+                    .iter()
+                    .flat_map(|layer| &layer.effects)
+                    .any(|effect| matches!(effect, EvaluatedEffect::Tint { .. }))
+            ),
+            "flash overlay" => assert!(frame.layers.iter().any(|layer| matches!(
+                layer.source,
+                crate::plan::EvaluatedSource::SolidColor { .. }
+            ))),
+            _ => unreachable!("the test cases above are exhaustive"),
+        }
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+            return;
+        };
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU generated frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU generated frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
+        assert!(
+            difference.maximum_absolute_channel_error <= tolerance,
+            "{name} parity exceeded tolerance {tolerance}: {difference:?}"
+        );
+    }
 }
 
 #[test]
@@ -371,10 +632,6 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
     }];
     plan.compilation.effect_pass_count = 4;
     let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
-    let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
-        return;
-    };
-    let mut cpu = CpuBackend::new(&plan, decoded);
     let base = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
     let cases = [
         (
@@ -481,17 +738,9 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
     for (name, effect, tolerance) in cases {
         let mut frame = base.clone();
         frame.layers[0].effects = vec![effect];
-        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
-        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
-        cpu.render_frame(&frame, &mut cpu_output)
-            .expect("CPU effect frame renders");
-        gpu.render_frame(&frame, &mut gpu_output)
-            .expect("GPU effect frame renders");
-        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
-        assert!(
-            difference.maximum_absolute_channel_error <= tolerance,
-            "{name} parity exceeded tolerance {tolerance}: {difference:?}"
-        );
+        if !gpu_effect_case_matches_cpu(&plan, &decoded, &frame, name, tolerance) {
+            return;
+        }
     }
 
     let chains = [
@@ -566,16 +815,15 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
         frame.layers[0].effects = effects;
         frame.layers[0].blend_mode = blend_mode;
         frame.post_effects = post_effects;
-        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
-        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
-        cpu.render_frame(&frame, &mut cpu_output)
-            .expect("CPU chain frame renders");
-        gpu.render_frame(&frame, &mut gpu_output)
-            .expect("GPU chain frame renders");
-        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
-        assert!(
-            difference.maximum_absolute_channel_error <= tolerance,
-            "{name} parity exceeded tolerance {tolerance}: {difference:?}"
-        );
+        if name == "sharpen plus glow and global sharpen" {
+            assert_eq!(evaluated_effect_pass_count(&frame), 10);
+            assert!(
+                evaluated_effect_pass_count(&frame) > 4,
+                "the old four-pass allocation must not cover this chain"
+            );
+        }
+        if !gpu_effect_case_matches_cpu(&plan, &decoded, &frame, name, tolerance) {
+            return;
+        }
     }
 }

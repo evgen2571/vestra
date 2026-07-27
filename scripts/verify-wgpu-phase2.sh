@@ -6,11 +6,13 @@ export VIDEO_EDITOR_WGPU_BACKEND
 export VIDEO_EDITOR_REQUIRE_WGPU=1
 
 echo "WGPU Phase 2 strict verification (backend: ${VIDEO_EDITOR_WGPU_BACKEND})"
+echo "The render result below includes the selected adapter metadata."
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
 cargo test --workspace --all-features
 cargo run -- render examples/projects/effects-ready-v1.json \
-  --render-backend wgpu --output "$temp_dir/render.mp4" --overwrite
+  --render-backend wgpu --output "$temp_dir/render.mp4" --overwrite \
+  --format json --progress json
 
 if [[ "${VIDEO_EDITOR_RUN_BENCHMARKS:-0}" == 1 ]]; then
   for resolution in '320 180' '720 1280' '1920 1080'; do

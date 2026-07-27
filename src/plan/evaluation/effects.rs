@@ -4,7 +4,9 @@ use crate::{
     domain::Point,
     plan::CompiledEffect,
     project::ZoomBlurDirection,
-    render::effects::{blur_radius_is_identity, effect_amount_is_identity},
+    render::effects::{
+        effect_amount_is_identity, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -89,15 +91,17 @@ impl EvaluatedEffect {
             Self::Contrast { amount } | Self::Saturation { amount } => *amount == 1.0,
             Self::Tint { amount, .. }
             | Self::ChromaticAberration { amount, .. }
-            | Self::Vignette { amount, .. }
-            | Self::Sharpen { amount, .. } => effect_amount_is_identity(*amount),
-            Self::GaussianBlur { radius }
-            | Self::DirectionalBlur { radius, .. }
+            | Self::Vignette { amount, .. } => effect_amount_is_identity(*amount),
+            Self::GaussianBlur { radius } => gaussian_radius_is_identity(*radius),
+            Self::DirectionalBlur { radius, .. }
             | Self::ZoomBlur { radius, .. }
-            | Self::MotionBlur { radius, .. } => blur_radius_is_identity(*radius),
+            | Self::MotionBlur { radius, .. } => sampling_blur_radius_is_identity(*radius),
             Self::Glow {
                 radius, intensity, ..
-            } => blur_radius_is_identity(*radius) || effect_amount_is_identity(*intensity),
+            } => gaussian_radius_is_identity(*radius) || effect_amount_is_identity(*intensity),
+            Self::Sharpen { amount, radius } => {
+                effect_amount_is_identity(*amount) || gaussian_radius_is_identity(*radius)
+            }
             Self::ColorAdjust {
                 exposure,
                 gamma,

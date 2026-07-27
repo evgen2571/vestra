@@ -5,7 +5,7 @@ use image::{GenericImage, Rgba, RgbaImage};
 use crate::{
     domain::Point,
     project::ZoomBlurDirection,
-    render::{cpu::raster::sample_edge, effects::blur_radius_is_identity},
+    render::{cpu::raster::sample_edge, effects::sampling_blur_radius_is_identity},
 };
 
 pub(crate) fn apply(
@@ -16,7 +16,7 @@ pub(crate) fn apply(
     anchor: Point,
     direction: ZoomBlurDirection,
 ) {
-    if blur_radius_is_identity(radius) {
+    if sampling_blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("same dimensions");
         return;
     }
@@ -89,5 +89,21 @@ mod tests {
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 128, 0, 82, 255, 128, 0, 163,
             ]
         );
+    }
+
+    #[test]
+    fn small_radius_remains_a_sampling_effect() {
+        let mut source = RgbaImage::new(5, 1);
+        source.put_pixel(4, 0, Rgba([255, 128, 0, 255]));
+        let mut output = RgbaImage::new(5, 1);
+        apply(
+            &source,
+            &mut output,
+            0.12,
+            5,
+            Point { x: 0.0, y: 0.5 },
+            ZoomBlurDirection::Centered,
+        );
+        assert_ne!(output, source);
     }
 }

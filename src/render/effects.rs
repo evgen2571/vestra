@@ -84,8 +84,16 @@ pub(crate) fn canonical_gaussian_radius(radius: f64) -> f64 {
 }
 
 #[must_use]
-pub(crate) fn blur_radius_is_identity(radius: f64) -> bool {
+pub(crate) fn gaussian_radius_is_identity(radius: f64) -> bool {
     canonical_gaussian_radius(radius) <= 0.01
+}
+
+/// Sampling blurs retain their authored evaluated radius. Unlike Gaussian
+/// kernels, their radius must not be quarter-step quantized before identity
+/// selection or parameter encoding.
+#[must_use]
+pub(crate) fn sampling_blur_radius_is_identity(radius: f64) -> bool {
+    radius <= 0.01
 }
 
 #[must_use]
@@ -242,8 +250,8 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
 #[cfg(test)]
 mod tests {
     use super::{
-        EffectPass, blur_radius_is_identity, canonical_gaussian_radius, effect_amount_is_identity,
-        effect_pass_plan,
+        EffectPass, canonical_gaussian_radius, effect_amount_is_identity, effect_pass_plan,
+        gaussian_radius_is_identity, sampling_blur_radius_is_identity,
     };
     use crate::{
         domain::Point,
@@ -309,6 +317,9 @@ mod tests {
     fn gaussian_radius_has_one_quarter_step_representation() {
         let cases = [
             (0.0, 0.0),
+            (0.004, 0.0),
+            (0.009, 0.0),
+            (0.011, 0.0),
             (0.001, 0.0),
             (0.12, 0.0),
             (0.13, 0.25),
@@ -326,12 +337,56 @@ mod tests {
 
     #[test]
     fn gaussian_identity_uses_the_canonical_radius() {
-        assert!(blur_radius_is_identity(0.0));
-        assert!(blur_radius_is_identity(0.12));
-        assert!(!blur_radius_is_identity(0.13));
+        assert!(gaussian_radius_is_identity(0.0));
+        assert!(gaussian_radius_is_identity(0.12));
+        assert!(!gaussian_radius_is_identity(0.13));
+        assert!(sampling_blur_radius_is_identity(0.0));
+        assert!(sampling_blur_radius_is_identity(0.01));
+        assert!(!sampling_blur_radius_is_identity(0.011));
+        assert!(!sampling_blur_radius_is_identity(0.12));
         assert!(effect_amount_is_identity(0.0));
         assert!(effect_amount_is_identity(-0.1));
         assert!(!effect_amount_is_identity(0.000_001));
+    }
+
+    #[test]
+    fn sampling_blurs_keep_small_authored_radii_non_identity() {
+        let cases = [
+            (0.0, true),
+            (0.005, true),
+            (0.01, true),
+            (0.011, false),
+            (0.12, false),
+        ];
+        for (radius, expected_identity) in cases {
+            let effects = [
+                EvaluatedEffect::DirectionalBlur {
+                    radius,
+                    angle_degrees: 0.0,
+                },
+                EvaluatedEffect::ZoomBlur {
+                    radius,
+                    samples: 3,
+                    anchor: Point { x: 0.5, y: 0.5 },
+                    direction: ZoomBlurDirection::Centered,
+                },
+                EvaluatedEffect::MotionBlur {
+                    radius,
+                    angle_degrees: 0.0,
+                    intensity: 1.0,
+                    shutter_angle: 180.0,
+                    max_radius: 32.0,
+                    samples: 3,
+                },
+            ];
+            for effect in effects {
+                assert_eq!(effect.is_identity(), expected_identity);
+                assert_eq!(
+                    effect_pass_plan(&effect).as_slice().is_empty(),
+                    expected_identity
+                );
+            }
+        }
     }
 
     #[test]

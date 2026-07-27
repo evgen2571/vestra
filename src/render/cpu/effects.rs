@@ -5,8 +5,8 @@ use image::{GenericImage, Rgba, RgbaImage};
 use crate::{
     plan::{ColourTransform, EvaluatedEffect},
     render::effects::{
-        EffectPass, blur_radius_is_identity, canonical_gaussian_radius, effect_amount_is_identity,
-        effect_pass_plan,
+        EffectPass, canonical_gaussian_radius, effect_amount_is_identity, effect_pass_plan,
+        gaussian_radius_is_identity, sampling_blur_radius_is_identity,
     },
 };
 
@@ -127,7 +127,7 @@ pub(crate) fn gaussian_blur(
     target: &mut RgbaImage,
     radius: f64,
 ) {
-    if blur_radius_is_identity(radius) {
+    if gaussian_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
@@ -146,7 +146,7 @@ pub(crate) fn glow(
     intensity: f64,
     colour: [u8; 4],
 ) {
-    if effect_amount_is_identity(intensity) || blur_radius_is_identity(radius) {
+    if effect_amount_is_identity(intensity) || gaussian_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
@@ -201,7 +201,7 @@ pub(crate) fn sharpen(
     amount: f64,
     radius: f64,
 ) {
-    if effect_amount_is_identity(amount) || blur_radius_is_identity(radius) {
+    if effect_amount_is_identity(amount) || gaussian_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
@@ -253,7 +253,7 @@ pub(crate) fn blur(
     direction: Option<f64>,
     configured_samples: Option<u8>,
 ) {
-    if blur_radius_is_identity(radius) {
+    if sampling_blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("same dimensions");
         return;
     }
@@ -489,5 +489,14 @@ mod tests {
             gaussian_blur(&source, &mut horizontal, &mut target, f64::from(radius));
         }
         assert!(gaussian_kernel_cache_len() <= 16);
+    }
+
+    #[test]
+    fn small_sampling_blur_radius_remains_a_cpu_effect() {
+        let mut source = RgbaImage::new(3, 1);
+        source.put_pixel(1, 0, Rgba([255, 255, 255, 255]));
+        let mut output = RgbaImage::new(3, 1);
+        blur(&source, &mut output, 0.12, Some(0.0), None);
+        assert_ne!(output, source);
     }
 }

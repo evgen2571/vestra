@@ -492,11 +492,14 @@ mod tests {
     }
 
     #[test]
-    fn small_sampling_blur_radius_remains_a_cpu_effect() {
+    fn small_sampling_radius_remains_a_cpu_effect_for_directional_and_motion_blur() {
         let mut source = RgbaImage::new(3, 1);
         source.put_pixel(1, 0, Rgba([255, 255, 255, 255]));
-        let mut output = RgbaImage::new(3, 1);
-        blur(&source, &mut output, 0.12, Some(0.0), None);
-        assert_ne!(output, source);
+        let mut directional = RgbaImage::new(3, 1);
+        let mut motion = RgbaImage::new(3, 1);
+        blur(&source, &mut directional, 0.12, Some(0.0), None);
+        blur(&source, &mut motion, 0.12, Some(0.0), Some(9));
+        assert_ne!(directional, source);
+        assert_ne!(motion, source);
     }
 }

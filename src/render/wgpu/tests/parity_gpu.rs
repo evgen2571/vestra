@@ -155,6 +155,66 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
             .push(LayerParameters::zeroed())
             .expect("every planned parameter record fits the prepared capacity");
     }
+    assert_eq!(
+        arena
+            .push(LayerParameters::zeroed())
+            .expect_err("one undeclared pass must exceed the prepared capacity")
+            .code,
+        "WGPU-PARAMETER-OVERFLOW"
+    );
+}
+
+#[test]
+fn generated_camera_shake_changes_geometry_without_creating_a_pixel_effect_pass() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/presets/heavy-impact.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("heavy-impact fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let before = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_450_000_000);
+    let during = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_550_000_000);
+    let crate::plan::EvaluatedSource::Image {
+        transform: before_transform,
+        ..
+    } = &before.layers[0].source
+    else {
+        unreachable!("heavy-impact clip uses an image")
+    };
+    let crate::plan::EvaluatedSource::Image {
+        transform: during_transform,
+        ..
+    } = &during.layers[0].source
+    else {
+        unreachable!("heavy-impact clip uses an image")
+    };
+    assert_ne!(before_transform.position, during_transform.position);
+    let camera_shake = during.layers[0]
+        .effects
+        .iter()
+        .find(|effect| matches!(effect, EvaluatedEffect::CameraShake { .. }))
+        .expect("heavy impact generates camera shake");
+    assert!(effect_pass_plan(camera_shake).is_empty());
+    let planned_pixel_passes = GpuFramePlan::build(&during)
+        .operations
+        .iter()
+        .filter(|operation| {
+            matches!(
+                operation,
+                super::frame_plan::GpuOperation::ApplyEffect { .. }
+            )
+        })
+        .count();
+    let expected_pixel_passes = during.layers[0]
+        .effects
+        .iter()
+        .filter(|effect| !matches!(effect, EvaluatedEffect::CameraShake { .. }))
+        .map(|effect| effect_pass_plan(effect).as_slice().len())
+        .sum::<usize>();
+    assert_eq!(planned_pixel_passes, expected_pixel_passes);
 }
 
 #[test]
@@ -322,7 +382,7 @@ fn gpu_rgba_fixture_matches_cpu_with_transparent_edges_when_an_adapter_is_availa
 }
 
 #[test]
-fn gpu_matches_cpu_for_every_blend_mode_with_overlapping_partial_alpha_rgba_layers() {
+fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     let validated = load_and_validate(
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
@@ -332,38 +392,68 @@ fn gpu_matches_cpu_for_every_blend_mode_with_overlapping_partial_alpha_rgba_laye
     )
     .expect("RGBA parity fixture validates");
     let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 173;
+    plan.canvas.height = 129;
     let mut upper = plan.layers[0].clone();
     upper.id = "overlapping-rgba-layer".to_owned();
-    upper.opacity = Track::new(0.61);
+    upper.opacity = Track::new(1.0);
     upper.transform.position = Track::new(Point { x: 0.56, y: 0.46 });
-    plan.layers[0].opacity = Track::new(0.73);
+    upper.effects = vec![TimedEffect {
+        start: 0,
+        end: u128::MAX,
+        effect: CompiledEffect::Vignette {
+            amount: Track::new(0.25),
+            radius: Track::new(0.55),
+            softness: Track::new(0.2),
+            colour: [0, 255, 1, 255],
+        },
+    }];
+    plan.layers[0].opacity = Track::new(1.0);
     plan.layers.push(upper);
+    plan.compilation.effect_pass_count = 1;
     let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
     };
     let mut cpu = CpuBackend::new(&plan, decoded);
-    for mode in [
-        crate::project::BlendMode::Normal,
-        crate::project::BlendMode::Add,
-        crate::project::BlendMode::Screen,
-        crate::project::BlendMode::Multiply,
-        crate::project::BlendMode::Overlay,
-    ] {
-        let mut frame = crate::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 0);
-        frame.layers[1].blend_mode = mode;
-        assert!(frame.layers.iter().all(|layer| layer.opacity < 1.0));
-        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
-        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
-        cpu.render_frame(&frame, &mut cpu_output)
-            .expect("CPU blend frame renders");
-        gpu.render_frame(&frame, &mut gpu_output)
-            .expect("GPU blend frame renders");
-        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
-        assert!(
-            difference.maximum_absolute_channel_error <= 2,
-            "{mode:?} blend parity exceeded tolerance: {difference:?}"
-        );
+    let cases = [
+        ("opaque layers", [26, 26, 40, 255], 1.0, 1.0),
+        ("transparent source", [26, 26, 40, 255], 1.0, 0.0),
+        ("transparent destination", [26, 26, 40, 0], 0.0, 1.0),
+        ("partial source alpha", [26, 26, 40, 255], 1.0, 0.61),
+        ("partial destination alpha", [26, 26, 40, 96], 0.47, 1.0),
+        (
+            "partial source and destination",
+            [26, 26, 40, 128],
+            0.73,
+            0.61,
+        ),
+        ("extreme channels", [0, 255, 1, 255], 1.0, 0.61),
+    ];
+    assert_eq!(crate::project::BlendMode::ALL.len(), 5);
+    for mode in crate::project::BlendMode::ALL {
+        for (case, background, lower_opacity, upper_opacity) in cases {
+            let mut frame = crate::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 0);
+            frame.background = background;
+            frame.layers[0].opacity = lower_opacity;
+            frame.layers[1].opacity = upper_opacity;
+            frame.layers[1].blend_mode = mode;
+            let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+            let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+            cpu.render_frame(&frame, &mut cpu_output)
+                .expect("CPU blend frame renders");
+            gpu.render_frame(&frame, &mut gpu_output)
+                .expect("GPU blend frame renders");
+            let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+            assert!(
+                difference.maximum_absolute_channel_error <= 2,
+                "{mode:?} {case} parity exceeded tolerance: max={} mean={} differing_pixels={} worst={:?}",
+                difference.maximum_absolute_channel_error,
+                difference.mean_absolute_channel_error,
+                difference.pixels_exceeding_tolerance,
+                difference.first_significant_mismatch,
+            );
+        }
     }
 }
 
@@ -371,10 +461,64 @@ fn gpu_matches_cpu_for_every_blend_mode_with_overlapping_partial_alpha_rgba_laye
 fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames() {
     let cases = [
         (
+            "impact preset",
+            "examples/presets/impact.json",
+            1_535_000_000,
+            4,
+        ),
+        (
             "heavy-impact preset and camera shake",
             "examples/presets/heavy-impact.json",
             1_550_000_000,
             4,
+        ),
+        (
+            "focus-reveal preset",
+            "examples/presets/focus-reveal.json",
+            1_600_000_000,
+            4,
+        ),
+        (
+            "zoom-blur transition before",
+            "examples/transitions/zoom-blur.json",
+            1_999_000_000,
+            2,
+        ),
+        (
+            "zoom-blur transition start",
+            "examples/transitions/zoom-blur.json",
+            2_000_000_000,
+            2,
+        ),
+        (
+            "zoom-blur transition midpoint",
+            "examples/transitions/zoom-blur.json",
+            2_500_000_000,
+            5,
+        ),
+        (
+            "zoom-blur transition end",
+            "examples/transitions/zoom-blur.json",
+            3_000_000_000,
+            2,
+        ),
+        (
+            "zoom-blur transition after",
+            "examples/transitions/zoom-blur.json",
+            3_001_000_000,
+            2,
+        ),
+        (
+            "flash-cut transition before",
+            "examples/transitions/flash-cut.json",
+            1_999_000_000,
+            2,
+        ),
+        (
+            "flash-cut transition start",
+            "examples/transitions/flash-cut.json",
+            2_000_000_000,
+            2,
         ),
         (
             "flash-cut transition",
@@ -383,12 +527,43 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
             2,
         ),
         (
+            "flash-cut transition end",
+            "examples/transitions/flash-cut.json",
+            3_000_000_000,
+            2,
+        ),
+        (
+            "flash-cut transition after",
+            "examples/transitions/flash-cut.json",
+            3_001_000_000,
+            2,
+        ),
+        (
+            "flash overlay before",
+            "examples/projects/animation-effects.json",
+            1_099_000_000,
+            2,
+        ),
+        (
             "flash overlay",
             "examples/projects/animation-effects.json",
             1_150_000_000,
             2,
         ),
+        (
+            "flash overlay end",
+            "examples/projects/animation-effects.json",
+            1_250_000_000,
+            2,
+        ),
+        (
+            "flash overlay after",
+            "examples/projects/animation-effects.json",
+            1_251_000_000,
+            2,
+        ),
     ];
+    let mut adapter_available = true;
     for (name, path, time, tolerance) in cases {
         let validated = load_and_validate(
             std::path::Path::new(path),
@@ -402,11 +577,36 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
         let active = active_items_at(&plan, time);
         let frame = crate::plan::evaluate(&plan, &active, time);
         match name {
-            "heavy-impact preset and camera shake" => assert!(
-                frame.layers[0]
-                    .effects
+            "impact preset" => assert!(matches!(
+                frame.layers[0].effects.as_slice(),
+                [
+                    EvaluatedEffect::CameraShake { .. },
+                    EvaluatedEffect::ChromaticAberration { .. },
+                    EvaluatedEffect::Tint { .. },
+                ]
+            )),
+            "heavy-impact preset and camera shake" => assert!(matches!(
+                frame.layers[0].effects.as_slice(),
+                [
+                    EvaluatedEffect::CameraShake { .. },
+                    EvaluatedEffect::DirectionalBlur { .. },
+                    EvaluatedEffect::ChromaticAberration { .. },
+                    EvaluatedEffect::Tint { .. },
+                ]
+            )),
+            "focus-reveal preset" => assert!(matches!(
+                frame.layers[0].effects.as_slice(),
+                [
+                    EvaluatedEffect::GaussianBlur { .. },
+                    EvaluatedEffect::Sharpen { .. }
+                ]
+            )),
+            "zoom-blur transition midpoint" => assert!(
+                frame
+                    .layers
                     .iter()
-                    .any(|effect| matches!(effect, EvaluatedEffect::CameraShake { .. }))
+                    .flat_map(|layer| &layer.effects)
+                    .any(|effect| matches!(effect, EvaluatedEffect::ZoomBlur { .. }))
             ),
             "flash-cut transition" => assert!(
                 frame
@@ -419,12 +619,16 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
                 layer.source,
                 crate::plan::EvaluatedSource::SolidColor { .. }
             ))),
-            _ => unreachable!("the test cases above are exhaustive"),
+            _ => {}
+        }
+        if !adapter_available {
+            continue;
         }
         let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
-            return;
+            adapter_available = false;
+            continue;
         };
         let mut cpu_output = RgbaImage::new(frame.width, frame.height);
         let mut gpu_output = RgbaImage::new(frame.width, frame.height);
@@ -436,6 +640,74 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
         assert!(
             difference.maximum_absolute_channel_error <= tolerance,
             "{name} parity exceeded tolerance {tolerance}: {difference:?}"
+        );
+    }
+}
+
+#[test]
+fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("flash fixture validates");
+    let mut adapter_available = true;
+    for (name, opaque_flash, global_post) in [
+        ("opaque flash", true, false),
+        ("partial flash with global post", false, true),
+    ] {
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        if global_post {
+            plan.post_effects.push(TimedEffect {
+                start: 0,
+                end: u128::MAX,
+                effect: CompiledEffect::Vignette {
+                    amount: Track::new(0.18),
+                    radius: Track::new(0.72),
+                    softness: Track::new(0.35),
+                    colour: [0, 0, 0, 255],
+                },
+            });
+            plan.compilation.effect_pass_count += 1;
+        }
+        let time = 1_150_000_000;
+        let active = active_items_at(&plan, time);
+        let mut frame = crate::plan::evaluate(&plan, &active, time);
+        let flash = frame
+            .layers
+            .iter_mut()
+            .find(|layer| {
+                matches!(
+                    layer.source,
+                    crate::plan::EvaluatedSource::SolidColor { .. }
+                )
+            })
+            .expect("fixture has an active flash layer");
+        if opaque_flash {
+            flash.opacity = 1.0;
+        }
+        if !adapter_available {
+            continue;
+        }
+        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+        let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+            adapter_available = false;
+            continue;
+        };
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU flash frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU flash frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "{name} parity exceeded tolerance: {difference:?}"
         );
     }
 }
@@ -685,6 +957,14 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             4,
         ),
         (
+            "small directional blur",
+            EvaluatedEffect::DirectionalBlur {
+                radius: 0.12,
+                angle_degrees: 31.0,
+            },
+            2,
+        ),
+        (
             "zoom blur",
             EvaluatedEffect::ZoomBlur {
                 radius: 8.0,
@@ -693,6 +973,16 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
                 direction: crate::project::ZoomBlurDirection::Centered,
             },
             5,
+        ),
+        (
+            "small zoom blur",
+            EvaluatedEffect::ZoomBlur {
+                radius: 0.12,
+                samples: 9,
+                anchor: Point { x: 0.37, y: 0.61 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            2,
         ),
         (
             "motion blur",
@@ -705,6 +995,18 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
                 samples: 9,
             },
             4,
+        ),
+        (
+            "small motion blur",
+            EvaluatedEffect::MotionBlur {
+                radius: 0.12,
+                angle_degrees: 31.0,
+                intensity: 1.0,
+                shutter_angle: 180.0,
+                max_radius: 8.0,
+                samples: 9,
+            },
+            2,
         ),
         (
             "chromatic aberration",

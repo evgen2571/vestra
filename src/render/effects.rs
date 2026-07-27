@@ -316,22 +316,24 @@ mod tests {
     #[test]
     fn gaussian_radius_has_one_quarter_step_representation() {
         let cases = [
-            (0.0, 0.0),
-            (0.004, 0.0),
-            (0.009, 0.0),
-            (0.011, 0.0),
-            (0.001, 0.0),
-            (0.12, 0.0),
-            (0.13, 0.25),
-            (2.12, 2.0),
-            (2.13, 2.25),
-            (2.125, 2.25),
-            (32.0, 32.0),
-            (64.0, 32.0),
-            (-1.0, 0.0),
+            (0.0, 0.0, true),
+            (0.004, 0.0, true),
+            (0.009, 0.0, true),
+            (0.011, 0.0, true),
+            (0.12, 0.0, true),
+            (0.125, 0.25, false),
+            (0.13, 0.25, false),
+            (2.12, 2.0, false),
+            (2.125, 2.25, false),
+            (2.13, 2.25, false),
+            (31.875, 32.0, false),
+            (32.0, 32.0, false),
+            (64.0, 32.0, false),
+            (-1.0, 0.0, true),
         ];
-        for (input, expected) in cases {
+        for (input, expected, identity) in cases {
             assert_eq!(canonical_gaussian_radius(input), expected);
+            assert_eq!(gaussian_radius_is_identity(input), identity);
         }
     }
 
@@ -381,10 +383,9 @@ mod tests {
             ];
             for effect in effects {
                 assert_eq!(effect.is_identity(), expected_identity);
-                assert_eq!(
-                    effect_pass_plan(&effect).as_slice().is_empty(),
-                    expected_identity
-                );
+                let passes = effect_pass_plan(&effect);
+                assert_eq!(passes.as_slice().is_empty(), expected_identity);
+                assert_eq!(passes.as_slice().len(), usize::from(!expected_identity));
             }
         }
     }

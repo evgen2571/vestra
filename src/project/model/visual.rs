@@ -84,3 +84,15 @@ pub enum BlendMode {
     Multiply,
     Overlay,
 }
+
+impl BlendMode {
+    /// Every blend mode supported by the project model, in stable declaration
+    /// order for exhaustive backend coverage.
+    pub const ALL: [Self; 5] = [
+        Self::Normal,
+        Self::Add,
+        Self::Screen,
+        Self::Multiply,
+        Self::Overlay,
+    ];
+}

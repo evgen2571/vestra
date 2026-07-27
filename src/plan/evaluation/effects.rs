@@ -1,6 +1,11 @@
 //! Evaluation and classification of compiled effects.
 
-use crate::{domain::Point, plan::CompiledEffect, project::ZoomBlurDirection};
+use crate::{
+    domain::Point,
+    plan::CompiledEffect,
+    project::ZoomBlurDirection,
+    render::effects::{blur_radius_is_identity, effect_amount_is_identity},
+};
 
 #[derive(Clone, Debug)]
 pub enum EvaluatedEffect {
@@ -85,14 +90,14 @@ impl EvaluatedEffect {
             Self::Tint { amount, .. }
             | Self::ChromaticAberration { amount, .. }
             | Self::Vignette { amount, .. }
-            | Self::Sharpen { amount, .. } => *amount == 0.0,
+            | Self::Sharpen { amount, .. } => effect_amount_is_identity(*amount),
             Self::GaussianBlur { radius }
             | Self::DirectionalBlur { radius, .. }
             | Self::ZoomBlur { radius, .. }
-            | Self::MotionBlur { radius, .. } => *radius == 0.0,
+            | Self::MotionBlur { radius, .. } => blur_radius_is_identity(*radius),
             Self::Glow {
                 radius, intensity, ..
-            } => *radius == 0.0 || *intensity == 0.0,
+            } => blur_radius_is_identity(*radius) || effect_amount_is_identity(*intensity),
             Self::ColorAdjust {
                 exposure,
                 gamma,

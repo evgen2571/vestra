@@ -65,6 +65,34 @@ pub(crate) enum EffectPass {
     },
 }
 
+impl EffectPass {
+    /// Final composite passes that must read the exact pre-effect image.
+    #[must_use]
+    pub(crate) const fn requires_original(self) -> bool {
+        matches!(
+            self,
+            Self::GlowComposite { .. } | Self::UnsharpComposite { .. }
+        )
+    }
+}
+
+/// The one Gaussian-radius representation shared by CPU kernel caching, pass
+/// planning, and WGPU parameter encoding.
+#[must_use]
+pub(crate) fn canonical_gaussian_radius(radius: f64) -> f64 {
+    (radius.clamp(0.0, 32.0) * 4.0).round() / 4.0
+}
+
+#[must_use]
+pub(crate) fn blur_radius_is_identity(radius: f64) -> bool {
+    canonical_gaussian_radius(radius) <= 0.01
+}
+
+#[must_use]
+pub(crate) fn effect_amount_is_identity(amount: f64) -> bool {
+    amount <= 0.0
+}
+
 /// The largest built-in chain, glow, has four passes. A stack-backed plan
 /// preserves the existing per-frame allocation behaviour and pass ordering.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -106,8 +134,12 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
     }
     match effect {
         EvaluatedEffect::GaussianBlur { radius } => EffectPassPlan::new(&[
-            EffectPass::GaussianHorizontal { radius: *radius },
-            EffectPass::GaussianVertical { radius: *radius },
+            EffectPass::GaussianHorizontal {
+                radius: canonical_gaussian_radius(*radius),
+            },
+            EffectPass::GaussianVertical {
+                radius: canonical_gaussian_radius(*radius),
+            },
         ]),
         EvaluatedEffect::Glow {
             threshold,
@@ -119,15 +151,23 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
                 threshold: *threshold,
                 colour: *colour,
             },
-            EffectPass::GaussianHorizontal { radius: *radius },
-            EffectPass::GaussianVertical { radius: *radius },
+            EffectPass::GaussianHorizontal {
+                radius: canonical_gaussian_radius(*radius),
+            },
+            EffectPass::GaussianVertical {
+                radius: canonical_gaussian_radius(*radius),
+            },
             EffectPass::GlowComposite {
                 intensity: *intensity,
             },
         ]),
         EvaluatedEffect::Sharpen { amount, radius } => EffectPassPlan::new(&[
-            EffectPass::GaussianHorizontal { radius: *radius },
-            EffectPass::GaussianVertical { radius: *radius },
+            EffectPass::GaussianHorizontal {
+                radius: canonical_gaussian_radius(*radius),
+            },
+            EffectPass::GaussianVertical {
+                radius: canonical_gaussian_radius(*radius),
+            },
             EffectPass::UnsharpComposite { amount: *amount },
         ]),
         EvaluatedEffect::Brightness { .. }
@@ -201,7 +241,10 @@ pub(crate) fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
 
 #[cfg(test)]
 mod tests {
-    use super::{EffectPass, effect_pass_plan};
+    use super::{
+        EffectPass, blur_radius_is_identity, canonical_gaussian_radius, effect_amount_is_identity,
+        effect_pass_plan,
+    };
     use crate::{
         domain::Point,
         plan::{ColourTransform, EvaluatedEffect},
@@ -260,6 +303,35 @@ mod tests {
                 }]),
             }]
         );
+    }
+
+    #[test]
+    fn gaussian_radius_has_one_quarter_step_representation() {
+        let cases = [
+            (0.0, 0.0),
+            (0.001, 0.0),
+            (0.12, 0.0),
+            (0.13, 0.25),
+            (2.12, 2.0),
+            (2.13, 2.25),
+            (2.125, 2.25),
+            (32.0, 32.0),
+            (64.0, 32.0),
+            (-1.0, 0.0),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(canonical_gaussian_radius(input), expected);
+        }
+    }
+
+    #[test]
+    fn gaussian_identity_uses_the_canonical_radius() {
+        assert!(blur_radius_is_identity(0.0));
+        assert!(blur_radius_is_identity(0.12));
+        assert!(!blur_radius_is_identity(0.13));
+        assert!(effect_amount_is_identity(0.0));
+        assert!(effect_amount_is_identity(-0.1));
+        assert!(!effect_amount_is_identity(0.000_001));
     }
 
     #[test]

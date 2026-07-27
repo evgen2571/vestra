@@ -4,7 +4,10 @@ use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::{
     plan::{ColourTransform, EvaluatedEffect},
-    render::effects::{EffectPass, effect_pass_plan},
+    render::effects::{
+        EffectPass, blur_radius_is_identity, canonical_gaussian_radius, effect_amount_is_identity,
+        effect_pass_plan,
+    },
 };
 
 use super::surfaces::EffectSurfacePool;
@@ -124,7 +127,7 @@ pub(crate) fn gaussian_blur(
     target: &mut RgbaImage,
     radius: f64,
 ) {
-    if radius <= 0.01 {
+    if blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
@@ -143,7 +146,7 @@ pub(crate) fn glow(
     intensity: f64,
     colour: [u8; 4],
 ) {
-    if intensity <= 0.0 || radius <= 0.01 {
+    if effect_amount_is_identity(intensity) || blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
@@ -198,7 +201,7 @@ pub(crate) fn sharpen(
     amount: f64,
     radius: f64,
 ) {
-    if amount <= 0.0 || radius <= 0.01 {
+    if effect_amount_is_identity(amount) || blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
@@ -250,7 +253,7 @@ pub(crate) fn blur(
     direction: Option<f64>,
     configured_samples: Option<u8>,
 ) {
-    if radius <= 0.01 {
+    if blur_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("same dimensions");
         return;
     }
@@ -311,7 +314,7 @@ thread_local! {
 }
 
 fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKernel) -> T) -> T {
-    let key = (radius.clamp(0.0, 32.0) * 4.0).round() as u16;
+    let key = (canonical_gaussian_radius(radius) * 4.0) as u16;
     GAUSSIAN_KERNEL_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let index = cache
@@ -321,7 +324,7 @@ fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKernel) -> T)
                 if cache.len() == 16 {
                     cache.remove(0);
                 }
-                cache.push((key, GaussianKernel::new(f64::from(key) / 4.0)));
+                cache.push((key, GaussianKernel::new(canonical_gaussian_radius(radius))));
                 cache.len() - 1
             });
         work(&cache[index].1)

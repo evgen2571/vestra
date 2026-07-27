@@ -747,6 +747,91 @@ mod tests {
         );
     }
 
+    #[test]
+    fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 7,
+            height: 5,
+            layers: vec![crate::plan::EvaluatedLayer {
+                source: EvaluatedSource::SolidColor {
+                    colour: [20, 40, 80, 255],
+                },
+                opacity: 1.0,
+                effects: vec![EvaluatedEffect::GaussianBlur { radius: 2.0 }],
+                colour_transform: crate::plan::ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: vec![EvaluatedEffect::Vignette {
+                amount: 0.4,
+                radius: 0.6,
+                softness: 0.2,
+                colour: [0, 0, 0, 255],
+            }],
+            evaluated_track_count: 0,
+        };
+
+        let mut raw_layer = GpuFramePlan::build(&frame);
+        let GpuOperation::CompositeLayer { layer_source, .. } = raw_layer
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::CompositeLayer { .. }))
+            .expect("frame contains a composite")
+        else {
+            unreachable!("the match above selected a composite")
+        };
+        *layer_source = TextureSlot::Layer;
+        assert!(raw_layer.validate(0).is_err());
+
+        let mut stale_effect = GpuFramePlan::build(&frame);
+        let GpuOperation::CompositeLayer { layer_source, .. } = stale_effect
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::CompositeLayer { .. }))
+            .expect("frame contains a composite")
+        else {
+            unreachable!("the match above selected a composite")
+        };
+        *layer_source = TextureSlot::EffectA;
+        assert!(stale_effect.validate(0).is_err());
+
+        let mut pre_final_canvas = GpuFramePlan::build(&frame);
+        let GpuOperation::ApplyEffect {
+            scope: EffectScope::Global,
+            source,
+            ..
+        } = pre_final_canvas
+            .operations
+            .iter_mut()
+            .find(|operation| {
+                matches!(
+                    operation,
+                    GpuOperation::ApplyEffect {
+                        scope: EffectScope::Global,
+                        ..
+                    }
+                )
+            })
+            .expect("frame contains a global effect")
+        else {
+            unreachable!("the match above selected a global effect")
+        };
+        *source = TextureSlot::CanvasA;
+        assert!(pre_final_canvas.validate(0).is_err());
+
+        let mut stale_readback = GpuFramePlan::build(&frame);
+        let GpuOperation::CopyForReadback { source, .. } = stale_readback
+            .operations
+            .last_mut()
+            .expect("frame ends in readback")
+        else {
+            unreachable!("the builder always appends readback")
+        };
+        *source = TextureSlot::CanvasA;
+        assert!(stale_readback.validate(0).is_err());
+    }
+
     #[expect(
         clippy::too_many_arguments,
         reason = "test helper spells out every self-describing effect operation field"

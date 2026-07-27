@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use crate::Diagnostic;
 
 use super::{
-    frame_plan::{GpuFramePlan, GpuOperation},
+    frame_plan::{GpuFramePlan, GpuOperation, TextureSlot},
     parameters::FrameParameterArena,
     pipeline::GpuPipelines,
     resources::{FrameResources, SourceResources},
@@ -35,8 +35,8 @@ pub(super) struct FrameBindGroups {
     clear_canvas_a: wgpu::BindGroup,
     solid_layer: wgpu::BindGroup,
     image_layers: Vec<wgpu::BindGroup>,
-    composite_a_to_b: wgpu::BindGroup,
-    composite_b_to_a: wgpu::BindGroup,
+    composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
+    effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
     persistent_created: usize,
 }
 
@@ -83,47 +83,80 @@ impl FrameBindGroups {
                 )
             })
             .collect::<Vec<_>>();
-        let composite_a_to_b = composite_group(
-            device,
-            &pipelines.composite_bindings,
-            &frame
-                .working
-                .get(super::frame_plan::TextureSlot::CanvasA)
-                .view,
-            &frame
-                .working
-                .get(super::frame_plan::TextureSlot::Layer)
-                .view,
-            &frame
-                .working
-                .get(super::frame_plan::TextureSlot::CanvasB)
-                .view,
-            &pipelines.parameters,
-        );
-        let composite_b_to_a = composite_group(
-            device,
-            &pipelines.composite_bindings,
-            &frame
-                .working
-                .get(super::frame_plan::TextureSlot::CanvasB)
-                .view,
-            &frame
-                .working
-                .get(super::frame_plan::TextureSlot::Layer)
-                .view,
-            &frame
-                .working
-                .get(super::frame_plan::TextureSlot::CanvasA)
-                .view,
-            &pipelines.parameters,
-        );
+        let layer_slots = if frame.working.has_effects() {
+            vec![
+                TextureSlot::Layer,
+                TextureSlot::EffectA,
+                TextureSlot::EffectB,
+            ]
+        } else {
+            vec![TextureSlot::Layer]
+        };
+        let mut composites = Vec::new();
+        for canvas in [TextureSlot::CanvasA, TextureSlot::CanvasB] {
+            let output = match canvas {
+                TextureSlot::CanvasA => TextureSlot::CanvasB,
+                TextureSlot::CanvasB => TextureSlot::CanvasA,
+                _ => unreachable!(),
+            };
+            for layer in layer_slots.iter().copied() {
+                composites.push((
+                    canvas,
+                    layer,
+                    composite_group(
+                        device,
+                        &pipelines.composite_bindings,
+                        &frame.working.get(canvas).view,
+                        &frame.working.get(layer).view,
+                        &frame.working.get(output).view,
+                        &pipelines.parameters,
+                    ),
+                ));
+            }
+        }
+        let mut effects = Vec::new();
+        if frame.working.has_effects() {
+            let slots = [
+                TextureSlot::CanvasA,
+                TextureSlot::CanvasB,
+                TextureSlot::Layer,
+                TextureSlot::EffectA,
+                TextureSlot::EffectB,
+            ];
+            for source in slots {
+                for destination in slots {
+                    if source == destination {
+                        continue;
+                    }
+                    for auxiliary in slots {
+                        if auxiliary == destination {
+                            continue;
+                        }
+                        effects.push((
+                            source,
+                            destination,
+                            auxiliary,
+                            effect_group(
+                                device,
+                                &pipelines.effect_bindings,
+                                &frame.working.get(source).view,
+                                &frame.working.get(auxiliary).view,
+                                &frame.working.get(destination).view,
+                                &pipelines.parameters,
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+        let persistent_created = sources.textures.len() + 2 + composites.len() + effects.len();
         Self {
             clear_canvas_a,
             solid_layer,
             image_layers,
-            composite_a_to_b,
-            composite_b_to_a,
-            persistent_created: sources.textures.len() + 4,
+            composites,
+            effects,
+            persistent_created,
         }
     }
 
@@ -144,12 +177,50 @@ impl FrameBindGroups {
         })
     }
 
-    fn composite(&self, canvas_source: super::frame_plan::TextureSlot) -> &wgpu::BindGroup {
-        match canvas_source {
-            super::frame_plan::TextureSlot::CanvasA => &self.composite_a_to_b,
-            super::frame_plan::TextureSlot::CanvasB => &self.composite_b_to_a,
-            _ => unreachable!("frame-plan validation requires a canvas source"),
-        }
+    fn composite(
+        &self,
+        canvas: TextureSlot,
+        layer: TextureSlot,
+    ) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.composites
+            .iter()
+            .find(|(cached_canvas, cached_layer, _)| {
+                *cached_canvas == canvas && *cached_layer == layer
+            })
+            .map(|(_, _, group)| group)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-BIND-GROUP",
+                    crate::Category::Backend,
+                    "missing cached canvas blend bind group",
+                    "",
+                )
+            })
+    }
+
+    fn effect(
+        &self,
+        source: TextureSlot,
+        destination: TextureSlot,
+        auxiliary: Option<TextureSlot>,
+    ) -> Result<&wgpu::BindGroup, Diagnostic> {
+        let auxiliary = auxiliary.unwrap_or(source);
+        self.effects
+            .iter()
+            .find(|(cached_source, cached_destination, cached_auxiliary, _)| {
+                *cached_source == source
+                    && *cached_destination == destination
+                    && *cached_auxiliary == auxiliary
+            })
+            .map(|(_, _, _, group)| group)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-BIND-GROUP",
+                    crate::Category::Backend,
+                    "missing cached effect bind group",
+                    "",
+                )
+            })
     }
 }
 
@@ -246,7 +317,7 @@ pub(super) fn encode_and_submit(
                         _ => unreachable!("frame-plan validation requires a canvas source"),
                     }
                 );
-                let group = bind_groups.composite(*canvas_source);
+                let group = bind_groups.composite(*canvas_source, *layer_source)?;
                 dispatch(
                     &mut encoder,
                     &pipelines.composite,
@@ -259,13 +330,25 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
             }
-            GpuOperation::ApplyEffect { .. } => {
-                return Err(Diagnostic::error(
-                    "EFFECTS-WGPU-UNSUPPORTED",
-                    crate::Category::Backend,
-                    "the GPU frame plan contains an effect without a Phase 1 shader",
-                    "",
-                ));
+            GpuOperation::ApplyEffect {
+                source,
+                destination,
+                auxiliary,
+                parameters_index,
+                ..
+            } => {
+                let group = bind_groups.effect(*source, *destination, *auxiliary)?;
+                dispatch(
+                    &mut encoder,
+                    &pipelines.effect,
+                    group,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
             }
             GpuOperation::CopyForReadback { source } => {
                 encoder.copy_texture_to_buffer(
@@ -299,6 +382,37 @@ pub(super) fn encode_and_submit(
     metrics.queue_submissions = 1;
     metrics.submission = submission_started.elapsed();
     Ok(metrics)
+}
+fn effect_group<'a>(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    source: &'a wgpu::TextureView,
+    auxiliary: &'a wgpu::TextureView,
+    output: &'a wgpu::TextureView,
+    parameters: &'a wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("video-editor effect operation"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(auxiliary),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(output),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: parameter_binding(parameters),
+            },
+        ],
+    })
 }
 
 fn dispatch(

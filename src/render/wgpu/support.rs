@@ -1,34 +1,17 @@
 //! WGPU plan compatibility policy.
 
-use crate::{Category, Diagnostic, plan::RenderPlan, project::BlendMode};
+use crate::{Diagnostic, plan::RenderPlan};
 
-/// Rejects features without a declared texture-frame shader and parity suite.
+/// All effects currently express themselves as backend-neutral `EffectPass`
+/// values, and every current blend mode is represented by the shared blend
+/// pipeline.  Keep this check deliberately narrow: adapter features and
+/// concrete resource limits are checked during WGPU preparation, where their
+/// diagnostics can name the unavailable capability.
 #[expect(
     clippy::result_large_err,
     reason = "backend selection preserves the existing structured diagnostic"
 )]
 pub(crate) fn validate_plan(plan: &RenderPlan) -> Result<(), Diagnostic> {
-    let requires_cpu = !plan.post_effects.is_empty()
-        || plan.layers.iter().any(|layer| {
-            layer.blend_mode != BlendMode::Normal
-                || layer.effects.iter().any(|timed| {
-                    !matches!(
-                        timed.effect,
-                        crate::plan::CompiledEffect::Brightness { .. }
-                            | crate::plan::CompiledEffect::Contrast { .. }
-                            | crate::plan::CompiledEffect::Saturation { .. }
-                            | crate::plan::CompiledEffect::Tint { .. }
-                    )
-                })
-        });
-    if requires_cpu {
-        Err(Diagnostic::error(
-            "EFFECTS-WGPU-UNSUPPORTED",
-            Category::Backend,
-            "the WGPU backend does not yet support ordered multi-pass effects; select CPU or use auto",
-            "",
-        ))
-    } else {
-        Ok(())
-    }
+    let _ = plan;
+    Ok(())
 }

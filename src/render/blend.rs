@@ -111,4 +111,21 @@ mod tests {
             destination
         );
     }
+
+    #[test]
+    fn every_declared_blend_mode_handles_partial_alpha() {
+        let destination = Rgba([48, 160, 220, 96]);
+        let source = Rgba([210, 80, 30, 144]);
+        for mode in [
+            crate::project::BlendMode::Normal,
+            crate::project::BlendMode::Add,
+            crate::project::BlendMode::Screen,
+            crate::project::BlendMode::Multiply,
+            crate::project::BlendMode::Overlay,
+        ] {
+            let pixel = blend_pixel(destination, source, mode, 0.6);
+            assert!(pixel[3] >= destination[3], "{mode:?}");
+            assert!(pixel[3] >= source[3] / 2, "{mode:?}");
+        }
+    }
 }

@@ -25,13 +25,14 @@ pub(super) struct WorkingTexture {
     pub(super) estimated_bytes: u64,
 }
 
-/// Phase 1 prepares two canvases and one layer texture. Advanced effect plans
-/// are rejected before resource preparation, so their future slots do not
-/// consume memory until Phase 2 supplies an executable pass and requests them.
+/// Effect textures are fixed reusable full-frame slots. They are created with
+/// the canvas resources during preparation, never while encoding a frame.
 pub(super) struct TexturePool {
     canvas_a: WorkingTexture,
     canvas_b: WorkingTexture,
     layer: WorkingTexture,
+    effect_a: Option<WorkingTexture>,
+    effect_b: Option<WorkingTexture>,
 }
 
 impl TexturePool {
@@ -44,10 +45,15 @@ impl TexturePool {
                 | wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
         };
+        let has_effects = plan.compilation.effect_pass_count > 0;
         Self {
             canvas_a: create_texture(device, descriptor, "video-editor canvas A"),
             canvas_b: create_texture(device, descriptor, "video-editor canvas B"),
             layer: create_texture(device, descriptor, "video-editor layer"),
+            effect_a: has_effects
+                .then(|| create_texture(device, descriptor, "video-editor effect A")),
+            effect_b: has_effects
+                .then(|| create_texture(device, descriptor, "video-editor effect B")),
         }
     }
 
@@ -56,17 +62,33 @@ impl TexturePool {
             TextureSlot::CanvasA => &self.canvas_a,
             TextureSlot::CanvasB => &self.canvas_b,
             TextureSlot::Layer => &self.layer,
-            TextureSlot::EffectA | TextureSlot::EffectB => {
-                unreachable!("Phase 1 rejects effect operations before WGPU resource preparation")
-            }
+            TextureSlot::EffectA => self
+                .effect_a
+                .as_ref()
+                .expect("effect plan requires prepared Effect A"),
+            TextureSlot::EffectB => self
+                .effect_b
+                .as_ref()
+                .expect("effect plan requires prepared Effect B"),
         }
     }
 
     pub(super) fn estimated_bytes(&self) -> u64 {
-        [&self.canvas_a, &self.canvas_b, &self.layer]
-            .into_iter()
-            .map(|texture| texture.estimated_bytes)
-            .sum()
+        self.canvas_a.estimated_bytes
+            + self.canvas_b.estimated_bytes
+            + self.layer.estimated_bytes
+            + self
+                .effect_a
+                .as_ref()
+                .map_or(0, |texture| texture.estimated_bytes)
+            + self
+                .effect_b
+                .as_ref()
+                .map_or(0, |texture| texture.estimated_bytes)
+    }
+
+    pub(super) fn has_effects(&self) -> bool {
+        self.effect_a.is_some()
     }
 }
 
@@ -101,8 +123,8 @@ fn create_texture(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn phase_one_working_texture_memory_uses_three_full_frame_slots() {
+    fn effect_pipeline_working_texture_memory_uses_five_full_frame_slots() {
         let bytes = u64::from(1920_u32) * 1080 * 4;
-        assert_eq!(bytes * 3, 24_883_200);
+        assert_eq!(bytes * 5, 41_472_000);
     }
 }

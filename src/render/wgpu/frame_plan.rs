@@ -7,20 +7,13 @@
 
 use crate::{
     Category, Diagnostic,
-    plan::{EvaluatedFrame, EvaluatedSource},
-    render::effects::EffectPass,
+    plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource},
+    render::effects::{EffectPass, effect_pass_plan},
 };
 
 /// Fixed full-frame working texture roles. Effect slots are plan-only in Phase
 /// 1 and become allocated resources when a supported pass requests them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "effect slots remain plan-only until Phase 2 declares executable WGPU effect support"
-    )
-)]
 pub(super) enum TextureSlot {
     CanvasA,
     CanvasB,
@@ -29,14 +22,16 @@ pub(super) enum TextureSlot {
     EffectB,
 }
 
+/// Whether a pass belongs to a rendered layer or to the final canvas.  Keeping
+/// this in the plan gives execution failures actionable context without making
+/// the pass itself WGPU-specific.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum EffectScope {
+    Layer,
+    Global,
+}
+
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "effect operations are represented now but only constructed when Phase 2 support exists"
-    )
-)]
 pub(super) enum GpuOperation {
     ClearCanvas {
         destination: TextureSlot,
@@ -56,7 +51,8 @@ pub(super) enum GpuOperation {
     /// A future executable effect pass. The operation owns the logical pass so
     /// the executor never has to rediscover semantics from an evaluated layer.
     ApplyEffect {
-        layer_index: usize,
+        scope: EffectScope,
+        layer_index: Option<usize>,
         effect_index: usize,
         pass_index: usize,
         pass: EffectPass,
@@ -85,10 +81,12 @@ pub(super) struct GpuFramePlan {
 }
 
 impl GpuFramePlan {
-    /// Builds the deterministic texture flow for the currently supported
-    /// image and solid layer path. The planner owns no WGPU handle.
+    /// Builds the complete deterministic texture flow.  Logical effect pass
+    /// expansion is shared with the CPU executor; this type only assigns its
+    /// source, destination, and retained-original texture roles.
     pub(super) fn build(frame: &EvaluatedFrame) -> Self {
-        let mut operations = Vec::with_capacity(2 + frame.layers.len() * 2);
+        let mut operations =
+            Vec::with_capacity(2 + frame.layers.len() * 4 + frame.post_effects.len() * 2);
         let mut parameter_count = 0_u32;
         operations.push(GpuOperation::ClearCanvas {
             destination: TextureSlot::CanvasA,
@@ -116,10 +114,22 @@ impl GpuFramePlan {
                 }
             }
             parameter_count += 1;
+            let mut layer_result = TextureSlot::Layer;
+            for (effect_index, effect) in layer.effects.iter().enumerate() {
+                append_effect_chain(
+                    &mut operations,
+                    &mut parameter_count,
+                    EffectScope::Layer,
+                    Some(layer_index),
+                    effect_index,
+                    effect,
+                    &mut layer_result,
+                );
+            }
             let destination = alternate_canvas(canvas);
             operations.push(GpuOperation::CompositeLayer {
                 layer_index,
-                layer_source: TextureSlot::Layer,
+                layer_source: layer_result,
                 canvas_source: canvas,
                 canvas_destination: destination,
                 parameters_index: parameter_count,
@@ -127,11 +137,25 @@ impl GpuFramePlan {
             parameter_count += 1;
             canvas = destination;
         }
-        operations.push(GpuOperation::CopyForReadback { source: canvas });
+        let mut final_texture = canvas;
+        for (effect_index, effect) in frame.post_effects.iter().enumerate() {
+            append_effect_chain(
+                &mut operations,
+                &mut parameter_count,
+                EffectScope::Global,
+                None,
+                effect_index,
+                effect,
+                &mut final_texture,
+            );
+        }
+        operations.push(GpuOperation::CopyForReadback {
+            source: final_texture,
+        });
         Self {
             operations,
             parameter_count,
-            final_canvas: canvas,
+            final_canvas: final_texture,
         }
     }
 
@@ -252,6 +276,52 @@ impl GpuFramePlan {
     }
 }
 
+fn append_effect_chain(
+    operations: &mut Vec<GpuOperation>,
+    parameter_count: &mut u32,
+    scope: EffectScope,
+    layer_index: Option<usize>,
+    effect_index: usize,
+    effect: &EvaluatedEffect,
+    current: &mut TextureSlot,
+) {
+    let passes = effect_pass_plan(effect);
+    if passes.is_empty() {
+        return;
+    }
+    let original = *current;
+    for (pass_index, pass) in passes.as_slice().iter().copied().enumerate() {
+        let destination = alternate_effect_destination(*current);
+        let auxiliary = matches!(
+            pass,
+            EffectPass::GlowComposite { .. } | EffectPass::UnsharpComposite { .. }
+        )
+        .then_some(original);
+        operations.push(GpuOperation::ApplyEffect {
+            scope,
+            layer_index,
+            effect_index,
+            pass_index,
+            pass,
+            source: *current,
+            destination,
+            auxiliary,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        *current = destination;
+    }
+}
+
+fn alternate_effect_destination(source: TextureSlot) -> TextureSlot {
+    match source {
+        TextureSlot::EffectA => TextureSlot::EffectB,
+        TextureSlot::EffectB | TextureSlot::Layer | TextureSlot::CanvasA | TextureSlot::CanvasB => {
+            TextureSlot::EffectA
+        }
+    }
+}
+
 fn alternate_canvas(current: TextureSlot) -> TextureSlot {
     match current {
         TextureSlot::CanvasA => TextureSlot::CanvasB,
@@ -357,7 +427,8 @@ mod tests {
         parameters_index: u32,
     ) -> GpuOperation {
         GpuOperation::ApplyEffect {
-            layer_index,
+            scope: EffectScope::Layer,
+            layer_index: Some(layer_index),
             effect_index,
             pass_index,
             pass,
@@ -552,5 +623,60 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0, 0, 0, 255],
+            width: 9,
+            height: 7,
+            layers: vec![crate::plan::EvaluatedLayer {
+                source: EvaluatedSource::SolidColor {
+                    colour: [100, 80, 60, 255],
+                },
+                opacity: 0.75,
+                effects: vec![crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 }],
+                colour_transform: crate::plan::ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Screen,
+            }],
+            post_effects: vec![crate::plan::EvaluatedEffect::Glow {
+                threshold: 0.5,
+                radius: 2.0,
+                intensity: 0.8,
+                colour: [255, 100, 20, 255],
+            }],
+            evaluated_track_count: 0,
+        };
+        let plan = GpuFramePlan::build(&frame);
+        plan.validate(0).expect("complete effect plan validates");
+        let effects = plan
+            .operations
+            .iter()
+            .filter_map(|operation| match operation {
+                GpuOperation::ApplyEffect {
+                    scope,
+                    layer_index,
+                    pass_index,
+                    source,
+                    destination,
+                    ..
+                } => Some((*scope, *layer_index, *pass_index, *source, *destination)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(effects.len(), 6);
+        assert_eq!(effects[0].0, EffectScope::Layer);
+        assert_eq!(effects[0].1, Some(0));
+        assert_eq!(effects[2].0, EffectScope::Global);
+        assert_eq!(effects[2].1, None);
+        assert_eq!(plan.final_canvas, TextureSlot::EffectB);
+        assert_eq!(
+            plan.operations.last(),
+            Some(&GpuOperation::CopyForReadback {
+                source: TextureSlot::EffectB
+            })
+        );
     }
 }

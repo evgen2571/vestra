@@ -127,3 +127,27 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
         estimates.parameter_buffer_bytes
     );
 }
+
+#[test]
+fn plans_without_visual_effect_passes_do_not_reserve_effect_textures() {
+    let (mut plan, decoded, _) = fixture_requirements();
+    for layer in &mut plan.layers {
+        layer.effects.clear();
+    }
+    plan.post_effects.clear();
+    plan.compilation.effect_pass_count = 0;
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("effect-free requirements calculate");
+    let estimates = requirements
+        .resource_estimates(256)
+        .expect("effect-free estimate calculates");
+    assert_eq!(estimates.effect_texture_bytes, 0);
+    assert_eq!(
+        estimates.working_texture_bytes,
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes
+    );
+}

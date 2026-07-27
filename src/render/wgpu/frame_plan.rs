@@ -11,8 +11,8 @@ use crate::{
     render::effects::{EffectPass, effect_pass_plan},
 };
 
-/// Fixed full-frame working texture roles. Effect slots are plan-only in Phase
-/// 1 and become allocated resources when a supported pass requests them.
+/// Fixed full-frame working texture roles. Effect slots are allocated when the
+/// compiled plan contains a non-transform visual effect.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum TextureSlot {
     CanvasA,
@@ -48,8 +48,8 @@ pub(super) enum GpuOperation {
         destination: TextureSlot,
         parameters_index: u32,
     },
-    /// A future executable effect pass. The operation owns the logical pass so
-    /// the executor never has to rediscover semantics from an evaluated layer.
+    /// An executable effect pass. The operation owns the logical pass so the
+    /// executor never has to rediscover semantics from an evaluated layer.
     ApplyEffect {
         scope: EffectScope,
         layer_index: Option<usize>,
@@ -220,15 +220,32 @@ impl GpuFramePlan {
                     initialized[index(*destination)] = true;
                 }
                 GpuOperation::ApplyEffect {
+                    scope,
+                    layer_index,
+                    pass,
                     source,
                     destination,
                     auxiliary,
                     ..
                 } => {
-                    if source == destination
+                    let scope_is_valid = match scope {
+                        EffectScope::Layer => layer_index.is_some(),
+                        EffectScope::Global => layer_index.is_none(),
+                    };
+                    let destination_is_effect =
+                        matches!(destination, TextureSlot::EffectA | TextureSlot::EffectB);
+                    let auxiliary_is_required = matches!(
+                        pass,
+                        EffectPass::GlowComposite { .. } | EffectPass::UnsharpComposite { .. }
+                    );
+                    if !scope_is_valid
+                        || !destination_is_effect
+                        || source == destination
                         || !initialized[index(*source)]
                         || auxiliary
                             .is_some_and(|slot| slot == *destination || !initialized[index(slot)])
+                        || (auxiliary_is_required && auxiliary.is_none())
+                        || (!auxiliary_is_required && auxiliary.is_some())
                     {
                         return Err(invalid(
                             operation_index,
@@ -243,7 +260,10 @@ impl GpuFramePlan {
                     canvas_destination,
                     ..
                 } => {
-                    if *canvas_source != expected_canvas
+                    if !matches!(
+                        layer_source,
+                        TextureSlot::Layer | TextureSlot::EffectA | TextureSlot::EffectB
+                    ) || *canvas_source != expected_canvas
                         || *canvas_destination != alternate_canvas(expected_canvas)
                         || canvas_source == canvas_destination
                         || !initialized[index(*layer_source)]
@@ -677,6 +697,43 @@ mod tests {
             Some(&GpuOperation::CopyForReadback {
                 source: TextureSlot::EffectB
             })
+        );
+    }
+
+    #[test]
+    fn validation_rejects_effect_scope_destination_and_auxiliary_contract_violations() {
+        let plan = GpuFramePlan {
+            operations: vec![
+                GpuOperation::ClearCanvas {
+                    destination: TextureSlot::CanvasA,
+                    parameters_index: 0,
+                },
+                GpuOperation::ApplyEffect {
+                    scope: EffectScope::Global,
+                    layer_index: Some(0),
+                    effect_index: 0,
+                    pass_index: 0,
+                    pass: EffectPass::Vignette {
+                        amount: 0.2,
+                        radius: 0.5,
+                        softness: 0.5,
+                        colour: [0, 0, 0, 255],
+                    },
+                    source: TextureSlot::CanvasA,
+                    destination: TextureSlot::CanvasB,
+                    auxiliary: Some(TextureSlot::CanvasA),
+                    parameters_index: 1,
+                },
+                GpuOperation::CopyForReadback {
+                    source: TextureSlot::CanvasA,
+                },
+            ],
+            parameter_count: 2,
+            final_canvas: TextureSlot::CanvasA,
+        };
+        assert_eq!(
+            plan.validate(0).expect_err("invalid effect contract").code,
+            "WGPU-FRAME-PLAN"
         );
     }
 }

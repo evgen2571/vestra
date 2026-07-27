@@ -8,7 +8,7 @@
 use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
-const PHASE_ONE_WORKING_TEXTURE_COUNT: u64 = 3;
+const BASE_WORKING_TEXTURE_COUNT: u64 = 3;
 
 /// Conservative allocation estimates for resources the renderer owns for one
 /// prepared WGPU backend. They exclude driver metadata, row-padding inside
@@ -81,6 +81,11 @@ impl GpuRequirements {
         let parameter_record_count = u32::try_from(plan.layers.len())
             .ok()
             .and_then(|count| count.checked_mul(2))
+            .and_then(|count| {
+                u32::try_from(plan.compilation.effect_pass_count)
+                    .ok()
+                    .and_then(|passes| count.checked_add(passes))
+            })
             .and_then(|count| count.checked_add(1))
             .ok_or_else(|| parameter_overflow("frame parameter record count overflow"))?;
         let default_alignment =
@@ -91,10 +96,11 @@ impl GpuRequirements {
         let canvas_texture_bytes =
             estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2)?;
         let layer_texture_bytes = full_frame_bytes;
+        let effect_texture_count = u64::from(plan.compilation.effect_pass_count > 0) * 2;
         let working_texture_bytes = estimated_texture_bytes(
             plan.canvas.width,
             plan.canvas.height,
-            PHASE_ONE_WORKING_TEXTURE_COUNT,
+            BASE_WORKING_TEXTURE_COUNT + effect_texture_count,
         )?;
         let source_texture_bytes = (0..plan.images.len()).try_fold(0_u64, |total, asset| {
             let image = decoded.image(asset);
@@ -115,7 +121,11 @@ impl GpuRequirements {
             source_texture_bytes,
             canvas_texture_bytes,
             layer_texture_bytes,
-            effect_texture_bytes: 0,
+            effect_texture_bytes: estimated_texture_bytes(
+                plan.canvas.width,
+                plan.canvas.height,
+                effect_texture_count,
+            )?,
             working_texture_bytes,
             readback_buffer_bytes: copy_bytes,
             parameter_buffer_bytes,

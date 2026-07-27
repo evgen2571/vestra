@@ -72,7 +72,7 @@ fn project_requirements_construct_the_requested_device_limits() {
 }
 
 #[test]
-fn texture_estimates_cover_common_sizes_and_phase_one_roles() {
+fn texture_estimates_cover_common_sizes_and_working_texture_roles() {
     for (width, height, expected) in [
         (1, 1, 4_u64),
         (319, 181, 230_956),
@@ -112,10 +112,15 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
         estimates.layer_texture_bytes,
         estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1).expect("layer bytes")
     );
-    assert_eq!(estimates.effect_texture_bytes, 0);
+    assert_eq!(
+        estimates.effect_texture_bytes,
+        estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2).expect("effect bytes")
+    );
     assert_eq!(
         estimates.working_texture_bytes,
-        estimates.canvas_texture_bytes + estimates.layer_texture_bytes
+        estimates.canvas_texture_bytes
+            + estimates.layer_texture_bytes
+            + estimates.effect_texture_bytes
     );
     assert_eq!(
         estimates.peak_parameter_buffer_bytes,

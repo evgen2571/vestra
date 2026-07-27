@@ -319,4 +319,109 @@ mod tests {
             .is_empty()
         );
     }
+
+    #[test]
+    fn current_effect_catalogue_has_complete_pass_coverage() {
+        let cases = [
+            (EvaluatedEffect::Brightness { amount: 0.1 }, 1),
+            (EvaluatedEffect::Contrast { amount: 0.9 }, 1),
+            (EvaluatedEffect::Saturation { amount: 0.8 }, 1),
+            (
+                EvaluatedEffect::Tint {
+                    colour: [1, 2, 3, 255],
+                    amount: 0.5,
+                },
+                1,
+            ),
+            (EvaluatedEffect::GaussianBlur { radius: 1.0 }, 2),
+            (
+                EvaluatedEffect::DirectionalBlur {
+                    radius: 1.0,
+                    angle_degrees: 0.0,
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::ZoomBlur {
+                    radius: 1.0,
+                    samples: 4,
+                    anchor: Point { x: 0.5, y: 0.5 },
+                    direction: ZoomBlurDirection::Centered,
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::Glow {
+                    threshold: 0.5,
+                    radius: 1.0,
+                    intensity: 1.0,
+                    colour: [255, 255, 255, 255],
+                },
+                4,
+            ),
+            (
+                EvaluatedEffect::ChromaticAberration {
+                    amount: 1.0,
+                    angle_degrees: 0.0,
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::Vignette {
+                    amount: 0.5,
+                    radius: 0.5,
+                    softness: 0.5,
+                    colour: [0, 0, 0, 255],
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::Sharpen {
+                    amount: 0.5,
+                    radius: 1.0,
+                },
+                3,
+            ),
+            (
+                EvaluatedEffect::ColorAdjust {
+                    exposure: 0.1,
+                    gamma: 1.1,
+                    black_point: 0.0,
+                    white_point: 1.0,
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::MotionBlur {
+                    radius: 1.0,
+                    angle_degrees: 0.0,
+                    intensity: 1.0,
+                    shutter_angle: 180.0,
+                    max_radius: 1.0,
+                    samples: 4,
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::CameraShake {
+                    local_time: 0,
+                    position_amount: 1.0,
+                    rotation_radians: 0.1,
+                    scale_amount: 0.1,
+                    frequency: 1.0,
+                    seed: 7,
+                    attack: 0.0,
+                    decay: 0.0,
+                },
+                0,
+            ),
+        ];
+        for (effect, expected_passes) in cases {
+            assert_eq!(
+                effect_pass_plan(&effect).as_slice().len(),
+                expected_passes,
+                "{effect:?}"
+            );
+        }
+    }
 }

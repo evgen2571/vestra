@@ -84,7 +84,9 @@ why a requested crop was not retained. The WGPU backend is headless and uses
 the same evaluated frames and decoded source bytes as CPU; it uploads full
 decoded images once, uses persistent output/readback resources, and transfers
 each completed RGBA frame back to CPU for FFmpeg. It does not implement
-zero-copy or hardware encoding, windowed preview, or advanced GPU effects.
+zero-copy or hardware encoding, windowed preview, or asynchronous readback.
+Current visual effects and blend modes execute through the same evaluated
+effect-pass ordering as CPU.
 
 ## Effects-ready v1
 

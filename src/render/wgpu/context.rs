@@ -7,7 +7,7 @@ use crate::{Category, Diagnostic, plan::RenderPlan, render::AdapterMetadata};
 use super::{
     diagnostics::{diagnostic, requested_backends},
     requirements::GpuRequirements,
-    texture_pool::WORKING_FORMAT,
+    texture_pool::{WORKING_FORMAT, WORKING_TEXTURE_USAGE},
 };
 
 pub(super) struct GpuContext {
@@ -45,18 +45,15 @@ impl GpuContext {
             )
         })?;
         let adapter_request = adapter_request_started.elapsed();
-        let required_texture_usage = wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::STORAGE_BINDING
-            | wgpu::TextureUsages::COPY_SRC;
         if !adapter
             .get_texture_format_features(WORKING_FORMAT)
             .allowed_usages
-            .contains(required_texture_usage)
+            .contains(WORKING_TEXTURE_USAGE)
         {
             return Err(Diagnostic::error(
                 "WGPU-TEXTURE-FORMAT",
                 Category::Backend,
-                "WGPU adapter does not support Rgba8Unorm sampled storage working textures",
+                "WGPU adapter does not support Rgba8Unorm sampled, storage, and copy working textures",
                 "",
             ));
         }
@@ -72,21 +69,6 @@ impl GpuContext {
         };
         let adapter_limits = adapter.limits();
         requirements.validate(&adapter_limits, plan)?;
-        let required_texture_usage = wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::STORAGE_BINDING
-            | wgpu::TextureUsages::COPY_SRC;
-        if !adapter
-            .get_texture_format_features(WORKING_FORMAT)
-            .allowed_usages
-            .contains(required_texture_usage)
-        {
-            return Err(Diagnostic::error(
-                "WGPU-TEXTURE-FORMAT",
-                Category::Backend,
-                "WGPU adapter cannot use Rgba8Unorm as the sampled, storage, and readback texture format",
-                "",
-            ));
-        }
         let requested_limits = requirements.requested_device_limits(plan)?;
         let device_request_started = Instant::now();
         let (device, queue) = pollster::block_on(adapter.request_device(

@@ -8,7 +8,7 @@ use crate::{
     domain::Point,
     plan::{
         ActiveSchedule, CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource,
-        EvaluatedFrame, ScheduleAction, ScheduledItem, compile,
+        EvaluatedEffect, EvaluatedFrame, ScheduleAction, ScheduledItem, TimedEffect, compile,
     },
     project::{ValidationOptions, load_and_validate},
     render::{CpuBackend, RenderBackend},
@@ -339,6 +339,158 @@ fn gpu_canonical_timeline_frames_match_cpu_within_two_channels() {
         assert!(
             difference.maximum_absolute_channel_error <= 2,
             "canonical frame {frame_index} raw parity exceeded tolerance: {difference:?}"
+        );
+    }
+}
+
+#[test]
+fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("RGBA parity fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    // Exercise odd output dimensions as well as the fixture's transparent,
+    // partial-alpha, sharp-edge, and nonuniform-colour source pixels.
+    plan.canvas.width = 173;
+    plan.canvas.height = 129;
+    // Preparation allocates every reusable working role the cases below use.
+    plan.layers[0].effects = vec![TimedEffect {
+        start: 0,
+        end: u128::MAX,
+        effect: CompiledEffect::Glow {
+            threshold: Track::new(0.4),
+            radius: Track::new(2.0),
+            intensity: Track::new(0.8),
+            colour: [255, 170, 60, 255],
+        },
+    }];
+    plan.compilation.effect_pass_count = 4;
+    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+        return;
+    };
+    let mut cpu = CpuBackend::new(&plan, decoded);
+    let base = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let cases = [
+        (
+            "brightness",
+            EvaluatedEffect::Brightness { amount: 0.12 },
+            2,
+        ),
+        ("contrast", EvaluatedEffect::Contrast { amount: 1.18 }, 2),
+        (
+            "saturation",
+            EvaluatedEffect::Saturation { amount: 0.63 },
+            2,
+        ),
+        (
+            "tint",
+            EvaluatedEffect::Tint {
+                colour: [20, 170, 255, 255],
+                amount: 0.32,
+            },
+            2,
+        ),
+        (
+            "gaussian",
+            EvaluatedEffect::GaussianBlur { radius: 2.25 },
+            4,
+        ),
+        (
+            "glow",
+            EvaluatedEffect::Glow {
+                threshold: 0.4,
+                radius: 2.25,
+                intensity: 0.8,
+                colour: [255, 170, 60, 255],
+            },
+            5,
+        ),
+        (
+            "sharpen",
+            EvaluatedEffect::Sharpen {
+                amount: 0.65,
+                radius: 2.25,
+            },
+            5,
+        ),
+        (
+            "directional blur",
+            EvaluatedEffect::DirectionalBlur {
+                radius: 4.0,
+                angle_degrees: 31.0,
+            },
+            4,
+        ),
+        (
+            "zoom blur",
+            EvaluatedEffect::ZoomBlur {
+                radius: 8.0,
+                samples: 9,
+                anchor: Point { x: 0.37, y: 0.61 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            5,
+        ),
+        (
+            "motion blur",
+            EvaluatedEffect::MotionBlur {
+                radius: 4.0,
+                angle_degrees: 31.0,
+                intensity: 1.0,
+                shutter_angle: 180.0,
+                max_radius: 8.0,
+                samples: 9,
+            },
+            4,
+        ),
+        (
+            "chromatic aberration",
+            EvaluatedEffect::ChromaticAberration {
+                amount: 2.0,
+                angle_degrees: 20.0,
+            },
+            4,
+        ),
+        (
+            "vignette",
+            EvaluatedEffect::Vignette {
+                amount: 0.7,
+                radius: 0.45,
+                softness: 0.25,
+                colour: [10, 20, 50, 255],
+            },
+            2,
+        ),
+        (
+            "color adjustment",
+            EvaluatedEffect::ColorAdjust {
+                exposure: 0.2,
+                gamma: 1.3,
+                black_point: 0.05,
+                white_point: 0.92,
+            },
+            3,
+        ),
+    ];
+    for (name, effect, tolerance) in cases {
+        let mut frame = base.clone();
+        frame.layers[0].effects = vec![effect];
+        let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+        let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU effect frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("GPU effect frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
+        assert!(
+            difference.maximum_absolute_channel_error <= tolerance,
+            "{name} parity exceeded tolerance {tolerance}: {difference:?}"
         );
     }
 }

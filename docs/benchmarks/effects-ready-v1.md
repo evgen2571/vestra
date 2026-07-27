@@ -12,6 +12,14 @@ scenarios are `baseline`, `basic_colour`, `gaussian_small`, `gaussian_large`,
 `global_post`, `impact`, `heavy_impact`, `transitions`, `zoom_blur`, and
 `combined`.
 
+The strict real-GPU sequence is available as
+`VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 ./scripts/verify-wgpu-phase2.sh`.
+It runs Gaussian, glow, sharpen, directional/zoom/motion blur, combined chains,
+and global post-effects at 320x180, 720x1280, and 1920x1080. It prints the
+selected adapter, backend, resolution, warmups, samples, and CPU-observed
+encoding/submission/readback timing. Do not interpret software-adapter timings
+as GPU acceleration.
+
 ```bash
 TMPDIR=target/tmp VIDEO_EDITOR_BENCH_BACKEND=cpu \
   VIDEO_EDITOR_BENCH_SCENARIO=combined cargo bench --bench animation_effects

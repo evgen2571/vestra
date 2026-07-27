@@ -295,10 +295,14 @@ impl GpuFramePlan {
                         pass,
                         EffectPass::GlowComposite { .. } | EffectPass::UnsharpComposite { .. }
                     );
+                    let source_context = match scope {
+                        EffectScope::Layer => "layer effect source",
+                        EffectScope::Global => "global effect source",
+                    };
                     if states[index(*source)].value != Some(*expected_source_value) {
                         return Err(stale_value(
                             operation_index,
-                            "effect source",
+                            source_context,
                             *source,
                             *expected_source_value,
                             states[index(*source)].value,

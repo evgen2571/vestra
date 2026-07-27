@@ -178,15 +178,30 @@ fn main() {
         .adapter
         .as_ref()
         .map(|adapter| adapter.performance_class());
+    if let Some(adapter) = summary.adapter.as_ref() {
+        let class = adapter.performance_class();
+        println!(
+            "WGPU adapter: name={} backend={} device_type={} driver={} driver_info={} class={} software={}",
+            adapter.adapter_name,
+            adapter.graphics_backend,
+            adapter.device_type,
+            adapter.driver_name,
+            adapter.driver_info,
+            class.as_str(),
+            class.is_software(),
+        );
+    }
     match adapter_class {
-        Some(AdapterPerformanceClass::Software) => println!(
+        Some(AdapterPerformanceClass::Software | AdapterPerformanceClass::Cpu) => println!(
             "Software WGPU adapter benchmark. This result verifies execution and measurement infrastructure; it is not representative of hardware-GPU performance."
         ),
-        Some(AdapterPerformanceClass::Hardware) => println!(
-            "Hardware WGPU adapter benchmark. Adapter metadata below identifies the measured device."
-        ),
-        Some(AdapterPerformanceClass::Unknown) => println!(
-            "WGPU adapter class is unknown. Performance status is not inferred; adapter metadata below identifies the measured device."
+        Some(AdapterPerformanceClass::IntegratedGpu | AdapterPerformanceClass::DiscreteGpu) => {
+            println!(
+                "Hardware WGPU adapter benchmark. Adapter metadata above identifies the measured device."
+            )
+        }
+        Some(AdapterPerformanceClass::VirtualGpu | AdapterPerformanceClass::Unknown) => println!(
+            "WGPU adapter class is not a confirmed hardware GPU. Performance status is not inferred."
         ),
         None if selected_backend == video_editor::render::RenderBackendKind::Wgpu => println!(
             "WGPU benchmark did not report adapter metadata; performance status is unknown."

@@ -76,10 +76,14 @@ direct-colour path from applying the same logical transform twice.
 Glow and sharpen copy their pre-effect logical value to Auxiliary before their
 working passes start. Their final composite reads that retained value while
 writing the alternate effect texture. The frame-plan validator tracks each
-texture's initialized state and monotonically assigned logical value, rejecting
-stale retained reads, invalid overwrites, source/destination aliasing, and a
-readback of anything other than the final value. Auxiliary is reused only after
-the preceding effect's final composite consumes it.
+texture's initialized state and monotonically assigned logical value. Every
+effect pass declares its expected source and fresh result value; composition
+declares expected layer and canvas values plus its fresh canvas result; readback
+declares the final expected value. The validator rejects stale retained reads,
+stale local/global effect inputs, invalid overwrites, source/destination
+aliasing, stale composition reads, and readback of anything other than the
+final value. Auxiliary is reused only after the preceding effect's final
+composite consumes it.
 The final slot is explicit in the plan, including empty, odd-layer, even-layer,
 and global-effect frames. `ApplyEffect` carries local/global scope, optional
 layer index, exact logical `EffectPass`, source, destination, auxiliary slot,
@@ -192,12 +196,14 @@ Camera shake only changes evaluated geometry and therefore produces no pixel
 pass. Presets and transitions are ordinary evaluated effects by this stage; no
 WGPU-specific expansion exists.
 
-Gaussian radius has one backend-neutral representation:
-`(clamp(radius, 0, 32) * 4).round() / 4`. Gaussian, directional, zoom, and
-motion blur treat a canonical radius at or below `0.01` as identity; glow also
-requires nonzero intensity, and sharpen requires nonzero amount. The same
-predicates drive evaluated pass planning and CPU execution, while WGPU receives
-the canonical Gaussian value in its parameter record.
+Gaussian-derived passes use one backend-neutral representation:
+`(clamp(radius, 0, 32) * 4).round() / 4`. Gaussian blur, glow, and sharpen use
+that canonical value to determine identity and encode Gaussian parameters.
+Directional, zoom, and motion blur preserve their raw evaluated sampling
+radius and are identity only at `radius <= 0.01`; they are never quarter-step
+quantized. The same family-specific predicates drive evaluated pass planning
+and CPU execution, while WGPU receives the canonical Gaussian or raw sampling
+value appropriate to its pass.
 
 Run the strict real-GPU verification sequence with:
 
@@ -207,10 +213,14 @@ VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 \
   ./scripts/verify-wgpu-phase2.sh
 ```
 
-The script fails if no compatible adapter is available; its optional benchmark
-matrix covers 320x180, 720x1280, and 1920x1080. Software adapters validate
-correctness only. Real-hardware CPU/WGPU performance benchmarking was deferred
-because this environment has no suitable GPU.
+The script fails if no compatible adapter is available or an adapter-dependent
+test skips. It runs the effect catalogue, blend matrix, generated-effect
+fixtures, chain/timeline coverage, and representative explicit-WGPU renders;
+its optional benchmark matrix covers 320x180, 720x1280, and 1920x1080. Render
+JSON and benchmark output include adapter name, backend, device type, driver,
+classification, and software status. Software adapters validate correctness
+only. Real-hardware CPU/WGPU performance benchmarking was deferred because this
+environment has no suitable GPU.
 
 The public example asset is `examples/assets/red.png`, currently a 160x90
 1-bit indexed-colour PNG. Its exact bytes and PNG header are protected by

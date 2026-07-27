@@ -67,7 +67,9 @@ pub(super) enum GpuOperation {
         pass_index: usize,
         pass: EffectPass,
         source: TextureSlot,
+        expected_source_value: u64,
         destination: TextureSlot,
+        result_value: u64,
         auxiliary: Option<TextureSlot>,
         auxiliary_value: Option<u64>,
         parameters_index: u32,
@@ -276,7 +278,9 @@ impl GpuFramePlan {
                     layer_index,
                     pass,
                     source,
+                    expected_source_value,
                     destination,
+                    result_value,
                     auxiliary,
                     auxiliary_value,
                     ..
@@ -291,10 +295,20 @@ impl GpuFramePlan {
                         pass,
                         EffectPass::GlowComposite { .. } | EffectPass::UnsharpComposite { .. }
                     );
+                    if states[index(*source)].value != Some(*expected_source_value) {
+                        return Err(stale_value(
+                            operation_index,
+                            "effect source",
+                            *source,
+                            *expected_source_value,
+                            states[index(*source)].value,
+                        ));
+                    }
                     if !scope_is_valid
                         || !destination_is_effect
                         || source == destination
                         || !states[index(*source)].initialized
+                        || *result_value != next_value
                         || auxiliary.is_some_and(|slot| {
                             slot == *destination || !states[index(slot)].initialized
                         })
@@ -310,7 +324,7 @@ impl GpuFramePlan {
                             "uses an invalid effect texture dependency",
                         ));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states[index(*destination)] = TextureState::written(*result_value);
                     next_value += 1;
                 }
                 GpuOperation::CompositeLayer {
@@ -322,6 +336,24 @@ impl GpuFramePlan {
                     result_value,
                     ..
                 } => {
+                    if states[index(*layer_source)].value != Some(*expected_layer_value) {
+                        return Err(stale_value(
+                            operation_index,
+                            "composition layer source",
+                            *layer_source,
+                            *expected_layer_value,
+                            states[index(*layer_source)].value,
+                        ));
+                    }
+                    if states[index(*canvas_source)].value != Some(*expected_canvas_value) {
+                        return Err(stale_value(
+                            operation_index,
+                            "composition canvas source",
+                            *canvas_source,
+                            *expected_canvas_value,
+                            states[index(*canvas_source)].value,
+                        ));
+                    }
                     if !matches!(
                         layer_source,
                         TextureSlot::Layer | TextureSlot::EffectA | TextureSlot::EffectB
@@ -330,8 +362,6 @@ impl GpuFramePlan {
                         || canvas_source == canvas_destination
                         || !states[index(*layer_source)].initialized
                         || !states[index(*canvas_source)].initialized
-                        || states[index(*layer_source)].value != Some(*expected_layer_value)
-                        || states[index(*canvas_source)].value != Some(*expected_canvas_value)
                         || *result_value != next_value
                     {
                         return Err(invalid(
@@ -347,9 +377,17 @@ impl GpuFramePlan {
                     source,
                     expected_value,
                 } => {
+                    if states[index(*source)].value != Some(*expected_value) {
+                        return Err(stale_value(
+                            operation_index,
+                            "readback source",
+                            *source,
+                            *expected_value,
+                            states[index(*source)].value,
+                        ));
+                    }
                     if operation_index + 1 != self.operations.len()
                         || !states[index(*source)].initialized
-                        || states[index(*source)].value != Some(*expected_value)
                     {
                         return Err(invalid(operation_index, "has an invalid readback source"));
                     }
@@ -408,7 +446,9 @@ fn append_effect_chain(
             pass_index,
             pass,
             source: *current,
+            expected_source_value: *current_value,
             destination,
+            result_value: *next_value,
             auxiliary,
             auxiliary_value: pass.requires_original().then_some(original_value),
             parameters_index: *parameter_count,
@@ -486,6 +526,19 @@ fn invalid(operation_index: usize, message: &str) -> Diagnostic {
         Category::Backend,
         format!("GPU frame operation {operation_index} {message}"),
         "",
+    )
+}
+
+fn stale_value(
+    operation_index: usize,
+    context: &str,
+    slot: TextureSlot,
+    expected: u64,
+    actual: Option<u64>,
+) -> Diagnostic {
+    invalid(
+        operation_index,
+        &format!("{context} texture {slot:?} expected logical value {expected}, actual {actual:?}"),
     )
 }
 
@@ -577,6 +630,45 @@ mod tests {
             "WGPU-FRAME-PLAN"
         );
 
+        let mut stale_canvas = GpuFramePlan::build(&frame);
+        let GpuOperation::CompositeLayer {
+            expected_canvas_value,
+            ..
+        } = stale_canvas
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::CompositeLayer { .. }))
+            .expect("frame contains a composite")
+        else {
+            unreachable!("the match above selected a composite")
+        };
+        *expected_canvas_value = 0;
+        assert_eq!(
+            stale_canvas
+                .validate(plan.images.len())
+                .expect_err("stale canvas value must be rejected")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
+
+        let mut stale_result = GpuFramePlan::build(&frame);
+        let GpuOperation::CompositeLayer { result_value, .. } = stale_result
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::CompositeLayer { .. }))
+            .expect("frame contains a composite")
+        else {
+            unreachable!("the match above selected a composite")
+        };
+        *result_value = 0;
+        assert_eq!(
+            stale_result
+                .validate(plan.images.len())
+                .expect_err("mismatched composition result must be rejected")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
+
         let mut stale_readback = GpuFramePlan::build(&frame);
         let GpuOperation::CopyForReadback { expected_value, .. } = stale_readback
             .operations
@@ -590,6 +682,62 @@ mod tests {
             stale_readback
                 .validate(plan.images.len())
                 .expect_err("stale readback value must be rejected")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
+    }
+
+    #[test]
+    fn validation_rejects_stale_global_effect_input_and_result_values() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 7,
+            height: 5,
+            layers: vec![],
+            post_effects: vec![EvaluatedEffect::Vignette {
+                amount: 0.4,
+                radius: 0.6,
+                softness: 0.2,
+                colour: [0, 0, 0, 255],
+            }],
+            evaluated_track_count: 0,
+        };
+        let mut stale_input = GpuFramePlan::build(&frame);
+        let GpuOperation::ApplyEffect {
+            expected_source_value,
+            ..
+        } = stale_input
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::ApplyEffect { .. }))
+            .expect("global effect exists")
+        else {
+            unreachable!("the match above selected an effect")
+        };
+        *expected_source_value = 0;
+        assert_eq!(
+            stale_input
+                .validate(0)
+                .expect_err("global effect must read the final canvas value")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
+
+        let mut stale_result = GpuFramePlan::build(&frame);
+        let GpuOperation::ApplyEffect { result_value, .. } = stale_result
+            .operations
+            .iter_mut()
+            .find(|operation| matches!(operation, GpuOperation::ApplyEffect { .. }))
+            .expect("global effect exists")
+        else {
+            unreachable!("the match above selected an effect")
+        };
+        *result_value = 0;
+        assert_eq!(
+            stale_result
+                .validate(0)
+                .expect_err("global effect result must be fresh")
                 .code,
             "WGPU-FRAME-PLAN"
         );
@@ -616,7 +764,9 @@ mod tests {
             pass_index,
             pass,
             source,
+            expected_source_value: u64::from(parameters_index),
             destination,
+            result_value: u64::from(parameters_index) + 1,
             auxiliary,
             auxiliary_value: None,
             parameters_index,
@@ -893,7 +1043,9 @@ mod tests {
                         colour: [0, 0, 0, 255],
                     },
                     source: TextureSlot::CanvasA,
+                    expected_source_value: 1,
                     destination: TextureSlot::CanvasB,
+                    result_value: 2,
                     auxiliary: Some(TextureSlot::CanvasA),
                     auxiliary_value: None,
                     parameters_index: 1,

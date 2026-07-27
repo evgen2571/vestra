@@ -2,7 +2,7 @@
 set -euo pipefail
 
 asset=examples/assets/red.png
-expected_hash=2cfe142de2e6fc4df682c6c77a75011c0120476ce65e0c79f8be2895d6428037
+expected_hash=1546bf939a4978f44474165e24607bb3d7542f8c84bd6c522e7249e054f4247a
 actual_hash=$(sha256sum "$asset" | awk '{print $1}')
 
 if [[ "$actual_hash" != "$expected_hash" ]]; then
@@ -22,6 +22,6 @@ if data[:8] != b"\x89PNG\r\n\x1a\n":
 width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(
     ">IIBBBBB", data[16:29]
 )
-if (width, height, bit_depth, color_type, compression, filtering, interlace) != (800, 2778, 8, 6, 0, 0, 0):
-    raise SystemExit("red.png must be an 800x2778 RGBA PNG")
+if (width, height, bit_depth, color_type, compression, filtering, interlace) != (160, 90, 1, 3, 0, 0, 0):
+    raise SystemExit("red.png must be a 160x90 1-bit indexed-colour PNG")
 PY

@@ -212,6 +212,11 @@ matrix covers 320x180, 720x1280, and 1920x1080. Software adapters validate
 correctness only. Real-hardware CPU/WGPU performance benchmarking was deferred
 because this environment has no suitable GPU.
 
+The public example asset is `examples/assets/red.png`, currently a 160x90
+1-bit indexed-colour PNG. Its exact bytes and PNG header are protected by
+`./scripts/verify-public-asset.sh`; WGPU-specific image fixtures remain under
+`tests/assets`.
+
 To add a future effect, extend the shared `EffectPass`, its CPU executor,
 WGPU parameter encoding, shader/pipeline mapping, frame-plan tests, capability
 diagnostics, parity fixture, and benchmark. Do not add a backend-specific

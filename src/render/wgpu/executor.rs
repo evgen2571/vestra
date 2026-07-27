@@ -125,6 +125,9 @@ impl FrameBindGroups {
             if frame.working.has_effect_b() {
                 slots.push(TextureSlot::EffectB);
             }
+            if frame.working.has_auxiliary() {
+                slots.push(TextureSlot::Auxiliary);
+            }
             for source in slots.iter().copied() {
                 for destination in slots.iter().copied() {
                     if source == destination {
@@ -308,7 +311,6 @@ pub(super) fn encode_and_submit(
                 parameters_index,
                 ..
             } => {
-                debug_assert_eq!(*layer_source, super::frame_plan::TextureSlot::Layer);
                 debug_assert_eq!(
                     *canvas_destination,
                     match canvas_source {
@@ -331,6 +333,32 @@ pub(super) fn encode_and_submit(
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
+            }
+            GpuOperation::CopyForEffect {
+                source,
+                destination,
+                ..
+            } => {
+                encoder.copy_texture_to_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &frame.working.get(*source).texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: &frame.working.get(*destination).texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                metrics.texture_copies += 1;
             }
             GpuOperation::ApplyEffect {
                 source,

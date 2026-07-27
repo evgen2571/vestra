@@ -7,6 +7,8 @@
 
 use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 
+use super::frame_plan::plan_requires_auxiliary;
+
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
 const BASE_WORKING_TEXTURE_COUNT: u64 = 3;
 
@@ -15,10 +17,15 @@ const BASE_WORKING_TEXTURE_COUNT: u64 = 3;
 /// textures, staging allocations, and implementation-specific alignment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ResourceEstimates {
+    pub(super) source_texture_count: u64,
+    pub(super) working_texture_count: u64,
+    pub(super) effect_texture_count: u64,
+    pub(super) auxiliary_texture_count: u64,
     pub(super) source_texture_bytes: u64,
     pub(super) canvas_texture_bytes: u64,
     pub(super) layer_texture_bytes: u64,
     pub(super) effect_texture_bytes: u64,
+    pub(super) auxiliary_texture_bytes: u64,
     pub(super) working_texture_bytes: u64,
     pub(super) readback_buffer_bytes: u64,
     pub(super) parameter_buffer_bytes: u64,
@@ -101,10 +108,11 @@ impl GpuRequirements {
             1 => 1,
             _ => 2,
         };
+        let auxiliary_texture_count = u64::from(plan_requires_auxiliary(plan));
         let working_texture_bytes = estimated_texture_bytes(
             plan.canvas.width,
             plan.canvas.height,
-            BASE_WORKING_TEXTURE_COUNT + effect_texture_count,
+            BASE_WORKING_TEXTURE_COUNT + effect_texture_count + auxiliary_texture_count,
         )?;
         let source_texture_bytes = (0..plan.images.len()).try_fold(0_u64, |total, asset| {
             let image = decoded.image(asset);
@@ -122,6 +130,12 @@ impl GpuRequirements {
             .and_then(|value| value.checked_add(parameter_buffer_bytes))
             .ok_or_else(|| resource_overflow("persistent WGPU allocation estimate overflow"))?;
         let resource_estimates = ResourceEstimates {
+            source_texture_count: plan.images.len() as u64,
+            working_texture_count: BASE_WORKING_TEXTURE_COUNT
+                + effect_texture_count
+                + auxiliary_texture_count,
+            effect_texture_count,
+            auxiliary_texture_count,
             source_texture_bytes,
             canvas_texture_bytes,
             layer_texture_bytes,
@@ -129,6 +143,11 @@ impl GpuRequirements {
                 plan.canvas.width,
                 plan.canvas.height,
                 effect_texture_count,
+            )?,
+            auxiliary_texture_bytes: estimated_texture_bytes(
+                plan.canvas.width,
+                plan.canvas.height,
+                auxiliary_texture_count,
             )?,
             working_texture_bytes,
             readback_buffer_bytes: copy_bytes,

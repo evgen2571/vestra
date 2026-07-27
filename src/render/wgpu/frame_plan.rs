@@ -2,12 +2,13 @@
 //!
 //! The texture compositor stores encoded, straight-alpha RGBA values in
 //! `Rgba8Unorm` working textures. `CanvasA` and `CanvasB` ping-pong for normal
-//! source-over composition. `Layer`, `EffectA`, and `EffectB` are fixed slots,
+//! source-over composition. `Layer`, `EffectA`, `EffectB`, and conditionally
+//! allocated `Auxiliary` are fixed slots,
 //! so the normal path never needs a frame-sized allocation after preparation.
 
 use crate::{
     Category, Diagnostic,
-    plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource},
+    plan::{CompiledEffect, EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::effects::{EffectPass, effect_pass_plan},
 };
 
@@ -20,6 +21,7 @@ pub(super) enum TextureSlot {
     Layer,
     EffectA,
     EffectB,
+    Auxiliary,
 }
 
 /// Whether a pass belongs to a rendered layer or to the final canvas.  Keeping
@@ -48,6 +50,14 @@ pub(super) enum GpuOperation {
         destination: TextureSlot,
         parameters_index: u32,
     },
+    /// Retains the pre-effect value needed by a final glow or sharpen pass.
+    /// This is a texture-to-texture copy in the frame's single encoder, not a
+    /// new working-texture allocation.
+    CopyForEffect {
+        source: TextureSlot,
+        destination: TextureSlot,
+        value: u64,
+    },
     /// An executable effect pass. The operation owns the logical pass so the
     /// executor never has to rediscover semantics from an evaluated layer.
     ApplyEffect {
@@ -59,6 +69,7 @@ pub(super) enum GpuOperation {
         source: TextureSlot,
         destination: TextureSlot,
         auxiliary: Option<TextureSlot>,
+        auxiliary_value: Option<u64>,
         parameters_index: u32,
     },
     CompositeLayer {
@@ -92,6 +103,9 @@ impl GpuFramePlan {
             destination: TextureSlot::CanvasA,
             parameters_index: parameter_count,
         });
+        let mut next_value = 1_u64;
+        let mut canvas_value = next_value;
+        next_value += 1;
         parameter_count += 1;
 
         let mut canvas = TextureSlot::CanvasA;
@@ -115,6 +129,8 @@ impl GpuFramePlan {
             }
             parameter_count += 1;
             let mut layer_result = TextureSlot::Layer;
+            let mut layer_value = next_value;
+            next_value += 1;
             for (effect_index, effect) in layer.effects.iter().enumerate() {
                 append_effect_chain(
                     &mut operations,
@@ -124,6 +140,8 @@ impl GpuFramePlan {
                     effect_index,
                     effect,
                     &mut layer_result,
+                    &mut layer_value,
+                    &mut next_value,
                 );
             }
             let destination = alternate_canvas(canvas);
@@ -136,8 +154,11 @@ impl GpuFramePlan {
             });
             parameter_count += 1;
             canvas = destination;
+            canvas_value = next_value;
+            next_value += 1;
         }
         let mut final_texture = canvas;
+        let mut final_value = canvas_value;
         for (effect_index, effect) in frame.post_effects.iter().enumerate() {
             append_effect_chain(
                 &mut operations,
@@ -147,6 +168,8 @@ impl GpuFramePlan {
                 effect_index,
                 effect,
                 &mut final_texture,
+                &mut final_value,
+                &mut next_value,
             );
         }
         operations.push(GpuOperation::CopyForReadback {
@@ -160,7 +183,8 @@ impl GpuFramePlan {
     }
 
     pub(super) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
-        let mut initialized = [false; 5];
+        let mut states = [TextureState::default(); 6];
+        let mut next_value = 1_u64;
         let mut expected_canvas = TextureSlot::CanvasA;
         let mut final_canvas = None;
         for (operation_index, operation) in self.operations.iter().enumerate() {
@@ -180,7 +204,7 @@ impl GpuFramePlan {
                 | GpuOperation::CompositeLayer {
                     parameters_index, ..
                 } => Some(*parameters_index),
-                GpuOperation::CopyForReadback { .. } => None,
+                GpuOperation::CopyForEffect { .. } | GpuOperation::CopyForReadback { .. } => None,
             };
             if let Some(parameter_index) = parameter_index
                 && parameter_index >= self.parameter_count
@@ -195,7 +219,8 @@ impl GpuFramePlan {
                     if *destination != TextureSlot::CanvasA || operation_index != 0 {
                         return Err(invalid(operation_index, "must clear CanvasA first"));
                     }
-                    initialized[index(*destination)] = true;
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
                 }
                 GpuOperation::RenderImageLayer {
                     source_asset_index,
@@ -211,13 +236,32 @@ impl GpuFramePlan {
                             "references an invalid source asset",
                         ));
                     }
-                    initialized[index(*destination)] = true;
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
                 }
                 GpuOperation::RenderSolidLayer { destination, .. } => {
                     if *destination != TextureSlot::Layer {
                         return Err(invalid(operation_index, "must render a layer into Layer"));
                     }
-                    initialized[index(*destination)] = true;
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
+                }
+                GpuOperation::CopyForEffect {
+                    source,
+                    destination,
+                    value,
+                } => {
+                    if *destination != TextureSlot::Auxiliary
+                        || source == destination
+                        || !states[index(*source)].initialized
+                        || states[index(*source)].value != Some(*value)
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "does not retain the expected original value",
+                        ));
+                    }
+                    states[index(*destination)] = states[index(*source)];
                 }
                 GpuOperation::ApplyEffect {
                     scope,
@@ -226,6 +270,7 @@ impl GpuFramePlan {
                     source,
                     destination,
                     auxiliary,
+                    auxiliary_value,
                     ..
                 } => {
                     let scope_is_valid = match scope {
@@ -241,18 +286,24 @@ impl GpuFramePlan {
                     if !scope_is_valid
                         || !destination_is_effect
                         || source == destination
-                        || !initialized[index(*source)]
-                        || auxiliary
-                            .is_some_and(|slot| slot == *destination || !initialized[index(slot)])
-                        || (auxiliary_is_required && auxiliary.is_none())
-                        || (!auxiliary_is_required && auxiliary.is_some())
+                        || !states[index(*source)].initialized
+                        || auxiliary.is_some_and(|slot| {
+                            slot == *destination || !states[index(slot)].initialized
+                        })
+                        || (auxiliary_is_required
+                            && (*auxiliary != Some(TextureSlot::Auxiliary)
+                                || auxiliary_value.is_none()
+                                || states[index(TextureSlot::Auxiliary)].value != *auxiliary_value))
+                        || (!auxiliary_is_required
+                            && (auxiliary.is_some() || auxiliary_value.is_some()))
                     {
                         return Err(invalid(
                             operation_index,
                             "uses an invalid effect texture dependency",
                         ));
                     }
-                    initialized[index(*destination)] = true;
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
                 }
                 GpuOperation::CompositeLayer {
                     layer_source,
@@ -266,19 +317,21 @@ impl GpuFramePlan {
                     ) || *canvas_source != expected_canvas
                         || *canvas_destination != alternate_canvas(expected_canvas)
                         || canvas_source == canvas_destination
-                        || !initialized[index(*layer_source)]
-                        || !initialized[index(*canvas_source)]
+                        || !states[index(*layer_source)].initialized
+                        || !states[index(*canvas_source)].initialized
                     {
                         return Err(invalid(
                             operation_index,
                             "has invalid canvas ping-pong sequencing",
                         ));
                     }
-                    initialized[index(*canvas_destination)] = true;
+                    states[index(*canvas_destination)] = TextureState::written(next_value);
+                    next_value += 1;
                     expected_canvas = *canvas_destination;
                 }
                 GpuOperation::CopyForReadback { source } => {
-                    if operation_index + 1 != self.operations.len() || !initialized[index(*source)]
+                    if operation_index + 1 != self.operations.len()
+                        || !states[index(*source)].initialized
                     {
                         return Err(invalid(operation_index, "has an invalid readback source"));
                     }
@@ -296,6 +349,10 @@ impl GpuFramePlan {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the frame-plan builder keeps all value-liveness state explicit at the call site"
+)]
 fn append_effect_chain(
     operations: &mut Vec<GpuOperation>,
     parameter_count: &mut u32,
@@ -304,19 +361,28 @@ fn append_effect_chain(
     effect_index: usize,
     effect: &EvaluatedEffect,
     current: &mut TextureSlot,
+    current_value: &mut u64,
+    next_value: &mut u64,
 ) {
     let passes = effect_pass_plan(effect);
     if passes.is_empty() {
         return;
     }
-    let original = *current;
+    let retains_original = passes
+        .as_slice()
+        .iter()
+        .any(|pass| pass.requires_original());
+    let original_value = *current_value;
+    if retains_original {
+        operations.push(GpuOperation::CopyForEffect {
+            source: *current,
+            destination: TextureSlot::Auxiliary,
+            value: original_value,
+        });
+    }
     for (pass_index, pass) in passes.as_slice().iter().copied().enumerate() {
         let destination = alternate_effect_destination(*current);
-        let auxiliary = matches!(
-            pass,
-            EffectPass::GlowComposite { .. } | EffectPass::UnsharpComposite { .. }
-        )
-        .then_some(original);
+        let auxiliary = pass.requires_original().then_some(TextureSlot::Auxiliary);
         operations.push(GpuOperation::ApplyEffect {
             scope,
             layer_index,
@@ -326,19 +392,24 @@ fn append_effect_chain(
             source: *current,
             destination,
             auxiliary,
+            auxiliary_value: pass.requires_original().then_some(original_value),
             parameters_index: *parameter_count,
         });
         *parameter_count += 1;
         *current = destination;
+        *current_value = *next_value;
+        *next_value += 1;
     }
 }
 
 fn alternate_effect_destination(source: TextureSlot) -> TextureSlot {
     match source {
         TextureSlot::EffectA => TextureSlot::EffectB,
-        TextureSlot::EffectB | TextureSlot::Layer | TextureSlot::CanvasA | TextureSlot::CanvasB => {
-            TextureSlot::EffectA
-        }
+        TextureSlot::EffectB
+        | TextureSlot::Layer
+        | TextureSlot::CanvasA
+        | TextureSlot::CanvasB
+        | TextureSlot::Auxiliary => TextureSlot::EffectA,
     }
 }
 
@@ -357,7 +428,38 @@ fn index(slot: TextureSlot) -> usize {
         TextureSlot::Layer => 2,
         TextureSlot::EffectA => 3,
         TextureSlot::EffectB => 4,
+        TextureSlot::Auxiliary => 5,
     }
+}
+
+#[derive(Clone, Copy, Default)]
+struct TextureState {
+    initialized: bool,
+    value: Option<u64>,
+}
+
+impl TextureState {
+    const fn written(value: u64) -> Self {
+        Self {
+            initialized: true,
+            value: Some(value),
+        }
+    }
+}
+
+/// Whether any compiled effect can need a retained pre-effect value.  The
+/// allocation is backend preparation-time only, so all frames share it.
+pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
+    plan.layers
+        .iter()
+        .flat_map(|layer| layer.effects.iter().map(|timed| &timed.effect))
+        .chain(plan.post_effects.iter().map(|timed| &timed.effect))
+        .any(|effect| {
+            matches!(
+                effect,
+                CompiledEffect::Glow { .. } | CompiledEffect::Sharpen { .. }
+            )
+        })
 }
 
 fn invalid(operation_index: usize, message: &str) -> Diagnostic {
@@ -455,6 +557,7 @@ mod tests {
             source,
             destination,
             auxiliary,
+            auxiliary_value: None,
             parameters_index,
         }
     }
@@ -722,6 +825,7 @@ mod tests {
                     source: TextureSlot::CanvasA,
                     destination: TextureSlot::CanvasB,
                     auxiliary: Some(TextureSlot::CanvasA),
+                    auxiliary_value: None,
                     parameters_index: 1,
                 },
                 GpuOperation::CopyForReadback {
@@ -733,6 +837,126 @@ mod tests {
         };
         assert_eq!(
             plan.validate(0).expect_err("invalid effect contract").code,
+            "WGPU-FRAME-PLAN"
+        );
+    }
+
+    #[test]
+    fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 7,
+            height: 5,
+            layers: vec![crate::plan::EvaluatedLayer {
+                source: EvaluatedSource::SolidColor {
+                    colour: [20, 40, 80, 255],
+                },
+                opacity: 0.75,
+                effects: vec![
+                    EvaluatedEffect::Brightness { amount: 0.1 },
+                    EvaluatedEffect::Contrast { amount: 1.1 },
+                    EvaluatedEffect::Saturation { amount: 0.8 },
+                    EvaluatedEffect::Tint {
+                        colour: [20, 60, 200, 255],
+                        amount: 0.25,
+                    },
+                ],
+                colour_transform: crate::plan::ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: vec![],
+            evaluated_track_count: 0,
+        };
+        let plan = GpuFramePlan::build(&frame);
+        let passes = plan
+            .operations
+            .iter()
+            .filter(|operation| matches!(operation, GpuOperation::ApplyEffect { .. }))
+            .count();
+        assert_eq!(passes, 4);
+        assert!(
+            plan.operations
+                .iter()
+                .all(|operation| !matches!(operation, GpuOperation::CopyForEffect { .. }))
+        );
+        plan.validate(0).expect("colour effects are planned once");
+    }
+
+    #[test]
+    fn chained_multipass_effects_retain_and_validate_their_original_values() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 7,
+            height: 5,
+            layers: vec![crate::plan::EvaluatedLayer {
+                source: EvaluatedSource::SolidColor {
+                    colour: [20, 40, 80, 255],
+                },
+                opacity: 1.0,
+                effects: vec![
+                    EvaluatedEffect::ChromaticAberration {
+                        amount: 2.0,
+                        angle_degrees: 30.0,
+                    },
+                    EvaluatedEffect::Glow {
+                        threshold: 0.4,
+                        radius: 2.0,
+                        intensity: 0.8,
+                        colour: [255, 200, 100, 255],
+                    },
+                    EvaluatedEffect::Sharpen {
+                        amount: 0.5,
+                        radius: 2.0,
+                    },
+                ],
+                colour_transform: crate::plan::ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Overlay,
+            }],
+            post_effects: vec![],
+            evaluated_track_count: 0,
+        };
+        let mut plan = GpuFramePlan::build(&frame);
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(operation, GpuOperation::CopyForEffect { .. }))
+                .count(),
+            2
+        );
+        assert!(
+            plan.operations
+                .iter()
+                .filter_map(|operation| match operation {
+                    GpuOperation::ApplyEffect {
+                        pass,
+                        auxiliary,
+                        auxiliary_value,
+                        ..
+                    } if pass.requires_original() => Some((*auxiliary, *auxiliary_value)),
+                    _ => None,
+                })
+                .all(|(slot, value)| slot == Some(TextureSlot::Auxiliary) && value.is_some())
+        );
+        plan.validate(0).expect("retained originals are live");
+        let stale = plan
+            .operations
+            .iter_mut()
+            .rev()
+            .find_map(|operation| match operation {
+                GpuOperation::ApplyEffect {
+                    auxiliary_value: Some(value),
+                    ..
+                } => Some(value),
+                _ => None,
+            })
+            .expect("chain has a retained composite");
+        *stale = 0;
+        assert_eq!(
+            plan.validate(0)
+                .expect_err("stale auxiliary must be rejected")
+                .code,
             "WGPU-FRAME-PLAN"
         );
     }

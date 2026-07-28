@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use tempfile::tempdir;
-use video_editor::{BackendPreference, CancellationToken, Editor, PreflightOptions, RenderRequest};
+use video_editor::{
+    BackendPreference, CancellationToken, Editor, EditorError, PreflightOptions, RenderRequest,
+};
 
 fn fixture(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -46,10 +48,83 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
         .expect("CPU render");
     assert!(result.output.is_file());
     assert_eq!(result.total_frames, 1);
+    assert!(result.timings.operation_total_ms >= result.timings.semantic_validation_ms);
+    assert!(result.timings.operation_total_ms >= result.timings.preflight_ms);
+    assert_eq!(result.timings.total_ms, result.timings.operation_total_ms);
     assert_eq!(
         events.last().map(|event| event.kind.as_str()),
         Some("completed")
     );
+}
+
+#[test]
+fn render_validation_and_preflight_failures_keep_operation_timings() {
+    let directory = tempdir().expect("temporary directory");
+    let invalid = r##"{"schema_version":1,"output":{"path":"out.mp4","width":0,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let project = video_editor::Project::from_json(invalid, directory.path()).expect("project");
+    let validation_error = Editor::new()
+        .render(
+            &project,
+            RenderRequest {
+                backend: BackendPreference::Cpu,
+                ..RenderRequest::default()
+            },
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect_err("semantic validation fails");
+    let EditorError::Project { timings, .. } = validation_error else {
+        panic!("expected project error");
+    };
+    assert!(timings.operation_total_ms >= timings.semantic_validation_ms);
+    assert!(timings.operation_total_ms >= timings.preflight_ms);
+
+    let valid = r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let project = video_editor::Project::from_json(valid, directory.path()).expect("project");
+    let preflight_error = Editor::new()
+        .render(
+            &project,
+            RenderRequest {
+                output: Some(directory.path().join("missing").join("out.mp4")),
+                backend: BackendPreference::Cpu,
+                ..RenderRequest::default()
+            },
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect_err("output preflight fails");
+    let EditorError::Project { timings, .. } = preflight_error else {
+        panic!("expected preflight project error");
+    };
+    assert!(timings.operation_total_ms >= timings.preflight_ms);
+}
+
+#[test]
+fn project_parse_time_stays_separate_from_sdk_operation_time() {
+    let directory = tempdir().expect("temporary directory");
+    let json = r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let from_value = video_editor::Project::from_value(
+        serde_json::from_str(json).expect("JSON value"),
+        directory.path(),
+    )
+    .expect("value project");
+    let error = Editor::new()
+        .render(
+            &from_value,
+            RenderRequest {
+                output: Some(directory.path().join("missing").join("out.mp4")),
+                backend: BackendPreference::Cpu,
+                ..RenderRequest::default()
+            },
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect_err("preflight fails");
+    let EditorError::Project { timings, .. } = error else {
+        panic!("expected project error");
+    };
+    assert_eq!(timings.project_parse_ms, 0);
+    assert!(timings.operation_total_ms >= timings.preflight_ms);
 }
 
 #[test]

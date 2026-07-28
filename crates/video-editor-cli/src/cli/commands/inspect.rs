@@ -7,10 +7,11 @@ use video_editor::Editor;
 
 pub(super) fn run(project: PathBuf, preview: bool, format: ResultFormat) -> ExitCode {
     let editor = Editor::new();
-    match editor
-        .load_project(&project)
-        .and_then(|loaded| editor.inspect(&loaded, preview))
-    {
+    let outcome = match editor.load_project(&project) {
+        Ok(loaded) => editor.inspect(&loaded, preview),
+        Err(error) => Err(error),
+    };
+    match outcome {
         Ok(inspection) => {
             print_success("inspect", format, inspection, "project inspection complete");
             ExitCode::SUCCESS

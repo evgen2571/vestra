@@ -5,6 +5,8 @@
 
 mod engine;
 
+pub(crate) use engine::backend_fallback_warning;
+
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,

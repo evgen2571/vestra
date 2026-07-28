@@ -87,18 +87,19 @@ pub enum EditorError {
     Project {
         errors: Vec<Diagnostic>,
         warnings: Vec<Diagnostic>,
+        timings: crate::RenderTimings,
     },
     Plan {
         diagnostic: Box<Diagnostic>,
         warnings: Vec<Diagnostic>,
-        validation_elapsed_ms: u128,
-        plan_compile_elapsed_ms: u128,
+        timings: crate::RenderTimings,
     },
     Render {
         diagnostic: Box<Diagnostic>,
         warnings: Vec<Diagnostic>,
         context: Box<RenderFailureContext>,
         temporary_removed: bool,
+        timings: crate::RenderTimings,
     },
 }
 
@@ -141,10 +142,18 @@ impl Editor {
     pub fn builder() -> EditorBuilder {
         EditorBuilder
     }
+    #[expect(
+        clippy::result_large_err,
+        reason = "load diagnostics retain operation timings for CLI report output"
+    )]
     pub fn load_project(&self, path: impl AsRef<Path>) -> Result<Project, EditorError> {
         Project::load(path).map_err(Self::project_error)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "validation diagnostics retain operation timings for CLI report output"
+    )]
     pub fn validate_path(
         &self,
         path: impl AsRef<Path>,
@@ -157,7 +166,10 @@ impl Editor {
                 warnings: report.warnings().cloned().collect(),
             })
         } else {
-            Err(Self::diagnostic_error(report.diagnostics().to_vec()))
+            Err(Self::diagnostic_error(
+                report.diagnostics().to_vec(),
+                crate::RenderTimings::default(),
+            ))
         }
     }
 
@@ -243,6 +255,10 @@ impl Editor {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "inspection diagnostics retain operation timings for CLI report output"
+    )]
     pub fn inspect(
         &self,
         project: &Project,
@@ -250,9 +266,9 @@ impl Editor {
     ) -> Result<InspectionReport, EditorError> {
         let validation = self.validate(project);
         let outcome = self.run_preflight(project, &validation, &PreflightOptions::for_inspection());
-        let validated = outcome
-            .resolved
-            .ok_or_else(|| Self::diagnostic_error(outcome.report.diagnostics))?;
+        let validated = outcome.resolved.ok_or_else(|| {
+            Self::diagnostic_error(outcome.report.diagnostics, crate::RenderTimings::default())
+        })?;
         application::inspect(project, validated, preview)
             .map(|inspection| {
                 application::inspect_result(Self::project_display_path(project), inspection)
@@ -260,6 +276,10 @@ impl Editor {
             .map_err(Self::project_error)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "render diagnostics retain operation timings for CLI report output"
+    )]
     pub fn render(
         &self,
         project: &Project,
@@ -267,6 +287,7 @@ impl Editor {
         emit: &mut dyn FnMut(RenderEvent),
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        let operation_started = Instant::now();
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
@@ -275,14 +296,24 @@ impl Editor {
             request.output.clone(),
             request.overwrite,
         );
+        let preflight_started = Instant::now();
         let preflight = self.run_preflight(project, &validation, &options);
-        let validated = preflight
-            .resolved
-            .ok_or_else(|| Self::diagnostic_error(preflight.report.diagnostics))?;
-        let (validated, summary) = application::render_project(
+        let preflight_elapsed = preflight_started.elapsed();
+        let mut warnings = Self::operation_warnings(&preflight.report.diagnostics);
+        let validated = preflight.resolved.ok_or_else(|| {
+            Self::diagnostic_error(
+                preflight.report.diagnostics,
+                Self::operation_timings(
+                    project,
+                    operation_started,
+                    validation_elapsed,
+                    preflight_elapsed,
+                ),
+            )
+        })?;
+        let (validated, mut summary) = application::render_project(
             project,
             validated,
-            validation_elapsed.as_millis(),
             RenderRequest {
                 output_override: request.output,
                 overwrite: request.overwrite,
@@ -292,11 +323,31 @@ impl Editor {
             },
             emit,
         )
-        .map_err(Self::render_error)?;
+        .map_err(|error| {
+            Self::render_error(
+                error,
+                project,
+                operation_started,
+                validation_elapsed,
+                preflight_elapsed,
+                warnings.clone(),
+            )
+        })?;
+        summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
+        summary.timings.semantic_validation_ms = validation_elapsed.as_millis();
+        summary.timings.preflight_ms = preflight_elapsed.as_millis();
+        summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
+        summary.timings.total_ms = summary.timings.operation_total_ms;
+        summary.elapsed_ms = summary.timings.operation_total_ms;
+        if let Some(fallback) = summary.backend_fallback.as_ref() {
+            warnings.push(crate::render::backend_fallback_warning(fallback));
+            warnings = Self::operation_warnings(&warnings);
+        }
         Ok(application::render_result(
             Self::project_display_path(project),
             validated,
             summary,
+            warnings,
         ))
     }
 
@@ -310,31 +361,65 @@ impl Editor {
     }
     fn project_error(error: LoadError) -> EditorError {
         match error {
-            LoadError::Diagnostics(diagnostics) => Self::diagnostic_error(diagnostics),
+            LoadError::Diagnostics(diagnostics) => {
+                Self::diagnostic_error(diagnostics, crate::RenderTimings::default())
+            }
         }
     }
-    fn render_error(error: ApplicationRenderError) -> EditorError {
+    fn render_error(
+        error: ApplicationRenderError,
+        project: &Project,
+        operation_started: Instant,
+        validation_elapsed: std::time::Duration,
+        preflight_elapsed: std::time::Duration,
+        warnings: Vec<Diagnostic>,
+    ) -> EditorError {
         match error {
             ApplicationRenderError::Plan {
                 diagnostic,
-                validated,
-                validation_elapsed_ms,
                 plan_compile_elapsed_ms,
+                ..
             } => EditorError::Plan {
                 diagnostic: Box::new(diagnostic),
-                warnings: validated.warnings().to_vec(),
-                validation_elapsed_ms,
+                warnings,
+                timings: crate::RenderTimings {
+                    plan_compile_ms: plan_compile_elapsed_ms,
+                    ..Self::operation_timings(
+                        project,
+                        operation_started,
+                        validation_elapsed,
+                        preflight_elapsed,
+                    )
+                },
+            },
+            ApplicationRenderError::Render {
+                error,
                 plan_compile_elapsed_ms,
-            },
-            ApplicationRenderError::Render { error, validated } => EditorError::Render {
-                diagnostic: Box::new(error.diagnostic),
-                warnings: validated.warnings().to_vec(),
-                context: Box::new(error.context),
-                temporary_removed: error.temporary_removed,
-            },
+            } => {
+                let error = *error;
+                let mut all_warnings = warnings;
+                all_warnings.extend(error.warnings);
+                let mut timings = error.timings;
+                timings.project_parse_ms = project.parse_elapsed().as_millis();
+                timings.semantic_validation_ms = validation_elapsed.as_millis();
+                timings.preflight_ms = preflight_elapsed.as_millis();
+                timings.plan_compile_ms = plan_compile_elapsed_ms;
+                timings.operation_total_ms = operation_started.elapsed().as_millis();
+                timings.total_ms = timings.operation_total_ms;
+                EditorError::Render {
+                    diagnostic: Box::new(error.diagnostic),
+                    warnings: Self::operation_warnings(&all_warnings),
+                    context: Box::new(error.context),
+                    temporary_removed: error.temporary_removed,
+                    timings,
+                }
+            }
         }
     }
-    fn diagnostic_error(diagnostics: Vec<Diagnostic>) -> EditorError {
+    fn diagnostic_error(
+        diagnostics: Vec<Diagnostic>,
+        timings: crate::RenderTimings,
+    ) -> EditorError {
         let errors = diagnostics
             .iter()
             .filter(|item| item.severity == crate::Severity::Fatal)
@@ -344,11 +429,56 @@ impl Editor {
             .into_iter()
             .filter(|item| item.severity == crate::Severity::Warning)
             .collect();
-        EditorError::Project { errors, warnings }
+        EditorError::Project {
+            errors,
+            warnings,
+            timings,
+        }
+    }
+    fn operation_timings(
+        project: &Project,
+        operation_started: Instant,
+        validation_elapsed: std::time::Duration,
+        preflight_elapsed: std::time::Duration,
+    ) -> crate::RenderTimings {
+        let operation_total_ms = operation_started.elapsed().as_millis();
+        crate::RenderTimings {
+            project_parse_ms: project.parse_elapsed().as_millis(),
+            operation_total_ms,
+            semantic_validation_ms: validation_elapsed.as_millis(),
+            preflight_ms: preflight_elapsed.as_millis(),
+            total_ms: operation_total_ms,
+            ..crate::RenderTimings::default()
+        }
+    }
+    fn operation_warnings(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
+        let mut warnings = Vec::new();
+        for diagnostic in diagnostics
+            .iter()
+            .filter(|item| item.severity == crate::Severity::Warning)
+        {
+            let duplicate = warnings.iter().any(|existing: &Diagnostic| {
+                existing.code == diagnostic.code
+                    && existing.category == diagnostic.category
+                    && existing.severity == diagnostic.severity
+                    && existing.message == diagnostic.message
+                    && existing.pointer == diagnostic.pointer
+                    && existing.related_id == diagnostic.related_id
+                    && existing.hint == diagnostic.hint
+            });
+            if !duplicate {
+                warnings.push(diagnostic.clone());
+            }
+        }
+        warnings
     }
 }
 
 impl EditorBuilder {
+    #[expect(
+        clippy::result_large_err,
+        reason = "builder keeps the SDK error type consistent with other entry points"
+    )]
     pub fn build(self) -> Result<Editor, EditorError> {
         Ok(Editor::new())
     }
@@ -361,4 +491,66 @@ pub struct SdkRenderRequest {
     pub overwrite: bool,
     pub preview: bool,
     pub backend: RenderBackendPreference,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_failure_keeps_compilation_timing_and_deduplicates_fallback_warning() {
+        let project = Project::from_json(
+            r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+            ".",
+        )
+        .expect("project");
+        let fallback = crate::render::backend_fallback_warning(&crate::BackendFallback {
+            code: "WGPU-PIPELINE-CREATION".to_owned(),
+            stage: "wgpu_preparation".to_owned(),
+            message: "injected pipeline preparation failure".to_owned(),
+        });
+        let error = crate::render::RenderError {
+            diagnostic: Diagnostic::error("MVP-RENDER", crate::Category::Render, "failed", ""),
+            warnings: vec![fallback.clone()],
+            temporary_removed: true,
+            context: crate::RenderFailureContext {
+                stage: crate::RenderFailureStage::FrameComposition,
+                last_completed_frame_index: None,
+                completed_frames: 0,
+                attempted_frame: Some(0),
+                total_frames: 1,
+                timeline_position: Some(0.0),
+                progress: Some(0.0),
+                output_path: None,
+                temporary_output_path: None,
+            },
+            timings: crate::RenderTimings {
+                asset_decode_ms: 17,
+                ..crate::RenderTimings::default()
+            },
+        };
+        let result = Editor::render_error(
+            ApplicationRenderError::Render {
+                error: Box::new(error),
+                plan_compile_elapsed_ms: 23,
+            },
+            &project,
+            Instant::now(),
+            std::time::Duration::from_millis(5),
+            std::time::Duration::from_millis(7),
+            vec![fallback],
+        );
+
+        let EditorError::Render {
+            warnings, timings, ..
+        } = result
+        else {
+            panic!("expected render error");
+        };
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(timings.asset_decode_ms, 17);
+        assert_eq!(timings.plan_compile_ms, 23);
+        assert_eq!(timings.semantic_validation_ms, 5);
+        assert_eq!(timings.preflight_ms, 7);
+    }
 }

@@ -15,6 +15,7 @@ pub(super) fn cleanup_error(
 ) -> RenderError {
     RenderError {
         diagnostic,
+        warnings: Vec::new(),
         temporary_removed: output.cleanup(),
         context: RenderFailureContext::at_output(
             stage,
@@ -23,6 +24,7 @@ pub(super) fn cleanup_error(
             attempted_frame,
             output,
         ),
+        timings: super::types::RenderTimings::default(),
     }
 }
 

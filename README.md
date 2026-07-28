@@ -111,7 +111,9 @@ single-frame rendering are intentionally not part of this SDK yet.
 `Project::load` and `Project::from_json` record JSON parse time. `from_value`
 does not parse JSON and reports zero parse time. Render reports separate that
 earlier parse time from `operation_total_ms`, which measures only work inside
-`Editor::render`; CLI command totals include loading as well.
+`Editor::render`. Successful CLI render output serializes that SDK result and
+does not add a command-total field. Selected CLI failure reports include an
+`elapsed_ms` measured by the command, which can include project loading.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

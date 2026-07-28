@@ -61,8 +61,10 @@ pub fn print_failure(
     ExitCode::from(exit)
 }
 
-/// Error categories have a deliberate precedence. This preserves the former
-/// lifecycle ordering without depending on diagnostics being sorted by code.
+/// Error categories have a deliberate precedence: internal failures, usage,
+/// project diagnostics, assets/media, backend/render, output, then cancellation.
+/// Cancellation is last so an internal failure reported alongside a signal is not hidden.
+/// Selection never depends on diagnostic display order.
 fn exit_for_errors(errors: &[Diagnostic]) -> u8 {
     errors
         .iter()
@@ -73,13 +75,14 @@ fn exit_for_errors(errors: &[Diagnostic]) -> u8 {
 
 fn exit_priority(exit: u8) -> u8 {
     match exit {
-        2 => 0,
-        3 => 1,
-        4 => 2,
-        5 => 3,
-        6 => 4,
-        130 => 5,
-        _ => 6,
+        1 => 0,
+        2 => 1,
+        3 => 2,
+        4 => 3,
+        5 => 4,
+        6 => 5,
+        130 => 6,
+        _ => 7,
     }
 }
 
@@ -92,5 +95,48 @@ fn exit_for(category: &Category) -> u8 {
         Category::Cancellation => 130,
         Category::Internal => 1,
         _ => 3,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn error(category: Category) -> Diagnostic {
+        Diagnostic::error("MVP-TEST", category, "test failure", "")
+    }
+
+    #[test]
+    fn internal_failures_take_precedence_regardless_of_display_order() {
+        let internal = error(Category::Internal);
+        let semantic = error(Category::Semantic);
+        let asset = error(Category::Asset);
+        let backend = error(Category::Backend);
+        let output = error(Category::Output);
+        let cancellation = error(Category::Cancellation);
+        for errors in [
+            vec![internal.clone()],
+            vec![semantic.clone(), internal.clone()],
+            vec![asset.clone(), internal.clone()],
+            vec![backend.clone(), internal.clone()],
+            vec![output.clone(), internal.clone()],
+            vec![cancellation.clone(), internal.clone()],
+            vec![internal.clone(), cancellation.clone()],
+        ] {
+            assert_eq!(exit_for_errors(&errors), 1);
+        }
+    }
+
+    #[test]
+    fn established_non_internal_precedence_is_stable() {
+        assert_eq!(
+            exit_for_errors(&[error(Category::Semantic), error(Category::Asset)]),
+            3
+        );
+        assert_eq!(
+            exit_for_errors(&[error(Category::Asset), error(Category::Semantic)]),
+            3
+        );
+        assert_eq!(exit_for_errors(&[error(Category::Cancellation)]), 130);
     }
 }

@@ -87,18 +87,19 @@ pub enum EditorError {
     Project {
         errors: Vec<Diagnostic>,
         warnings: Vec<Diagnostic>,
+        timings: crate::RenderTimings,
     },
     Plan {
         diagnostic: Box<Diagnostic>,
         warnings: Vec<Diagnostic>,
-        validation_elapsed_ms: u128,
-        plan_compile_elapsed_ms: u128,
+        timings: crate::RenderTimings,
     },
     Render {
         diagnostic: Box<Diagnostic>,
         warnings: Vec<Diagnostic>,
         context: Box<RenderFailureContext>,
         temporary_removed: bool,
+        timings: crate::RenderTimings,
     },
 }
 
@@ -157,7 +158,10 @@ impl Editor {
                 warnings: report.warnings().cloned().collect(),
             })
         } else {
-            Err(Self::diagnostic_error(report.diagnostics().to_vec()))
+            Err(Self::diagnostic_error(
+                report.diagnostics().to_vec(),
+                crate::RenderTimings::default(),
+            ))
         }
     }
 
@@ -250,9 +254,9 @@ impl Editor {
     ) -> Result<InspectionReport, EditorError> {
         let validation = self.validate(project);
         let outcome = self.run_preflight(project, &validation, &PreflightOptions::for_inspection());
-        let validated = outcome
-            .resolved
-            .ok_or_else(|| Self::diagnostic_error(outcome.report.diagnostics))?;
+        let validated = outcome.resolved.ok_or_else(|| {
+            Self::diagnostic_error(outcome.report.diagnostics, crate::RenderTimings::default())
+        })?;
         application::inspect(project, validated, preview)
             .map(|inspection| {
                 application::inspect_result(Self::project_display_path(project), inspection)
@@ -267,6 +271,7 @@ impl Editor {
         emit: &mut dyn FnMut(RenderEvent),
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        let operation_started = Instant::now();
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
@@ -275,14 +280,24 @@ impl Editor {
             request.output.clone(),
             request.overwrite,
         );
+        let preflight_started = Instant::now();
         let preflight = self.run_preflight(project, &validation, &options);
-        let validated = preflight
-            .resolved
-            .ok_or_else(|| Self::diagnostic_error(preflight.report.diagnostics))?;
-        let (validated, summary) = application::render_project(
+        let preflight_elapsed = preflight_started.elapsed();
+        let warnings = Self::operation_warnings(&preflight.report.diagnostics);
+        let validated = preflight.resolved.ok_or_else(|| {
+            Self::diagnostic_error(
+                preflight.report.diagnostics,
+                Self::operation_timings(
+                    project,
+                    operation_started,
+                    validation_elapsed,
+                    preflight_elapsed,
+                ),
+            )
+        })?;
+        let (validated, mut summary) = application::render_project(
             project,
             validated,
-            validation_elapsed.as_millis(),
             RenderRequest {
                 output_override: request.output,
                 overwrite: request.overwrite,
@@ -292,11 +307,27 @@ impl Editor {
             },
             emit,
         )
-        .map_err(Self::render_error)?;
+        .map_err(|error| {
+            Self::render_error(
+                error,
+                project,
+                operation_started,
+                validation_elapsed,
+                preflight_elapsed,
+                warnings.clone(),
+            )
+        })?;
+        summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
+        summary.timings.semantic_validation_ms = validation_elapsed.as_millis();
+        summary.timings.preflight_ms = preflight_elapsed.as_millis();
+        summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
+        summary.timings.total_ms = summary.timings.operation_total_ms;
+        summary.elapsed_ms = summary.timings.operation_total_ms;
         Ok(application::render_result(
             Self::project_display_path(project),
             validated,
             summary,
+            warnings,
         ))
     }
 
@@ -310,31 +341,55 @@ impl Editor {
     }
     fn project_error(error: LoadError) -> EditorError {
         match error {
-            LoadError::Diagnostics(diagnostics) => Self::diagnostic_error(diagnostics),
+            LoadError::Diagnostics(diagnostics) => {
+                Self::diagnostic_error(diagnostics, crate::RenderTimings::default())
+            }
         }
     }
-    fn render_error(error: ApplicationRenderError) -> EditorError {
+    fn render_error(
+        error: ApplicationRenderError,
+        project: &Project,
+        operation_started: Instant,
+        validation_elapsed: std::time::Duration,
+        preflight_elapsed: std::time::Duration,
+        warnings: Vec<Diagnostic>,
+    ) -> EditorError {
         match error {
             ApplicationRenderError::Plan {
                 diagnostic,
-                validated,
-                validation_elapsed_ms,
                 plan_compile_elapsed_ms,
+                ..
             } => EditorError::Plan {
                 diagnostic: Box::new(diagnostic),
-                warnings: validated.warnings().to_vec(),
-                validation_elapsed_ms,
-                plan_compile_elapsed_ms,
+                warnings,
+                timings: crate::RenderTimings {
+                    plan_compile_ms: plan_compile_elapsed_ms,
+                    ..Self::operation_timings(
+                        project,
+                        operation_started,
+                        validation_elapsed,
+                        preflight_elapsed,
+                    )
+                },
             },
-            ApplicationRenderError::Render { error, validated } => EditorError::Render {
+            ApplicationRenderError::Render { error, .. } => EditorError::Render {
                 diagnostic: Box::new(error.diagnostic),
-                warnings: validated.warnings().to_vec(),
+                warnings,
                 context: Box::new(error.context),
                 temporary_removed: error.temporary_removed,
+                timings: Self::operation_timings(
+                    project,
+                    operation_started,
+                    validation_elapsed,
+                    preflight_elapsed,
+                ),
             },
         }
     }
-    fn diagnostic_error(diagnostics: Vec<Diagnostic>) -> EditorError {
+    fn diagnostic_error(
+        diagnostics: Vec<Diagnostic>,
+        timings: crate::RenderTimings,
+    ) -> EditorError {
         let errors = diagnostics
             .iter()
             .filter(|item| item.severity == crate::Severity::Fatal)
@@ -344,7 +399,48 @@ impl Editor {
             .into_iter()
             .filter(|item| item.severity == crate::Severity::Warning)
             .collect();
-        EditorError::Project { errors, warnings }
+        EditorError::Project {
+            errors,
+            warnings,
+            timings,
+        }
+    }
+    fn operation_timings(
+        project: &Project,
+        operation_started: Instant,
+        validation_elapsed: std::time::Duration,
+        preflight_elapsed: std::time::Duration,
+    ) -> crate::RenderTimings {
+        let operation_total_ms = operation_started.elapsed().as_millis();
+        crate::RenderTimings {
+            project_parse_ms: project.parse_elapsed().as_millis(),
+            operation_total_ms,
+            semantic_validation_ms: validation_elapsed.as_millis(),
+            preflight_ms: preflight_elapsed.as_millis(),
+            total_ms: operation_total_ms,
+            ..crate::RenderTimings::default()
+        }
+    }
+    fn operation_warnings(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
+        let mut warnings = Vec::new();
+        for diagnostic in diagnostics
+            .iter()
+            .filter(|item| item.severity == crate::Severity::Warning)
+        {
+            let duplicate = warnings.iter().any(|existing: &Diagnostic| {
+                existing.code == diagnostic.code
+                    && existing.category == diagnostic.category
+                    && existing.severity == diagnostic.severity
+                    && existing.message == diagnostic.message
+                    && existing.pointer == diagnostic.pointer
+                    && existing.related_id == diagnostic.related_id
+                    && existing.hint == diagnostic.hint
+            });
+            if !duplicate {
+                warnings.push(diagnostic.clone());
+            }
+        }
+        warnings
     }
 }
 

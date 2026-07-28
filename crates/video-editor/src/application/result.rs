@@ -138,6 +138,7 @@ pub fn render_result(
     project: &Path,
     validated: crate::project::ValidatedProject,
     summary: RenderSummary,
+    warnings: Vec<Diagnostic>,
 ) -> RenderResult {
     RenderResult {
         editor_version: env!("CARGO_PKG_VERSION"),
@@ -159,6 +160,6 @@ pub fn render_result(
         encoder_backend: "ffmpeg",
         backend_fallback: summary.backend_fallback,
         adapter: summary.adapter,
-        warnings: validated.warnings,
+        warnings,
     }
 }

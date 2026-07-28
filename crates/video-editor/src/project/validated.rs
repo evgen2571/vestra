@@ -51,11 +51,6 @@ impl ValidatedProject {
             self.project.visual.transitions.len(),
         )
     }
-
-    #[must_use]
-    pub fn warnings(&self) -> &[Diagnostic] {
-        &self.warnings
-    }
 }
 
 #[derive(Debug)]

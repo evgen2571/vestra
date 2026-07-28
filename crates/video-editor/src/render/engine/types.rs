@@ -40,9 +40,13 @@ pub struct BackendFallback {
 pub struct RenderTimings {
     /// JSON parsing spent while constructing `Project`; zero for `from_value`.
     pub project_parse_ms: u128,
-    /// Time inside `Editor::render`, excluding earlier project construction.
+    /// All work inside `Editor::render`, from semantic validation through cleanup.
+    /// It excludes `Project` construction and is not the sum of stage fields.
     pub operation_total_ms: u128,
+    /// Pure semantic validation used by this render operation.
     pub semantic_validation_ms: u128,
+    /// Environment and target readiness checks used by this render operation.
+    pub preflight_ms: u128,
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]

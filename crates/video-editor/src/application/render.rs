@@ -29,13 +29,10 @@ pub struct RenderRequest {
 
 pub enum ApplicationRenderError {
     Plan {
-        validated: crate::project::ValidatedProject,
         diagnostic: Diagnostic,
-        validation_elapsed_ms: u128,
         plan_compile_elapsed_ms: u128,
     },
     Render {
-        validated: crate::project::ValidatedProject,
         error: RenderError,
     },
 }
@@ -43,11 +40,9 @@ pub enum ApplicationRenderError {
 pub fn render_project(
     project: &Project,
     validated: ValidatedProject,
-    validation_elapsed_ms: u128,
     request: RenderRequest,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<(crate::project::ValidatedProject, RenderSummary), ApplicationRenderError> {
-    let workflow_started = Instant::now();
     let compilation_started = Instant::now();
     let plan = compile(
         &validated,
@@ -56,9 +51,7 @@ pub fn render_project(
         },
     )
     .map_err(|diagnostic| ApplicationRenderError::Plan {
-        validated: validated.clone(),
         diagnostic,
-        validation_elapsed_ms,
         plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let compilation_elapsed = compilation_started.elapsed();
@@ -72,15 +65,8 @@ pub fn render_project(
         },
         emit,
     )
-    .map_err(|error| ApplicationRenderError::Render {
-        validated: validated.clone(),
-        error,
-    })?;
+    .map_err(|error| ApplicationRenderError::Render { error })?;
     summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
-    summary.timings.semantic_validation_ms = validation_elapsed_ms;
     summary.timings.plan_compile_ms = compilation_elapsed.as_millis();
-    summary.timings.operation_total_ms = workflow_started.elapsed().as_millis();
-    summary.timings.total_ms = summary.timings.operation_total_ms;
-    summary.elapsed_ms = summary.timings.operation_total_ms;
     Ok((validated, summary))
 }

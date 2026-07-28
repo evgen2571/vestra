@@ -71,7 +71,11 @@ pub(super) fn run(
             print_success("render", format, data, "render completed");
             ExitCode::SUCCESS
         }
-        Err(EditorError::Project { errors, warnings }) => {
+        Err(EditorError::Project {
+            errors,
+            warnings,
+            timings,
+        }) => {
             if let Err(message) = write_failure_report(
                 report.as_deref(),
                 "render",
@@ -81,6 +85,7 @@ pub(super) fn run(
                 &warnings,
                 began.elapsed().as_millis(),
                 Some(&project),
+                Some(&timings),
             ) {
                 let mut all_errors = errors.clone();
                 all_errors.push(Diagnostic::error(
@@ -96,18 +101,11 @@ pub(super) fn run(
         Err(EditorError::Plan {
             diagnostic,
             warnings,
-            validation_elapsed_ms,
-            plan_compile_elapsed_ms,
+            timings,
         }) => {
             if let Some(path) = report.as_deref()
-                && let Err(report_error) = write_plan_failure_report(
-                    path,
-                    &project,
-                    &diagnostic,
-                    &warnings,
-                    validation_elapsed_ms,
-                    plan_compile_elapsed_ms,
-                )
+                && let Err(report_error) =
+                    write_plan_failure_report(path, &project, &diagnostic, &warnings, &timings)
             {
                 return print_failure(
                     "render",
@@ -131,6 +129,7 @@ pub(super) fn run(
             warnings,
             context,
             temporary_removed,
+            timings,
         }) => {
             if matches!(
                 diagnostic.category,
@@ -155,6 +154,7 @@ pub(super) fn run(
                     &warnings,
                     temporary_removed,
                     began.elapsed().as_millis(),
+                    &timings,
                 )
             {
                 return print_failure(
@@ -190,6 +190,7 @@ fn write_failure_report(
     warnings: &[Diagnostic],
     elapsed_ms: u128,
     project_path: Option<&Path>,
+    operation_timings: Option<&video_editor::RenderTimings>,
 ) -> Result<(), String> {
     if let Some(path) = path {
         write_command_failure_report(
@@ -201,6 +202,7 @@ fn write_failure_report(
             warnings,
             project_path,
             elapsed_ms,
+            operation_timings,
         )?;
     }
     Ok(())

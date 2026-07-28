@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use serde::Serialize;
 
-use video_editor::{Diagnostic, RenderFailureContext};
+use video_editor::{Diagnostic, RenderFailureContext, RenderTimings};
 
 pub fn write_report<T: Serialize>(path: &Path, report: &T) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(report)
@@ -46,6 +46,8 @@ struct CommandFailureReport<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     project_path: Option<&'a Path>,
     elapsed_ms: u128,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    operation_timings: Option<&'a RenderTimings>,
 }
 
 #[expect(
@@ -61,6 +63,7 @@ pub fn write_command_failure_report(
     warnings: &[Diagnostic],
     project_path: Option<&Path>,
     elapsed_ms: u128,
+    operation_timings: Option<&RenderTimings>,
 ) -> Result<(), String> {
     write_report(
         path,
@@ -74,6 +77,7 @@ pub fn write_command_failure_report(
             warnings,
             project_path,
             elapsed_ms,
+            operation_timings,
         },
     )
 }
@@ -89,13 +93,7 @@ struct PlanFailureReport<'a> {
     diagnostics: [&'a Diagnostic; 1],
     project_path: &'a Path,
     warnings: &'a [Diagnostic],
-    timings: PlanFailureTimings,
-}
-
-#[derive(Serialize)]
-struct PlanFailureTimings {
-    semantic_validation_ms: u128,
-    plan_compile_ms: u128,
+    timings: &'a RenderTimings,
 }
 
 pub fn write_plan_failure_report(
@@ -103,8 +101,7 @@ pub fn write_plan_failure_report(
     project_path: &Path,
     diagnostic: &Diagnostic,
     warnings: &[Diagnostic],
-    validation_elapsed_ms: u128,
-    plan_compile_elapsed_ms: u128,
+    timings: &RenderTimings,
 ) -> Result<(), String> {
     write_report(
         path,
@@ -118,10 +115,7 @@ pub fn write_plan_failure_report(
             diagnostics: [diagnostic],
             project_path,
             warnings,
-            timings: PlanFailureTimings {
-                semantic_validation_ms: validation_elapsed_ms,
-                plan_compile_ms: plan_compile_elapsed_ms,
-            },
+            timings,
         },
     )
 }
@@ -151,6 +145,7 @@ struct RenderFailureReport<'a> {
     failure_context: &'a RenderFailureContext,
     temporary_removed: bool,
     elapsed_ms: u128,
+    timings: &'a RenderTimings,
 }
 
 pub fn write_render_failure_report(
@@ -161,6 +156,7 @@ pub fn write_render_failure_report(
     warnings: &[Diagnostic],
     temporary_removed: bool,
     elapsed_ms: u128,
+    timings: &RenderTimings,
 ) -> Result<(), String> {
     write_report(
         path,
@@ -183,6 +179,7 @@ pub fn write_render_failure_report(
             failure_context: context,
             temporary_removed,
             elapsed_ms,
+            timings,
         },
     )
 }
@@ -208,8 +205,19 @@ mod tests {
             "clip is invisible",
             "/visual/clips/1",
         )];
-        write_plan_failure_report(&report_path, &project_path, &diagnostic, &warnings, 11, 7)
-            .expect("write report");
+        let timings = RenderTimings {
+            semantic_validation_ms: 11,
+            plan_compile_ms: 7,
+            ..RenderTimings::default()
+        };
+        write_plan_failure_report(
+            &report_path,
+            &project_path,
+            &diagnostic,
+            &warnings,
+            &timings,
+        )
+        .expect("write report");
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(report_path).expect("read report"))
                 .expect("report JSON");

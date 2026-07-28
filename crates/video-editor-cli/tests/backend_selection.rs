@@ -69,6 +69,13 @@ fn automatic_mode_records_structured_wgpu_fallback_when_no_adapter_is_available(
     if report["render_backend"] == "cpu" {
         assert_eq!(report["requested_render_backend"], "auto");
         assert!(report["backend_fallback"]["code"].as_str().is_some());
+        assert!(
+            report["warnings"]
+                .as_array()
+                .expect("warning list")
+                .iter()
+                .any(|warning| warning["code"] == "MVP-WGPU-FALLBACK")
+        );
     } else {
         assert_eq!(report["render_backend"], "wgpu");
         assert!(report.get("adapter").is_some());

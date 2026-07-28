@@ -12,7 +12,7 @@ use std::{
 use crate::{
     Diagnostic,
     plan::{CompileOptions, compile},
-    project::{LoadError, Project},
+    project::{Project, ValidatedProject},
     render::{
         RenderBackendPreference, RenderError, RenderEvent, RenderOptions, RenderSummary, render,
     },
@@ -28,7 +28,6 @@ pub struct RenderRequest {
 }
 
 pub enum ApplicationRenderError {
-    Project(Vec<Diagnostic>),
     Plan {
         validated: crate::project::ValidatedProject,
         diagnostic: Diagnostic,
@@ -43,21 +42,12 @@ pub enum ApplicationRenderError {
 
 pub fn render_project(
     project: &Project,
+    validated: ValidatedProject,
+    validation_elapsed_ms: u128,
     request: RenderRequest,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<(crate::project::ValidatedProject, RenderSummary), ApplicationRenderError> {
     let workflow_started = Instant::now();
-    let validation_started = Instant::now();
-    let validation = crate::Editor::new().validate(project);
-    let validation_elapsed = validation_started.elapsed();
-    let validated = crate::project::validation::preflight(
-        project,
-        &validation,
-        &crate::project::ValidationOptions::default(),
-    )
-    .map_err(|error| match error {
-        LoadError::Diagnostics(errors) => ApplicationRenderError::Project(errors),
-    })?;
     let compilation_started = Instant::now();
     let plan = compile(
         &validated,
@@ -68,7 +58,7 @@ pub fn render_project(
     .map_err(|diagnostic| ApplicationRenderError::Plan {
         validated: validated.clone(),
         diagnostic,
-        validation_elapsed_ms: validation_elapsed.as_millis(),
+        validation_elapsed_ms,
         plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let compilation_elapsed = compilation_started.elapsed();
@@ -87,9 +77,10 @@ pub fn render_project(
         error,
     })?;
     summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
-    summary.timings.semantic_validation_ms = validation_elapsed.as_millis();
+    summary.timings.semantic_validation_ms = validation_elapsed_ms;
     summary.timings.plan_compile_ms = compilation_elapsed.as_millis();
-    summary.timings.total_ms = workflow_started.elapsed().as_millis();
-    summary.elapsed_ms = summary.timings.total_ms;
+    summary.timings.operation_total_ms = workflow_started.elapsed().as_millis();
+    summary.timings.total_ms = summary.timings.operation_total_ms;
+    summary.elapsed_ms = summary.timings.operation_total_ms;
     Ok((validated, summary))
 }

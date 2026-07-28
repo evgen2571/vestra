@@ -1,14 +1,14 @@
 use std::{
-    fmt, fs,
+    fmt,
     path::{Path, PathBuf},
-    process::Command,
+    time::Instant,
 };
 
 use crate::{
     CancellationToken, Diagnostic, InspectionReport, PreflightReport, Project, RenderEvent,
     RenderFailureContext, RenderResult, ValidationReport,
     application::{self, ApplicationRenderError, RenderRequest},
-    project::{LoadError, ValidationOptions},
+    project::{LoadError, ValidatedProject, ValidationOptions},
     render::RenderBackendPreference,
 };
 
@@ -21,33 +21,73 @@ pub struct Editor;
 #[derive(Clone, Debug, Default)]
 pub struct EditorBuilder;
 
-/// Environment checks requested before rendering.
+/// The operation whose environment requirements are being checked.
 #[derive(Clone, Debug)]
-pub struct PreflightOptions {
-    /// Backend requested by the next operation. `Auto` reports the normal
-    /// fallback policy; an explicit CPU request never requires WGPU.
-    pub backend: RenderBackendPreference,
-    /// Output selected by the caller, if it differs from the project value.
-    pub output: Option<PathBuf>,
-    /// Whether this operation will encode a video. Validation and inspection
-    /// leave this false, rendering sets it true.
-    pub check_encoder: bool,
+pub enum PreflightTarget {
+    /// Resolve only files and media required to inspect a project.
+    Inspect,
+    /// Check complete default render readiness for the CLI validation contract.
+    Validate,
+    /// Check an actual render destination and backend.
+    Render {
+        backend: RenderBackendPreference,
+        output: Option<PathBuf>,
+        overwrite: bool,
+    },
 }
 
-impl Default for PreflightOptions {
-    fn default() -> Self {
+/// Explicit, operation-aware environment checks. No accepted option is ignored.
+#[derive(Clone, Debug)]
+pub struct PreflightOptions {
+    target: PreflightTarget,
+}
+
+impl PreflightOptions {
+    #[must_use]
+    pub fn for_inspection() -> Self {
         Self {
-            backend: RenderBackendPreference::Auto,
-            output: None,
-            check_encoder: false,
+            target: PreflightTarget::Inspect,
         }
     }
+    #[must_use]
+    pub fn for_validation() -> Self {
+        Self {
+            target: PreflightTarget::Validate,
+        }
+    }
+    #[must_use]
+    pub fn for_render(
+        backend: RenderBackendPreference,
+        output: Option<PathBuf>,
+        overwrite: bool,
+    ) -> Self {
+        Self {
+            target: PreflightTarget::Render {
+                backend,
+                output,
+                overwrite,
+            },
+        }
+    }
+}
+impl Default for PreflightOptions {
+    fn default() -> Self {
+        Self::for_inspection()
+    }
+}
+
+struct InternalPreflightOutcome {
+    report: PreflightReport,
+    resolved: Option<ValidatedProject>,
 }
 
 /// An SDK operation failed after parsing or during rendering.
 #[derive(Debug)]
 pub enum EditorError {
-    Project(Vec<Diagnostic>),
+    Project {
+        errors: Vec<Diagnostic>,
+        warnings: Vec<Diagnostic>,
+    },
     Plan {
         diagnostic: Box<Diagnostic>,
         warnings: Vec<Diagnostic>,
@@ -66,7 +106,7 @@ impl EditorError {
     #[must_use]
     pub fn diagnostics(&self) -> &[Diagnostic] {
         match self {
-            Self::Project(value) => value,
+            Self::Project { errors, .. } => errors,
             Self::Plan { diagnostic, .. } | Self::Render { diagnostic, .. } => {
                 std::slice::from_ref(diagnostic)
             }
@@ -75,7 +115,7 @@ impl EditorError {
     #[must_use]
     pub fn warnings(&self) -> &[Diagnostic] {
         match self {
-            Self::Project(_) => &[],
+            Self::Project { warnings, .. } => warnings,
             Self::Plan { warnings, .. } | Self::Render { warnings, .. } => warnings,
         }
     }
@@ -117,7 +157,7 @@ impl Editor {
                 warnings: report.warnings().cloned().collect(),
             })
         } else {
-            Err(EditorError::Project(report.errors().cloned().collect()))
+            Err(Self::diagnostic_error(report.diagnostics().to_vec()))
         }
     }
 
@@ -137,118 +177,69 @@ impl Editor {
     #[must_use]
     pub fn preflight(&self, project: &Project, options: PreflightOptions) -> PreflightReport {
         let validation = self.validate(project);
-        let mut report = match crate::project::validation::preflight(
-            project,
-            &validation,
-            &ValidationOptions::default(),
-        ) {
-            Ok(validated) => PreflightReport {
-                diagnostics: validated.warnings().to_vec(),
-            },
-            Err(LoadError::Diagnostics(mut diagnostics)) => {
-                diagnostics.extend(validation.warnings().cloned());
-                diagnostics.sort_by(|left, right| {
-                    left.code
-                        .cmp(&right.code)
-                        .then(left.pointer.cmp(&right.pointer))
-                });
-                diagnostics.dedup_by(|left, right| {
-                    left.code == right.code
-                        && left.pointer == right.pointer
-                        && left.message == right.message
-                });
-                PreflightReport { diagnostics }
-            }
-        };
-        if options.check_encoder {
-            self.check_render_target(project, &options, &mut report.diagnostics);
-        } else if matches!(options.backend, RenderBackendPreference::Wgpu) {
-            self.check_backend(options.backend, &mut report.diagnostics);
-        }
-        report
+        self.run_preflight(project, &validation, &options).report
     }
 
-    fn check_render_target(
+    fn run_preflight(
         &self,
         project: &Project,
+        validation: &ValidationReport,
         options: &PreflightOptions,
-        diagnostics: &mut Vec<Diagnostic>,
-    ) {
-        let output = options.output.clone().unwrap_or_else(|| {
-            let configured = PathBuf::from(&project.canonical().output.path);
-            if configured.is_absolute() {
-                configured
-            } else {
-                project.base_directory().join(configured)
-            }
-        });
-        if output.is_dir() {
-            diagnostics.push(Diagnostic::error(
-                "MVP-OUTPUT-PATH",
-                crate::Category::Output,
-                format!("output path '{}' is a directory", output.display()),
-                "/output/path",
-            ));
-        }
-        match output.parent() {
-            Some(parent) => match fs::metadata(parent) {
-                Ok(metadata) if !metadata.is_dir() => diagnostics.push(Diagnostic::error(
-                    "MVP-OUTPUT-PARENT",
-                    crate::Category::Output,
-                    format!("output parent '{}' is not a directory", parent.display()),
-                    "/output/path",
-                )),
-                Err(error) => diagnostics.push(Diagnostic::error(
-                    "MVP-OUTPUT-PARENT",
-                    crate::Category::Output,
-                    format!(
-                        "cannot access output parent '{}': {error}",
-                        parent.display()
-                    ),
-                    "/output/path",
-                )),
-                Ok(_) => {}
-            },
-            None => diagnostics.push(Diagnostic::error(
-                "MVP-OUTPUT-PARENT",
-                crate::Category::Output,
-                "output path has no parent directory",
-                "/output/path",
-            )),
-        }
-        if let Err(error) = Command::new("ffmpeg").arg("-version").output() {
-            diagnostics.push(Diagnostic::error(
-                "MVP-ENCODER-UNAVAILABLE",
-                crate::Category::Backend,
-                format!("FFmpeg is unavailable: {error}"),
-                "",
-            ));
-        }
-        self.check_backend(options.backend, diagnostics);
-    }
-
-    fn check_backend(&self, backend: RenderBackendPreference, diagnostics: &mut Vec<Diagnostic>) {
-        match backend {
-            RenderBackendPreference::Cpu => {}
-            RenderBackendPreference::Wgpu => {
-                if let Err(message) = wgpu_adapter_available() {
-                    diagnostics.push(Diagnostic::error(
-                        "MVP-WGPU-UNAVAILABLE",
-                        crate::Category::Backend,
-                        message,
-                        "",
-                    ));
+    ) -> InternalPreflightOutcome {
+        let outcome = crate::project::validation::preflight(
+            project,
+            validation,
+            &ValidationOptions::default(),
+        );
+        let mut diagnostics = outcome.diagnostics;
+        let target = &options.target;
+        let render_target = match target {
+            PreflightTarget::Render {
+                backend,
+                output,
+                overwrite,
+            } => Some((*backend, output.clone(), *overwrite)),
+            PreflightTarget::Validate => Some((RenderBackendPreference::Auto, None, false)),
+            PreflightTarget::Inspect => None,
+        };
+        if let Some((backend, override_output, overwrite)) = render_target {
+            let output = override_output.unwrap_or_else(|| {
+                let configured = PathBuf::from(&project.canonical().output.path);
+                if configured.is_absolute() {
+                    configured
+                } else {
+                    project.base_directory().join(configured)
                 }
+            });
+            if let Err(error) = video_editor_media::check_output(&output, overwrite) {
+                diagnostics.push(Diagnostic::error(
+                    "MVP-OUTPUT-PATH",
+                    crate::Category::Output,
+                    error.to_string(),
+                    "/output/path",
+                ));
             }
-            RenderBackendPreference::Auto => {
-                if let Err(message) = wgpu_adapter_available() {
-                    diagnostics.push(Diagnostic::warning(
-                        "MVP-WGPU-FALLBACK",
-                        format!("WGPU is unavailable; rendering will use CPU: {message}"),
-                        "",
-                    ));
-                }
+            if let Err(error) = video_editor_media::check_ffmpeg_available(None) {
+                diagnostics.push(Diagnostic::error(
+                    "MVP-ENCODER-UNAVAILABLE",
+                    crate::Category::Backend,
+                    format!("FFmpeg is unavailable: {error}"),
+                    "",
+                ));
             }
+            let probe = video_editor_render::probe_backend(match backend {
+                RenderBackendPreference::Auto => video_editor_render::RenderBackendPreference::Auto,
+                RenderBackendPreference::Cpu => video_editor_render::RenderBackendPreference::Cpu,
+                RenderBackendPreference::Wgpu => video_editor_render::RenderBackendPreference::Wgpu,
+            });
+            diagnostics.extend(probe.diagnostics);
+        }
+        let has_errors = diagnostics
+            .iter()
+            .any(|item| item.severity == crate::Severity::Fatal);
+        InternalPreflightOutcome {
+            report: PreflightReport { diagnostics },
+            resolved: if has_errors { None } else { outcome.resolved },
         }
     }
 
@@ -257,7 +248,12 @@ impl Editor {
         project: &Project,
         preview: bool,
     ) -> Result<InspectionReport, EditorError> {
-        application::inspect(project, preview)
+        let validation = self.validate(project);
+        let outcome = self.run_preflight(project, &validation, &PreflightOptions::for_inspection());
+        let validated = outcome
+            .resolved
+            .ok_or_else(|| Self::diagnostic_error(outcome.report.diagnostics))?;
+        application::inspect(project, validated, preview)
             .map(|inspection| {
                 application::inspect_result(Self::project_display_path(project), inspection)
             })
@@ -271,8 +267,22 @@ impl Editor {
         emit: &mut dyn FnMut(RenderEvent),
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        let validation_started = Instant::now();
+        let validation = self.validate(project);
+        let validation_elapsed = validation_started.elapsed();
+        let options = PreflightOptions::for_render(
+            request.backend,
+            request.output.clone(),
+            request.overwrite,
+        );
+        let preflight = self.run_preflight(project, &validation, &options);
+        let validated = preflight
+            .resolved
+            .ok_or_else(|| Self::diagnostic_error(preflight.report.diagnostics))?;
         let (validated, summary) = application::render_project(
             project,
+            validated,
+            validation_elapsed.as_millis(),
             RenderRequest {
                 output_override: request.output,
                 overwrite: request.overwrite,
@@ -300,12 +310,11 @@ impl Editor {
     }
     fn project_error(error: LoadError) -> EditorError {
         match error {
-            LoadError::Diagnostics(diagnostics) => EditorError::Project(diagnostics),
+            LoadError::Diagnostics(diagnostics) => Self::diagnostic_error(diagnostics),
         }
     }
     fn render_error(error: ApplicationRenderError) -> EditorError {
         match error {
-            ApplicationRenderError::Project(diagnostics) => EditorError::Project(diagnostics),
             ApplicationRenderError::Plan {
                 diagnostic,
                 validated,
@@ -325,23 +334,18 @@ impl Editor {
             },
         }
     }
-}
-
-#[cfg(feature = "wgpu")]
-fn wgpu_adapter_available() -> Result<(), String> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::HighPerformance,
-        force_fallback_adapter: std::env::var_os("VIDEO_EDITOR_WGPU_FORCE_FALLBACK").is_some(),
-        compatible_surface: None,
-    }))
-    .map(|_| ())
-    .ok_or_else(|| "WGPU adapter request returned no compatible adapter".to_owned())
-}
-
-#[cfg(not(feature = "wgpu"))]
-fn wgpu_adapter_available() -> Result<(), String> {
-    Err("WGPU support is not enabled in this build".to_owned())
+    fn diagnostic_error(diagnostics: Vec<Diagnostic>) -> EditorError {
+        let errors = diagnostics
+            .iter()
+            .filter(|item| item.severity == crate::Severity::Fatal)
+            .cloned()
+            .collect();
+        let warnings = diagnostics
+            .into_iter()
+            .filter(|item| item.severity == crate::Severity::Warning)
+            .collect();
+        EditorError::Project { errors, warnings }
+    }
 }
 
 impl EditorBuilder {

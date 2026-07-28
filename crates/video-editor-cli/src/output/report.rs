@@ -42,17 +42,23 @@ struct CommandFailureReport<'a> {
     failure_category: &'a str,
     failure_stage: &'a str,
     diagnostics: &'a [Diagnostic],
+    warnings: &'a [Diagnostic],
     #[serde(skip_serializing_if = "Option::is_none")]
     project_path: Option<&'a Path>,
     elapsed_ms: u128,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the report format keeps each compatibility field explicit"
+)]
 pub fn write_command_failure_report(
     path: &Path,
     command: &str,
     category: &str,
     stage: &str,
     diagnostics: &[Diagnostic],
+    warnings: &[Diagnostic],
     project_path: Option<&Path>,
     elapsed_ms: u128,
 ) -> Result<(), String> {
@@ -65,6 +71,7 @@ pub fn write_command_failure_report(
             failure_category: category,
             failure_stage: stage,
             diagnostics,
+            warnings,
             project_path,
             elapsed_ms,
         },

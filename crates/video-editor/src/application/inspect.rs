@@ -16,13 +16,11 @@ pub struct Inspection {
     pub audio_end: Option<f64>,
 }
 
-pub fn inspect(project: &Project, preview: bool) -> Result<Inspection, LoadError> {
-    let validation = crate::Editor::new().validate(project);
-    let validated = crate::project::validation::preflight(
-        project,
-        &validation,
-        &crate::project::ValidationOptions::default(),
-    )?;
+pub fn inspect(
+    _project: &Project,
+    validated: ValidatedProject,
+    preview: bool,
+) -> Result<Inspection, LoadError> {
     let plan = compile(&validated, CompileOptions { preview })
         .map_err(|diagnostic| LoadError::Diagnostics(vec![diagnostic]))?;
     let audio_end = validated

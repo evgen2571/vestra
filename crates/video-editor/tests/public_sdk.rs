@@ -174,12 +174,32 @@ fn render_preflight_checks_the_requested_output_override() {
     let project = video_editor::Project::from_json(json, directory.path()).expect("project");
     let report = Editor::new().preflight(
         &project,
-        PreflightOptions {
-            output: Some(directory.path().join("missing").join("out.mp4")),
-            check_encoder: true,
-            ..PreflightOptions::default()
-        },
+        PreflightOptions::for_render(
+            BackendPreference::Cpu,
+            Some(directory.path().join("missing").join("out.mp4")),
+            false,
+        ),
     );
     assert!(!report.is_ready());
-    assert!(report.errors().any(|item| item.code == "MVP-OUTPUT-PARENT"));
+    assert!(report.errors().any(|item| item.code == "MVP-OUTPUT-PATH"));
+}
+
+#[test]
+fn preflight_preserves_pure_warnings_when_asset_resolution_fails() {
+    let directory = tempdir().expect("temporary directory");
+    let json = r##"{
+        "schema_version": 1,
+        "output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
+        "assets":[{"id":"unused","type":"image","source":"missing.png"}],
+        "visual":{"clips":[{"id":"solid","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":1,"layer":0,"opacity":{"base_value":1}}]}
+    }"##;
+    let project = video_editor::Project::from_json(json, directory.path()).expect("project");
+    let report = Editor::new().preflight(&project, PreflightOptions::for_inspection());
+    assert!(!report.is_ready());
+    assert!(report.errors().any(|item| item.code == "MVP-ASSET-PATH"));
+    assert!(
+        report
+            .warnings()
+            .any(|item| item.code == "MVP-ASSET-UNUSED")
+    );
 }

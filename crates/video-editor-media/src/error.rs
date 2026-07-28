@@ -56,6 +56,12 @@ pub enum MediaError {
     OutputAlreadyExists(PathBuf),
     #[error("output directory '{0}' does not exist")]
     OutputParentMissing(PathBuf),
+    #[error("output parent '{0}' is not a directory")]
+    OutputParentNotDirectory(PathBuf),
+    #[error("output path '{0}' is a directory")]
+    OutputIsDirectory(PathBuf),
+    #[error("cannot inspect output path: {0}")]
+    OutputMetadata(#[source] io::Error),
     #[error("cannot publish output: {0}")]
     Publication(#[source] io::Error),
 }

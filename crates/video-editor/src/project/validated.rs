@@ -6,7 +6,6 @@ use video_editor_core::project::Project;
 
 #[derive(Clone, Debug, Default)]
 pub struct ValidationOptions {
-    pub check_backend: bool,
     pub limits: ResourceLimits,
 }
 

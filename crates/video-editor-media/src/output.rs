@@ -20,15 +20,31 @@ pub struct OutputTarget {
     pub temporary_path: PathBuf,
 }
 
+/// Read-only validation of an output destination.  This deliberately shares
+/// the same parent and overwrite rules as `OutputTarget::prepare` without
+/// allocating a temporary file or starting an encoder.
+pub fn check_output(path: &Path, overwrite: bool) -> Result<(), MediaError> {
+    if path.exists() {
+        let metadata = fs::metadata(path).map_err(MediaError::OutputMetadata)?;
+        if metadata.is_dir() {
+            return Err(MediaError::OutputIsDirectory(path.to_path_buf()));
+        }
+        if !overwrite {
+            return Err(MediaError::OutputAlreadyExists(path.to_path_buf()));
+        }
+    }
+    let parent = effective_parent(path);
+    let metadata =
+        fs::metadata(parent).map_err(|_| MediaError::OutputParentMissing(parent.to_path_buf()))?;
+    if !metadata.is_dir() {
+        return Err(MediaError::OutputParentNotDirectory(parent.to_path_buf()));
+    }
+    Ok(())
+}
+
 impl OutputTarget {
     pub fn prepare(path: PathBuf, overwrite: bool) -> Result<Self, MediaError> {
-        if path.exists() && !overwrite {
-            return Err(MediaError::OutputAlreadyExists(path));
-        }
-        let parent = effective_parent(&path);
-        if !parent.is_dir() {
-            return Err(MediaError::OutputParentMissing(parent.to_path_buf()));
-        }
+        check_output(&path, overwrite)?;
         let stem = path
             .file_stem()
             .and_then(|value| value.to_str())

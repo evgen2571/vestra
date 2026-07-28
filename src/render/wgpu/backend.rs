@@ -83,6 +83,13 @@ impl WgpuBackend {
             std::mem::size_of::<LayerParameters>() as u32,
         )?;
         let context = GpuContext::create(plan, requirements)?;
+        // Preparation is synchronous and infrequent, so scope errors here can
+        // be collected deterministically. Normal frame submission deliberately
+        // does not use this path because awaiting scopes serializes staging.
+        context
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        context.device.push_error_scope(wgpu::ErrorFilter::Internal);
         let alignment = context.device.limits().min_uniform_buffer_offset_alignment;
         let parameter_buffer_bytes = requirements.parameter_buffer_bytes(alignment)?;
         let resource_estimates =
@@ -181,10 +188,6 @@ impl WgpuBackend {
         timings.gpu_pipeline_creation = pipeline_creation;
         timings.texture_upload = upload_started.elapsed();
         timings.gpu_initialization = started.elapsed();
-        context
-            .device
-            .push_error_scope(wgpu::ErrorFilter::Validation);
-        context.device.push_error_scope(wgpu::ErrorFilter::Internal);
         drain(&context.device);
         finish_error_scopes(&context.device, "WGPU-RESOURCE-CREATION")?;
         Ok(Self {

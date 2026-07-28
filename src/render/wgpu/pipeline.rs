@@ -12,11 +12,10 @@ pub(super) struct GpuPipelines {
     pub(super) layer_bindings: wgpu::BindGroupLayout,
     pub(super) composite_bindings: wgpu::BindGroupLayout,
     pub(super) effect_bindings: wgpu::BindGroupLayout,
-    pub(super) parameters: wgpu::Buffer,
 }
 
 impl GpuPipelines {
-    pub(super) fn create(device: &wgpu::Device, parameter_buffer_bytes: u64) -> Self {
+    pub(super) fn create(device: &wgpu::Device) -> Self {
         let layer_shader = shader(
             device,
             "video-editor layer shader",
@@ -89,12 +88,6 @@ impl GpuPipelines {
             &effect_shader,
             &effect_bindings,
         );
-        let parameters = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("video-editor frame parameters"),
-            size: parameter_buffer_bytes,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
         Self {
             _layer_shader: layer_shader,
             _composite_shader: composite_shader,
@@ -105,7 +98,6 @@ impl GpuPipelines {
             layer_bindings,
             composite_bindings,
             effect_bindings,
-            parameters,
         }
     }
 }

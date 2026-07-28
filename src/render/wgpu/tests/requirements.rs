@@ -139,6 +139,30 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
 }
 
 #[test]
+fn staged_resource_estimates_scale_checked_storage_by_pipeline_depth() {
+    let (_plan, _decoded, requirements) = fixture_requirements();
+    let depth_one = requirements
+        .resource_estimates_for_depth(256, 1)
+        .expect("depth one estimate");
+    let depth_three = requirements
+        .resource_estimates_for_depth(256, 3)
+        .expect("depth three estimate");
+    assert_eq!(
+        depth_three.readback_buffer_bytes,
+        depth_one.readback_buffer_bytes * 3
+    );
+    assert_eq!(
+        depth_three.parameter_buffer_bytes,
+        depth_one.parameter_buffer_bytes * 3
+    );
+    assert_eq!(depth_three.packed_frame_bytes, depth_one.packed_frame_bytes);
+    assert_eq!(
+        depth_three.total_staging_bytes,
+        depth_three.total_persistent_bytes + depth_one.packed_frame_bytes * 3
+    );
+}
+
+#[test]
 fn plans_without_visual_effect_passes_do_not_reserve_effect_textures() {
     let (mut plan, decoded, _) = fixture_requirements();
     for layer in &mut plan.layers {

@@ -18,7 +18,7 @@ use crate::{
         compile,
     },
     project::{ValidationOptions, load_and_validate},
-    render::{CpuBackend, RenderBackend, effects::effect_pass_plan},
+    render::{CpuBackend, effects::effect_pass_plan},
 };
 use bytemuck::Zeroable;
 use image::RgbaImage;

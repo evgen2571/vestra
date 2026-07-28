@@ -13,6 +13,7 @@ mod frame_plan;
 mod parameters;
 mod parity;
 mod pipeline;
+mod polling;
 mod readback;
 mod requirements;
 mod resources;

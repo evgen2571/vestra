@@ -74,20 +74,24 @@ passes and never rediscovers semantics from an evaluated effect.
 reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
 returns.
 
-`render/wgpu/backend` owns prepared WGPU state and frame rendering. `context`
+`render/wgpu/backend` owns prepared WGPU state and staged frame submission. `context`
 creates the adapter and device. `requirements` validates limits and estimates
 allocation sizes before resources exist. `frame_plan` creates and validates
 adapter-independent canvas and effect ping-pong operations. `texture_pool` owns
 Canvas A, Canvas B, Layer, Effect A, and Effect B for the backend lifetime.
 `pipeline` creates texture compute
 pipelines and layouts. `parameters` stores aligned per-operation records.
-`executor` reuses prepared bind groups, encodes one complete frame into one
-command buffer, and submits it once. `readback` keeps synchronous mapping and
-row repacking. Support checks decide whether the current WGPU renderer accepts
-a plan. That policy is outside the engine so future GPU effect work changes the
-WGPU module rather than selection logic.
+`executor` reuses per-slot bind groups, encodes one complete frame into one
+command buffer, and submits it once. `readback` owns the bounded slot ring,
+generation tokens, asynchronous callbacks, mapping, unmapping, and row
+repacking. `polling` is the only module that calls `device.poll`. Support checks
+decide whether the current WGPU renderer accepts a plan. That policy is outside
+the engine so future GPU effect work changes the WGPU module rather than
+selection logic.
 
-`RenderBackend` accepts evaluated frames only. The engine creates CPU and WGPU
+`RenderBackend` accepts evaluated frames only. `submit_frame` starts work without
+returning pixels. `poll_completed` advances callbacks in nonblocking or waiting
+modes, and `flush` drains every submitted frame. The engine creates CPU and WGPU
 backends lazily and returns a fully prepared backend before frame rendering
 starts. CPU preference never initializes WGPU. Auto selection tries WGPU first
 and constructs CPU only when WGPU preparation fails. A failure after frame

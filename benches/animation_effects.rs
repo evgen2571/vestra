@@ -25,6 +25,7 @@ fn main() {
         std::env::var("VIDEO_EDITOR_BENCH_SCENARIO").unwrap_or_else(|_| "basic_colour".to_owned());
     let warmup_runs = env_usize("VIDEO_EDITOR_BENCH_WARMUPS", WARMUP_RUNS);
     let measured_runs = env_usize("VIDEO_EDITOR_BENCH_SAMPLES", MEASURED_RUNS);
+    let pipeline_depth = env_usize("VIDEO_EDITOR_WGPU_IN_FLIGHT", 3);
     assert!(
         measured_runs > 0,
         "VIDEO_EDITOR_BENCH_SAMPLES must be positive"
@@ -40,7 +41,7 @@ fn main() {
             .expect("parse benchmark fixture");
     project["output"]["width"] = width.into();
     project["output"]["height"] = height.into();
-    if scenario == "basic_colour" {
+    if matches!(scenario.as_str(), "basic_colour" | "basic_composition") {
         project["visual"]["clips"][0]["effects"] = serde_json::json!([
             { "id": "brightness", "type": "brightness", "amount": { "base_value": 0.05 } },
             { "id": "contrast", "type": "contrast", "amount": { "base_value": 1.1 } },
@@ -50,6 +51,14 @@ fn main() {
     }
     if scenario == "gaussian_large" {
         project["visual"]["clips"][0]["effects"][0]["radius"]["base_value"] = 16.into();
+    }
+    if scenario == "short_sequence" {
+        project["output"]["duration_mode"] = "explicit".into();
+        project["output"]["duration"] = 1.into();
+    }
+    if scenario == "long_sequence" {
+        project["output"]["duration_mode"] = "explicit".into();
+        project["output"]["duration"] = 10.into();
     }
     let fixture_parent = fixture.parent().expect("fixture parent");
     for asset in project["assets"].as_array_mut().expect("fixture assets") {
@@ -209,9 +218,10 @@ fn main() {
         None => {}
     }
     println!(
-        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} pipeline_depth={pipeline_depth} frame_count={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} peak_in_flight={} blocking_polls={} slot_waits={} staging_memory_bytes={} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend.as_str(),
         adapter_class.map_or("none", AdapterPerformanceClass::as_str),
+        summary.frame_count,
         wall_samples[median_index],
         wall_samples[0],
         wall_samples[measured_runs - 1],
@@ -231,6 +241,10 @@ fn main() {
         median_submission,
         median_readback_wait,
         median_row_repack,
+        summary.performance.peak_frames_in_flight,
+        summary.performance.blocking_polls,
+        summary.performance.slot_wait_count,
+        summary.performance.estimated_staging_memory_bytes,
         summary.adapter,
         summary.performance.cache_peak_bytes,
         summary.performance.peak_cache_entries,
@@ -240,7 +254,9 @@ fn main() {
 
 fn scenario_fixture(scenario: &str) -> &'static Path {
     match scenario {
-        "baseline" | "basic_colour" => Path::new("examples/projects/animation-effects.json"),
+        "baseline" | "basic_colour" | "basic_composition" => {
+            Path::new("examples/projects/animation-effects.json")
+        }
         "gaussian_small" | "gaussian_large" => Path::new("examples/effects/gaussian-blur.json"),
         "glow" => Path::new("examples/effects/glow.json"),
         "sharpen" => Path::new("examples/effects/sharpen.json"),
@@ -255,7 +271,8 @@ fn scenario_fixture(scenario: &str) -> &'static Path {
         "impact" => Path::new("examples/presets/impact.json"),
         "heavy_impact" => Path::new("examples/presets/heavy-impact.json"),
         "transitions" => Path::new("examples/transitions/zoom-blur.json"),
-        "combined" => Path::new("examples/projects/effects-ready-v1.json"),
+        "combined" | "multiple_layers" => Path::new("examples/projects/effects-ready-v1.json"),
+        "short_sequence" | "long_sequence" => Path::new("examples/projects/animation-effects.json"),
         _ => panic!("unknown VIDEO_EDITOR_BENCH_SCENARIO: {scenario}"),
     }
 }

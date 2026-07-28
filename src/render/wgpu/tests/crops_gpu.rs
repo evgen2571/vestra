@@ -8,7 +8,7 @@ use crate::{
     domain::Crop,
     plan::{CompileOptions, compile},
     project::{ValidationOptions, load_and_validate},
-    render::{CpuBackend, RenderBackend},
+    render::CpuBackend,
 };
 use image::RgbaImage;
 

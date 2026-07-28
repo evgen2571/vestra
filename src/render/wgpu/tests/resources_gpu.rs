@@ -2,11 +2,14 @@
 
 use std::sync::Arc;
 
-use super::{compare_rgba, gpu::wgpu_backend_or_skip};
+use super::{
+    compare_rgba,
+    gpu::{wgpu_backend_or_skip, wgpu_backend_or_skip_depth},
+};
 use crate::{
     plan::{CompileOptions, compile},
     project::{ValidationOptions, load_and_validate},
-    render::{CpuBackend, RenderBackend},
+    render::{CompletedFrame, CpuBackend, PollMode, RenderBackend, StagedMetrics, WgpuBackend},
 };
 use image::RgbaImage;
 
@@ -88,15 +91,15 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         return;
     };
     let initial = gpu.stats();
-    assert_eq!(initial.shader_module_count, 2);
-    assert_eq!(initial.pipeline_count, 2);
+    assert_eq!(initial.shader_module_count, 3);
+    assert_eq!(initial.pipeline_count, 3);
     assert_eq!(initial.uploaded_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);
     assert_eq!(initial.sampler_count, 0);
     assert_eq!(initial.output_texture_count, 3);
     assert_eq!(initial.accumulation_buffer_count, 0);
-    assert_eq!(initial.readback_buffer_count, 1);
+    assert_eq!(initial.readback_buffer_count, 3);
     let estimates = gpu.resource_estimates();
     assert_eq!(estimates.source_texture_bytes, initial.source_texture_bytes);
     assert_eq!(
@@ -159,4 +162,77 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         initial.readback_buffer_count
     );
     assert_eq!(final_stats.command_submission_count, 3);
+}
+
+#[test]
+fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("canonical fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let image_layer = plan
+        .layers
+        .iter()
+        .position(|layer| {
+            matches!(
+                layer.source,
+                crate::plan::CompiledVisualSource::Image { .. }
+            )
+        })
+        .expect("fixture has image");
+    let frames = [0, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000]
+        .into_iter()
+        .map(|time| crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], time))
+        .collect::<Vec<_>>();
+    let mut outputs = Vec::new();
+    for depth in [1, 2, 3] {
+        let Some(gpu) = wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), depth) else {
+            return;
+        };
+        let (frames_out, snapshot) = render_staged_sequence(gpu, &frames);
+        assert_eq!(snapshot.configured_pipeline_depth, depth);
+        assert_eq!(snapshot.allocated_slot_count, depth);
+        if depth > 1 {
+            assert!(snapshot.parameter_slot_reuse_count > 0);
+        }
+        outputs.push(frames_out);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+    assert_eq!(outputs[1], outputs[2]);
+}
+
+fn render_staged_sequence(
+    mut backend: WgpuBackend,
+    frames: &[crate::plan::EvaluatedFrame],
+) -> (Vec<Vec<u8>>, StagedMetrics) {
+    let mut next = 0;
+    let mut completed = Vec::<CompletedFrame>::new();
+    while next < frames.len() || backend.in_flight() > 0 {
+        while next < frames.len() && backend.in_flight() < backend.capacity() {
+            backend
+                .submit_frame(next as u64, &frames[next])
+                .expect("staged frame submits");
+            next += 1;
+        }
+        if let Some(frame) = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("staged frame polls")
+        {
+            completed.push(frame);
+        }
+    }
+    completed.extend(backend.flush().expect("staged sequence flushes"));
+    completed.sort_by_key(|frame| frame.frame_number);
+    let outputs = completed
+        .into_iter()
+        .map(|frame| frame.rgba)
+        .collect::<Vec<_>>();
+    let metrics = backend.staged_metrics();
+    (outputs, metrics)
 }

@@ -6,31 +6,14 @@ use super::texture_pool::TexturePool;
 
 pub(super) struct FrameResources {
     pub(super) working: TexturePool,
-    pub(super) readback: wgpu::Buffer,
-    pub(super) row_bytes: u32,
     pub(super) padded_row_bytes: u32,
-    pub(super) frame_bytes: Vec<u8>,
 }
 
 impl FrameResources {
-    pub(super) fn create(
-        device: &wgpu::Device,
-        plan: &RenderPlan,
-        row_bytes: u32,
-        padded_row_bytes: u32,
-        buffer_size: u64,
-    ) -> Self {
+    pub(super) fn create(device: &wgpu::Device, plan: &RenderPlan, padded_row_bytes: u32) -> Self {
         Self {
             working: TexturePool::create(device, plan),
-            readback: device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("video-editor readback"),
-                size: buffer_size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            }),
-            row_bytes,
             padded_row_bytes,
-            frame_bytes: vec![0; (u64::from(row_bytes) * u64::from(plan.canvas.height)) as usize],
         }
     }
 }

@@ -48,8 +48,9 @@ values, so fixture failures can report compact context rather than frame content
 
 WGPU owns persistent source textures, two canvas textures, a layer texture,
 Effect A and Effect B textures, and an Auxiliary texture only for projects
-that contain glow or sharpen, plus shaders, compute pipelines, a bounded
-dynamic-uniform buffer, and a readback buffer. `Rgba8Unorm` working textures store encoded
+that contain glow or sharpen, plus shaders, compute pipelines, and a bounded
+readback ring. Each in-flight slot owns its dynamic-uniform buffer, bind groups,
+readback buffer, callback state, and packed output storage. `Rgba8Unorm` working textures store encoded
 straight-alpha channel values. This deliberately matches the CPU's byte-space
 colour semantics. Shaders clamp each write. They do not perform linear-light
 compositing or use sRGB storage textures.
@@ -90,7 +91,7 @@ layer index, exact logical `EffectPass`, source, destination, auxiliary slot,
 and pass index. The executor selects an already-prepared effect pipeline and
 cached bind group from that operation; it never reinterprets an evaluated effect.
 
-The frame parameter arena writes every operation record before command encoding.
+Each frame-slot parameter arena writes every operation record before command encoding.
 `LayerParameters` is 176 bytes. Each bind group uses an explicit 176-byte
 uniform binding range at buffer offset zero, and dynamic offsets select one
 aligned record. The arena checks alignment, arithmetic, final-record bounds,
@@ -118,15 +119,71 @@ active. These are allocation estimates, not exact VRAM measurements.
 It excludes texture row padding, driver allocation overhead, mip levels,
 implementation alignment, and temporary source staging allocations. Output rows
 in the readback buffer do include WGPU's copy-row padding. Output rows are then
-repacked into a contiguous RGBA buffer before streaming to FFmpeg.
+repacked into a contiguous owned RGBA buffer before streaming to FFmpeg.
 
 The compute shader samples with `textureLoad`, so source texture and byte
 counters are reported separately and `sampler_count` is intentionally zero.
 
 Every normal frame creates one command encoder and one queue submission. Clear,
 layer work, effect passes, ping-pong composition, and the final texture-to-readback copy all
-live in that command buffer. Readback remains synchronous. There is no zero-copy
-encoder path, hardware video encoding, windowed preview, or asynchronous readback.
+live in that command buffer. Submission returns after `map_async` is initiated.
+The polling subsystem supports nonblocking progress, waiting for one completion,
+and final drain. There is no zero-copy encoder path, hardware video encoding, or
+windowed preview.
+
+## Phase 3 staged lifecycle
+
+The engine uses one lifecycle for CPU and WGPU:
+
+```text
+evaluate → submit → in flight → map callback → repack → completed
+         → ordered write → FFmpeg → slot reuse
+```
+
+The default WGPU depth is three. Tests and benchmarks select one, two, or three
+slots with `VIDEO_EDITOR_WGPU_IN_FLIGHT`. A slot is reusable only after GPU copy,
+mapping, row repacking, unmapping, completion consumption, and generation advance.
+The callback captures a submission token containing frame number, slot index, and
+generation. A stale token cannot complete a newer frame.
+
+Completion callbacks only publish a result. They do not copy rows or perform
+diagnostic work. The render thread polls the device in one WGPU polling module,
+copies tightly packed rows into owned storage, unmaps the buffer, and hands an
+owned `CompletedFrame` to the engine. The engine keeps a bounded ordered queue and
+writes only the next frame number. Out-of-order completion therefore cannot
+reorder FFmpeg input.
+
+Shared Canvas, Layer, and effect textures remain backend-owned. WGPU preserves
+submission order on one queue. Submission N copies its final texture into its
+dedicated readback buffer before submission N+1 can reuse the working textures.
+Parameter buffers are per-slot, so a later submission cannot overwrite an earlier
+frame's dynamic records or destroy a bind group still referenced by work.
+
+The engine submits only while slot capacity and ordered-ready capacity permit it.
+Progress events and public completion counts still mean frames accepted by FFmpeg.
+Internal metrics distinguish evaluated, submitted, backend-completed, ready, and
+written frames. Accumulated stage work can overlap and can therefore sum to more
+than wall-clock render time.
+
+Cancellation stops evaluation and submission, aborts FFmpeg, discards ready frames,
+invalidates slots, and removes the temporary output. WGPU work already submitted
+to the device cannot be cancelled. Runtime WGPU failures abort FFmpeg, clean up
+outstanding callbacks, unmap handled buffers, and never switch to CPU.
+
+`VIDEO_EDITOR_WGPU_IN_FLIGHT=1 cargo test --workspace --all-features` exercises the
+synchronous-compatible depth. Strict verification and the optional benchmark matrix
+run with:
+
+```bash
+VIDEO_EDITOR_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase3.sh
+VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 \
+  scripts/verify-wgpu-phase3.sh
+```
+
+The agent environment has no compatible adapter, so real hardware throughput was
+not measured. Lavapipe or another software adapter can validate correctness, but
+its timings do not demonstrate GPU acceleration. The script exits nonzero when
+strict tests cannot obtain an adapter.
 
 ## Headless setup and diagnostics
 

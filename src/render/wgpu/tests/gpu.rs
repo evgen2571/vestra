@@ -22,3 +22,26 @@ pub(super) fn wgpu_backend_or_skip(
         }
     }
 }
+
+pub(super) fn wgpu_backend_or_skip_depth(
+    plan: &crate::plan::RenderPlan,
+    decoded: Arc<crate::render::DecodedAssets>,
+    depth: usize,
+) -> Option<WgpuBackend> {
+    match WgpuBackend::new_with_pipeline_depth(plan, decoded, depth) {
+        Ok(backend) => Some(backend),
+        Err(error) if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some() => {
+            panic!(
+                "strict WGPU verification requires an adapter and device: {}",
+                error.message
+            )
+        }
+        Err(error) => {
+            eprintln!(
+                "skipping adapter-dependent WGPU depth {depth} test: {}",
+                error.message
+            );
+            None
+        }
+    }
+}

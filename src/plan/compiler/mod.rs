@@ -21,11 +21,21 @@ mod limits;
 mod metrics;
 mod output;
 mod presets;
-mod time;
-mod tracks;
 mod transitions;
 
-use time::{effective_dimensions, first_frame_at_or_after, to_nanos};
+/// Transitional facade for compiler submodules while time conversion is owned
+/// by `video-editor-core`.
+mod time {
+    pub use video_editor_core::plan_time::{first_frame_at_or_after, to_nanos};
+}
+
+/// Transitional facade for compiler submodules while track compilation is
+/// owned by `video-editor-core`.
+mod tracks {
+    pub use video_editor_core::plan_tracks::{compile, degrees_to_radians, interpolation};
+}
+
+use video_editor_core::plan_time::{effective_dimensions, first_frame_at_or_after, to_nanos};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,

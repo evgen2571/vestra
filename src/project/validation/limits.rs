@@ -7,7 +7,7 @@ pub(super) fn enforce(
     clips: usize,
     frame_count: u64,
     duration: f64,
-    limits: crate::project::ResourceLimits,
+    limits: video_editor_core::validation::ResourceLimits,
     errors: &mut Vec<Diagnostic>,
 ) {
     if output.width > limits.maximum_width || output.height > limits.maximum_height {

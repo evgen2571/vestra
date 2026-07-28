@@ -9,8 +9,12 @@ use crate::{
 mod colour;
 mod effects;
 mod motion;
-mod shake;
 mod transform;
+
+/// Temporary compatibility facade for core-owned camera shake evaluation.
+mod shake {
+    pub use video_editor_core::camera_shake::apply;
+}
 
 pub use colour::ColourTransform;
 pub use effects::EvaluatedEffect;

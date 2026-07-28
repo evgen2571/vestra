@@ -28,22 +28,25 @@ pub(crate) struct ScheduleCursor<'schedule> {
 impl ActiveSchedule {
     #[must_use]
     pub(crate) fn compile(plan: &RenderPlan) -> Self {
-        let mut events = Vec::with_capacity(plan.layers.len() * 2);
-        for (index, layer) in plan.layers.iter().enumerate() {
-            if layer.start_frame < layer.end_frame {
-                events.push(ScheduleEvent {
-                    frame: layer.start_frame,
-                    action: ScheduleAction::Activate,
-                    item: ScheduledItem(index),
-                });
-                events.push(ScheduleEvent {
-                    frame: layer.end_frame,
-                    action: ScheduleAction::Deactivate,
-                    item: ScheduledItem(index),
-                });
-            }
-        }
-        events.sort_unstable();
+        let events = video_editor_core::plan_schedule::compile(
+            plan.layers
+                .iter()
+                .map(|layer| (layer.start_frame, layer.end_frame)),
+        )
+        .into_iter()
+        .map(|event| ScheduleEvent {
+            frame: event.frame,
+            action: match event.action {
+                video_editor_core::plan_schedule::ScheduleAction::Deactivate => {
+                    ScheduleAction::Deactivate
+                }
+                video_editor_core::plan_schedule::ScheduleAction::Activate => {
+                    ScheduleAction::Activate
+                }
+            },
+            item: ScheduledItem(event.item_index),
+        })
+        .collect();
         Self { events }
     }
 

@@ -19,14 +19,13 @@ pub(super) fn resolve_path(validated: &ValidatedProject) -> std::path::PathBuf {
 }
 
 pub(super) fn compile_sizing(sizing: &Sizing) -> CompiledSizing {
-    match sizing {
-        Sizing::Original => CompiledSizing::Original,
-        Sizing::Fit => CompiledSizing::Fit,
-        Sizing::Cover => CompiledSizing::Cover,
-        Sizing::Scale { scale } => CompiledSizing::Scale(*scale),
-        Sizing::Stretch { width, height } => CompiledSizing::Stretch {
-            width: *width,
-            height: *height,
-        },
+    match video_editor_core::plan_sizing::normalize(sizing) {
+        video_editor_core::plan_sizing::SizingMode::Original => CompiledSizing::Original,
+        video_editor_core::plan_sizing::SizingMode::Fit => CompiledSizing::Fit,
+        video_editor_core::plan_sizing::SizingMode::Cover => CompiledSizing::Cover,
+        video_editor_core::plan_sizing::SizingMode::Scale(scale) => CompiledSizing::Scale(scale),
+        video_editor_core::plan_sizing::SizingMode::Stretch { width, height } => {
+            CompiledSizing::Stretch { width, height }
+        }
     }
 }

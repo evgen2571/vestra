@@ -14,7 +14,7 @@ pub struct RenderPlan {
     pub(crate) frame_rate: (u64, u64),
     pub(crate) frame_count: u64,
     pub(crate) encoder: EncoderSettings,
-    pub(crate) limits: crate::project::ResourceLimits,
+    pub(crate) limits: video_editor_core::validation::ResourceLimits,
     pub(crate) images: Vec<ImageAsset>,
     pub(crate) layers: Vec<CompiledLayer>,
     pub(crate) post_effects: Vec<TimedEffect>,

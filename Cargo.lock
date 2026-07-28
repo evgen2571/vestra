@@ -2100,7 +2100,16 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "uuid",
+ "video-editor-core",
  "wgpu",
+]
+
+[[package]]
+name = "video-editor-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

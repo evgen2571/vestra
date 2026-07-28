@@ -1,12 +1,8 @@
 //! Evaluation and classification of compiled effects.
 
-use crate::{
-    domain::Point,
-    plan::CompiledEffect,
-    project::ZoomBlurDirection,
-    render::effects::{
-        effect_amount_is_identity, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
-    },
+use crate::{domain::Point, plan::CompiledEffect, project::ZoomBlurDirection};
+use video_editor_core::effects::{
+    effect_amount_is_identity, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
 };
 
 #[derive(Clone, Debug)]

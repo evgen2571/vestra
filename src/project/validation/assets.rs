@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
@@ -21,29 +21,9 @@ pub(crate) fn validate(
 ) -> ValidatedAssets {
     let mut paths = BTreeMap::new();
     let mut kinds = BTreeMap::new();
-    let mut ids = BTreeSet::new();
     let mut audio_durations = BTreeMap::new();
     for (index, asset) in assets.iter().enumerate() {
         let pointer = format!("/assets/{index}");
-        if asset.id.trim().is_empty() {
-            errors.push(Diagnostic::error(
-                "MVP-ASSET-ID",
-                Category::Semantic,
-                "asset id must not be empty",
-                format!("{pointer}/id"),
-            ));
-        }
-        if !ids.insert(asset.id.clone()) {
-            errors.push(
-                Diagnostic::error(
-                    "MVP-ASSET-DUPLICATE",
-                    Category::Semantic,
-                    format!("duplicate asset id '{}'", asset.id),
-                    format!("{pointer}/id"),
-                )
-                .with_related_id(&asset.id),
-            );
-        }
         match super::super::paths::resolve_regular_file(root, &asset.source) {
             Ok(resolved) => {
                 match asset.kind {

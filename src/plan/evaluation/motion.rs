@@ -3,13 +3,12 @@
 use crate::plan::CompiledLayer;
 
 pub(super) fn sample_bounds(layer: &CompiledLayer, relative: u128) -> (u128, u128) {
-    let mut lower = 0;
-    let mut upper = layer.duration_nanos;
-    for contribution in &layer.transform_contributions {
-        if contribution.start <= relative && relative < contribution.end {
-            lower = lower.max(contribution.start);
-            upper = upper.min(contribution.end);
-        }
-    }
-    (lower, upper)
+    video_editor_core::motion_bounds::sample_bounds(
+        layer.duration_nanos,
+        layer
+            .transform_contributions
+            .iter()
+            .map(|contribution| (contribution.start, contribution.end)),
+        relative,
+    )
 }

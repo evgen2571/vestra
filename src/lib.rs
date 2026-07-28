@@ -2,15 +2,19 @@
 
 pub mod application;
 pub mod cli;
-pub mod diagnostic;
-pub mod domain;
 pub mod media;
 pub mod output;
 pub mod plan;
 pub mod project;
 pub mod render;
-pub mod timeline;
+/// Temporary compatibility facade for Phase 1 extraction.
+pub use video_editor_core::diagnostic;
+/// Temporary compatibility facade for Phase 1 extraction.
+pub use video_editor_core::domain;
+/// Temporary compatibility facade for Phase 1 extraction.
+pub use video_editor_core::timeline;
 
-pub use diagnostic::{Category, Diagnostic, Severity};
 pub use project::{ValidatedProject, ValidationOptions, load_and_validate};
-pub mod animation;
+/// Temporary compatibility facade for Phase 1 extraction.
+pub use video_editor_core::animation;
+pub use video_editor_core::{Category, Diagnostic, Severity};

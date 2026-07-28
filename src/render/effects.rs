@@ -76,30 +76,10 @@ impl EffectPass {
     }
 }
 
-/// The one Gaussian-radius representation shared by CPU kernel caching, pass
-/// planning, and WGPU parameter encoding.
-#[must_use]
-pub(crate) fn canonical_gaussian_radius(radius: f64) -> f64 {
-    (radius.clamp(0.0, 32.0) * 4.0).round() / 4.0
-}
-
-#[must_use]
-pub(crate) fn gaussian_radius_is_identity(radius: f64) -> bool {
-    canonical_gaussian_radius(radius) <= 0.01
-}
-
-/// Sampling blurs retain their authored evaluated radius. Unlike Gaussian
-/// kernels, their radius must not be quarter-step quantized before identity
-/// selection or parameter encoding.
-#[must_use]
-pub(crate) fn sampling_blur_radius_is_identity(radius: f64) -> bool {
-    radius <= 0.01
-}
-
-#[must_use]
-pub(crate) fn effect_amount_is_identity(amount: f64) -> bool {
-    amount <= 0.0
-}
+pub(crate) use video_editor_core::effects::{
+    canonical_gaussian_radius, effect_amount_is_identity, gaussian_radius_is_identity,
+    sampling_blur_radius_is_identity,
+};
 
 /// The largest built-in chain, glow, has four passes. A stack-backed plan
 /// preserves the existing per-frame allocation behaviour and pass ordering.

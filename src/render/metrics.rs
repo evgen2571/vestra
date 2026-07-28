@@ -234,3 +234,44 @@ pub struct StagedMetrics {
     pub flush_duration: Duration,
     pub abort_drain_duration: Duration,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn staged_snapshot_keeps_poll_and_lifecycle_measurements_separate() {
+        let metrics = StagedMetrics {
+            configured_pipeline_depth: 3,
+            allocated_slot_count: 3,
+            peak_frames_in_flight: 3,
+            nonblocking_polls: 7,
+            nonblocking_poll_duration: Duration::from_millis(11),
+            blocking_polls: 5,
+            drain_polls: 2,
+            slot_wait_count: 4,
+            poll_wait_duration: Duration::from_millis(13),
+            map_callback_duration: Duration::from_millis(17),
+            row_repack_duration: Duration::from_millis(19),
+            submission_to_map_ready: Duration::from_millis(23),
+            slot_lifetime: Duration::from_millis(29),
+            ordered_ready_queue_peak: 2,
+            parameter_slot_reuse_count: 8,
+            ..StagedMetrics::default()
+        };
+        let mut snapshot = PreparationStats::default();
+        snapshot.absorb_staged(&metrics);
+        assert_eq!(snapshot.nonblocking_polls, 7);
+        assert_eq!(snapshot.nonblocking_poll_duration_ms, 11);
+        assert_eq!(snapshot.blocking_polls, 5);
+        assert_eq!(snapshot.drain_polls, 2);
+        assert_eq!(snapshot.poll_wait_duration_ms, 13);
+        assert_eq!(snapshot.map_callback_duration_ms, 17);
+        assert_eq!(snapshot.row_repack_duration_ms, 19);
+        assert_eq!(snapshot.submission_to_map_ready_ms, 23);
+        assert_eq!(snapshot.slot_lifetime_ms, 29);
+        assert_eq!(snapshot.peak_frames_in_flight, 3);
+        assert_eq!(snapshot.ordered_ready_queue_peak, 2);
+        assert_eq!(snapshot.parameter_slot_reuse_count, 8);
+    }
+}

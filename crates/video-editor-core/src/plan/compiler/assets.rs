@@ -2,11 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{
-    Diagnostic,
-    plan::ImageAsset,
-    project::{Project, ValidatedProject},
-};
+use crate::{Diagnostic, plan::ImageAsset, plan::PlanCompileInput, project::Project};
 
 pub(super) struct ImageTable {
     pub(super) images: Vec<ImageAsset>,
@@ -15,7 +11,7 @@ pub(super) struct ImageTable {
 
 /// Keeps the project asset order while omitting unused and non-image assets.
 #[must_use]
-pub(super) fn build(validated: &ValidatedProject, project: &Project) -> ImageTable {
+pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> ImageTable {
     let image_ids: BTreeSet<&str> = project
         .visual
         .clips

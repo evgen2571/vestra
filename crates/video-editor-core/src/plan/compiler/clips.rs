@@ -8,16 +8,16 @@ use crate::{
     domain::{Crop, Point},
     plan::{
         CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
-        CompiledVisualSource, DrawKey,
+        CompiledVisualSource, DrawKey, PlanCompileInput,
     },
-    project::{Clip, ValidatedProject, VisualSource, parse_colour},
+    project::{Clip, VisualSource, parse_colour},
 };
 
 use super::{assets, effects, output, time, tracks};
 
 pub(super) fn compile(
     clip: &Clip,
-    validated: &ValidatedProject,
+    validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
     compilation: &mut CompilationStats,
 ) -> Result<CompiledLayer, Diagnostic> {

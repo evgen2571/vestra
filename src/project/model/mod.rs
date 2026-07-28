@@ -74,10 +74,12 @@ mod tests {
 
     #[test]
     fn optional_fields_reject_explicit_null_but_allow_omission() {
-        let project: Value = serde_json::from_slice(
-            &std::fs::read("examples/projects/animation-effects.json").expect("project"),
-        )
-        .expect("project JSON");
+        let project_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/projects/animation-effects.json"
+        );
+        let project: Value = serde_json::from_slice(&std::fs::read(project_path).expect("project"))
+            .expect("project JSON");
         assert!(serde_json::from_value::<Project>(project.clone()).is_ok());
         let null_fields = [
             vec!["name"],

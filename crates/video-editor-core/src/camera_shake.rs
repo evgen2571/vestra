@@ -6,7 +6,7 @@ use crate::animation::Transform2D;
     clippy::too_many_arguments,
     reason = "the evaluated shake signal is kept allocation-free"
 )]
-pub(super) fn apply(
+pub fn apply(
     transform: &mut Transform2D,
     time: u128,
     position_amount: f64,

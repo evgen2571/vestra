@@ -19,41 +19,8 @@ impl Default for ValidationOptions {
     }
 }
 
-/// Upper bounds applied before rendering allocates or decodes untrusted input.
-#[derive(Clone, Copy, Debug)]
-pub struct ResourceLimits {
-    pub maximum_width: u32,
-    pub maximum_height: u32,
-    pub maximum_frames: u64,
-    pub maximum_duration_seconds: f64,
-    pub maximum_source_pixels: u64,
-    pub maximum_decoded_asset_bytes: u64,
-    pub maximum_total_decoded_bytes: u64,
-    pub maximum_active_layers: usize,
-    pub maximum_clips: usize,
-    pub maximum_effects_per_clip: usize,
-    pub maximum_keyframes_per_track: usize,
-    pub maximum_cache_bytes: u64,
-}
-
-impl Default for ResourceLimits {
-    fn default() -> Self {
-        Self {
-            maximum_width: 8192,
-            maximum_height: 8192,
-            maximum_frames: 216_000,
-            maximum_duration_seconds: 7_200.0,
-            maximum_source_pixels: 100_000_000,
-            maximum_decoded_asset_bytes: 400 * 1024 * 1024,
-            maximum_total_decoded_bytes: 1024 * 1024 * 1024,
-            maximum_active_layers: 64,
-            maximum_clips: 10_000,
-            maximum_effects_per_clip: 32,
-            maximum_keyframes_per_track: 1_000,
-            maximum_cache_bytes: 256 * 1024 * 1024,
-        }
-    }
-}
+/// Temporary compatibility alias for the deterministic core limits.
+pub use video_editor_core::validation::ResourceLimits;
 
 /// Project data that crossed semantic validation. Construction remains inside
 /// the project boundary so downstream layers cannot bypass its invariants.
@@ -71,6 +38,22 @@ pub struct ValidatedProject {
 }
 
 impl ValidatedProject {
+    /// Supplies deterministic planning with resources already resolved by
+    /// application preflight; core never accesses these paths or media.
+    pub(crate) fn plan_compile_input(&self) -> video_editor_core::plan::PlanCompileInput<'_> {
+        video_editor_core::plan::PlanCompileInput::new(
+            &self.project,
+            self.limits,
+            &self.project_path,
+            &self.asset_paths,
+            &self.audio_durations,
+            self.duration,
+            self.frame_rate,
+            self.frame_count,
+            &self.warnings,
+        )
+    }
+
     #[must_use]
     pub fn project(&self) -> &Project {
         &self.project

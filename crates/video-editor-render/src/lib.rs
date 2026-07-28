@@ -158,10 +158,12 @@ pub struct BackendFallback {
 /// Internal import compatibility for renderer modules moved from the root.
 /// This disappears with the temporary root facade in the SDK extraction.
 pub mod render {
+    #[cfg(feature = "cpu")]
     pub use crate::CpuBackend;
     #[cfg(feature = "wgpu")]
     pub use crate::WgpuBackend;
     pub use crate::blend;
+    #[cfg(feature = "cpu")]
     pub use crate::cpu;
     pub use crate::decoded;
     pub use crate::effects;
@@ -186,6 +188,7 @@ pub fn create_backend(
     if let Err(error) = wgpu::support::validate_plan(plan) {
         return match preference {
             RenderBackendPreference::Wgpu => Err(error),
+            #[cfg(feature = "cpu")]
             RenderBackendPreference::Auto => Ok((
                 Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
                 Some(BackendFallback {
@@ -194,16 +197,32 @@ pub fn create_backend(
                     message: error.message,
                 }),
             )),
+            #[cfg(feature = "cpu")]
             RenderBackendPreference::Cpu => Ok((
                 Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
                 None,
             )),
+            #[cfg(not(feature = "cpu"))]
+            RenderBackendPreference::Auto | RenderBackendPreference::Cpu => Err(Diagnostic::error(
+                "MVP-CPU-UNAVAILABLE",
+                Category::Backend,
+                "CPU support is not enabled in this build",
+                "",
+            )),
         };
     }
     match preference {
+        #[cfg(feature = "cpu")]
         RenderBackendPreference::Cpu => Ok((
             Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
             None,
+        )),
+        #[cfg(not(feature = "cpu"))]
+        RenderBackendPreference::Cpu => Err(Diagnostic::error(
+            "MVP-CPU-UNAVAILABLE",
+            Category::Backend,
+            "CPU support is not enabled in this build",
+            "",
         )),
         #[cfg(feature = "wgpu")]
         RenderBackendPreference::Wgpu => Ok((
@@ -231,10 +250,17 @@ pub fn create_backend(
                 )),
             }
         }
-        #[cfg(not(feature = "wgpu"))]
+        #[cfg(all(not(feature = "wgpu"), feature = "cpu"))]
         RenderBackendPreference::Auto => Ok((
             Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
             None,
+        )),
+        #[cfg(all(not(feature = "wgpu"), not(feature = "cpu")))]
+        RenderBackendPreference::Auto => Err(Diagnostic::error(
+            "MVP-BACKEND-UNAVAILABLE",
+            Category::Backend,
+            "no renderer backend is enabled in this build",
+            "",
         )),
     }
 }

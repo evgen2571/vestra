@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    media::FfmpegEncoder,
+    media::{FfmpegSink, FrameSink},
     output::OutputTarget,
     plan::{ActiveSchedule, RenderPlan},
     render::{DecodedAssets, RenderBackend, RenderBackendKind},
@@ -61,8 +61,13 @@ where
             .unwrap_or_else(|| plan.configured_output.clone()),
         options.overwrite,
     )
-    .map_err(|diagnostic| RenderError {
-        diagnostic,
+    .map_err(|error| RenderError {
+        diagnostic: Diagnostic::error(
+            "MVP-OUTPUT-PREPARE",
+            Category::Output,
+            error.to_string(),
+            "/output/path",
+        ),
         temporary_removed: false,
         context: RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, plan),
     })?;
@@ -116,14 +121,19 @@ where
     };
     emit(events::started(plan.frame_count, &output.final_path));
     let mut encoder =
-        FfmpegEncoder::start(&plan.encoder, &output.temporary_path).map_err(|message| {
+        FfmpegSink::start(&plan.encoder, &output.temporary_path).map_err(|error| {
             cleanup_error(
                 &output,
                 plan,
                 RenderFailureStage::EncoderStartup,
                 0,
                 None,
-                Diagnostic::error("MVP-BACKEND-START", Category::Backend, message, ""),
+                Diagnostic::error(
+                    "MVP-BACKEND-START",
+                    Category::Backend,
+                    error.to_string(),
+                    "",
+                ),
             )
         })?;
     let frame_loop = run_frame_loop(
@@ -139,22 +149,27 @@ where
     performance.absorb_staged(&backend.staged_metrics());
     let completed_frames = frame_loop.completed_frames;
     let finish_started = Instant::now();
-    if let Err(message) = encoder.finish() {
+    if let Err(error) = encoder.finish() {
         return Err(cleanup_error(
             &output,
             plan,
             RenderFailureStage::EncoderFinalization,
             completed_frames,
             None,
-            Diagnostic::error("MVP-ENCODE", Category::Render, message, ""),
+            Diagnostic::error("MVP-ENCODE", Category::Render, error.to_string(), ""),
         ));
     }
     timings.encoder_finalize_ms = milliseconds(finish_started.elapsed());
     let publish_started = Instant::now();
-    output.publish().map_err(|diagnostic| {
+    output.publish().map_err(|error| {
         let removed = output.cleanup();
         RenderError {
-            diagnostic,
+            diagnostic: Diagnostic::error(
+                "MVP-OUTPUT-PUBLISH",
+                Category::Output,
+                error.to_string(),
+                "/output/path",
+            ),
             temporary_removed: removed,
             context: RenderFailureContext::at_output(
                 RenderFailureStage::OutputPublication,

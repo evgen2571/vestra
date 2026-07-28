@@ -55,7 +55,7 @@ pub(crate) fn validate(
         errors.push(Diagnostic::error(
             "MVP-BACKEND-UNAVAILABLE",
             Category::Backend,
-            message,
+            message.to_string(),
             "",
         ));
     }

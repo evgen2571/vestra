@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    media::FfmpegEncoder,
+    media::{FfmpegSink, FrameSink},
     output::OutputTarget,
     plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
     render::{CompletedFrame, PollMode, PreparationStats, RenderBackend},
@@ -40,7 +40,7 @@ pub(super) fn run(
     output: &OutputTarget,
     schedule: &ActiveSchedule,
     backend: &mut dyn RenderBackend,
-    encoder: &mut FfmpegEncoder,
+    encoder: &mut FfmpegSink,
     performance: &mut PreparationStats,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<FrameLoopResult, RenderError> {
@@ -423,7 +423,7 @@ fn write_ready_frames(
     ready_frames: &mut BTreeMap<u64, CompletedFrame>,
     next_frame_to_write: &mut u64,
     completed_frames: &mut u64,
-    encoder: &mut FfmpegEncoder,
+    encoder: &mut FfmpegSink,
     backend: &mut dyn RenderBackend,
     performance: &mut PreparationStats,
     plan: &RenderPlan,
@@ -433,8 +433,8 @@ fn write_ready_frames(
 ) -> Result<(), RenderError> {
     while let Some(frame) = ready_frames.remove(next_frame_to_write) {
         let write_started = Instant::now();
-        if let Err(message) = encoder.write_frame(&frame.rgba) {
-            let message = encoder.abort_after_write_failure(message);
+        if let Err(error) = encoder.write_frame(&frame) {
+            let message = encoder.abort_after_write_failure(error);
             return Err(cleanup_error(
                 output,
                 plan,
@@ -473,14 +473,14 @@ fn with_encoder_cleanup(diagnostic: Diagnostic, cleanup: Option<String>) -> Diag
 )]
 fn cancellation(
     backend: &mut dyn RenderBackend,
-    encoder: &mut FfmpegEncoder,
+    encoder: &mut FfmpegSink,
     output: &OutputTarget,
     plan: &RenderPlan,
     completed_frames: u64,
     attempted_frame: Option<u64>,
 ) -> Result<FrameLoopResult, RenderError> {
     backend.abort();
-    encoder.cancel();
+    encoder.abort();
     Err(cleanup_error(
         output,
         plan,

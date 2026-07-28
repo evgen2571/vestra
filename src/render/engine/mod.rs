@@ -40,8 +40,8 @@ mod tests {
         Category, Diagnostic,
         plan::{CompileOptions, EvaluatedFrame, RenderPlan, compile},
         project::{ValidationOptions, load_and_validate},
-        render::{AdapterMetadata, RenderBackend, RenderBackendKind},
-        render::{PreparationStats, PreparationTimings},
+        render::{AdapterMetadata, CompletedFrame, PollMode, RenderBackend, RenderBackendKind},
+        render::{PreparationStats, PreparationTimings, StagedMetrics},
     };
 
     struct FailingBackend {
@@ -49,6 +49,7 @@ mod tests {
         failure_message: &'static str,
         fail_after_completed_frames: u64,
         rendered_frames: u64,
+        completed: std::collections::VecDeque<CompletedFrame>,
     }
 
     impl RenderBackend for FailingBackend {
@@ -56,15 +57,28 @@ mod tests {
             RenderBackendKind::Wgpu
         }
 
-        fn render_frame(
+        fn capacity(&self) -> usize {
+            1
+        }
+
+        fn in_flight(&self) -> usize {
+            self.completed.len()
+        }
+
+        fn submit_frame(
             &mut self,
+            frame_number: u64,
             frame: &EvaluatedFrame,
-            destination: &mut RgbaImage,
         ) -> Result<(), Diagnostic> {
             if self.rendered_frames < self.fail_after_completed_frames {
+                let mut destination = RgbaImage::new(frame.width, frame.height);
                 for pixel in destination.pixels_mut() {
                     *pixel = image::Rgba(frame.background);
                 }
+                self.completed.push_back(CompletedFrame {
+                    frame_number,
+                    rgba: destination.into_raw(),
+                });
                 self.rendered_frames += 1;
                 return Ok(());
             }
@@ -76,6 +90,21 @@ mod tests {
             ))
         }
 
+        fn poll_completed(
+            &mut self,
+            _mode: PollMode,
+        ) -> Result<Option<CompletedFrame>, Diagnostic> {
+            Ok(self.completed.pop_front())
+        }
+
+        fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic> {
+            Ok(self.completed.drain(..).collect())
+        }
+
+        fn abort(&mut self) {
+            self.completed.clear();
+        }
+
         fn stats(&mut self) -> PreparationStats {
             PreparationStats::default()
         }
@@ -83,6 +112,18 @@ mod tests {
         fn timings(&self) -> PreparationTimings {
             PreparationTimings::default()
         }
+
+        fn staged_metrics(&self) -> StagedMetrics {
+            StagedMetrics {
+                configured_pipeline_depth: 1,
+                allocated_slot_count: 1,
+                ..StagedMetrics::default()
+            }
+        }
+
+        fn record_written(&mut self, _frame_number: u64) {}
+
+        fn record_ready_queue(&mut self, _length: usize, _out_of_order: bool) {}
 
         fn adapter(&self) -> Option<AdapterMetadata> {
             None
@@ -96,13 +137,34 @@ mod tests {
             RenderBackendKind::Cpu
         }
 
-        fn render_frame(
+        fn capacity(&self) -> usize {
+            1
+        }
+
+        fn in_flight(&self) -> usize {
+            0
+        }
+
+        fn submit_frame(
             &mut self,
+            _frame_number: u64,
             _frame: &EvaluatedFrame,
-            _destination: &mut RgbaImage,
         ) -> Result<(), Diagnostic> {
             Ok(())
         }
+
+        fn poll_completed(
+            &mut self,
+            _mode: PollMode,
+        ) -> Result<Option<CompletedFrame>, Diagnostic> {
+            Ok(None)
+        }
+
+        fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic> {
+            Ok(Vec::new())
+        }
+
+        fn abort(&mut self) {}
 
         fn stats(&mut self) -> PreparationStats {
             PreparationStats::default()
@@ -111,6 +173,18 @@ mod tests {
         fn timings(&self) -> PreparationTimings {
             PreparationTimings::default()
         }
+
+        fn staged_metrics(&self) -> StagedMetrics {
+            StagedMetrics {
+                configured_pipeline_depth: 1,
+                allocated_slot_count: 1,
+                ..StagedMetrics::default()
+            }
+        }
+
+        fn record_written(&mut self, _frame_number: u64) {}
+
+        fn record_ready_queue(&mut self, _length: usize, _out_of_order: bool) {}
 
         fn adapter(&self) -> Option<AdapterMetadata> {
             None
@@ -128,13 +202,34 @@ mod tests {
             RenderBackendKind::Wgpu
         }
 
-        fn render_frame(
+        fn capacity(&self) -> usize {
+            1
+        }
+
+        fn in_flight(&self) -> usize {
+            0
+        }
+
+        fn submit_frame(
             &mut self,
+            _frame_number: u64,
             _frame: &EvaluatedFrame,
-            _destination: &mut RgbaImage,
         ) -> Result<(), Diagnostic> {
             Ok(())
         }
+
+        fn poll_completed(
+            &mut self,
+            _mode: PollMode,
+        ) -> Result<Option<CompletedFrame>, Diagnostic> {
+            Ok(None)
+        }
+
+        fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic> {
+            Ok(Vec::new())
+        }
+
+        fn abort(&mut self) {}
 
         fn stats(&mut self) -> PreparationStats {
             PreparationStats::default()
@@ -143,6 +238,18 @@ mod tests {
         fn timings(&self) -> PreparationTimings {
             PreparationTimings::default()
         }
+
+        fn staged_metrics(&self) -> StagedMetrics {
+            StagedMetrics {
+                configured_pipeline_depth: 1,
+                allocated_slot_count: 1,
+                ..StagedMetrics::default()
+            }
+        }
+
+        fn record_written(&mut self, _frame_number: u64) {}
+
+        fn record_ready_queue(&mut self, _length: usize, _out_of_order: bool) {}
 
         fn adapter(&self) -> Option<AdapterMetadata> {
             None
@@ -217,6 +324,8 @@ mod tests {
 
     #[path = "selection.rs"]
     mod selection_tests;
+    #[path = "staged.rs"]
+    mod staged_tests;
 
     #[test]
     fn explicit_wgpu_selection_propagates_the_wgpu_diagnostic() {
@@ -415,6 +524,7 @@ mod tests {
                     failure_message: "injected submission failure",
                     fail_after_completed_frames: 0,
                     rendered_frames: 0,
+                    completed: std::collections::VecDeque::new(),
                 }),
                 None,
             ))
@@ -464,6 +574,7 @@ mod tests {
                         failure_message: message,
                         fail_after_completed_frames: 2,
                         rendered_frames: 0,
+                        completed: std::collections::VecDeque::new(),
                     }),
                     None,
                 ))

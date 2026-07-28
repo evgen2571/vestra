@@ -29,7 +29,9 @@ pub(super) struct ResourceEstimates {
     pub(super) working_texture_bytes: u64,
     pub(super) readback_buffer_bytes: u64,
     pub(super) parameter_buffer_bytes: u64,
+    pub(super) packed_frame_bytes: u64,
     pub(super) total_persistent_bytes: u64,
+    pub(super) total_staging_bytes: u64,
     pub(super) peak_parameter_buffer_bytes: u64,
 }
 
@@ -152,7 +154,11 @@ impl GpuRequirements {
             working_texture_bytes,
             readback_buffer_bytes: copy_bytes,
             parameter_buffer_bytes,
+            packed_frame_bytes: full_frame_bytes,
             total_persistent_bytes,
+            total_staging_bytes: total_persistent_bytes
+                .checked_add(full_frame_bytes)
+                .ok_or_else(|| resource_overflow("staging memory estimate overflow"))?,
             peak_parameter_buffer_bytes: parameter_buffer_bytes,
         };
         Ok(Self {
@@ -276,22 +282,50 @@ impl GpuRequirements {
         parameter_buffer_bytes(self.uniform_bytes, alignment, self.parameter_record_count)
     }
 
+    #[cfg(test)]
     pub(super) fn resource_estimates(
         self,
         alignment: u32,
     ) -> Result<ResourceEstimates, Diagnostic> {
+        self.resource_estimates_for_depth(alignment, 1)
+    }
+
+    pub(super) fn resource_estimates_for_depth(
+        self,
+        alignment: u32,
+        pipeline_depth: usize,
+    ) -> Result<ResourceEstimates, Diagnostic> {
+        let pipeline_depth = u64::try_from(pipeline_depth)
+            .map_err(|_| resource_overflow("pipeline depth does not fit the memory estimate"))?;
         let parameter_buffer_bytes = self.parameter_buffer_bytes(alignment)?;
+        let parameter_buffer_bytes = parameter_buffer_bytes
+            .checked_mul(pipeline_depth)
+            .ok_or_else(|| resource_overflow("parameter staging estimate overflow"))?;
+        let readback_buffer_bytes = self
+            .copy_bytes
+            .checked_mul(pipeline_depth)
+            .ok_or_else(|| resource_overflow("readback staging estimate overflow"))?;
         let total_persistent_bytes = self
             .resource_estimates
             .source_texture_bytes
             .checked_add(self.resource_estimates.working_texture_bytes)
-            .and_then(|value| value.checked_add(self.copy_bytes))
+            .and_then(|value| value.checked_add(readback_buffer_bytes))
             .and_then(|value| value.checked_add(parameter_buffer_bytes))
             .ok_or_else(|| resource_overflow("persistent WGPU allocation estimate overflow"))?;
+        let packed_frame_bytes = self
+            .resource_estimates
+            .packed_frame_bytes
+            .checked_mul(pipeline_depth)
+            .ok_or_else(|| resource_overflow("packed frame staging estimate overflow"))?;
         Ok(ResourceEstimates {
             parameter_buffer_bytes,
+            readback_buffer_bytes,
+            packed_frame_bytes: self.resource_estimates.packed_frame_bytes,
             total_persistent_bytes,
-            peak_parameter_buffer_bytes: parameter_buffer_bytes,
+            total_staging_bytes: total_persistent_bytes
+                .checked_add(packed_frame_bytes)
+                .ok_or_else(|| resource_overflow("staging memory estimate overflow"))?,
+            peak_parameter_buffer_bytes: self.parameter_buffer_bytes(alignment)?,
             ..self.resource_estimates
         })
     }

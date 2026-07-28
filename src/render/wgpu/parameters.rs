@@ -183,6 +183,25 @@ mod tests {
             .expect_err("WGPU dynamic offsets are u32 values");
         assert_eq!(error.code, "WGPU-PARAMETER-OVERFLOW");
     }
+
+    #[test]
+    fn separate_parameter_arenas_keep_consecutive_frames_isolated() {
+        let mut first = FrameParameterArena::new(256, 512);
+        let mut second = FrameParameterArena::new(256, 512);
+        let mut first_parameters = LayerParameters::zeroed();
+        first_parameters.header[0] = 320;
+        let mut second_parameters = LayerParameters::zeroed();
+        second_parameters.header[0] = 720;
+        first
+            .push(first_parameters)
+            .expect("first frame parameters");
+        second
+            .push(second_parameters)
+            .expect("second frame parameters");
+        assert_ne!(first.bytes(), second.bytes());
+        assert_eq!(first.offset(0).expect("first offset"), 0);
+        assert_eq!(second.offset(0).expect("second offset"), 0);
+    }
 }
 
 /// Matches the explicit sixteen-byte chunks in `layer.wgsl`.

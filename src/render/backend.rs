@@ -3,7 +3,6 @@
     reason = "backend diagnostics retain structured user-facing context"
 )]
 
-use image::RgbaImage;
 use serde::Serialize;
 
 use crate::{
@@ -119,15 +118,33 @@ fn is_known_software_adapter(field: &str) -> bool {
 
 /// Backend-neutral rendering lifecycle. The engine owns scheduling and encoding;
 /// backends consume already evaluated frames and shared decoded source bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PollMode {
+    NonBlocking,
+    WaitForOne,
+    Drain,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CompletedFrame {
+    pub frame_number: u64,
+    pub rgba: Vec<u8>,
+}
+
 pub trait RenderBackend {
     fn kind(&self) -> RenderBackendKind;
-    fn render_frame(
-        &mut self,
-        frame: &EvaluatedFrame,
-        destination: &mut RgbaImage,
-    ) -> Result<(), Diagnostic>;
+    fn capacity(&self) -> usize;
+    fn in_flight(&self) -> usize;
+    fn submit_frame(&mut self, frame_number: u64, frame: &EvaluatedFrame)
+    -> Result<(), Diagnostic>;
+    fn poll_completed(&mut self, mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic>;
+    fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic>;
+    fn abort(&mut self);
     fn stats(&mut self) -> PreparationStats;
     fn timings(&self) -> PreparationTimings;
+    fn staged_metrics(&self) -> crate::render::metrics::StagedMetrics;
+    fn record_written(&mut self, frame_number: u64);
+    fn record_ready_queue(&mut self, length: usize, out_of_order: bool);
     fn adapter(&self) -> Option<AdapterMetadata>;
 }
 

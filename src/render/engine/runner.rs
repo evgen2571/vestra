@@ -136,6 +136,7 @@ where
         &mut performance,
         emit,
     )?;
+    performance.absorb_staged(&backend.staged_metrics());
     let completed_frames = frame_loop.completed_frames;
     let finish_started = Instant::now();
     if let Err(message) = encoder.finish() {

@@ -11,6 +11,7 @@ use super::{
     resources::{FrameResources, SourceResources},
 };
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct FrameExecutionMetrics {
     pub(super) command_encoders: u64,
@@ -46,6 +47,7 @@ impl FrameBindGroups {
         pipelines: &GpuPipelines,
         frame: &FrameResources,
         sources: &SourceResources,
+        parameters: &wgpu::Buffer,
     ) -> Self {
         let clear_canvas_a = layer_group(
             device,
@@ -55,7 +57,7 @@ impl FrameBindGroups {
                 .working
                 .get(super::frame_plan::TextureSlot::CanvasA)
                 .view,
-            &pipelines.parameters,
+            parameters,
         );
         let solid_layer = layer_group(
             device,
@@ -65,7 +67,7 @@ impl FrameBindGroups {
                 .working
                 .get(super::frame_plan::TextureSlot::Layer)
                 .view,
-            &pipelines.parameters,
+            parameters,
         );
         let image_layers = sources
             .textures
@@ -79,7 +81,7 @@ impl FrameBindGroups {
                         .working
                         .get(super::frame_plan::TextureSlot::Layer)
                         .view,
-                    &pipelines.parameters,
+                    parameters,
                 )
             })
             .collect::<Vec<_>>();
@@ -109,7 +111,7 @@ impl FrameBindGroups {
                         &frame.working.get(canvas).view,
                         &frame.working.get(layer).view,
                         &frame.working.get(output).view,
-                        &pipelines.parameters,
+                        parameters,
                     ),
                 ));
             }
@@ -147,7 +149,7 @@ impl FrameBindGroups {
                                 &frame.working.get(source).view,
                                 &frame.working.get(auxiliary).view,
                                 &frame.working.get(destination).view,
-                                &pipelines.parameters,
+                                parameters,
                             ),
                         ));
                     }
@@ -241,10 +243,12 @@ pub(super) fn encode_and_submit(
     bind_groups: &FrameBindGroups,
     plan: &GpuFramePlan,
     parameters: &FrameParameterArena,
+    parameter_buffer: &wgpu::Buffer,
+    readback: &wgpu::Buffer,
     width: u32,
     height: u32,
 ) -> Result<FrameExecutionMetrics, Diagnostic> {
-    queue.write_buffer(&pipelines.parameters, 0, parameters.bytes());
+    queue.write_buffer(parameter_buffer, 0, parameters.bytes());
     let started = Instant::now();
     let mut metrics = FrameExecutionMetrics {
         command_encoders: 1,
@@ -389,7 +393,7 @@ pub(super) fn encode_and_submit(
                         aspect: wgpu::TextureAspect::All,
                     },
                     wgpu::ImageCopyBuffer {
-                        buffer: &frame.readback,
+                        buffer: readback,
                         layout: wgpu::ImageDataLayout {
                             offset: 0,
                             bytes_per_row: Some(frame.padded_row_bytes),

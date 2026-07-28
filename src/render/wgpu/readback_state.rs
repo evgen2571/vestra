@@ -205,4 +205,19 @@ mod tests {
         assert!(state.all_available());
         assert!(state.acquire(1).is_ok());
     }
+
+    #[test]
+    fn full_ring_failure_and_reuse_follow_the_production_transitions() {
+        let mut state = ReadbackStateMachine::new(2);
+        let first = state.acquire(10).expect("first acquisition");
+        let second = state.acquire(11).expect("second acquisition");
+        assert!(state.acquire(12).is_err());
+        state.mark_failed(first).expect("submitted failure");
+        assert!(!state.all_available());
+        state.abort();
+        assert!(state.all_available());
+        let reused = state.acquire(12).expect("reuse after abort");
+        assert_ne!(first.generation, reused.generation);
+        assert!(state.matches(second) == false);
+    }
 }

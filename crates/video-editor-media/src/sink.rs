@@ -11,5 +11,6 @@ pub struct SinkResult {
 pub trait FrameSink {
     fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError>;
     fn finish(&mut self) -> Result<SinkResult, MediaError>;
-    fn abort(&mut self);
+    /// Stops the sink and releases resources. Calling this more than once is harmless.
+    fn abort(&mut self) -> Result<(), MediaError>;
 }

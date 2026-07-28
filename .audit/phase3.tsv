@@ -1,6 +1,15 @@
-ts	phase	decision	why	evidence	result
-2026-07-28T00:00:00Z	baseline	captured a clean worktree and Phase 2 baseline	preserve unrelated changes and compare the migration against known-good behavior	git status; cargo test --workspace --all-features	164 unit and integration tests passed; no compatible WGPU adapter
-2026-07-28T00:00:00Z	design	used one staged trait with per-slot WGPU ownership	per-slot parameters and bind groups prevent later submissions from overwriting submitted uniform data	src/render/backend.rs; src/render/wgpu/backend.rs	implemented
-2026-07-28T00:00:00Z	engine	bounded submission and ordered writes through a frame-number map	FFmpeg must receive contiguous frame numbers even when backend completion is out of order	src/render/engine/frame_loop.rs; src/render/engine/tests/staged.rs	mock ordering and failure tests pass
-2026-07-28T00:00:00Z	readback	centralized polling and generation-token callback validation	callbacks must not retain unsafe backend references or complete a reused slot	src/render/wgpu/polling.rs; src/render/wgpu/readback.rs	adapter-independent ledger and repack tests pass
-2026-07-28T00:00:00Z	verification	attempted strict Vulkan adapter tests	adapter-dependent correctness must be run when an adapter exists and must not be inferred from software timing	VIDEO_EDITOR_REQUIRE_WGPU=1 VIDEO_EDITOR_WGPU_BACKEND=vulkan cargo test ... resource_gpu_tests	INCONCLUSIVE: WGPU adapter request returned no compatible adapter
+ts	phase	command	result	tests_or_evidence	environment_or_skip
+2026-07-28T15:12:00Z	phase3-finalization	cargo fmt --check	passed	workspace formatting clean	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo check --workspace	passed	all four workspace packages checked	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-core	passed	33 unit tests	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-render	passed	114 unit tests	WGPU adapter-dependent tests stayed intact
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-media	passed	14 unit tests	FFmpeg process fixtures passed
+2026-07-28T15:12:00Z	phase3-finalization	cargo test --workspace --quiet	passed	all workspace unit and integration suites passed	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo clippy --workspace --all-targets --all-features -- -D warnings	passed	no warnings	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo check -p video-editor-render --no-default-features --features cpu	passed	CPU-only renderer builds	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-render --no-default-features --features cpu	passed	50 tests	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo tree -p video-editor-media	passed	no wgpu, naga, pollster, clap, ctrlc, terminal UI, or root application dependency	media depends on render contracts with default features disabled
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- validate examples/projects/animation-effects.json	passed	project is valid	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- inspect examples/projects/animation-effects.json	passed	project inspection complete	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- render examples/projects/animation-effects.json --render-backend cpu --output /tmp/video-editor-phase3-small.mp4 --overwrite --progress none	passed	render completed; FFprobe reported h264 video	FFmpeg and FFprobe available at /usr/bin
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- render examples/projects/animation-effects.json --render-backend wgpu ...	skipped	WGPU-ADAPTER-NOT-FOUND	no compatible WGPU adapter in this environment; compile and adapter-independent tests passed

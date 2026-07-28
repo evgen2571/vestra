@@ -63,18 +63,18 @@ and inverse mapping, converting only final uniform values to `f32`.
 `render/metrics` owns the flat preparation and timing report types. The engine
 uses its merge methods for compiler, schedule, and backend data.
 
-`render/decoded` eagerly decodes image assets once. `render/cpu/assets` owns the
-CPU-only static-crop cache. `render/effects` turns evaluated effects into
-backend-neutral logical passes. It owns identity elimination, multipass
-decomposition, and pass order. Both the CPU executor and WGPU frame planner
-consume those passes; the WGPU executor receives only self-describing planned
-passes and never rediscovers semantics from an evaluated effect.
+`crates/video-editor-render/src/decoded.rs` eagerly decodes image assets once.
+`crates/video-editor-render/src/cpu/assets.rs` owns the CPU-only static-crop
+cache. `video-editor-core` plans backend-neutral logical effect passes,
+including identity elimination, multipass decomposition, and pass order.
+`video-editor-render` executes those logical passes on CPU and WGPU. The WGPU executor
+receives self-describing planned passes and never rediscovers effect semantics.
 
-`render/cpu` contains its prepared backend, composition, rasterization, surface
+`crates/video-editor-render/src/cpu` contains its prepared backend, composition, rasterization, surface
 reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
 returns.
 
-`render/wgpu/backend` owns prepared WGPU state and staged frame submission. `context`
+`crates/video-editor-render/src/wgpu/backend.rs` owns prepared WGPU state and staged frame submission. `context`
 creates the adapter and device. `requirements` validates limits and estimates
 allocation sizes before resources exist. `frame_plan` creates and validates
 adapter-independent canvas and effect ping-pong operations. `texture_pool` owns
@@ -99,15 +99,22 @@ rendering begins aborts the render instead of changing backends mid-stream.
 
 ## Engine, failures, and output
 
-`render/engine/runner` coordinates output setup, shared decoding, active
-scheduling, backend selection, FFmpeg startup, finalization, publication, and
-final reporting. `engine/frame_loop` owns cancellation, active-layer updates,
-evaluation, backend rendering, encoder writes, and progress events. Companion
-modules hold public types, selection, events, and failure handling.
+`crates/video-editor-render` owns `CompletedFrame`. `src/render/engine/runner.rs`
+coordinates output setup, shared decoding, active scheduling, backend selection,
+`FfmpegSink` startup, finalization, frame-count verification, publication, and
+final reporting. `src/render/engine/frame_loop.rs` owns cancellation, active-layer
+updates, evaluation, backend rendering, completion ordering, delivery to
+`FrameSink`, and progress events. The frame loop depends only on `FrameSink`. It
+never knows about FFmpeg, process arguments, or temporary paths.
 
-Failure handling cleans temporary output and aborts FFmpeg when needed. It keeps
-completed-frame and attempted-frame accounting separate so progress and failure
-reports preserve their existing meaning.
+`video-editor-media` owns `FrameSink`, `FfmpegSink`, encoding, and output
+publication. A sink validates and writes the root's ordered input. `FfmpegSink`
+closes stdin, terminates and reaps its child on abort or active drop, joins stderr
+collection after process resolution, and retains the child handle when cleanup
+fails so a later abort or `Drop` can retry. The runner publishes only after sink
+finalization reports the expected frame count. Failure handling removes temporary
+output. Cancellation remains the primary diagnostic, while a sink cleanup failure
+is attached as a secondary hint.
 
 ## Effect and geometry flow
 
@@ -131,7 +138,9 @@ evaluated source and transform
 ## Extending effects
 
 To add a project effect, update the project model and schema, validation,
-compiler, compiled-effect metadata, evaluation, `render/effects` pass planning,
-CPU execution, WGPU parameter encoding, shader/pipeline mapping, prepared bind
-groups, capability coverage, a parity fixture, and a benchmark. Keep the effect
-plan and evaluation behavior unchanged so neither renderer rediscovers ordering.
+compiler, compiled-effect metadata, evaluation, logical-pass planning in
+`video-editor-core::plan`, CPU execution in `crates/video-editor-render/src/cpu`,
+WGPU execution in `crates/video-editor-render/src/wgpu`, parameter encoding,
+shader and pipeline mapping, prepared bind groups, capability coverage, a parity
+fixture, and a benchmark. Keep the effect-plan and evaluation behavior unchanged
+so neither renderer rediscovers ordering.

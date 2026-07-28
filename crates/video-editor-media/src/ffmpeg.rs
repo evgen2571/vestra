@@ -14,7 +14,14 @@ pub struct FfmpegSink {
     stderr_reader: Option<std::thread::JoinHandle<Vec<u8>>>,
     expected_frame: u64,
     expected_bytes: usize,
-    finished: bool,
+    state: SinkState,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SinkState {
+    Active,
+    Finished,
+    Aborted,
 }
 
 impl FfmpegSink {
@@ -68,8 +75,21 @@ impl FfmpegSink {
                 program: "FFmpeg",
                 source,
             })?;
-        let stdin = child.stdin.take().ok_or(MediaError::MissingFrameInput)?;
-        let stderr = child.stderr.take().ok_or(MediaError::MissingErrorOutput)?;
+        let stdin = match child.stdin.take() {
+            Some(stdin) => stdin,
+            None => {
+                let _ = terminate_and_reap(&mut child);
+                return Err(MediaError::MissingFrameInput);
+            }
+        };
+        let stderr = match child.stderr.take() {
+            Some(stderr) => stderr,
+            None => {
+                drop(stdin);
+                let _ = terminate_and_reap(&mut child);
+                return Err(MediaError::MissingErrorOutput);
+            }
+        };
         let expected_bytes = settings.width as usize * settings.height as usize * 4;
         Ok(Self {
             child: Some(child),
@@ -77,61 +97,49 @@ impl FfmpegSink {
             stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
             expected_frame: 0,
             expected_bytes,
-            finished: false,
+            state: SinkState::Active,
         })
     }
 
-    pub fn abort_after_backend_failure(&mut self) -> Option<String> {
-        self.abort_with_context()
-    }
-
-    #[must_use]
-    pub fn abort_after_write_failure(&mut self, write_failure: MediaError) -> String {
-        let context = self.abort_with_context();
-        match context {
-            Some(context) => format!("{write_failure}; {context}"),
-            None => write_failure.to_string(),
-        }
-    }
-
-    fn abort_with_context(&mut self) -> Option<String> {
-        if self.finished {
-            return None;
-        }
-        self.finished = true;
+    fn abort_active(&mut self) -> Result<(), MediaError> {
         drop(self.stdin.take());
-        let mut failures = Vec::new();
-        if let Some(child) = self.child.as_mut() {
-            if let Err(error) = child.kill()
-                && child.try_wait().ok().flatten().is_none()
-            {
-                failures.push(format!("cannot stop FFmpeg: {error}"));
-            }
-            if let Err(error) = child.wait() {
-                failures.push(format!("cannot reap FFmpeg: {error}"));
-            }
-        }
-        self.child.take();
-        let stderr = String::from_utf8_lossy(&self.join_stderr())
-            .trim()
-            .to_owned();
-        if !stderr.is_empty() {
-            failures.push(format!("FFmpeg: {stderr}"));
-        }
-        (!failures.is_empty()).then(|| failures.join("; "))
+        let cleanup_result = if let Some(child) = self.child.as_mut() {
+            terminate_and_reap(child)
+        } else {
+            Ok(())
+        };
+        self.resolve_abort_cleanup(cleanup_result)
     }
 
-    fn join_stderr(&mut self) -> Vec<u8> {
+    fn resolve_abort_cleanup(
+        &mut self,
+        cleanup_result: Result<(), MediaError>,
+    ) -> Result<(), MediaError> {
+        // Keep both handles when the process could not be reaped. Drop can then
+        // make another cleanup attempt instead of losing the only child handle.
+        cleanup_result?;
+
+        self.child.take();
+        self.state = SinkState::Aborted;
+        self.join_stderr().map(|_| ())
+    }
+
+    fn join_stderr(&mut self) -> Result<Vec<u8>, MediaError> {
         self.stderr_reader
             .take()
-            .and_then(|reader| reader.join().ok())
-            .unwrap_or_default()
+            .map(|reader| {
+                reader.join().map_err(|_| MediaError::StderrCollection {
+                    operation: "joining FFmpeg stderr reader",
+                })
+            })
+            .transpose()
+            .map(|stderr| stderr.unwrap_or_default())
     }
 }
 
 impl FrameSink for FfmpegSink {
     fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
-        if self.finished {
+        if self.state != SinkState::Active {
             return Err(MediaError::InvalidSinkState);
         }
         if frame.frame_number != self.expected_frame {
@@ -147,27 +155,57 @@ impl FrameSink for FfmpegSink {
                 actual: frame.rgba.len(),
             });
         }
-        self.stdin
+        if let Err(source) = self
+            .stdin
             .as_mut()
             .ok_or(MediaError::FrameInputClosed)?
             .write_all(&frame.rgba)
-            .map_err(MediaError::FrameWrite)?;
+        {
+            if let Some(status) = self
+                .child
+                .as_mut()
+                .and_then(|child| child.try_wait().ok())
+                .flatten()
+            {
+                self.child.take();
+                let stderr = String::from_utf8_lossy(&self.join_stderr()?)
+                    .trim()
+                    .to_owned();
+                self.state = SinkState::Aborted;
+                return Err(MediaError::ProcessFailed {
+                    program: "FFmpeg",
+                    status,
+                    stderr,
+                });
+            }
+            return Err(MediaError::FrameWrite(source));
+        }
         self.expected_frame += 1;
         Ok(())
     }
 
     fn finish(&mut self) -> Result<SinkResult, MediaError> {
-        if self.finished {
+        if self.state != SinkState::Active {
             return Err(MediaError::InvalidSinkState);
         }
-        self.finished = true;
         drop(self.stdin.take());
-        let child = self.child.as_mut().ok_or(MediaError::InvalidSinkState)?;
-        let status = child.wait().map_err(MediaError::ProcessWait)?;
+        let status = match self
+            .child
+            .as_mut()
+            .ok_or(MediaError::InvalidSinkState)?
+            .wait()
+        {
+            Ok(status) => status,
+            Err(error) => {
+                let _ = self.abort_active();
+                return Err(MediaError::ProcessWait(error));
+            }
+        };
         self.child.take();
-        let stderr = String::from_utf8_lossy(&self.join_stderr())
+        let stderr = String::from_utf8_lossy(&self.join_stderr()?)
             .trim()
             .to_owned();
+        self.state = SinkState::Finished;
         if status.success() {
             Ok(SinkResult {
                 frames_written: self.expected_frame,
@@ -181,15 +219,33 @@ impl FrameSink for FfmpegSink {
         }
     }
 
-    fn abort(&mut self) {
-        let _ = self.abort_with_context();
+    fn abort(&mut self) -> Result<(), MediaError> {
+        match self.state {
+            SinkState::Active => self.abort_active(),
+            SinkState::Finished | SinkState::Aborted => Ok(()),
+        }
     }
 }
 
 impl Drop for FfmpegSink {
     fn drop(&mut self) {
-        self.abort();
+        let _ = self.abort();
     }
+}
+
+fn terminate_and_reap(child: &mut Child) -> Result<(), MediaError> {
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return Ok(());
+    }
+
+    // A process may exit between try_wait and kill. Always wait afterwards: it
+    // both reaps that race and prevents a kill error from creating a zombie.
+    let _kill_error = child.kill();
+    child.wait().map_err(|source| MediaError::ProcessCleanup {
+        operation: "reaping FFmpeg",
+        source,
+    })?;
+    Ok(())
 }
 
 fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
@@ -270,6 +326,36 @@ fn seconds(value: f64) -> String {
 mod tests {
     use super::*;
 
+    fn active_test_sink() -> FfmpegSink {
+        test_sink("exec sleep 30")
+    }
+
+    fn test_sink(script: &str) -> FfmpegSink {
+        let mut child = Command::new("sh")
+            .args(["-c", script])
+            .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("test process starts");
+        let stdin = child.stdin.take().expect("test stdin");
+        let stderr = child.stderr.take().expect("test stderr");
+        FfmpegSink {
+            child: Some(child),
+            stdin: Some(stdin),
+            stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+            expected_frame: 0,
+            expected_bytes: 4,
+            state: SinkState::Active,
+        }
+    }
+
+    fn frame(number: u64) -> CompletedFrame {
+        CompletedFrame {
+            frame_number: number,
+            rgba: vec![0; 4],
+        }
+    }
+
     #[test]
     fn rejects_out_of_order_frames_before_writing() {
         let error = MediaError::FrameOutOfOrder {
@@ -293,7 +379,7 @@ mod tests {
             stderr_reader: None,
             expected_frame: 0,
             expected_bytes: 4,
-            finished: true,
+            state: SinkState::Finished,
         };
         let frame = CompletedFrame {
             frame_number: 0,
@@ -301,6 +387,85 @@ mod tests {
         };
         assert!(sink.write_frame(&frame).is_err());
         assert!(sink.finish().is_err());
-        sink.abort();
+        sink.abort().expect("finished abort is a no-op");
+    }
+
+    #[test]
+    fn abort_is_idempotent_and_blocks_later_writes_and_finish() {
+        let mut sink = active_test_sink();
+        sink.abort().expect("first abort");
+        sink.abort().expect("second abort is a no-op");
+        assert_eq!(sink.state, SinkState::Aborted);
+        assert!(sink.write_frame(&frame(0)).is_err());
+        assert!(sink.finish().is_err());
+    }
+
+    #[test]
+    fn failed_cleanup_keeps_child_ownership_for_a_later_abort_attempt() {
+        let mut sink = active_test_sink();
+        let error = sink
+            .resolve_abort_cleanup(Err(MediaError::ProcessCleanup {
+                operation: "stopping FFmpeg",
+                source: std::io::Error::other("simulated cleanup failure"),
+            }))
+            .expect_err("simulated cleanup failure propagates");
+        assert!(matches!(error, MediaError::ProcessCleanup { .. }));
+        assert!(sink.child.is_some());
+        assert_eq!(sink.state, SinkState::Active);
+        sink.abort().expect("later cleanup attempt reaps child");
+        assert_eq!(sink.state, SinkState::Aborted);
+        assert!(sink.child.is_none());
+    }
+
+    #[test]
+    fn dropping_an_active_sink_terminates_its_child() {
+        let sink = active_test_sink();
+        let process_id = sink.child.as_ref().expect("active child").id();
+        drop(sink);
+        let status = Command::new("sh")
+            .args(["-c", &format!("kill -0 {process_id}")])
+            .status()
+            .expect("check process status");
+        assert!(!status.success(), "dropped sink left child process running");
+    }
+
+    #[test]
+    fn rejects_wrong_frame_size_before_writing() {
+        let mut sink = active_test_sink();
+        let error = sink
+            .write_frame(&CompletedFrame {
+                frame_number: 0,
+                rgba: vec![0; 3],
+            })
+            .expect_err("wrong byte count rejected");
+        assert!(matches!(error, MediaError::InvalidFrameSize { .. }));
+        sink.abort().expect("cleanup test child");
+    }
+
+    #[test]
+    fn write_failure_includes_captured_stderr_after_the_process_exits() {
+        let mut sink = test_sink("echo encoder-broke >&2; exit 1");
+        sink.child
+            .as_mut()
+            .expect("test child")
+            .wait()
+            .expect("test child exits");
+        let error = sink.write_frame(&frame(0)).expect_err("write fails");
+        assert!(matches!(
+            error,
+            MediaError::ProcessFailed { ref stderr, .. } if stderr.contains("encoder-broke")
+        ));
+    }
+
+    #[test]
+    fn failed_finish_collects_stderr_and_leaves_no_active_child() {
+        let mut sink = test_sink("echo finalization-broke >&2; exit 1");
+        let error = sink.finish().expect_err("failed child status propagates");
+        assert!(matches!(
+            error,
+            MediaError::ProcessFailed { ref stderr, .. } if stderr.contains("finalization-broke")
+        ));
+        assert!(sink.child.is_none());
+        assert_eq!(sink.state, SinkState::Finished);
     }
 }

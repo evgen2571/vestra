@@ -59,4 +59,21 @@ mod tests {
         state.record("SECOND", "second".into());
         assert_eq!(state.check().expect_err("fatal state").code, "FIRST");
     }
+
+    #[test]
+    fn empty_state_allows_submit_poll_and_flush_checks() {
+        let state = RuntimeErrorState::default();
+        state.check().expect("no runtime failure");
+        state.check().expect("repeated check remains clear");
+    }
+
+    #[test]
+    fn device_loss_root_cause_is_not_overwritten_by_later_callbacks() {
+        let state = RuntimeErrorState::default();
+        state.record("WGPU-DEVICE-LOST", "device reset".into());
+        state.record("WGPU-RUNTIME", "later validation error".into());
+        let error = state.check().expect_err("device loss is fatal");
+        assert_eq!(error.code, "WGPU-DEVICE-LOST");
+        assert_eq!(error.message, "device reset");
+    }
 }

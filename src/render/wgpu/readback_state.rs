@@ -218,6 +218,6 @@ mod tests {
         assert!(state.all_available());
         let reused = state.acquire(12).expect("reuse after abort");
         assert_ne!(first.generation, reused.generation);
-        assert!(state.matches(second) == false);
+        assert!(!state.matches(second));
     }
 }

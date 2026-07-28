@@ -232,6 +232,16 @@ pub(super) fn run(
             );
         }
         match backend.poll_completed_cancellable(PollMode::WaitForOne, &options.cancelled) {
+            Ok(Some(_frame)) if options.cancelled.load(Ordering::Relaxed) => {
+                return cancellation(
+                    backend,
+                    encoder,
+                    output,
+                    plan,
+                    completed_frames,
+                    plan.frame_count.checked_sub(1),
+                );
+            }
             Ok(Some(frame)) => drained.push(frame),
             Ok(None) if options.cancelled.load(Ordering::Relaxed) => {
                 return cancellation(

@@ -9,7 +9,7 @@ elif [[ $# -ne 0 ]]; then
   exit 2
 fi
 
-cargo build --release --all-features
+cargo build --release -p video-editor-cli --all-features
 mkdir -p examples/output
 
 while IFS= read -r config; do

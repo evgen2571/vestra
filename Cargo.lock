@@ -2086,19 +2086,28 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "video-editor"
 version = "0.1.0"
 dependencies = [
+ "image",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "video-editor-core",
+ "video-editor-media",
+ "video-editor-render",
+]
+
+[[package]]
+name = "video-editor-cli"
+version = "0.1.0"
+dependencies = [
  "assert_cmd",
  "clap",
  "ctrlc",
- "image",
  "predicates",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
- "thiserror 2.0.18",
- "video-editor-core",
- "video-editor-media",
- "video-editor-render",
+ "video-editor",
 ]
 
 [[package]]

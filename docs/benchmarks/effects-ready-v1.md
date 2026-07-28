@@ -3,7 +3,7 @@
 Run the harness with the CPU backend. It defaults to the basic-colour scene:
 
 ```bash
-TMPDIR=target/tmp VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench --bench animation_effects
+TMPDIR=target/tmp VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench -p video-editor --bench animation_effects
 ```
 
 Select an advanced scenario with `VIDEO_EDITOR_BENCH_SCENARIO`. The available
@@ -23,7 +23,7 @@ as GPU acceleration.
 
 ```bash
 TMPDIR=target/tmp VIDEO_EDITOR_BENCH_BACKEND=cpu \
-  VIDEO_EDITOR_BENCH_SCENARIO=combined cargo bench --bench animation_effects
+  VIDEO_EDITOR_BENCH_SCENARIO=combined cargo bench -p video-editor --bench animation_effects
 ```
 
 The harness defaults to 720x1280 with five warmups and five measured renders.
@@ -55,7 +55,7 @@ Command (run once per scenario):
 VIDEO_EDITOR_BENCH_BACKEND=cpu VIDEO_EDITOR_BENCH_SCENARIO=<scenario> \
 VIDEO_EDITOR_BENCH_WIDTH=320 VIDEO_EDITOR_BENCH_HEIGHT=180 \
 VIDEO_EDITOR_BENCH_WARMUPS=0 VIDEO_EDITOR_BENCH_SAMPLES=1 \
-cargo bench --bench animation_effects -- --nocapture
+cargo bench -p video-editor --bench animation_effects -- --nocapture
 ```
 
 These are single-sample development measurements, not comparative release

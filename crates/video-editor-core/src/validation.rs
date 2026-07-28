@@ -7,25 +7,15 @@ use crate::{
     project::{AssetType, Project},
 };
 
-#[path = "../../../src/project/validation/effects.rs"]
 mod effects;
-#[path = "../../../src/project/validation/flashes.rs"]
 mod flashes;
-#[path = "../../../src/project/validation/intervals.rs"]
 mod intervals;
-#[path = "../../../src/project/validation/limits.rs"]
 mod limits;
-#[path = "../../../src/project/validation/output.rs"]
 mod output;
-#[path = "../../../src/project/validation/presets.rs"]
 mod presets;
-#[path = "../../../src/project/validation/tracks.rs"]
 mod tracks;
-#[path = "../../../src/project/validation/transitions.rs"]
 mod transitions;
-#[path = "../../../src/project/validation/visual.rs"]
 mod visual;
-#[path = "../../../src/project/validation/warnings.rs"]
 mod warnings;
 
 /// Upper bounds applied before a renderer allocates resources for a project.

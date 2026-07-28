@@ -8,11 +8,8 @@
 
 extern crate self as video_editor_core;
 
-#[path = "../../../src/animation/mod.rs"]
 pub mod animation;
-#[path = "../../../src/diagnostic.rs"]
 pub mod diagnostic;
-#[path = "../../../src/domain/mod.rs"]
 pub mod domain;
 pub mod effects;
 pub mod output;
@@ -33,7 +30,6 @@ pub mod plan_sizing;
 pub mod plan_time;
 /// Project-track normalization used by plan compilation.
 pub mod plan_tracks;
-#[path = "../../../src/timeline/mod.rs"]
 pub mod timeline;
 pub mod validation;
 
@@ -42,7 +38,7 @@ pub mod validation;
 /// Validation and filesystem loading remain in the transitional root package
 /// while environment-dependent checks are separated in the next extraction
 /// step.
-#[path = "../../../src/project/model/mod.rs"]
+#[path = "project/model/mod.rs"]
 #[allow(
     clippy::module_inception,
     reason = "the compatibility module preserves the existing project model path"

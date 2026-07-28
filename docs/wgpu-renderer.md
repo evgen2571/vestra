@@ -231,8 +231,8 @@ On a compatible adapter, run WGPU parity tests and the release benchmark:
 
 ```bash
 VIDEO_EDITOR_WGPU_BACKEND=vulkan cargo test --all-targets --all-features
-VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench --bench animation_effects -- --nocapture
-VIDEO_EDITOR_BENCH_BACKEND=wgpu cargo bench --bench animation_effects -- --nocapture
+VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench -p video-editor --bench animation_effects -- --nocapture
+VIDEO_EDITOR_BENCH_BACKEND=wgpu cargo bench -p video-editor --bench animation_effects -- --nocapture
 ```
 
 The harness performs five warmups followed by five measured renders and prints

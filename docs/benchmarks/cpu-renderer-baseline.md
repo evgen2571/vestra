@@ -4,7 +4,7 @@ This is a machine-specific release-mode baseline, not a performance guarantee.
 
 ## Workload
 
-`cargo bench --bench animation_effects -- --nocapture` renders the canonical
+`cargo bench -p video-editor --bench animation_effects -- --nocapture` renders the canonical
 animation/effects example at 720×1280, 24 FPS, for 2.5 seconds (60 frames).
 It includes animated position, scale, rotation, a crossfade, a flash overlay,
 and brightness, contrast, saturation, and tint effects. The output uses the
@@ -39,7 +39,7 @@ below ran on the same 720×1280 basic-colour workload:
 
 ```bash
 VIDEO_EDITOR_BENCH_BACKEND=cpu VIDEO_EDITOR_BENCH_WARMUPS=0 \
-VIDEO_EDITOR_BENCH_SAMPLES=1 cargo bench --bench animation_effects -- --nocapture
+VIDEO_EDITOR_BENCH_SAMPLES=1 cargo bench -p video-editor --bench animation_effects -- --nocapture
 ```
 
 | Field | 2026-07-23 baseline | Refactor check | Difference |

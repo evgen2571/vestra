@@ -32,12 +32,15 @@ domain / timeline / animation
         -> render geometry and backend-neutral support
         -> CPU or WGPU backend
         -> render engine / media / output
-        -> application
-        -> CLI
+        -> video-editor SDK
+        -> video-editor-cli
 ```
 
 Project code never depends on rendering. The plan does not depend on a backend.
-The CLI only translates arguments and reports into application calls.
+The SDK coordinates loading, environment preflight, plan compilation, backend
+selection, staged rendering, progress, and cancellation. The CLI only
+translates arguments, installs Ctrl-C handling, and formats structured SDK
+results.
 
 ## Project and plan
 
@@ -99,10 +102,11 @@ rendering begins aborts the render instead of changing backends mid-stream.
 
 ## Engine, failures, and output
 
-`crates/video-editor-render` owns `CompletedFrame`. `src/render/engine/runner.rs`
+`crates/video-editor-render` owns `CompletedFrame`.
+`crates/video-editor/src/render/engine/runner.rs`
 coordinates output setup, shared decoding, active scheduling, backend selection,
 `FfmpegSink` startup, finalization, frame-count verification, publication, and
-final reporting. `src/render/engine/frame_loop.rs` owns cancellation, active-layer
+final reporting. `crates/video-editor/src/render/engine/frame_loop.rs` owns cancellation, active-layer
 updates, evaluation, backend rendering, completion ordering, delivery to
 `FrameSink`, and progress events. The frame loop depends only on `FrameSink`. It
 never knows about FFmpeg, process arguments, or temporary paths.

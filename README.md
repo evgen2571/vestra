@@ -5,7 +5,7 @@
 It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs use formats supported by the Rust `image` crate (including PNG, JPEG, GIF, WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV and MP3 are practical baseline formats).
 
 ```bash
-cargo build --release
+cargo build --release -p video-editor-cli
 
 # Run these from the repository root.
 ./target/release/video-editor validate examples/projects/animation-effects.json
@@ -46,7 +46,7 @@ See [the project format](docs/specs/project-format.md), [the effects-ready examp
 ```bash
 python3 -m pip install -r requirements-dev.txt
 ./scripts/check.sh
-cargo bench --bench animation_effects
+cargo bench -p video-editor --bench animation_effects
 ./scripts/render-effect-examples.sh
 ```
 
@@ -62,6 +62,30 @@ Focused effect, transition, preset, and compositing projects render at least
 
 `requirements-dev.txt` pins the Python package used by the JSON Schema check;
 Rust dependencies are locked in `Cargo.lock`.
+
+## Rust SDK
+
+The workspace root is virtual. `video-editor` is the supported Rust SDK and
+`video-editor-cli` supplies the `video-editor` executable. A normal Rust
+consumer needs only `video-editor`:
+
+```rust
+use video_editor::{BackendPreference, CancellationToken, Editor, RenderRequest};
+
+let editor = Editor::new();
+let result = editor.render_path(
+    "project.json",
+    RenderRequest { output: Some("result.mp4".into()), overwrite: true,
+        preview: false, backend: BackendPreference::Auto },
+    &mut |_| {},
+    &CancellationToken::new(),
+)?;
+```
+
+The SDK exposes structured inspection, validation, preflight, render results,
+events, and errors. It neither initializes logging nor prints or exits. CLI
+formatting, Ctrl-C installation, and exit-code mapping belong to
+`video-editor-cli`.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

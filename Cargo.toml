@@ -1,45 +1,18 @@
-[package]
-name = "video-editor"
-version = "0.1.0"
-edition = "2024"
-description = "A standalone JSON-driven declarative video renderer"
-license = "MIT"
-
 [workspace]
 resolver = "2"
 members = [
-    ".",
     "crates/video-editor-core",
     "crates/video-editor-render",
     "crates/video-editor-media",
+    "crates/video-editor",
+    "crates/video-editor-cli",
 ]
 
-[dependencies]
-video-editor-core = { path = "crates/video-editor-core" }
-video-editor-render = { path = "crates/video-editor-render" }
-video-editor-media = { path = "crates/video-editor-media" }
-clap = { version = "4.5", features = ["derive"] }
-ctrlc = "3.4"
-image = { version = "0.25", default-features = true }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-
-[dev-dependencies]
-assert_cmd = "2"
-predicates = "3"
-sha2 = "0.10"
-tempfile = "3"
-
-[[bench]]
-name = "animation_effects"
-harness = false
-
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 unused_must_use = "deny"
 
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 module_name_repetitions = "allow"
 missing_errors_doc = "allow"

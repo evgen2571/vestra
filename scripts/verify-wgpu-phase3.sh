@@ -12,7 +12,7 @@ cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo check --workspace --benches --all-features
 cargo test --workspace --all-features
-python3 tests/schema_validation.py
+python3 crates/video-editor-cli/tests/schema_validation.py
 scripts/verify-public-asset.sh
 
 # Adapter-independent lifecycle gates must pass before adapter-dependent work.
@@ -47,7 +47,7 @@ for project in \
   examples/presets/heavy-impact.json \
   examples/projects/animation-effects.json; do
   stem=$(basename "$project" .json)
-  cargo run -- render "$project" \
+  cargo run -p video-editor-cli -- render "$project" \
     --render-backend wgpu --output "$temp_dir/$stem.mp4" --overwrite \
     --format json --progress json
 done
@@ -64,7 +64,7 @@ if [[ "${VIDEO_EDITOR_RUN_BENCHMARKS:-0}" == 1 ]]; then
         VIDEO_EDITOR_BENCH_SCENARIO="$scenario" \
         VIDEO_EDITOR_BENCH_WIDTH="$width" \
         VIDEO_EDITOR_BENCH_HEIGHT="$height" \
-          cargo bench --bench animation_effects -- --nocapture
+          cargo bench -p video-editor --bench animation_effects -- --nocapture
       done
     done
   done

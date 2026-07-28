@@ -1,0 +1,20 @@
+checkpoint	command	result	notes
+workspace	cargo fmt --check	pass	formatted virtual workspace and all member crates
+workspace	cargo check --workspace --all-targets	pass	all SDK, CLI, internal crates, tests, examples, and benchmark compile
+tests	cargo test -p video-editor-core	pass	33 unit tests
+tests	cargo test -p video-editor-render	pass	114 unit and adapter-aware tests
+tests	cargo test -p video-editor-media	pass	14 unit tests
+tests	cargo test -p video-editor	pass	33 orchestration tests plus 2 public-SDK integration tests
+tests	cargo test -p video-editor-cli	pass	CLI command, JSON, render, backend, regression, and report tests
+tests	cargo test --workspace	pass	workspace test matrix
+quality	cargo clippy --workspace --all-targets --all-features -- -D warnings	pass	no warnings
+cpu	cargo check -p video-editor-render --no-default-features --features cpu	pass	CPU-only renderer compiles
+cpu	cargo test -p video-editor-render --no-default-features --features cpu	pass	50 CPU-only tests
+cpu	cargo check -p video-editor --no-default-features --features cpu	pass	CPU-only SDK compiles
+dependencies	cargo tree -p video-editor	pass	SDK depends on core, render, and media; no clap or ctrlc
+dependencies	cargo tree -p video-editor-cli	pass	production dependency path starts at video-editor; CLI manifest has no direct internal-crate dependency
+cli	cargo run -p video-editor-cli -- validate examples/projects/animation-effects.json --format json	pass	structured validation result
+cli	cargo run -p video-editor-cli -- inspect examples/projects/animation-effects.json --format json	pass	structured inspection result
+cli	cargo run -p video-editor-cli -- render tests/fixtures/wgpu-small-rgba.json --render-backend cpu --progress none --format json	pass	FFmpeg CPU render published one-frame MP4
+schema	python3 crates/video-editor-cli/tests/schema_validation.py	pass	project schema fixtures
+wgpu	package test suite	pass	adapter-aware WGPU tests execute or skip when no compatible adapter is available; no runtime GPU performance claim

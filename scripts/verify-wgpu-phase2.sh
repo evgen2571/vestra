@@ -26,7 +26,7 @@ for project in \
   examples/presets/heavy-impact.json \
   examples/projects/animation-effects.json; do
   stem=$(basename "$project" .json)
-  cargo run -- render "$project" \
+  cargo run -p video-editor-cli -- render "$project" \
     --render-backend wgpu --output "$temp_dir/$stem.mp4" --overwrite \
     --format json --progress json
 done
@@ -37,7 +37,7 @@ if [[ "${VIDEO_EDITOR_RUN_BENCHMARKS:-0}" == 1 ]]; then
     for scenario in gaussian_large glow sharpen directional_blur zoom_blur motion_blur chromatic_aberration vignette color_adjust blend_modes combined global_post; do
       VIDEO_EDITOR_BENCH_BACKEND=wgpu VIDEO_EDITOR_BENCH_SCENARIO="$scenario" \
         VIDEO_EDITOR_BENCH_WIDTH="$width" VIDEO_EDITOR_BENCH_HEIGHT="$height" \
-        cargo bench --bench animation_effects -- --nocapture
+        cargo bench -p video-editor --bench animation_effects -- --nocapture
     done
   done
 fi

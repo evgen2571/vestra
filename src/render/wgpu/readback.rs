@@ -51,7 +51,7 @@ pub(super) struct ReadbackSlot {
     pub(super) generation: u64,
     submission_index: Option<wgpu::SubmissionIndex>,
     pub(super) state: ReadbackState,
-    callback: Arc<Mutex<Option<MappingCompletion>>>,
+    callback: Arc<Mutex<Vec<MappingCompletion>>>,
     pub(super) packed_bytes: Vec<u8>,
     pub(super) submitted_at: Option<Instant>,
     pub(super) mapped_at: Option<Instant>,
@@ -93,7 +93,7 @@ impl ReadbackRing {
                 generation: 0,
                 submission_index: None,
                 state: ReadbackState::Available,
-                callback: Arc::new(Mutex::new(None)),
+                callback: Arc::new(Mutex::new(Vec::new())),
                 packed_bytes: Vec::with_capacity(packed_bytes),
                 submitted_at: None,
                 mapped_at: None,
@@ -125,10 +125,10 @@ impl ReadbackRing {
         slot.mapped_at = None;
         slot.submission_index = None;
         slot.packed_bytes.clear();
-        *slot
-            .callback
+        slot.callback
             .lock()
-            .map_err(|_| readback_state_error("readback callback state was poisoned"))? = None;
+            .map_err(|_| readback_state_error("readback callback state was poisoned"))?
+            .clear();
         Ok(SubmissionToken {
             frame_number,
             slot_index: lifecycle.slot_index,
@@ -179,7 +179,7 @@ impl ReadbackRing {
                     callback_duration: started.elapsed(),
                 };
                 if let Ok(mut state) = callback.lock() {
-                    *state = Some(completion);
+                    state.push(completion);
                 }
             });
         Ok(())
@@ -187,66 +187,68 @@ impl ReadbackRing {
 
     pub(super) fn process_callbacks(&mut self) -> Result<(), Diagnostic> {
         for slot_index in 0..self.slots.len() {
-            let completion = self.slots[slot_index]
-                .callback
-                .lock()
-                .map_err(|_| readback_state_error("readback callback state was poisoned"))?
-                .take();
-            let Some(completion) = completion else {
-                continue;
-            };
-            self.metrics.callback_duration += completion.callback_duration;
-            let token = completion.token;
-            let Some(slot) = self.slots.get_mut(slot_index) else {
-                continue;
-            };
-            if slot.generation != token.generation
-                || slot.frame_number != Some(token.frame_number)
-                || slot.state != ReadbackState::Mapping
-            {
-                continue;
-            }
-            match completion.result {
-                Ok(()) => {
-                    let mapped = slot.buffer.slice(..).get_mapped_range();
-                    let repack_started = Instant::now();
-                    let mut packed = vec![0_u8; self.packed_bytes];
-                    let repack_result = repack_rows(
-                        &mapped,
-                        &mut packed,
-                        self.width,
-                        self.height,
-                        self.padded_row_bytes,
-                    );
-                    drop(mapped);
-                    slot.buffer.unmap();
-                    if let Err(error) = repack_result {
+            let completions = std::mem::take(
+                &mut *self.slots[slot_index]
+                    .callback
+                    .lock()
+                    .map_err(|_| readback_state_error("readback callback state was poisoned"))?,
+            );
+            for completion in completions {
+                self.metrics.callback_duration += completion.callback_duration;
+                let token = completion.token;
+                let Some(slot) = self.slots.get_mut(slot_index) else {
+                    continue;
+                };
+                if slot.generation != token.generation
+                    || slot.frame_number != Some(token.frame_number)
+                {
+                    continue;
+                }
+                if slot.state != ReadbackState::Mapping {
+                    return Err(readback_state_error("duplicate readback completion"));
+                }
+                match completion.result {
+                    Ok(()) => {
+                        let mapped = slot.buffer.slice(..).get_mapped_range();
+                        let repack_started = Instant::now();
+                        let mut packed = vec![0_u8; self.packed_bytes];
+                        let repack_result = repack_rows(
+                            &mapped,
+                            &mut packed,
+                            self.width,
+                            self.height,
+                            self.padded_row_bytes,
+                        );
+                        drop(mapped);
+                        slot.buffer.unmap();
+                        if let Err(error) = repack_result {
+                            self.lifecycle.mark_failed(lifecycle_token(&token))?;
+                            slot.state = ReadbackState::Failed;
+                            return Err(error);
+                        }
+                        slot.packed_bytes = packed;
+                        if let Some(submitted_at) = slot.submitted_at {
+                            self.metrics.submission_to_map_ready += submitted_at.elapsed();
+                        }
+                        self.lifecycle.mark_ready(lifecycle_token(&token))?;
+                        slot.mapped_at = Some(Instant::now());
+                        slot.state = ReadbackState::Ready;
+                        self.metrics.row_repack_duration += repack_started.elapsed();
+                    }
+                    Err(error) => {
                         self.lifecycle.mark_failed(lifecycle_token(&token))?;
                         slot.state = ReadbackState::Failed;
-                        return Err(error);
+                        self.metrics.mapping_failure_count += 1;
+                        return Err(Diagnostic::error(
+                            "WGPU-READBACK",
+                            Category::Backend,
+                            format!(
+                                "WGPU buffer map failed for frame {} slot {} generation {}: {error}",
+                                token.frame_number, token.slot_index, token.generation
+                            ),
+                            "",
+                        ));
                     }
-                    slot.packed_bytes = packed;
-                    if let Some(submitted_at) = slot.submitted_at {
-                        self.metrics.submission_to_map_ready += submitted_at.elapsed();
-                    }
-                    self.lifecycle.mark_ready(lifecycle_token(&token))?;
-                    slot.mapped_at = Some(Instant::now());
-                    slot.state = ReadbackState::Ready;
-                    self.metrics.row_repack_duration += repack_started.elapsed();
-                }
-                Err(error) => {
-                    self.lifecycle.mark_failed(lifecycle_token(&token))?;
-                    slot.state = ReadbackState::Failed;
-                    self.metrics.mapping_failure_count += 1;
-                    return Err(Diagnostic::error(
-                        "WGPU-READBACK",
-                        Category::Backend,
-                        format!(
-                            "WGPU buffer map failed for frame {} slot {} generation {}: {error}",
-                            token.frame_number, token.slot_index, token.generation
-                        ),
-                        "",
-                    ));
                 }
             }
         }
@@ -307,7 +309,7 @@ impl ReadbackRing {
             slot.submitted_at = None;
             slot.mapped_at = None;
             slot.packed_bytes.clear();
-            slot.callback = Arc::new(Mutex::new(None));
+            slot.callback = Arc::new(Mutex::new(Vec::new()));
             slot.state = ReadbackState::Available;
         }
         self.lifecycle.abort();

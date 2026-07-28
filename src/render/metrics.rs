@@ -77,7 +77,8 @@ pub struct PreparationStats {
     pub written_frames_staged: u64,
     #[serde(skip)]
     pub nonblocking_polls: u64,
-    pub nonblocking_poll_duration: Duration,
+    #[serde(skip)]
+    pub nonblocking_poll_duration_ms: u128,
     #[serde(skip)]
     pub blocking_polls: u64,
     #[serde(skip)]
@@ -102,6 +103,10 @@ pub struct PreparationStats {
     pub flush_duration_ms: u128,
     #[serde(skip)]
     pub abort_drain_duration_ms: u128,
+    #[serde(skip)]
+    pub submission_to_map_ready_ms: u128,
+    #[serde(skip)]
+    pub slot_lifetime_ms: u128,
 }
 
 impl PreparationStats {
@@ -172,12 +177,15 @@ impl PreparationStats {
         self.backend_completed_frames = metrics.backend_completed_frames;
         self.written_frames_staged = metrics.written_frames;
         self.nonblocking_polls = metrics.nonblocking_polls;
+        self.nonblocking_poll_duration_ms = metrics.nonblocking_poll_duration.as_millis();
         self.blocking_polls = metrics.blocking_polls;
         self.drain_polls = metrics.drain_polls;
         self.slot_wait_count = metrics.slot_wait_count;
         self.poll_wait_duration_ms = metrics.poll_wait_duration.as_millis();
         self.map_callback_duration_ms = metrics.map_callback_duration.as_millis();
         self.row_repack_duration_ms = metrics.row_repack_duration.as_millis();
+        self.submission_to_map_ready_ms = metrics.submission_to_map_ready.as_millis();
+        self.slot_lifetime_ms = metrics.slot_lifetime.as_millis();
         self.ordered_ready_queue_peak = metrics.ordered_ready_queue_peak;
         self.out_of_order_completion_count = metrics.out_of_order_completion_count;
         self.parameter_slot_reuse_count = metrics.parameter_slot_reuse_count;
@@ -217,6 +225,8 @@ pub struct StagedMetrics {
     pub poll_wait_duration: Duration,
     pub map_callback_duration: Duration,
     pub row_repack_duration: Duration,
+    pub submission_to_map_ready: Duration,
+    pub slot_lifetime: Duration,
     pub ordered_ready_queue_peak: usize,
     pub out_of_order_completion_count: u64,
     pub parameter_slot_reuse_count: u64,

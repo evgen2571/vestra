@@ -13,6 +13,16 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo check --workspace --benches --all-features
 cargo test --workspace --all-features
 python3 tests/schema_validation.py
+scripts/verify-public-asset.sh
+
+# Adapter-independent lifecycle gates must pass before adapter-dependent work.
+for test_name in \
+  ready_frames_are_returned_before_wait_for_one_blocks \
+  engine_cancellation_after_submission_discards_in_flight_work \
+  lifecycle_rejects_stale_and_invalid_transitions \
+  abort_is_idempotent_and_restores_capacity; do
+  cargo test --lib --all-features "$test_name" -- --nocapture
+done
 
 for depth in 1 2 3; do
   VIDEO_EDITOR_WGPU_IN_FLIGHT="$depth" cargo test --lib --all-features \

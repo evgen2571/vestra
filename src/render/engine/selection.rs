@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{
     Diagnostic,
     plan::RenderPlan,
-    render::{CpuBackend, DecodedAssets, RenderBackend, WgpuBackend},
+    render::{DecodedAssets, RenderBackend},
 };
 
 use super::types::{BackendFallback, RenderBackendPreference};
@@ -19,33 +19,28 @@ pub(super) fn create_backend(
     plan: &RenderPlan,
     decoded: &Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
-    if let Err(error) = super::super::wgpu::support::validate_plan(plan) {
-        return match preference {
-            RenderBackendPreference::Wgpu => Err(error),
-            RenderBackendPreference::Auto => Ok((
-                Box::new(CpuBackend::new(plan, Arc::clone(decoded))),
-                Some(BackendFallback {
-                    code: error.code,
-                    stage: "effect_capability".to_owned(),
-                    message: error.message,
-                }),
-            )),
-            RenderBackendPreference::Cpu => {
-                Ok((Box::new(CpuBackend::new(plan, Arc::clone(decoded))), None))
-            }
-        };
-    }
-    create_backend_with(
-        preference,
-        || Box::new(CpuBackend::new(plan, Arc::clone(decoded))),
-        || WgpuBackend::new(plan, Arc::clone(decoded)).map(|backend| Box::new(backend) as _),
-    )
+    let preference = match preference {
+        RenderBackendPreference::Auto => video_editor_render::RenderBackendPreference::Auto,
+        RenderBackendPreference::Cpu => video_editor_render::RenderBackendPreference::Cpu,
+        RenderBackendPreference::Wgpu => video_editor_render::RenderBackendPreference::Wgpu,
+    };
+    video_editor_render::create_backend(preference, plan, decoded).map(|(backend, fallback)| {
+        (
+            backend,
+            fallback.map(|fallback| BackendFallback {
+                code: fallback.code,
+                stage: fallback.stage,
+                message: fallback.message,
+            }),
+        )
+    })
 }
 
 #[expect(
     clippy::result_large_err,
     reason = "backend selection preserves structured diagnostics for auto fallback and explicit requests"
 )]
+#[cfg(test)]
 pub(super) fn create_backend_with<CF, WF>(
     preference: RenderBackendPreference,
     create_cpu: CF,

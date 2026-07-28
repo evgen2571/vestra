@@ -51,7 +51,7 @@ fn plan_for_evaluated_effect_case(base: &RenderPlan, frame: &EvaluatedFrame) -> 
 
 fn gpu_effect_case_matches_cpu(
     base_plan: &RenderPlan,
-    decoded: &Arc<crate::render::DecodedAssets>,
+    decoded: &Arc<crate::DecodedAssets>,
     frame: &EvaluatedFrame,
     name: &str,
     tolerance: u8,
@@ -137,7 +137,7 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
     assert_eq!(frame_plan.parameter_count, 13);
     assert!(plan.compilation.effect_pass_count > 4);
 
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let requirements = GpuRequirements::from_plan(
         &plan,
         &decoded,
@@ -228,7 +228,7 @@ fn gpu_background_frame_matches_cpu_when_an_adapter_is_available() {
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
@@ -266,7 +266,7 @@ fn gpu_image_layer_matches_cpu_within_two_channels_when_an_adapter_is_available(
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
@@ -306,7 +306,7 @@ fn gpu_multilayer_frame_uses_nonzero_dynamic_offsets_without_validation_errors()
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layers = plan
         .layers
         .iter()
@@ -362,7 +362,7 @@ fn gpu_rgba_fixture_matches_cpu_with_transparent_edges_when_an_adapter_is_availa
     )
     .expect("RGBA parity fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
@@ -411,7 +411,7 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     plan.layers[0].opacity = Track::new(1.0);
     plan.layers.push(upper);
     plan.compilation.effect_pass_count = 1;
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
     };
@@ -624,7 +624,7 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
         if !adapter_available {
             continue;
         }
-        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
             adapter_available = false;
@@ -692,7 +692,7 @@ fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
         if !adapter_available {
             continue;
         }
-        let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+        let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
             adapter_available = false;
@@ -723,7 +723,7 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
     )
     .expect("canonical fixture validates");
     let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&canonical).expect("fixture decodes");
     let image_layers = canonical
         .layers
         .iter()
@@ -836,7 +836,7 @@ fn gpu_canonical_timeline_frames_match_cpu_within_two_channels() {
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
@@ -903,7 +903,7 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
         },
     }];
     plan.compilation.effect_pass_count = 4;
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let base = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
     let cases = [
         (

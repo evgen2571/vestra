@@ -2,7 +2,7 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::render::{cpu::raster::sample_edge, effects::effect_amount_is_identity};
+use crate::{cpu::raster::sample_edge, effects::effect_amount_is_identity};
 
 pub(crate) fn apply(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
     if effect_amount_is_identity(amount) {

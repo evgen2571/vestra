@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
-use crate::render::PollMode;
+use crate::PollMode;
 
 use super::readback::SubmissionToken;
 

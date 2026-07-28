@@ -6,7 +6,7 @@ use super::WgpuBackend;
 
 pub(super) fn wgpu_backend_or_skip(
     plan: &crate::plan::RenderPlan,
-    decoded: Arc<crate::render::DecodedAssets>,
+    decoded: Arc<crate::DecodedAssets>,
 ) -> Option<WgpuBackend> {
     match WgpuBackend::new(plan, decoded) {
         Ok(backend) => Some(backend),
@@ -25,7 +25,7 @@ pub(super) fn wgpu_backend_or_skip(
 
 pub(super) fn wgpu_backend_or_skip_depth(
     plan: &crate::plan::RenderPlan,
-    decoded: Arc<crate::render::DecodedAssets>,
+    decoded: Arc<crate::DecodedAssets>,
     depth: usize,
 ) -> Option<WgpuBackend> {
     match WgpuBackend::new_with_pipeline_depth(plan, decoded, depth) {

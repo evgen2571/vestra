@@ -110,7 +110,7 @@ pub struct PreparationStats {
 }
 
 impl PreparationStats {
-    pub(crate) fn absorb_compilation(&mut self, compilation: &CompilationStats) {
+    pub fn absorb_compilation(&mut self, compilation: &CompilationStats) {
         self.compiled_transition_association_count =
             compilation.compiled_transition_association_count;
         self.parsed_colour_count = compilation.parsed_colour_count;
@@ -134,11 +134,11 @@ impl PreparationStats {
         self.effect_pass_count = compilation.effect_pass_count;
     }
 
-    pub(crate) fn absorb_schedule(&mut self, schedule: &ActiveSchedule) {
+    pub fn absorb_schedule(&mut self, schedule: &ActiveSchedule) {
         self.schedule_event_count = schedule.event_count();
     }
 
-    pub(crate) fn absorb_backend_snapshot(&mut self, backend: &Self) {
+    pub fn absorb_backend_snapshot(&mut self, backend: &Self) {
         self.decoded_image_count = backend.decoded_image_count;
         self.decoded_source_bytes = backend.decoded_source_bytes;
         self.peak_decoded_bytes = backend.peak_decoded_bytes;
@@ -169,7 +169,7 @@ impl PreparationStats {
         self.command_submission_count = backend.command_submission_count;
     }
 
-    pub(crate) fn absorb_staged(&mut self, metrics: &StagedMetrics) {
+    pub fn absorb_staged(&mut self, metrics: &StagedMetrics) {
         self.pipeline_depth = metrics.configured_pipeline_depth;
         self.allocated_slot_count = metrics.allocated_slot_count;
         self.peak_frames_in_flight = metrics.peak_frames_in_flight;

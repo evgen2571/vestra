@@ -12,7 +12,7 @@ use crate::{
 
 fn fixture_requirements() -> (
     crate::plan::RenderPlan,
-    std::sync::Arc<crate::render::DecodedAssets>,
+    std::sync::Arc<crate::DecodedAssets>,
     GpuRequirements,
 ) {
     let validated = load_and_validate(
@@ -24,7 +24,7 @@ fn fixture_requirements() -> (
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let requirements = GpuRequirements::from_plan(
         &plan,
         &decoded,

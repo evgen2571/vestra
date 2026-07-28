@@ -2087,12 +2087,9 @@ name = "video-editor"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
- "bytemuck",
  "clap",
  "ctrlc",
  "image",
- "naga",
- "pollster",
  "predicates",
  "serde",
  "serde_json",
@@ -2101,7 +2098,7 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "video-editor-core",
- "wgpu",
+ "video-editor-render",
 ]
 
 [[package]]
@@ -2110,6 +2107,20 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "video-editor-render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "image",
+ "naga",
+ "pollster",
+ "serde",
+ "serde_json",
+ "video-editor-core",
+ "wgpu",
 ]
 
 [[package]]

@@ -2,9 +2,12 @@
 
 #[test]
 fn small_rgba_parity_fixture_has_transparency_and_nontrivial_detail() {
-    let image = image::open("tests/assets/wgpu-small-rgba.png")
-        .expect("WGPU RGBA fixture decodes")
-        .into_rgba8();
+    let image = image::open(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/assets/wgpu-small-rgba.png"),
+    )
+    .expect("WGPU RGBA fixture decodes")
+    .into_rgba8();
     assert_eq!(image.dimensions(), (173, 129));
     let alpha = image.pixels().map(|pixel| pixel[3]).collect::<Vec<_>>();
     assert_eq!(alpha.iter().copied().min(), Some(0));

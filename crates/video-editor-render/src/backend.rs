@@ -153,7 +153,7 @@ pub trait RenderBackend {
     fn abort(&mut self);
     fn stats(&mut self) -> PreparationStats;
     fn timings(&self) -> PreparationTimings;
-    fn staged_metrics(&self) -> crate::render::metrics::StagedMetrics;
+    fn staged_metrics(&self) -> crate::metrics::StagedMetrics;
     fn record_written(&mut self, frame_number: u64);
     fn record_ready_queue(&mut self, length: usize, out_of_order: bool);
     fn adapter(&self) -> Option<AdapterMetadata>;

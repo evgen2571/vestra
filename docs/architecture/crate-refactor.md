@@ -1,12 +1,12 @@
-# Phase 2 crate refactor
+# Phase 3 crate refactor
 
 The repository is now a transitional Cargo workspace:
 
 ```text
 video-editor (root transitional package)
     -> video-editor-core
-    -> video-editor-render
-            -> video-editor-core
+    -> video-editor-render -> video-editor-core
+    -> video-editor-media -> video-editor-render (contracts only)
 ```
 
 `video-editor-core` is an internal crate (`publish = false`). It owns the
@@ -15,9 +15,13 @@ timeline conversion, animation evaluation, pure project validation, output
 settings, resource limits, and effect normalization. It intentionally has no dependency on WGPU,
 FFmpeg, Clap, the root application, or terminal output.
 
-The root package remains responsible for application orchestration, media
-probing and FFmpeg invocation, CLI presentation, output publication, and the
-environment preflight part of project loading. Preflight
+`video-editor-media` is an internal crate (`publish = false`). It owns FFmpeg,
+FFprobe, media probing, `FrameSink`, `FfmpegSink`, temporary output, final
+publication, and media errors. It depends on `video-editor-render` with default
+features disabled, so media-only work does not enable CPU or WGPU rendering.
+
+The root package remains responsible for application orchestration, CLI
+presentation, and the environment preflight part of project loading. Preflight
 checks file accessibility, image decoding, audio probing, source-duration
 bounds, and backend availability; semantic diagnostics are produced by core.
 
@@ -52,15 +56,24 @@ exposes a mapped WGPU buffer or reusable readback storage, so its pixels remain
 valid after later submissions and polls. WGPU may complete frames out of order;
 the root pipeline preserves encoder order using frame numbers.
 
-The root's `src/render/mod.rs` is a temporary compatibility facade. Its only
-implementation code is the application pipeline: it evaluates plans, handles
-cancellation, drains completions, writes FFmpeg input, reports progress, and
-publishes output. FFmpeg, FFprobe, encoding, output publication, cancellation
-ownership, and CLI handling do not enter `video-editor-render`.
+The root's `src/render/mod.rs` and `src/media/mod.rs` are temporary
+compatibility facades. The root application evaluates plans, handles
+cancellation, drains and orders completed frames, writes each frame through
+`FrameSink`, reports progress, and decides publication. The sink closes stdin,
+terminates and reaps FFmpeg on abort or drop. Root cleanup removes temporary
+output. Only a successful `finish()` result is published, and existing output
+is rejected unless overwrite was selected.
 
-The next phase starts at the root media boundary: extract FFmpeg/FFprobe and
-frame-sink responsibilities into `video-editor-media`, leaving orchestration
-in the transitional package.
+Frame flow:
+
+```text
+core EvaluatedFrame -> renderer submission -> renderer CompletedFrame
+-> root completion ordering -> FrameSink -> temporary encoded output -> publication
+```
+
+Phase 3 is complete. Phase 4 starts by creating the public `video-editor` SDK
+facade and moving root application workflows behind it, then separating the
+CLI crate.
 
 ## Migration map
 

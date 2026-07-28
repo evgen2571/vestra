@@ -468,6 +468,8 @@ impl RenderBackend for WgpuBackend {
         let readback = self.readback.metrics();
         metrics.map_callback_duration = readback.callback_duration;
         metrics.row_repack_duration = readback.row_repack_duration;
+        metrics.submission_to_map_ready = readback.submission_to_map_ready;
+        metrics.slot_lifetime = readback.slot_lifetime;
         metrics.mapping_failure_count = readback.mapping_failure_count;
         metrics
     }

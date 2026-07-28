@@ -16,6 +16,8 @@ use super::{
 pub(super) struct ReadbackMetrics {
     pub(super) callback_duration: Duration,
     pub(super) row_repack_duration: Duration,
+    pub(super) submission_to_map_ready: Duration,
+    pub(super) slot_lifetime: Duration,
     pub(super) mapping_failure_count: u64,
 }
 
@@ -224,6 +226,9 @@ impl ReadbackRing {
                         return Err(error);
                     }
                     slot.packed_bytes = packed;
+                    if let Some(submitted_at) = slot.submitted_at {
+                        self.metrics.submission_to_map_ready += submitted_at.elapsed();
+                    }
                     self.lifecycle.mark_ready(lifecycle_token(&token))?;
                     slot.mapped_at = Some(Instant::now());
                     slot.state = ReadbackState::Ready;
@@ -253,6 +258,9 @@ impl ReadbackRing {
             let slot = &mut self.slots[token.slot_index];
             let frame_number = token.frame_number;
             let rgba = std::mem::take(&mut slot.packed_bytes);
+            if let Some(submitted_at) = slot.submitted_at {
+                self.metrics.slot_lifetime += submitted_at.elapsed();
+            }
             self.lifecycle
                 .consume(token)
                 .expect("ready lifecycle token remains valid");

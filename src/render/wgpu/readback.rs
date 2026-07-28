@@ -16,11 +16,12 @@ pub(super) struct ReadbackMetrics {
     pub(super) mapping_failure_count: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub(super) struct SubmissionToken {
     pub(super) frame_number: u64,
     pub(super) slot_index: usize,
     pub(super) generation: u64,
+    pub(super) submission_index: Option<wgpu::SubmissionIndex>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,6 +44,7 @@ pub(super) struct ReadbackSlot {
     pub(super) buffer: wgpu::Buffer,
     pub(super) frame_number: Option<u64>,
     pub(super) generation: u64,
+    submission_index: Option<wgpu::SubmissionIndex>,
     pub(super) state: ReadbackState,
     callback: Arc<Mutex<Option<MappingCompletion>>>,
     pub(super) packed_bytes: Vec<u8>,
@@ -83,6 +85,7 @@ impl ReadbackRing {
                 }),
                 frame_number: None,
                 generation: 0,
+                submission_index: None,
                 state: ReadbackState::Available,
                 callback: Arc::new(Mutex::new(None)),
                 packed_bytes: Vec::with_capacity(packed_bytes),
@@ -135,6 +138,7 @@ impl ReadbackRing {
         slot.state = ReadbackState::Submitted;
         slot.submitted_at = Some(Instant::now());
         slot.mapped_at = None;
+        slot.submission_index = None;
         slot.packed_bytes.clear();
         *slot
             .callback
@@ -144,15 +148,28 @@ impl ReadbackRing {
             frame_number,
             slot_index,
             generation: slot.generation,
+            submission_index: None,
         })
     }
 
-    pub(super) fn buffer(&self, token: SubmissionToken) -> Result<&wgpu::Buffer, Diagnostic> {
+    pub(super) fn record_submission(
+        &mut self,
+        token: &SubmissionToken,
+        submission_index: wgpu::SubmissionIndex,
+    ) -> Result<SubmissionToken, Diagnostic> {
+        self.slot(token)?;
+        self.slots[token.slot_index].submission_index = Some(submission_index.clone());
+        let mut token = token.clone();
+        token.submission_index = Some(submission_index);
+        Ok(token)
+    }
+
+    pub(super) fn buffer(&self, token: &SubmissionToken) -> Result<&wgpu::Buffer, Diagnostic> {
         let slot = self.slot(token)?;
         Ok(&slot.buffer)
     }
 
-    pub(super) fn mark_mapping(&mut self, token: SubmissionToken) -> Result<(), Diagnostic> {
+    pub(super) fn mark_mapping(&mut self, token: &SubmissionToken) -> Result<(), Diagnostic> {
         let slot = self.slot_mut(token)?;
         if slot.state != ReadbackState::Submitted {
             return Err(readback_state_error("readback slot is not submitted"));
@@ -161,16 +178,17 @@ impl ReadbackRing {
         Ok(())
     }
 
-    pub(super) fn map_async(&mut self, token: SubmissionToken) -> Result<(), Diagnostic> {
+    pub(super) fn map_async(&mut self, token: &SubmissionToken) -> Result<(), Diagnostic> {
         self.mark_mapping(token)?;
         let slot = self.slot(token)?;
         let callback = Arc::clone(&slot.callback);
+        let token = token.clone();
         slot.buffer
             .slice(..)
             .map_async(wgpu::MapMode::Read, move |result| {
                 let started = Instant::now();
                 let completion = MappingCompletion {
-                    token,
+                    token: token.clone(),
                     result: result.map_err(|error| error.to_string()),
                     callback_duration: started.elapsed(),
                 };
@@ -252,6 +270,7 @@ impl ReadbackRing {
             let frame_number = slot.frame_number?;
             let rgba = std::mem::take(&mut slot.packed_bytes);
             slot.frame_number = None;
+            slot.submission_index = None;
             slot.state = ReadbackState::Available;
             slot.submitted_at = None;
             slot.mapped_at = None;
@@ -270,6 +289,32 @@ impl ReadbackRing {
             .all(|slot| slot.state == ReadbackState::Available)
     }
 
+    pub(super) fn oldest_token(&self) -> Result<SubmissionToken, Diagnostic> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| {
+                matches!(
+                    slot.state,
+                    ReadbackState::Submitted | ReadbackState::Mapping
+                )
+            })
+            .filter_map(|(slot_index, slot)| {
+                slot.frame_number
+                    .map(|frame_number| (slot_index, slot, frame_number))
+            })
+            .min_by_key(|(_, _, frame_number)| *frame_number)
+            .map(|(slot_index, slot, frame_number)| SubmissionToken {
+                frame_number,
+                slot_index,
+                generation: slot.generation,
+                submission_index: slot.submission_index.clone(),
+            })
+            .ok_or_else(|| {
+                readback_state_error("no submitted readback slot is available to wait for")
+            })
+    }
+
     pub(super) fn abort(&mut self) {
         for slot in &mut self.slots {
             if slot.state == ReadbackState::Mapping {
@@ -277,6 +322,7 @@ impl ReadbackRing {
             }
             slot.state = ReadbackState::Aborted;
             slot.frame_number = None;
+            slot.submission_index = None;
             slot.submitted_at = None;
             slot.mapped_at = None;
             slot.packed_bytes.clear();
@@ -285,7 +331,7 @@ impl ReadbackRing {
         }
     }
 
-    fn slot(&self, token: SubmissionToken) -> Result<&ReadbackSlot, Diagnostic> {
+    fn slot(&self, token: &SubmissionToken) -> Result<&ReadbackSlot, Diagnostic> {
         let slot = self
             .slots
             .get(token.slot_index)
@@ -296,7 +342,7 @@ impl ReadbackRing {
         Ok(slot)
     }
 
-    fn slot_mut(&mut self, token: SubmissionToken) -> Result<&mut ReadbackSlot, Diagnostic> {
+    fn slot_mut(&mut self, token: &SubmissionToken) -> Result<&mut ReadbackSlot, Diagnostic> {
         let slot = self
             .slots
             .get_mut(token.slot_index)
@@ -412,10 +458,11 @@ mod ledger_tests {
                 frame_number,
                 slot_index,
                 generation: slot.generation,
+                submission_index: None,
             }
         }
 
-        fn transition(&mut self, token: SubmissionToken, state: ReadbackState) -> bool {
+        fn transition(&mut self, token: &SubmissionToken, state: ReadbackState) -> bool {
             let Some(slot) = self.slots.get_mut(token.slot_index) else {
                 return false;
             };
@@ -427,7 +474,7 @@ mod ledger_tests {
             true
         }
 
-        fn release(&mut self, token: SubmissionToken) -> bool {
+        fn release(&mut self, token: &SubmissionToken) -> bool {
             self.transition(token, ReadbackState::Available)
                 && self.slots[token.slot_index].frame_number.take().is_some()
         }
@@ -446,22 +493,22 @@ mod ledger_tests {
                 .iter()
                 .any(|slot| slot.state == ReadbackState::Available)
         );
-        assert!(ledger.transition(first, ReadbackState::Mapping));
-        assert!(ledger.transition(first, ReadbackState::Ready));
-        assert!(ledger.release(first));
+        assert!(ledger.transition(&first, ReadbackState::Mapping));
+        assert!(ledger.transition(&first, ReadbackState::Ready));
+        assert!(ledger.release(&first));
         assert_eq!(ledger.slots[0].state, ReadbackState::Available);
-        assert!(ledger.transition(second, ReadbackState::Mapping));
-        assert!(ledger.transition(second, ReadbackState::Failed));
+        assert!(ledger.transition(&second, ReadbackState::Mapping));
+        assert!(ledger.transition(&second, ReadbackState::Failed));
     }
 
     #[test]
     fn stale_generation_cannot_complete_a_reused_slot() {
         let mut ledger = ReadbackLedger::new(1);
         let old = ledger.acquire(0);
-        assert!(ledger.release(old));
+        assert!(ledger.release(&old));
         let current = ledger.acquire(1);
         assert_ne!(old.generation, current.generation);
-        assert!(!ledger.transition(old, ReadbackState::Ready));
+        assert!(!ledger.transition(&old, ReadbackState::Ready));
         assert_eq!(ledger.slots[0].state, ReadbackState::Submitted);
     }
 
@@ -469,15 +516,15 @@ mod ledger_tests {
     fn a_slot_cannot_be_reused_until_completion_is_consumed() {
         let mut ledger = ReadbackLedger::new(1);
         let token = ledger.acquire(0);
-        assert!(ledger.transition(token, ReadbackState::Mapping));
+        assert!(ledger.transition(&token, ReadbackState::Mapping));
         assert!(
             !ledger
                 .slots
                 .iter()
                 .any(|slot| slot.state == ReadbackState::Available)
         );
-        assert!(ledger.transition(token, ReadbackState::Ready));
-        assert!(ledger.release(token));
+        assert!(ledger.transition(&token, ReadbackState::Ready));
+        assert!(ledger.release(&token));
         let reused = ledger.acquire(1);
         assert!(reused.generation > token.generation);
     }

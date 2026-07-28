@@ -17,6 +17,7 @@ mod polling;
 mod readback;
 mod requirements;
 mod resources;
+mod runtime_error;
 pub(crate) mod support;
 mod texture_pool;
 

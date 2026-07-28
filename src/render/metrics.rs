@@ -77,6 +77,7 @@ pub struct PreparationStats {
     pub written_frames_staged: u64,
     #[serde(skip)]
     pub nonblocking_polls: u64,
+    pub nonblocking_poll_duration: Duration,
     #[serde(skip)]
     pub blocking_polls: u64,
     #[serde(skip)]
@@ -209,6 +210,7 @@ pub struct StagedMetrics {
     pub backend_completed_frames: u64,
     pub written_frames: u64,
     pub nonblocking_polls: u64,
+    pub nonblocking_poll_duration: Duration,
     pub blocking_polls: u64,
     pub drain_polls: u64,
     pub slot_wait_count: u64,

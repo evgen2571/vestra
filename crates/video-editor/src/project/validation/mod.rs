@@ -1,17 +1,22 @@
-use crate::{Category, Diagnostic, ValidationReport};
+use crate::{Diagnostic, ValidationReport};
 use video_editor_core::timeline::{frame_count, seconds_to_nanos};
 
-use crate::project::{LoadError, Project, ValidatedProject, ValidationOptions};
+use crate::project::{Project, ValidatedProject, ValidationOptions};
 
 pub(super) mod assets;
 pub(super) mod audio;
 pub(super) mod duration;
 
+pub(crate) struct PreflightOutcome {
+    pub diagnostics: Vec<Diagnostic>,
+    pub resolved: Option<ValidatedProject>,
+}
+
 pub(crate) fn preflight(
     project: &Project,
     validation: &ValidationReport,
     options: &ValidationOptions,
-) -> Result<ValidatedProject, LoadError> {
+) -> PreflightOutcome {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
     let canonical = project.canonical();
@@ -33,18 +38,13 @@ pub(crate) fn preflight(
     let duration =
         duration::resolve(canonical, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
-    if options.check_backend
-        && let Err(message) = video_editor_media::backend_available()
+    let mut diagnostics = errors;
+    diagnostics.extend(warnings.iter().cloned());
+    let resolved = if diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic.severity != crate::Severity::Fatal)
     {
-        errors.push(Diagnostic::error(
-            "MVP-BACKEND-UNAVAILABLE",
-            Category::Backend,
-            message.to_string(),
-            "",
-        ));
-    }
-    if errors.is_empty() {
-        Ok(ValidatedProject {
+        Some(ValidatedProject {
             project: canonical.clone(),
             limits: options.limits,
             base_directory: project.base_directory().to_path_buf(),
@@ -56,7 +56,11 @@ pub(crate) fn preflight(
             warnings,
         })
     } else {
-        Err(LoadError::Diagnostics(errors))
+        None
+    };
+    PreflightOutcome {
+        diagnostics,
+        resolved,
     }
 }
 

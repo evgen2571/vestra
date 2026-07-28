@@ -155,6 +155,93 @@ pub struct BackendFallback {
     pub message: String,
 }
 
+/// Renderer-owned readiness result. It carries stable facts, never raw WGPU
+/// handles, so callers use the renderer's backend policy without duplicating it.
+#[derive(Clone, Debug)]
+pub struct BackendProbe {
+    pub selected: Option<RenderBackendPreference>,
+    pub fallback: Option<BackendFallback>,
+    pub adapter: Option<AdapterMetadata>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+pub fn probe_backend(preference: RenderBackendPreference) -> BackendProbe {
+    match preference {
+        RenderBackendPreference::Cpu => BackendProbe {
+            selected: cpu_probe(),
+            fallback: None,
+            adapter: None,
+            diagnostics: Vec::new(),
+        },
+        RenderBackendPreference::Wgpu => match wgpu_probe() {
+            Ok(adapter) => BackendProbe {
+                selected: Some(RenderBackendPreference::Wgpu),
+                fallback: None,
+                adapter: Some(adapter),
+                diagnostics: Vec::new(),
+            },
+            Err(diagnostic) => BackendProbe {
+                selected: None,
+                fallback: None,
+                adapter: None,
+                diagnostics: vec![diagnostic],
+            },
+        },
+        RenderBackendPreference::Auto => match wgpu_probe() {
+            Ok(adapter) => BackendProbe {
+                selected: Some(RenderBackendPreference::Wgpu),
+                fallback: None,
+                adapter: Some(adapter),
+                diagnostics: Vec::new(),
+            },
+            Err(diagnostic) => BackendProbe {
+                selected: cpu_probe(),
+                fallback: cpu_probe().map(|_| BackendFallback {
+                    code: diagnostic.code.clone(),
+                    stage: "wgpu_probe".to_owned(),
+                    message: diagnostic.message.clone(),
+                }),
+                adapter: None,
+                diagnostics: if cpu_probe().is_some() {
+                    vec![Diagnostic::warning(
+                        "MVP-WGPU-FALLBACK",
+                        format!(
+                            "WGPU is unavailable; rendering will use CPU: {}",
+                            diagnostic.message
+                        ),
+                        "",
+                    )]
+                } else {
+                    vec![diagnostic]
+                },
+            },
+        },
+    }
+}
+
+#[cfg(feature = "cpu")]
+fn cpu_probe() -> Option<RenderBackendPreference> {
+    Some(RenderBackendPreference::Cpu)
+}
+#[cfg(not(feature = "cpu"))]
+fn cpu_probe() -> Option<RenderBackendPreference> {
+    None
+}
+
+#[cfg(feature = "wgpu")]
+fn wgpu_probe() -> Result<AdapterMetadata, Diagnostic> {
+    wgpu::probe()
+}
+#[cfg(not(feature = "wgpu"))]
+fn wgpu_probe() -> Result<AdapterMetadata, Diagnostic> {
+    Err(Diagnostic::error(
+        "MVP-WGPU-UNAVAILABLE",
+        Category::Backend,
+        "WGPU support is not enabled in this build",
+        "",
+    ))
+}
+
 /// Internal renderer imports shared by renderer modules.
 pub mod render {
     #[cfg(feature = "cpu")]
@@ -235,7 +322,7 @@ pub fn create_backend(
             "WGPU support is not enabled in this build",
             "",
         )),
-        #[cfg(feature = "wgpu")]
+        #[cfg(all(feature = "wgpu", feature = "cpu"))]
         RenderBackendPreference::Auto => {
             match WgpuBackend::new(plan, std::sync::Arc::clone(decoded)) {
                 Ok(backend) => Ok((Box::new(backend), None)),
@@ -249,6 +336,11 @@ pub fn create_backend(
                 )),
             }
         }
+        #[cfg(all(feature = "wgpu", not(feature = "cpu")))]
+        RenderBackendPreference::Auto => Ok((
+            Box::new(WgpuBackend::new(plan, std::sync::Arc::clone(decoded))?),
+            None,
+        )),
         #[cfg(all(not(feature = "wgpu"), feature = "cpu"))]
         RenderBackendPreference::Auto => Ok((
             Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),

@@ -38,9 +38,12 @@ pub fn print_failure(
     errors: Vec<Diagnostic>,
     warnings: Vec<Diagnostic>,
 ) -> ExitCode {
-    let exit = exit_for(errors.first().map(|error| &error.category));
+    let exit = exit_for_errors(&errors);
     match format {
         ResultFormat::Human => {
+            for warning in &warnings {
+                eprintln!("{}: {}", warning.code, warning.message);
+            }
             for error in &errors {
                 eprintln!("{}: {}", error.code, error.message);
             }
@@ -58,14 +61,36 @@ pub fn print_failure(
     ExitCode::from(exit)
 }
 
-fn exit_for(category: Option<&Category>) -> u8 {
+/// Error categories have a deliberate precedence. This preserves the former
+/// lifecycle ordering without depending on diagnostics being sorted by code.
+fn exit_for_errors(errors: &[Diagnostic]) -> u8 {
+    errors
+        .iter()
+        .map(|error| exit_for(&error.category))
+        .min_by_key(|exit| exit_priority(*exit))
+        .unwrap_or(3)
+}
+
+fn exit_priority(exit: u8) -> u8 {
+    match exit {
+        2 => 0,
+        3 => 1,
+        4 => 2,
+        5 => 3,
+        6 => 4,
+        130 => 5,
+        _ => 6,
+    }
+}
+
+fn exit_for(category: &Category) -> u8 {
     match category {
-        Some(Category::Asset | Category::Media) => 4,
-        Some(Category::Backend | Category::Render) => 5,
-        Some(Category::Output) => 6,
-        Some(Category::Usage) => 2,
-        Some(Category::Cancellation) => 130,
-        Some(Category::Internal) => 1,
+        Category::Asset | Category::Media => 4,
+        Category::Backend | Category::Render => 5,
+        Category::Output => 6,
+        Category::Usage => 2,
+        Category::Cancellation => 130,
+        Category::Internal => 1,
         _ => 3,
     }
 }

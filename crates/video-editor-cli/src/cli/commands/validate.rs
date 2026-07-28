@@ -20,7 +20,7 @@ pub(super) fn run(project: PathBuf, format: ResultFormat) -> ExitCode {
     };
     // Validation remains a pure SDK operation. The established CLI command
     // also reports whether that valid project can actually use its assets.
-    let report = editor.preflight(&loaded, video_editor::PreflightOptions::default());
+    let report = editor.preflight(&loaded, video_editor::PreflightOptions::for_validation());
     if report.is_valid() {
         print_success(
             "validate",

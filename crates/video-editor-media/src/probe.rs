@@ -7,28 +7,44 @@ use serde::Deserialize;
 
 use crate::MediaError;
 
-pub fn backend_available() -> Result<(), MediaError> {
-    for executable in ["ffmpeg", "ffprobe"] {
-        let status = Command::new(executable)
-            .arg("-version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|source| MediaError::ProcessStart {
-                program: executable,
-                source,
-            })?;
-        if !status.success() {
-            return Err(MediaError::Unavailable {
-                program: executable,
-            });
-        }
+pub fn check_executable(executable: &Path, program: &'static str) -> Result<(), MediaError> {
+    let status = Command::new(executable)
+        .arg("-version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|source| MediaError::ProcessStart { program, source })?;
+    if !status.success() {
+        return Err(MediaError::Unavailable { program });
     }
     Ok(())
 }
 
+pub fn check_ffmpeg_available(executable: Option<&Path>) -> Result<(), MediaError> {
+    check_executable(executable.unwrap_or_else(|| Path::new("ffmpeg")), "ffmpeg")
+}
+
+pub fn check_ffprobe_available(executable: Option<&Path>) -> Result<(), MediaError> {
+    check_executable(
+        executable.unwrap_or_else(|| Path::new("ffprobe")),
+        "ffprobe",
+    )
+}
+
+pub fn backend_available() -> Result<(), MediaError> {
+    check_ffmpeg_available(None)?;
+    check_ffprobe_available(None)
+}
+
 pub fn probe_audio_duration(path: &Path) -> Result<f64, MediaError> {
-    let output = Command::new("ffprobe")
+    probe_audio_duration_with(path, None)
+}
+
+pub fn probe_audio_duration_with(
+    path: &Path,
+    executable: Option<&Path>,
+) -> Result<f64, MediaError> {
+    let output = Command::new(executable.unwrap_or_else(|| Path::new("ffprobe")))
         .args([
             "-v",
             "error",

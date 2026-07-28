@@ -85,6 +85,12 @@ fn solid_colour_clips_cover_the_canvas_without_transforms() {
         "opacity": { "base_value": 1.0 }
     }]);
     project["visual"]["transitions"] = serde_json::json!([]);
+    project["output"]["path"] = workspace
+        .path()
+        .join("solid-colour.mp4")
+        .to_string_lossy()
+        .into_owned()
+        .into();
     let path = workspace.path().join("solid-colour.json");
     std::fs::write(
         &path,

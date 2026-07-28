@@ -38,7 +38,10 @@ pub struct BackendFallback {
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct RenderTimings {
+    /// JSON parsing spent while constructing `Project`; zero for `from_value`.
     pub project_parse_ms: u128,
+    /// Time inside `Editor::render`, excluding earlier project construction.
+    pub operation_total_ms: u128,
     pub semantic_validation_ms: u128,
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
@@ -65,6 +68,7 @@ pub struct RenderTimings {
     pub encoder_write_ms: u128,
     pub encoder_finalize_ms: u128,
     pub output_publish_ms: u128,
+    /// Compatibility alias for `operation_total_ms`.
     pub total_ms: u128,
 }
 

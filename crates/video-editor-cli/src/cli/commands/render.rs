@@ -71,13 +71,14 @@ pub(super) fn run(
             print_success("render", format, data, "render completed");
             ExitCode::SUCCESS
         }
-        Err(EditorError::Project(errors)) => {
+        Err(EditorError::Project { errors, warnings }) => {
             if let Err(message) = write_failure_report(
                 report.as_deref(),
                 "render",
                 "project",
                 "project_load_or_validation",
                 &errors,
+                &warnings,
                 began.elapsed().as_millis(),
                 Some(&project),
             ) {
@@ -88,9 +89,9 @@ pub(super) fn run(
                     message,
                     "",
                 ));
-                return print_failure("render", format, all_errors, Vec::new());
+                return print_failure("render", format, all_errors, warnings);
             }
-            print_failure("render", format, errors, Vec::new())
+            print_failure("render", format, errors, warnings)
         }
         Err(EditorError::Plan {
             diagnostic,
@@ -176,12 +177,17 @@ pub(super) fn run(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the command boundary keeps report compatibility fields explicit"
+)]
 fn write_failure_report(
     path: Option<&Path>,
     command: &str,
     category: &str,
     stage: &str,
     errors: &[Diagnostic],
+    warnings: &[Diagnostic],
     elapsed_ms: u128,
     project_path: Option<&Path>,
 ) -> Result<(), String> {
@@ -192,6 +198,7 @@ fn write_failure_report(
             category,
             stage,
             errors,
+            warnings,
             project_path,
             elapsed_ms,
         )?;

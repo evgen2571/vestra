@@ -99,12 +99,19 @@ relative asset and output path resolves against that base directory. Absolute
 paths stay absolute. Serializing or saving a `Project` preserves the canonical
 path strings; it does not rewrite relative paths to absolute paths.
 
-The lifecycle is project parsing, pure validation, environment preflight, plan
-compilation, render preparation, staged rendering, then `FrameSink` and FFmpeg
-publication. `Editor::validate` is deterministic and never opens assets or
-starts a subprocess. The CLI `validate` command additionally runs preflight,
-so a missing or unreadable asset is reported to CLI users. Reusable preparation
-and single-frame rendering are intentionally not part of this SDK yet.
+The lifecycle is project parsing, pure validation, operation-aware preflight,
+plan compilation, render preparation, staged rendering, ordered `FrameSink`
+delivery, then temporary output publication. `Editor::validate` is deterministic
+and never opens assets or starts a subprocess. `Editor::preflight` checks only
+the environment required by its explicit target. The CLI `validate` command uses
+the complete default render-readiness target, including assets, required media
+probing, encoder, backend, and configured output. Reusable preparation and
+single-frame rendering are intentionally not part of this SDK yet.
+
+`Project::load` and `Project::from_json` record JSON parse time. `from_value`
+does not parse JSON and reports zero parse time. Render reports separate that
+earlier parse time from `operation_total_ms`, which measures only work inside
+`Editor::render`; CLI command totals include loading as well.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

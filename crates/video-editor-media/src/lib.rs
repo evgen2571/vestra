@@ -13,8 +13,11 @@ mod sink;
 
 pub use error::MediaError;
 pub use ffmpeg::FfmpegSink;
-pub use output::{OutputTarget, effective_parent};
-pub use probe::{backend_available, probe_audio_duration};
+pub use output::{OutputTarget, check_output, effective_parent};
+pub use probe::{
+    backend_available, check_ffmpeg_available, check_ffprobe_available, probe_audio_duration,
+    probe_audio_duration_with,
+};
 pub use sink::{FrameSink, SinkResult};
 
 pub use video_editor_core::output::{AudioSettings, EncoderSettings};

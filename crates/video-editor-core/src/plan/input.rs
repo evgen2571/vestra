@@ -13,15 +13,15 @@ use crate::{diagnostic::Diagnostic, project::Project, validation::ResourceLimits
 /// this value. Compilation never opens, inspects, or otherwise accesses them.
 #[derive(Clone, Copy, Debug)]
 pub struct PlanCompileInput<'a> {
-    pub project: &'a Project,
-    pub limits: ResourceLimits,
-    pub project_path: &'a Path,
-    pub asset_paths: &'a BTreeMap<String, PathBuf>,
-    pub audio_durations: &'a BTreeMap<String, f64>,
-    pub duration: f64,
-    pub frame_rate: (u64, u64),
-    pub frame_count: u64,
-    pub warnings: &'a [Diagnostic],
+    pub(crate) project: &'a Project,
+    pub(crate) limits: ResourceLimits,
+    pub(crate) project_path: &'a Path,
+    pub(crate) asset_paths: &'a BTreeMap<String, PathBuf>,
+    pub(crate) audio_durations: &'a BTreeMap<String, f64>,
+    pub(crate) duration: f64,
+    pub(crate) frame_rate: (u64, u64),
+    pub(crate) frame_count: u64,
+    pub(crate) warnings: &'a [Diagnostic],
 }
 
 impl<'a> PlanCompileInput<'a> {

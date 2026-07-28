@@ -22,18 +22,16 @@ pub mod media {
     pub use crate::output::{AudioSettings, EncoderSettings};
 }
 /// Deterministic camera-shake transform evaluation.
-#[path = "../../../src/plan/evaluation/shake.rs"]
 pub mod camera_shake;
 pub mod motion_bounds;
+pub mod plan;
 pub mod plan_audio;
 pub mod plan_schedule;
 pub mod plan_sizing;
 /// Deterministic frame/time and preview-dimension conversion used by plan
 /// compilation. No project loading or rendering dependency is involved.
-#[path = "../../../src/plan/compiler/time.rs"]
 pub mod plan_time;
 /// Project-track normalization used by plan compilation.
-#[path = "../../../src/plan/compiler/tracks.rs"]
 pub mod plan_tracks;
 #[path = "../../../src/timeline/mod.rs"]
 pub mod timeline;

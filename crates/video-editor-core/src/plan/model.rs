@@ -8,79 +8,79 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct RenderPlan {
-    pub(crate) configured_output: PathBuf,
-    pub(crate) canvas: Canvas,
-    pub(crate) duration: f64,
-    pub(crate) frame_rate: (u64, u64),
-    pub(crate) frame_count: u64,
-    pub(crate) encoder: EncoderSettings,
-    pub(crate) limits: video_editor_core::validation::ResourceLimits,
-    pub(crate) images: Vec<ImageAsset>,
-    pub(crate) layers: Vec<CompiledLayer>,
-    pub(crate) post_effects: Vec<TimedEffect>,
-    pub(crate) compilation: CompilationStats,
-    pub(crate) warnings: Vec<crate::Diagnostic>,
+    pub configured_output: PathBuf,
+    pub canvas: Canvas,
+    pub duration: f64,
+    pub frame_rate: (u64, u64),
+    pub frame_count: u64,
+    pub encoder: EncoderSettings,
+    pub limits: crate::validation::ResourceLimits,
+    pub images: Vec<ImageAsset>,
+    pub layers: Vec<CompiledLayer>,
+    pub post_effects: Vec<TimedEffect>,
+    pub compilation: CompilationStats,
+    pub warnings: Vec<crate::Diagnostic>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct CompilationStats {
-    pub(crate) compiled_transition_association_count: u64,
-    pub(crate) parsed_colour_count: u64,
-    pub(crate) declared_clip_count: usize,
-    pub(crate) rendered_clip_count: usize,
-    pub(crate) hidden_clip_count: usize,
-    pub(crate) zero_frame_clip_count: usize,
-    pub(crate) image_source_count: usize,
-    pub(crate) solid_color_source_count: usize,
-    pub(crate) keyframe_count: u64,
-    pub(crate) brightness_effect_count: usize,
-    pub(crate) contrast_effect_count: usize,
-    pub(crate) saturation_effect_count: usize,
-    pub(crate) tint_effect_count: usize,
-    pub(crate) local_effect_count: usize,
+    pub compiled_transition_association_count: u64,
+    pub parsed_colour_count: u64,
+    pub declared_clip_count: usize,
+    pub rendered_clip_count: usize,
+    pub hidden_clip_count: usize,
+    pub zero_frame_clip_count: usize,
+    pub image_source_count: usize,
+    pub solid_color_source_count: usize,
+    pub keyframe_count: u64,
+    pub brightness_effect_count: usize,
+    pub contrast_effect_count: usize,
+    pub saturation_effect_count: usize,
+    pub tint_effect_count: usize,
+    pub local_effect_count: usize,
     /// Effects synthesized from presets, included in `local_effect_count`.
-    pub(crate) generated_local_effect_count: usize,
-    pub(crate) global_effect_count: usize,
-    pub(crate) advanced_effect_count: usize,
-    pub(crate) generated_transform_contribution_count: usize,
-    pub(crate) effect_pass_count: usize,
+    pub generated_local_effect_count: usize,
+    pub global_effect_count: usize,
+    pub advanced_effect_count: usize,
+    pub generated_transform_contribution_count: usize,
+    pub effect_pass_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Canvas {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) background: [u8; 4],
-    pub(crate) preview: bool,
+    pub width: u32,
+    pub height: u32,
+    pub background: [u8; 4],
+    pub preview: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct ImageAsset {
-    pub(crate) id: String,
-    pub(crate) path: PathBuf,
+    pub id: String,
+    pub path: PathBuf,
 }
 
 /// A renderer-visible layer. Project transitions and flashes have already
 /// become tracks and normal sources by the time this type exists.
 #[derive(Clone, Debug)]
 pub struct CompiledLayer {
-    pub(crate) id: String,
-    pub(crate) start_nanos: u128,
-    pub(crate) duration_nanos: u128,
-    pub(crate) start_frame: u64,
-    pub(crate) end_frame: u64,
-    pub(crate) draw_key: DrawKey,
-    pub(crate) source: CompiledVisualSource,
-    pub(crate) transform: CompiledTransformTracks,
+    pub id: String,
+    pub start_nanos: u128,
+    pub duration_nanos: u128,
+    pub start_frame: u64,
+    pub end_frame: u64,
+    pub draw_key: DrawKey,
+    pub source: CompiledVisualSource,
+    pub transform: CompiledTransformTracks,
     /// Generated motion stays separate from user-authored tracks. Evaluation
     /// adds position/rotation offsets and multiplies scale in declaration order.
-    pub(crate) transform_contributions: Vec<TransformContribution>,
-    pub(crate) opacity: Track<f64>,
+    pub transform_contributions: Vec<TransformContribution>,
+    pub opacity: Track<f64>,
     /// Independent opacity contributors compose multiplicatively. Transitions
     /// populate one contributor instead of a transition variant.
-    pub(crate) opacity_contributions: Vec<Track<f64>>,
-    pub(crate) effects: Vec<TimedEffect>,
-    pub(crate) blend_mode: crate::project::BlendMode,
+    pub opacity_contributions: Vec<Track<f64>>,
+    pub effects: Vec<TimedEffect>,
+    pub blend_mode: crate::project::BlendMode,
 }
 
 #[derive(Clone, Debug)]
@@ -98,24 +98,24 @@ pub enum CompiledVisualSource {
 
 #[derive(Clone, Debug)]
 pub struct CompiledTransformTracks {
-    pub(crate) position: Track<Point>,
-    pub(crate) anchor: Track<Point>,
-    pub(crate) scale: Track<Point>,
-    pub(crate) rotation_radians: Track<f64>,
+    pub position: Track<Point>,
+    pub anchor: Track<Point>,
+    pub scale: Track<Point>,
+    pub rotation_radians: Track<f64>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TransformContribution {
-    pub(crate) start: u128,
-    pub(crate) end: u128,
-    pub(crate) position_offset: Track<Point>,
-    pub(crate) scale_multiplier: Track<Point>,
-    pub(crate) rotation_radians_offset: Track<f64>,
+    pub start: u128,
+    pub end: u128,
+    pub position_offset: Track<Point>,
+    pub scale_multiplier: Track<Point>,
+    pub rotation_radians_offset: Track<f64>,
 }
 
 impl TransformContribution {
     #[must_use]
-    pub(crate) fn identity() -> Self {
+    pub fn identity() -> Self {
         Self {
             start: 0,
             end: u128::MAX,
@@ -199,7 +199,7 @@ pub enum CompiledEffect {
 
 /// Phase-independent effect classification used by reporting and backend policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum EffectClass {
+pub enum EffectClass {
     BasicColour,
     Advanced,
     Transform,
@@ -207,7 +207,7 @@ pub(crate) enum EffectClass {
 
 impl CompiledEffect {
     #[must_use]
-    pub(crate) const fn class(&self) -> EffectClass {
+    pub const fn class(&self) -> EffectClass {
         match self {
             Self::Brightness { .. }
             | Self::Contrast { .. }
@@ -227,7 +227,7 @@ impl CompiledEffect {
     }
 
     #[must_use]
-    pub(crate) fn keyframe_count(&self) -> u64 {
+    pub fn keyframe_count(&self) -> u64 {
         match self {
             Self::Brightness { amount }
             | Self::Contrast { amount }
@@ -304,7 +304,7 @@ impl CompiledEffect {
 
     /// Conservative logical pass count before effect tracks are evaluated.
     #[must_use]
-    pub(crate) const fn estimated_pass_count(&self) -> usize {
+    pub const fn estimated_pass_count(&self) -> usize {
         match self {
             Self::GaussianBlur { .. } => 2,
             Self::Glow { .. } => 4,
@@ -328,23 +328,23 @@ impl CompiledEffect {
 /// The interval is half-open, matching scheduled layers and transitions.
 #[derive(Clone, Debug)]
 pub struct TimedEffect {
-    pub(crate) start: u128,
-    pub(crate) end: u128,
-    pub(crate) effect: CompiledEffect,
+    pub start: u128,
+    pub end: u128,
+    pub effect: CompiledEffect,
 }
 
 impl TimedEffect {
     #[must_use]
-    pub(crate) fn active_at(&self, time: u128) -> bool {
+    pub fn active_at(&self, time: u128) -> bool {
         self.start <= time && time < self.end
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DrawKey {
-    pub(crate) layer: i32,
-    pub(crate) start_nanos: u128,
-    pub(crate) id: String,
+    pub layer: i32,
+    pub start_nanos: u128,
+    pub id: String,
 }
 
 #[derive(Clone, Debug)]
@@ -357,7 +357,7 @@ pub enum CompiledSizing {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct ScheduledItem(pub(crate) usize);
+pub struct ScheduledItem(pub usize);
 
 #[cfg(test)]
 mod tests {

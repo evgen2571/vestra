@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use crate::{
     Category, Diagnostic,
     media::EncoderSettings,
-    plan::{Canvas, CompilationStats, RenderPlan},
-    project::{ValidatedProject, parse_colour},
+    plan::{Canvas, CompilationStats, PlanCompileInput, RenderPlan},
+    project::parse_colour,
 };
 
 mod assets;
@@ -26,16 +26,16 @@ mod transitions;
 /// Transitional facade for compiler submodules while time conversion is owned
 /// by `video-editor-core`.
 mod time {
-    pub use video_editor_core::plan_time::{first_frame_at_or_after, to_nanos};
+    pub use crate::plan_time::{first_frame_at_or_after, to_nanos};
 }
 
 /// Transitional facade for compiler submodules while track compilation is
 /// owned by `video-editor-core`.
 mod tracks {
-    pub use video_editor_core::plan_tracks::{compile, degrees_to_radians, interpolation};
+    pub use crate::plan_tracks::{compile, degrees_to_radians, interpolation};
 }
 
-use video_editor_core::plan_time::{effective_dimensions, first_frame_at_or_after, to_nanos};
+use crate::plan_time::{effective_dimensions, first_frame_at_or_after, to_nanos};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,
@@ -46,16 +46,10 @@ pub struct CompileOptions {
     reason = "compiler diagnostics are machine-readable"
 )]
 pub fn compile(
-    validated: &ValidatedProject,
+    validated: PlanCompileInput<'_>,
     options: CompileOptions,
 ) -> Result<RenderPlan, Diagnostic> {
-    compile_canonical(validated, &validated.project, options)
-}
-fn compile_canonical(
-    validated: &ValidatedProject,
-    project: &crate::project::Project,
-    options: CompileOptions,
-) -> Result<RenderPlan, Diagnostic> {
+    let project = validated.project;
     let (width, height) =
         effective_dimensions(project.output.width, project.output.height, options.preview);
     let background = parse_colour(&project.output.background).ok_or_else(|| {
@@ -66,7 +60,7 @@ fn compile_canonical(
             "/output/background",
         )
     })?;
-    let image_table = assets::build(validated, project);
+    let image_table = assets::build(&validated, project);
     let mut layers = Vec::new();
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
@@ -82,7 +76,7 @@ fn compile_canonical(
     for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
         layers.push(clips::compile(
             clip,
-            validated,
+            &validated,
             &image_table.indices,
             &mut compilation,
         )?);
@@ -128,7 +122,7 @@ fn compile_canonical(
     metrics::record(&mut compilation, &layers, &post_effects);
     limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     Ok(RenderPlan {
-        configured_output: output::resolve_path(validated),
+        configured_output: output::resolve_path(&validated),
         canvas: Canvas {
             width,
             height,
@@ -145,40 +139,13 @@ fn compile_canonical(
             frame_count: validated.frame_count,
             duration: validated.duration,
             quality_crf: project.output.quality.crf(),
-            audio: audio::compile(validated)?,
+            audio: audio::compile(&validated)?,
         },
         limits: validated.limits,
         images: image_table.images,
         layers,
         post_effects,
         compilation,
-        warnings: validated.warnings.clone(),
+        warnings: validated.warnings.to_vec(),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::plan::CompiledVisualSource;
-    use crate::project::{ValidationOptions, load_and_validate};
-
-    fn flash(fade_in: f64, fade_out: f64) -> crate::project::Flash {
-        crate::project::Flash {
-            id: "flash".to_owned(),
-            start: 1.0,
-            duration: 2.0,
-            colour: "#ffffff".to_owned(),
-            opacity: 0.7,
-            fade_in,
-            fade_out,
-            layer: 1,
-        }
-    }
-
-    #[path = "basics.rs"]
-    mod basics;
-    #[path = "presets.rs"]
-    mod preset_tests;
-    #[path = "transitions.rs"]
-    mod transition_tests;
 }

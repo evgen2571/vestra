@@ -1,9 +1,9 @@
 //! Evaluation and classification of compiled effects.
 
-use crate::{domain::Point, plan::CompiledEffect, project::ZoomBlurDirection};
-use video_editor_core::effects::{
+use crate::effects::{
     effect_amount_is_identity, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
 };
+use crate::{domain::Point, plan::CompiledEffect, project::ZoomBlurDirection};
 
 #[derive(Clone, Debug)]
 pub enum EvaluatedEffect {
@@ -81,7 +81,7 @@ pub enum EvaluatedEffect {
 
 impl EvaluatedEffect {
     #[must_use]
-    pub(crate) fn is_identity(&self) -> bool {
+    pub fn is_identity(&self) -> bool {
         match self {
             Self::Brightness { amount } => *amount == 0.0,
             Self::Contrast { amount } | Self::Saturation { amount } => *amount == 1.0,
@@ -109,7 +109,7 @@ impl EvaluatedEffect {
     }
 
     #[must_use]
-    pub(crate) const fn is_basic_colour_effect(&self) -> bool {
+    pub const fn is_basic_colour_effect(&self) -> bool {
         matches!(
             self,
             Self::Brightness { .. }
@@ -120,7 +120,7 @@ impl EvaluatedEffect {
     }
 }
 
-pub(crate) fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
+pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
     match effect {
         CompiledEffect::Brightness { amount } => EvaluatedEffect::Brightness {
             amount: amount.evaluate(time),

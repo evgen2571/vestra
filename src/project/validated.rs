@@ -38,6 +38,22 @@ pub struct ValidatedProject {
 }
 
 impl ValidatedProject {
+    /// Supplies deterministic planning with resources already resolved by
+    /// application preflight; core never accesses these paths or media.
+    pub(crate) fn plan_compile_input(&self) -> video_editor_core::plan::PlanCompileInput<'_> {
+        video_editor_core::plan::PlanCompileInput::new(
+            &self.project,
+            self.limits,
+            &self.project_path,
+            &self.asset_paths,
+            &self.audio_durations,
+            self.duration,
+            self.frame_rate,
+            self.frame_count,
+            &self.warnings,
+        )
+    }
+
     #[must_use]
     pub fn project(&self) -> &Project {
         &self.project

@@ -17,7 +17,7 @@ pub fn compile<T: Copy>(
     let mut keyframes = Vec::with_capacity(track.keyframes.len());
     for keyframe in &track.keyframes {
         keyframes.push(Keyframe {
-            time: video_editor_core::plan_time::to_nanos(keyframe.time, id)?,
+            time: crate::plan_time::to_nanos(keyframe.time, id)?,
             value: keyframe.value,
             interpolation: interpolation(&keyframe.interpolation),
         });

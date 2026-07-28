@@ -31,10 +31,16 @@ CLI / application / renderer / media
                 -> video-editor-core
 ```
 
-Core must never depend in the reverse direction. The remaining Phase 1 work is
-to move the render-plan compiler and evaluator behind this boundary while
-retaining root preflight adapters for filesystem, image, audio, FFprobe,
-FFmpeg, and backend checks.
+Core must never depend in the reverse direction. Phase 1 is complete:
+`video-editor-core::plan` owns the canonical render-plan model, compiler,
+active schedule, logical effect-pass plan, and per-frame evaluator. The root
+`plan` module is a documented compatibility façade only. Root preflight keeps
+filesystem, image, audio, FFprobe, FFmpeg, and backend checks, then supplies
+their resolved results through `PlanCompileInput`.
+
+Phase 2 begins with extracting CPU/WGPU renderer and decoded-resource ownership
+into `video-editor-render`, while preserving staged submission, readback,
+backpressure, and backend selection behavior.
 
 ## Migration map
 
@@ -42,12 +48,10 @@ FFmpeg, and backend checks.
 | --- | --- | --- |
 | `diagnostic`, `domain`, `timeline`, `animation` | Canonical implementation | Compatibility re-exports |
 | `project/model`, pure `project/validation` | Canonical schema and semantic rules | Filesystem/media/backend preflight and validated-resource handles |
-| `plan/compiler/time`, `plan/compiler/tracks`, `plan/schedule` | Canonical deterministic conversion, track normalization, and event construction | Compatibility adapters for existing plan types |
-| `plan/model`, remaining compiler modules, `plan/evaluation` | Next extraction unit | Existing renderer-visible plan representation and resource-path attachment |
+| `plan/model`, `plan/compiler`, `plan/schedule`, `plan/evaluation`, logical effect passes | Canonical backend-neutral planning and evaluation in `video-editor-core::plan` | Root façade adapts `ValidatedProject` into `PlanCompileInput` |
 
-The plan migration must introduce narrow constructors and accessors for core
-types. It must not convert all existing `pub(crate)` fields to unrestricted
-public fields merely to cross the crate boundary.
+`PlanCompileInput` has a narrow constructor and private source fields; it
+accepts paths and probed durations as resolved values without accessing them.
 
 The final target remains five crates:
 

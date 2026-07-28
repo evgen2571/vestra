@@ -5,8 +5,8 @@ use super::EvaluatedEffect;
 /// An affine RGB operation in byte colour space: `matrix * rgb + offset`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ColourTransform {
-    pub(crate) matrix: [[f64; 3]; 3],
-    pub(crate) offset: [f64; 3],
+    pub matrix: [[f64; 3]; 3],
+    pub offset: [f64; 3],
 }
 
 impl Default for ColourTransform {
@@ -28,7 +28,7 @@ impl ColourTransform {
     }
 
     #[must_use]
-    pub(crate) fn from_effects(effects: impl IntoIterator<Item = EvaluatedEffect>) -> Self {
+    pub fn from_effects(effects: impl IntoIterator<Item = EvaluatedEffect>) -> Self {
         effects
             .into_iter()
             .fold(Self::default(), |transform, effect| match effect {

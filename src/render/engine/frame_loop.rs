@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    media::{FfmpegSink, FrameSink},
+    media::FrameSink,
     output::OutputTarget,
     plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
     render::{CompletedFrame, PollMode, PreparationStats, RenderBackend},
@@ -34,13 +34,13 @@ pub(super) struct FrameLoopResult {
     clippy::result_large_err,
     reason = "frame failures preserve the existing structured diagnostics and cleanup context"
 )]
-pub(super) fn run(
+pub(super) fn run<S: FrameSink + ?Sized>(
     plan: &RenderPlan,
     options: &RenderOptions,
     output: &OutputTarget,
     schedule: &ActiveSchedule,
     backend: &mut dyn RenderBackend,
-    encoder: &mut FfmpegSink,
+    encoder: &mut S,
     performance: &mut PreparationStats,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<FrameLoopResult, RenderError> {
@@ -95,7 +95,7 @@ pub(super) fn run(
             let compose_started = Instant::now();
             if let Err(diagnostic) = backend.submit_frame(frame_number, &evaluated) {
                 backend.abort();
-                let cleanup = encoder.abort_after_backend_failure();
+                let cleanup = abort_sink(encoder);
                 let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
                 return Err(cleanup_error(
                     output,
@@ -119,7 +119,7 @@ pub(super) fn run(
             Ok(completed) => completed,
             Err(diagnostic) => {
                 backend.abort();
-                let cleanup = encoder.abort_after_backend_failure();
+                let cleanup = abort_sink(encoder);
                 let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
                 return Err(cleanup_error(
                     output,
@@ -151,7 +151,7 @@ pub(super) fn run(
                 plan.frame_count,
             ) {
                 backend.abort();
-                let cleanup = encoder.abort_after_backend_failure();
+                let cleanup = abort_sink(encoder);
                 let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
                 return Err(cleanup_error(
                     output,
@@ -186,7 +186,7 @@ pub(super) fn run(
             && next_frame_to_write == written_before_poll
         {
             backend.abort();
-            let cleanup = encoder.abort_after_backend_failure();
+            let cleanup = abort_sink(encoder);
             let diagnostic = with_encoder_cleanup(
                 Diagnostic::error(
                     "MVP-POLL-STALLED",
@@ -254,23 +254,28 @@ pub(super) fn run(
                 );
             }
             Ok(None) => {
+                backend.abort();
+                let cleanup = abort_sink(encoder);
                 return Err(cleanup_error(
                     output,
                     plan,
                     RenderFailureStage::FrameComposition,
                     completed_frames,
                     plan.frame_count.checked_sub(1),
-                    Diagnostic::error(
-                        "MVP-POLL-STALLED",
-                        Category::Backend,
-                        "backend final drain completed without a frame or progress",
-                        "",
+                    with_encoder_cleanup(
+                        Diagnostic::error(
+                            "MVP-POLL-STALLED",
+                            Category::Backend,
+                            "backend final drain completed without a frame or progress",
+                            "",
+                        ),
+                        cleanup,
                     ),
                 ));
             }
             Err(diagnostic) => {
                 backend.abort();
-                let cleanup = encoder.abort_after_backend_failure();
+                let cleanup = abort_sink(encoder);
                 let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
                 return Err(cleanup_error(
                     output,
@@ -287,7 +292,7 @@ pub(super) fn run(
         Ok(frames) => frames,
         Err(diagnostic) => {
             backend.abort();
-            let cleanup = encoder.abort_after_backend_failure();
+            let cleanup = abort_sink(encoder);
             let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
             return Err(cleanup_error(
                 output,
@@ -309,7 +314,7 @@ pub(super) fn run(
             plan.frame_count,
         ) {
             backend.abort();
-            let cleanup = encoder.abort_after_backend_failure();
+            let cleanup = abort_sink(encoder);
             let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
             return Err(cleanup_error(
                 output,
@@ -342,7 +347,7 @@ pub(super) fn run(
         || backend.in_flight() != 0
     {
         backend.abort();
-        let cleanup = encoder.abort_after_backend_failure();
+        let cleanup = abort_sink(encoder);
         let diagnostic = with_encoder_cleanup(
             Diagnostic::error(
                 "MVP-MISSING-FRAME",
@@ -419,11 +424,11 @@ fn insert_completed(
     clippy::result_large_err,
     reason = "write failures retain the existing structured cleanup context"
 )]
-fn write_ready_frames(
+fn write_ready_frames<S: FrameSink + ?Sized>(
     ready_frames: &mut BTreeMap<u64, CompletedFrame>,
     next_frame_to_write: &mut u64,
     completed_frames: &mut u64,
-    encoder: &mut FfmpegSink,
+    encoder: &mut S,
     backend: &mut dyn RenderBackend,
     performance: &mut PreparationStats,
     plan: &RenderPlan,
@@ -434,14 +439,18 @@ fn write_ready_frames(
     while let Some(frame) = ready_frames.remove(next_frame_to_write) {
         let write_started = Instant::now();
         if let Err(error) = encoder.write_frame(&frame) {
-            let message = encoder.abort_after_write_failure(error);
+            let cleanup = abort_sink(encoder);
+            let diagnostic = with_encoder_cleanup(
+                Diagnostic::error("MVP-RENDER-WRITE", Category::Render, error.to_string(), ""),
+                cleanup,
+            );
             return Err(cleanup_error(
                 output,
                 plan,
                 RenderFailureStage::FrameWrite,
                 *completed_frames,
                 Some(frame.frame_number),
-                Diagnostic::error("MVP-RENDER-WRITE", Category::Render, message, ""),
+                diagnostic,
             ));
         }
         *encoder_write += write_started.elapsed();
@@ -467,20 +476,24 @@ fn with_encoder_cleanup(diagnostic: Diagnostic, cleanup: Option<String>) -> Diag
     }
 }
 
+fn abort_sink<S: FrameSink + ?Sized>(sink: &mut S) -> Option<String> {
+    sink.abort().err().map(|error| error.to_string())
+}
+
 #[expect(
     clippy::result_large_err,
     reason = "cancellation preserves the existing structured cleanup context"
 )]
-fn cancellation(
+fn cancellation<S: FrameSink + ?Sized>(
     backend: &mut dyn RenderBackend,
-    encoder: &mut FfmpegSink,
+    encoder: &mut S,
     output: &OutputTarget,
     plan: &RenderPlan,
     completed_frames: u64,
     attempted_frame: Option<u64>,
 ) -> Result<FrameLoopResult, RenderError> {
     backend.abort();
-    encoder.abort();
+    let _ = encoder.abort();
     Err(cleanup_error(
         output,
         plan,

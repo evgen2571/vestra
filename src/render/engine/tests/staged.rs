@@ -1,17 +1,52 @@
 use std::{
     collections::{HashMap, VecDeque},
+    fs,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use crate::{
     Category, Diagnostic,
+    media::{EncoderSettings, FrameSink, MediaError, SinkResult},
     plan::EvaluatedFrame,
     render::{
         AdapterMetadata, CompletedFrame, PollMode, RenderBackend, RenderBackendKind, StagedMetrics,
     },
 };
 
-use super::super::{RenderBackendPreference, RenderOptions, runner::render_with_backend_builder};
+use super::super::{
+    RenderBackendPreference, RenderOptions,
+    runner::{render_with_backend_builder, render_with_backend_builder_and_sink},
+};
+
+struct RecordingSink {
+    frames: Arc<Mutex<Vec<u64>>>,
+    temporary_path: PathBuf,
+    reported_frames: Option<u64>,
+}
+
+impl FrameSink for RecordingSink {
+    fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+        self.frames
+            .lock()
+            .expect("sink lock")
+            .push(frame.frame_number);
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<SinkResult, MediaError> {
+        fs::write(&self.temporary_path, b"fake encoded output").map_err(MediaError::Publication)?;
+        Ok(SinkResult {
+            frames_written: self
+                .reported_frames
+                .unwrap_or_else(|| self.frames.lock().expect("sink lock").len() as u64),
+        })
+    }
+
+    fn abort(&mut self) -> Result<(), MediaError> {
+        Ok(())
+    }
+}
 
 struct MockStagedBackend {
     capacity: usize,
@@ -229,17 +264,75 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         backend_preference: RenderBackendPreference::Wgpu,
     };
-    let result = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
-        Ok((
-            Box::new(MockStagedBackend::new(3, order, backend_written)) as Box<dyn RenderBackend>,
-            None,
-        ))
-    });
+    let sink_frames = Arc::new(Mutex::new(Vec::new()));
+    let sink_frames_for_factory = Arc::clone(&sink_frames);
+    let result = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| {},
+        |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(3, order, backend_written))
+                    as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink {
+                frames: sink_frames_for_factory,
+                temporary_path: temporary_path.to_path_buf(),
+                reported_frames: None,
+            })
+        },
+    );
     result.expect("mock staged render succeeds");
     assert_eq!(
         *written.lock().expect("mock metrics lock"),
         (0..plan.frame_count).collect::<Vec<_>>()
     );
+    assert_eq!(
+        *sink_frames.lock().expect("sink lock"),
+        (0..plan.frame_count).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn engine_rejects_a_sink_frame_count_mismatch_before_publication() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("mismatch.mp4");
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let total_frames = plan.frame_count;
+    let error = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| {},
+        move |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    3,
+                    (0..total_frames).collect(),
+                    Arc::new(Mutex::new(Vec::new())),
+                )) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink {
+                frames: Arc::new(Mutex::new(Vec::new())),
+                temporary_path: temporary_path.to_path_buf(),
+                reported_frames: Some(total_frames - 1),
+            })
+        },
+    )
+    .expect_err("short sink result rejects publication");
+    assert_eq!(error.diagnostic.code, "MVP-SINK-FRAME-COUNT");
+    assert!(!output.exists());
 }
 
 fn run_failure_case(mode: MockMode) -> crate::render::RenderError {

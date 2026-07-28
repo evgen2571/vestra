@@ -44,6 +44,12 @@ pub enum MediaError {
     InvalidSinkState,
     #[error("cannot wait for FFmpeg: {0}")]
     ProcessWait(#[source] io::Error),
+    #[error("cannot clean up FFmpeg while {operation}: {source}")]
+    ProcessCleanup {
+        operation: &'static str,
+        #[source]
+        source: io::Error,
+    },
     #[error("output '{0}' already exists; pass --overwrite to replace it")]
     OutputAlreadyExists(PathBuf),
     #[error("output directory '{0}' does not exist")]

@@ -1,13 +1,14 @@
 //! High-level render lifecycle from output preparation through publication.
 
 use std::{
+    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use crate::{
     Category, Diagnostic,
-    media::{FfmpegSink, FrameSink},
+    media::{EncoderSettings, FfmpegSink, FrameSink, MediaError},
     output::OutputTarget,
     plan::{ActiveSchedule, RenderPlan},
     render::{DecodedAssets, RenderBackend, RenderBackendKind},
@@ -52,6 +53,31 @@ where
         &RenderPlan,
         &Arc<DecodedAssets>,
     ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
+{
+    render_with_backend_builder_and_sink(plan, options, emit, build_backend, |settings, output| {
+        FfmpegSink::start(settings, output)
+    })
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "render errors retain cleanup status"
+)]
+pub(super) fn render_with_backend_builder_and_sink<F, S, SF>(
+    plan: &RenderPlan,
+    options: &RenderOptions,
+    emit: &mut dyn FnMut(RenderEvent),
+    build_backend: F,
+    start_sink: SF,
+) -> Result<RenderSummary, RenderError>
+where
+    F: FnOnce(
+        RenderBackendPreference,
+        &RenderPlan,
+        &Arc<DecodedAssets>,
+    ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
+    S: FrameSink,
+    SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
     let total_started = Instant::now();
     let output = OutputTarget::prepare(
@@ -120,22 +146,21 @@ where
         ..RenderTimings::default()
     };
     emit(events::started(plan.frame_count, &output.final_path));
-    let mut encoder =
-        FfmpegSink::start(&plan.encoder, &output.temporary_path).map_err(|error| {
-            cleanup_error(
-                &output,
-                plan,
-                RenderFailureStage::EncoderStartup,
-                0,
-                None,
-                Diagnostic::error(
-                    "MVP-BACKEND-START",
-                    Category::Backend,
-                    error.to_string(),
-                    "",
-                ),
-            )
-        })?;
+    let mut encoder = start_sink(&plan.encoder, &output.temporary_path).map_err(|error| {
+        cleanup_error(
+            &output,
+            plan,
+            RenderFailureStage::EncoderStartup,
+            0,
+            None,
+            Diagnostic::error(
+                "MVP-BACKEND-START",
+                Category::Backend,
+                error.to_string(),
+                "",
+            ),
+        )
+    })?;
     let frame_loop = run_frame_loop(
         plan,
         options,
@@ -149,14 +174,32 @@ where
     performance.absorb_staged(&backend.staged_metrics());
     let completed_frames = frame_loop.completed_frames;
     let finish_started = Instant::now();
-    if let Err(error) = encoder.finish() {
-        return Err(cleanup_error(
+    let sink_result = encoder.finish().map_err(|error| {
+        cleanup_error(
             &output,
             plan,
             RenderFailureStage::EncoderFinalization,
             completed_frames,
             None,
             Diagnostic::error("MVP-ENCODE", Category::Render, error.to_string(), ""),
+        )
+    })?;
+    if sink_result.frames_written != plan.frame_count {
+        return Err(cleanup_error(
+            &output,
+            plan,
+            RenderFailureStage::EncoderFinalization,
+            completed_frames,
+            None,
+            Diagnostic::error(
+                "MVP-SINK-FRAME-COUNT",
+                Category::Render,
+                format!(
+                    "sink accepted {} frames; expected {}",
+                    sink_result.frames_written, plan.frame_count
+                ),
+                "",
+            ),
         ));
     }
     timings.encoder_finalize_ms = milliseconds(finish_started.elapsed());

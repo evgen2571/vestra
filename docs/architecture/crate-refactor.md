@@ -7,6 +7,7 @@ video-editor (root transitional package)
     -> video-editor-core
     -> video-editor-render -> video-editor-core
     -> video-editor-media -> video-editor-render (contracts only)
+                         -> video-editor-core (encoder and audio settings)
 ```
 
 `video-editor-core` is an internal crate (`publish = false`). It owns the
@@ -59,10 +60,12 @@ the root pipeline preserves encoder order using frame numbers.
 The root's `src/render/mod.rs` and `src/media/mod.rs` are temporary
 compatibility facades. The root application evaluates plans, handles
 cancellation, drains and orders completed frames, writes each frame through
-`FrameSink`, reports progress, and decides publication. The sink closes stdin,
-terminates and reaps FFmpeg on abort or drop. Root cleanup removes temporary
-output. Only a successful `finish()` result is published, and existing output
-is rejected unless overwrite was selected.
+`FrameSink`, reports progress, and decides publication. `FrameSink::abort()`
+returns structured cleanup errors without replacing the primary render error.
+The sink closes stdin, terminates and reaps FFmpeg on abort or active drop, and
+joins stderr collection. Root cleanup removes temporary output. Only a
+successful `finish()` result that reports the expected frame count is published,
+and existing output is rejected unless overwrite was selected.
 
 Frame flow:
 
@@ -71,7 +74,7 @@ core EvaluatedFrame -> renderer submission -> renderer CompletedFrame
 -> root completion ordering -> FrameSink -> temporary encoded output -> publication
 ```
 
-Phase 3 is complete. Phase 4 starts by creating the public `video-editor` SDK
+Phase 3 finalization is complete. Phase 4 starts by creating the public `video-editor` SDK
 facade and moving root application workflows behind it, then separating the
 CLI crate.
 

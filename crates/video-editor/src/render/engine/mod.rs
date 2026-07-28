@@ -7,6 +7,8 @@ mod runner;
 mod selection;
 mod types;
 
+pub(crate) use types::backend_fallback_warning;
+
 pub use runner::render;
 pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,

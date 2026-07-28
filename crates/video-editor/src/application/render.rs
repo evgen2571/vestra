@@ -33,7 +33,8 @@ pub enum ApplicationRenderError {
         plan_compile_elapsed_ms: u128,
     },
     Render {
-        error: RenderError,
+        error: Box<RenderError>,
+        plan_compile_elapsed_ms: u128,
     },
 }
 
@@ -65,7 +66,10 @@ pub fn render_project(
         },
         emit,
     )
-    .map_err(|error| ApplicationRenderError::Render { error })?;
+    .map_err(|error| ApplicationRenderError::Render {
+        error: Box::new(error),
+        plan_compile_elapsed_ms: compilation_elapsed.as_millis(),
+    })?;
     summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
     summary.timings.plan_compile_ms = compilation_elapsed.as_millis();
     Ok((validated, summary))

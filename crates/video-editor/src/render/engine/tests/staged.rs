@@ -18,7 +18,7 @@ use crate::{
 use video_editor_media::{EncoderSettings, FrameSink, MediaError, SinkResult};
 
 use super::super::{
-    RenderBackendPreference, RenderOptions,
+    BackendFallback, RenderBackendPreference, RenderOptions,
     runner::{render_with_backend_builder, render_with_backend_builder_and_sink},
 };
 
@@ -348,6 +348,100 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
     assert_eq!(
         *sink_frames.lock().expect("sink lock"),
         (0..plan.frame_count).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn preparation_fallback_is_retained_on_successful_render() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let total_frames = plan.frame_count;
+    let options = RenderOptions {
+        output_override: Some(output_dir.path().join("fallback-success.mp4")),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Auto,
+    };
+    let result = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| {},
+        move |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    3,
+                    (0..total_frames).collect(),
+                    Arc::new(Mutex::new(Vec::new())),
+                )) as Box<dyn RenderBackend>,
+                Some(BackendFallback {
+                    code: "WGPU-PIPELINE-CREATION".to_owned(),
+                    stage: "wgpu_preparation".to_owned(),
+                    message: "injected pipeline preparation failure".to_owned(),
+                }),
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                SinkProbe::default(),
+            ))
+        },
+    )
+    .expect("CPU fallback render succeeds");
+
+    assert!(matches!(
+        result.backend_fallback,
+        Some(BackendFallback { code, .. }) if code == "WGPU-PIPELINE-CREATION"
+    ));
+}
+
+#[test]
+fn preparation_fallback_is_retained_on_later_render_failure() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let total_frames = plan.frame_count;
+    let options = RenderOptions {
+        output_override: Some(output_dir.path().join("fallback-failure.mp4")),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Auto,
+    };
+    let error = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| {},
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(
+                        3,
+                        (0..total_frames).collect(),
+                        Arc::new(Mutex::new(Vec::new())),
+                    )
+                    .failing(MockMode::SubmitFailure),
+                ) as Box<dyn RenderBackend>,
+                Some(BackendFallback {
+                    code: "WGPU-PIPELINE-CREATION".to_owned(),
+                    stage: "wgpu_preparation".to_owned(),
+                    message: "injected pipeline preparation failure".to_owned(),
+                }),
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                SinkProbe::default(),
+            ))
+        },
+    )
+    .expect_err("later render failure propagates");
+
+    assert_eq!(error.diagnostic.code, "MOCK-SUBMIT");
+    assert_eq!(error.warnings.len(), 1);
+    assert_eq!(error.warnings[0].code, "MVP-WGPU-FALLBACK");
+    assert_eq!(
+        error.warnings[0].message,
+        "WGPU fallback to CPU: injected pipeline preparation failure"
     );
 }
 

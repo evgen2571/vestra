@@ -148,6 +148,10 @@ struct RenderFailureReport<'a> {
     timings: &'a RenderTimings,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the report format keeps each compatibility field explicit"
+)]
 pub fn write_render_failure_report(
     path: &Path,
     project_path: &Path,
@@ -226,6 +230,51 @@ mod tests {
         assert_eq!(report["diagnostics"][0]["code"], "MVP-PLAN-ASSET");
         assert_eq!(report["warnings"][0]["code"], "MVP-CLIP-HIDDEN");
         assert_eq!(report["timings"]["semantic_validation_ms"], 11);
+        assert_eq!(report["timings"]["plan_compile_ms"], 7);
+    }
+
+    #[test]
+    fn render_failure_report_preserves_fallback_warnings() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let report_path = directory.path().join("report.json");
+        let project_path = directory.path().join("project.json");
+        let diagnostic = Diagnostic::error("MVP-RENDER", Category::Render, "render failed", "");
+        let warnings = vec![Diagnostic::warning(
+            "MVP-WGPU-FALLBACK",
+            "WGPU fallback to CPU: injected preparation failure",
+            "",
+        )];
+        let context = RenderFailureContext {
+            stage: video_editor::RenderFailureStage::FrameComposition,
+            last_completed_frame_index: None,
+            completed_frames: 0,
+            attempted_frame: Some(0),
+            total_frames: 1,
+            timeline_position: Some(0.0),
+            progress: Some(0.0),
+            output_path: None,
+            temporary_output_path: None,
+        };
+        write_render_failure_report(
+            &report_path,
+            &project_path,
+            &diagnostic,
+            &context,
+            &warnings,
+            true,
+            19,
+            &RenderTimings {
+                plan_compile_ms: 7,
+                operation_total_ms: 19,
+                total_ms: 19,
+                ..RenderTimings::default()
+            },
+        )
+        .expect("write report");
+        let report: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(report_path).expect("read report"))
+                .expect("report JSON");
+        assert_eq!(report["warnings"][0]["code"], "MVP-WGPU-FALLBACK");
         assert_eq!(report["timings"]["plan_compile_ms"], 7);
     }
 }

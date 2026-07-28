@@ -37,8 +37,8 @@ pub(super) fn run(
     }
     let mut emit = |event: RenderEvent| write_progress(progress, &event);
     let editor = Editor::new();
-    let outcome = editor.load_project(&project).and_then(|loaded| {
-        editor.render(
+    let outcome = match editor.load_project(&project) {
+        Ok(loaded) => editor.render(
             &loaded,
             RenderRequest {
                 output,
@@ -48,8 +48,9 @@ pub(super) fn run(
             },
             &mut emit,
             &cancellation,
-        )
-    });
+        ),
+        Err(error) => Err(error),
+    };
     match outcome {
         Ok(data) => {
             let warnings = data.warnings.clone();

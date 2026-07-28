@@ -36,6 +36,14 @@ pub struct BackendFallback {
     pub message: String,
 }
 
+pub(crate) fn backend_fallback_warning(fallback: &BackendFallback) -> Diagnostic {
+    Diagnostic::warning(
+        "MVP-WGPU-FALLBACK",
+        format!("WGPU fallback to CPU: {}", fallback.message),
+        "",
+    )
+}
+
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct RenderTimings {
     /// JSON parsing spent while constructing `Project`; zero for `from_value`.
@@ -47,6 +55,8 @@ pub struct RenderTimings {
     pub semantic_validation_ms: u128,
     /// Environment and target readiness checks used by this render operation.
     pub preflight_ms: u128,
+    /// Compilation time when compilation succeeded. On a render-stage failure,
+    /// later renderer fields contain only timings known before the failure.
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,8 +122,12 @@ pub struct RenderEvent {
 #[derive(Debug)]
 pub struct RenderError {
     pub diagnostic: Diagnostic,
+    /// Operation warnings discovered after renderer preparation began.
+    pub warnings: Vec<Diagnostic>,
     pub temporary_removed: bool,
     pub context: RenderFailureContext,
+    /// Timings measured before this render-stage failure.
+    pub timings: RenderTimings,
 }
 
 #[derive(Clone, Debug, Serialize)]

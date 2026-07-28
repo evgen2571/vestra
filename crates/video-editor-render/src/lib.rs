@@ -205,10 +205,7 @@ pub fn probe_backend(preference: RenderBackendPreference) -> BackendProbe {
                 diagnostics: if cpu_probe().is_some() {
                     vec![Diagnostic::warning(
                         "MVP-WGPU-FALLBACK",
-                        format!(
-                            "WGPU is unavailable; rendering will use CPU: {}",
-                            diagnostic.message
-                        ),
+                        format!("WGPU fallback to CPU: {}", diagnostic.message),
                         "",
                     )]
                 } else {

@@ -110,3 +110,76 @@ fn file_loading_uses_its_parent_and_round_trips_without_relocating_paths() {
     assert!(saved.contains("assets/image.png"));
     assert!(saved.contains("\"schema_version\":1"));
 }
+
+#[test]
+fn in_memory_projects_resolve_assets_and_output_against_their_base_directory() {
+    let directory = tempdir().expect("temporary directory");
+    let assets = directory.path().join("assets");
+    std::fs::create_dir(&assets).expect("assets directory");
+    std::fs::copy(
+        fixture("tests/assets/wgpu-small-rgba.png"),
+        assets.join("image.png"),
+    )
+    .expect("copy image");
+    let json = r##"{
+        "schema_version": 1,
+        "output": {"path":"result.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
+        "assets":[{"id":"image","type":"image","source":"assets/image.png"}],
+        "visual":{"clips":[]}
+    }"##;
+    let editor = Editor::new();
+    for project in [
+        video_editor::Project::from_json(json, directory.path()).expect("JSON project"),
+        video_editor::Project::from_value(
+            serde_json::from_str(json).expect("JSON value"),
+            directory.path(),
+        )
+        .expect("value project"),
+    ] {
+        let inspection = editor.inspect(&project, false).expect("inspect project");
+        assert_eq!(inspection.output.path, directory.path().join("result.mp4"));
+        assert!(
+            project
+                .to_json()
+                .expect("serialize")
+                .contains("assets/image.png")
+        );
+    }
+}
+
+#[test]
+fn absolute_output_path_is_not_rebased() {
+    let directory = tempdir().expect("temporary directory");
+    let output = directory.path().join("absolute.mp4");
+    let json = format!(
+        r##"{{"schema_version":1,"output":{{"path":"{}","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1}},"assets":[],"visual":{{"clips":[]}}}}"##,
+        output.display()
+    );
+    let project =
+        video_editor::Project::from_json(&json, directory.path().join("base")).expect("project");
+    assert_eq!(
+        Editor::new()
+            .inspect(&project, false)
+            .expect("inspect")
+            .output
+            .path,
+        output
+    );
+}
+
+#[test]
+fn render_preflight_checks_the_requested_output_override() {
+    let directory = tempdir().expect("temporary directory");
+    let json = r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let project = video_editor::Project::from_json(json, directory.path()).expect("project");
+    let report = Editor::new().preflight(
+        &project,
+        PreflightOptions {
+            output: Some(directory.path().join("missing").join("out.mp4")),
+            check_encoder: true,
+            ..PreflightOptions::default()
+        },
+    );
+    assert!(!report.is_ready());
+    assert!(report.errors().any(|item| item.code == "MVP-OUTPUT-PARENT"));
+}

@@ -7,5 +7,6 @@ pub(crate) fn load_and_validate(
     options: &ValidationOptions,
 ) -> Result<ValidatedProject, LoadError> {
     let project = Project::load(path)?;
-    validation::preflight(&project, options)
+    let validation = crate::Editor::new().validate(&project);
+    validation::preflight(&project, &validation, options)
 }

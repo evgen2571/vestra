@@ -48,13 +48,11 @@ pub fn render_project(
 ) -> Result<(crate::project::ValidatedProject, RenderSummary), ApplicationRenderError> {
     let workflow_started = Instant::now();
     let validation_started = Instant::now();
-    let _validation = video_editor_core::validation::validate(
-        project.canonical(),
-        video_editor_core::validation::ResourceLimits::default(),
-    );
+    let validation = crate::Editor::new().validate(project);
     let validation_elapsed = validation_started.elapsed();
     let validated = crate::project::validation::preflight(
         project,
+        &validation,
         &crate::project::ValidationOptions::default(),
     )
     .map_err(|error| match error {

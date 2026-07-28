@@ -4,19 +4,10 @@ use crate::Diagnostic;
 
 use video_editor_core::project::Project;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ValidationOptions {
     pub check_backend: bool,
     pub limits: ResourceLimits,
-}
-
-impl Default for ValidationOptions {
-    fn default() -> Self {
-        Self {
-            check_backend: true,
-            limits: ResourceLimits::default(),
-        }
-    }
 }
 
 pub use video_editor_core::validation::ResourceLimits;
@@ -27,7 +18,7 @@ pub use video_editor_core::validation::ResourceLimits;
 pub struct ValidatedProject {
     pub(crate) project: Project,
     pub(crate) limits: ResourceLimits,
-    pub(crate) project_path: PathBuf,
+    pub(crate) base_directory: PathBuf,
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: BTreeMap<String, f64>,
     pub(crate) duration: f64,
@@ -43,7 +34,7 @@ impl ValidatedProject {
         video_editor_core::plan::PlanCompileInput::new(
             &self.project,
             self.limits,
-            &self.project_path,
+            &self.base_directory,
             &self.asset_paths,
             &self.audio_durations,
             self.duration,

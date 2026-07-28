@@ -51,8 +51,9 @@ impl Project {
     }
 
     pub fn from_json(json: &str, base_directory: impl Into<PathBuf>) -> Result<Self, LoadError> {
+        let started = Instant::now();
         let canonical = serde_json::from_str(json).map_err(LoadError::parse)?;
-        Self::from_canonical(canonical, base_directory.into(), None, Duration::ZERO)
+        Self::from_canonical(canonical, base_directory.into(), None, started.elapsed())
     }
 
     pub fn from_value(value: Value, base_directory: impl Into<PathBuf>) -> Result<Self, LoadError> {

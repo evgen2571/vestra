@@ -10,11 +10,7 @@ pub(super) fn resolve_path(validated: &PlanCompileInput<'_>) -> std::path::PathB
     if configured.is_absolute() {
         configured
     } else {
-        validated
-            .project_path
-            .parent()
-            .unwrap_or_else(|| std::path::Path::new("."))
-            .join(configured)
+        validated.base_directory.join(configured)
     }
 }
 

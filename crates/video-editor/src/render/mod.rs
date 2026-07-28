@@ -14,7 +14,7 @@ pub use engine::{
     reason = "private orchestration modules share these renderer contracts"
 )]
 pub use video_editor_render::{
-    AdapterMetadata, AdapterPerformanceClass, ByteLruCache, CacheStats, CompletedFrame, CpuBackend,
+    AdapterMetadata, AdapterPerformanceClass, ByteLruCache, CacheStats, CompletedFrame,
     DecodedAssets, PollMode, PreparationStats, PreparationTimings, RenderBackend,
     RenderBackendKind, StagedMetrics,
 };

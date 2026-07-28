@@ -2087,12 +2087,14 @@ name = "video-editor"
 version = "0.1.0"
 dependencies = [
  "image",
+ "pollster",
  "serde",
  "serde_json",
  "tempfile",
  "video-editor-core",
  "video-editor-media",
  "video-editor-render",
+ "wgpu",
 ]
 
 [[package]]

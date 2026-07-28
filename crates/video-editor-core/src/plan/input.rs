@@ -15,7 +15,10 @@ use crate::{diagnostic::Diagnostic, project::Project, validation::ResourceLimits
 pub struct PlanCompileInput<'a> {
     pub(crate) project: &'a Project,
     pub(crate) limits: ResourceLimits,
-    pub(crate) project_path: &'a Path,
+    /// Directory against which canonical relative paths are resolved. This is
+    /// deliberately not the source project-file path: in-memory projects have
+    /// no source file, but still have a base directory.
+    pub(crate) base_directory: &'a Path,
     pub(crate) asset_paths: &'a BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: &'a BTreeMap<String, f64>,
     pub(crate) duration: f64,
@@ -34,7 +37,7 @@ impl<'a> PlanCompileInput<'a> {
     pub fn new(
         project: &'a Project,
         limits: ResourceLimits,
-        project_path: &'a Path,
+        base_directory: &'a Path,
         asset_paths: &'a BTreeMap<String, PathBuf>,
         audio_durations: &'a BTreeMap<String, f64>,
         duration: f64,
@@ -45,7 +48,7 @@ impl<'a> PlanCompileInput<'a> {
         Self {
             project,
             limits,
-            project_path,
+            base_directory,
             asset_paths,
             audio_durations,
             duration,

@@ -4,7 +4,7 @@ mod application;
 mod cancellation;
 mod editor;
 mod plan;
-pub mod project;
+mod project;
 mod render;
 
 pub use application::{
@@ -59,6 +59,11 @@ pub struct PreflightReport {
 }
 
 impl PreflightReport {
+    /// `true` when no fatal readiness diagnostic was found.
+    #[must_use]
+    pub fn is_ready(&self) -> bool {
+        self.is_valid()
+    }
     #[must_use]
     pub fn is_valid(&self) -> bool {
         !self

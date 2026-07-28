@@ -31,8 +31,8 @@ pub mod plan {
     #[cfg(test)]
     use video_editor_core::plan::compile as compile_input;
 }
-/// Temporary internal facade retained while the root compatibility imports are
-/// removed. It exposes only core project values used by pixel production.
+/// Internal project values used by renderer tests and pixel production.
+/// Production path resolution and environment preflight belong to the SDK.
 pub mod project {
     pub use video_editor_core::project::*;
 
@@ -155,8 +155,7 @@ pub struct BackendFallback {
     pub message: String,
 }
 
-/// Internal import compatibility for renderer modules moved from the root.
-/// This disappears with the temporary root facade in the SDK extraction.
+/// Internal renderer imports shared by renderer modules.
 pub mod render {
     #[cfg(feature = "cpu")]
     pub use crate::CpuBackend;

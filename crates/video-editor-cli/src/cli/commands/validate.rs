@@ -3,19 +3,41 @@
 use std::{path::PathBuf, process::ExitCode};
 
 use crate::output::{ResultFormat, print_failure, print_success};
-use video_editor::Editor;
+use video_editor::{Editor, ValidateResult};
 
 pub(super) fn run(project: PathBuf, format: ResultFormat) -> ExitCode {
-    match Editor::new().validate_path(&project) {
-        Ok(result) => {
-            print_success("validate", format, result, "project is valid");
-            ExitCode::SUCCESS
+    let editor = Editor::new();
+    let loaded = match editor.load_project(&project) {
+        Ok(project) => project,
+        Err(error) => {
+            return print_failure(
+                "validate",
+                format,
+                error.diagnostics().to_vec(),
+                error.warnings().to_vec(),
+            );
         }
-        Err(error) => print_failure(
+    };
+    // Validation remains a pure SDK operation. The established CLI command
+    // also reports whether that valid project can actually use its assets.
+    let report = editor.preflight(&loaded, video_editor::PreflightOptions::default());
+    if report.is_valid() {
+        print_success(
             "validate",
             format,
-            error.diagnostics().to_vec(),
-            error.warnings().to_vec(),
-        ),
+            ValidateResult {
+                project,
+                warnings: report.warnings().cloned().collect(),
+            },
+            "project is valid",
+        );
+        ExitCode::SUCCESS
+    } else {
+        print_failure(
+            "validate",
+            format,
+            report.errors().cloned().collect(),
+            report.warnings().cloned().collect(),
+        )
     }
 }

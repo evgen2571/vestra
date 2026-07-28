@@ -17,8 +17,10 @@ pub struct Inspection {
 }
 
 pub fn inspect(project: &Project, preview: bool) -> Result<Inspection, LoadError> {
+    let validation = crate::Editor::new().validate(project);
     let validated = crate::project::validation::preflight(
         project,
+        &validation,
         &crate::project::ValidationOptions::default(),
     )?;
     let plan = compile(&validated, CompileOptions { preview })

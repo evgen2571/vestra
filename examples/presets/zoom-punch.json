@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Zoom punch preset",
   "output": {
     "path": "../output/zoom-punch.mp4",

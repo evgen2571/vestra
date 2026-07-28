@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Focus reveal preset",
   "output": {
     "path": "../output/focus-reveal.mp4",

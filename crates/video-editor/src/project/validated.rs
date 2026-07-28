@@ -2,24 +2,14 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::Diagnostic;
 
-use super::Project;
+use video_editor_core::project::Project;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ValidationOptions {
     pub check_backend: bool,
     pub limits: ResourceLimits,
 }
 
-impl Default for ValidationOptions {
-    fn default() -> Self {
-        Self {
-            check_backend: true,
-            limits: ResourceLimits::default(),
-        }
-    }
-}
-
-/// Temporary compatibility alias for the deterministic core limits.
 pub use video_editor_core::validation::ResourceLimits;
 
 /// Project data that crossed semantic validation. Construction remains inside
@@ -28,7 +18,7 @@ pub use video_editor_core::validation::ResourceLimits;
 pub struct ValidatedProject {
     pub(crate) project: Project,
     pub(crate) limits: ResourceLimits,
-    pub(crate) project_path: PathBuf,
+    pub(crate) base_directory: PathBuf,
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: BTreeMap<String, f64>,
     pub(crate) duration: f64,
@@ -44,7 +34,7 @@ impl ValidatedProject {
         video_editor_core::plan::PlanCompileInput::new(
             &self.project,
             self.limits,
-            &self.project_path,
+            &self.base_directory,
             &self.asset_paths,
             &self.audio_durations,
             self.duration,
@@ -52,11 +42,6 @@ impl ValidatedProject {
             self.frame_count,
             &self.warnings,
         )
-    }
-
-    #[must_use]
-    pub fn project(&self) -> &Project {
-        &self.project
     }
 
     #[must_use]
@@ -69,27 +54,53 @@ impl ValidatedProject {
     }
 
     #[must_use]
-    pub fn duration(&self) -> f64 {
-        self.duration
-    }
-
-    #[must_use]
-    pub fn frame_count(&self) -> u64 {
-        self.frame_count
-    }
-
-    #[must_use]
     pub fn warnings(&self) -> &[Diagnostic] {
         &self.warnings
-    }
-
-    #[must_use]
-    pub fn asset_path(&self, id: &str) -> Option<&std::path::Path> {
-        self.asset_paths.get(id).map(PathBuf::as_path)
     }
 }
 
 #[derive(Debug)]
 pub enum LoadError {
     Diagnostics(Vec<Diagnostic>),
+}
+
+impl LoadError {
+    pub(crate) fn read(error: std::io::Error) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-PROJECT-READ",
+            crate::Category::Project,
+            format!("cannot read project: {error}"),
+            "",
+        )])
+    }
+    pub(crate) fn write(error: std::io::Error) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-PROJECT-WRITE",
+            crate::Category::Project,
+            format!("cannot save project: {error}"),
+            "",
+        )])
+    }
+    pub(crate) fn parse(error: serde_json::Error) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-PROJECT-SHAPE",
+            crate::Category::Project,
+            format!("project does not match the canonical format: {error}"),
+            "",
+        )])
+    }
+    pub(crate) fn unsupported_schema(version: u32) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-SCHEMA-VERSION",
+            crate::Category::Project,
+            format!("unsupported project schema version {version}; supported version is 1"),
+            "/schema_version",
+        )])
+    }
+    #[must_use]
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        match self {
+            Self::Diagnostics(diagnostics) => diagnostics,
+        }
+    }
 }

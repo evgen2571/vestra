@@ -1,8 +1,7 @@
-//! Temporary compatibility facade for the extracted renderer crate.
+//! Private rendering orchestration.
 //!
-//! Renderer implementation lives in `video-editor-render`. The root keeps
-//! only the application pipeline that coordinates FFmpeg, progress, output,
-//! cancellation, and ordered frame delivery.
+//! Renderer implementation lives in `video-editor-render`; this module owns
+//! SDK-level progress, output, cancellation, and ordered frame delivery.
 
 mod engine;
 
@@ -15,7 +14,7 @@ pub use engine::{
     reason = "private orchestration modules share these renderer contracts"
 )]
 pub use video_editor_render::{
-    AdapterMetadata, AdapterPerformanceClass, ByteLruCache, CacheStats, CompletedFrame, CpuBackend,
+    AdapterMetadata, AdapterPerformanceClass, ByteLruCache, CacheStats, CompletedFrame,
     DecodedAssets, PollMode, PreparationStats, PreparationTimings, RenderBackend,
     RenderBackendKind, StagedMetrics,
 };

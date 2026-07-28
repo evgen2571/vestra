@@ -3,8 +3,9 @@ use video_editor::{BackendPreference, CancellationToken, Editor, RenderRequest};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let editor = Editor::new();
     let project = "project.json";
-    let result = editor.render_path(
-        project,
+    let project = editor.load_project(project)?;
+    let result = editor.render(
+        &project,
         RenderRequest {
             output: Some("result.mp4".into()),
             overwrite: true,

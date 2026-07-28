@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Slow drift preset",
   "output": {
     "path": "../output/slow-drift.mp4",

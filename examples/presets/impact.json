@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Impact preset",
   "output": {
     "path": "../output/impact.mp4",

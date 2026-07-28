@@ -73,8 +73,9 @@ consumer needs only `video-editor`:
 use video_editor::{BackendPreference, CancellationToken, Editor, RenderRequest};
 
 let editor = Editor::new();
-let result = editor.render_path(
-    "project.json",
+let project = editor.load_project("project.json")?;
+let result = editor.render(
+    &project,
     RenderRequest { output: Some("result.mp4".into()), overwrite: true,
         preview: false, backend: BackendPreference::Auto },
     &mut |_| {},
@@ -85,7 +86,25 @@ let result = editor.render_path(
 The SDK exposes structured inspection, validation, preflight, render results,
 events, and errors. It neither initializes logging nor prints or exits. CLI
 formatting, Ctrl-C installation, and exit-code mapping belong to
-`video-editor-cli`.
+`video-editor-cli`. `video-editor-core`, `video-editor-render`, and
+`video-editor-media` are implementation crates. Their public items support
+the workspace and are not stable SDK contracts.
+
+### Project paths and lifecycle
+
+`Project::load("/a/b/project.json")` uses `/a/b` as its base directory.
+`Project::from_json(json, "/a/b")` and `Project::from_value(value, "/a/b")`
+use the supplied directory. During preflight and rendering, every canonical
+relative asset and output path resolves against that base directory. Absolute
+paths stay absolute. Serializing or saving a `Project` preserves the canonical
+path strings; it does not rewrite relative paths to absolute paths.
+
+The lifecycle is project parsing, pure validation, environment preflight, plan
+compilation, render preparation, staged rendering, then `FrameSink` and FFmpeg
+publication. `Editor::validate` is deterministic and never opens assets or
+starts a subprocess. The CLI `validate` command additionally runs preflight,
+so a missing or unreadable asset is reported to CLI users. Reusable preparation
+and single-frame rendering are intentionally not part of this SDK yet.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

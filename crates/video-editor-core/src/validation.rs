@@ -84,7 +84,7 @@ impl ValidationReport {
 
 /// Validates project semantics without reading files, probing media, creating
 /// a GPU device, or checking backend availability. Environment-dependent
-/// validation is deliberately performed by the transitional root package.
+/// validation is deliberately performed by the SDK crate.
 #[must_use]
 pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationReport {
     let mut errors = Vec::new();

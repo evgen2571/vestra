@@ -1,9 +1,7 @@
 //! Project-duration resolution and truncation warnings.
 
-use crate::{
-    Category, Diagnostic,
-    project::{DurationMode, Project},
-};
+use crate::{Category, Diagnostic, project::DurationMode};
+use video_editor_core::project::Project;
 
 pub(super) fn resolve(
     project: &Project,

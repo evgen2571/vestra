@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "WGPU RGBA parity fixture",
   "output": {
     "path": "../output/wgpu-small-rgba.mp4",

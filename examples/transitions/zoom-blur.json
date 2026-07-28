@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Zoom blur",
   "output": {
     "path": "../output/zoom-blur.mp4",

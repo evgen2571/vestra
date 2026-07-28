@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Color adjustment",
   "output": {
     "path": "../output/color-adjust.mp4",

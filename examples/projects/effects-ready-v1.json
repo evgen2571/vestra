@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Effects-ready v1",
   "output": {
     "path": "../output/effects-ready-v1.mp4",

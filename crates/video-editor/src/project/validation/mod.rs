@@ -1,9 +1,5 @@
-use std::path::Path;
-
-use crate::{
-    Category, Diagnostic,
-    timeline::{frame_count, seconds_to_nanos},
-};
+use crate::{Category, Diagnostic, ValidationReport};
+use video_editor_core::timeline::{frame_count, seconds_to_nanos};
 
 use crate::project::{LoadError, Project, ValidatedProject, ValidationOptions};
 
@@ -11,43 +7,31 @@ pub(super) mod assets;
 pub(super) mod audio;
 pub(super) mod duration;
 
-pub(crate) fn validate(
-    project: Project,
-    path: &Path,
+pub(crate) fn preflight(
+    project: &Project,
+    validation: &ValidationReport,
     options: &ValidationOptions,
 ) -> Result<ValidatedProject, LoadError> {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    let core_report = video_editor_core::validation::validate(&project, options.limits);
-    for diagnostic in core_report.into_diagnostics() {
+    let canonical = project.canonical();
+    for diagnostic in validation.diagnostics() {
         match diagnostic.severity {
-            crate::Severity::Fatal => errors.push(diagnostic),
-            crate::Severity::Warning => warnings.push(diagnostic),
+            crate::Severity::Fatal => errors.push(diagnostic.clone()),
+            crate::Severity::Warning => warnings.push(diagnostic.clone()),
         }
     }
-    let frame_rate = match project.output.frame_rate.rational() {
-        Ok(rate) => rate,
-        Err(message) => {
-            errors.push(Diagnostic::error(
-                "MVP-OUTPUT-FPS",
-                Category::Semantic,
-                message,
-                "/output/frame_rate",
-            ));
-            (1, 1)
-        }
-    };
-    let root = path.parent().unwrap_or_else(|| Path::new("."));
-    let assets = assets::validate(&project.assets, root, &mut errors);
+    let frame_rate = canonical.output.frame_rate.rational().unwrap_or((1, 1));
+    let assets = assets::validate(&canonical.assets, project.base_directory(), &mut errors);
     let audio_end = audio::validate(
-        project.audio.as_ref(),
-        project.output.audio,
+        canonical.audio.as_ref(),
+        canonical.output.audio,
         &assets.kinds,
         &assets.audio_durations,
         &mut errors,
     );
     let duration =
-        duration::resolve(&project, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+        duration::resolve(canonical, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
     if options.check_backend
         && let Err(message) = video_editor_media::backend_available()
@@ -61,9 +45,9 @@ pub(crate) fn validate(
     }
     if errors.is_empty() {
         Ok(ValidatedProject {
-            project,
+            project: canonical.clone(),
             limits: options.limits,
-            project_path: path.to_path_buf(),
+            base_directory: project.base_directory().to_path_buf(),
             asset_paths: assets.paths,
             audio_durations: assets.audio_durations,
             duration,

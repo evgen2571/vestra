@@ -3,22 +3,23 @@
 use std::{path::PathBuf, process::ExitCode};
 
 use crate::output::{ResultFormat, print_failure, print_success};
-use video_editor::{
-    LoadError,
-    application::{inspect, inspect_result},
-};
+use video_editor::Editor;
 
 pub(super) fn run(project: PathBuf, preview: bool, format: ResultFormat) -> ExitCode {
-    match inspect(&project, preview) {
+    let editor = Editor::new();
+    match editor
+        .load_project(&project)
+        .and_then(|loaded| editor.inspect(&loaded, preview))
+    {
         Ok(inspection) => {
-            print_success(
-                "inspect",
-                format,
-                inspect_result(&project, inspection),
-                "project inspection complete",
-            );
+            print_success("inspect", format, inspection, "project inspection complete");
             ExitCode::SUCCESS
         }
-        Err(LoadError::Diagnostics(errors)) => print_failure("inspect", format, errors, Vec::new()),
+        Err(error) => print_failure(
+            "inspect",
+            format,
+            error.diagnostics().to_vec(),
+            error.warnings().to_vec(),
+        ),
     }
 }

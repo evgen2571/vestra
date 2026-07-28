@@ -1,26 +1,17 @@
-//! Rendering from a compiled plan.
+//! Temporary compatibility facade for the extracted renderer crate.
+//!
+//! Renderer implementation lives in `video-editor-render`. The root keeps
+//! only the application pipeline that coordinates FFmpeg, progress, output,
+//! cancellation, and ordered frame delivery.
 
-mod backend;
-mod blend;
-mod cache;
-mod cpu;
-mod decoded;
-pub(crate) mod effects;
 mod engine;
-pub(crate) mod geometry;
-mod metrics;
-mod wgpu;
 
-pub use backend::{
-    AdapterMetadata, AdapterPerformanceClass, CompletedFrame, PollMode, RenderBackend,
-    RenderBackendKind,
-};
-pub use cache::{ByteLruCache, CacheStats};
-pub use cpu::backend::CpuBackend;
-pub use decoded::DecodedAssets;
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,
 };
-pub use metrics::{PreparationStats, PreparationTimings, StagedMetrics};
-pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
+pub use video_editor_render::{
+    AdapterMetadata, AdapterPerformanceClass, ByteLruCache, CacheStats, CompletedFrame, CpuBackend,
+    DecodedAssets, FrameDifference, PixelMismatch, PollMode, PreparationStats, PreparationTimings,
+    RenderBackend, RenderBackendKind, StagedMetrics, WgpuBackend, compare_rgba,
+};

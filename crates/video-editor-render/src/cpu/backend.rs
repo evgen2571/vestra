@@ -115,6 +115,7 @@ impl RenderBackend for CpuBackend {
 
 #[cfg(test)]
 impl CpuBackend {
+    #[allow(dead_code)]
     #[expect(
         clippy::result_large_err,
         reason = "test-only compatibility helper preserves the existing diagnostic type"
@@ -135,5 +136,47 @@ impl CpuBackend {
         })?;
         destination.copy_from_slice(&completed.rgba);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        plan::{CompileOptions, ScheduledItem, compile, evaluate},
+        project::{ValidationOptions, load_and_validate},
+    };
+
+    #[test]
+    fn completed_pixels_remain_owned_after_later_submission_and_polling() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+        let mut backend = CpuBackend::new(&plan, decoded);
+
+        backend.submit_frame(3, &frame).expect("first submission");
+        let first = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("first poll")
+            .expect("first completion");
+        let first_pixels = first.rgba.clone();
+
+        backend.submit_frame(4, &frame).expect("second submission");
+        let second = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("second poll")
+            .expect("second completion");
+
+        assert_eq!(first.frame_number, 3);
+        assert_eq!(second.frame_number, 4);
+        assert_eq!(first.rgba, first_pixels);
     }
 }

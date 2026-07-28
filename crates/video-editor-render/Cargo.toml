@@ -1,0 +1,34 @@
+[package]
+name = "video-editor-render"
+version = "0.1.0"
+edition = "2024"
+description = "CPU and WGPU frame rendering for video-editor"
+license = "MIT"
+publish = false
+
+[features]
+default = ["cpu", "wgpu"]
+cpu = []
+wgpu = ["dep:bytemuck", "dep:naga", "dep:pollster", "dep:wgpu"]
+
+[dependencies]
+video-editor-core = { path = "../video-editor-core" }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+image = { version = "0.25", default-features = true }
+naga = { version = "22", features = ["wgsl-in"], optional = true }
+pollster = { version = "0.4", optional = true }
+serde = { version = "1", features = ["derive"] }
+wgpu = { version = "22", optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"

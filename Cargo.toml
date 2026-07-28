@@ -7,21 +7,18 @@ license = "MIT"
 
 [workspace]
 resolver = "2"
-members = [".", "crates/video-editor-core"]
+members = [".", "crates/video-editor-core", "crates/video-editor-render"]
 
 [dependencies]
 video-editor-core = { path = "crates/video-editor-core" }
+video-editor-render = { path = "crates/video-editor-render" }
 clap = { version = "4.5", features = ["derive"] }
-bytemuck = { version = "1", features = ["derive"] }
 ctrlc = "3.4"
 image = { version = "0.25", default-features = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
-pollster = "0.4"
-wgpu = "22"
-naga = { version = "22", features = ["wgsl-in"] }
 
 [dev-dependencies]
 assert_cmd = "2"

@@ -23,7 +23,7 @@ fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
     )
     .expect("canonical fixture validates");
     let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&canonical).expect("fixture decodes");
     let image_layer = canonical
         .layers
         .iter()
@@ -108,7 +108,7 @@ fn gpu_animated_crop_matches_cpu_when_an_adapter_is_available() {
     )
     .expect("canonical fixture validates");
     let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layer = plan
         .layers
         .iter()

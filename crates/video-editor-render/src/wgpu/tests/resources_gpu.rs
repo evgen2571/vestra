@@ -24,7 +24,7 @@ fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
     )
     .expect("canonical fixture validates");
     let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&canonical).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&canonical).expect("fixture decodes");
     let image_layer = canonical
         .layers
         .iter()
@@ -76,7 +76,7 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layer = plan
         .layers
         .iter()
@@ -175,7 +175,7 @@ fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_avail
     )
     .expect("canonical fixture validates");
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let decoded = crate::render::DecodedAssets::build(&plan).expect("fixture decodes");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layer = plan
         .layers
         .iter()

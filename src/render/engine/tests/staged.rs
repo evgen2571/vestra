@@ -22,6 +22,7 @@ struct MockStagedBackend {
     mode: MockMode,
     duplicate: Option<CompletedFrame>,
     cancel_after_submit: Option<Arc<std::sync::atomic::AtomicBool>>,
+    cancel_after_poll: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 #[derive(Clone, Copy)]
@@ -49,6 +50,7 @@ impl MockStagedBackend {
             mode: MockMode::Normal,
             duplicate: None,
             cancel_after_submit: None,
+            cancel_after_poll: None,
         }
     }
 
@@ -59,6 +61,11 @@ impl MockStagedBackend {
 
     fn cancel_after_submit(mut self, cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
         self.cancel_after_submit = Some(cancelled);
+        self
+    }
+
+    fn cancel_after_poll(mut self, cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        self.cancel_after_poll = Some(cancelled);
         self
     }
 
@@ -147,6 +154,9 @@ impl RenderBackend for MockStagedBackend {
             });
         }
         self.metrics.backend_completed_frames += 1;
+        if let Some(cancelled) = self.cancel_after_poll.take() {
+            cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         Ok(Some(frame))
     }
 
@@ -339,6 +349,36 @@ fn engine_cancellation_after_submission_discards_in_flight_work() {
         ))
     })
     .expect_err("in-flight cancellation propagates");
+    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert!(written.lock().expect("mock metrics lock").is_empty());
+    assert!(!output.exists());
+}
+
+#[test]
+fn engine_cancellation_during_final_drain_discards_polled_frame() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("mock-cancel-final-drain.mp4");
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::clone(&cancelled),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let backend_written = Arc::clone(&written);
+    let capacity = usize::try_from(plan.frame_count).expect("frame count fits usize");
+    let error = render_with_backend_builder(&plan, &options, &mut |_| {}, move |_, _, _| {
+        Ok((
+            Box::new(
+                MockStagedBackend::new(capacity, (0..plan.frame_count).collect(), backend_written)
+                    .cancel_after_poll(cancelled),
+            ) as Box<dyn RenderBackend>,
+            None,
+        ))
+    })
+    .expect_err("final-drain cancellation propagates");
     assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
     assert!(written.lock().expect("mock metrics lock").is_empty());
     assert!(!output.exists());

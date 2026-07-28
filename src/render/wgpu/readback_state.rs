@@ -187,6 +187,7 @@ mod tests {
         assert!(state.mark_ready(first).is_err());
         state.mark_mapping(first).expect("mapping");
         state.mark_ready(first).expect("ready");
+        assert!(state.mark_ready(first).is_err(), "duplicate completion");
         state.consume(first).expect("consume");
         let second = state.acquire(1).expect("reuse");
         assert!(!state.matches(first));

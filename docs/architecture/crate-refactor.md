@@ -74,9 +74,11 @@ core EvaluatedFrame -> renderer submission -> renderer CompletedFrame
 -> root completion ordering -> FrameSink -> temporary encoded output -> publication
 ```
 
-Phase 3 finalization is complete. Phase 4 starts by creating the public `video-editor` SDK
-facade and moving root application workflows behind it, then separating the
-CLI crate.
+Phase 3 finalization is complete. The recorded verification in `.audit/phase3.tsv`
+covers the generic media boundary, CPU-only renderer support, FFmpeg integration,
+and the available WGPU checks. Phase 4 starts by creating the public
+`video-editor` SDK facade and moving root application workflows behind it, then
+separating the CLI crate.
 
 ## Migration map
 

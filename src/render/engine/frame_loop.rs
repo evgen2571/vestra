@@ -493,18 +493,21 @@ fn cancellation<S: FrameSink + ?Sized>(
     attempted_frame: Option<u64>,
 ) -> Result<FrameLoopResult, RenderError> {
     backend.abort();
-    let _ = encoder.abort();
+    let cleanup = abort_sink(encoder);
     Err(cleanup_error(
         output,
         plan,
         RenderFailureStage::Cancellation,
         completed_frames,
         attempted_frame,
-        Diagnostic::error(
-            "MVP-CANCELLED",
-            Category::Cancellation,
-            "render cancelled",
-            "",
+        with_encoder_cleanup(
+            Diagnostic::error(
+                "MVP-CANCELLED",
+                Category::Cancellation,
+                "render cancelled",
+                "",
+            ),
+            cleanup,
         ),
     ))
 }

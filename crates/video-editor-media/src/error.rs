@@ -50,6 +50,8 @@ pub enum MediaError {
         #[source]
         source: io::Error,
     },
+    #[error("cannot clean up FFmpeg while {operation}: stderr reader panicked")]
+    StderrCollection { operation: &'static str },
     #[error("output '{0}' already exists; pass --overwrite to replace it")]
     OutputAlreadyExists(PathBuf),
     #[error("output directory '{0}' does not exist")]

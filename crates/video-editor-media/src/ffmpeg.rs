@@ -103,22 +103,37 @@ impl FfmpegSink {
 
     fn abort_active(&mut self) -> Result<(), MediaError> {
         drop(self.stdin.take());
-        let cleanup = if let Some(child) = self.child.as_mut() {
+        let cleanup_result = if let Some(child) = self.child.as_mut() {
             terminate_and_reap(child)
         } else {
             Ok(())
         };
-        self.child.take();
-        let _ = self.join_stderr();
-        self.state = SinkState::Aborted;
-        cleanup
+        self.resolve_abort_cleanup(cleanup_result)
     }
 
-    fn join_stderr(&mut self) -> Vec<u8> {
+    fn resolve_abort_cleanup(
+        &mut self,
+        cleanup_result: Result<(), MediaError>,
+    ) -> Result<(), MediaError> {
+        // Keep both handles when the process could not be reaped. Drop can then
+        // make another cleanup attempt instead of losing the only child handle.
+        cleanup_result?;
+
+        self.child.take();
+        self.state = SinkState::Aborted;
+        self.join_stderr().map(|_| ())
+    }
+
+    fn join_stderr(&mut self) -> Result<Vec<u8>, MediaError> {
         self.stderr_reader
             .take()
-            .and_then(|reader| reader.join().ok())
-            .unwrap_or_default()
+            .map(|reader| {
+                reader.join().map_err(|_| MediaError::StderrCollection {
+                    operation: "joining FFmpeg stderr reader",
+                })
+            })
+            .transpose()
+            .map(|stderr| stderr.unwrap_or_default())
     }
 }
 
@@ -153,7 +168,7 @@ impl FrameSink for FfmpegSink {
                 .flatten()
             {
                 self.child.take();
-                let stderr = String::from_utf8_lossy(&self.join_stderr())
+                let stderr = String::from_utf8_lossy(&self.join_stderr()?)
                     .trim()
                     .to_owned();
                 self.state = SinkState::Aborted;
@@ -187,7 +202,7 @@ impl FrameSink for FfmpegSink {
             }
         };
         self.child.take();
-        let stderr = String::from_utf8_lossy(&self.join_stderr())
+        let stderr = String::from_utf8_lossy(&self.join_stderr()?)
             .trim()
             .to_owned();
         self.state = SinkState::Finished;
@@ -219,19 +234,13 @@ impl Drop for FfmpegSink {
 }
 
 fn terminate_and_reap(child: &mut Child) -> Result<(), MediaError> {
-    if child
-        .try_wait()
-        .map_err(|source| MediaError::ProcessCleanup {
-            operation: "checking FFmpeg status",
-            source,
-        })?
-        .is_none()
-    {
-        child.kill().map_err(|source| MediaError::ProcessCleanup {
-            operation: "stopping FFmpeg",
-            source,
-        })?;
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return Ok(());
     }
+
+    // A process may exit between try_wait and kill. Always wait afterwards: it
+    // both reaps that race and prevents a kill error from creating a zombie.
+    let _kill_error = child.kill();
     child.wait().map_err(|source| MediaError::ProcessCleanup {
         operation: "reaping FFmpeg",
         source,
@@ -389,6 +398,23 @@ mod tests {
         assert_eq!(sink.state, SinkState::Aborted);
         assert!(sink.write_frame(&frame(0)).is_err());
         assert!(sink.finish().is_err());
+    }
+
+    #[test]
+    fn failed_cleanup_keeps_child_ownership_for_a_later_abort_attempt() {
+        let mut sink = active_test_sink();
+        let error = sink
+            .resolve_abort_cleanup(Err(MediaError::ProcessCleanup {
+                operation: "stopping FFmpeg",
+                source: std::io::Error::other("simulated cleanup failure"),
+            }))
+            .expect_err("simulated cleanup failure propagates");
+        assert!(matches!(error, MediaError::ProcessCleanup { .. }));
+        assert!(sink.child.is_some());
+        assert_eq!(sink.state, SinkState::Active);
+        sink.abort().expect("later cleanup attempt reaps child");
+        assert_eq!(sink.state, SinkState::Aborted);
+        assert!(sink.child.is_none());
     }
 
     #[test]

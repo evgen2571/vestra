@@ -2,7 +2,10 @@ use std::{
     collections::{HashMap, VecDeque},
     fs,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use crate::{
@@ -20,14 +23,50 @@ use super::super::{
 };
 
 struct RecordingSink {
-    frames: Arc<Mutex<Vec<u64>>>,
+    probe: SinkProbe,
     temporary_path: PathBuf,
+    fail_on_frame: Option<u64>,
+    fail_finish: bool,
+    fail_abort: bool,
+}
+
+#[derive(Clone, Default)]
+struct SinkProbe {
+    frames: Arc<Mutex<Vec<u64>>>,
+    abort_count: Arc<AtomicUsize>,
+    finish_count: Arc<AtomicUsize>,
     reported_frames: Option<u64>,
+}
+
+impl RecordingSink {
+    fn new(temporary_path: PathBuf, probe: SinkProbe) -> Self {
+        Self {
+            probe,
+            temporary_path,
+            fail_on_frame: None,
+            fail_finish: false,
+            fail_abort: false,
+        }
+    }
+
+    fn failing_on_frame(mut self, frame_number: u64) -> Self {
+        self.fail_on_frame = Some(frame_number);
+        self
+    }
+
+    fn failing_abort(mut self) -> Self {
+        self.fail_abort = true;
+        self
+    }
 }
 
 impl FrameSink for RecordingSink {
     fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
-        self.frames
+        if self.fail_on_frame == Some(frame.frame_number) {
+            return Err(MediaError::FrameInputClosed);
+        }
+        self.probe
+            .frames
             .lock()
             .expect("sink lock")
             .push(frame.frame_number);
@@ -35,16 +74,26 @@ impl FrameSink for RecordingSink {
     }
 
     fn finish(&mut self) -> Result<SinkResult, MediaError> {
+        self.probe.finish_count.fetch_add(1, Ordering::Relaxed);
+        if self.fail_finish {
+            return Err(MediaError::FrameInputClosed);
+        }
         fs::write(&self.temporary_path, b"fake encoded output").map_err(MediaError::Publication)?;
         Ok(SinkResult {
             frames_written: self
+                .probe
                 .reported_frames
-                .unwrap_or_else(|| self.frames.lock().expect("sink lock").len() as u64),
+                .unwrap_or_else(|| self.probe.frames.lock().expect("sink lock").len() as u64),
         })
     }
 
     fn abort(&mut self) -> Result<(), MediaError> {
-        Ok(())
+        self.probe.abort_count.fetch_add(1, Ordering::Relaxed);
+        if self.fail_abort {
+            Err(MediaError::FrameInputClosed)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -58,6 +107,7 @@ struct MockStagedBackend {
     duplicate: Option<CompletedFrame>,
     cancel_after_submit: Option<Arc<std::sync::atomic::AtomicBool>>,
     cancel_after_poll: Option<Arc<std::sync::atomic::AtomicBool>>,
+    abort_count: Arc<AtomicUsize>,
 }
 
 #[derive(Clone, Copy)]
@@ -86,6 +136,7 @@ impl MockStagedBackend {
             duplicate: None,
             cancel_after_submit: None,
             cancel_after_poll: None,
+            abort_count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -102,6 +153,10 @@ impl MockStagedBackend {
     fn cancel_after_poll(mut self, cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
         self.cancel_after_poll = Some(cancelled);
         self
+    }
+
+    fn abort_count(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.abort_count)
     }
 
     fn next_pending_frame(&mut self) -> Option<u64> {
@@ -212,6 +267,7 @@ impl RenderBackend for MockStagedBackend {
     }
 
     fn abort(&mut self) {
+        self.abort_count.fetch_add(1, Ordering::Relaxed);
         self.pending.clear();
     }
 
@@ -265,7 +321,10 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
         backend_preference: RenderBackendPreference::Wgpu,
     };
     let sink_frames = Arc::new(Mutex::new(Vec::new()));
-    let sink_frames_for_factory = Arc::clone(&sink_frames);
+    let sink_probe = SinkProbe {
+        frames: Arc::clone(&sink_frames),
+        ..SinkProbe::default()
+    };
     let result = render_with_backend_builder_and_sink(
         &plan,
         &options,
@@ -278,11 +337,7 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
             ))
         },
         move |_settings: &EncoderSettings, temporary_path| {
-            Ok(RecordingSink {
-                frames: sink_frames_for_factory,
-                temporary_path: temporary_path.to_path_buf(),
-                reported_frames: None,
-            })
+            Ok(RecordingSink::new(temporary_path.to_path_buf(), sink_probe))
         },
     );
     result.expect("mock staged render succeeds");
@@ -308,6 +363,10 @@ fn engine_rejects_a_sink_frame_count_mismatch_before_publication() {
         backend_preference: RenderBackendPreference::Wgpu,
     };
     let total_frames = plan.frame_count;
+    let sink_probe = SinkProbe {
+        reported_frames: Some(total_frames - 1),
+        ..SinkProbe::default()
+    };
     let error = render_with_backend_builder_and_sink(
         &plan,
         &options,
@@ -323,11 +382,7 @@ fn engine_rejects_a_sink_frame_count_mismatch_before_publication() {
             ))
         },
         move |_settings: &EncoderSettings, temporary_path| {
-            Ok(RecordingSink {
-                frames: Arc::new(Mutex::new(Vec::new())),
-                temporary_path: temporary_path.to_path_buf(),
-                reported_frames: Some(total_frames - 1),
-            })
+            Ok(RecordingSink::new(temporary_path.to_path_buf(), sink_probe))
         },
     )
     .expect_err("short sink result rejects publication");
@@ -359,6 +414,143 @@ fn run_failure_case(mode: MockMode) -> crate::render::RenderError {
         ))
     })
     .expect_err("configured mock failure propagates")
+}
+
+fn run_failure_with_recording_sink(
+    mode: MockMode,
+    fail_on_frame: Option<u64>,
+    fail_abort: bool,
+) -> (
+    crate::render::RenderError,
+    SinkProbe,
+    Arc<AtomicUsize>,
+    PathBuf,
+) {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("recording-sink-failure.mp4");
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let probe = SinkProbe::default();
+    let sink_probe = probe.clone();
+    let backend = MockStagedBackend::new(
+        3,
+        (0..plan.frame_count).collect(),
+        Arc::new(Mutex::new(Vec::new())),
+    )
+    .failing(mode);
+    let backend_aborts = backend.abort_count();
+    let error = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| {},
+        move |_, _, _| Ok((Box::new(backend) as Box<dyn RenderBackend>, None)),
+        move |_settings: &EncoderSettings, temporary_path| {
+            let mut sink = RecordingSink::new(temporary_path.to_path_buf(), sink_probe);
+            if let Some(frame_number) = fail_on_frame {
+                sink = sink.failing_on_frame(frame_number);
+            }
+            if fail_abort {
+                sink = sink.failing_abort();
+            }
+            Ok(sink)
+        },
+    )
+    .expect_err("configured failure propagates");
+    (error, probe, backend_aborts, output)
+}
+
+#[test]
+fn submission_failure_aborts_the_sink_without_finishing_or_publishing() {
+    let (error, probe, backend_aborts, output) =
+        run_failure_with_recording_sink(MockMode::SubmitFailure, None, false);
+    assert_eq!(error.diagnostic.code, "MOCK-SUBMIT");
+    assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
+    assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
+    assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
+    assert!(!output.exists());
+}
+
+#[test]
+fn poll_failure_aborts_the_sink_without_finishing_or_publishing() {
+    let (error, probe, backend_aborts, output) =
+        run_failure_with_recording_sink(MockMode::PollFailure, None, false);
+    assert_eq!(error.diagnostic.code, "MOCK-POLL");
+    assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
+    assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
+    assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
+    assert!(!output.exists());
+}
+
+#[test]
+fn sink_write_failure_aborts_renderer_and_sink_without_publishing() {
+    let (error, probe, backend_aborts, output) =
+        run_failure_with_recording_sink(MockMode::Normal, Some(0), false);
+    assert_eq!(error.diagnostic.code, "MVP-RENDER-WRITE");
+    assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
+    assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
+    assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
+    assert!(probe.frames.lock().expect("sink lock").is_empty());
+    assert!(!output.exists());
+}
+
+#[test]
+fn sink_abort_failure_is_a_hint_without_replacing_the_primary_failure() {
+    let (error, probe, _, output) =
+        run_failure_with_recording_sink(MockMode::SubmitFailure, None, true);
+    assert_eq!(error.diagnostic.code, "MOCK-SUBMIT");
+    assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
+    assert!(
+        error
+            .diagnostic
+            .hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("encoder cleanup"))
+    );
+    assert!(!output.exists());
+}
+
+#[test]
+fn cancellation_aborts_the_sink_and_keeps_cleanup_failure_as_a_hint() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("recording-sink-cancel.mp4");
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let probe = SinkProbe::default();
+    let sink_probe = probe.clone();
+    let backend = MockStagedBackend::new(3, Vec::new(), Arc::new(Mutex::new(Vec::new())));
+    let backend_aborts = backend.abort_count();
+    let error = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| {},
+        move |_, _, _| Ok((Box::new(backend) as Box<dyn RenderBackend>, None)),
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(temporary_path.to_path_buf(), sink_probe).failing_abort())
+        },
+    )
+    .expect_err("cancellation propagates");
+    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
+    assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
+    assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
+    assert!(
+        error
+            .diagnostic
+            .hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("encoder cleanup"))
+    );
+    assert!(!output.exists());
 }
 
 #[test]

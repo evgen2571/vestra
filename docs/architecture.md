@@ -67,7 +67,7 @@ uses its merge methods for compiler, schedule, and backend data.
 `crates/video-editor-render/src/cpu/assets.rs` owns the CPU-only static-crop
 cache. `video-editor-core` plans backend-neutral logical effect passes,
 including identity elimination, multipass decomposition, and pass order.
-`video-editor-render` executes those passes on CPU and WGPU. The WGPU executor
+`video-editor-render` executes those logical passes on CPU and WGPU. The WGPU executor
 receives self-describing planned passes and never rediscovers effect semantics.
 
 `crates/video-editor-render/src/cpu` contains its prepared backend, composition, rasterization, surface
@@ -99,20 +99,22 @@ rendering begins aborts the render instead of changing backends mid-stream.
 
 ## Engine, failures, and output
 
-`src/render/engine/runner.rs` coordinates output setup, shared decoding, active
-scheduling, backend selection, `FfmpegSink` startup, finalization, frame-count
-verification, publication, and final reporting. `src/render/engine/frame_loop.rs`
-owns cancellation, active-layer updates, evaluation, backend rendering, ordered
-delivery of completed frames to `FrameSink`, and progress events. The frame loop
-depends only on `FrameSink`. It never knows about FFmpeg, process arguments, or
-temporary paths.
+`crates/video-editor-render` owns `CompletedFrame`. `src/render/engine/runner.rs`
+coordinates output setup, shared decoding, active scheduling, backend selection,
+`FfmpegSink` startup, finalization, frame-count verification, publication, and
+final reporting. `src/render/engine/frame_loop.rs` owns cancellation, active-layer
+updates, evaluation, backend rendering, completion ordering, delivery to
+`FrameSink`, and progress events. The frame loop depends only on `FrameSink`. It
+never knows about FFmpeg, process arguments, or temporary paths.
 
-The root orders out-of-order renderer completions. A sink validates and writes
-that ordered input. `FfmpegSink` closes stdin, terminates and reaps its child on
-abort or active drop, joins stderr collection, and rejects writes or finishing
-after termination. The runner publishes only after sink finalization reports the
-expected frame count. Failure handling removes temporary output and keeps the
-primary render error while recording cleanup trouble as a diagnostic hint.
+`video-editor-media` owns `FrameSink`, `FfmpegSink`, encoding, and output
+publication. A sink validates and writes the root's ordered input. `FfmpegSink`
+closes stdin, terminates and reaps its child on abort or active drop, joins stderr
+collection after process resolution, and retains the child handle when cleanup
+fails so a later abort or `Drop` can retry. The runner publishes only after sink
+finalization reports the expected frame count. Failure handling removes temporary
+output. Cancellation remains the primary diagnostic, while a sink cleanup failure
+is attached as a secondary hint.
 
 ## Effect and geometry flow
 
@@ -136,7 +138,9 @@ evaluated source and transform
 ## Extending effects
 
 To add a project effect, update the project model and schema, validation,
-compiler, compiled-effect metadata, evaluation, `render/effects` pass planning,
-CPU execution, WGPU parameter encoding, shader/pipeline mapping, prepared bind
-groups, capability coverage, a parity fixture, and a benchmark. Keep the effect
-plan and evaluation behavior unchanged so neither renderer rediscovers ordering.
+compiler, compiled-effect metadata, evaluation, logical-pass planning in
+`video-editor-core::plan`, CPU execution in `crates/video-editor-render/src/cpu`,
+WGPU execution in `crates/video-editor-render/src/wgpu`, parameter encoding,
+shader and pipeline mapping, prepared bind groups, capability coverage, a parity
+fixture, and a benchmark. Keep the effect-plan and evaluation behavior unchanged
+so neither renderer rediscovers ordering.

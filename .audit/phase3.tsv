@@ -1,5 +1,15 @@
-ts	phase	decision	why	evidence	result
-2026-07-28T00:00:00Z	frame-sink	made the frame loop generic over FrameSink	root ordering must work for any ordered frame consumer	src/render/engine/frame_loop.rs; src/render/engine/tests/staged.rs	fake sink receives ordered frames from out-of-order mock completions
-2026-07-28T00:00:00Z	lifecycle	replaced FFmpeg-specific root cleanup with trait-level abort	root retains the primary renderer or write failure while sink cleanup is secondary	src/render/engine/frame_loop.rs; crates/video-editor-media/src/sink.rs	root no longer calls FFmpeg-specific abort helpers
-2026-07-28T00:00:00Z	ffmpeg-cleanup	used active finished and aborted sink states	child ownership must remain active until finalization or abort resolves	crates/video-editor-media/src/ffmpeg.rs	constructor failures, abort, finish wait failure, and Drop use explicit cleanup paths
-2026-07-28T00:00:00Z	output	checked SinkResult before publication	an encoded file with fewer frames must not become the final output	src/render/engine/runner.rs	MVP-SINK-FRAME-COUNT triggers cleanup before publication
+ts	phase	command	result	tests_or_evidence	environment_or_skip
+2026-07-28T15:12:00Z	phase3-finalization	cargo fmt --check	passed	workspace formatting clean	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo check --workspace	passed	all four workspace packages checked	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-core	passed	33 unit tests	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-render	passed	114 unit tests	WGPU adapter-dependent tests stayed intact
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-media	passed	14 unit tests	FFmpeg process fixtures passed
+2026-07-28T15:12:00Z	phase3-finalization	cargo test --workspace --quiet	passed	all workspace unit and integration suites passed	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo clippy --workspace --all-targets --all-features -- -D warnings	passed	no warnings	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo check -p video-editor-render --no-default-features --features cpu	passed	CPU-only renderer builds	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo test -p video-editor-render --no-default-features --features cpu	passed	50 tests	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo tree -p video-editor-media	passed	no wgpu, naga, pollster, clap, ctrlc, terminal UI, or root application dependency	media depends on render contracts with default features disabled
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- validate examples/projects/animation-effects.json	passed	project is valid	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- inspect examples/projects/animation-effects.json	passed	project inspection complete	not applicable
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- render examples/projects/animation-effects.json --render-backend cpu --output /tmp/video-editor-phase3-small.mp4 --overwrite --progress none	passed	render completed; FFprobe reported h264 video	FFmpeg and FFprobe available at /usr/bin
+2026-07-28T15:12:00Z	phase3-finalization	cargo run -- render examples/projects/animation-effects.json --render-backend wgpu ...	skipped	WGPU-ADAPTER-NOT-FOUND	no compatible WGPU adapter in this environment; compile and adapter-independent tests passed

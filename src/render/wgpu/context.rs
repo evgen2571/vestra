@@ -7,6 +7,7 @@ use crate::{Category, Diagnostic, plan::RenderPlan, render::AdapterMetadata};
 use super::{
     diagnostics::{diagnostic, requested_backends},
     requirements::GpuRequirements,
+    runtime_error::RuntimeErrorState,
     texture_pool::{WORKING_FORMAT, WORKING_TEXTURE_USAGE},
 };
 
@@ -19,6 +20,7 @@ pub(super) struct GpuContext {
     pub(super) adapter_limits: wgpu::Limits,
     pub(super) adapter_request: Duration,
     pub(super) device_request: Duration,
+    pub(super) runtime_errors: RuntimeErrorState,
 }
 
 impl GpuContext {
@@ -83,6 +85,7 @@ impl GpuContext {
         .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
         let device_request = device_request_started.elapsed();
         requirements.validate(&device.limits(), plan)?;
+        let runtime_errors = RuntimeErrorState::install(&device);
         Ok(Self {
             _instance: instance,
             _adapter: adapter,
@@ -92,6 +95,7 @@ impl GpuContext {
             adapter_limits,
             adapter_request,
             device_request,
+            runtime_errors,
         })
     }
 }

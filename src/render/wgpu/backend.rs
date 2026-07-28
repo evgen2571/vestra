@@ -22,7 +22,7 @@ use super::{
     frame_plan::{GpuFramePlan, GpuOperation},
     parameters::{self, FrameParameterArena, LayerParameters},
     pipeline::GpuPipelines,
-    polling::poll,
+    polling::{drain, nonblocking, wait_for_one},
     readback::ReadbackRing,
     requirements::{GpuRequirements, ResourceEstimates},
     resources::{FrameResources, SourceResources},
@@ -178,7 +178,7 @@ impl WgpuBackend {
             .device
             .push_error_scope(wgpu::ErrorFilter::Validation);
         context.device.push_error_scope(wgpu::ErrorFilter::Internal);
-        poll(&context.device, PollMode::WaitForOne);
+        drain(&context.device);
         finish_error_scopes(&context.device, "WGPU-RESOURCE-CREATION")?;
         Ok(Self {
             context,
@@ -225,6 +225,18 @@ impl WgpuBackend {
             self.in_flight(),
         ))
     }
+
+    fn process_callbacks_and_take_ready(&mut self) -> Result<Option<CompletedFrame>, Diagnostic> {
+        let before = self.readback.metrics();
+        self.readback.process_callbacks()?;
+        let after = self.readback.metrics();
+        self.timings.row_repack += after.row_repack_duration - before.row_repack_duration;
+        let ready = self.readback.take_ready();
+        if ready.is_some() {
+            self.staged.backend_completed_frames += 1;
+        }
+        Ok(ready)
+    }
 }
 
 impl RenderBackend for WgpuBackend {
@@ -245,6 +257,10 @@ impl RenderBackend for WgpuBackend {
         frame_number: u64,
         evaluated: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
+        self.context
+            .runtime_errors
+            .check()
+            .map_err(|error| self.runtime_context(error, None))?;
         if self.aborted {
             return Err(Diagnostic::error(
                 "WGPU-ABORTED",
@@ -268,12 +284,6 @@ impl RenderBackend for WgpuBackend {
             self.abort();
             return Err(error);
         }
-        self.context
-            .device
-            .push_error_scope(wgpu::ErrorFilter::Validation);
-        self.context
-            .device
-            .push_error_scope(wgpu::ErrorFilter::Internal);
         let execution = match encode_and_submit(
             &self.context.device,
             &self.context.queue,
@@ -283,7 +293,7 @@ impl RenderBackend for WgpuBackend {
             &plan,
             &slot.parameters,
             &slot.parameter_buffer,
-            self.readback.buffer(token)?,
+            self.readback.buffer(&token)?,
             evaluated.width,
             evaluated.height,
         ) {
@@ -294,19 +304,23 @@ impl RenderBackend for WgpuBackend {
                 return Err(error);
             }
         };
-        if let Err(error) = finish_error_scopes(&self.context.device, "WGPU-COMMAND-SUBMISSION") {
-            let error = self.runtime_context(error, Some(token));
-            self.abort();
-            return Err(error);
-        }
-        if let Err(error) = self.readback.map_async(token) {
+        // Error scopes are intentionally not awaited in the hot submission
+        // path: doing so serializes map scheduling and defeats staging.
+        let token = self.readback.record_submission(
+            &token,
+            execution
+                .submission_index
+                .clone()
+                .expect("queue submission index"),
+        )?;
+        if let Err(error) = self.readback.map_async(&token) {
             let error = self.runtime_context(error, Some(token));
             self.abort();
             return Err(error);
         }
         self.staged.submitted_frames += 1;
         self.staged.peak_frames_in_flight = self.staged.peak_frames_in_flight.max(self.in_flight());
-        self.last_execution = execution;
+        self.last_execution = execution.clone();
         self.timings.gpu_frame_command_encode += execution.command_encode;
         self.timings.gpu_submission += execution.submission;
         self.stats.command_submission_count += execution.queue_submissions;
@@ -314,54 +328,59 @@ impl RenderBackend for WgpuBackend {
     }
 
     fn poll_completed(&mut self, mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic> {
+        self.context
+            .runtime_errors
+            .check()
+            .map_err(|error| self.runtime_context(error, None))?;
         if self.aborted {
             return Ok(None);
         }
-        let poll_duration = poll(&self.context.device, mode);
-        match mode {
-            PollMode::NonBlocking => self.staged.nonblocking_polls += 1,
-            PollMode::WaitForOne => self.staged.blocking_polls += 1,
-            PollMode::Drain => self.staged.drain_polls += 1,
-        }
-        if !matches!(mode, PollMode::NonBlocking) {
-            self.staged.poll_wait_duration += poll_duration;
-        }
-        if !matches!(mode, PollMode::NonBlocking) {
-            self.timings.gpu_readback_wait += poll_duration;
-        }
-        let before = self.readback.metrics();
-        if let Err(error) = self.readback.process_callbacks() {
-            return Err(self.runtime_context(error, None));
-        }
-        let after = self.readback.metrics();
-        self.timings.row_repack += after.row_repack_duration - before.row_repack_duration;
-        if let Some(frame) = self.readback.take_ready() {
-            self.staged.backend_completed_frames += 1;
-            return Ok(Some(frame));
-        }
-        if mode == PollMode::WaitForOne && self.in_flight() > 0 {
-            while self.in_flight() > 0 {
-                self.staged.slot_wait_count += 1;
-                let wait_duration = poll(&self.context.device, PollMode::WaitForOne);
-                self.staged.poll_wait_duration += wait_duration;
-                self.staged.blocking_polls += 1;
-                self.timings.gpu_readback_wait += wait_duration;
-                let before = self.readback.metrics();
-                if let Err(error) = self.readback.process_callbacks() {
-                    return Err(self.runtime_context(error, None));
+        // A ready completion always wins over device progress or a blocking
+        // wait. This keeps capacity available and makes WaitForOne observable.
+        self.process_callbacks_and_take_ready()
+            .map_err(|error| self.runtime_context(error, None))
+            .and_then(|ready| {
+                if ready.is_some() {
+                    return Ok(ready);
                 }
-                let after = self.readback.metrics();
-                self.timings.row_repack += after.row_repack_duration - before.row_repack_duration;
-                if let Some(frame) = self.readback.take_ready() {
-                    self.staged.backend_completed_frames += 1;
-                    return Ok(Some(frame));
+                let duration = nonblocking(&self.context.device);
+                self.staged.nonblocking_polls += 1;
+                self.staged.nonblocking_poll_duration += duration;
+                self.context
+                    .runtime_errors
+                    .check()
+                    .map_err(|error| self.runtime_context(error, None))?;
+                self.process_callbacks_and_take_ready()
+                    .map_err(|error| self.runtime_context(error, None))
+            })
+            .and_then(|ready| {
+                if ready.is_some() || mode == PollMode::NonBlocking || self.in_flight() == 0 {
+                    return Ok(ready);
                 }
-            }
-        }
-        Ok(None)
+                let duration = match mode {
+                    PollMode::WaitForOne => {
+                        self.staged.slot_wait_count += 1;
+                        self.staged.blocking_polls += 1;
+                        wait_for_one(&self.context.device, &self.readback.oldest_token()?)
+                    }
+                    PollMode::Drain => {
+                        self.staged.drain_polls += 1;
+                        drain(&self.context.device)
+                    }
+                    PollMode::NonBlocking => unreachable!(),
+                };
+                self.staged.poll_wait_duration += duration;
+                self.timings.gpu_readback_wait += duration;
+                self.process_callbacks_and_take_ready()
+                    .map_err(|error| self.runtime_context(error, None))
+            })
     }
 
     fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic> {
+        self.context
+            .runtime_errors
+            .check()
+            .map_err(|error| self.runtime_context(error, None))?;
         if self.aborted {
             return Ok(Vec::new());
         }
@@ -460,7 +479,7 @@ impl WgpuBackend {
     }
 
     pub(super) fn last_execution_metrics(&self) -> FrameExecutionMetrics {
-        self.last_execution
+        self.last_execution.clone()
     }
 
     pub(super) fn resource_estimates(&self) -> ResourceEstimates {

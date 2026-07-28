@@ -12,8 +12,9 @@ use super::{
 };
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(super) struct FrameExecutionMetrics {
+    pub(super) submission_index: Option<wgpu::SubmissionIndex>,
     pub(super) command_encoders: u64,
     pub(super) queue_submissions: u64,
     pub(super) command_encode: Duration,
@@ -412,7 +413,7 @@ pub(super) fn encode_and_submit(
     }
     metrics.command_encode = started.elapsed();
     let submission_started = Instant::now();
-    queue.submit(Some(encoder.finish()));
+    metrics.submission_index = Some(queue.submit(Some(encoder.finish())));
     metrics.queue_submissions = 1;
     metrics.submission = submission_started.elapsed();
     Ok(metrics)

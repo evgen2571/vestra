@@ -3,6 +3,8 @@
     reason = "backend diagnostics retain structured user-facing context"
 )]
 
+use std::sync::atomic::AtomicBool;
+
 use serde::Serialize;
 
 use crate::{
@@ -138,6 +140,15 @@ pub trait RenderBackend {
     fn submit_frame(&mut self, frame_number: u64, frame: &EvaluatedFrame)
     -> Result<(), Diagnostic>;
     fn poll_completed(&mut self, mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic>;
+    /// Cancellation-aware backends may avoid an uninterruptible driver wait.
+    /// The default preserves the synchronous CPU contract.
+    fn poll_completed_cancellable(
+        &mut self,
+        mode: PollMode,
+        _cancelled: &AtomicBool,
+    ) -> Result<Option<CompletedFrame>, Diagnostic> {
+        self.poll_completed(mode)
+    }
     fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic>;
     fn abort(&mut self);
     fn stats(&mut self) -> PreparationStats;

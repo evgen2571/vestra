@@ -115,7 +115,7 @@ pub(super) fn run(
         } else {
             PollMode::NonBlocking
         };
-        let completed = match backend.poll_completed(mode) {
+        let completed = match backend.poll_completed_cancellable(mode, &options.cancelled) {
             Ok(completed) => completed,
             Err(diagnostic) => {
                 backend.abort();
@@ -131,6 +131,16 @@ pub(super) fn run(
                 ));
             }
         };
+        if options.cancelled.load(Ordering::Relaxed) {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                completed_frames,
+                next_frame_to_submit.checked_sub(1),
+            );
+        }
         let received_completion = completed.is_some();
         if let Some(completed) = completed {
             let out_of_order = completed.frame_number != next_frame_to_write;
@@ -207,7 +217,63 @@ pub(super) fn run(
             plan.frame_count.checked_sub(1),
         );
     }
-    let drained = match backend.flush() {
+    // Drain through the cancellation-aware staged polling path. Once there are
+    // no active slots, `flush` only validates and returns already-ready data.
+    let mut drained = Vec::new();
+    while backend.in_flight() > 0 {
+        if options.cancelled.load(Ordering::Relaxed) {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                completed_frames,
+                plan.frame_count.checked_sub(1),
+            );
+        }
+        match backend.poll_completed_cancellable(PollMode::WaitForOne, &options.cancelled) {
+            Ok(Some(frame)) => drained.push(frame),
+            Ok(None) if options.cancelled.load(Ordering::Relaxed) => {
+                return cancellation(
+                    backend,
+                    encoder,
+                    output,
+                    plan,
+                    completed_frames,
+                    plan.frame_count.checked_sub(1),
+                );
+            }
+            Ok(None) => {
+                return Err(cleanup_error(
+                    output,
+                    plan,
+                    RenderFailureStage::FrameComposition,
+                    completed_frames,
+                    plan.frame_count.checked_sub(1),
+                    Diagnostic::error(
+                        "MVP-POLL-STALLED",
+                        Category::Backend,
+                        "backend final drain completed without a frame or progress",
+                        "",
+                    ),
+                ));
+            }
+            Err(diagnostic) => {
+                backend.abort();
+                let cleanup = encoder.abort_after_backend_failure();
+                let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
+                return Err(cleanup_error(
+                    output,
+                    plan,
+                    RenderFailureStage::FrameComposition,
+                    completed_frames,
+                    plan.frame_count.checked_sub(1),
+                    diagnostic,
+                ));
+            }
+        }
+    }
+    let remaining = match backend.flush() {
         Ok(frames) => frames,
         Err(diagnostic) => {
             backend.abort();
@@ -223,6 +289,7 @@ pub(super) fn run(
             ));
         }
     };
+    drained.extend(remaining);
     for completed in drained {
         let out_of_order = completed.frame_number != next_frame_to_write;
         if let Err(diagnostic) = insert_completed(

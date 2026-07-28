@@ -1,6 +1,13 @@
 //! Prepared WGPU texture-frame backend.
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, Instant},
+};
 
 use bytemuck::Zeroable;
 #[cfg(test)]
@@ -374,6 +381,29 @@ impl RenderBackend for WgpuBackend {
                 self.process_callbacks_and_take_ready()
                     .map_err(|error| self.runtime_context(error, None))
             })
+    }
+
+    fn poll_completed_cancellable(
+        &mut self,
+        mode: PollMode,
+        cancelled: &AtomicBool,
+    ) -> Result<Option<CompletedFrame>, Diagnostic> {
+        if mode == PollMode::NonBlocking {
+            return self.poll_completed(mode);
+        }
+        // WGPU's blocking Maintain calls cannot be interrupted. Poll in a
+        // bounded cadence instead so cancellation can stop writes promptly;
+        // this is not a render timeout and makes no assumptions about GPU speed.
+        while self.in_flight() > 0 {
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(None);
+            }
+            if let Some(frame) = self.poll_completed(PollMode::NonBlocking)? {
+                return Ok(Some(frame));
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        Ok(None)
     }
 
     fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic> {

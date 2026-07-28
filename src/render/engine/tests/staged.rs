@@ -21,6 +21,7 @@ struct MockStagedBackend {
     metrics: StagedMetrics,
     mode: MockMode,
     duplicate: Option<CompletedFrame>,
+    cancel_after_submit: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 #[derive(Clone, Copy)]
@@ -47,11 +48,17 @@ impl MockStagedBackend {
             },
             mode: MockMode::Normal,
             duplicate: None,
+            cancel_after_submit: None,
         }
     }
 
     fn failing(mut self, mode: MockMode) -> Self {
         self.mode = mode;
+        self
+    }
+
+    fn cancel_after_submit(mut self, cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        self.cancel_after_submit = Some(cancelled);
         self
     }
 
@@ -101,6 +108,9 @@ impl RenderBackend for MockStagedBackend {
         self.metrics.submitted_frames += 1;
         self.metrics.peak_frames_in_flight =
             self.metrics.peak_frames_in_flight.max(self.pending.len());
+        if let Some(cancelled) = &self.cancel_after_submit {
+            cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         Ok(())
     }
 
@@ -303,4 +313,33 @@ fn engine_cancellation_stops_before_mock_submission() {
     })
     .expect_err("cancellation propagates");
     assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+}
+
+#[test]
+fn engine_cancellation_after_submission_discards_in_flight_work() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("mock-cancel-in-flight.mp4");
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::clone(&cancelled),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let backend_written = Arc::clone(&written);
+    let error = render_with_backend_builder(&plan, &options, &mut |_| {}, move |_, _, _| {
+        Ok((
+            Box::new(
+                MockStagedBackend::new(3, Vec::new(), backend_written)
+                    .cancel_after_submit(cancelled),
+            ) as Box<dyn RenderBackend>,
+            None,
+        ))
+    })
+    .expect_err("in-flight cancellation propagates");
+    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert!(written.lock().expect("mock metrics lock").is_empty());
+    assert!(!output.exists());
 }

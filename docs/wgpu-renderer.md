@@ -127,9 +127,12 @@ counters are reported separately and `sampler_count` is intentionally zero.
 Every normal frame creates one command encoder and one queue submission. Clear,
 layer work, effect passes, ping-pong composition, and the final texture-to-readback copy all
 live in that command buffer. Submission returns after `map_async` is initiated.
-The polling subsystem supports nonblocking progress, waiting for one completion,
-and final drain. There is no zero-copy encoder path, hardware video encoding, or
-windowed preview.
+The polling subsystem first processes callback results, returns any ready frame,
+makes nonblocking progress, and only then waits. `WaitForOne` waits for the
+oldest relevant submission rather than draining later work; `Drain` completes
+all active slots. Cancellation-aware polling uses bounded nonblocking progress
+so a device wait cannot delay cleanup indefinitely. There is no zero-copy
+encoder path, hardware video encoding, or windowed preview.
 
 ## Phase 3 staged lifecycle
 
@@ -143,8 +146,11 @@ evaluate → submit → in flight → map callback → repack → completed
 The default WGPU depth is three. Tests and benchmarks select one, two, or three
 slots with `VIDEO_EDITOR_WGPU_IN_FLIGHT`. A slot is reusable only after GPU copy,
 mapping, row repacking, unmapping, completion consumption, and generation advance.
-The callback captures a submission token containing frame number, slot index, and
-generation. A stale token cannot complete a newer frame.
+The callback captures a submission token containing frame number, slot index,
+generation, and queue submission identity. A stale token cannot complete a
+newer frame. The adapter-independent readback state machine owns legal slot
+transitions, rejects duplicates and stale generations, and restores every slot
+on abort.
 
 Completion callbacks only publish a result. They do not copy rows or perform
 diagnostic work. The render thread polls the device in one WGPU polling module,
@@ -167,8 +173,9 @@ than wall-clock render time.
 
 Cancellation stops evaluation and submission, aborts FFmpeg, discards ready frames,
 invalidates slots, and removes the temporary output. WGPU work already submitted
-to the device cannot be cancelled. Runtime WGPU failures abort FFmpeg, clean up
-outstanding callbacks, unmap handled buffers, and never switch to CPU.
+to the device cannot be cancelled. Uncaptured WGPU errors and device loss retain
+the first fatal diagnostic; submit, poll, and flush check that state and never
+switch to CPU.
 
 `VIDEO_EDITOR_WGPU_IN_FLIGHT=1 cargo test --workspace --all-features` exercises the
 synchronous-compatible depth. Strict verification and the optional benchmark matrix
@@ -200,10 +207,11 @@ The backend derives and validates output and source texture dimensions, padded
 row/copy sizes, uniform size, texture bindings, and compute workgroup limits
 before creating render resources. It
 requests those project-derived limits on top of WGPU's downlevel baseline, then
-checks the limits returned by the requested device again. Initialization, limit, and readback failures
-are returned as structured diagnostics. Per-frame WGPU validation and internal
-errors are captured with device error scopes, so they trigger the normal encoder
-abort and output cleanup path. In environments without an adapter,
+checks the limits returned by the requested device again. Initialization, limit,
+and readback failures are returned as structured diagnostics. Normal staged
+submission does not synchronously await per-frame error scopes because that
+would serialize the pipeline; asynchronous uncaptured and device-loss callbacks
+trigger the normal encoder-abort and output-cleanup path. In environments without an adapter,
 adapter-dependent parity tests print an explicit skip reason; this is not GPU
 verification. With `VIDEO_EDITOR_REQUIRE_WGPU=1`, those tests fail instead of
 skipping when adapter or device creation fails. The project-local

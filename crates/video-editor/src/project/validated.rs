@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::Diagnostic;
 
-use super::Project;
+use video_editor_core::project::Project;
 
 #[derive(Clone, Debug)]
 pub struct ValidationOptions {
@@ -19,7 +19,6 @@ impl Default for ValidationOptions {
     }
 }
 
-/// Temporary compatibility alias for the deterministic core limits.
 pub use video_editor_core::validation::ResourceLimits;
 
 /// Project data that crossed semantic validation. Construction remains inside
@@ -55,11 +54,6 @@ impl ValidatedProject {
     }
 
     #[must_use]
-    pub fn project(&self) -> &Project {
-        &self.project
-    }
-
-    #[must_use]
     pub fn visual_counts(&self) -> (usize, usize, usize) {
         (
             self.project.visual.clips.len(),
@@ -69,27 +63,53 @@ impl ValidatedProject {
     }
 
     #[must_use]
-    pub fn duration(&self) -> f64 {
-        self.duration
-    }
-
-    #[must_use]
-    pub fn frame_count(&self) -> u64 {
-        self.frame_count
-    }
-
-    #[must_use]
     pub fn warnings(&self) -> &[Diagnostic] {
         &self.warnings
-    }
-
-    #[must_use]
-    pub fn asset_path(&self, id: &str) -> Option<&std::path::Path> {
-        self.asset_paths.get(id).map(PathBuf::as_path)
     }
 }
 
 #[derive(Debug)]
 pub enum LoadError {
     Diagnostics(Vec<Diagnostic>),
+}
+
+impl LoadError {
+    pub(crate) fn read(error: std::io::Error) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-PROJECT-READ",
+            crate::Category::Project,
+            format!("cannot read project: {error}"),
+            "",
+        )])
+    }
+    pub(crate) fn write(error: std::io::Error) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-PROJECT-WRITE",
+            crate::Category::Project,
+            format!("cannot save project: {error}"),
+            "",
+        )])
+    }
+    pub(crate) fn parse(error: serde_json::Error) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-PROJECT-SHAPE",
+            crate::Category::Project,
+            format!("project does not match the canonical format: {error}"),
+            "",
+        )])
+    }
+    pub(crate) fn unsupported_schema(version: u32) -> Self {
+        Self::Diagnostics(vec![Diagnostic::error(
+            "MVP-SCHEMA-VERSION",
+            crate::Category::Project,
+            format!("unsupported project schema version {version}; supported version is 1"),
+            "/schema_version",
+        )])
+    }
+    #[must_use]
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        match self {
+            Self::Diagnostics(diagnostics) => diagnostics,
+        }
+    }
 }

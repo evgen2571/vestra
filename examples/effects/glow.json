@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Glow",
   "output": {
     "path": "../output/glow.mp4",

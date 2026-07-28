@@ -9,7 +9,7 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use crate::output::{ResultFormat, print_success};
-use video_editor::application::version_result;
+use video_editor::Editor;
 
 use super::args::{Cli, Command};
 
@@ -33,7 +33,7 @@ pub fn run() -> ExitCode {
             print_success(
                 "version",
                 ResultFormat::Human,
-                version_result(),
+                Editor::new().version(),
                 &format!("video-editor {}", env!("CARGO_PKG_VERSION")),
             );
             ExitCode::SUCCESS

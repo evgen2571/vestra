@@ -3,10 +3,6 @@
 use std::{
     path::{Path, PathBuf},
     process::ExitCode,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
     time::Instant,
 };
 
@@ -15,8 +11,8 @@ use crate::output::{
     write_plan_failure_report, write_progress, write_render_failure_report, write_success_report,
 };
 use video_editor::{
-    BackendPreference as RenderBackendPreference, Category, Diagnostic, RenderEvent,
-    application::{ApplicationRenderError, RenderRequest, render_project, render_result},
+    BackendPreference as RenderBackendPreference, CancellationToken, Category, Diagnostic, Editor,
+    EditorError, RenderEvent, RenderRequest,
 };
 
 #[expect(
@@ -34,26 +30,28 @@ pub(super) fn run(
     backend_preference: RenderBackendPreference,
 ) -> ExitCode {
     let began = Instant::now();
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let cancellation_flag = Arc::clone(&cancelled);
-    if let Err(error) = ctrlc::set_handler(move || cancellation_flag.store(true, Ordering::Relaxed))
-    {
+    let cancellation = CancellationToken::new();
+    let cancellation_flag = cancellation.clone();
+    if let Err(error) = ctrlc::set_handler(move || cancellation_flag.cancel()) {
         eprintln!("warning: interrupt handler unavailable: {error}");
     }
     let mut emit = |event: RenderEvent| write_progress(progress, &event);
-    match render_project(
-        &project,
-        RenderRequest {
-            output_override: output,
-            overwrite,
-            preview,
-            cancelled,
-            backend_preference,
-        },
-        &mut emit,
-    ) {
-        Ok((validated, summary)) => {
-            let data = render_result(&project, validated, summary);
+    let editor = Editor::new();
+    let outcome = editor.load_project(&project).and_then(|loaded| {
+        editor.render(
+            &loaded,
+            RenderRequest {
+                output,
+                overwrite,
+                preview,
+                backend: backend_preference,
+            },
+            &mut emit,
+            &cancellation,
+        )
+    });
+    match outcome {
+        Ok(data) => {
             let warnings = data.warnings.clone();
             if let Some(path) = report.as_deref()
                 && let Err(error) = write_success_report(path, "render", &data)
@@ -73,7 +71,7 @@ pub(super) fn run(
             print_success("render", format, data, "render completed");
             ExitCode::SUCCESS
         }
-        Err(ApplicationRenderError::Project(errors)) => {
+        Err(EditorError::Project(errors)) => {
             if let Err(message) = write_failure_report(
                 report.as_deref(),
                 "render",
@@ -94,13 +92,12 @@ pub(super) fn run(
             }
             print_failure("render", format, errors, Vec::new())
         }
-        Err(ApplicationRenderError::Plan {
-            validated,
+        Err(EditorError::Plan {
             diagnostic,
+            warnings,
             validation_elapsed_ms,
             plan_compile_elapsed_ms,
         }) => {
-            let warnings = validated.warnings().to_vec();
             if let Some(path) = report.as_deref()
                 && let Err(report_error) = write_plan_failure_report(
                     path,
@@ -115,7 +112,7 @@ pub(super) fn run(
                     "render",
                     format,
                     vec![
-                        diagnostic.clone(),
+                        *diagnostic.clone(),
                         Diagnostic::error(
                             "MVP-REPORT-WRITE",
                             Category::Output,
@@ -126,31 +123,36 @@ pub(super) fn run(
                     warnings,
                 );
             }
-            print_failure("render", format, vec![diagnostic], warnings)
+            print_failure("render", format, vec![*diagnostic], warnings)
         }
-        Err(ApplicationRenderError::Render { validated, error }) => {
+        Err(EditorError::Render {
+            diagnostic,
+            warnings,
+            context,
+            temporary_removed,
+        }) => {
             if matches!(
-                error.diagnostic.category,
+                diagnostic.category,
                 Category::Backend | Category::Render | Category::Cancellation
             ) {
                 emit(RenderEvent {
                     event_schema_version: 1,
                     kind: "failed".to_owned(),
-                    frame: error.context.completed_frames,
-                    total_frames: error.context.total_frames,
-                    progress: error.context.progress,
-                    output_path: error.context.output_path.clone(),
-                    warnings: Some(validated.warnings().to_vec()),
+                    frame: context.completed_frames,
+                    total_frames: context.total_frames,
+                    progress: context.progress,
+                    output_path: context.output_path.clone(),
+                    warnings: Some(warnings.clone()),
                 });
             }
             if let Some(path) = report.as_deref()
                 && let Err(report_error) = write_render_failure_report(
                     path,
                     &project,
-                    &error.diagnostic,
-                    &error.context,
-                    validated.warnings(),
-                    error.temporary_removed,
+                    &diagnostic,
+                    &context,
+                    &warnings,
+                    temporary_removed,
                     began.elapsed().as_millis(),
                 )
             {
@@ -158,7 +160,7 @@ pub(super) fn run(
                     "render",
                     format,
                     vec![
-                        error.diagnostic,
+                        *diagnostic,
                         Diagnostic::error(
                             "MVP-REPORT-WRITE",
                             Category::Output,
@@ -166,15 +168,10 @@ pub(super) fn run(
                             "",
                         ),
                     ],
-                    validated.warnings().to_vec(),
+                    warnings,
                 );
             }
-            print_failure(
-                "render",
-                format,
-                vec![error.diagnostic],
-                validated.warnings().to_vec(),
-            )
+            print_failure("render", format, vec![*diagnostic], warnings)
         }
     }
 }

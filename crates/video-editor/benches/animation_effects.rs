@@ -1,14 +1,8 @@
-use std::{
-    fs,
-    path::Path,
-    sync::{Arc, atomic::AtomicBool},
-    time::Instant,
-};
+use std::{fs, path::Path, time::Instant};
 
 use video_editor::{
-    AdapterPerformanceClass, BackendPreference as RenderBackendPreference, RenderBackendKind,
-    RenderSummary,
-    application::{RenderRequest, render_project},
+    AdapterPerformanceClass, BackendPreference as RenderBackendPreference, CancellationToken,
+    Editor, RenderRequest, RenderResult,
 };
 
 const WARMUP_RUNS: usize = 5;
@@ -93,96 +87,94 @@ fn main() {
             )
         })
         .collect();
-    let selected_backend = samples[0].summary.render_backend;
-    if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some()
-        && selected_backend != RenderBackendKind::Wgpu
-    {
+    let selected_backend = samples[0].result.render_backend;
+    if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some() && selected_backend != "wgpu" {
         panic!("strict WGPU benchmark did not execute the WGPU backend");
     }
     assert!(
         samples
             .iter()
-            .all(|sample| sample.summary.render_backend == selected_backend),
+            .all(|sample| sample.result.render_backend == selected_backend),
         "benchmark runs selected different render backends"
     );
     let mut wall_samples: Vec<_> = samples.iter().map(|sample| sample.wall_ms).collect();
     let mut render_samples: Vec<_> = samples
         .iter()
-        .map(|sample| sample.summary.timings.total_ms)
+        .map(|sample| sample.result.timings.total_ms)
         .collect();
     wall_samples.sort_unstable();
     render_samples.sort_unstable();
     let median_track_evaluation = median(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.track_evaluation_ms),
+            .map(|sample| sample.result.timings.track_evaluation_ms),
     );
     let median_frame_render = median(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.frame_render_ms),
+            .map(|sample| sample.result.timings.frame_render_ms),
     );
     let median_encoder_write = median(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.encoder_write_ms),
+            .map(|sample| sample.result.timings.encoder_write_ms),
     );
     let median_encoder_finalize = median(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.encoder_finalize_ms),
+            .map(|sample| sample.result.timings.encoder_finalize_ms),
     );
     let median_gpu_initialization = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_initialization_ms),
+            .map(|sample| sample.result.timings.gpu_initialization_ms),
     );
     let median_gpu_adapter_request = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_adapter_request_ms),
+            .map(|sample| sample.result.timings.gpu_adapter_request_ms),
     );
     let median_gpu_device_request = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_device_request_ms),
+            .map(|sample| sample.result.timings.gpu_device_request_ms),
     );
     let median_gpu_pipeline_creation = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_pipeline_creation_ms),
+            .map(|sample| sample.result.timings.gpu_pipeline_creation_ms),
     );
     let median_texture_upload = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.texture_upload_ms),
+            .map(|sample| sample.result.timings.texture_upload_ms),
     );
     let median_command_encode = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_frame_command_encode_ms),
+            .map(|sample| sample.result.timings.gpu_frame_command_encode_ms),
     );
     let median_submission = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_submission_ms),
+            .map(|sample| sample.result.timings.gpu_submission_ms),
     );
     let median_readback_wait = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.gpu_readback_wait_ms),
+            .map(|sample| sample.result.timings.gpu_readback_wait_ms),
     );
     let median_row_repack = median_optional(
         samples
             .iter()
-            .map(|sample| sample.summary.timings.row_repack_ms),
+            .map(|sample| sample.result.timings.row_repack_ms),
     );
     let median_index = measured_runs / 2;
-    let summary = &samples[0].summary;
+    let summary = &samples[0].result;
     let effective_fps = if wall_samples[median_index] == 0 {
         f64::INFINITY
     } else {
-        summary.frame_count as f64 * 1_000.0 / wall_samples[median_index] as f64
+        summary.total_frames as f64 * 1_000.0 / wall_samples[median_index] as f64
     };
     let adapter_class = summary
         .adapter
@@ -213,16 +205,16 @@ fn main() {
         Some(AdapterPerformanceClass::VirtualGpu | AdapterPerformanceClass::Unknown) => println!(
             "WGPU adapter class is not a confirmed hardware GPU. Performance status is not inferred."
         ),
-        None if selected_backend == RenderBackendKind::Wgpu => println!(
+        None if selected_backend == "wgpu" => println!(
             "WGPU benchmark did not report adapter metadata; performance status is unknown."
         ),
         None => {}
     }
     println!(
         "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} pipeline_depth={pipeline_depth} frame_count={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} peak_in_flight={} blocking_polls={} slot_waits={} staging_memory_bytes={} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
-        selected_backend.as_str(),
+        selected_backend,
         adapter_class.map_or("none", AdapterPerformanceClass::as_str),
-        summary.frame_count,
+        summary.total_frames,
         wall_samples[median_index],
         wall_samples[0],
         wall_samples[measured_runs - 1],
@@ -306,7 +298,7 @@ fn median_optional(values: impl Iterator<Item = Option<u128>>) -> Option<u128> {
 }
 
 struct Sample {
-    summary: RenderSummary,
+    result: RenderResult,
     wall_ms: u128,
 }
 
@@ -316,23 +308,27 @@ fn render_once(
     backend_preference: RenderBackendPreference,
 ) -> Sample {
     let started = Instant::now();
-    let result = render_project(
-        project_path,
+    let editor = Editor::new();
+    let project = editor
+        .load_project(project_path)
+        .expect("load benchmark project");
+    let result = editor.render(
+        &project,
         RenderRequest {
-            output_override: Some(output_path),
+            output: Some(output_path),
             overwrite: false,
             preview: false,
-            cancelled: Arc::new(AtomicBool::new(false)),
-            backend_preference,
+            backend: backend_preference,
         },
         &mut |_| {},
+        &CancellationToken::new(),
     );
-    let (_, summary) = match result {
+    let result = match result {
         Ok(result) => result,
         Err(_) => panic!("benchmark project renders"),
     };
     Sample {
-        summary,
+        result,
         wall_ms: started.elapsed().as_millis(),
     }
 }

@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Directional push",
   "output": {
     "path": "../output/directional-push.mp4",

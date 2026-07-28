@@ -2,7 +2,9 @@
 
 `video-editor` accepts one JSON project format, described by
 [`schemas/project.schema.json`](../../schemas/project.schema.json). Project
-objects do not carry a format or project-version field.
+objects carry a required `schema_version` field. Version `1` is the only
+accepted version. Missing and unsupported versions fail during loading; the
+editor does not guess a version or migrate project data.
 
 Every image clip has a typed source, local timeline interval, layer, transform
 tracks, opacity track, and optional ordered colour effects. A track has a

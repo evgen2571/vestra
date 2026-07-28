@@ -45,7 +45,7 @@ pub mod project {
     }
 
     /// Test-only fixture loader. Production path resolution and environment
-    /// preflight remain in the root package.
+    /// preflight belong to the SDK crate.
     #[cfg(test)]
     pub fn load_and_validate(
         path: &std::path::Path,

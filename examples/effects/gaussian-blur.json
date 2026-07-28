@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Gaussian blur",
   "output": {
     "path": "../output/gaussian-blur.mp4",

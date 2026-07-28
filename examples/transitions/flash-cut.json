@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Flash cut",
   "output": {
     "path": "../output/flash-cut.mp4",

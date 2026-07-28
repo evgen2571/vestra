@@ -4,7 +4,7 @@
 )]
 
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, atomic::AtomicBool},
     time::Instant,
 };
@@ -12,7 +12,7 @@ use std::{
 use crate::{
     Diagnostic,
     plan::{CompileOptions, compile},
-    project::{LoadError, load_and_validate_with_timings},
+    project::{LoadError, Project},
     render::{
         RenderBackendPreference, RenderError, RenderEvent, RenderOptions, RenderSummary, render,
     },
@@ -42,16 +42,24 @@ pub enum ApplicationRenderError {
 }
 
 pub fn render_project(
-    path: &Path,
+    project: &Project,
     request: RenderRequest,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<(crate::project::ValidatedProject, RenderSummary), ApplicationRenderError> {
     let workflow_started = Instant::now();
-    let (validated, load_timings) =
-        load_and_validate_with_timings(path, &crate::project::ValidationOptions::default())
-            .map_err(|error| match error {
-                LoadError::Diagnostics(errors) => ApplicationRenderError::Project(errors),
-            })?;
+    let validation_started = Instant::now();
+    let _validation = video_editor_core::validation::validate(
+        project.canonical(),
+        video_editor_core::validation::ResourceLimits::default(),
+    );
+    let validation_elapsed = validation_started.elapsed();
+    let validated = crate::project::validation::preflight(
+        project,
+        &crate::project::ValidationOptions::default(),
+    )
+    .map_err(|error| match error {
+        LoadError::Diagnostics(errors) => ApplicationRenderError::Project(errors),
+    })?;
     let compilation_started = Instant::now();
     let plan = compile(
         &validated,
@@ -62,7 +70,7 @@ pub fn render_project(
     .map_err(|diagnostic| ApplicationRenderError::Plan {
         validated: validated.clone(),
         diagnostic,
-        validation_elapsed_ms: load_timings.semantic_validation.as_millis(),
+        validation_elapsed_ms: validation_elapsed.as_millis(),
         plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let compilation_elapsed = compilation_started.elapsed();
@@ -80,8 +88,8 @@ pub fn render_project(
         validated: validated.clone(),
         error,
     })?;
-    summary.timings.project_parse_ms = load_timings.project_parse.as_millis();
-    summary.timings.semantic_validation_ms = load_timings.semantic_validation.as_millis();
+    summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
+    summary.timings.semantic_validation_ms = validation_elapsed.as_millis();
     summary.timings.plan_compile_ms = compilation_elapsed.as_millis();
     summary.timings.total_ms = workflow_started.elapsed().as_millis();
     summary.elapsed_ms = summary.timings.total_ms;

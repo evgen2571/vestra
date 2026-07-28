@@ -73,8 +73,9 @@ consumer needs only `video-editor`:
 use video_editor::{BackendPreference, CancellationToken, Editor, RenderRequest};
 
 let editor = Editor::new();
-let result = editor.render_path(
-    "project.json",
+let project = editor.load_project("project.json")?;
+let result = editor.render(
+    &project,
     RenderRequest { output: Some("result.mp4".into()), overwrite: true,
         preview: false, backend: BackendPreference::Auto },
     &mut |_| {},
@@ -85,7 +86,9 @@ let result = editor.render_path(
 The SDK exposes structured inspection, validation, preflight, render results,
 events, and errors. It neither initializes logging nor prints or exits. CLI
 formatting, Ctrl-C installation, and exit-code mapping belong to
-`video-editor-cli`.
+`video-editor-cli`. `video-editor-core`, `video-editor-render`, and
+`video-editor-media` are implementation crates. Their public items support
+the workspace and are not stable SDK contracts.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

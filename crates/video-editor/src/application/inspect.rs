@@ -1,12 +1,8 @@
-use std::path::Path;
-
 use crate::{
     Category, Diagnostic,
     plan::{CompileOptions, compile},
-    project::{LoadError, ValidatedProject},
+    project::{LoadError, Project, ValidatedProject},
 };
-
-use super::validate_project;
 
 #[derive(Clone, Debug)]
 pub struct Inspection {
@@ -20,8 +16,11 @@ pub struct Inspection {
     pub audio_end: Option<f64>,
 }
 
-pub fn inspect(path: &Path, preview: bool) -> Result<Inspection, LoadError> {
-    let validated = validate_project(path)?;
+pub fn inspect(project: &Project, preview: bool) -> Result<Inspection, LoadError> {
+    let validated = crate::project::validation::preflight(
+        project,
+        &crate::project::ValidationOptions::default(),
+    )?;
     let plan = compile(&validated, CompileOptions { preview })
         .map_err(|diagnostic| LoadError::Diagnostics(vec![diagnostic]))?;
     let audio_end = validated

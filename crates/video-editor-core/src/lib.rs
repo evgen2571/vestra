@@ -35,9 +35,8 @@ pub mod validation;
 
 /// Canonical serializable project value objects.
 ///
-/// Validation and filesystem loading remain in the transitional root package
-/// while environment-dependent checks are separated in the next extraction
-/// step.
+/// The SDK crate owns project source context, validation, and environment
+/// preflight. This crate remains deterministic and backend-independent.
 #[path = "project/model/mod.rs"]
 #[allow(
     clippy::module_inception,

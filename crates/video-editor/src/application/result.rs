@@ -4,8 +4,7 @@ use serde::Serialize;
 
 use crate::{
     Diagnostic,
-    application::{Inspection, validate_project},
-    project::LoadError,
+    application::Inspection,
     render::{
         AdapterMetadata, BackendFallback, RenderBackendPreference, RenderSummary, RenderTimings,
     },
@@ -29,14 +28,6 @@ pub const fn version_result() -> VersionResult {
     }
 }
 
-pub fn validate_result(path: &Path) -> Result<ValidateResult, LoadError> {
-    let validated = validate_project(path)?;
-    Ok(ValidateResult {
-        project: path.to_path_buf(),
-        warnings: validated.warnings,
-    })
-}
-
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectResult {
     pub project: PathBuf,
@@ -57,7 +48,7 @@ pub struct InspectOutput {
     pub width: u32,
     pub height: u32,
     pub frame_rate: String,
-    pub duration_mode: crate::project::DurationMode,
+    pub duration_mode: String,
     pub duration: f64,
     pub total_frames: u64,
     pub preview: bool,
@@ -97,7 +88,10 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
             width: inspection.width,
             height: inspection.height,
             frame_rate: inspection.validated.project.output.frame_rate.display(),
-            duration_mode: inspection.validated.project.output.duration_mode,
+            duration_mode: match inspection.validated.project.output.duration_mode {
+                video_editor_core::project::DurationMode::Automatic => "automatic".to_owned(),
+                video_editor_core::project::DurationMode::Explicit => "explicit".to_owned(),
+            },
             duration: inspection.validated.duration,
             total_frames: inspection.validated.frame_count,
             preview: inspection.preview,

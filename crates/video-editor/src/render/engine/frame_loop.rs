@@ -10,8 +10,8 @@ use crate::{
     Category, Diagnostic,
     plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
     render::{CompletedFrame, PollMode, PreparationStats, RenderBackend},
-    timeline::frame_time_nanos,
 };
+use video_editor_core::timeline::frame_time_nanos;
 use video_editor_media::{FrameSink, OutputTarget};
 
 use super::{

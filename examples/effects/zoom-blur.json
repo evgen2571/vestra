@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "name": "Radial zoom blur",
   "output": {
     "path": "../output/zoom-blur.mp4",
@@ -12,23 +13,49 @@
     "duration": 5
   },
   "assets": [
-    { "id": "red", "type": "image", "source": "../assets/red.png" }
+    {
+      "id": "red",
+      "type": "image",
+      "source": "../assets/red.png"
+    }
   ],
   "visual": {
     "clips": [
       {
         "id": "clip",
-        "source": { "type": "image", "asset": "red" },
+        "source": {
+          "type": "image",
+          "asset": "red"
+        },
         "start": 0,
         "duration": 5,
         "layer": 0,
-        "sizing": { "mode": "cover" },
-        "transform": {
-          "position": { "base_value": { "x": 0.5, "y": 0.5 } },
-          "anchor": { "base_value": { "x": 0.5, "y": 0.5 } },
-          "scale": { "base_value": { "x": 1, "y": 1 } }
+        "sizing": {
+          "mode": "cover"
         },
-        "opacity": { "base_value": 1 },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "opacity": {
+          "base_value": 1
+        },
         "effects": [
           {
             "id": "radial-zoom",
@@ -36,13 +63,28 @@
             "radius": {
               "base_value": 0,
               "keyframes": [
-                { "time": 1, "value": 0, "interpolation": "linear" },
-                { "time": 2.25, "value": 24, "interpolation": "ease_in_out" },
-                { "time": 3.5, "value": 0, "interpolation": "ease_in_out" }
+                {
+                  "time": 1,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 2.25,
+                  "value": 24,
+                  "interpolation": "ease_in_out"
+                },
+                {
+                  "time": 3.5,
+                  "value": 0,
+                  "interpolation": "ease_in_out"
+                }
               ]
             },
             "samples": 16,
-            "anchor": { "x": 0.5, "y": 0.5 },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
             "direction": "centered"
           }
         ]

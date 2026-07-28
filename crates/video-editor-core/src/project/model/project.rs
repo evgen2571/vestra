@@ -6,6 +6,8 @@ use super::{Asset, AudioTrack, Output, Visual, optional_metadata_non_null, optio
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Project {
+    /// Version of the canonical on-disk project format.
+    pub schema_version: u32,
     #[serde(default, deserialize_with = "optional_non_null")]
     pub name: Option<String>,
     #[serde(default, deserialize_with = "optional_metadata_non_null")]

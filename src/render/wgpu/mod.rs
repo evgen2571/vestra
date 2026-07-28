@@ -15,6 +15,7 @@ mod parity;
 mod pipeline;
 mod polling;
 mod readback;
+mod readback_state;
 mod requirements;
 mod resources;
 mod runtime_error;

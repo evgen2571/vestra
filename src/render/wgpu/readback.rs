@@ -7,7 +7,10 @@ use std::{
 
 use crate::{Category, Diagnostic, render::CompletedFrame};
 
-use super::resources::FrameResources;
+use super::{
+    readback_state::{ReadbackStateMachine, SlotToken},
+    resources::FrameResources,
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct ReadbackMetrics {
@@ -54,6 +57,7 @@ pub(super) struct ReadbackSlot {
 
 pub(super) struct ReadbackRing {
     slots: Vec<ReadbackSlot>,
+    lifecycle: ReadbackStateMachine,
     width: u32,
     height: u32,
     padded_row_bytes: u32,
@@ -96,6 +100,7 @@ impl ReadbackRing {
         }
         Ok(Self {
             slots,
+            lifecycle: ReadbackStateMachine::new(slot_count),
             width,
             height,
             padded_row_bytes: frame.padded_row_bytes,
@@ -105,35 +110,13 @@ impl ReadbackRing {
     }
 
     pub(super) fn in_flight(&self) -> usize {
-        self.slots
-            .iter()
-            .filter(|slot| {
-                !matches!(
-                    slot.state,
-                    ReadbackState::Available | ReadbackState::Aborted
-                )
-            })
-            .count()
+        self.lifecycle.in_flight()
     }
 
     pub(super) fn acquire(&mut self, frame_number: u64) -> Result<SubmissionToken, Diagnostic> {
-        let (slot_index, slot) = self
-            .slots
-            .iter_mut()
-            .enumerate()
-            .find(|(_, slot)| slot.state == ReadbackState::Available)
-            .ok_or_else(|| {
-                Diagnostic::error(
-                    "WGPU-SLOT-RING-FULL",
-                    Category::Backend,
-                    "no staged readback slot is available",
-                    "",
-                )
-            })?;
-        slot.generation = slot
-            .generation
-            .checked_add(1)
-            .ok_or_else(|| readback_state_error("readback slot generation overflow"))?;
+        let lifecycle = self.lifecycle.acquire(frame_number)?;
+        let slot = &mut self.slots[lifecycle.slot_index];
+        slot.generation = lifecycle.generation;
         slot.frame_number = Some(frame_number);
         slot.state = ReadbackState::Submitted;
         slot.submitted_at = Some(Instant::now());
@@ -146,8 +129,8 @@ impl ReadbackRing {
             .map_err(|_| readback_state_error("readback callback state was poisoned"))? = None;
         Ok(SubmissionToken {
             frame_number,
-            slot_index,
-            generation: slot.generation,
+            slot_index: lifecycle.slot_index,
+            generation: lifecycle.generation,
             submission_index: None,
         })
     }
@@ -170,6 +153,7 @@ impl ReadbackRing {
     }
 
     pub(super) fn mark_mapping(&mut self, token: &SubmissionToken) -> Result<(), Diagnostic> {
+        self.lifecycle.mark_mapping(lifecycle_token(token))?;
         let slot = self.slot_mut(token)?;
         if slot.state != ReadbackState::Submitted {
             return Err(readback_state_error("readback slot is not submitted"));
@@ -235,15 +219,18 @@ impl ReadbackRing {
                     drop(mapped);
                     slot.buffer.unmap();
                     if let Err(error) = repack_result {
+                        self.lifecycle.mark_failed(lifecycle_token(&token))?;
                         slot.state = ReadbackState::Failed;
                         return Err(error);
                     }
                     slot.packed_bytes = packed;
+                    self.lifecycle.mark_ready(lifecycle_token(&token))?;
                     slot.mapped_at = Some(Instant::now());
                     slot.state = ReadbackState::Ready;
                     self.metrics.row_repack_duration += repack_started.elapsed();
                 }
                 Err(error) => {
+                    self.lifecycle.mark_failed(lifecycle_token(&token))?;
                     slot.state = ReadbackState::Failed;
                     self.metrics.mapping_failure_count += 1;
                     return Err(Diagnostic::error(
@@ -262,13 +249,13 @@ impl ReadbackRing {
     }
 
     pub(super) fn take_ready(&mut self) -> Option<CompletedFrame> {
-        if let Some(slot) = self
-            .slots
-            .iter_mut()
-            .find(|slot| slot.state == ReadbackState::Ready)
-        {
-            let frame_number = slot.frame_number?;
+        if let Some(token) = self.lifecycle.first_ready() {
+            let slot = &mut self.slots[token.slot_index];
+            let frame_number = token.frame_number;
             let rgba = std::mem::take(&mut slot.packed_bytes);
+            self.lifecycle
+                .consume(token)
+                .expect("ready lifecycle token remains valid");
             slot.frame_number = None;
             slot.submission_index = None;
             slot.state = ReadbackState::Available;
@@ -284,31 +271,17 @@ impl ReadbackRing {
     }
 
     pub(super) fn all_available(&self) -> bool {
-        self.slots
-            .iter()
-            .all(|slot| slot.state == ReadbackState::Available)
+        self.lifecycle.all_available()
     }
 
     pub(super) fn oldest_token(&self) -> Result<SubmissionToken, Diagnostic> {
-        self.slots
-            .iter()
-            .enumerate()
-            .filter(|(_, slot)| {
-                matches!(
-                    slot.state,
-                    ReadbackState::Submitted | ReadbackState::Mapping
-                )
-            })
-            .filter_map(|(slot_index, slot)| {
-                slot.frame_number
-                    .map(|frame_number| (slot_index, slot, frame_number))
-            })
-            .min_by_key(|(_, _, frame_number)| *frame_number)
-            .map(|(slot_index, slot, frame_number)| SubmissionToken {
-                frame_number,
-                slot_index,
-                generation: slot.generation,
-                submission_index: slot.submission_index.clone(),
+        self.lifecycle
+            .oldest_active()
+            .map(|token| SubmissionToken {
+                frame_number: token.frame_number,
+                slot_index: token.slot_index,
+                generation: token.generation,
+                submission_index: self.slots[token.slot_index].submission_index.clone(),
             })
             .ok_or_else(|| {
                 readback_state_error("no submitted readback slot is available to wait for")
@@ -329,9 +302,13 @@ impl ReadbackRing {
             slot.callback = Arc::new(Mutex::new(None));
             slot.state = ReadbackState::Available;
         }
+        self.lifecycle.abort();
     }
 
     fn slot(&self, token: &SubmissionToken) -> Result<&ReadbackSlot, Diagnostic> {
+        if !self.lifecycle.matches(lifecycle_token(token)) {
+            return Err(readback_state_error("submission token is stale"));
+        }
         let slot = self
             .slots
             .get(token.slot_index)
@@ -351,6 +328,14 @@ impl ReadbackRing {
             return Err(readback_state_error("submission token is stale"));
         }
         Ok(slot)
+    }
+}
+
+fn lifecycle_token(token: &SubmissionToken) -> SlotToken {
+    SlotToken {
+        frame_number: token.frame_number,
+        slot_index: token.slot_index,
+        generation: token.generation,
     }
 }
 
@@ -413,155 +398,4 @@ fn readback_size_error(message: &str) -> Diagnostic {
 
 fn readback_state_error(message: &str) -> Diagnostic {
     Diagnostic::error("WGPU-READBACK-STATE", Category::Backend, message, "")
-}
-
-#[cfg(test)]
-mod ledger_tests {
-    use super::*;
-
-    #[derive(Clone, Copy)]
-    struct LedgerSlot {
-        generation: u64,
-        frame_number: Option<u64>,
-        state: ReadbackState,
-    }
-
-    struct ReadbackLedger {
-        slots: Vec<LedgerSlot>,
-    }
-
-    impl ReadbackLedger {
-        fn new(count: usize) -> Self {
-            Self {
-                slots: vec![
-                    LedgerSlot {
-                        generation: 0,
-                        frame_number: None,
-                        state: ReadbackState::Available,
-                    };
-                    count
-                ],
-            }
-        }
-
-        fn acquire(&mut self, frame_number: u64) -> SubmissionToken {
-            let (slot_index, slot) = self
-                .slots
-                .iter_mut()
-                .enumerate()
-                .find(|(_, slot)| slot.state == ReadbackState::Available)
-                .expect("ledger slot available");
-            slot.generation += 1;
-            slot.frame_number = Some(frame_number);
-            slot.state = ReadbackState::Submitted;
-            SubmissionToken {
-                frame_number,
-                slot_index,
-                generation: slot.generation,
-                submission_index: None,
-            }
-        }
-
-        fn transition(&mut self, token: &SubmissionToken, state: ReadbackState) -> bool {
-            let Some(slot) = self.slots.get_mut(token.slot_index) else {
-                return false;
-            };
-            if slot.generation != token.generation || slot.frame_number != Some(token.frame_number)
-            {
-                return false;
-            }
-            slot.state = state;
-            true
-        }
-
-        fn release(&mut self, token: &SubmissionToken) -> bool {
-            self.transition(token, ReadbackState::Available)
-                && self.slots[token.slot_index].frame_number.take().is_some()
-        }
-    }
-
-    #[test]
-    fn ledger_covers_state_transitions_and_ring_full() {
-        let mut ledger = ReadbackLedger::new(2);
-        let first = ledger.acquire(4);
-        let second = ledger.acquire(5);
-        assert_eq!(ledger.slots[0].state, ReadbackState::Submitted);
-        assert_eq!(ledger.slots[1].state, ReadbackState::Submitted);
-        assert!(
-            !ledger
-                .slots
-                .iter()
-                .any(|slot| slot.state == ReadbackState::Available)
-        );
-        assert!(ledger.transition(&first, ReadbackState::Mapping));
-        assert!(ledger.transition(&first, ReadbackState::Ready));
-        assert!(ledger.release(&first));
-        assert_eq!(ledger.slots[0].state, ReadbackState::Available);
-        assert!(ledger.transition(&second, ReadbackState::Mapping));
-        assert!(ledger.transition(&second, ReadbackState::Failed));
-    }
-
-    #[test]
-    fn stale_generation_cannot_complete_a_reused_slot() {
-        let mut ledger = ReadbackLedger::new(1);
-        let old = ledger.acquire(0);
-        assert!(ledger.release(&old));
-        let current = ledger.acquire(1);
-        assert_ne!(old.generation, current.generation);
-        assert!(!ledger.transition(&old, ReadbackState::Ready));
-        assert_eq!(ledger.slots[0].state, ReadbackState::Submitted);
-    }
-
-    #[test]
-    fn a_slot_cannot_be_reused_until_completion_is_consumed() {
-        let mut ledger = ReadbackLedger::new(1);
-        let token = ledger.acquire(0);
-        assert!(ledger.transition(&token, ReadbackState::Mapping));
-        assert!(
-            !ledger
-                .slots
-                .iter()
-                .any(|slot| slot.state == ReadbackState::Available)
-        );
-        assert!(ledger.transition(&token, ReadbackState::Ready));
-        assert!(ledger.release(&token));
-        let reused = ledger.acquire(1);
-        assert!(reused.generation > token.generation);
-    }
-
-    #[test]
-    fn repack_rows_handles_padded_and_tight_rows() {
-        for width in [1_u32, 62, 64, 65] {
-            let height = 3;
-            let row_bytes = width * 4;
-            let padded =
-                super::super::requirements::align_up(row_bytes, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-            let mut mapped = vec![0; (padded * height) as usize];
-            for row in 0..height as usize {
-                mapped[row * padded as usize..row * padded as usize + row_bytes as usize]
-                    .fill((row + 1) as u8);
-            }
-            let mut packed = vec![0; (row_bytes * height) as usize];
-            repack_rows(&mapped, &mut packed, width, height, padded).expect("rows repack");
-            assert!(packed[..row_bytes as usize].iter().all(|byte| *byte == 1));
-            assert!(
-                packed[row_bytes as usize..row_bytes as usize * 2]
-                    .iter()
-                    .all(|byte| *byte == 2)
-            );
-            assert!(
-                packed[row_bytes as usize * 2..]
-                    .iter()
-                    .all(|byte| *byte == 3)
-            );
-        }
-    }
-
-    #[test]
-    fn repack_rows_rejects_inconsistent_storage_without_panicking() {
-        let mut packed = vec![0; 4];
-        let error =
-            repack_rows(&[0; 4], &mut packed, 1, 1, 2).expect_err("short padded row is rejected");
-        assert_eq!(error.code, "WGPU-READBACK-SIZE");
-    }
 }

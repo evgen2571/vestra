@@ -142,6 +142,16 @@ pub enum RenderTimingScope {
     PreparedOperation,
 }
 
+impl RenderTimingScope {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OneShot => "one_shot",
+            Self::PreparedOperation => "prepared_operation",
+        }
+    }
+}
+
 pub fn render_result(
     project: &Path,
     metadata: crate::application::render::PreparedRenderMetadata,

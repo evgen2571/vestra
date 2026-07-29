@@ -20,7 +20,8 @@ use super::{
     selection::create_backend,
     types::{
         BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
-        RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, backend_fallback_warning,
+        RenderFailureStage, RenderObserverControl, RenderOptions, RenderSummary, RenderTimings,
+        backend_fallback_warning,
     },
 };
 
@@ -349,7 +350,7 @@ fn frame_error(prepared: &PreparedState, diagnostic: Diagnostic) -> RenderError 
 pub(crate) fn render_prepared(
     prepared: &mut PreparedState,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
 ) -> Result<RenderSummary, RenderError> {
     render_prepared_with_sink(prepared, options, emit, FfmpegSink::start)
 }
@@ -362,7 +363,7 @@ pub(crate) fn render_prepared(
 pub(super) fn render_with_backend_builder<F>(
     plan: &RenderPlan,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
     build_backend: F,
 ) -> Result<RenderSummary, RenderError>
 where
@@ -384,7 +385,7 @@ where
 pub(super) fn render_with_backend_builder_and_sink<F, S, SF>(
     plan: &RenderPlan,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
     build_backend: F,
     start_sink: SF,
 ) -> Result<RenderSummary, RenderError>
@@ -408,7 +409,7 @@ where
 pub(crate) fn render_prepared_with_sink<S, SF>(
     prepared: &mut PreparedState,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
     start_sink: SF,
 ) -> Result<RenderSummary, RenderError>
 where
@@ -454,7 +455,51 @@ where
         .into_iter()
         .collect::<Vec<_>>();
     prepared.backend.reset_operation_metrics();
-    emit(events::started(plan.frame_count, &output.final_path));
+    let cancelled_before_started = options.cancelled.load(std::sync::atomic::Ordering::Relaxed);
+    if emit(events::started(plan.frame_count, &output.final_path)) == RenderObserverControl::Cancel
+    {
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::Cancellation,
+                0,
+                None,
+                Diagnostic::error(
+                    "MVP-CANCELLED",
+                    Category::Cancellation,
+                    "render cancelled by observer",
+                    "",
+                ),
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
+    // The legacy callback can only request cancellation through the shared
+    // token. `started` is also a pre-publication callback, so do not start the
+    // encoder if it requested cancellation.
+    if !cancelled_before_started && options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::Cancellation,
+                0,
+                None,
+                Diagnostic::error(
+                    "MVP-CANCELLED",
+                    Category::Cancellation,
+                    "render cancelled",
+                    "",
+                ),
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
     let mut encoder = start_sink(&plan.encoder, &output.temporary_path)
         .map_err(|error| {
             cleanup_error(
@@ -538,6 +583,46 @@ where
             total_started,
         ));
     }
+    // This is deliberately after the frame loop and idle verification, but
+    // before encoder finalization. It catches cancellation from the last
+    // legitimate progress callback even when no later frame-loop iteration
+    // occurs.
+    if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+        prepared.backend.abort();
+        // Frame submission has already completed, so aborting the backend may
+        // leave it permanently unusable. Keep the public prepared lifecycle in
+        // lockstep with that backend state before returning cancellation.
+        prepared.invalidate();
+        let cleanup = encoder.abort().err().map(|error| error.to_string());
+        let diagnostic = match cleanup {
+            Some(detail) => Diagnostic::error(
+                "MVP-CANCELLED",
+                Category::Cancellation,
+                "render cancelled",
+                "",
+            )
+            .with_hint(format!("encoder cleanup: {detail}")),
+            None => Diagnostic::error(
+                "MVP-CANCELLED",
+                Category::Cancellation,
+                "render cancelled",
+                "",
+            ),
+        };
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::Cancellation,
+                completed_frames,
+                None,
+                diagnostic,
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
     let finish_started = Instant::now();
     let sink_result = encoder
         .finish()
@@ -610,7 +695,7 @@ where
     timings.track_evaluation_ms = milliseconds(frame_loop.track_evaluation);
     timings.encoder_write_ms = milliseconds(frame_loop.encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
-    emit(events::completed(
+    let _ = emit(events::completed(
         plan.frame_count,
         &output.final_path,
         plan.warnings.clone(),

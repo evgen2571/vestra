@@ -133,6 +133,11 @@ fn public_auto_traits_are_explicit() {
     assert_send_sync::<video_editor::AdapterInfo>();
     assert_send_sync::<video_editor::RenderPerformance>();
     assert_send_sync::<Editor>();
+    assert_send_sync::<video_editor::Project>();
+    assert_send_sync::<CancellationToken>();
+    assert_send_sync::<PrepareOptions>();
+    assert_send_sync::<PreparedVideoRenderRequest>();
+    assert_send_sync::<RenderRequest>();
     assert_send::<video_editor::PreparedProject>();
 }
 
@@ -405,6 +410,276 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
     assert_eq!(
         events.last().map(|event| event.kind.as_str()),
         Some("completed")
+    );
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.kind.as_str())
+            .collect::<Vec<_>>(),
+        ["started", "completed"]
+    );
+    assert!(events.iter().all(|event| {
+        event.kind != "progress"
+            || (event.frame < event.total_frames && event.progress.is_some_and(|value| value < 1.0))
+    }));
+}
+
+#[test]
+fn observer_cancellation_on_last_legitimate_progress_removes_temporary_output_and_prevents_publication()
+ {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("cancelled.mp4");
+    let mut events = Vec::new();
+    let error = Editor::new()
+        .render_with_observer(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: false,
+                backend: BackendPreference::Cpu,
+            },
+            |event| {
+                let cancel = event.kind == "progress" && event.frame + 1 == event.total_frames;
+                events.push(event.kind);
+                if cancel {
+                    video_editor::RenderObserverControl::Cancel
+                } else {
+                    video_editor::RenderObserverControl::Continue
+                }
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("last legitimate progress observer cancellation must stop publication");
+
+    assert!(error.is_cancelled());
+    assert_eq!(error.kind(), video_editor::EditorErrorKind::Render);
+    assert_eq!(
+        error
+            .render_failure_context()
+            .map(|context| context.stage.as_str()),
+        Some("cancellation")
+    );
+    assert_eq!(error.temporary_output_removed(), Some(true));
+    assert!(events.iter().all(|kind| kind != "completed"));
+    assert_eq!(events.last().map(String::as_str), Some("progress"));
+    assert!(!output.exists());
+    assert!(
+        !std::fs::read_dir(directory.path())
+            .expect("output directory")
+            .any(|entry| entry
+                .expect("directory entry")
+                .file_name()
+                .to_string_lossy()
+                .contains(".tmp"))
+    );
+}
+
+#[test]
+fn token_cancellation_from_progress_prevents_publication() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("cancelled.mp4");
+    let token = CancellationToken::new();
+    let callback_token = token.clone();
+    let error = Editor::new()
+        .render(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: false,
+                backend: BackendPreference::Cpu,
+            },
+            &mut |event| {
+                if event.kind == "progress" && event.frame + 1 == event.total_frames {
+                    callback_token.cancel();
+                }
+            },
+            &token,
+        )
+        .expect_err("progress token cancellation must stop publication");
+    assert!(error.is_cancelled());
+    assert!(!output.exists());
+}
+
+#[test]
+fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publication() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("multi-frame.mp4");
+    let mut events = Vec::new();
+    let result = Editor::new()
+        .render(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: false,
+                backend: BackendPreference::Cpu,
+            },
+            &mut |event| events.push(event),
+            &CancellationToken::new(),
+        )
+        .expect("multi-frame render");
+    assert!(result.output.is_file());
+    assert_eq!(
+        events.first().map(|event| event.kind.as_str()),
+        Some("started")
+    );
+    assert_eq!(
+        events.last().map(|event| event.kind.as_str()),
+        Some("completed")
+    );
+    assert!(events.iter().any(|event| event.kind == "progress"));
+    for event in events.iter().filter(|event| event.kind == "progress") {
+        assert!(event.frame > 0 && event.frame < event.total_frames);
+        assert!(
+            event
+                .progress
+                .is_some_and(|value| value > 0.0 && value < 1.0)
+        );
+    }
+}
+
+#[test]
+fn completed_observer_cancellation_keeps_the_published_output_and_success() {
+    let directory = tempdir().expect("temporary directory");
+    let project = Editor::new()
+        .load_project(fixture("tests/fixtures/wgpu-small-rgba.json"))
+        .expect("project");
+    let output = directory.path().join("completed-cancel.mp4");
+    let mut events = Vec::new();
+    let result = Editor::new()
+        .render_with_observer(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: false,
+                backend: BackendPreference::Cpu,
+            },
+            |event| {
+                let control = if event.kind == "completed" {
+                    video_editor::RenderObserverControl::Cancel
+                } else {
+                    video_editor::RenderObserverControl::Continue
+                };
+                events.push(event.kind);
+                control
+            },
+            &CancellationToken::new(),
+        )
+        .expect("completed observer control cannot roll back success");
+    assert_eq!(result.output, output);
+    assert!(output.is_file());
+    assert_eq!(events, ["started", "completed"]);
+}
+
+#[test]
+fn request_getters_expose_the_configured_values() {
+    let output = PathBuf::from("nested/output.mp4");
+    let prepared = PreparedVideoRenderRequest::new(&output).with_overwrite(true);
+    assert_eq!(prepared.output(), output.as_path());
+    assert!(prepared.overwrite());
+
+    let request = RenderRequest {
+        output: Some(output.clone()),
+        overwrite: true,
+        preview: true,
+        backend: BackendPreference::Cpu,
+    };
+    assert_eq!(request.output(), Some(output.as_path()));
+    assert!(request.overwrite());
+    assert!(request.preview());
+    assert_eq!(request.backend(), BackendPreference::Cpu);
+
+    let options = PrepareOptions::new(BackendPreference::Wgpu);
+    assert_eq!(options.backend(), BackendPreference::Wgpu);
+}
+
+#[test]
+fn observer_cancellation_before_submission_keeps_prepared_project_reusable() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let mut prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare");
+    let output = directory.path().join("cancelled.mp4");
+    let mut calls = 0;
+    let error = prepared
+        .render_video_with_observer(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            |_| {
+                calls += 1;
+                video_editor::RenderObserverControl::Cancel
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("started observer cancellation");
+    assert!(error.is_cancelled());
+    assert_eq!(calls, 1);
+    assert!(!output.exists());
+    assert!(prepared.render_frame_number(0).is_ok());
+}
+
+#[test]
+fn observer_cancellation_after_submission_invalidates_prepared_project() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let mut prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare");
+    let output = directory.path().join("cancelled.mp4");
+    let mut events = Vec::new();
+    let error = prepared
+        .render_video_with_observer(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            |event| {
+                let cancel = event.kind == "progress" && event.frame + 1 == event.total_frames;
+                events.push(event.kind);
+                if cancel {
+                    video_editor::RenderObserverControl::Cancel
+                } else {
+                    video_editor::RenderObserverControl::Continue
+                }
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("last legitimate progress observer cancellation");
+    assert!(error.is_cancelled());
+    assert_eq!(events.last().map(String::as_str), Some("progress"));
+    assert!(!output.exists());
+    let invalidated = prepared
+        .render_frame_number(0)
+        .expect_err("submitted cancellation invalidates prepared state");
+    assert_eq!(
+        invalidated.diagnostics()[0].code,
+        "MVP-PREPARED-INVALIDATED"
+    );
+}
+
+#[test]
+fn stable_sdk_enum_strings_match_report_names() {
+    use video_editor::{
+        BackendKind, Category, GraphicsBackend, PixelFormat, RenderFailureStage, RenderTimingScope,
+        Severity,
+    };
+
+    assert_eq!(Category::Cancellation.as_str(), "cancellation");
+    assert_eq!(Severity::Warning.as_str(), "warning");
+    assert_eq!(BackendPreference::Wgpu.as_str(), "wgpu");
+    assert_eq!(BackendKind::Cpu.as_str(), "cpu");
+    assert_eq!(PixelFormat::Rgba8.as_str(), "rgba8");
+    assert_eq!(GraphicsBackend::BrowserWebGpu.as_str(), "browserwebgpu");
+    assert_eq!(
+        RenderTimingScope::PreparedOperation.as_str(),
+        "prepared_operation"
+    );
+    assert_eq!(
+        RenderFailureStage::OutputPublication.as_str(),
+        "output_publication"
     );
 }
 

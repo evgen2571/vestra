@@ -14,7 +14,7 @@ pub(crate) use engine::{PreparedState, prepare_for_video, render_prepared, rende
 
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
-    RenderFailureStage, RenderOptions, RenderSummary, RenderTimings,
+    RenderFailureStage, RenderObserverControl, RenderOptions, RenderSummary, RenderTimings,
 };
 #[allow(
     unused_imports,

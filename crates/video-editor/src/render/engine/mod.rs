@@ -16,7 +16,7 @@ pub(crate) use runner::render_prepared_with_sink;
 pub(crate) use runner::{PreparedState, prepare_for_video, render_prepared, render_prepared_frame};
 pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
-    RenderFailureStage, RenderOptions, RenderSummary, RenderTimings,
+    RenderFailureStage, RenderObserverControl, RenderOptions, RenderSummary, RenderTimings,
 };
 
 #[cfg(test)]
@@ -30,7 +30,7 @@ mod tests {
     use super::selection::create_backend_with;
     use super::{
         BackendFallback, RenderBackendPreference, RenderFailureContext, RenderFailureStage,
-        RenderOptions,
+        RenderObserverControl, RenderOptions,
     };
     use std::{
         cell::Cell,
@@ -522,18 +522,23 @@ mod tests {
             backend_preference: RenderBackendPreference::Wgpu,
         };
         let plan = example_plan();
-        let error = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
-            Ok((
-                Box::new(FailingBackend {
-                    failure_code: "WGPU-COMMAND-SUBMISSION",
-                    failure_message: "injected submission failure",
-                    fail_after_completed_frames: 0,
-                    rendered_frames: 0,
-                    completed: std::collections::VecDeque::new(),
-                }),
-                None,
-            ))
-        })
+        let error = render_with_backend_builder(
+            &plan,
+            &options,
+            &mut |_| RenderObserverControl::Continue,
+            |_, _, _| {
+                Ok((
+                    Box::new(FailingBackend {
+                        failure_code: "WGPU-COMMAND-SUBMISSION",
+                        failure_message: "injected submission failure",
+                        fail_after_completed_frames: 0,
+                        rendered_frames: 0,
+                        completed: std::collections::VecDeque::new(),
+                    }),
+                    None,
+                ))
+            },
+        )
         .expect_err("injected backend failure reaches the render loop");
 
         assert!(matches!(
@@ -572,18 +577,23 @@ mod tests {
                 backend_preference: RenderBackendPreference::Wgpu,
             };
             let plan = example_plan();
-            let error = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
-                Ok((
-                    Box::new(FailingBackend {
-                        failure_code: code,
-                        failure_message: message,
-                        fail_after_completed_frames: 2,
-                        rendered_frames: 0,
-                        completed: std::collections::VecDeque::new(),
-                    }),
-                    None,
-                ))
-            })
+            let error = render_with_backend_builder(
+                &plan,
+                &options,
+                &mut |_| RenderObserverControl::Continue,
+                |_, _, _| {
+                    Ok((
+                        Box::new(FailingBackend {
+                            failure_code: code,
+                            failure_message: message,
+                            fail_after_completed_frames: 2,
+                            rendered_frames: 0,
+                            completed: std::collections::VecDeque::new(),
+                        }),
+                        None,
+                    ))
+                },
+            )
             .expect_err("injected runtime GPU failure reaches the render loop");
 
             assert!(matches!(

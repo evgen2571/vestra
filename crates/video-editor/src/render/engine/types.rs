@@ -31,6 +31,17 @@ pub enum RenderBackendPreference {
     Wgpu,
 }
 
+impl RenderBackendPreference {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Cpu => "cpu",
+            Self::Wgpu => "wgpu",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct BackendFallback {
     pub code: String,
@@ -121,6 +132,19 @@ pub struct RenderEvent {
     pub warnings: Option<Vec<Diagnostic>>,
 }
 
+/// Synchronous control returned by an advanced render observer.
+///
+/// `Cancel` stops a pre-publication operation, aborts the encoder, removes the
+/// temporary output, and returns the usual structured cancellation error. The
+/// result of the post-publication `completed` event is ignored because output
+/// publication has already succeeded.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RenderObserverControl {
+    #[default]
+    Continue,
+    Cancel,
+}
+
 #[derive(Debug)]
 pub struct RenderError {
     pub diagnostic: Diagnostic,
@@ -151,7 +175,7 @@ pub struct RenderFailureContext {
     pub temporary_output_path: Option<PathBuf>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RenderFailureStage {
     OutputPreparation,
@@ -162,4 +186,20 @@ pub enum RenderFailureStage {
     EncoderFinalization,
     OutputPublication,
     Cancellation,
+}
+
+impl RenderFailureStage {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OutputPreparation => "output_preparation",
+            Self::AssetPreparation => "asset_preparation",
+            Self::EncoderStartup => "encoder_startup",
+            Self::FrameComposition => "frame_composition",
+            Self::FrameWrite => "frame_write",
+            Self::EncoderFinalization => "encoder_finalization",
+            Self::OutputPublication => "output_publication",
+            Self::Cancellation => "cancellation",
+        }
+    }
 }

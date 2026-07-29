@@ -119,11 +119,22 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         &mut errors,
     );
     let frame_rate = project.output.frame_rate.rational().unwrap_or((1, 1));
-    let frame_count = crate::timeline::frame_count(
+    let frame_count = match crate::timeline::frame_count(
         crate::timeline::seconds_to_nanos(visual_duration).unwrap_or(0),
         frame_rate.0,
         frame_rate.1,
-    );
+    ) {
+        Ok(count) => count,
+        Err(_) => {
+            errors.push(Diagnostic::error(
+                "MVP-TIMELINE-OVERFLOW",
+                Category::Semantic,
+                "project duration or frame rate cannot be represented safely",
+                "/output",
+            ));
+            0
+        }
+    };
     limits::enforce(
         &project.output,
         project.visual.clips.len(),

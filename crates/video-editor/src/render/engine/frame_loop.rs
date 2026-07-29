@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    plan::{ActiveSchedule, DrawKey, RenderPlan, ScheduleAction, ScheduledItem, evaluate},
+    plan::{ActiveSchedule, RenderPlan, ScheduleAction, evaluate},
     render::{CompletedFrame, PollMode, PreparationStats, RenderBackend},
 };
 use video_editor_core::timeline::frame_time_nanos;
@@ -81,11 +81,26 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                         ScheduleAction::Activate => active.push(event.item),
                     }
                 }
-                active.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
+                video_editor_core::plan::sort_active_items(plan, &mut active);
             }
             performance.active_item_consideration_count += active.len() as u64;
             performance.maximum_active_layers = performance.maximum_active_layers.max(active.len());
-            let time = frame_time_nanos(frame_number, plan.frame_rate.0, plan.frame_rate.1);
+            let time = frame_time_nanos(frame_number, plan.frame_rate.0, plan.frame_rate.1)
+                .map_err(|_| {
+                    cleanup_error(
+                        output,
+                        plan,
+                        RenderFailureStage::FrameComposition,
+                        completed_frames,
+                        Some(frame_number),
+                        Diagnostic::error(
+                            "MVP-TIMELINE-OVERFLOW",
+                            Category::Render,
+                            "frame timestamp cannot be represented",
+                            "",
+                        ),
+                    )
+                })?;
             let evaluation_started = Instant::now();
             let evaluated = evaluate(plan, &active, time);
             performance.evaluated_track_count += evaluated.evaluated_track_count;
@@ -513,10 +528,6 @@ fn cancellation<S: FrameSink + ?Sized>(
             cleanup,
         ),
     ))
-}
-
-fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
-    &plan.layers[item.0].draw_key
 }
 
 #[cfg(test)]

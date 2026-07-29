@@ -860,7 +860,8 @@ fn gpu_canonical_timeline_frames_match_cpu_within_two_channels() {
             continue;
         }
         let time =
-            crate::timeline::frame_time_nanos(frame_index, plan.frame_rate.0, plan.frame_rate.1);
+            crate::timeline::frame_time_nanos(frame_index, plan.frame_rate.0, plan.frame_rate.1)
+                .expect("validated plan has representable timeline timestamps");
         let evaluated = crate::plan::evaluate(&plan, &active, time);
         let mut cpu_output = RgbaImage::new(evaluated.width, evaluated.height);
         let mut gpu_output = RgbaImage::new(evaluated.width, evaluated.height);

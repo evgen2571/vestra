@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    CancellationToken, Diagnostic, InspectionReport, PreflightReport, Project, RenderEvent,
-    RenderFailureContext, RenderResult, ValidationReport,
+    CancellationToken, Diagnostic, InspectionReport, PreflightReport, PrepareOptions,
+    PreparedProject, Project, RenderEvent, RenderFailureContext, RenderResult, ValidationReport,
     application::{self, ApplicationRenderError, PreparationTimings, RenderRequest},
     project::{LoadError, ValidatedProject, ValidationOptions},
     render::RenderBackendPreference,
@@ -28,6 +28,8 @@ pub enum PreflightTarget {
     Inspect,
     /// Check complete default render readiness for the CLI validation contract.
     Validate,
+    /// Check everything needed to build a reusable visual execution snapshot.
+    Preparation { backend: RenderBackendPreference },
     /// Check an actual render destination and backend.
     Render {
         backend: RenderBackendPreference,
@@ -56,6 +58,12 @@ impl PreflightOptions {
         }
     }
     #[must_use]
+    pub fn for_preparation(backend: RenderBackendPreference) -> Self {
+        Self {
+            target: PreflightTarget::Preparation { backend },
+        }
+    }
+    #[must_use]
     pub fn for_render(
         backend: RenderBackendPreference,
         output: Option<PathBuf>,
@@ -79,6 +87,27 @@ impl Default for PreflightOptions {
 struct InternalPreflightOutcome {
     report: PreflightReport,
     resolved: Option<ValidatedProject>,
+}
+
+struct PreparationContext {
+    warnings: Vec<Diagnostic>,
+    timings: PreparationTimings,
+    operation_started: Instant,
+    validation_elapsed: std::time::Duration,
+    preflight_elapsed: std::time::Duration,
+}
+
+/// The one internal preparation coordinator serves both public reusable
+/// preparation and the compatibility one-shot render path. Only preflight
+/// target selection differs; validation through backend construction is shared.
+enum InternalPreparationTarget<'a> {
+    Public(PrepareOptions),
+    OneShot(&'a SdkRenderRequest),
+}
+
+struct CoordinatedPreparation {
+    prepared: application::PreparedRender,
+    started: Instant,
 }
 
 /// An SDK operation failed after parsing or during rendering.
@@ -212,6 +241,21 @@ impl Editor {
                 overwrite,
             } => Some((*backend, output.clone(), *overwrite)),
             PreflightTarget::Validate => Some((RenderBackendPreference::Auto, None, false)),
+            PreflightTarget::Preparation { backend } => {
+                let probe = video_editor_render::probe_backend(match backend {
+                    RenderBackendPreference::Auto => {
+                        video_editor_render::RenderBackendPreference::Auto
+                    }
+                    RenderBackendPreference::Cpu => {
+                        video_editor_render::RenderBackendPreference::Cpu
+                    }
+                    RenderBackendPreference::Wgpu => {
+                        video_editor_render::RenderBackendPreference::Wgpu
+                    }
+                });
+                diagnostics.extend(probe.diagnostics);
+                None
+            }
             PreflightTarget::Inspect => None,
         };
         if let Some((backend, override_output, overwrite)) = render_target {
@@ -276,6 +320,118 @@ impl Editor {
             .map_err(Self::project_error)
     }
 
+    /// Prepares an owned visual snapshot. This performs no output-path check
+    /// and does not require FFmpeg encoder availability.
+    #[expect(
+        clippy::result_large_err,
+        reason = "preparation failures retain diagnostics"
+    )]
+    pub fn prepare(
+        &self,
+        project: &Project,
+        options: PrepareOptions,
+    ) -> Result<PreparedProject, EditorError> {
+        let coordinated =
+            self.prepare_internal(project, InternalPreparationTarget::Public(options))?;
+        Ok(PreparedProject::new(
+            coordinated.prepared,
+            Self::project_display_path(project).to_path_buf(),
+            coordinated.started.elapsed().as_millis(),
+        ))
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "preparation failures retain diagnostics and timing context"
+    )]
+    fn prepare_internal(
+        &self,
+        project: &Project,
+        target: InternalPreparationTarget<'_>,
+    ) -> Result<CoordinatedPreparation, EditorError> {
+        let started = Instant::now();
+        let validation_started = Instant::now();
+        let validation = self.validate(project);
+        let validation_elapsed = validation_started.elapsed();
+        let preflight_started = Instant::now();
+        let (options, backend) = match target {
+            InternalPreparationTarget::Public(options) => (
+                PreflightOptions::for_preparation(options.backend()),
+                options.backend(),
+            ),
+            InternalPreparationTarget::OneShot(request) => (
+                PreflightOptions::for_render(
+                    request.backend,
+                    request.output.clone(),
+                    request.overwrite,
+                ),
+                request.backend,
+            ),
+        };
+        let outcome = self.run_preflight(project, &validation, &options);
+        let preflight_elapsed = preflight_started.elapsed();
+        let warnings = Self::operation_warnings(&outcome.report.diagnostics);
+        let validated = outcome.resolved.ok_or_else(|| {
+            Self::diagnostic_error(
+                outcome.report.diagnostics,
+                Self::operation_timings(project, started, validation_elapsed, preflight_elapsed),
+            )
+        })?;
+        let prepared = self.prepare_validated(
+            project,
+            validated,
+            backend,
+            PreparationContext {
+                warnings: warnings.clone(),
+                timings: PreparationTimings {
+                    validation_ms: validation_elapsed.as_millis(),
+                    preflight_ms: preflight_elapsed.as_millis(),
+                    ..PreparationTimings::default()
+                },
+                operation_started: started,
+                validation_elapsed,
+                preflight_elapsed,
+            },
+        )?;
+        Ok(CoordinatedPreparation { prepared, started })
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "the shared coordinator preserves preparation diagnostics"
+    )]
+    fn prepare_validated(
+        &self,
+        project: &Project,
+        validated: ValidatedProject,
+        backend: RenderBackendPreference,
+        context: PreparationContext,
+    ) -> Result<application::PreparedRender, EditorError> {
+        let request = RenderRequest {
+            output_override: None,
+            overwrite: false,
+            preview: false,
+            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            backend_preference: backend,
+        };
+        application::prepare_project(
+            validated,
+            &request,
+            context.warnings.clone(),
+            context.timings,
+        )
+        .map_err(|error| {
+            Self::render_error(
+                error,
+                project,
+                context.operation_started,
+                context.validation_elapsed,
+                context.preflight_elapsed,
+                context.warnings,
+            )
+        })
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "render diagnostics retain operation timings for CLI report output"
@@ -287,33 +443,9 @@ impl Editor {
         emit: &mut dyn FnMut(RenderEvent),
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
-        let operation_started = Instant::now();
-        let validation_started = Instant::now();
-        let validation = self.validate(project);
-        let validation_elapsed = validation_started.elapsed();
-        // Keep the one-shot SDK's established operation preflight contract.
-        // The private renderer preparation that follows remains independent of
-        // FFmpeg and output paths, so a future prepared API can call it alone.
-        let options = PreflightOptions::for_render(
-            request.backend,
-            request.output.clone(),
-            request.overwrite,
-        );
-        let preflight_started = Instant::now();
-        let preflight = self.run_preflight(project, &validation, &options);
-        let preflight_elapsed = preflight_started.elapsed();
-        let mut warnings = Self::operation_warnings(&preflight.report.diagnostics);
-        let validated = preflight.resolved.ok_or_else(|| {
-            Self::diagnostic_error(
-                preflight.report.diagnostics,
-                Self::operation_timings(
-                    project,
-                    operation_started,
-                    validation_elapsed,
-                    preflight_elapsed,
-                ),
-            )
-        })?;
+        let coordinated =
+            self.prepare_internal(project, InternalPreparationTarget::OneShot(&request))?;
+        let operation_started = coordinated.started;
         let render_request = RenderRequest {
             output_override: request.output,
             overwrite: request.overwrite,
@@ -321,26 +453,8 @@ impl Editor {
             cancelled: cancellation.flag(),
             backend_preference: request.backend,
         };
-        let mut prepared = application::prepare_project(
-            validated,
-            &render_request,
-            warnings.clone(),
-            PreparationTimings {
-                validation_ms: validation_elapsed.as_millis(),
-                preflight_ms: preflight_elapsed.as_millis(),
-                ..PreparationTimings::default()
-            },
-        )
-        .map_err(|error| {
-            Self::render_error(
-                error,
-                project,
-                operation_started,
-                validation_elapsed,
-                preflight_elapsed,
-                warnings.clone(),
-            )
-        })?;
+        let mut prepared = coordinated.prepared;
+        let mut warnings = prepared.preparation_warnings().to_vec();
         let operation_preparation = prepared.preparation_timings();
         let mut summary =
             match application::render_prepared_project(&mut prepared, render_request, emit) {
@@ -350,8 +464,10 @@ impl Editor {
                         error,
                         project,
                         operation_started,
-                        validation_elapsed,
-                        preflight_elapsed,
+                        std::time::Duration::from_millis(
+                            operation_preparation.validation_ms as u64,
+                        ),
+                        std::time::Duration::from_millis(operation_preparation.preflight_ms as u64),
                         warnings.clone(),
                     );
                     Self::apply_error_preparation_timings(
@@ -507,7 +623,7 @@ impl Editor {
             Self::apply_renderer_preparation_timings(timings, preparation);
         }
     }
-    fn operation_warnings(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
+    pub(crate) fn operation_warnings(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
         let mut warnings = Vec::new();
         for diagnostic in diagnostics
             .iter()

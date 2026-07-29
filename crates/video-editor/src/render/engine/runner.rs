@@ -9,7 +9,7 @@ use std::{
 use crate::{
     Category, Diagnostic,
     plan::{ActiveSchedule, RenderPlan},
-    render::{DecodedAssets, RenderBackend, RenderBackendKind},
+    render::{CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind},
 };
 use video_editor_media::{EncoderSettings, FfmpegSink, FrameSink, MediaError, OutputTarget};
 
@@ -42,6 +42,22 @@ pub(crate) struct PreparedState {
     lifecycle: PreparedLifecycle,
 }
 
+pub(crate) trait IntoPreparedPlan {
+    fn into_prepared_plan(self) -> RenderPlan;
+}
+
+impl IntoPreparedPlan for RenderPlan {
+    fn into_prepared_plan(self) -> RenderPlan {
+        self
+    }
+}
+
+impl IntoPreparedPlan for &RenderPlan {
+    fn into_prepared_plan(self) -> RenderPlan {
+        self.clone()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PreparedLifecycle {
     Ready,
@@ -49,6 +65,16 @@ enum PreparedLifecycle {
 }
 
 impl PreparedState {
+    pub(crate) fn frame_details(&self) -> (u32, u32, (u64, u64), u64, f64, usize) {
+        (
+            self.plan.canvas.width,
+            self.plan.canvas.height,
+            self.plan.frame_rate,
+            self.plan.frame_count,
+            self.plan.duration,
+            self.plan.images.len(),
+        )
+    }
     pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
         self.requested_backend
     }
@@ -100,7 +126,7 @@ impl PreparedState {
     reason = "preparation preserves structured backend-selection diagnostics"
 )]
 pub(crate) fn prepare_for_video(
-    plan: &RenderPlan,
+    plan: RenderPlan,
     preference: RenderBackendPreference,
 ) -> Result<PreparedState, RenderError> {
     prepare(plan, preference, create_backend)
@@ -110,8 +136,8 @@ pub(crate) fn prepare_for_video(
     clippy::result_large_err,
     reason = "preparation retains structured diagnostics"
 )]
-pub(crate) fn prepare(
-    plan: &RenderPlan,
+pub(crate) fn prepare<P: IntoPreparedPlan>(
+    plan: P,
     preference: RenderBackendPreference,
     build_backend: impl FnOnce(
         RenderBackendPreference,
@@ -120,22 +146,23 @@ pub(crate) fn prepare(
     )
         -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
 ) -> Result<PreparedState, RenderError> {
-    let decoded = DecodedAssets::build(plan).map_err(|diagnostic| RenderError {
+    let plan = plan.into_prepared_plan();
+    let decoded = DecodedAssets::build(&plan).map_err(|diagnostic| RenderError {
         diagnostic,
         warnings: Vec::new(),
         temporary_removed: true,
-        context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, plan),
+        context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, &plan),
         timings: RenderTimings::default(),
     })?;
-    let schedule = ActiveSchedule::compile(plan);
+    let schedule = ActiveSchedule::compile(&plan);
     let (backend, backend_fallback) =
-        build_backend(preference, plan, &decoded).map_err(|diagnostic| RenderError {
+        build_backend(preference, &plan, &decoded).map_err(|diagnostic| RenderError {
             diagnostic,
             warnings: Vec::new(),
             temporary_removed: true,
             context: RenderFailureContext::before_render(
                 RenderFailureStage::AssetPreparation,
-                plan,
+                &plan,
             ),
             timings: RenderTimings {
                 asset_decode_ms: milliseconds(decoded.timings().decode),
@@ -147,7 +174,7 @@ pub(crate) fn prepare(
         ..backend.timings()
     };
     Ok(PreparedState {
-        plan: Arc::new(plan.clone()),
+        plan: Arc::new(plan),
         schedule,
         _decoded: decoded,
         selected_backend: backend.kind(),
@@ -157,6 +184,113 @@ pub(crate) fn prepare(
         preparation_timings,
         lifecycle: PreparedLifecycle::Ready,
     })
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "frame failures retain SDK diagnostics"
+)]
+pub(crate) fn render_prepared_frame(
+    prepared: &mut PreparedState,
+    frame_number: u64,
+) -> Result<CompletedFrame, RenderError> {
+    prepared.ensure_ready()?;
+    if frame_number >= prepared.plan.frame_count {
+        return Err(frame_error(
+            prepared,
+            "MVP-FRAME-RANGE",
+            "frame number is outside the prepared timeline",
+        ));
+    }
+    if prepared.selected_backend != RenderBackendKind::Cpu {
+        return Err(frame_error(
+            prepared,
+            "MVP-PREPARED-FRAME-BACKEND",
+            "single-frame rendering requires a CPU prepared project",
+        ));
+    }
+    let active = prepared.schedule.active_at(&prepared.plan, frame_number);
+    let time = video_editor_core::timeline::frame_time_nanos(
+        frame_number,
+        prepared.plan.frame_rate.0,
+        prepared.plan.frame_rate.1,
+    )
+    .map_err(|_| {
+        frame_error(
+            prepared,
+            "MVP-TIMELINE-OVERFLOW",
+            "frame timestamp cannot be represented",
+        )
+    })?;
+    let evaluated = video_editor_core::plan::evaluate(&prepared.plan, &active, time);
+    prepared.backend.reset_operation_metrics();
+    if let Err(diagnostic) = prepared.backend.submit_frame(frame_number, &evaluated) {
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+    }
+    let completion = match prepared.backend.poll_completed(PollMode::WaitForOne) {
+        Ok(Some(completion)) => completion,
+        Ok(None) => {
+            prepared.backend.abort();
+            prepared.invalidate();
+            return Err(frame_error(
+                prepared,
+                "MVP-FRAME-COMPLETION",
+                "backend did not complete the submitted frame",
+            ));
+        }
+        Err(diagnostic) => {
+            prepared.backend.abort();
+            prepared.invalidate();
+            return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+        }
+    };
+    if completion.frame_number != frame_number {
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(frame_error(
+            prepared,
+            "MVP-FRAME-COMPLETION",
+            "backend completed an unexpected frame",
+        ));
+    }
+    match prepared.backend.flush() {
+        Ok(extra) if extra.is_empty() => {}
+        Ok(_) => {
+            prepared.backend.abort();
+            prepared.invalidate();
+            return Err(frame_error(
+                prepared,
+                "MVP-FRAME-COMPLETION",
+                "backend retained an unexpected completion",
+            ));
+        }
+        Err(diagnostic) => {
+            prepared.backend.abort();
+            prepared.invalidate();
+            return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+        }
+    }
+    if let Err(diagnostic) = prepared.backend.verify_idle() {
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+    }
+    Ok(completion)
+}
+
+fn frame_error(prepared: &PreparedState, code: &str, message: &str) -> RenderError {
+    RenderError {
+        diagnostic: Diagnostic::error(code, Category::Render, message, ""),
+        warnings: Vec::new(),
+        temporary_removed: true,
+        context: RenderFailureContext::before_render(
+            RenderFailureStage::FrameComposition,
+            &prepared.plan,
+        ),
+        timings: RenderTimings::default(),
+    }
 }
 
 #[allow(

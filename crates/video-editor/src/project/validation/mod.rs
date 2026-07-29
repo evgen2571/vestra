@@ -37,7 +37,18 @@ pub(crate) fn preflight(
     );
     let duration =
         duration::resolve(canonical, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
-    let total_frames = frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1);
+    let total_frames = match frame_count(duration_nanos(duration), frame_rate.0, frame_rate.1) {
+        Ok(count) => count,
+        Err(_) => {
+            errors.push(crate::Diagnostic::error(
+                "MVP-TIMELINE-OVERFLOW",
+                crate::Category::Semantic,
+                "project duration or frame rate cannot be represented safely",
+                "/output",
+            ));
+            0
+        }
+    };
     let mut diagnostics = errors;
     diagnostics.extend(warnings.iter().cloned());
     let resolved = if diagnostics

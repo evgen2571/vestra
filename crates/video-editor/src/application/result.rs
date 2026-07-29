@@ -122,6 +122,8 @@ pub struct RenderResult {
     pub audio_present: bool,
     pub preview: bool,
     pub elapsed_ms: u128,
+    /// Identifies whether timing fields include preparation.
+    pub timing_scope: RenderTimingScope,
     pub timings: RenderTimings,
     pub performance: crate::render::PreparationStats,
     pub requested_render_backend: RenderBackendPreference,
@@ -132,6 +134,14 @@ pub struct RenderResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adapter: Option<AdapterMetadata>,
     pub warnings: Vec<Diagnostic>,
+}
+
+/// Scope of the timing fields in a render result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderTimingScope {
+    OneShot,
+    PreparedOperation,
 }
 
 pub fn render_result(
@@ -153,6 +163,7 @@ pub fn render_result(
         audio_present: summary.audio_present,
         preview: summary.preview,
         elapsed_ms: summary.elapsed_ms,
+        timing_scope: RenderTimingScope::OneShot,
         timings: summary.timings,
         performance: summary.performance,
         requested_render_backend: summary.requested_render_backend,

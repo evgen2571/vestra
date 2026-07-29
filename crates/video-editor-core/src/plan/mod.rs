@@ -15,7 +15,9 @@ pub use evaluation::{
 };
 pub use input::PlanCompileInput;
 pub use model::*;
-pub use schedule::{ActiveSchedule, ScheduleAction, ScheduleCursor, ScheduleEvent};
+pub use schedule::{
+    ActiveSchedule, ScheduleAction, ScheduleCursor, ScheduleEvent, sort_active_items,
+};
 
 #[cfg(test)]
 mod tests {

@@ -6,7 +6,7 @@
 use std::{
     path::PathBuf,
     sync::{Arc, atomic::AtomicBool},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
     project::ValidatedProject,
     render::{
         PreparedState, RenderBackendPreference, RenderError, RenderEvent, RenderOptions,
-        RenderSummary, prepare_for_video, render_prepared,
+        RenderSummary, prepare_for_video, render_prepared, render_prepared_frame,
     },
 };
 
@@ -61,6 +61,12 @@ pub(crate) struct PreparedRender {
 pub(crate) struct PreparedRenderMetadata {
     pub(crate) frame_rate: String,
     pub(crate) visual_clip_count: usize,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) frame_rate_ratio: (u64, u64),
+    pub(crate) frame_count: u64,
+    pub(crate) duration: Duration,
+    pub(crate) decoded_asset_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -72,6 +78,15 @@ pub(crate) struct PreparationTimings {
 }
 
 impl PreparedRender {
+    pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
+        self.requested_backend
+    }
+    pub(crate) const fn selected_backend(&self) -> crate::render::RenderBackendKind {
+        self.selected_backend
+    }
+    pub(crate) fn prepared_backend_fallback(&self) -> Option<crate::render::BackendFallback> {
+        self.backend_fallback.clone()
+    }
     pub(crate) fn preparation_warnings(&self) -> &[Diagnostic] {
         &self.preparation_warnings
     }
@@ -82,6 +97,18 @@ impl PreparedRender {
 
     pub(crate) fn result_metadata(&self) -> PreparedRenderMetadata {
         self.metadata.clone()
+    }
+
+    pub(crate) fn render_frame(
+        &mut self,
+        frame_number: u64,
+    ) -> Result<crate::render::CompletedFrame, ApplicationRenderError> {
+        render_prepared_frame(&mut self.prepared, frame_number).map_err(|error| {
+            ApplicationRenderError::Render {
+                error: Box::new(error),
+                plan_compile_elapsed_ms: self.plan_compile_elapsed_ms,
+            }
+        })
     }
 }
 
@@ -103,7 +130,7 @@ pub(crate) fn prepare_project(
         plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let plan_compile_elapsed_ms = compilation_started.elapsed().as_millis();
-    let prepared = prepare_for_video(&plan, request.backend_preference).map_err(|error| {
+    let prepared = prepare_for_video(plan, request.backend_preference).map_err(|error| {
         ApplicationRenderError::Render {
             error: Box::new(error),
             plan_compile_elapsed_ms,
@@ -112,6 +139,45 @@ pub(crate) fn prepare_project(
     let metadata = PreparedRenderMetadata {
         frame_rate: validated.project.output.frame_rate.display(),
         visual_clip_count: validated.visual_counts().0,
+        width: 0,
+        height: 0,
+        frame_rate_ratio: validated.frame_rate,
+        frame_count: validated.frame_count,
+        duration: Duration::from_nanos(
+            u64::try_from(
+                video_editor_core::timeline::seconds_to_nanos(validated.duration).ok_or_else(
+                    || ApplicationRenderError::Plan {
+                        diagnostic: Diagnostic::error(
+                            "MVP-TIMELINE-OVERFLOW",
+                            crate::Category::Render,
+                            "project duration cannot be represented",
+                            "",
+                        ),
+                        plan_compile_elapsed_ms,
+                    },
+                )?,
+            )
+            .map_err(|_| ApplicationRenderError::Plan {
+                diagnostic: Diagnostic::error(
+                    "MVP-TIMELINE-OVERFLOW",
+                    crate::Category::Render,
+                    "project duration cannot be represented",
+                    "",
+                ),
+                plan_compile_elapsed_ms,
+            })?,
+        ),
+        decoded_asset_count: 0,
+    };
+    let (width, height, frame_rate_ratio, frame_count, _duration, decoded_asset_count) =
+        prepared.frame_details();
+    let metadata = PreparedRenderMetadata {
+        width,
+        height,
+        frame_rate_ratio,
+        frame_count,
+        decoded_asset_count,
+        ..metadata
     };
     let renderer_preparation_timings = prepared.preparation_timings();
     Ok(PreparedRender {
@@ -193,7 +259,7 @@ mod tests {
     use std::{
         path::Path,
         sync::{
-            Arc,
+            Arc, Mutex,
             atomic::{AtomicUsize, Ordering},
         },
     };
@@ -206,9 +272,38 @@ mod tests {
         render::CompletedFrame,
     };
 
+    type CapturedFrames = Arc<Mutex<Vec<(u64, Vec<u8>)>>>;
+
     struct CountingSink {
         frames: u64,
         temporary_path: std::path::PathBuf,
+    }
+
+    struct CaptureSink {
+        frames: CapturedFrames,
+        temporary_path: std::path::PathBuf,
+    }
+
+    impl FrameSink for CaptureSink {
+        fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+            self.frames
+                .lock()
+                .expect("capture lock")
+                .push((frame.frame_number, frame.rgba.clone()));
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<SinkResult, MediaError> {
+            std::fs::write(&self.temporary_path, b"captured frames")
+                .map_err(MediaError::Publication)?;
+            Ok(SinkResult {
+                frames_written: self.frames.lock().expect("capture lock").len() as u64,
+            })
+        }
+
+        fn abort(&mut self) -> Result<(), MediaError> {
+            Ok(())
+        }
     }
 
     impl FrameSink for CountingSink {
@@ -279,5 +374,97 @@ mod tests {
         assert_eq!(frame_counts.len(), 2);
         assert!(frame_counts[0] > 0);
         assert_eq!(frame_counts[0], frame_counts[1]);
+    }
+
+    #[test]
+    fn random_cpu_frame_matches_the_pre_encoding_video_frame() {
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/wgpu-small-rgba.json");
+        let validated =
+            load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
+        let request = RenderRequest {
+            backend_preference: RenderBackendPreference::Cpu,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            output_override: None,
+            overwrite: true,
+            preview: false,
+        };
+        let mut prepared = prepare_project(
+            validated,
+            &request,
+            Vec::new(),
+            PreparationTimings::default(),
+        )
+        .expect("prepare CPU");
+        let random = prepared.render_frame(0).expect("random frame");
+        let workspace = tempfile::tempdir().expect("temporary output directory");
+        let output = workspace.path().join("parity.mp4");
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let sink_frames = Arc::clone(&captured);
+        render_prepared_project_with_sink(
+            &mut prepared,
+            RenderRequest {
+                output_override: Some(output),
+                ..request
+            },
+            &mut |_| {},
+            move |_settings, temporary_path| {
+                Ok(CaptureSink {
+                    frames: sink_frames,
+                    temporary_path: temporary_path.to_path_buf(),
+                })
+            },
+        )
+        .expect("video path");
+        let video = captured.lock().expect("capture lock");
+        assert_eq!(video.len(), 1);
+        assert_eq!(video[0].0, random.frame_number);
+        assert_eq!(video[0].1, random.rgba);
+    }
+
+    #[test]
+    fn random_cpu_frames_match_every_pre_encoding_animation_effects_frame() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/projects/animation-effects.json");
+        let validated =
+            load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
+        let request = RenderRequest {
+            backend_preference: RenderBackendPreference::Cpu,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            output_override: None,
+            overwrite: true,
+            preview: false,
+        };
+        let mut prepared = prepare_project(
+            validated,
+            &request,
+            Vec::new(),
+            PreparationTimings::default(),
+        )
+        .expect("prepare CPU");
+        let workspace = tempfile::tempdir().expect("temporary output directory");
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let sink_frames = Arc::clone(&captured);
+        render_prepared_project_with_sink(
+            &mut prepared,
+            RenderRequest {
+                output_override: Some(workspace.path().join("parity.mp4")),
+                ..request
+            },
+            &mut |_| {},
+            move |_settings, temporary_path| {
+                Ok(CaptureSink {
+                    frames: sink_frames,
+                    temporary_path: temporary_path.to_path_buf(),
+                })
+            },
+        )
+        .expect("video path");
+        let video = captured.lock().expect("capture lock");
+        assert!(!video.is_empty());
+        for (frame_number, pixels) in video.iter() {
+            let random = prepared.render_frame(*frame_number).expect("random frame");
+            assert_eq!(&random.rgba, pixels, "frame {frame_number}");
+        }
     }
 }

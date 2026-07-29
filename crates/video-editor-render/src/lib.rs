@@ -100,7 +100,15 @@ pub mod project {
             video_editor_core::timeline::seconds_to_nanos(duration).unwrap_or(0),
             frame_rate.0,
             frame_rate.1,
-        );
+        )
+        .map_err(|_| {
+            crate::Diagnostic::error(
+                "MVP-TIMELINE-OVERFLOW",
+                crate::Category::Semantic,
+                "project duration or frame rate cannot be represented safely",
+                "",
+            )
+        })?;
         Ok(crate::plan::PlanCompileInput::new(
             project,
             video_editor_core::validation::ResourceLimits::default(),

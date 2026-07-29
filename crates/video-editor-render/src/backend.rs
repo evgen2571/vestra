@@ -151,9 +151,28 @@ pub trait RenderBackend {
     }
     fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic>;
     fn abort(&mut self);
+    /// Confirms that a completed operation left no backend-owned work or
+    /// readback resource outstanding. The runner calls this before an output
+    /// can become visible to users.
+    fn verify_idle(&self) -> Result<(), Diagnostic> {
+        if self.in_flight() == 0 {
+            Ok(())
+        } else {
+            Err(Diagnostic::error(
+                "MVP-BACKEND-NOT-IDLE",
+                crate::Category::Backend,
+                "backend retained in-flight work after flush",
+                "",
+            ))
+        }
+    }
     fn stats(&mut self) -> PreparationStats;
     fn timings(&self) -> PreparationTimings;
     fn staged_metrics(&self) -> crate::metrics::StagedMetrics;
+    /// Starts a new video-operation metric window without rebuilding prepared
+    /// renderer resources. Callers must only invoke this while the backend is
+    /// idle, after all prior completions have been consumed.
+    fn reset_operation_metrics(&mut self) {}
     fn record_written(&mut self, frame_number: u64);
     fn record_ready_queue(&mut self, length: usize, out_of_order: bool);
     fn adapter(&self) -> Option<AdapterMetadata>;

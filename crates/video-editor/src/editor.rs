@@ -7,7 +7,7 @@ use std::{
 use crate::{
     CancellationToken, Diagnostic, InspectionReport, PreflightReport, Project, RenderEvent,
     RenderFailureContext, RenderResult, ValidationReport,
-    application::{self, ApplicationRenderError, RenderRequest},
+    application::{self, ApplicationRenderError, PreparationTimings, RenderRequest},
     project::{LoadError, ValidatedProject, ValidationOptions},
     render::RenderBackendPreference,
 };
@@ -291,6 +291,9 @@ impl Editor {
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
+        // Keep the one-shot SDK's established operation preflight contract.
+        // The private renderer preparation that follows remains independent of
+        // FFmpeg and output paths, so a future prepared API can call it alone.
         let options = PreflightOptions::for_render(
             request.backend,
             request.output.clone(),
@@ -311,17 +314,22 @@ impl Editor {
                 ),
             )
         })?;
-        let (validated, mut summary) = application::render_project(
-            project,
+        let render_request = RenderRequest {
+            output_override: request.output,
+            overwrite: request.overwrite,
+            preview: request.preview,
+            cancelled: cancellation.flag(),
+            backend_preference: request.backend,
+        };
+        let mut prepared = application::prepare_project(
             validated,
-            RenderRequest {
-                output_override: request.output,
-                overwrite: request.overwrite,
-                preview: request.preview,
-                cancelled: cancellation.flag(),
-                backend_preference: request.backend,
+            &render_request,
+            warnings.clone(),
+            PreparationTimings {
+                validation_ms: validation_elapsed.as_millis(),
+                preflight_ms: preflight_elapsed.as_millis(),
+                ..PreparationTimings::default()
             },
-            emit,
         )
         .map_err(|error| {
             Self::render_error(
@@ -333,19 +341,46 @@ impl Editor {
                 warnings.clone(),
             )
         })?;
+        let operation_preparation = prepared.preparation_timings();
+        let mut summary =
+            match application::render_prepared_project(&mut prepared, render_request, emit) {
+                Ok(summary) => summary,
+                Err(error) => {
+                    let mut editor_error = Self::render_error(
+                        error,
+                        project,
+                        operation_started,
+                        validation_elapsed,
+                        preflight_elapsed,
+                        warnings.clone(),
+                    );
+                    Self::apply_error_preparation_timings(
+                        &mut editor_error,
+                        operation_preparation.renderer,
+                    );
+                    return Err(editor_error);
+                }
+            };
+        let preparation_timings = prepared.preparation_timings();
+        summary.timings.plan_compile_ms = preparation_timings.plan_compile_ms;
         summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
-        summary.timings.semantic_validation_ms = validation_elapsed.as_millis();
-        summary.timings.preflight_ms = preflight_elapsed.as_millis();
+        summary.timings.semantic_validation_ms = preparation_timings.validation_ms;
+        summary.timings.preflight_ms = preparation_timings.preflight_ms;
+        Self::apply_renderer_preparation_timings(
+            &mut summary.timings,
+            preparation_timings.renderer,
+        );
         summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
         summary.timings.total_ms = summary.timings.operation_total_ms;
         summary.elapsed_ms = summary.timings.operation_total_ms;
+        warnings = prepared.preparation_warnings().to_vec();
         if let Some(fallback) = summary.backend_fallback.as_ref() {
             warnings.push(crate::render::backend_fallback_warning(fallback));
             warnings = Self::operation_warnings(&warnings);
         }
         Ok(application::render_result(
             Self::project_display_path(project),
-            validated,
+            prepared.result_metadata(),
             summary,
             warnings,
         ))
@@ -451,6 +486,27 @@ impl Editor {
             ..crate::RenderTimings::default()
         }
     }
+    fn apply_renderer_preparation_timings(
+        timings: &mut crate::RenderTimings,
+        preparation: crate::render::PreparationTimings,
+    ) {
+        timings.asset_decode_ms = preparation.decode.as_millis();
+        if preparation.gpu_initialization != std::time::Duration::ZERO {
+            timings.gpu_initialization_ms = Some(preparation.gpu_initialization.as_millis());
+            timings.gpu_adapter_request_ms = Some(preparation.gpu_adapter_request.as_millis());
+            timings.gpu_device_request_ms = Some(preparation.gpu_device_request.as_millis());
+            timings.gpu_pipeline_creation_ms = Some(preparation.gpu_pipeline_creation.as_millis());
+            timings.texture_upload_ms = Some(preparation.texture_upload.as_millis());
+        }
+    }
+    fn apply_error_preparation_timings(
+        error: &mut EditorError,
+        preparation: crate::render::PreparationTimings,
+    ) {
+        if let EditorError::Render { timings, .. } = error {
+            Self::apply_renderer_preparation_timings(timings, preparation);
+        }
+    }
     fn operation_warnings(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
         let mut warnings = Vec::new();
         for diagnostic in diagnostics
@@ -552,5 +608,71 @@ mod tests {
         assert_eq!(timings.plan_compile_ms, 23);
         assert_eq!(timings.semantic_validation_ms, 5);
         assert_eq!(timings.preflight_ms, 7);
+    }
+
+    #[test]
+    fn renderer_preparation_timing_snapshot_is_merged_without_operation_timing() {
+        let mut timings = crate::RenderTimings {
+            frame_render_ms: 31,
+            ..crate::RenderTimings::default()
+        };
+        Editor::apply_renderer_preparation_timings(
+            &mut timings,
+            crate::render::PreparationTimings {
+                decode: std::time::Duration::from_millis(11),
+                gpu_initialization: std::time::Duration::from_millis(13),
+                gpu_adapter_request: std::time::Duration::from_millis(17),
+                gpu_device_request: std::time::Duration::from_millis(19),
+                gpu_pipeline_creation: std::time::Duration::from_millis(23),
+                texture_upload: std::time::Duration::from_millis(29),
+                ..crate::render::PreparationTimings::default()
+            },
+        );
+        assert_eq!(timings.asset_decode_ms, 11);
+        assert_eq!(timings.gpu_initialization_ms, Some(13));
+        assert_eq!(timings.gpu_adapter_request_ms, Some(17));
+        assert_eq!(timings.gpu_device_request_ms, Some(19));
+        assert_eq!(timings.gpu_pipeline_creation_ms, Some(23));
+        assert_eq!(timings.texture_upload_ms, Some(29));
+        assert_eq!(timings.frame_render_ms, 31);
+    }
+
+    #[test]
+    fn prepared_render_failure_retains_renderer_preparation_timing_snapshot() {
+        let mut error = EditorError::Render {
+            diagnostic: Box::new(Diagnostic::error(
+                "MVP-RENDER",
+                crate::Category::Render,
+                "failed",
+                "",
+            )),
+            warnings: Vec::new(),
+            context: Box::new(crate::RenderFailureContext {
+                stage: crate::RenderFailureStage::FrameComposition,
+                last_completed_frame_index: None,
+                completed_frames: 0,
+                attempted_frame: None,
+                total_frames: 1,
+                timeline_position: None,
+                progress: Some(0.0),
+                output_path: None,
+                temporary_output_path: None,
+            }),
+            temporary_removed: true,
+            timings: crate::RenderTimings::default(),
+        };
+        Editor::apply_error_preparation_timings(
+            &mut error,
+            crate::render::PreparationTimings {
+                decode: std::time::Duration::from_millis(37),
+                gpu_initialization: std::time::Duration::from_millis(41),
+                ..crate::render::PreparationTimings::default()
+            },
+        );
+        let EditorError::Render { timings, .. } = error else {
+            panic!("expected render error");
+        };
+        assert_eq!(timings.asset_decode_ms, 37);
+        assert_eq!(timings.gpu_initialization_ms, Some(41));
     }
 }

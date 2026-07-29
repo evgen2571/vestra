@@ -136,7 +136,7 @@ pub struct RenderResult {
 
 pub fn render_result(
     project: &Path,
-    validated: crate::project::ValidatedProject,
+    metadata: crate::application::render::PreparedRenderMetadata,
     summary: RenderSummary,
     warnings: Vec<Diagnostic>,
 ) -> RenderResult {
@@ -146,10 +146,10 @@ pub fn render_result(
         output: summary.output_path,
         width: summary.width,
         height: summary.height,
-        frame_rate: validated.project.output.frame_rate.display(),
+        frame_rate: metadata.frame_rate,
         duration: summary.duration,
         total_frames: summary.frame_count,
-        visual_clip_count: validated.visual_counts().0,
+        visual_clip_count: metadata.visual_clip_count,
         audio_present: summary.audio_present,
         preview: summary.preview,
         elapsed_ms: summary.elapsed_ms,

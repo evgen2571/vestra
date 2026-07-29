@@ -280,6 +280,10 @@ impl ReadbackRing {
         self.metrics
     }
 
+    pub(super) fn reset_metrics(&mut self) {
+        self.metrics = ReadbackMetrics::default();
+    }
+
     pub(super) fn all_available(&self) -> bool {
         self.lifecycle.all_available()
     }

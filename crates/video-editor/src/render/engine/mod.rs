@@ -9,7 +9,9 @@ mod types;
 
 pub(crate) use types::backend_fallback_warning;
 
-pub use runner::render;
+#[cfg(test)]
+pub(crate) use runner::render_prepared_with_sink;
+pub(crate) use runner::{PreparedState, prepare_for_video, render_prepared};
 pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderOptions, RenderSummary, RenderTimings,

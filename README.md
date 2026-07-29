@@ -84,8 +84,12 @@ let result = editor.render(
 ```
 
 The SDK exposes structured inspection, validation, preflight, render results,
-events, and errors. It neither initializes logging nor prints or exits. CLI
-formatting, Ctrl-C installation, and exit-code mapping belong to
+events, and errors. A successful video operation emits `started`, zero or more
+pre-publication `progress` events with values below 1.0, then `completed` only
+after the output is published. `RenderObserverControl::Cancel` can stop a
+pre-publication operation. A `Cancel` returned for `completed` is ignored
+because publication has already succeeded. The SDK neither initializes logging
+nor prints or exits. CLI formatting, Ctrl-C installation, and exit-code mapping belong to
 `video-editor-cli`. `video-editor-core`, `video-editor-render`, and
 `video-editor-media` are implementation crates. Their public items support
 the workspace and are not stable SDK contracts.
@@ -157,13 +161,14 @@ workspace internals rather than contracts for future bindings.
 
 The public exports are classified as follows:
 
-- Stable high-level SDK: `Editor`, `EditorBuilder`, `EditorError`, `Project`,
+- Stable high-level SDK: `Editor`, `EditorBuilder`, `EditorError`, `EditorErrorKind`, `Project`,
   `PrepareOptions`, `PreparedProject`, `PreparedVideoRenderRequest`,
-  `RenderRequest`, `CancellationToken`, `RenderEvent`, `RenderResult`, and
+  `RenderRequest`, `CancellationToken`, `RenderEvent`, `RenderObserverControl`, `RenderResult`, and
   `RenderTimingScope`.
 - Stable SDK-owned DTOs: `Frame`, `PixelFormat`, `FrameRate`,
   `FrameRateError`, `PreparationReport`, `PreparationTimings`,
-  `ValidationReport`, `PreflightReport`, `InspectionReport`, `VersionResult`,
+  `ValidationReport`, `PreflightReport`, `InspectionReport`, `InspectOutput`,
+  `InspectAssets`, `InspectAudio`, `VersionResult`,
   `Diagnostic`, `Category`, `Severity`, `BackendPreference`, `BackendKind`,
   `BackendFallback`, `AdapterInfo`, `AdapterDeviceType`, `GraphicsBackend`,
   `RenderPerformance`, `RenderFailureContext`,

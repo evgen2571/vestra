@@ -14,8 +14,8 @@ use crate::{
     plan::{CompileOptions, compile},
     project::ValidatedProject,
     render::{
-        PreparedState, RenderBackendPreference, RenderError, RenderEvent, RenderOptions,
-        RenderSummary, prepare_for_video, render_prepared, render_prepared_frame,
+        PreparedState, RenderBackendPreference, RenderError, RenderEvent, RenderObserverControl,
+        RenderOptions, RenderSummary, prepare_for_video, render_prepared, render_prepared_frame,
     },
 };
 
@@ -189,7 +189,7 @@ pub(crate) fn prepare_project(
 pub(crate) fn render_prepared_project(
     prepared: &mut PreparedRender,
     request: RenderRequest,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
 ) -> Result<RenderSummary, ApplicationRenderError> {
     let summary = render_prepared(
         &mut prepared.prepared,
@@ -216,7 +216,7 @@ pub(crate) fn render_prepared_project(
 pub(crate) fn render_prepared_project_with_sink<S, SF>(
     prepared: &mut PreparedRender,
     request: RenderRequest,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
     start_sink: SF,
 ) -> Result<RenderSummary, ApplicationRenderError>
 where
@@ -347,7 +347,7 @@ mod tests {
                     output_override: Some(output.clone()),
                     ..request.clone()
                 },
-                &mut |_| {},
+                &mut |_| RenderObserverControl::Continue,
                 move |_settings, temporary_path| {
                     sink_creations.fetch_add(1, Ordering::Relaxed);
                     Ok(CountingSink {
@@ -397,7 +397,7 @@ mod tests {
                 output_override: Some(output),
                 ..request
             },
-            &mut |_| {},
+            &mut |_| RenderObserverControl::Continue,
             move |_settings, temporary_path| {
                 Ok(CaptureSink {
                     frames: sink_frames,
@@ -441,7 +441,7 @@ mod tests {
                 output_override: Some(workspace.path().join("parity.mp4")),
                 ..request
             },
-            &mut |_| {},
+            &mut |_| RenderObserverControl::Continue,
             move |_settings, temporary_path| {
                 Ok(CaptureSink {
                     frames: sink_frames,

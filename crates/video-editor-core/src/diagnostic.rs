@@ -15,11 +15,39 @@ pub enum Category {
     Internal,
 }
 
+impl Category {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Usage => "usage",
+            Self::Project => "project",
+            Self::Semantic => "semantic",
+            Self::Asset => "asset",
+            Self::Media => "media",
+            Self::Backend => "backend",
+            Self::Render => "render",
+            Self::Output => "output",
+            Self::Cancellation => "cancellation",
+            Self::Internal => "internal",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     Fatal,
     Warning,
+}
+
+impl Severity {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Fatal => "fatal",
+            Self::Warning => "warning",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

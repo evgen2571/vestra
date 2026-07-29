@@ -19,7 +19,7 @@ use video_editor_media::{EncoderSettings, FrameSink, MediaError, SinkResult};
 use video_editor_render::CpuBackend;
 
 use super::super::{
-    BackendFallback, RenderBackendPreference, RenderOptions,
+    BackendFallback, RenderBackendPreference, RenderObserverControl, RenderOptions,
     runner::{
         prepare, render_prepared_frame, render_prepared_with_sink, render_with_backend_builder,
         render_with_backend_builder_and_sink,
@@ -137,6 +137,7 @@ struct MockStagedBackend {
     duplicate: Option<CompletedFrame>,
     cancel_after_submit: Option<Arc<std::sync::atomic::AtomicBool>>,
     cancel_after_poll: Option<Arc<std::sync::atomic::AtomicBool>>,
+    cancel_on_idle_verify: Option<Arc<std::sync::atomic::AtomicBool>>,
     abort_count: Arc<AtomicUsize>,
 }
 
@@ -169,6 +170,7 @@ impl MockStagedBackend {
             duplicate: None,
             cancel_after_submit: None,
             cancel_after_poll: None,
+            cancel_on_idle_verify: None,
             abort_count: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -185,6 +187,11 @@ impl MockStagedBackend {
 
     fn cancel_after_poll(mut self, cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
         self.cancel_after_poll = Some(cancelled);
+        self
+    }
+
+    fn cancel_on_idle_verify(mut self, cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        self.cancel_on_idle_verify = Some(cancelled);
         self
     }
 
@@ -315,6 +322,9 @@ impl RenderBackend for MockStagedBackend {
     }
 
     fn verify_idle(&self) -> Result<(), Diagnostic> {
+        if let Some(cancelled) = &self.cancel_on_idle_verify {
+            cancelled.store(true, Ordering::Relaxed);
+        }
         if matches!(self.mode, MockMode::IdleFailure) {
             Err(Diagnostic::error(
                 "MOCK-NOT-IDLE",
@@ -399,7 +409,7 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
     let result = render_with_backend_builder_and_sink(
         &plan,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_, _, _| {
             Ok((
                 Box::new(MockStagedBackend::new(3, order, backend_written))
@@ -455,7 +465,7 @@ fn wgpu_frame_request_uses_the_shared_staged_completion_contract() {
     render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -552,7 +562,7 @@ fn prepared_state_reuses_one_backend_for_two_video_operations() {
         let result = render_prepared_with_sink(
             &mut prepared,
             &options,
-            &mut |_| {},
+            &mut |_| RenderObserverControl::Continue,
             |_settings: &EncoderSettings, temporary_path| {
                 Ok(RecordingSink::new(
                     temporary_path.to_path_buf(),
@@ -594,7 +604,10 @@ fn idle_failure_prevents_publication_and_invalidates_prepared_state() {
     let error = render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |event| events.push(event.kind),
+        &mut |event| {
+            events.push(event.kind);
+            RenderObserverControl::Continue
+        },
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -609,7 +622,7 @@ fn idle_failure_prevents_publication_and_invalidates_prepared_state() {
     let next = render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -648,7 +661,7 @@ fn already_cancelled_operation_keeps_prepared_backend_reusable() {
     let error = render_prepared_with_sink(
         &mut prepared,
         &cancelled,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -668,7 +681,7 @@ fn already_cancelled_operation_keeps_prepared_backend_reusable() {
     let summary = render_prepared_with_sink(
         &mut prepared,
         &fresh,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -714,7 +727,7 @@ fn prepared_state_rejects_reuse_after_submission_failure() {
     let first = render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -728,7 +741,7 @@ fn prepared_state_rejects_reuse_after_submission_failure() {
     let second = render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -765,7 +778,7 @@ fn output_precheck_failure_leaves_prepared_state_ready() {
     let error = render_prepared_with_sink(
         &mut prepared,
         &invalid,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, _temporary_path| -> Result<RecordingSink, MediaError> {
             panic!("sink must not start before output validation")
         },
@@ -780,7 +793,7 @@ fn output_precheck_failure_leaves_prepared_state_ready() {
     render_prepared_with_sink(
         &mut prepared,
         &corrected,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -816,7 +829,7 @@ fn encoder_startup_failure_leaves_prepared_state_ready() {
     let error = render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, _temporary_path| -> Result<RecordingSink, MediaError> {
             Err(MediaError::FrameInputClosed)
         },
@@ -827,7 +840,7 @@ fn encoder_startup_failure_leaves_prepared_state_ready() {
     render_prepared_with_sink(
         &mut prepared,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(
                 temporary_path.to_path_buf(),
@@ -885,7 +898,7 @@ fn prepared_visual_snapshot_ignores_later_source_file_changes() {
         render_prepared_with_sink(
             prepared,
             &options,
-            &mut |_| {},
+            &mut |_| RenderObserverControl::Continue,
             move |_settings: &EncoderSettings, temporary_path| {
                 Ok(PixelSink {
                     frames: sink_pixels,
@@ -936,7 +949,7 @@ fn preparation_fallback_is_retained_on_successful_render() {
     let result = render_with_backend_builder_and_sink(
         &plan,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         move |_, _, _| {
             Ok((
                 Box::new(MockStagedBackend::new(
@@ -980,7 +993,7 @@ fn preparation_fallback_is_retained_on_later_render_failure() {
     let error = render_with_backend_builder_and_sink(
         &plan,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         move |_, _, _| {
             Ok((
                 Box::new(
@@ -1035,7 +1048,7 @@ fn engine_rejects_a_sink_frame_count_mismatch_before_publication() {
     let error = render_with_backend_builder_and_sink(
         &plan,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         move |_, _, _| {
             Ok((
                 Box::new(MockStagedBackend::new(
@@ -1065,19 +1078,24 @@ fn run_failure_case(mode: MockMode) -> crate::render::RenderError {
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         backend_preference: RenderBackendPreference::Wgpu,
     };
-    render_with_backend_builder(&plan, &options, &mut |_| {}, move |_, _, _| {
-        Ok((
-            Box::new(
-                MockStagedBackend::new(
-                    3,
-                    (0..total_frames).collect(),
-                    Arc::new(Mutex::new(Vec::new())),
-                )
-                .failing(mode),
-            ) as Box<dyn RenderBackend>,
-            None,
-        ))
-    })
+    render_with_backend_builder(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(
+                        3,
+                        (0..total_frames).collect(),
+                        Arc::new(Mutex::new(Vec::new())),
+                    )
+                    .failing(mode),
+                ) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
     .expect_err("configured mock failure propagates")
 }
 
@@ -1112,7 +1130,7 @@ fn run_failure_with_recording_sink(
     let error = render_with_backend_builder_and_sink(
         &plan,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         move |_, _, _| Ok((Box::new(backend) as Box<dyn RenderBackend>, None)),
         move |_settings: &EncoderSettings, temporary_path| {
             let mut sink = RecordingSink::new(temporary_path.to_path_buf(), sink_probe);
@@ -1197,7 +1215,7 @@ fn cancellation_aborts_the_sink_and_keeps_cleanup_failure_as_a_hint() {
     let error = render_with_backend_builder_and_sink(
         &plan,
         &options,
-        &mut |_| {},
+        &mut |_| RenderObserverControl::Continue,
         move |_, _, _| Ok((Box::new(backend) as Box<dyn RenderBackend>, None)),
         move |_settings: &EncoderSettings, temporary_path| {
             Ok(RecordingSink::new(temporary_path.to_path_buf(), sink_probe).failing_abort())
@@ -1261,16 +1279,21 @@ fn engine_cancellation_stops_before_mock_submission() {
         cancelled,
         backend_preference: RenderBackendPreference::Wgpu,
     };
-    let error = render_with_backend_builder(&plan, &options, &mut |_| {}, |_, _, _| {
-        Ok((
-            Box::new(MockStagedBackend::new(
-                3,
-                Vec::new(),
-                Arc::new(Mutex::new(Vec::new())),
-            )) as Box<dyn RenderBackend>,
-            None,
-        ))
-    })
+    let error = render_with_backend_builder(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    3,
+                    Vec::new(),
+                    Arc::new(Mutex::new(Vec::new())),
+                )) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
     .expect_err("cancellation propagates");
     assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
 }
@@ -1289,15 +1312,20 @@ fn engine_cancellation_after_submission_discards_in_flight_work() {
         backend_preference: RenderBackendPreference::Wgpu,
     };
     let backend_written = Arc::clone(&written);
-    let error = render_with_backend_builder(&plan, &options, &mut |_| {}, move |_, _, _| {
-        Ok((
-            Box::new(
-                MockStagedBackend::new(3, Vec::new(), backend_written)
-                    .cancel_after_submit(cancelled),
-            ) as Box<dyn RenderBackend>,
-            None,
-        ))
-    })
+    let error = render_with_backend_builder(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(3, Vec::new(), backend_written)
+                        .cancel_after_submit(cancelled),
+                ) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
     .expect_err("in-flight cancellation propagates");
     assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
     assert!(written.lock().expect("mock metrics lock").is_empty());
@@ -1319,17 +1347,187 @@ fn engine_cancellation_during_final_drain_discards_polled_frame() {
     };
     let backend_written = Arc::clone(&written);
     let capacity = usize::try_from(plan.frame_count).expect("frame count fits usize");
-    let error = render_with_backend_builder(&plan, &options, &mut |_| {}, move |_, _, _| {
-        Ok((
-            Box::new(
-                MockStagedBackend::new(capacity, (0..plan.frame_count).collect(), backend_written)
+    let error = render_with_backend_builder(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(
+                        capacity,
+                        (0..plan.frame_count).collect(),
+                        backend_written,
+                    )
                     .cancel_after_poll(cancelled),
-            ) as Box<dyn RenderBackend>,
-            None,
-        ))
-    })
+                ) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
     .expect_err("final-drain cancellation propagates");
     assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
     assert!(written.lock().expect("mock metrics lock").is_empty());
     assert!(!output.exists());
+}
+
+#[test]
+fn observer_cancellation_stops_ready_queue_drain_before_another_frame_write() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("ready-queue-cancel.mp4");
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let backend_written = Arc::clone(&written);
+    let sink_probe = SinkProbe::default();
+    let sink_probe_for_start = sink_probe.clone();
+    let capacity = usize::try_from(plan.frame_count).expect("frame count fits usize");
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let error = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |event| {
+            if event.kind == "progress" {
+                RenderObserverControl::Cancel
+            } else {
+                RenderObserverControl::Continue
+            }
+        },
+        move |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    capacity,
+                    (0..plan.frame_count).collect(),
+                    backend_written,
+                )) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                sink_probe_for_start,
+            ))
+        },
+    )
+    .expect_err("observer cancellation must stop ready queue draining");
+    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(*written.lock().expect("mock metrics lock"), vec![0]);
+    assert_eq!(*sink_probe.frames.lock().expect("sink lock"), vec![0]);
+    assert_eq!(sink_probe.finish_count.load(Ordering::Relaxed), 0);
+    assert!(!output.exists());
+}
+
+#[test]
+fn callback_token_cancellation_stops_ready_queue_drain_before_another_frame_write() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("ready-queue-token-cancel.mp4");
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let callback_token = Arc::clone(&cancelled);
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let backend_written = Arc::clone(&written);
+    let sink_probe = SinkProbe::default();
+    let sink_probe_for_start = sink_probe.clone();
+    let capacity = usize::try_from(plan.frame_count).expect("frame count fits usize");
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled,
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let error = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |event| {
+            if event.kind == "progress" {
+                callback_token.store(true, Ordering::Relaxed);
+            }
+            RenderObserverControl::Continue
+        },
+        move |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    capacity,
+                    (0..plan.frame_count).collect(),
+                    backend_written,
+                )) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                sink_probe_for_start,
+            ))
+        },
+    )
+    .expect_err("callback token cancellation must stop ready queue draining");
+    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(*written.lock().expect("mock metrics lock"), vec![0]);
+    assert_eq!(*sink_probe.frames.lock().expect("sink lock"), vec![0]);
+    assert_eq!(sink_probe.finish_count.load(Ordering::Relaxed), 0);
+    assert!(!output.exists());
+}
+
+#[test]
+fn cancellation_after_frame_loop_stops_before_encoder_finalization() {
+    let plan = super::example_plan();
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let output = output_dir.path().join("pre-finalization-cancel.mp4");
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let sink_probe = SinkProbe::default();
+    let sink_probe_for_start = sink_probe.clone();
+    let total_frames = plan.frame_count;
+    let options = RenderOptions {
+        output_override: Some(output.clone()),
+        overwrite: true,
+        cancelled: Arc::clone(&cancelled),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let backend = MockStagedBackend::new(
+        1,
+        (0..total_frames).collect(),
+        Arc::new(Mutex::new(Vec::new())),
+    )
+    .cancel_on_idle_verify(cancelled);
+    let backend_aborts = backend.abort_count();
+    let mut prepared = prepare(&plan, RenderBackendPreference::Wgpu, move |_, _, _| {
+        Ok((Box::new(backend) as Box<dyn RenderBackend>, None))
+    })
+    .expect("preparation succeeds");
+    let error = render_prepared_with_sink(
+        &mut prepared,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_settings: &EncoderSettings, temporary_path| {
+            fs::write(temporary_path, b"partial encoded output")
+                .map_err(MediaError::Publication)?;
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                sink_probe_for_start,
+            ))
+        },
+    )
+    .expect_err("cancellation before finalization must stop the operation");
+    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert!(error.temporary_removed);
+    assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
+    assert_eq!(sink_probe.finish_count.load(Ordering::Relaxed), 0);
+    assert_eq!(sink_probe.abort_count.load(Ordering::Relaxed), 1);
+    assert!(!output.exists());
+    assert!(
+        fs::read_dir(output_dir.path())
+            .expect("output directory remains readable")
+            .next()
+            .is_none(),
+        "cancellation removes the encoder temporary output"
+    );
+    let later = render_prepared_frame(&mut prepared, 0)
+        .expect_err("post-submission cancellation invalidates prepared state");
+    assert_eq!(later.diagnostic.code, "MVP-PREPARED-INVALIDATED");
 }

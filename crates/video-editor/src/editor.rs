@@ -15,6 +15,31 @@ use crate::{
     render::RenderBackendPreference,
 };
 
+/// Stable category for an [`EditorError`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorErrorKind {
+    Project,
+    Plan,
+    Render,
+}
+
+impl EditorErrorKind {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Plan => "plan",
+            Self::Render => "render",
+        }
+    }
+}
+
+impl fmt::Display for EditorErrorKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 /// Reusable entry point for the supported SDK workflows.
 #[derive(Clone, Debug, Default)]
 pub struct Editor;
@@ -137,6 +162,14 @@ pub enum EditorError {
 
 impl EditorError {
     #[must_use]
+    pub const fn kind(&self) -> EditorErrorKind {
+        match self {
+            Self::Project { .. } => EditorErrorKind::Project,
+            Self::Plan { .. } => EditorErrorKind::Plan,
+            Self::Render { .. } => EditorErrorKind::Render,
+        }
+    }
+    #[must_use]
     pub fn diagnostics(&self) -> &[Diagnostic] {
         match self {
             Self::Project { errors, .. } => errors,
@@ -151,6 +184,38 @@ impl EditorError {
             Self::Project { warnings, .. } => warnings,
             Self::Plan { warnings, .. } | Self::Render { warnings, .. } => warnings,
         }
+    }
+    #[must_use]
+    pub const fn timings(&self) -> &crate::RenderTimings {
+        match self {
+            Self::Project { timings, .. }
+            | Self::Plan { timings, .. }
+            | Self::Render { timings, .. } => timings,
+        }
+    }
+    #[must_use]
+    pub fn render_failure_context(&self) -> Option<&RenderFailureContext> {
+        match self {
+            Self::Render { context, .. } => Some(context),
+            Self::Project { .. } | Self::Plan { .. } => None,
+        }
+    }
+    #[must_use]
+    pub const fn temporary_output_removed(&self) -> Option<bool> {
+        match self {
+            Self::Render {
+                temporary_removed, ..
+            } => Some(*temporary_removed),
+            Self::Project { .. } | Self::Plan { .. } => None,
+        }
+    }
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.kind() == EditorErrorKind::Render
+            && self
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.category == crate::Category::Cancellation)
     }
 }
 
@@ -454,6 +519,31 @@ impl Editor {
         emit: &mut dyn FnMut(RenderEvent),
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        self.render_with_observer(
+            project,
+            request,
+            |event| {
+                emit(event);
+                crate::RenderObserverControl::Continue
+            },
+            cancellation,
+        )
+    }
+
+    /// Renders while allowing a synchronous observer to stop before output
+    /// publication. A cancellation requested for the post-publication
+    /// `completed` event is intentionally ignored.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render diagnostics retain operation timings for CLI report output"
+    )]
+    pub fn render_with_observer(
+        &self,
+        project: &Project,
+        request: SdkRenderRequest,
+        mut emit: impl FnMut(RenderEvent) -> crate::RenderObserverControl,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
         let coordinated =
             self.prepare_internal(project, InternalPreparationTarget::OneShot(&request))?;
         let operation_started = coordinated.started;
@@ -468,7 +558,7 @@ impl Editor {
         let mut warnings = prepared.preparation_warnings().to_vec();
         let operation_preparation = prepared.preparation_timings();
         let mut summary =
-            match application::render_prepared_project(&mut prepared, render_request, emit) {
+            match application::render_prepared_project(&mut prepared, render_request, &mut emit) {
                 Ok(summary) => summary,
                 Err(error) => {
                     let mut editor_error = Self::render_error(
@@ -702,9 +792,80 @@ pub struct SdkRenderRequest {
     pub backend: RenderBackendPreference,
 }
 
+impl SdkRenderRequest {
+    #[must_use]
+    pub fn output(&self) -> Option<&Path> {
+        self.output.as_deref()
+    }
+    #[must_use]
+    pub const fn overwrite(&self) -> bool {
+        self.overwrite
+    }
+    #[must_use]
+    pub const fn preview(&self) -> bool {
+        self.preview
+    }
+    #[must_use]
+    pub const fn backend(&self) -> RenderBackendPreference {
+        self.backend
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editor_error_accessors_cover_every_variant() {
+        let diagnostic = Diagnostic::error("MVP-TEST", crate::Category::Render, "failed", "");
+        let project = EditorError::Project {
+            errors: vec![diagnostic.clone()],
+            warnings: Vec::new(),
+            timings: crate::RenderTimings::default(),
+        };
+        let plan = EditorError::Plan {
+            diagnostic: Box::new(diagnostic.clone()),
+            warnings: vec![Diagnostic::warning("MVP-WARN", "warning", "")],
+            timings: crate::RenderTimings::default(),
+        };
+        let render = EditorError::Render {
+            diagnostic: Box::new(Diagnostic::error(
+                "MVP-CANCELLED",
+                crate::Category::Cancellation,
+                "cancelled",
+                "",
+            )),
+            warnings: Vec::new(),
+            context: Box::new(crate::RenderFailureContext {
+                stage: crate::RenderFailureStage::Cancellation,
+                last_completed_frame_index: None,
+                completed_frames: 0,
+                attempted_frame: None,
+                total_frames: 1,
+                timeline_position: None,
+                progress: Some(0.0),
+                output_path: None,
+                temporary_output_path: None,
+            }),
+            temporary_removed: true,
+            timings: crate::RenderTimings::default(),
+        };
+
+        assert_eq!(project.kind(), EditorErrorKind::Project);
+        assert!(project.render_failure_context().is_none());
+        assert_eq!(project.temporary_output_removed(), None);
+        assert!(!project.is_cancelled());
+        assert_eq!(plan.kind(), EditorErrorKind::Plan);
+        assert_eq!(plan.warnings().len(), 1);
+        assert_eq!(render.kind(), EditorErrorKind::Render);
+        assert_eq!(
+            render.render_failure_context().map(|context| context.stage),
+            Some(crate::RenderFailureStage::Cancellation)
+        );
+        assert_eq!(render.temporary_output_removed(), Some(true));
+        assert!(render.is_cancelled());
+        assert_eq!(render.timings().total_ms, 0);
+    }
 
     #[test]
     fn render_failure_keeps_compilation_timing_and_deduplicates_fallback_warning() {

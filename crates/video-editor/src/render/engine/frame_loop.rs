@@ -15,7 +15,8 @@ use video_editor_core::timeline::frame_time_nanos;
 use video_editor_media::{FrameSink, OutputTarget};
 
 use super::{
-    RenderError, RenderEvent, RenderFailureStage, RenderOptions, events, failure::cleanup_error,
+    RenderError, RenderEvent, RenderFailureStage, RenderObserverControl, RenderOptions, events,
+    failure::cleanup_error,
 };
 
 pub(super) struct FrameLoopResult {
@@ -41,7 +42,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
     backend: &mut dyn RenderBackend,
     encoder: &mut S,
     performance: &mut PreparationStats,
-    emit: &mut dyn FnMut(RenderEvent),
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
 ) -> Result<FrameLoopResult, RenderError> {
     let capacity = backend.capacity();
     debug_assert!(capacity > 0);
@@ -189,6 +190,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
             performance,
             plan,
             output,
+            options,
             emit,
             &mut encoder_write,
         ) {
@@ -350,6 +352,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         performance,
         plan,
         output,
+        options,
         emit,
         &mut encoder_write,
     ) {
@@ -447,10 +450,25 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
     performance: &mut PreparationStats,
     plan: &RenderPlan,
     output: &OutputTarget,
-    emit: &mut dyn FnMut(RenderEvent),
+    options: &RenderOptions,
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
     encoder_write: &mut Duration,
 ) -> Result<(), RenderError> {
     while let Some(frame) = ready_frames.remove(next_frame_to_write) {
+        // A callback can cancel while several completed frames are already
+        // ordered in this queue. Observe the shared token before every write,
+        // not merely at the next submission or polling boundary.
+        if options.cancelled.load(Ordering::Relaxed) {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                *completed_frames,
+                Some(frame.frame_number),
+            )
+            .map(|_| ());
+        }
         let write_started = Instant::now();
         if let Err(error) = encoder.write_frame(&frame) {
             let cleanup = abort_sink(encoder);
@@ -472,15 +490,44 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
         *completed_frames += 1;
         *next_frame_to_write += 1;
         performance.rendered_frame_count = *completed_frames;
-        emit_progress(*completed_frames, plan.frame_count, emit);
+        if *completed_frames < plan.frame_count
+            && emit_progress(*completed_frames, plan.frame_count, emit)
+                == RenderObserverControl::Cancel
+        {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                *completed_frames,
+                Some(frame.frame_number),
+            )
+            .map(|_| ());
+        }
+        // The compatibility observer returns `()`, so it can only request
+        // termination through the shared token. Check it synchronously after
+        // each forwarded progress event.
+        if options.cancelled.load(Ordering::Relaxed) {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                *completed_frames,
+                Some(frame.frame_number),
+            )
+            .map(|_| ());
+        }
     }
     Ok(())
 }
 
-fn emit_progress(completed_frames: u64, total_frames: u64, emit: &mut dyn FnMut(RenderEvent)) {
-    if completed_frames < total_frames {
-        emit(events::progress(completed_frames, total_frames));
-    }
+fn emit_progress(
+    completed_frames: u64,
+    total_frames: u64,
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+) -> RenderObserverControl {
+    emit(events::progress(completed_frames, total_frames))
 }
 
 fn with_encoder_cleanup(diagnostic: Diagnostic, cleanup: Option<String>) -> Diagnostic {

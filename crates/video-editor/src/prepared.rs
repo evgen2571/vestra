@@ -114,6 +114,14 @@ impl PreparedVideoRenderRequest {
         self.overwrite = overwrite;
         self
     }
+    #[must_use]
+    pub fn output(&self) -> &std::path::Path {
+        &self.output
+    }
+    #[must_use]
+    pub const fn overwrite(&self) -> bool {
+        self.overwrite
+    }
 }
 
 /// Pixel storage returned by prepared single-frame rendering.
@@ -125,11 +133,28 @@ pub enum PixelFormat {
     Rgba8,
 }
 
+impl PixelFormat {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        "rgba8"
+    }
+}
+
 /// Backend retained by a prepared project.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendKind {
     Cpu,
     Wgpu,
+}
+
+impl BackendKind {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Cpu => "cpu",
+            Self::Wgpu => "wgpu",
+        }
+    }
 }
 
 impl From<RenderBackendKind> for BackendKind {
@@ -395,6 +420,29 @@ impl PreparedProject {
         &mut self,
         request: PreparedVideoRenderRequest,
         mut emit: impl FnMut(RenderEvent),
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        self.render_video_with_observer(
+            request,
+            |event| {
+                emit(event);
+                crate::RenderObserverControl::Continue
+            },
+            cancellation,
+        )
+    }
+
+    /// Renders while allowing a synchronous observer to stop before output
+    /// publication. A cancellation requested for the post-publication
+    /// `completed` event is intentionally ignored.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render failures retain diagnostics"
+    )]
+    pub fn render_video_with_observer(
+        &mut self,
+        request: PreparedVideoRenderRequest,
+        mut emit: impl FnMut(RenderEvent) -> crate::RenderObserverControl,
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
         let operation_started = Instant::now();

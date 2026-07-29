@@ -10,13 +10,14 @@ mod project;
 mod render;
 
 pub use application::{
-    InspectResult as InspectionReport, RenderResult, RenderTimingScope, ValidateResult,
-    VersionResult,
+    InspectAssets, InspectAudio, InspectOutput, InspectResult as InspectionReport, RenderResult,
+    RenderTimingScope, ValidateResult, VersionResult,
 };
 pub use cancellation::CancellationToken;
 pub use dto::{AdapterDeviceType, AdapterInfo, GraphicsBackend, RenderPerformance};
 pub use editor::{
-    Editor, EditorBuilder, EditorError, PreflightOptions, SdkRenderRequest as RenderRequest,
+    Editor, EditorBuilder, EditorError, EditorErrorKind, PreflightOptions,
+    SdkRenderRequest as RenderRequest,
 };
 pub use prepared::{
     BackendKind, Frame, FrameRate, FrameRateError, PixelFormat, PreparationReport,
@@ -25,7 +26,7 @@ pub use prepared::{
 pub use project::{LoadError, Project};
 pub use render::{
     BackendFallback, RenderBackendPreference as BackendPreference, RenderEvent,
-    RenderFailureContext, RenderFailureStage, RenderTimings,
+    RenderFailureContext, RenderFailureStage, RenderObserverControl, RenderTimings,
 };
 pub use video_editor_core::{Category, Diagnostic, Severity};
 

@@ -143,21 +143,8 @@ pub(crate) fn prepare_project(
         height: 0,
         frame_rate_ratio: validated.frame_rate,
         frame_count: validated.frame_count,
-        duration: Duration::from_nanos(
-            u64::try_from(
-                video_editor_core::timeline::seconds_to_nanos(validated.duration).ok_or_else(
-                    || ApplicationRenderError::Plan {
-                        diagnostic: Diagnostic::error(
-                            "MVP-TIMELINE-OVERFLOW",
-                            crate::Category::Render,
-                            "project duration cannot be represented",
-                            "",
-                        ),
-                        plan_compile_elapsed_ms,
-                    },
-                )?,
-            )
-            .map_err(|_| ApplicationRenderError::Plan {
+        duration: Duration::from_nanos(u64::try_from(validated.duration_nanos).map_err(|_| {
+            ApplicationRenderError::Plan {
                 diagnostic: Diagnostic::error(
                     "MVP-TIMELINE-OVERFLOW",
                     crate::Category::Render,
@@ -165,8 +152,8 @@ pub(crate) fn prepare_project(
                     "",
                 ),
                 plan_compile_elapsed_ms,
-            })?,
-        ),
+            }
+        })?),
         decoded_asset_count: 0,
     };
     let (width, height, frame_rate_ratio, frame_count, _duration, decoded_asset_count) =

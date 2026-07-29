@@ -4,7 +4,7 @@ use std::time::Duration;
 use tempfile::tempdir;
 use video_editor::{
     BackendPreference, CancellationToken, Editor, EditorError, PreflightOptions, PrepareOptions,
-    PreparedVideoRenderRequest, RenderRequest,
+    PreparedProject, PreparedVideoRenderRequest, RenderRequest,
 };
 
 fn fixture(path: &str) -> PathBuf {
@@ -13,13 +13,214 @@ fn fixture(path: &str) -> PathBuf {
         .join(path)
 }
 
+fn background_project(directory: &std::path::Path) -> video_editor::Project {
+    video_editor::Project::from_json(
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        directory,
+    )
+    .expect("project")
+}
+
+fn wgpu_prepared_or_skip(project: &video_editor::Project) -> Option<PreparedProject> {
+    match Editor::new().prepare(project, PrepareOptions::new(BackendPreference::Wgpu)) {
+        Ok(prepared) => Some(prepared),
+        Err(error) if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_none() => {
+            eprintln!("skipping public WGPU runtime test: {error}");
+            None
+        }
+        Err(error) => panic!("strict WGPU verification requires an adapter: {error}"),
+    }
+}
+
 #[test]
 fn public_auto_traits_are_explicit() {
     fn assert_send_sync<T: Send + Sync>() {}
+    fn assert_send<T: Send>() {}
     assert_send_sync::<video_editor::Frame>();
+    assert_send_sync::<video_editor::FrameRate>();
+    assert_send_sync::<video_editor::PreparationReport>();
     assert_send_sync::<Editor>();
-    // PreparedProject deliberately has exclusive operations and contains an
-    // opaque backend trait object, so Phase 6B does not promise Send or Sync.
+    assert_send::<video_editor::PreparedProject>();
+}
+
+#[test]
+fn public_wgpu_prepared_frames_are_reusable_and_owned_when_an_adapter_is_available() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let Some(mut prepared) = wgpu_prepared_or_skip(&project) else {
+        return;
+    };
+    assert_eq!(
+        prepared.preparation_report().selected_backend(),
+        video_editor::BackendKind::Wgpu
+    );
+    let first = prepared.render_frame_number(0).expect("first frame");
+    let retained = first.as_bytes().to_vec();
+    let middle = prepared.render_frame_number(12).expect("middle frame");
+    let earlier = prepared.render_frame_number(4).expect("earlier frame");
+    let again = prepared.render_frame_number(0).expect("repeated frame");
+    assert_eq!(first.as_bytes(), again.as_bytes());
+    assert_eq!(middle.frame_number(), 12);
+    assert_eq!(earlier.frame_number(), 4);
+    drop(prepared);
+    assert_eq!(first.as_bytes(), retained);
+}
+
+#[test]
+fn public_wgpu_frame_video_cross_reuse_keeps_metrics_operation_local_when_an_adapter_is_available()
+{
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let Some(mut prepared) = wgpu_prepared_or_skip(&project) else {
+        return;
+    };
+    let report = prepared.preparation_report().clone();
+    let frame_before = prepared.render_frame_number(3).expect("frame before video");
+    let first = prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(directory.path().join("first.mp4"))
+                .with_overwrite(true),
+            |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("first video");
+    let frame_after = prepared.render_frame_number(22).expect("frame after video");
+    let second = prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(directory.path().join("second.mp4"))
+                .with_overwrite(true),
+            |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("second video");
+
+    assert_eq!(frame_before.frame_number(), 3);
+    assert_eq!(frame_after.frame_number(), 22);
+    assert_eq!(first.render_backend, "wgpu");
+    assert_eq!(second.render_backend, "wgpu");
+    for result in [&first, &second] {
+        assert_eq!(result.performance.submitted_frames, result.total_frames);
+        assert_eq!(
+            result.performance.backend_completed_frames,
+            result.total_frames
+        );
+        assert_eq!(
+            result.performance.written_frames_staged,
+            result.total_frames
+        );
+        assert_eq!(
+            result.performance.command_submission_count,
+            result.total_frames
+        );
+        assert_eq!(result.performance.mapping_failure_count, 0);
+    }
+    assert_eq!(
+        first.performance.submitted_frames,
+        second.performance.submitted_frames
+    );
+    assert_eq!(
+        prepared.preparation_report().selected_backend(),
+        report.selected_backend()
+    );
+    assert_eq!(
+        prepared.preparation_report().timings().total_ms,
+        report.timings().total_ms
+    );
+}
+
+#[test]
+fn public_cpu_wgpu_frame_parity_is_exact_for_background_when_an_adapter_is_available() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let mut cpu = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("CPU prepare");
+    let Some(mut wgpu) = wgpu_prepared_or_skip(&project) else {
+        return;
+    };
+    let cpu_frame = cpu.render_frame_number(0).expect("CPU frame");
+    let wgpu_frame = wgpu.render_frame_number(0).expect("WGPU frame");
+    assert_eq!(cpu_frame.width(), wgpu_frame.width());
+    assert_eq!(cpu_frame.height(), wgpu_frame.height());
+    assert_eq!(cpu_frame.frame_number(), wgpu_frame.frame_number());
+    assert_eq!(cpu_frame.timestamp(), wgpu_frame.timestamp());
+    assert_eq!(cpu_frame.pixel_format(), wgpu_frame.pixel_format());
+    assert_eq!(cpu_frame.as_bytes(), wgpu_frame.as_bytes());
+}
+
+fn assert_public_frame_parity(
+    cpu: &video_editor::Frame,
+    wgpu: &video_editor::Frame,
+    tolerance: u8,
+) {
+    assert_eq!(cpu.width(), wgpu.width());
+    assert_eq!(cpu.height(), wgpu.height());
+    assert_eq!(cpu.frame_number(), wgpu.frame_number());
+    assert_eq!(cpu.timestamp(), wgpu.timestamp());
+    assert_eq!(cpu.pixel_format(), wgpu.pixel_format());
+    assert_eq!(cpu.as_bytes().len(), wgpu.as_bytes().len());
+    let mut maximum_difference = 0_u8;
+    let mut total_difference = 0_u64;
+    let mut outside_tolerance = 0_u64;
+    for (&left, &right) in cpu.as_bytes().iter().zip(wgpu.as_bytes()) {
+        let difference = left.abs_diff(right);
+        maximum_difference = maximum_difference.max(difference);
+        total_difference += u64::from(difference);
+        outside_tolerance += u64::from(difference > tolerance);
+    }
+    let channels = cpu.as_bytes().len() as u64;
+    let mean_difference = total_difference as f64 / channels as f64;
+    assert!(
+        maximum_difference <= tolerance,
+        "public parity exceeded tolerance {tolerance}: max={maximum_difference}, mean={mean_difference:.3}, outside={outside_tolerance}/{channels}"
+    );
+}
+
+#[test]
+fn public_cpu_wgpu_parity_covers_image_alpha_and_effect_fixtures_when_an_adapter_is_available() {
+    for (path, tolerance) in [
+        ("tests/fixtures/wgpu-small-rgba.json", 2_u8),
+        ("examples/projects/animation-effects.json", 2),
+        ("examples/compositing/blend-modes.json", 2),
+        ("examples/transitions/zoom-crossfade.json", 2),
+        ("examples/transitions/flash-cut.json", 2),
+        ("examples/effects/color-adjust.json", 2),
+        ("examples/effects/gaussian-blur.json", 2),
+    ] {
+        let project = Editor::new().load_project(fixture(path)).expect("project");
+        let mut cpu = Editor::new()
+            .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+            .expect("CPU prepare");
+        let Some(mut wgpu) = wgpu_prepared_or_skip(&project) else {
+            return;
+        };
+        let frame_count = cpu.preparation_report().frame_count();
+        let mut frames = vec![0, frame_count / 2, frame_count - 1];
+        frames.sort_unstable();
+        frames.dedup();
+        for frame_number in frames {
+            let cpu_frame = cpu.render_frame_number(frame_number).expect("CPU frame");
+            let wgpu_frame = wgpu.render_frame_number(frame_number).expect("WGPU frame");
+            assert_public_frame_parity(&cpu_frame, &wgpu_frame, tolerance);
+        }
+    }
+}
+
+#[test]
+fn frame_rate_normalizes_and_rejects_zero_components() {
+    let normalized = video_editor::FrameRate::new(60_000, 2_002).expect("valid frame rate");
+    assert_eq!(
+        (normalized.numerator(), normalized.denominator()),
+        (30_000, 1_001)
+    );
+    assert_eq!(
+        video_editor::FrameRate::new(0, 1),
+        Err(video_editor::FrameRateError::ZeroNumerator)
+    );
+    assert_eq!(
+        video_editor::FrameRate::new(1, 0),
+        Err(video_editor::FrameRateError::ZeroDenominator)
+    );
 }
 
 #[test]
@@ -84,7 +285,8 @@ fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
     };
     drop(project);
     let report = prepared.preparation_report();
-    assert_eq!(report.frame_rate(), (30_000, 1_001));
+    assert_eq!(report.frame_rate().numerator(), 30_000);
+    assert_eq!(report.frame_rate().denominator(), 1_001);
     assert!(report.supports_single_frame_rendering());
     assert_eq!(report.width(), 2);
     let duration = report.duration();

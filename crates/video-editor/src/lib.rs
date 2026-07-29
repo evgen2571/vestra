@@ -17,14 +17,27 @@ pub use editor::{
     Editor, EditorBuilder, EditorError, PreflightOptions, SdkRenderRequest as RenderRequest,
 };
 pub use prepared::{
-    BackendKind, Frame, PixelFormat, PreparationReport, PreparationTimings, PrepareOptions,
-    PreparedProject, PreparedVideoRenderRequest,
+    BackendKind, Frame, FrameRate, FrameRateError, PixelFormat, PreparationReport,
+    PreparationTimings, PrepareOptions, PreparedProject, PreparedVideoRenderRequest,
 };
 pub use project::{LoadError, Project};
+/// Legacy renderer-oriented compatibility export. New SDK integrations should
+/// use `PreparationReport` and `BackendFallback` instead.
+#[deprecated(
+    since = "0.1.0",
+    note = "renderer-oriented compatibility export; use SDK preparation reports instead"
+)]
+pub use render::AdapterPerformanceClass;
+/// Legacy renderer-oriented compatibility export. New SDK integrations should
+/// use `PreparationReport` and per-operation `RenderResult` fields instead.
+#[deprecated(
+    since = "0.1.0",
+    note = "renderer-oriented compatibility export; use SDK reports instead"
+)]
+pub use render::PreparationStats;
 pub use render::{
-    AdapterMetadata, AdapterPerformanceClass, BackendFallback, PreparationStats,
-    RenderBackendPreference as BackendPreference, RenderEvent, RenderFailureContext,
-    RenderFailureStage, RenderTimings,
+    AdapterMetadata, BackendFallback, RenderBackendPreference as BackendPreference, RenderEvent,
+    RenderFailureContext, RenderFailureStage, RenderTimings,
 };
 pub use video_editor_core::{Category, Diagnostic, Severity};
 

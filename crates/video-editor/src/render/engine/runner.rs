@@ -198,15 +198,10 @@ pub(crate) fn render_prepared_frame(
     if frame_number >= prepared.plan.frame_count {
         return Err(frame_error(
             prepared,
-            "MVP-FRAME-RANGE",
-            "frame number is outside the prepared timeline",
-        ));
-    }
-    if prepared.selected_backend != RenderBackendKind::Cpu {
-        return Err(frame_error(
-            prepared,
-            "MVP-PREPARED-FRAME-BACKEND",
-            "single-frame rendering requires a CPU prepared project",
+            frame_diagnostic(
+                "MVP-FRAME-RANGE",
+                "frame number is outside the prepared timeline",
+            ),
         ));
     }
     let active = prepared.schedule.active_at(&prepared.plan, frame_number);
@@ -218,8 +213,10 @@ pub(crate) fn render_prepared_frame(
     .map_err(|_| {
         frame_error(
             prepared,
-            "MVP-TIMELINE-OVERFLOW",
-            "frame timestamp cannot be represented",
+            frame_diagnostic(
+                "MVP-TIMELINE-OVERFLOW",
+                "frame timestamp cannot be represented",
+            ),
         )
     })?;
     let evaluated = video_editor_core::plan::evaluate(&prepared.plan, &active, time);
@@ -227,7 +224,7 @@ pub(crate) fn render_prepared_frame(
     if let Err(diagnostic) = prepared.backend.submit_frame(frame_number, &evaluated) {
         prepared.backend.abort();
         prepared.invalidate();
-        return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+        return Err(frame_error(prepared, diagnostic));
     }
     let completion = match prepared.backend.poll_completed(PollMode::WaitForOne) {
         Ok(Some(completion)) => completion,
@@ -236,14 +233,16 @@ pub(crate) fn render_prepared_frame(
             prepared.invalidate();
             return Err(frame_error(
                 prepared,
-                "MVP-FRAME-COMPLETION",
-                "backend did not complete the submitted frame",
+                frame_diagnostic(
+                    "MVP-FRAME-COMPLETION",
+                    "backend did not complete the submitted frame",
+                ),
             ));
         }
         Err(diagnostic) => {
             prepared.backend.abort();
             prepared.invalidate();
-            return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+            return Err(frame_error(prepared, diagnostic));
         }
     };
     if completion.frame_number != frame_number {
@@ -251,9 +250,16 @@ pub(crate) fn render_prepared_frame(
         prepared.invalidate();
         return Err(frame_error(
             prepared,
-            "MVP-FRAME-COMPLETION",
-            "backend completed an unexpected frame",
+            frame_diagnostic(
+                "MVP-FRAME-COMPLETION",
+                "backend completed an unexpected frame",
+            ),
         ));
+    }
+    if let Err(diagnostic) = validate_completed_frame(&prepared.plan, &completion) {
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(frame_error(prepared, diagnostic));
     }
     match prepared.backend.flush() {
         Ok(extra) if extra.is_empty() => {}
@@ -262,27 +268,66 @@ pub(crate) fn render_prepared_frame(
             prepared.invalidate();
             return Err(frame_error(
                 prepared,
-                "MVP-FRAME-COMPLETION",
-                "backend retained an unexpected completion",
+                frame_diagnostic(
+                    "MVP-FRAME-COMPLETION",
+                    "backend retained an unexpected completion",
+                ),
             ));
         }
         Err(diagnostic) => {
             prepared.backend.abort();
             prepared.invalidate();
-            return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+            return Err(frame_error(prepared, diagnostic));
         }
     }
     if let Err(diagnostic) = prepared.backend.verify_idle() {
         prepared.backend.abort();
         prepared.invalidate();
-        return Err(frame_error(prepared, &diagnostic.code, &diagnostic.message));
+        return Err(frame_error(prepared, diagnostic));
     }
     Ok(completion)
 }
 
-fn frame_error(prepared: &PreparedState, code: &str, message: &str) -> RenderError {
+/// Backend output is an internal contract, not caller-controlled input. Validate
+/// it before the backend is declared reusable so malformed output cannot escape
+/// as an SDK `Frame` or contaminate a later operation.
+#[expect(
+    clippy::result_large_err,
+    reason = "backend contract diagnostics preserve structured failure context"
+)]
+fn validate_completed_frame(
+    plan: &RenderPlan,
+    completion: &CompletedFrame,
+) -> Result<(), Diagnostic> {
+    let expected = usize::try_from(plan.canvas.width)
+        .ok()
+        .and_then(|width| {
+            usize::try_from(plan.canvas.height)
+                .ok()
+                .and_then(|height| width.checked_mul(height))
+        })
+        .and_then(|pixels| pixels.checked_mul(4));
+    if expected == Some(completion.rgba.len()) {
+        Ok(())
+    } else {
+        Err(Diagnostic::error(
+            "MVP-BACKEND-CONTRACT",
+            Category::Backend,
+            "backend completed a frame with an invalid RGBA8 byte layout",
+            "",
+        ))
+    }
+}
+
+fn frame_diagnostic(code: &str, message: &str) -> Diagnostic {
+    Diagnostic::error(code, Category::Render, message, "")
+}
+
+/// Lower-level diagnostics cross the SDK frame boundary unchanged.  The SDK
+/// creates a new diagnostic only for lifecycle and contract failures it owns.
+fn frame_error(prepared: &PreparedState, diagnostic: Diagnostic) -> RenderError {
     RenderError {
-        diagnostic: Diagnostic::error(code, Category::Render, message, ""),
+        diagnostic,
         warnings: Vec::new(),
         temporary_removed: true,
         context: RenderFailureContext::before_render(

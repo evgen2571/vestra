@@ -196,13 +196,22 @@ impl ReadbackRing {
             for completion in completions {
                 self.metrics.callback_duration += completion.callback_duration;
                 let token = completion.token;
+                if token.slot_index != slot_index {
+                    return Err(readback_state_error(
+                        "mapping callback references a different readback slot",
+                    ));
+                }
                 let Some(slot) = self.slots.get_mut(slot_index) else {
-                    continue;
+                    return Err(readback_state_error(
+                        "mapping callback references an invalid readback slot",
+                    ));
                 };
                 if slot.generation != token.generation
                     || slot.frame_number != Some(token.frame_number)
                 {
-                    continue;
+                    return Err(readback_state_error(
+                        "stale mapping callback cannot complete a newer operation",
+                    ));
                 }
                 if slot.state != ReadbackState::Mapping {
                     return Err(readback_state_error("duplicate readback completion"));
@@ -360,6 +369,11 @@ pub(super) fn repack_rows(
     height: u32,
     padded_row_bytes: u32,
 ) -> Result<(), Diagnostic> {
+    if width == 0 || height == 0 {
+        return Err(readback_size_error(
+            "readback dimensions must both be non-zero",
+        ));
+    }
     let row_bytes = u64::from(width)
         .checked_mul(4)
         .ok_or_else(|| readback_size_error("output row size overflow"))?;
@@ -374,9 +388,13 @@ pub(super) fn repack_rows(
             "padded output row is smaller than the packed row",
         ));
     }
-    if packed.len() != usize::try_from(packed_bytes).unwrap_or(usize::MAX)
-        || mapped.len() < usize::try_from(mapped_bytes).unwrap_or(usize::MAX)
-    {
+    let expected_packed_bytes = usize::try_from(packed_bytes).map_err(|_| {
+        readback_size_error("packed output size does not fit the host address space")
+    })?;
+    let required_mapped_bytes = usize::try_from(mapped_bytes).map_err(|_| {
+        readback_size_error("mapped output size does not fit the host address space")
+    })?;
+    if packed.len() != expected_packed_bytes || mapped.len() < required_mapped_bytes {
         return Err(readback_size_error(
             "readback row storage has an unexpected size",
         ));
@@ -412,4 +430,171 @@ fn readback_size_error(message: &str) -> Diagnostic {
 
 fn readback_state_error(message: &str) -> Diagnostic {
     Diagnostic::error("WGPU-READBACK-STATE", Category::Backend, message, "")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ring_with_mapping_slot() -> Option<(ReadbackRing, SubmissionToken)> {
+        let instance = wgpu::Instance::default();
+        let adapter =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+        let (device, _) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .ok()?;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback callback test"),
+            size: 256,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let callback = Arc::new(Mutex::new(Vec::new()));
+        let mut lifecycle = ReadbackStateMachine::new(1);
+        let token = lifecycle.acquire(7).expect("acquire test slot");
+        lifecycle.mark_mapping(token).expect("mapping state");
+        Some((
+            ReadbackRing {
+                slots: vec![ReadbackSlot {
+                    buffer,
+                    frame_number: Some(7),
+                    generation: token.generation,
+                    submission_index: None,
+                    state: ReadbackState::Mapping,
+                    callback,
+                    packed_bytes: Vec::new(),
+                    submitted_at: None,
+                    mapped_at: None,
+                }],
+                lifecycle,
+                width: 1,
+                height: 1,
+                padded_row_bytes: 256,
+                packed_bytes: 4,
+                metrics: ReadbackMetrics::default(),
+            },
+            SubmissionToken {
+                frame_number: 7,
+                slot_index: token.slot_index,
+                generation: token.generation,
+                submission_index: None,
+            },
+        ))
+    }
+
+    fn enqueue(ring: &mut ReadbackRing, slot: usize, token: SubmissionToken) {
+        ring.slots[slot]
+            .callback
+            .lock()
+            .expect("callback queue")
+            .push(MappingCompletion {
+                token,
+                result: Err("injected map failure".into()),
+                callback_duration: Duration::ZERO,
+            });
+    }
+
+    #[test]
+    fn callback_processing_rejects_stale_generation_and_wrong_slot_tokens() {
+        let Some((mut ring, first)) = ring_with_mapping_slot() else {
+            eprintln!("skipping adapter-dependent callback queue test: no adapter");
+            return;
+        };
+        // Simulate a normal completion and reuse of the only slot. The old
+        // callback is then delivered after generation two has begun.
+        ring.lifecycle
+            .mark_ready(lifecycle_token(&first))
+            .expect("first completion");
+        ring.slots[0].state = ReadbackState::Ready;
+        let _ = ring.take_ready().expect("consume first completion");
+        let second = ring.acquire(7).expect("reuse slot");
+        ring.mark_mapping(&second).expect("map second generation");
+        enqueue(&mut ring, 0, first);
+        assert_eq!(
+            ring.process_callbacks().expect_err("stale callback").code,
+            "WGPU-READBACK-STATE"
+        );
+        assert_eq!(ring.slots[0].generation, second.generation);
+        assert_eq!(ring.slots[0].state, ReadbackState::Mapping);
+        assert!(ring.take_ready().is_none());
+
+        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+            return;
+        };
+        enqueue(
+            &mut ring,
+            0,
+            SubmissionToken {
+                frame_number: 7,
+                slot_index: 1,
+                generation: current.generation,
+                submission_index: None,
+            },
+        );
+        assert_eq!(
+            ring.process_callbacks()
+                .expect_err("wrong-slot callback")
+                .code,
+            "WGPU-READBACK-STATE"
+        );
+    }
+
+    #[test]
+    fn callback_processing_rejects_duplicate_wrong_frame_and_post_abort_callbacks() {
+        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+            eprintln!("skipping adapter-dependent callback queue test: no adapter");
+            return;
+        };
+        // A map failure transitions the real slot to Failed. Replaying the
+        // same token through the actual queue must not count or release it twice.
+        enqueue(&mut ring, 0, current.clone());
+        assert_eq!(
+            ring.process_callbacks()
+                .expect_err("first map failure")
+                .code,
+            "WGPU-READBACK"
+        );
+        assert_eq!(ring.metrics.mapping_failure_count, 1);
+        enqueue(&mut ring, 0, current.clone());
+        assert_eq!(
+            ring.process_callbacks()
+                .expect_err("duplicate callback")
+                .code,
+            "WGPU-READBACK-STATE"
+        );
+        assert_eq!(ring.metrics.mapping_failure_count, 1);
+        assert_eq!(ring.slots[0].state, ReadbackState::Failed);
+
+        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+            return;
+        };
+        enqueue(
+            &mut ring,
+            0,
+            SubmissionToken {
+                frame_number: current.frame_number + 1,
+                ..current.clone()
+            },
+        );
+        assert_eq!(
+            ring.process_callbacks()
+                .expect_err("wrong frame callback")
+                .code,
+            "WGPU-READBACK-STATE"
+        );
+
+        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+            return;
+        };
+        ring.abort();
+        enqueue(&mut ring, 0, current);
+        assert_eq!(
+            ring.process_callbacks()
+                .expect_err("post-abort callback")
+                .code,
+            "WGPU-READBACK-STATE"
+        );
+        assert!(ring.all_available());
+        assert!(ring.take_ready().is_none());
+    }
 }

@@ -11,6 +11,66 @@ use crate::{
     render::{RenderBackendKind, RenderBackendPreference, RenderEvent},
 };
 
+/// A normalized positive rational video frame rate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FrameRate {
+    numerator: u64,
+    denominator: u64,
+}
+
+/// Error returned when a [`FrameRate`] cannot represent the requested ratio.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameRateError {
+    ZeroNumerator,
+    ZeroDenominator,
+}
+
+impl std::fmt::Display for FrameRateError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ZeroNumerator => formatter.write_str("frame-rate numerator must be non-zero"),
+            Self::ZeroDenominator => formatter.write_str("frame-rate denominator must be non-zero"),
+        }
+    }
+}
+
+impl std::error::Error for FrameRateError {}
+
+impl FrameRate {
+    pub fn new(numerator: u64, denominator: u64) -> Result<Self, FrameRateError> {
+        if numerator == 0 {
+            return Err(FrameRateError::ZeroNumerator);
+        }
+        if denominator == 0 {
+            return Err(FrameRateError::ZeroDenominator);
+        }
+        let divisor = gcd(numerator, denominator);
+        Ok(Self {
+            numerator: numerator / divisor,
+            denominator: denominator / divisor,
+        })
+    }
+
+    #[must_use]
+    pub const fn numerator(self) -> u64 {
+        self.numerator
+    }
+
+    #[must_use]
+    pub const fn denominator(self) -> u64 {
+        self.denominator
+    }
+}
+
+const fn gcd(mut left: u64, mut right: u64) -> u64 {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left
+}
+
 /// Preparation configuration. The backend choice is fixed for the lifetime of
 /// the returned [`PreparedProject`].
 #[derive(Clone, Copy, Debug, Default)]
@@ -56,7 +116,7 @@ impl PreparedVideoRenderRequest {
     }
 }
 
-/// Pixel storage returned by CPU single-frame rendering.
+/// Pixel storage returned by prepared single-frame rendering.
 ///
 /// Pixels are RGBA, eight bits per channel, row-major with the top row first,
 /// tightly packed at `width * 4` bytes per row, and use unpremultiplied alpha.
@@ -131,7 +191,7 @@ pub struct PreparationReport {
     backend_fallback: Option<BackendFallback>,
     width: u32,
     height: u32,
-    frame_rate: (u64, u64),
+    frame_rate: FrameRate,
     duration: Duration,
     frame_count: u64,
     decoded_asset_count: usize,
@@ -161,7 +221,7 @@ impl PreparationReport {
         self.height
     }
     #[must_use]
-    pub const fn frame_rate(&self) -> (u64, u64) {
+    pub const fn frame_rate(&self) -> FrameRate {
         self.frame_rate
     }
     #[must_use]
@@ -186,7 +246,7 @@ impl PreparationReport {
     }
     #[must_use]
     pub const fn supports_single_frame_rendering(&self) -> bool {
-        matches!(self.selected_backend, BackendKind::Cpu)
+        matches!(self.selected_backend, BackendKind::Cpu | BackendKind::Wgpu)
     }
 }
 
@@ -205,6 +265,10 @@ pub struct PreparationTimings {
 /// visual assets, resolved metadata, schedule, and selected backend. FFmpeg
 /// reopens external media such as audio for each video operation, so those
 /// source files must remain available and unchanged for repeatable output.
+///
+/// `PreparedProject` is `Send` but intentionally not `Sync`: it may be moved
+/// while idle, while rendering requires exclusive `&mut self` access. Video
+/// progress callbacks execute on the thread that calls [`Self::render_video`].
 pub struct PreparedProject {
     prepared: application::PreparedRender,
     report: PreparationReport,
@@ -232,7 +296,12 @@ impl PreparedProject {
                 backend_fallback: fallback,
                 width: metadata.width,
                 height: metadata.height,
-                frame_rate: metadata.frame_rate_ratio,
+                // Validation owns construction of this internal rational and
+                // rejects zero components before a prepared project exists.
+                frame_rate: FrameRate {
+                    numerator: metadata.frame_rate_ratio.0,
+                    denominator: metadata.frame_rate_ratio.1,
+                },
                 duration: metadata.duration,
                 frame_count: metadata.frame_count,
                 decoded_asset_count: metadata.decoded_asset_count,
@@ -267,28 +336,14 @@ impl PreparedProject {
             .prepared
             .render_frame(frame_number)
             .map_err(frame_error)?;
-        let expected = usize::try_from(self.report.width)
-            .ok()
-            .and_then(|width| {
-                usize::try_from(self.report.height)
-                    .ok()
-                    .and_then(|height| width.checked_mul(height))
-            })
-            .and_then(|pixels| pixels.checked_mul(4));
-        if expected != Some(completion.rgba.len()) {
-            return Err(simple_error(
-                "MVP-FRAME-BYTES",
-                "backend returned a frame with an invalid byte length",
-            ));
-        }
         Ok(Frame {
             width: self.report.width,
             height: self.report.height,
             frame_number,
             timestamp: video_editor_core::timeline::frame_start_duration(
                 frame_number,
-                self.report.frame_rate.0,
-                self.report.frame_rate.1,
+                self.report.frame_rate.numerator(),
+                self.report.frame_rate.denominator(),
             )
             .map_err(|_| {
                 simple_error(
@@ -310,8 +365,8 @@ impl PreparedProject {
         }
         let frame = video_editor_core::timeline::frame_at_duration(
             timestamp,
-            self.report.frame_rate.0,
-            self.report.frame_rate.1,
+            self.report.frame_rate.numerator(),
+            self.report.frame_rate.denominator(),
         )
         .map_err(|_| {
             simple_error(
@@ -377,9 +432,11 @@ fn simple_error(code: &str, message: &str) -> EditorError {
 }
 fn frame_error(error: ApplicationRenderError) -> EditorError {
     match error {
-        ApplicationRenderError::Plan { diagnostic, .. } => {
-            simple_error(&diagnostic.code, &diagnostic.message)
-        }
+        ApplicationRenderError::Plan { diagnostic, .. } => EditorError::Plan {
+            diagnostic: Box::new(diagnostic),
+            warnings: Vec::new(),
+            timings: crate::RenderTimings::default(),
+        },
         ApplicationRenderError::Render { error, .. } => EditorError::Render {
             diagnostic: Box::new(error.diagnostic),
             warnings: error.warnings,

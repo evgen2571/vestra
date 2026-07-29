@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    Category, Diagnostic,
+    Category, Diagnostic, Severity,
     plan::EvaluatedFrame,
     render::{
         AdapterMetadata, CompletedFrame, PollMode, RenderBackend, RenderBackendKind, StagedMetrics,
@@ -144,9 +144,11 @@ struct MockStagedBackend {
 enum MockMode {
     Normal,
     SubmitFailure,
+    RichSubmitFailure,
     PollFailure,
     MissingCompletion,
     DuplicateCompletion,
+    InvalidFrameLayout,
     FlushFailure,
     IdleFailure,
 }
@@ -218,6 +220,16 @@ impl RenderBackend for MockStagedBackend {
         frame_number: u64,
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
+        if matches!(self.mode, MockMode::RichSubmitFailure) {
+            return Err(Diagnostic::error(
+                "WGPU-DEVICE-LOST",
+                Category::Backend,
+                "injected device loss",
+                "/readback/slot/2",
+            )
+            .with_hint("adapter=mock; generation=7")
+            .with_related_id("frame-100"));
+        }
         if matches!(self.mode, MockMode::SubmitFailure) {
             return Err(Diagnostic::error(
                 "MOCK-SUBMIT",
@@ -226,13 +238,13 @@ impl RenderBackend for MockStagedBackend {
                 "",
             ));
         }
-        self.pending.insert(
-            frame_number,
-            CompletedFrame {
-                frame_number,
-                rgba: vec![frame_number as u8; frame.width as usize * frame.height as usize * 4],
-            },
-        );
+        let rgba = if matches!(self.mode, MockMode::InvalidFrameLayout) {
+            vec![0]
+        } else {
+            vec![frame_number as u8; frame.width as usize * frame.height as usize * 4]
+        };
+        self.pending
+            .insert(frame_number, CompletedFrame { frame_number, rgba });
         self.metrics.submitted_frames += 1;
         self.metrics.peak_frames_in_flight =
             self.metrics.peak_frames_in_flight.max(self.pending.len());
@@ -411,7 +423,7 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
 }
 
 #[test]
-fn unsupported_wgpu_frame_request_is_non_destructive() {
+fn wgpu_frame_request_uses_the_shared_staged_completion_contract() {
     let plan = super::example_plan();
     let total_frames = plan.frame_count;
     let written = Arc::new(Mutex::new(Vec::new()));
@@ -431,9 +443,8 @@ fn unsupported_wgpu_frame_request_is_non_destructive() {
         },
     )
     .expect("prepared WGPU seam");
-    let error = render_prepared_frame(&mut prepared, 0).expect_err("WGPU frames are deferred");
-    assert_eq!(error.diagnostic.code, "MVP-PREPARED-FRAME-BACKEND");
-    assert!(written.lock().expect("mock metrics lock").is_empty());
+    let frame = render_prepared_frame(&mut prepared, 0).expect("WGPU frame completes");
+    assert_eq!(frame.frame_number, 0);
     let workspace = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
         output_override: Some(workspace.path().join("still-usable.mp4")),
@@ -453,6 +464,58 @@ fn unsupported_wgpu_frame_request_is_non_destructive() {
         },
     )
     .expect("video remains usable");
+}
+
+#[test]
+fn malformed_wgpu_completion_invalidates_the_prepared_backend() {
+    let plan = super::example_plan();
+    let mut prepared = prepare(plan, RenderBackendPreference::Wgpu, |_, _, _| {
+        Ok((
+            Box::new(
+                MockStagedBackend::new(1, vec![0], Arc::new(Mutex::new(Vec::new())))
+                    .failing(MockMode::InvalidFrameLayout),
+            ) as Box<dyn RenderBackend>,
+            None,
+        ))
+    })
+    .expect("prepared WGPU seam");
+
+    let error = render_prepared_frame(&mut prepared, 0).expect_err("invalid backend output");
+    assert_eq!(error.diagnostic.code, "MVP-BACKEND-CONTRACT");
+    let later = render_prepared_frame(&mut prepared, 0).expect_err("state invalidated");
+    assert_eq!(later.diagnostic.code, "MVP-PREPARED-INVALIDATED");
+}
+
+#[test]
+fn frame_failures_preserve_complete_backend_diagnostics() {
+    let plan = super::example_plan();
+    let mut prepared = prepare(plan, RenderBackendPreference::Wgpu, |_, _, _| {
+        Ok((
+            Box::new(
+                MockStagedBackend::new(1, vec![], Arc::new(Mutex::new(Vec::new())))
+                    .failing(MockMode::RichSubmitFailure),
+            ) as Box<dyn RenderBackend>,
+            None,
+        ))
+    })
+    .expect("prepared WGPU seam");
+
+    let error = render_prepared_frame(&mut prepared, 0).expect_err("device loss");
+    assert_eq!(error.diagnostic.code, "WGPU-DEVICE-LOST");
+    assert_eq!(error.diagnostic.category, Category::Backend);
+    assert_eq!(error.diagnostic.severity, Severity::Fatal);
+    assert_eq!(
+        error.diagnostic.pointer.as_deref(),
+        Some("/readback/slot/2")
+    );
+    assert_eq!(
+        error.diagnostic.hint.as_deref(),
+        Some("adapter=mock; generation=7")
+    );
+    assert_eq!(error.diagnostic.related_id.as_deref(), Some("frame-100"));
+    assert_eq!(error.diagnostic.message, "injected device loss");
+    let later = render_prepared_frame(&mut prepared, 0).expect_err("invalidated state");
+    assert_eq!(later.diagnostic.code, "MVP-PREPARED-INVALIDATED");
 }
 
 #[test]

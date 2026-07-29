@@ -1,5 +1,9 @@
 use std::{fs, path::Path, time::Instant};
 
+#[allow(
+    deprecated,
+    reason = "benchmark records legacy renderer compatibility metadata"
+)]
 use video_editor::{
     AdapterPerformanceClass, BackendPreference as RenderBackendPreference, CancellationToken,
     Editor, RenderRequest, RenderResult,

@@ -1,11 +1,11 @@
 //! Compile-time contract for the supported external SDK surface.
 
 use video_editor::{
-    AdapterMetadata, BackendFallback, BackendKind, BackendPreference, CancellationToken,
-    Diagnostic, Editor, EditorBuilder, Frame, FrameRate, InspectionReport, PixelFormat,
-    PreflightReport, PreparationReport, PreparationTimings, PrepareOptions, PreparedProject,
-    PreparedVideoRenderRequest, Project, RenderEvent, RenderRequest, RenderResult,
-    RenderTimingScope, ValidationReport,
+    AdapterDeviceType, AdapterInfo, BackendFallback, BackendKind, BackendPreference,
+    CancellationToken, Diagnostic, Editor, EditorBuilder, Frame, FrameRate, InspectionReport,
+    PixelFormat, PreflightReport, PreparationReport, PreparationTimings, PrepareOptions,
+    PreparedProject, PreparedVideoRenderRequest, Project, RenderEvent, RenderPerformance,
+    RenderRequest, RenderResult, RenderTimingScope, ValidationReport,
 };
 
 #[test]
@@ -37,5 +37,7 @@ fn supported_sdk_exports_are_importable_by_an_external_crate() {
     assert_sized::<BackendPreference>();
     assert_sized::<BackendKind>();
     assert_sized::<BackendFallback>();
-    assert_sized::<AdapterMetadata>();
+    assert_sized::<AdapterInfo>();
+    assert_sized::<AdapterDeviceType>();
+    assert_sized::<RenderPerformance>();
 }

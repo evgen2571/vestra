@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    BackendFallback, CancellationToken, Diagnostic, EditorError, RenderResult,
+    AdapterInfo, BackendFallback, CancellationToken, Diagnostic, EditorError, RenderResult,
     application::{self, ApplicationRenderError},
     render::{RenderBackendKind, RenderBackendPreference, RenderEvent},
 };
@@ -189,6 +189,7 @@ pub struct PreparationReport {
     requested_backend: RenderBackendPreference,
     selected_backend: BackendKind,
     backend_fallback: Option<BackendFallback>,
+    adapter: Option<AdapterInfo>,
     width: u32,
     height: u32,
     frame_rate: FrameRate,
@@ -211,6 +212,10 @@ impl PreparationReport {
     #[must_use]
     pub fn backend_fallback(&self) -> Option<&BackendFallback> {
         self.backend_fallback.as_ref()
+    }
+    #[must_use]
+    pub fn adapter(&self) -> Option<&AdapterInfo> {
+        self.adapter.as_ref()
     }
     #[must_use]
     pub const fn width(&self) -> u32 {
@@ -284,16 +289,15 @@ impl PreparedProject {
         let metadata = prepared.result_metadata();
         let timings = prepared.preparation_timings();
         let fallback = prepared.prepared_backend_fallback();
-        let mut warnings = prepared.preparation_warnings().to_vec();
-        if let Some(fallback) = &fallback {
-            warnings.push(crate::render::backend_fallback_warning(fallback));
-        }
-        let warnings = crate::editor::Editor::operation_warnings(&warnings);
+        let adapter = prepared.adapter_metadata().map(Into::into);
+        let warnings =
+            preparation_report_warnings(prepared.preparation_warnings(), fallback.as_ref());
         Self {
             report: PreparationReport {
                 requested_backend: prepared.requested_backend(),
                 selected_backend: prepared.selected_backend().into(),
                 backend_fallback: fallback,
+                adapter,
                 width: metadata.width,
                 height: metadata.height,
                 // Validation owns construction of this internal rational and
@@ -418,6 +422,17 @@ impl PreparedProject {
     }
 }
 
+fn preparation_report_warnings(
+    preparation_warnings: &[Diagnostic],
+    fallback: Option<&BackendFallback>,
+) -> Vec<Diagnostic> {
+    let mut warnings = preparation_warnings.to_vec();
+    if let Some(fallback) = fallback {
+        warnings.push(crate::render::backend_fallback_warning(fallback));
+    }
+    crate::editor::Editor::operation_warnings(&warnings)
+}
+
 fn simple_error(code: &str, message: &str) -> EditorError {
     EditorError::Project {
         errors: vec![Diagnostic::error(
@@ -458,4 +473,85 @@ fn prepared_operation_error(mut error: EditorError, started: Instant) -> EditorE
         }
     }
     error
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Project;
+    use tempfile::TempDir;
+
+    #[test]
+    fn editor_prepare_deduplicates_fallback_warning_and_keeps_its_report_immutable() {
+        let project = Project::from_json(
+            r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+            ".",
+        )
+        .expect("project");
+        let fallback = BackendFallback {
+            code: "WGPU-ADAPTER-NOT-FOUND".to_owned(),
+            stage: "wgpu_preparation".to_owned(),
+            message: "WGPU adapter request returned no compatible adapter".to_owned(),
+        };
+        let _preflight_warning = crate::editor::inject_preflight_warning(
+            crate::render::backend_fallback_warning(&fallback),
+        );
+        let _failure = crate::render::inject_wgpu_preparation_failure(Diagnostic::error(
+            &fallback.code,
+            crate::Category::Backend,
+            &fallback.message,
+            "",
+        ));
+        let mut prepared = crate::Editor::new()
+            .prepare(
+                &project,
+                crate::PrepareOptions::new(crate::BackendPreference::Auto),
+            )
+            .expect("Auto preparation falls back to CPU");
+        let report = prepared.preparation_report().clone();
+        assert_eq!(report.requested_backend(), crate::BackendPreference::Auto);
+        assert_eq!(report.selected_backend(), BackendKind::Cpu);
+        assert_eq!(report.backend_fallback(), Some(&fallback));
+        assert!(report.adapter().is_none());
+        assert_eq!(report.warnings().len(), 1);
+        let warning = &report.warnings()[0];
+        assert_eq!(warning.code, "MVP-WGPU-FALLBACK");
+        assert_eq!(warning.severity, crate::Severity::Warning);
+        assert_eq!(warning.category, crate::Category::Semantic);
+        assert_eq!(
+            warning.message,
+            "WGPU fallback to CPU: WGPU adapter request returned no compatible adapter"
+        );
+        assert_eq!(warning.hint, None);
+        assert_eq!(warning.pointer.as_deref(), Some(""));
+
+        prepared.render_frame_number(0).expect("CPU frame");
+        let after_frame = prepared.preparation_report();
+        assert_eq!(after_frame.warnings().len(), 1);
+        assert_eq!(after_frame.warnings()[0].code, warning.code);
+        assert_eq!(after_frame.warnings()[0].message, warning.message);
+        let output = TempDir::new().expect("temporary output directory");
+        let result = prepared
+            .render_video(
+                PreparedVideoRenderRequest::new(output.path().join("fallback.mp4"))
+                    .with_overwrite(true),
+                |_| {},
+                &CancellationToken::new(),
+            )
+            .expect("CPU video");
+        assert_eq!(result.render_backend, "cpu");
+        assert_eq!(prepared.preparation_report().warnings().len(), 1);
+        assert_eq!(
+            prepared.preparation_report().warnings()[0].code,
+            warning.code
+        );
+        assert_eq!(
+            prepared.preparation_report().warnings()[0].message,
+            warning.message
+        );
+        assert_eq!(
+            prepared.preparation_report().backend_fallback(),
+            Some(&fallback),
+        );
+    }
 }

@@ -2,6 +2,9 @@
 
 use std::sync::Arc;
 
+#[cfg(test)]
+use std::cell::RefCell;
+
 use crate::{
     Diagnostic,
     plan::RenderPlan,
@@ -19,6 +22,23 @@ pub(super) fn create_backend(
     plan: &RenderPlan,
     decoded: &Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
+    #[cfg(test)]
+    if let Some(error) = test_wgpu_preparation_failure() {
+        return create_backend_with(
+            preference,
+            || {
+                video_editor_render::create_backend(
+                    video_editor_render::RenderBackendPreference::Cpu,
+                    plan,
+                    decoded,
+                )
+                .expect("test CPU backend construction")
+                .0
+            },
+            || Err(error),
+        );
+    }
+
     let preference = match preference {
         RenderBackendPreference::Auto => video_editor_render::RenderBackendPreference::Auto,
         RenderBackendPreference::Cpu => video_editor_render::RenderBackendPreference::Cpu,
@@ -34,6 +54,37 @@ pub(super) fn create_backend(
             }),
         )
     })
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_WGPU_PREPARATION_FAILURE: RefCell<Option<Diagnostic>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) struct TestWgpuPreparationFailureGuard(Option<Diagnostic>);
+
+#[cfg(test)]
+impl Drop for TestWgpuPreparationFailureGuard {
+    fn drop(&mut self) {
+        TEST_WGPU_PREPARATION_FAILURE.with(|failure| {
+            *failure.borrow_mut() = self.0.take();
+        });
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn inject_wgpu_preparation_failure(
+    error: Diagnostic,
+) -> TestWgpuPreparationFailureGuard {
+    let previous =
+        TEST_WGPU_PREPARATION_FAILURE.with(|failure| failure.borrow_mut().replace(error));
+    TestWgpuPreparationFailureGuard(previous)
+}
+
+#[cfg(test)]
+fn test_wgpu_preparation_failure() -> Option<Diagnostic> {
+    TEST_WGPU_PREPARATION_FAILURE.with(|failure| failure.borrow().clone())
 }
 
 #[expect(

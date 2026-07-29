@@ -21,15 +21,106 @@ fn background_project(directory: &std::path::Path) -> video_editor::Project {
     .expect("project")
 }
 
-fn wgpu_prepared_or_skip(project: &video_editor::Project) -> Option<PreparedProject> {
+enum WgpuTestEnvironment {
+    Available(Box<PreparedProject>),
+    Unavailable {
+        diagnostic: video_editor::Diagnostic,
+    },
+}
+
+fn diagnostics_are_exclusively_wgpu_environment_unavailable(
+    diagnostics: &[video_editor::Diagnostic],
+) -> bool {
+    !diagnostics.is_empty()
+        && diagnostics.iter().all(|diagnostic| {
+            matches!(
+                diagnostic.code.as_str(),
+                "WGPU-ADAPTER-NOT-FOUND" | "WGPU-NO-COMPATIBLE-ADAPTER"
+            )
+        })
+}
+
+fn is_wgpu_environment_unavailable(error: &EditorError) -> bool {
+    diagnostics_are_exclusively_wgpu_environment_unavailable(error.diagnostics())
+}
+
+fn prepare_wgpu_environment(project: &video_editor::Project) -> WgpuTestEnvironment {
     match Editor::new().prepare(project, PrepareOptions::new(BackendPreference::Wgpu)) {
-        Ok(prepared) => Some(prepared),
-        Err(error) if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_none() => {
-            eprintln!("skipping public WGPU runtime test: {error}");
-            None
+        Ok(prepared) => {
+            let adapter = prepared
+                .preparation_report()
+                .adapter()
+                .map_or("unknown", |adapter| adapter.adapter_name.as_str());
+            eprintln!("WGPU_RUNTIME_EXECUTED adapter={adapter} backend=wgpu");
+            WgpuTestEnvironment::Available(Box::new(prepared))
         }
-        Err(error) => panic!("strict WGPU verification requires an adapter: {error}"),
+        Err(error)
+            if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_none()
+                && is_wgpu_environment_unavailable(&error) =>
+        {
+            let diagnostic = error
+                .diagnostics()
+                .iter()
+                .find(|diagnostic| {
+                    matches!(
+                        diagnostic.code.as_str(),
+                        "WGPU-ADAPTER-NOT-FOUND" | "WGPU-NO-COMPATIBLE-ADAPTER"
+                    )
+                })
+                .expect("exclusive environment classification has an adapter diagnostic")
+                .clone();
+            eprintln!(
+                "WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter code={} message={}",
+                diagnostic.code, diagnostic.message
+            );
+            WgpuTestEnvironment::Unavailable { diagnostic }
+        }
+        Err(error) => panic!(
+            "WGPU preparation failed after environment classification{}: {error}",
+            if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some() {
+                " (VIDEO_EDITOR_REQUIRE_WGPU=1)"
+            } else {
+                ""
+            }
+        ),
     }
+}
+
+#[test]
+fn wgpu_skip_classification_requires_an_exclusively_unavailable_diagnostic_set() {
+    use video_editor::{Category, Diagnostic};
+
+    let unavailable = Diagnostic::error(
+        "WGPU-ADAPTER-NOT-FOUND",
+        Category::Backend,
+        "no adapter",
+        "",
+    );
+    let project_failure = Diagnostic::error(
+        "MVP-ASSET-PATH",
+        Category::Project,
+        "missing asset",
+        "/assets/0/path",
+    );
+    let device_failure = Diagnostic::error(
+        "WGPU-DEVICE-REQUEST",
+        Category::Backend,
+        "device request failed",
+        "",
+    );
+
+    assert!(diagnostics_are_exclusively_wgpu_environment_unavailable(
+        std::slice::from_ref(&unavailable)
+    ));
+    assert!(!diagnostics_are_exclusively_wgpu_environment_unavailable(
+        &[unavailable, project_failure,]
+    ));
+    assert!(!diagnostics_are_exclusively_wgpu_environment_unavailable(
+        &[device_failure]
+    ));
+    assert!(!diagnostics_are_exclusively_wgpu_environment_unavailable(
+        &[]
+    ));
 }
 
 #[test]
@@ -39,16 +130,54 @@ fn public_auto_traits_are_explicit() {
     assert_send_sync::<video_editor::Frame>();
     assert_send_sync::<video_editor::FrameRate>();
     assert_send_sync::<video_editor::PreparationReport>();
+    assert_send_sync::<video_editor::AdapterInfo>();
+    assert_send_sync::<video_editor::RenderPerformance>();
     assert_send_sync::<Editor>();
     assert_send::<video_editor::PreparedProject>();
+}
+
+#[test]
+fn public_wgpu_skip_classification_is_limited_to_adapter_absence() {
+    let unavailable = video_editor::Diagnostic::error(
+        "WGPU-ADAPTER-NOT-FOUND",
+        video_editor::Category::Backend,
+        "no adapter",
+        "",
+    );
+    assert!(diagnostics_are_exclusively_wgpu_environment_unavailable(&[
+        unavailable
+    ]));
+    for code in [
+        "WGPU-DEVICE-REQUEST",
+        "WGPU-SHADER-VALIDATION",
+        "WGPU-PIPELINE-CREATION",
+        "WGPU-TEXTURE-UPLOAD",
+        "WGPU-PROJECT-FAILURE",
+    ] {
+        assert!(
+            !diagnostics_are_exclusively_wgpu_environment_unavailable(&[
+                video_editor::Diagnostic::error(
+                    code,
+                    video_editor::Category::Backend,
+                    "injected backend failure",
+                    "",
+                )
+            ]),
+            "{code} must fail rather than skip"
+        );
+    }
 }
 
 #[test]
 fn public_wgpu_prepared_frames_are_reusable_and_owned_when_an_adapter_is_available() {
     let directory = tempdir().expect("temporary directory");
     let project = background_project(directory.path());
-    let Some(mut prepared) = wgpu_prepared_or_skip(&project) else {
-        return;
+    let mut prepared = match prepare_wgpu_environment(&project) {
+        WgpuTestEnvironment::Available(prepared) => prepared,
+        WgpuTestEnvironment::Unavailable { diagnostic } => {
+            assert_eq!(diagnostic.code, "WGPU-ADAPTER-NOT-FOUND");
+            return;
+        }
     };
     assert_eq!(
         prepared.preparation_report().selected_backend(),
@@ -71,8 +200,9 @@ fn public_wgpu_frame_video_cross_reuse_keeps_metrics_operation_local_when_an_ada
 {
     let directory = tempdir().expect("temporary directory");
     let project = background_project(directory.path());
-    let Some(mut prepared) = wgpu_prepared_or_skip(&project) else {
-        return;
+    let mut prepared = match prepare_wgpu_environment(&project) {
+        WgpuTestEnvironment::Available(prepared) => prepared,
+        WgpuTestEnvironment::Unavailable { .. } => return,
     };
     let report = prepared.preparation_report().clone();
     let frame_before = prepared.render_frame_number(3).expect("frame before video");
@@ -135,8 +265,9 @@ fn public_cpu_wgpu_frame_parity_is_exact_for_background_when_an_adapter_is_avail
     let mut cpu = Editor::new()
         .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
         .expect("CPU prepare");
-    let Some(mut wgpu) = wgpu_prepared_or_skip(&project) else {
-        return;
+    let mut wgpu = match prepare_wgpu_environment(&project) {
+        WgpuTestEnvironment::Available(prepared) => prepared,
+        WgpuTestEnvironment::Unavailable { .. } => return,
     };
     let cpu_frame = cpu.render_frame_number(0).expect("CPU frame");
     let wgpu_frame = wgpu.render_frame_number(0).expect("WGPU frame");
@@ -178,6 +309,14 @@ fn assert_public_frame_parity(
 
 #[test]
 fn public_cpu_wgpu_parity_covers_image_alpha_and_effect_fixtures_when_an_adapter_is_available() {
+    // Probe once. Once an adapter has been confirmed, every fixture below is
+    // required to prepare and render successfully; none may soft-skip.
+    let probe_directory = tempdir().expect("temporary directory");
+    let probe = background_project(probe_directory.path());
+    match prepare_wgpu_environment(&probe) {
+        WgpuTestEnvironment::Available(_) => {}
+        WgpuTestEnvironment::Unavailable { .. } => return,
+    }
     for (path, tolerance) in [
         ("tests/fixtures/wgpu-small-rgba.json", 2_u8),
         ("examples/projects/animation-effects.json", 2),
@@ -191,9 +330,9 @@ fn public_cpu_wgpu_parity_covers_image_alpha_and_effect_fixtures_when_an_adapter
         let mut cpu = Editor::new()
             .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
             .expect("CPU prepare");
-        let Some(mut wgpu) = wgpu_prepared_or_skip(&project) else {
-            return;
-        };
+        let mut wgpu = Editor::new()
+            .prepare(&project, PrepareOptions::new(BackendPreference::Wgpu))
+            .unwrap_or_else(|error| panic!("WGPU preparation failed for fixture {path}: {error}"));
         let frame_count = cpu.preparation_report().frame_count();
         let mut frames = vec![0, frame_count / 2, frame_count - 1];
         frames.sort_unstable();

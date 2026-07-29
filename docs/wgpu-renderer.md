@@ -234,10 +234,20 @@ submission does not synchronously await per-frame error scopes because that
 would serialize the pipeline; asynchronous uncaptured and device-loss callbacks
 trigger the normal encoder-abort and output-cleanup path. In environments without an adapter,
 adapter-dependent parity tests print an explicit skip reason; this is not GPU
-verification. With `VIDEO_EDITOR_REQUIRE_WGPU=1`, those tests fail instead of
-skipping when adapter or device creation fails. The project-local
+verification. They skip only when structured diagnostics report no compatible
+adapter. Device creation and every later backend failure always fail; with
+`VIDEO_EDITOR_REQUIRE_WGPU=1`, adapter absence fails too. The project-local
 `nix develop .#software-vulkan` shell discovers Lavapipe through Nix's Mesa ICD
 path and enables strict Vulkan verification.
+
+Adapter-gated tests run with `-- --nocapture` and emit
+`WGPU_RUNTIME_EXECUTED adapter=<name> backend=wgpu` when their runtime body
+executes, or `WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter ...` when normal
+mode encounters an exclusively adapter-unavailable diagnostic. Cargo records an
+early return as passed, so the marker—not the pass count—distinguishes a real
+runtime execution from an environment skip. Strict mode converts that same
+adapter absence into a failure; device, shader, pipeline, texture, project, and
+all mixed failures always fail in either mode.
 
 ## Verification and benchmark
 

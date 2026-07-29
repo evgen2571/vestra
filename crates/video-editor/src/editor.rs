@@ -4,6 +4,9 @@ use std::{
     time::Instant,
 };
 
+#[cfg(test)]
+use std::cell::RefCell;
+
 use crate::{
     CancellationToken, Diagnostic, InspectionReport, PreflightReport, PrepareOptions,
     PreparedProject, Project, RenderEvent, RenderFailureContext, RenderResult, ValidationReport,
@@ -371,6 +374,14 @@ impl Editor {
         let outcome = self.run_preflight(project, &validation, &options);
         let preflight_elapsed = preflight_started.elapsed();
         let warnings = Self::operation_warnings(&outcome.report.diagnostics);
+        #[cfg(test)]
+        let warnings = {
+            let mut warnings = warnings;
+            if let Some(warning) = test_preflight_warning() {
+                warnings.push(warning);
+            }
+            Self::operation_warnings(&warnings)
+        };
         let validated = outcome.resolved.ok_or_else(|| {
             Self::diagnostic_error(
                 outcome.report.diagnostics,
@@ -644,6 +655,32 @@ impl Editor {
         }
         warnings
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_PREFLIGHT_WARNING: RefCell<Option<Diagnostic>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) struct TestPreflightWarningGuard(Option<Diagnostic>);
+
+#[cfg(test)]
+impl Drop for TestPreflightWarningGuard {
+    fn drop(&mut self) {
+        TEST_PREFLIGHT_WARNING.with(|warning| *warning.borrow_mut() = self.0.take());
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn inject_preflight_warning(warning: Diagnostic) -> TestPreflightWarningGuard {
+    let previous = TEST_PREFLIGHT_WARNING.with(|current| current.borrow_mut().replace(warning));
+    TestPreflightWarningGuard(previous)
+}
+
+#[cfg(test)]
+fn test_preflight_warning() -> Option<Diagnostic> {
+    TEST_PREFLIGHT_WARNING.with(|warning| warning.borrow().clone())
 }
 
 impl EditorBuilder {

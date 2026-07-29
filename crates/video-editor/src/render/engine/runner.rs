@@ -87,6 +87,10 @@ impl PreparedState {
         self.backend_fallback.as_ref()
     }
 
+    pub(crate) fn adapter_metadata(&self) -> Option<crate::render::AdapterMetadata> {
+        self.backend.adapter()
+    }
+
     pub(crate) const fn preparation_timings(&self) -> crate::render::PreparationTimings {
         self.preparation_timings
     }

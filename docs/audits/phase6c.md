@@ -1,94 +1,98 @@
-# Phase 6C audit
+# Phase 6C closure audit
 
-Recorded on 2026-07-29 in the workspace CI environment.
+Recorded on 2026-07-29 in the workspace CI environment. This audit separates
+compilation, pure/injected logic, adapter-gated invocation, runtime skips, and
+real GPU execution. A passing Cargo test that emits a skip marker is not claimed
+as WGPU runtime verification.
 
-## Verification executed
+## API and JSON closure
 
-| Command | Result | Evidence |
-| --- | --- | --- |
-| `cargo fmt --all -- --check` | passed | Workspace formatting gate. |
-| `cargo check --workspace` | passed | All five workspace crates compile. |
-| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | passed | No warning suppression added for Phase 6C. |
-| `cargo test --workspace -q` | passed | SDK unit tests (51), public SDK tests (21), public-export compile test (1), CLI unit tests (4), plus workspace integration/unit suites. |
-| `cargo test -p video-editor-render -q` | passed | 119 renderer CPU, lifecycle, shader, readback, and adapter-gated tests. |
-| `cargo test -p video-editor` | passed | 51 SDK unit tests. |
-| `cargo test -p video-editor --test public_sdk` | passed | 21 public API tests. |
-| `cargo test -p video-editor --test public_exports` | passed | External-style supported-SDK import boundary. |
-| `cargo check -p video-editor --no-default-features --features cpu` | passed | CPU-only SDK build. |
-| `cargo check -p video-editor-render --no-default-features --features wgpu` | passed with existing dead-code warnings | WGPU-only renderer compilation. |
-| `./scripts/verify-public-asset.sh` | passed | Public fixture asset integrity. |
-| `python3 crates/video-editor-cli/tests/schema_validation.py` | passed | Project schema compatibility. |
-| `./scripts/check.sh` | passed | Repository check script, including CLI integration coverage. |
-
-## Phase 6C evidence
-
-### Diagnostic preservation
-
-The single-frame SDK path now passes the original `Diagnostic` from submit,
-poll, validation, flush, and idle failures into `RenderError`; it no longer
-reconstructs a generic render diagnostic from code and message. The deterministic
-`frame_failures_preserve_complete_backend_diagnostics` test injects
-`WGPU-DEVICE-LOST` and verifies the backend category, message, pointer, hint,
-and related identifier before confirming prepared-state invalidation.
-
-### Readback ownership, layouts, and callbacks
-
-Mapped WGPU bytes are copied into an independent tightly packed RGBA8 vector,
-then unmapped before the slot becomes reusable. `repack_rows()` uses checked
-size conversion, multiplication, and row-offset arithmetic. Direct production
-tests cover unpadded layouts, padding removal, alignment-boundary widths,
-short source/destination buffers, invalid stride, zero dimensions, and checked
-layout multiplication overflow.
-
-The callback processor now also validates that a queued callback belongs to the
-slot whose queue is being drained. Adapter-gated callback tests invoke
-`ReadbackRing::process_callbacks()` with a stale generation after actual slot
-reuse, duplicate callback, wrong frame, wrong slot, and callback after abort;
-the slot state machine separately proves checked generation overflow. A callback
-is accepted only when slot index, generation, frame identity, and state match.
-
-### Public WGPU tests and parity
-
-Public SDK tests exercise `Editor::prepare` and `PreparedProject` for
-non-monotonic frame access, owned frame bytes after dropping preparation,
-frame → video → frame → video reuse, operation-local video counters, exact
-CPU/WGPU metadata/pixel parity for a solid-background fixture, and tolerance-2
-public parity checks for the RGBA image/alpha fixture plus first, middle, and
-final valid frames of the animation/effects, blend-mode/overlapping
-transparency, crossfade, flash, color-adjustment, and Gaussian-blur fixtures.
-The public comparison reports maximum per-channel and mean absolute difference
-plus the number of channels outside tolerance on failure.
-
-These tests were invoked but skipped their runtime body in this environment:
-`WGPU adapter request returned no compatible adapter`. Consequently:
+`RenderResult` and `PreparationReport` use SDK-owned `AdapterInfo` and
+`RenderPerformance`; renderer-owned DTOs are not part of the supported public
+result signatures. `RenderPerformance` keeps the previous report JSON shape.
+The exact-key regression covers default and populated (including WGPU-only)
+values. The serialized keys are:
 
 ```text
-WGPU code compiled.
-Pure readback and lifecycle tests passed.
-Adapter-gated public WGPU tests were invoked and skipped because no compatible
-adapter was available.
-Real WGPU single-frame, cross-reuse, and CPU/WGPU runtime parity were not verified.
+active_item_consideration_count, advanced_effect_count, accumulation_buffer_count,
+bind_group_count, bitmap_cache_hit_rate, bitmap_cache_hits,
+bitmap_cache_insertions, bitmap_cache_misses, bitmap_cache_requests,
+brightness_effect_count, cache_budget_bytes, cache_current_bytes,
+cache_current_entries, cache_evictions, cache_oversized_entries_skipped,
+cache_peak_bytes, command_submission_count,
+compiled_transition_association_count, contrast_effect_count,
+declared_clip_count, decoded_image_count, decoded_source_bytes,
+effect_pass_count, evaluated_track_count, generated_local_effect_count,
+generated_transform_contribution_count, global_effect_count, hidden_clip_count,
+image_source_count, keyframe_count, local_effect_count, maximum_active_layers,
+output_texture_count, parsed_colour_count, peak_cache_entries,
+peak_decoded_bytes, pipeline_count, readback_buffer_bytes,
+readback_buffer_count, rendered_clip_count, rendered_frame_count,
+saturation_effect_count, schedule_event_count, sampler_count, shader_module_count,
+solid_color_source_count, source_texture_bytes, source_texture_count,
+tint_effect_count, uploaded_texture_bytes, uploaded_texture_count,
+zero_frame_clip_count
 ```
 
-No adapter metadata exists to record. Runtime parity statistics are therefore
-not available; the public background fixture requires exact equality when it
-runs.
+The former `serde(skip)` fields remain absent: staging estimates, pipeline and
+slot counts, in-flight/submitted/completed/written counters, poll/wait/map/repack
+timings, callback queue measurements, mapping failures, flush/abort timings,
+and slot-lifetime timings. These are advanced Rust diagnostics, not stable
+serialized or Python-v0.1 metrics. The README documents the operation-local
+semantics for one-shot, prepared-video, CPU, WGPU, caches, and timings.
 
-### API and thread safety
+The public-coordinator regression
+`prepared::tests::editor_prepare_deduplicates_fallback_warning_and_keeps_its_report_immutable`
+uses `Editor::prepare(... Auto)` with a narrow test-only preflight/backend seam.
+It proves selected CPU retention, no adapter, matching fallback metadata, one
+`MVP-WGPU-FALLBACK` diagnostic with its complete structured identity, stable
+warning order, and an unchanged `PreparationReport` after both a frame and a
+video operation.
 
-`Frame`, `FrameRate`, `PreparationReport`, and `Editor` have compile-time
-`Send + Sync` assertions. `PreparedProject` has a `Send` assertion and is
-documented as intentionally not `Sync`; render methods require `&mut self`.
-`AdapterMetadata` remains the SDK-owned report DTO. The renderer-oriented
-`AdapterPerformanceClass` and `PreparationStats` re-exports are deprecated
-compatibility exports; new public APIs use SDK report types. The
-`public_exports` integration test imports every supported high-level SDK type
-from outside the library crate. The README classifies every root export as a
-stable high-level API, stable SDK-owned DTO, legacy compatibility export, or
-non-exported internal implementation type.
+## WGPU environment policy
 
-## Audit conclusion
+Public SDK classification now skips only non-empty diagnostic sets composed
+exclusively of `WGPU-ADAPTER-NOT-FOUND` or `WGPU-NO-COMPATIBLE-ADAPTER`.
+The matching diagnostic is selected by code, not array index. Tests prove that
+mixed adapter/project diagnostics, an empty set, and device, shader, pipeline,
+and texture failures are fatal. Renderer runtime helpers apply the same strict
+policy; callback/readback runtime tests now emit the same explicit marker and
+fail in strict mode if no adapter is available. Device creation failures always
+fail after discovery.
 
-This audit is intentionally not a claim of complete real-adapter verification.
-The environment provided no compatible WGPU adapter, so all adapter-gated
-runtime coverage is reported as skipped rather than passed.
+Adapter-gated tests emit one of:
+
+```text
+WGPU_RUNTIME_EXECUTED adapter=<name> backend=wgpu
+WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter ...
+```
+
+Normal mode invoked the adapter-gated bodies but emitted the skip marker because
+the environment returned `WGPU-ADAPTER-NOT-FOUND`. No compatible adapter,
+adapter metadata, device metadata, or real CPU/WGPU parity execution is claimed.
+
+## Commands and results
+
+| Command | Result |
+| --- | --- |
+| `cargo fmt --all -- --check` | passed |
+| `cargo check --workspace` | passed |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | passed |
+| `cargo test --workspace` | passed; SDK 54 unit + 23 public-SDK + 1 export, renderer 119, CLI unit/integration suites passed |
+| `cargo test -p video-editor` | passed; 54 unit, 23 public-SDK, 1 public-export |
+| `cargo test -p video-editor --test public_sdk -- --nocapture` | passed; 23 tests, four adapter-gated invocations explicitly skipped |
+| `cargo test -p video-editor-render -- --nocapture` | passed; 119 tests; adapter-gated and callback runtime paths emitted explicit skips |
+| `VIDEO_EDITOR_REQUIRE_WGPU=1 cargo test -p video-editor --test public_sdk -- --nocapture` | expected failure: 19 passed, 4 adapter-dependent failures due to no compatible adapter |
+| `VIDEO_EDITOR_REQUIRE_WGPU=1 cargo test -p video-editor-render -- --nocapture` | expected failure: 102 passed, 17 adapter-dependent failures, including both callback queue tests, due to no compatible adapter |
+| `cargo check -p video-editor --no-default-features --features cpu` | passed |
+| `cargo check -p video-editor-render --no-default-features --features wgpu` | passed with seven existing CPU-only dead-code warnings |
+| `python3 crates/video-editor-cli/tests/schema_validation.py` | passed |
+| `./scripts/verify-public-asset.sh` | passed |
+
+## Conclusion
+
+Phase 6C’s source, API-contract, deterministic test, CLI/schema, and compile
+closure is complete. Real WGPU execution remains environment-limited: this
+runner has no compatible adapter, so strict commands correctly fail and no
+runtime parity or adapter metadata is recorded. A GPU-capable runner must pass
+the two strict commands before claiming real WGPU runtime verification.

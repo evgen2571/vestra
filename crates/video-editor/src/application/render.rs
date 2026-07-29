@@ -90,6 +90,9 @@ impl PreparedRender {
     pub(crate) fn preparation_warnings(&self) -> &[Diagnostic] {
         &self.preparation_warnings
     }
+    pub(crate) fn adapter_metadata(&self) -> Option<crate::render::AdapterMetadata> {
+        self.prepared.adapter_metadata()
+    }
 
     pub(crate) const fn preparation_timings(&self) -> PreparationTimings {
         self.preparation_timings

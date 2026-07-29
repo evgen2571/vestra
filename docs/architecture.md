@@ -125,7 +125,7 @@ failures leave it reusable. The visual snapshot is owned by the prepared state,
 while operation-time audio remains an FFmpeg input and must remain available and
 unchanged for deterministic repeated video renders. The SDK exposes this
 ownership through `Editor::prepare`, which returns an opaque `PreparedProject`.
-It reports preparation facts and can render repeated videos or CPU frames
+It reports preparation facts and can render repeated videos or CPU/WGPU frames
 without rebuilding the plan, decoded assets, schedule, or backend.
 
 The schedule itself is immutable; each video operation creates a chronological
@@ -135,8 +135,9 @@ change CPU compositing. Frame timestamps use checked rational integer math:
 `Frame::timestamp()` is the earliest representable `Duration` that maps to the
 frame (a ceiling at fractional boundaries), while the final duration remains
 exclusive. Single-frame operations then follow the same staged submit,
-completion, flush, and idle-verification contract. WGPU frame readback remains
-explicitly unsupported until Phase 6C. `crates/video-editor/src/render/engine/frame_loop.rs` owns cancellation, active-layer
+completion, flush, and idle-verification contract. WGPU frame readback copies
+its padded GPU rows into owned tightly packed RGBA8 storage before a slot can be
+reused. `crates/video-editor/src/render/engine/frame_loop.rs` owns cancellation, active-layer
 updates, evaluation, backend rendering, completion ordering, delivery to
 `FrameSink`, and progress events. The frame loop depends only on `FrameSink`. It
 never knows about FFmpeg, process arguments, or temporary paths.

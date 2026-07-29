@@ -221,4 +221,14 @@ mod tests {
         assert_ne!(first.generation, reused.generation);
         assert!(!state.matches(second));
     }
+
+    #[test]
+    fn generation_overflow_is_a_structured_failure_and_never_wraps() {
+        let mut state = ReadbackStateMachine::new(1);
+        state.slots[0].generation = u64::MAX;
+        let error = state.acquire(0).expect_err("generation must not wrap");
+        assert_eq!(error.code, "WGPU-READBACK-STATE");
+        assert_eq!(error.category, Category::Backend);
+        assert!(state.all_available());
+    }
 }

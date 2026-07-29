@@ -124,17 +124,52 @@ assert_eq!(frame.as_bytes().len(), frame.width() as usize * frame.height() as us
 ```
 
 Prepared video operations use `PreparedVideoRenderRequest`; the backend cannot
-change after preparation. CPU snapshots support synchronous single-frame
-rendering. WGPU snapshots return a capability error for frame requests. Frame
+change after preparation. CPU and WGPU snapshots support synchronous single-frame
+rendering through the same staged submit/completion/flush lifecycle. WGPU frame
+readback remains internal: it removes GPU copy-row padding and copies pixels into
+an independent CPU-owned RGBA8 allocation before its ring slot is reusable. Frame
 pixels are owned RGBA8, top-row-first, tightly packed, and unpremultiplied.
+The mapped GPU buffer is unmapped before a readback slot becomes reusable; returned
+`Frame` bytes never borrow GPU buffers or readback slots. A WGPU callback is
+accepted only when its slot index, checked slot generation, frame identity, and
+slot state all match. A mismatched callback or device-loss diagnostic invalidates
+the prepared backend rather than falling back or recreating a device. Backend,
+media, and core diagnostics retain their structured category, code, severity,
+pointer, hint, and related identifier at the SDK error boundary.
 `Frame::timestamp()` is the earliest `Duration` that maps back to that frame.
 Timeline conversion uses checked integer rational arithmetic; when a fractional
 frame boundary lies between nanoseconds, it is rounded up to the next
 nanosecond. The final project duration is an exclusive endpoint. Random frame
-access uses the same canonical draw ordering and CPU staged backend path as
+access uses the same canonical draw ordering and selected staged backend path as
 video rendering. Prepared-video timing totals exclude reusable preparation;
 one-shot totals include it. Preparation warnings are merged in lifecycle order
 and deduplicated by their complete diagnostic identity.
+
+`Frame`, `FrameRate`, `PreparationReport`, and `Editor` are `Send + Sync`.
+`PreparedProject` is `Send` but intentionally not `Sync`: it can move between
+threads while idle, and every render method requires `&mut self`; video progress
+callbacks run on the calling thread. The supported SDK surface is the API exported
+by `video-editor`; renderer crates and renderer-oriented implementation DTOs are
+workspace internals rather than contracts for future bindings.
+
+### API stability
+
+The public exports are classified as follows:
+
+- Stable high-level SDK: `Editor`, `EditorBuilder`, `EditorError`, `Project`,
+  `PrepareOptions`, `PreparedProject`, `PreparedVideoRenderRequest`,
+  `RenderRequest`, `CancellationToken`, `RenderEvent`, `RenderResult`, and
+  `RenderTimingScope`.
+- Stable SDK-owned DTOs: `Frame`, `PixelFormat`, `FrameRate`,
+  `FrameRateError`, `PreparationReport`, `PreparationTimings`,
+  `ValidationReport`, `PreflightReport`, `InspectionReport`, `VersionResult`,
+  `Diagnostic`, `Category`, `Severity`, `BackendPreference`, `BackendKind`,
+  `BackendFallback`, `AdapterMetadata`, `RenderFailureContext`,
+  `RenderFailureStage`, and `RenderTimings`.
+- Legacy compatibility exports: `AdapterPerformanceClass` and
+  `PreparationStats`. Both are deprecated; new SDK APIs do not use them.
+- Internal leaks: none. Renderer crate types, render plans, WGPU resources,
+  and staged backend interfaces are not public SDK contracts.
 
 `Project::load` and `Project::from_json` record JSON parse time. `from_value`
 does not parse JSON and reports zero parse time. Render reports separate that

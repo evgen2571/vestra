@@ -133,7 +133,7 @@ pub struct CompletedFrame {
     pub rgba: Vec<u8>,
 }
 
-pub trait RenderBackend {
+pub trait RenderBackend: Send {
     fn kind(&self) -> RenderBackendKind;
     fn capacity(&self) -> usize;
     fn in_flight(&self) -> usize;

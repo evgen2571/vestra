@@ -136,7 +136,7 @@ encoder path, hardware video encoding, or windowed preview.
 
 ## Phase 3 staged lifecycle
 
-The engine uses one lifecycle for CPU and WGPU:
+The engine uses one lifecycle for CPU and WGPU video and single-frame operations:
 
 ```text
 evaluate → submit → in flight → map callback → repack → completed
@@ -159,6 +159,22 @@ owned `CompletedFrame` to the engine. The engine keeps a bounded ordered queue a
 writes only the next frame number. Out-of-order completion therefore cannot
 reorder FFmpeg input.
 
+Every row-layout calculation uses checked arithmetic. Invalid strides, host-size
+conversions, source/destination lengths, and row offsets produce a structured
+`WGPU-READBACK-SIZE` backend diagnostic. The production repacker is tested
+directly for padded and unpadded layouts; padding bytes never appear in public
+`Frame` pixels.
+
+`Editor::prepare` retains this WGPU backend for both `render_frame_number` and
+`render_frame`; neither method creates an encoder, output file, device, pipeline,
+or texture upload. A returned SDK `Frame` is always top-row-first, tightly packed,
+straight-alpha RGBA8 in independent CPU-owned storage. A readback callback carries
+the frame, slot, and monotonically checked slot generation. A stale or duplicate
+callback is a backend-contract failure: the prepared project is invalidated rather
+than risking completion delivery to a later operation. After a successful frame
+operation, `flush` and `verify_idle` require no in-flight work, mapped slot, queued
+completion, or unavailable readback slot.
+
 Shared Canvas, Layer, and effect textures remain backend-owned. WGPU preserves
 submission order on one queue. Submission N copies its final texture into its
 dedicated readback buffer before submission N+1 can reuse the working textures.
@@ -176,6 +192,11 @@ invalidates slots, and removes the temporary output. WGPU work already submitted
 to the device cannot be cancelled. Uncaptured WGPU errors and device loss retain
 the first fatal diagnostic; submit, poll, and flush check that state and never
 switch to CPU.
+
+The SDK preserves an originating renderer diagnostic unchanged, including its
+backend category, code, severity, pointer, hint, and related identifier. SDK-only
+lifecycle failures use distinct `MVP-*` diagnostics. Device loss invalidates the
+prepared backend; there is no automatic recovery or backend re-preparation.
 
 `VIDEO_EDITOR_WGPU_IN_FLIGHT=1 cargo test --workspace --all-features` exercises the
 synchronous-compatible depth. Strict verification and the optional benchmark matrix

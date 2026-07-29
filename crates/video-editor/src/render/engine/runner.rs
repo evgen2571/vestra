@@ -28,18 +28,154 @@ use super::{
     clippy::result_large_err,
     reason = "render errors retain cleanup status"
 )]
-pub fn render(
+/// Owned visual execution snapshot. It deliberately excludes the output target and
+/// encoder: audio and FFmpeg are reopened for every video operation.
+pub(crate) struct PreparedState {
+    plan: Arc<RenderPlan>,
+    schedule: ActiveSchedule,
+    _decoded: Arc<DecodedAssets>,
+    backend: Box<dyn RenderBackend>,
+    requested_backend: RenderBackendPreference,
+    selected_backend: RenderBackendKind,
+    backend_fallback: Option<BackendFallback>,
+    preparation_timings: crate::render::PreparationTimings,
+    lifecycle: PreparedLifecycle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PreparedLifecycle {
+    Ready,
+    Invalidated,
+}
+
+impl PreparedState {
+    pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
+        self.requested_backend
+    }
+
+    pub(crate) const fn selected_backend(&self) -> RenderBackendKind {
+        self.selected_backend
+    }
+
+    pub(crate) fn backend_fallback(&self) -> Option<&BackendFallback> {
+        self.backend_fallback.as_ref()
+    }
+
+    pub(crate) const fn preparation_timings(&self) -> crate::render::PreparationTimings {
+        self.preparation_timings
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "the internal invalidation error preserves the public diagnostic shape"
+    )]
+    fn ensure_ready(&self) -> Result<(), RenderError> {
+        if self.lifecycle == PreparedLifecycle::Ready {
+            return Ok(());
+        }
+        Err(RenderError {
+            diagnostic: Diagnostic::error(
+                "MVP-PREPARED-INVALIDATED",
+                Category::Render,
+                "prepared render state was invalidated by an earlier render failure",
+                "",
+            ),
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::FrameComposition,
+                &self.plan,
+            ),
+            timings: RenderTimings::default(),
+        })
+    }
+
+    fn invalidate(&mut self) {
+        self.lifecycle = PreparedLifecycle::Invalidated;
+    }
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "preparation preserves structured backend-selection diagnostics"
+)]
+pub(crate) fn prepare_for_video(
     plan: &RenderPlan,
+    preference: RenderBackendPreference,
+) -> Result<PreparedState, RenderError> {
+    prepare(plan, preference, create_backend)
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "preparation retains structured diagnostics"
+)]
+pub(crate) fn prepare(
+    plan: &RenderPlan,
+    preference: RenderBackendPreference,
+    build_backend: impl FnOnce(
+        RenderBackendPreference,
+        &RenderPlan,
+        &Arc<DecodedAssets>,
+    )
+        -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
+) -> Result<PreparedState, RenderError> {
+    let decoded = DecodedAssets::build(plan).map_err(|diagnostic| RenderError {
+        diagnostic,
+        warnings: Vec::new(),
+        temporary_removed: true,
+        context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, plan),
+        timings: RenderTimings::default(),
+    })?;
+    let schedule = ActiveSchedule::compile(plan);
+    let (backend, backend_fallback) =
+        build_backend(preference, plan, &decoded).map_err(|diagnostic| RenderError {
+            diagnostic,
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::AssetPreparation,
+                plan,
+            ),
+            timings: RenderTimings {
+                asset_decode_ms: milliseconds(decoded.timings().decode),
+                ..RenderTimings::default()
+            },
+        })?;
+    let preparation_timings = crate::render::PreparationTimings {
+        decode: decoded.timings().decode,
+        ..backend.timings()
+    };
+    Ok(PreparedState {
+        plan: Arc::new(plan.clone()),
+        schedule,
+        _decoded: decoded,
+        selected_backend: backend.kind(),
+        backend,
+        requested_backend: preference,
+        backend_fallback,
+        preparation_timings,
+        lifecycle: PreparedLifecycle::Ready,
+    })
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "operation errors retain structured diagnostics"
+)]
+pub(crate) fn render_prepared(
+    prepared: &mut PreparedState,
     options: &RenderOptions,
     emit: &mut dyn FnMut(RenderEvent),
 ) -> Result<RenderSummary, RenderError> {
-    render_with_backend_builder(plan, options, emit, create_backend)
+    render_prepared_with_sink(prepared, options, emit, FfmpegSink::start)
 }
 
 #[allow(
     clippy::result_large_err,
     reason = "render errors retain cleanup status"
 )]
+#[cfg(test)]
 pub(super) fn render_with_backend_builder<F>(
     plan: &RenderPlan,
     options: &RenderOptions,
@@ -53,15 +189,15 @@ where
         &Arc<DecodedAssets>,
     ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
 {
-    render_with_backend_builder_and_sink(plan, options, emit, build_backend, |settings, output| {
-        FfmpegSink::start(settings, output)
-    })
+    let mut prepared = prepare(plan, options.backend_preference, build_backend)?;
+    render_prepared_with_sink(&mut prepared, options, emit, FfmpegSink::start)
 }
 
 #[allow(
     clippy::result_large_err,
     reason = "render errors retain cleanup status"
 )]
+#[cfg(test)]
 pub(super) fn render_with_backend_builder_and_sink<F, S, SF>(
     plan: &RenderPlan,
     options: &RenderOptions,
@@ -78,6 +214,28 @@ where
     S: FrameSink,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
+    let mut prepared = prepare(plan, options.backend_preference, build_backend)?;
+    render_prepared_with_sink(&mut prepared, options, emit, start_sink)
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "render errors retain cleanup status"
+)]
+pub(crate) fn render_prepared_with_sink<S, SF>(
+    prepared: &mut PreparedState,
+    options: &RenderOptions,
+    emit: &mut dyn FnMut(RenderEvent),
+    start_sink: SF,
+) -> Result<RenderSummary, RenderError>
+where
+    S: FrameSink,
+    SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
+{
+    prepared.ensure_ready()?;
+    // Keep the immutable plan local while the backend is mutably borrowed.
+    // This lets a failed operation invalidate the reusable state immediately.
+    let plan = Arc::clone(&prepared.plan);
     let total_started = Instant::now();
     let output = OutputTarget::prepare(
         options
@@ -95,68 +253,30 @@ where
         ),
         warnings: Vec::new(),
         temporary_removed: false,
-        context: RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, plan),
+        context: RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, &plan),
         timings: failure_timings(RenderTimings::default(), total_started),
     })?;
-    let decoded = DecodedAssets::build(plan).map_err(|diagnostic| {
-        cleanup_error(
-            &output,
-            plan,
-            RenderFailureStage::AssetPreparation,
-            0,
-            None,
-            diagnostic,
-        )
-    })?;
-    let schedule = ActiveSchedule::compile(plan);
-    let mut timings = RenderTimings {
-        asset_decode_ms: milliseconds(decoded.timings().decode),
-        ..RenderTimings::default()
-    };
-    let (mut backend, backend_fallback) = build_backend(options.backend_preference, plan, &decoded)
-        .map_err(|diagnostic| {
-            failure_with_context(
-                cleanup_error(
-                    &output,
-                    plan,
-                    RenderFailureStage::AssetPreparation,
-                    0,
-                    None,
-                    diagnostic,
-                ),
-                &[],
-                &timings,
-                total_started,
-            )
-        })?;
-    let mut performance = backend.stats();
+    let mut timings = RenderTimings::default();
+    // Resource counts are stable preparation facts. Cache requests and command
+    // submissions are cumulative inside some backends, so take a boundary
+    // snapshot and report only this operation's delta below.
+    let backend_metrics_before = prepared.backend.stats();
+    let mut performance = backend_metrics_before.clone();
     performance.absorb_compilation(&plan.compilation);
-    performance.absorb_schedule(&schedule);
-    let backend_timings = backend.timings();
-    if backend.kind() == RenderBackendKind::Wgpu {
-        timings.gpu_initialization_ms = Some(milliseconds(backend_timings.gpu_initialization));
-        timings.gpu_adapter_request_ms = Some(milliseconds(backend_timings.gpu_adapter_request));
-        timings.gpu_device_request_ms = Some(milliseconds(backend_timings.gpu_device_request));
-        timings.gpu_pipeline_creation_ms =
-            Some(milliseconds(backend_timings.gpu_pipeline_creation));
-        timings.texture_upload_ms = Some(milliseconds(backend_timings.texture_upload));
-        timings.gpu_frame_command_encode_ms =
-            Some(milliseconds(backend_timings.gpu_frame_command_encode));
-        timings.gpu_submission_ms = Some(milliseconds(backend_timings.gpu_submission));
-        timings.gpu_readback_wait_ms = Some(milliseconds(backend_timings.gpu_readback_wait));
-        timings.row_repack_ms = Some(milliseconds(backend_timings.row_repack));
-    }
-    let fallback_warnings = backend_fallback
+    performance.absorb_schedule(&prepared.schedule);
+    let fallback_warnings = prepared
+        .backend_fallback
         .as_ref()
         .map(backend_fallback_warning)
         .into_iter()
         .collect::<Vec<_>>();
+    prepared.backend.reset_operation_metrics();
     emit(events::started(plan.frame_count, &output.final_path));
     let mut encoder = start_sink(&plan.encoder, &output.temporary_path)
         .map_err(|error| {
             cleanup_error(
                 &output,
-                plan,
+                &plan,
                 RenderFailureStage::EncoderStartup,
                 0,
                 None,
@@ -172,25 +292,76 @@ where
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
     let frame_loop = run_frame_loop(
-        plan,
+        &plan,
         options,
         &output,
-        &schedule,
-        backend.as_mut(),
+        &prepared.schedule,
+        prepared.backend.as_mut(),
         &mut encoder,
         &mut performance,
         emit,
     )
-    .map_err(|error| failure_with_context(error, &fallback_warnings, &timings, total_started))?;
-    performance.absorb_staged(&backend.staged_metrics());
+    .map_err(|error| {
+        // A pre-submission cancellation leaves the staged backend untouched and
+        // therefore reusable. Other frame-loop failures may have left backend
+        // state uncertain, as may any cancellation after a successful submit.
+        if error.diagnostic.code != "MVP-CANCELLED"
+            || prepared.backend.staged_metrics().submitted_frames > 0
+        {
+            prepared.invalidate();
+        }
+        failure_with_context(error, &fallback_warnings, &timings, total_started)
+    })?;
+    performance.absorb_staged(&prepared.backend.staged_metrics());
     let completed_frames = frame_loop.completed_frames;
+    let preparation = prepared.backend.stats();
+    performance.absorb_backend_snapshot(&preparation);
+    if let Err(error) = operation_backend_metrics(
+        &mut performance,
+        &backend_metrics_before,
+        &preparation,
+        &plan,
+    ) {
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::FrameComposition,
+                completed_frames,
+                None,
+                error.diagnostic,
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
+    if let Err(diagnostic) = prepared.backend.verify_idle() {
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::FrameComposition,
+                completed_frames,
+                None,
+                diagnostic,
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
     let finish_started = Instant::now();
     let sink_result = encoder
         .finish()
         .map_err(|error| {
             cleanup_error(
                 &output,
-                plan,
+                &plan,
                 RenderFailureStage::EncoderFinalization,
                 completed_frames,
                 None,
@@ -204,7 +375,7 @@ where
         return Err(failure_with_context(
             cleanup_error(
                 &output,
-                plan,
+                &plan,
                 RenderFailureStage::EncoderFinalization,
                 completed_frames,
                 None,
@@ -240,7 +411,7 @@ where
                 temporary_removed: removed,
                 context: RenderFailureContext::at_output(
                     RenderFailureStage::OutputPublication,
-                    plan,
+                    &plan,
                     completed_frames,
                     None,
                     &output,
@@ -261,10 +432,8 @@ where
         &output.final_path,
         plan.warnings.clone(),
     ));
-    let preparation = backend.stats();
-    performance.absorb_backend_snapshot(&preparation);
-    if backend.kind() == RenderBackendKind::Wgpu {
-        let backend_timings = backend.timings();
+    if prepared.backend.kind() == RenderBackendKind::Wgpu {
+        let backend_timings = prepared.backend.timings();
         timings.gpu_frame_command_encode_ms =
             Some(milliseconds(backend_timings.gpu_frame_command_encode));
         timings.gpu_submission_ms = Some(milliseconds(backend_timings.gpu_submission));
@@ -282,11 +451,99 @@ where
         elapsed_ms: timings.total_ms,
         timings,
         performance,
-        requested_render_backend: options.backend_preference,
-        render_backend: backend.kind(),
-        backend_fallback,
-        adapter: backend.adapter(),
+        requested_render_backend: prepared.requested_backend,
+        render_backend: prepared.selected_backend,
+        backend_fallback: prepared.backend_fallback.clone(),
+        adapter: prepared.backend.adapter(),
     })
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "metric invariant errors retain the same structured render failure context"
+)]
+fn operation_backend_metrics(
+    performance: &mut crate::render::PreparationStats,
+    before: &crate::render::PreparationStats,
+    after: &crate::render::PreparationStats,
+    plan: &RenderPlan,
+) -> Result<(), RenderError> {
+    let counters = [
+        (
+            "command submission",
+            before.command_submission_count,
+            after.command_submission_count,
+        ),
+        (
+            "cache hit",
+            before.bitmap_cache_hits,
+            after.bitmap_cache_hits,
+        ),
+        (
+            "cache miss",
+            before.bitmap_cache_misses,
+            after.bitmap_cache_misses,
+        ),
+        (
+            "cache request",
+            before.bitmap_cache_requests,
+            after.bitmap_cache_requests,
+        ),
+        (
+            "cache insertion",
+            before.bitmap_cache_insertions,
+            after.bitmap_cache_insertions,
+        ),
+        (
+            "cache eviction",
+            before.cache_evictions,
+            after.cache_evictions,
+        ),
+        (
+            "oversized cache skip",
+            before.cache_oversized_entries_skipped,
+            after.cache_oversized_entries_skipped,
+        ),
+    ];
+    if let Some((name, _, _)) = counters.iter().find(|(_, before, after)| after < before) {
+        return Err(RenderError {
+            diagnostic: Diagnostic::error(
+                "MVP-BACKEND-METRICS",
+                Category::Backend,
+                format!("backend {name} counter moved backwards between operations"),
+                "",
+            ),
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::FrameComposition,
+                plan,
+            ),
+            timings: RenderTimings::default(),
+        });
+    }
+    let delta =
+        |before: u64, after: u64| after.checked_sub(before).expect("counters checked above");
+    performance.command_submission_count = delta(
+        before.command_submission_count,
+        after.command_submission_count,
+    );
+    performance.bitmap_cache_hits = delta(before.bitmap_cache_hits, after.bitmap_cache_hits);
+    performance.bitmap_cache_misses = delta(before.bitmap_cache_misses, after.bitmap_cache_misses);
+    performance.bitmap_cache_requests =
+        delta(before.bitmap_cache_requests, after.bitmap_cache_requests);
+    performance.bitmap_cache_insertions = delta(
+        before.bitmap_cache_insertions,
+        after.bitmap_cache_insertions,
+    );
+    performance.cache_evictions = delta(before.cache_evictions, after.cache_evictions);
+    performance.cache_oversized_entries_skipped = delta(
+        before.cache_oversized_entries_skipped,
+        after.cache_oversized_entries_skipped,
+    );
+    performance.bitmap_cache_hit_rate = (performance.bitmap_cache_requests != 0)
+        .then(|| performance.bitmap_cache_hits as f64 / performance.bitmap_cache_requests as f64);
+    Ok(())
 }
 
 pub(super) fn milliseconds(duration: Duration) -> u128 {

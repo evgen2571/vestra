@@ -6,10 +6,13 @@
 mod engine;
 
 pub(crate) use engine::backend_fallback_warning;
+#[cfg(test)]
+pub(crate) use engine::render_prepared_with_sink;
+pub(crate) use engine::{PreparedState, prepare_for_video, render_prepared};
 
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
-    RenderFailureStage, RenderOptions, RenderSummary, RenderTimings, render,
+    RenderFailureStage, RenderOptions, RenderSummary, RenderTimings,
 };
 #[allow(
     unused_imports,

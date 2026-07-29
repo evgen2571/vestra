@@ -85,6 +85,19 @@ impl RenderBackend for CpuBackend {
         self.completed.clear();
     }
 
+    fn verify_idle(&self) -> Result<(), Diagnostic> {
+        if self.completed.is_empty() {
+            Ok(())
+        } else {
+            Err(Diagnostic::error(
+                "MVP-BACKEND-NOT-IDLE",
+                crate::Category::Backend,
+                "CPU backend retained completed frames after flush",
+                "",
+            ))
+        }
+    }
+
     fn stats(&mut self) -> PreparationStats {
         self.assets.stats().clone()
     }
@@ -95,6 +108,14 @@ impl RenderBackend for CpuBackend {
 
     fn staged_metrics(&self) -> StagedMetrics {
         self.metrics
+    }
+
+    fn reset_operation_metrics(&mut self) {
+        self.metrics = StagedMetrics {
+            configured_pipeline_depth: 1,
+            allocated_slot_count: 1,
+            ..StagedMetrics::default()
+        };
     }
 
     fn record_written(&mut self, _frame_number: u64) {

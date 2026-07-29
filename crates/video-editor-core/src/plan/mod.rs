@@ -39,7 +39,7 @@ mod tests {
         PlanCompileInput::new(
             project,
             ResourceLimits::default(),
-            std::path::Path::new("/projects/animation-effects.json"),
+            std::path::Path::new("/projects"),
             assets,
             durations,
             6.0,

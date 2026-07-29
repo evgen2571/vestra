@@ -450,6 +450,26 @@ impl RenderBackend for WgpuBackend {
         self.staged.abort_drain_duration += started.elapsed();
     }
 
+    fn verify_idle(&self) -> Result<(), Diagnostic> {
+        if self.aborted {
+            return Err(Diagnostic::error(
+                "MVP-BACKEND-NOT-IDLE",
+                crate::Category::Backend,
+                "WGPU backend was aborted",
+                "",
+            ));
+        }
+        if self.in_flight() != 0 || !self.readback.all_available() {
+            return Err(Diagnostic::error(
+                "MVP-BACKEND-NOT-IDLE",
+                crate::Category::Backend,
+                "WGPU backend retained pending readback work after flush",
+                "",
+            ));
+        }
+        Ok(())
+    }
+
     fn stats(&mut self) -> PreparationStats {
         debug_assert_eq!(
             self.stats.source_texture_bytes,
@@ -475,6 +495,19 @@ impl RenderBackend for WgpuBackend {
         metrics.slot_lifetime = readback.slot_lifetime;
         metrics.mapping_failure_count = readback.mapping_failure_count;
         metrics
+    }
+
+    fn reset_operation_metrics(&mut self) {
+        self.staged = StagedMetrics {
+            configured_pipeline_depth: self.pipeline_depth,
+            allocated_slot_count: self.pipeline_depth,
+            ..StagedMetrics::default()
+        };
+        self.readback.reset_metrics();
+        self.timings.gpu_frame_command_encode = Duration::ZERO;
+        self.timings.gpu_submission = Duration::ZERO;
+        self.timings.gpu_readback_wait = Duration::ZERO;
+        self.timings.row_repack = Duration::ZERO;
     }
 
     fn record_written(&mut self, _frame_number: u64) {

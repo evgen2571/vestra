@@ -103,10 +103,33 @@ rendering begins aborts the render instead of changing backends mid-stream.
 ## Engine, failures, and output
 
 `crates/video-editor-render` owns `CompletedFrame`.
-`crates/video-editor/src/render/engine/runner.rs`
-coordinates output setup, shared decoding, active scheduling, backend selection,
-`FfmpegSink` startup, finalization, frame-count verification, publication, and
-final reporting. `crates/video-editor/src/render/engine/frame_loop.rs` owns cancellation, active-layer
+`crates/video-editor/src/application/render.rs` owns the SDK-private
+preparation bridge; `crates/video-editor/src/render/engine/runner.rs` owns its
+private `PreparedState`. Preparation compiles one immutable shared plan, decodes
+visual assets, compiles the schedule, selects and constructs the backend, and
+uploads GPU resources once. It retains a stable preparation-timing snapshot and
+preparation facts. A video operation separately owns its output check,
+`FfmpegSink`, ordering buffer, operation metrics, and publication. Cumulative
+backend counters are sampled at the operation boundary and rendered as deltas;
+cache request fields are per-operation deltas while cache occupancy fields are
+the persistent snapshot after that operation.
+
+After the staged frame loop succeeds, the runner verifies backend idleness
+before encoder finalization and publication. CPU requires an empty completion
+queue; WGPU requires no in-flight or unavailable readback slot and no aborted
+state. An idle-invariant failure aborts and invalidates the prepared state,
+cleans the temporary output, and emits no completed event. Any failure after
+frame submission conservatively invalidates the state; an invalidated state is
+never rebuilt implicitly. Output, FFmpeg, and pre-submission cancellation
+failures leave it reusable. The visual snapshot is owned by the prepared state,
+while operation-time audio remains an FFmpeg input and must remain available and
+unchanged for deterministic repeated video renders. Public prepared and
+single-frame APIs remain deferred to Phase 6B.
+
+The schedule itself is immutable; each video operation creates a chronological
+cursor and active-layer list. This preserves the existing sequential video
+evaluation contract and leaves arbitrary frame evaluation for a later public
+frame-rendering phase. `crates/video-editor/src/render/engine/frame_loop.rs` owns cancellation, active-layer
 updates, evaluation, backend rendering, completion ordering, delivery to
 `FrameSink`, and progress events. The frame loop depends only on `FrameSink`. It
 never knows about FFmpeg, process arguments, or temporary paths.

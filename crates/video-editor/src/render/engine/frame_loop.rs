@@ -491,7 +491,11 @@ fn cancellation<S: FrameSink + ?Sized>(
     completed_frames: u64,
     attempted_frame: Option<u64>,
 ) -> Result<FrameLoopResult, RenderError> {
-    backend.abort();
+    // An already-cancelled operation has not submitted work, so aborting would
+    // dirty an otherwise reusable prepared backend.
+    if backend.staged_metrics().submitted_frames > 0 {
+        backend.abort();
+    }
     let cleanup = abort_sink(encoder);
     Err(cleanup_error(
         output,

@@ -17,6 +17,8 @@ pub struct RenderOptions {
     pub output_override: Option<PathBuf>,
     pub overwrite: bool,
     pub cancelled: Arc<AtomicBool>,
+    /// Test-only factory selection; production operations cannot select a backend.
+    #[cfg(test)]
     pub backend_preference: RenderBackendPreference,
 }
 
@@ -29,7 +31,7 @@ pub enum RenderBackendPreference {
     Wgpu,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct BackendFallback {
     pub code: String,
     pub stage: String,

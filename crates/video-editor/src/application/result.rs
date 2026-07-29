@@ -5,9 +5,7 @@ use serde::Serialize;
 use crate::{
     Diagnostic,
     application::Inspection,
-    render::{
-        AdapterMetadata, BackendFallback, RenderBackendPreference, RenderSummary, RenderTimings,
-    },
+    render::{BackendFallback, RenderBackendPreference, RenderSummary, RenderTimings},
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -125,14 +123,14 @@ pub struct RenderResult {
     /// Identifies whether timing fields include preparation.
     pub timing_scope: RenderTimingScope,
     pub timings: RenderTimings,
-    pub performance: crate::render::PreparationStats,
+    pub performance: crate::RenderPerformance,
     pub requested_render_backend: RenderBackendPreference,
     pub render_backend: &'static str,
     pub encoder_backend: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backend_fallback: Option<BackendFallback>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub adapter: Option<AdapterMetadata>,
+    pub adapter: Option<crate::AdapterInfo>,
     pub warnings: Vec<Diagnostic>,
 }
 
@@ -165,12 +163,12 @@ pub fn render_result(
         elapsed_ms: summary.elapsed_ms,
         timing_scope: RenderTimingScope::OneShot,
         timings: summary.timings,
-        performance: summary.performance,
+        performance: summary.performance.into(),
         requested_render_backend: summary.requested_render_backend,
         render_backend: summary.render_backend.as_str(),
         encoder_backend: "ffmpeg",
         backend_fallback: summary.backend_fallback,
-        adapter: summary.adapter,
+        adapter: summary.adapter.map(Into::into),
         warnings,
     }
 }

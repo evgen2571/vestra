@@ -1,12 +1,8 @@
 use std::{fs, path::Path, time::Instant};
 
-#[allow(
-    deprecated,
-    reason = "benchmark records legacy renderer compatibility metadata"
-)]
 use video_editor::{
-    AdapterPerformanceClass, BackendPreference as RenderBackendPreference, CancellationToken,
-    Editor, RenderRequest, RenderResult,
+    AdapterDeviceType, BackendPreference as RenderBackendPreference, CancellationToken, Editor,
+    RenderRequest, RenderResult,
 };
 
 const WARMUP_RUNS: usize = 5;
@@ -180,33 +176,29 @@ fn main() {
     } else {
         summary.total_frames as f64 * 1_000.0 / wall_samples[median_index] as f64
     };
-    let adapter_class = summary
-        .adapter
-        .as_ref()
-        .map(|adapter| adapter.performance_class());
+    let adapter_class = summary.adapter.as_ref().map(|adapter| adapter.device_type);
     if let Some(adapter) = summary.adapter.as_ref() {
-        let class = adapter.performance_class();
         println!(
             "WGPU adapter: name={} backend={} device_type={} driver={} driver_info={} class={} software={}",
             adapter.adapter_name,
-            adapter.graphics_backend,
-            adapter.device_type,
+            adapter.graphics_backend.as_str(),
+            adapter.device_type.as_str(),
             adapter.driver_name,
             adapter.driver_info,
-            class.as_str(),
-            class.is_software(),
+            adapter.device_type.as_str(),
+            adapter.is_software(),
         );
     }
     match adapter_class {
-        Some(AdapterPerformanceClass::Software | AdapterPerformanceClass::Cpu) => println!(
+        Some(AdapterDeviceType::Cpu) => println!(
             "Software WGPU adapter benchmark. This result verifies execution and measurement infrastructure; it is not representative of hardware-GPU performance."
         ),
-        Some(AdapterPerformanceClass::IntegratedGpu | AdapterPerformanceClass::DiscreteGpu) => {
+        Some(AdapterDeviceType::IntegratedGpu | AdapterDeviceType::DiscreteGpu) => {
             println!(
                 "Hardware WGPU adapter benchmark. Adapter metadata above identifies the measured device."
             )
         }
-        Some(AdapterPerformanceClass::VirtualGpu | AdapterPerformanceClass::Unknown) => println!(
+        Some(AdapterDeviceType::VirtualGpu | AdapterDeviceType::Other) => println!(
             "WGPU adapter class is not a confirmed hardware GPU. Performance status is not inferred."
         ),
         None if selected_backend == "wgpu" => println!(
@@ -217,7 +209,7 @@ fn main() {
     println!(
         "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} pipeline_depth={pipeline_depth} frame_count={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} peak_in_flight={} blocking_polls={} slot_waits={} staging_memory_bytes={} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
         selected_backend,
-        adapter_class.map_or("none", AdapterPerformanceClass::as_str),
+        adapter_class.map_or("none", AdapterDeviceType::as_str),
         summary.total_frames,
         wall_samples[median_index],
         wall_samples[0],

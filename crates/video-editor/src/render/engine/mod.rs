@@ -7,6 +7,8 @@ mod runner;
 mod selection;
 mod types;
 
+#[cfg(test)]
+pub(crate) use selection::inject_wgpu_preparation_failure;
 pub(crate) use types::backend_fallback_warning;
 
 #[cfg(test)]

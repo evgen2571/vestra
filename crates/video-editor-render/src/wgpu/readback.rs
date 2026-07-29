@@ -438,11 +438,19 @@ mod tests {
 
     fn ring_with_mapping_slot() -> Option<(ReadbackRing, SubmissionToken)> {
         let instance = wgpu::Instance::default();
-        let adapter =
-            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+        let Some(adapter) =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+        else {
+            if std::env::var_os("VIDEO_EDITOR_REQUIRE_WGPU").is_some() {
+                panic!("strict WGPU verification requires an adapter for callback queue tests");
+            }
+            eprintln!("WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter callback=readback");
+            return None;
+        };
         let (device, _) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
-                .ok()?;
+                .expect("adapter was found but device request failed");
+        eprintln!("WGPU_RUNTIME_EXECUTED adapter=available backend=wgpu callback=readback");
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback callback test"),
             size: 256,
@@ -497,7 +505,6 @@ mod tests {
     #[test]
     fn callback_processing_rejects_stale_generation_and_wrong_slot_tokens() {
         let Some((mut ring, first)) = ring_with_mapping_slot() else {
-            eprintln!("skipping adapter-dependent callback queue test: no adapter");
             return;
         };
         // Simulate a normal completion and reuse of the only slot. The old
@@ -542,7 +549,6 @@ mod tests {
     #[test]
     fn callback_processing_rejects_duplicate_wrong_frame_and_post_abort_callbacks() {
         let Some((mut ring, current)) = ring_with_mapping_slot() else {
-            eprintln!("skipping adapter-dependent callback queue test: no adapter");
             return;
         };
         // A map failure transitions the real slot to Failed. Replaying the

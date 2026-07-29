@@ -145,7 +145,8 @@ video rendering. Prepared-video timing totals exclude reusable preparation;
 one-shot totals include it. Preparation warnings are merged in lifecycle order
 and deduplicated by their complete diagnostic identity.
 
-`Frame`, `FrameRate`, `PreparationReport`, and `Editor` are `Send + Sync`.
+`Frame`, `FrameRate`, `PreparationReport`, `AdapterInfo`, `RenderPerformance`,
+and `Editor` are `Send + Sync`.
 `PreparedProject` is `Send` but intentionally not `Sync`: it can move between
 threads while idle, and every render method requires `&mut self`; video progress
 callbacks run on the calling thread. The supported SDK surface is the API exported
@@ -164,10 +165,9 @@ The public exports are classified as follows:
   `FrameRateError`, `PreparationReport`, `PreparationTimings`,
   `ValidationReport`, `PreflightReport`, `InspectionReport`, `VersionResult`,
   `Diagnostic`, `Category`, `Severity`, `BackendPreference`, `BackendKind`,
-  `BackendFallback`, `AdapterMetadata`, `RenderFailureContext`,
+  `BackendFallback`, `AdapterInfo`, `AdapterDeviceType`, `GraphicsBackend`,
+  `RenderPerformance`, `RenderFailureContext`,
   `RenderFailureStage`, and `RenderTimings`.
-- Legacy compatibility exports: `AdapterPerformanceClass` and
-  `PreparationStats`. Both are deprecated; new SDK APIs do not use them.
 - Internal leaks: none. Renderer crate types, render plans, WGPU resources,
   and staged backend interfaces are not public SDK contracts.
 
@@ -177,6 +177,18 @@ earlier parse time from `operation_total_ms`, which measures only work inside
 `Editor::render`. Successful CLI render output serializes that SDK result and
 does not add a command-total field. Selected CLI failure reports include an
 `elapsed_ms` measured by the command, which can include project loading.
+
+`AdapterInfo` is the stable SDK-owned adapter report. `RenderPerformance` is
+also SDK-owned, but it is a deliberately curated report rather than a mirror of
+renderer state: its serialized fields preserve the existing JSON/report schema.
+They cover operation facts, compilation/asset/cache observations, and stable
+resource counts for one CPU or WGPU video operation. Repeated prepared-video
+operations report their own deltas; one-shot reports include preparation in its
+timing scope, while prepared operations do not. Readback-ring configuration,
+slot and callback lifecycle data, polling counters, staging estimates, and
+fine-grained readback timings are Rust-only advanced diagnostics and are
+excluded from JSON. Python v0.1 will consume only SDK-owned DTOs and a
+deliberately selected subset of these metrics.
 
 Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.

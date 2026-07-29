@@ -21,7 +21,7 @@ use video_editor_render::CpuBackend;
 use super::super::{
     BackendFallback, RenderBackendPreference, RenderOptions,
     runner::{
-        prepare, render_prepared_with_sink, render_with_backend_builder,
+        prepare, render_prepared_frame, render_prepared_with_sink, render_with_backend_builder,
         render_with_backend_builder_and_sink,
     },
 };
@@ -411,23 +411,72 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
 }
 
 #[test]
+fn unsupported_wgpu_frame_request_is_non_destructive() {
+    let plan = super::example_plan();
+    let total_frames = plan.frame_count;
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let backend_written = Arc::clone(&written);
+    let mut prepared = prepare(
+        plan.clone(),
+        RenderBackendPreference::Wgpu,
+        move |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    1,
+                    (0..total_frames).collect(),
+                    backend_written,
+                )) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
+    .expect("prepared WGPU seam");
+    let error = render_prepared_frame(&mut prepared, 0).expect_err("WGPU frames are deferred");
+    assert_eq!(error.diagnostic.code, "MVP-PREPARED-FRAME-BACKEND");
+    assert!(written.lock().expect("mock metrics lock").is_empty());
+    let workspace = tempfile::tempdir().expect("temporary output directory");
+    let options = RenderOptions {
+        output_override: Some(workspace.path().join("still-usable.mp4")),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    render_prepared_with_sink(
+        &mut prepared,
+        &options,
+        &mut |_| {},
+        |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                SinkProbe::default(),
+            ))
+        },
+    )
+    .expect("video remains usable");
+}
+
+#[test]
 fn prepared_state_reuses_one_backend_for_two_video_operations() {
     let plan = super::example_plan();
     let total_frames = plan.frame_count;
     let workspace = tempfile::tempdir().expect("temporary output directory");
     let backend_creations = Arc::new(AtomicUsize::new(0));
     let creation_counter = Arc::clone(&backend_creations);
-    let mut prepared = prepare(&plan, RenderBackendPreference::Wgpu, move |_, _, _| {
-        creation_counter.fetch_add(1, Ordering::Relaxed);
-        Ok((
-            Box::new(MockStagedBackend::new(
-                3,
-                (0..total_frames).collect(),
-                Arc::new(Mutex::new(Vec::new())),
-            )) as Box<dyn RenderBackend>,
-            None,
-        ))
-    })
+    let mut prepared = prepare(
+        plan.clone(),
+        RenderBackendPreference::Wgpu,
+        move |_, _, _| {
+            creation_counter.fetch_add(1, Ordering::Relaxed);
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    3,
+                    (0..total_frames).collect(),
+                    Arc::new(Mutex::new(Vec::new())),
+                )) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
     .expect("one visual preparation succeeds");
 
     for name in ["first.mp4", "second.mp4"] {

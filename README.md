@@ -105,8 +105,36 @@ delivery, then temporary output publication. `Editor::validate` is deterministic
 and never opens assets or starts a subprocess. `Editor::preflight` checks only
 the environment required by its explicit target. The CLI `validate` command uses
 the complete default render-readiness target, including assets, required media
-probing, encoder, backend, and configured output. Reusable preparation and
-single-frame rendering are intentionally not part of this SDK yet.
+probing, encoder, backend, and configured output. `Editor::prepare` performs
+preparation-target preflight without checking an output path or starting FFmpeg.
+It returns an owned `PreparedProject` that can outlive both the `Editor` and
+`Project`. The snapshot freezes visual assets and resolved metadata. FFmpeg
+reopens external media, including audio, per video operation, so those files
+must remain unchanged for repeatable output.
+
+```rust
+use std::time::Duration;
+use video_editor::{BackendPreference, Editor, PrepareOptions};
+
+let project = Editor::new().load_project("project.json")?;
+let mut prepared = Editor::new()
+    .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))?;
+let frame = prepared.render_frame(Duration::from_secs(2))?;
+assert_eq!(frame.as_bytes().len(), frame.width() as usize * frame.height() as usize * 4);
+```
+
+Prepared video operations use `PreparedVideoRenderRequest`; the backend cannot
+change after preparation. CPU snapshots support synchronous single-frame
+rendering. WGPU snapshots return a capability error for frame requests. Frame
+pixels are owned RGBA8, top-row-first, tightly packed, and unpremultiplied.
+`Frame::timestamp()` is the earliest `Duration` that maps back to that frame.
+Timeline conversion uses checked integer rational arithmetic; when a fractional
+frame boundary lies between nanoseconds, it is rounded up to the next
+nanosecond. The final project duration is an exclusive endpoint. Random frame
+access uses the same canonical draw ordering and CPU staged backend path as
+video rendering. Prepared-video timing totals exclude reusable preparation;
+one-shot totals include it. Preparation warnings are merged in lifecycle order
+and deduplicated by their complete diagnostic identity.
 
 `Project::load` and `Project::from_json` record JSON parse time. `from_value`
 does not parse JSON and reports zero parse time. Render reports separate that

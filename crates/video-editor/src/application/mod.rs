@@ -6,8 +6,10 @@ mod result;
 
 pub use inspect::{Inspection, inspect};
 pub use render::{ApplicationRenderError, RenderRequest};
-pub(crate) use render::{PreparationTimings, prepare_project, render_prepared_project};
+pub(crate) use render::{
+    PreparationTimings, PreparedRender, prepare_project, render_prepared_project,
+};
 pub use result::{
-    InspectResult, RenderResult, ValidateResult, VersionResult, inspect_result, render_result,
-    version_result,
+    InspectResult, RenderResult, RenderTimingScope, ValidateResult, VersionResult, inspect_result,
+    render_result, version_result,
 };

@@ -4,15 +4,21 @@ mod application;
 mod cancellation;
 mod editor;
 mod plan;
+mod prepared;
 mod project;
 mod render;
 
 pub use application::{
-    InspectResult as InspectionReport, RenderResult, ValidateResult, VersionResult,
+    InspectResult as InspectionReport, RenderResult, RenderTimingScope, ValidateResult,
+    VersionResult,
 };
 pub use cancellation::CancellationToken;
 pub use editor::{
     Editor, EditorBuilder, EditorError, PreflightOptions, SdkRenderRequest as RenderRequest,
+};
+pub use prepared::{
+    BackendKind, Frame, PixelFormat, PreparationReport, PreparationTimings, PrepareOptions,
+    PreparedProject, PreparedVideoRenderRequest,
 };
 pub use project::{LoadError, Project};
 pub use render::{

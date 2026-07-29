@@ -1,14 +1,25 @@
 use std::path::PathBuf;
 
+use std::time::Duration;
 use tempfile::tempdir;
 use video_editor::{
-    BackendPreference, CancellationToken, Editor, EditorError, PreflightOptions, RenderRequest,
+    BackendPreference, CancellationToken, Editor, EditorError, PreflightOptions, PrepareOptions,
+    PreparedVideoRenderRequest, RenderRequest,
 };
 
 fn fixture(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(path)
+}
+
+#[test]
+fn public_auto_traits_are_explicit() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<video_editor::Frame>();
+    assert_send_sync::<Editor>();
+    // PreparedProject deliberately has exclusive operations and contains an
+    // opaque backend trait object, so Phase 6B does not promise Send or Sync.
 }
 
 #[test]
@@ -55,6 +66,145 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
         events.last().map(|event| event.kind.as_str()),
         Some("completed")
     );
+}
+
+#[test]
+fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
+    let directory = tempdir().expect("temporary directory");
+    let project = video_editor::Project::from_json(
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        directory.path(),
+    )
+    .expect("project");
+    let mut prepared = {
+        let editor = Editor::new();
+        editor
+            .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+            .expect("prepare")
+    };
+    drop(project);
+    let report = prepared.preparation_report();
+    assert_eq!(report.frame_rate(), (30_000, 1_001));
+    assert!(report.supports_single_frame_rendering());
+    assert_eq!(report.width(), 2);
+    let duration = report.duration();
+    let first = prepared.render_frame_number(0).expect("first frame");
+    let later = prepared.render_frame_number(10).expect("later frame");
+    let again = prepared.render_frame_number(0).expect("first frame again");
+    assert_eq!(first.as_bytes(), again.as_bytes());
+    assert_eq!(first.as_bytes().len(), 16);
+    assert_eq!(later.frame_number(), 10);
+    assert_eq!(
+        prepared
+            .render_frame(duration)
+            .expect_err("exclusive end")
+            .diagnostics()[0]
+            .code,
+        "MVP-FRAME-RANGE"
+    );
+}
+
+#[test]
+fn prepared_cpu_video_operation_uses_an_operation_request() {
+    let directory = tempdir().expect("temporary directory");
+    let project_path = fixture("tests/fixtures/wgpu-small-rgba.json");
+    let project = Editor::new().load_project(project_path).expect("project");
+    let mut prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare");
+    let output = directory.path().join("prepared.mp4");
+    let result = prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("render");
+    assert_eq!(result.output, output);
+    assert_eq!(
+        result.timing_scope,
+        video_editor::RenderTimingScope::PreparedOperation
+    );
+    assert_eq!(result.timings.operation_total_ms, result.timings.total_ms);
+    assert_eq!(result.elapsed_ms, result.timings.operation_total_ms);
+    assert!(prepared.render_frame_number(0).is_ok());
+}
+
+#[test]
+fn prepared_frames_have_exact_rational_timestamps_and_owned_pixels() {
+    let directory = tempdir().expect("temporary directory");
+    let project = video_editor::Project::from_json(
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        directory.path(),
+    ).expect("project");
+    let mut prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare");
+    let retained = prepared.render_frame_number(17).expect("frame 17");
+    assert_eq!(retained.timestamp(), Duration::from_nanos(567_233_334));
+    assert_eq!(
+        prepared
+            .render_frame(retained.timestamp())
+            .expect("round trip")
+            .frame_number(),
+        17
+    );
+    assert_eq!(
+        prepared
+            .render_frame(retained.timestamp() - Duration::from_nanos(1))
+            .expect("previous instant")
+            .frame_number(),
+        16
+    );
+    let retained_pixels = retained.as_bytes().to_vec();
+    let _next = prepared.render_frame_number(18).expect("frame 18");
+    assert_eq!(retained.as_bytes(), retained_pixels);
+    let report = prepared.preparation_report();
+    let snapshot = (
+        report.selected_backend(),
+        report.duration(),
+        report.frame_count(),
+        report
+            .warnings()
+            .iter()
+            .map(|warning| {
+                (
+                    warning.code.clone(),
+                    warning.message.clone(),
+                    warning.pointer.clone(),
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
+    let output = directory.path().join("owned-frame.mp4");
+    prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("video");
+    assert_eq!(retained.as_bytes(), retained_pixels);
+    let report = prepared.preparation_report();
+    assert_eq!(
+        (
+            report.selected_backend(),
+            report.duration(),
+            report.frame_count(),
+            report
+                .warnings()
+                .iter()
+                .map(|warning| (
+                    warning.code.clone(),
+                    warning.message.clone(),
+                    warning.pointer.clone()
+                ))
+                .collect::<Vec<_>>()
+        ),
+        snapshot
+    );
+    drop(prepared);
+    assert_eq!(retained.as_bytes(), retained_pixels);
 }
 
 #[test]

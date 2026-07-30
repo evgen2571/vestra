@@ -79,10 +79,12 @@ impl Project {
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&self.canonical)
+        serde_json::to_string(&self.to_value()?)
     }
     pub fn to_value(&self) -> Result<Value, serde_json::Error> {
-        serde_json::to_value(&self.canonical)
+        let mut value = serde_json::to_value(&self.canonical)?;
+        remove_null_fields(&mut value);
+        Ok(value)
     }
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), LoadError> {
         fs::write(path, self.to_json().map_err(LoadError::parse)?).map_err(LoadError::write)
@@ -100,5 +102,48 @@ impl Project {
     }
     pub(crate) const fn parse_elapsed(&self) -> Duration {
         self.parse_elapsed
+    }
+}
+
+/// The canonical model rejects explicit `null` for optional fields. Keep its
+/// exported JSON and value forms reloadable by omitting absent fields instead.
+fn remove_null_fields(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            object.retain(|_, item| !item.is_null());
+            for (key, item) in object {
+                if key != "metadata" {
+                    remove_null_fields(item);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                remove_null_fields(item);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Project;
+
+    #[test]
+    fn serialized_optional_fields_are_omitted_and_reloadable() {
+        let project = Project::from_json(
+            r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#000000","quality":"balanced","audio":false,"duration_mode":"automatic"},"assets":[],"visual":{"clips":[]}}"##,
+            ".",
+        )
+        .expect("fixture is valid");
+
+        let json = project.to_json().expect("project serializes");
+        assert!(!json.contains(":null"));
+        let reloaded = Project::from_json(&json, ".").expect("serialized project reloads");
+        assert_eq!(
+            reloaded.to_value().expect("value"),
+            project.to_value().expect("value")
+        );
     }
 }

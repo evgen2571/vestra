@@ -5,6 +5,7 @@ members = [
     "crates/video-editor-render",
     "crates/video-editor-media",
     "crates/video-editor",
+    "crates/video-editor-python",
     "crates/video-editor-cli",
 ]
 

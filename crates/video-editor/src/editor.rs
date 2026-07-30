@@ -422,10 +422,11 @@ impl Editor {
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
         let preflight_started = Instant::now();
-        let (options, backend) = match target {
+        let (options, backend, preview) = match target {
             InternalPreparationTarget::Public(options) => (
                 PreflightOptions::for_preparation(options.backend()),
                 options.backend(),
+                false,
             ),
             InternalPreparationTarget::OneShot(request) => (
                 PreflightOptions::for_render(
@@ -434,6 +435,7 @@ impl Editor {
                     request.overwrite,
                 ),
                 request.backend,
+                request.preview,
             ),
         };
         let outcome = self.run_preflight(project, &validation, &options);
@@ -457,6 +459,7 @@ impl Editor {
             project,
             validated,
             backend,
+            preview,
             PreparationContext {
                 warnings: warnings.clone(),
                 timings: PreparationTimings {
@@ -481,12 +484,13 @@ impl Editor {
         project: &Project,
         validated: ValidatedProject,
         backend: RenderBackendPreference,
+        preview: bool,
         context: PreparationContext,
     ) -> Result<application::PreparedRender, EditorError> {
         let request = RenderRequest {
             output_override: None,
             overwrite: false,
-            preview: false,
+            preview,
             cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             backend_preference: backend,
         };

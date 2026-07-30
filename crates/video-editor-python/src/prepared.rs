@@ -543,13 +543,33 @@ impl PyPreparedProject {
             Ok(result)
         })
     }
+
+    pub(crate) fn video_operation<T>(
+        &self,
+        py: Python<'_>,
+        operation: impl FnOnce(&mut NativePreparedProject) -> Result<T, SlotError> + Send,
+    ) -> Result<Result<T, EditorError>, SlotError>
+    where
+        T: Send,
+    {
+        let mut prepared = self.take()?;
+        py.detach(|| {
+            if let Err(error) = wait_for_prepared_test_barrier() {
+                self.restore(prepared)?;
+                return Err(error);
+            }
+            let value = operation(&mut prepared);
+            self.restore(prepared)?;
+            value.map(Ok)
+        })
+    }
 }
 #[derive(Clone, Copy)]
-enum SlotError {
+pub(crate) enum SlotError {
     Busy,
     Poisoned,
 }
-fn slot_error(py: Python<'_>, error: SlotError) -> PyResult<PyErr> {
+pub(crate) fn slot_error(py: Python<'_>, error: SlotError) -> PyResult<PyErr> {
     match error {
         SlotError::Busy => {
             let exception = PyErr::new::<PreparedProjectBusyError, _>("prepared project is busy");
@@ -645,6 +665,16 @@ impl PyPreparedProject {
             Ok(Err(error)) => frame_error(py, error),
             Err(error) => Err(slot_error(py, error)?),
         }
+    }
+    #[pyo3(signature = (request, *, progress = None, cancellation = None))]
+    fn render_video(
+        &self,
+        py: Python<'_>,
+        request: &crate::render::PyPreparedVideoRenderRequest,
+        progress: Option<Py<PyAny>>,
+        cancellation: Option<&crate::render::PyCancellationToken>,
+    ) -> PyResult<crate::render::PyRenderResult> {
+        crate::render::render_prepared(py, self, request, progress, cancellation)
     }
 }
 

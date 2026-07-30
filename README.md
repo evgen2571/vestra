@@ -236,8 +236,37 @@ preparation, `PreparedProject`, `PreparationReport`, exact frame timing, and
 synchronous CPU or WGPU single-frame rendering with copied frame bytes. A
 prepared object permits one operation at a time.
 
-Phase 7C is still deferred. It will cover video rendering, progress events,
-cancellation, callback exceptions, render results, and performance reports.
+Phase 7C adds synchronous video rendering, progress callbacks, cancellation,
+and immutable render results. FFmpeg is required for video rendering; FFprobe
+is used by verification where applicable. Prepared frame rendering does not
+encode a video. WGPU availability depends on the runtime adapter.
+
+```python
+import video_editor
+
+editor = video_editor.Editor()
+project = video_editor.Project.load("project.json")
+prepared = editor.prepare(
+    project,
+    video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+)
+result = prepared.render_video(
+    video_editor.PreparedVideoRenderRequest("result.mp4", overwrite=True),
+    progress=lambda event: print(event.kind, event.progress),
+    cancellation=video_editor.CancellationToken(),
+)
+print(result.output_path)
+```
+
+Callbacks run synchronously on the calling render thread. Rendering methods
+block that thread but release the interpreter between callbacks. The callback
+receives only pre-publication `started` and `progress` events; a successful
+return is the completion notification. A callback exception cancels the native
+operation, waits for cleanup, and is then re-raised unchanged.
+
+Phase 7A provides immutable project and inspection APIs. Phase 7B adds
+preparation and single-frame rendering. Phase 7C completes the Python video
+execution API.
 
 ```bash
 python3 -m venv .venv
@@ -247,9 +276,10 @@ python3 -m venv .venv
 ```
 
 Use `import video_editor`. `Project.from_dict()` follows the same native path
-as JSON, and package path properties return `pathlib.Path` values. The full
-binding contract is recorded in `docs/audits/phase7a.md`.
+as JSON, and package path properties return `pathlib.Path` values. The binding
+audits are recorded in `docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and
+`docs/audits/phase7c.md`; together they record Phase 7 finalization.
 
-The currently exposed Python API is immutable. `Project.from_dict()` accepts
-`collections.abc.Mapping` values. Python does not yet expose video rendering,
-callbacks, cancellation, or asynchronous rendering.
+The exposed Python API is immutable. `Project.from_dict()` accepts
+`collections.abc.Mapping` values. Python does not expose asynchronous or
+background rendering.

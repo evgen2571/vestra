@@ -24,6 +24,7 @@ use video_editor::{
 
 mod conversion;
 mod prepared;
+mod render;
 
 create_exception!(
     video_editor._native,
@@ -33,6 +34,8 @@ create_exception!(
 create_exception!(video_editor._native, ProjectError, VideoEditorError);
 create_exception!(video_editor._native, PreparationError, VideoEditorError);
 create_exception!(video_editor._native, FrameRenderError, VideoEditorError);
+create_exception!(video_editor._native, RenderError, VideoEditorError);
+create_exception!(video_editor._native, CancelledError, RenderError);
 create_exception!(
     video_editor._native,
     PreparedProjectBusyError,
@@ -81,6 +84,38 @@ pub(crate) fn editor_error(py: Python<'_>, error: EditorError) -> PyResult<PyErr
         &error_diagnostics,
         &warnings,
     )?;
+    Ok(exception)
+}
+
+pub(crate) fn render_error(py: Python<'_>, error: EditorError) -> PyResult<PyErr> {
+    let error_diagnostics = diagnostics(error.diagnostics());
+    let warnings = diagnostics(error.warnings());
+    let exception = if error.is_cancelled() {
+        PyErr::new::<CancelledError, _>(error.to_string())
+    } else {
+        PyErr::new::<RenderError, _>(error.to_string())
+    };
+    attach_error_context(
+        py,
+        &exception,
+        error.kind().as_str(),
+        &error_diagnostics,
+        &warnings,
+    )?;
+    let value = exception.value(py);
+    value.setattr(
+        "timings",
+        Py::new(py, render::PyRenderTimings::from(error.timings()))?,
+    )?;
+    if let Some(context) = error.render_failure_context() {
+        value.setattr(
+            "failure_context",
+            Py::new(py, render::PyRenderFailureContext::from(context))?,
+        )?;
+    } else {
+        value.setattr("failure_context", py.None())?;
+    }
+    value.setattr("temporary_removed", error.temporary_output_removed())?;
     Ok(exception)
 }
 
@@ -256,6 +291,25 @@ impl PyEditor {
                 "prepared test synchronization failed",
             )),
         }
+    }
+
+    #[pyo3(signature = (project, request, *, progress = None, cancellation = None))]
+    fn render(
+        &self,
+        py: Python<'_>,
+        project: &PyProject,
+        request: &render::PyRenderRequest,
+        progress: Option<Py<PyAny>>,
+        cancellation: Option<&render::PyCancellationToken>,
+    ) -> PyResult<render::PyRenderResult> {
+        render::render_one_shot(
+            py,
+            &self.inner,
+            &project.inner,
+            request,
+            progress,
+            cancellation,
+        )
     }
 }
 
@@ -833,6 +887,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "FrameRenderError",
         module.py().get_type::<FrameRenderError>(),
     )?;
+    module.add("RenderError", module.py().get_type::<RenderError>())?;
+    module.add("CancelledError", module.py().get_type::<CancelledError>())?;
     module.add(
         "PreparedProjectBusyError",
         module.py().get_type::<PreparedProjectBusyError>(),
@@ -851,6 +907,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyInspectAudio>()?;
     module.add_class::<PyInspectionReport>()?;
     prepared::register(module)?;
+    render::register(module)?;
     module.add_function(wrap_pyfunction!(native_version, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_until_detached_entered, module)?)?;
@@ -864,6 +921,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "ProjectError",
                 "PreparationError",
                 "FrameRenderError",
+                "RenderError",
+                "CancelledError",
                 "PreparedProjectBusyError",
                 "Project",
                 "Editor",
@@ -890,6 +949,16 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "AdapterInfo",
                 "AdapterDeviceType",
                 "GraphicsBackend",
+                "RenderRequest",
+                "PreparedVideoRenderRequest",
+                "CancellationToken",
+                "RenderEvent",
+                "RenderResult",
+                "RenderTimingScope",
+                "RenderTimings",
+                "RenderPerformance",
+                "RenderFailureContext",
+                "RenderFailureStage",
                 "native_version",
             ],
         )?,

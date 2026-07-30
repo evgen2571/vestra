@@ -12,7 +12,7 @@ There is no second project format.
 
 ```python
 from video_editor import Editor, FrameRate, RenderRequest
-from video_editor.authoring import Point, ProjectBuilder, Sizing
+from video_editor.authoring import Interpolation, Point, ProjectBuilder, Sizing
 
 builder = ProjectBuilder(
     width=160,
@@ -29,6 +29,8 @@ clip = builder.add_image_clip(
     source=cover, start=0.0, duration=1.0, layer=0, sizing=Sizing.cover(),
 )
 clip.transform.position.base_value = Point(0.5, 0.5)
+clip.opacity.keyframe(time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT)
+clip.opacity.keyframe(time=0.5, value=1.0)
 builder.set_audio(asset=music, timeline_start=0.0, trim_start=0.0)
 
 data = builder.to_dict()
@@ -56,8 +58,18 @@ while solid-colour clips are full-canvas and deliberately have no sizing, crop,
 or transform properties. Assets, clips, tracks, transforms, and audio tracks
 are created only by builder factories. Their stable owned objects cannot be
 replaced; mutate a track's `base_value` instead. Static transform, crop, and
-opacity values serialize as constant `{"base_value": ...}` tracks. Keyframes
-do not exist yet.
+opacity values serialize as constant `{"base_value": ...}` tracks until you add a
+keyframe. `track.keyframe(time=..., value=..., interpolation=...)` works on
+scalar, point, and crop tracks. Keyframes are immutable values, returned in an
+immutable tuple, and their clip-local seconds stay in authored order. Native
+validation reports duplicate, unordered, and out-of-clip times. Before the
+first keyframe a track uses `base_value`; each keyframe's interpolation controls
+the segment ending at it, and the final keyframe holds. Use
+`Interpolation.LINEAR`, `HOLD`, `EASE_IN`, `EASE_OUT`, or `EASE_IN_OUT`, or
+`CubicBezier(x1, y1, x2, y2)`. Bézier x controls must be in `0..=1`; y controls
+are finite and unrestricted. `clear_keyframes()` keeps the stable track and
+its base value. A disabled crop retains its animated state and serializes again
+when `set_crop()` re-enables it.
 
 Every add operation validates before reserving an ID, so a failed call leaves
 the builder unchanged and does not consume an explicit or generated ID. An

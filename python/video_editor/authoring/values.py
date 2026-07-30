@@ -175,6 +175,8 @@ class CubicBezier:
     def __post_init__(self) -> None:
         for name in ("x1", "y1", "x2", "y2"):
             object.__setattr__(self, name, _finite_number(getattr(self, name), name))
+        if not 0.0 <= self.x1 <= 1.0 or not 0.0 <= self.x2 <= 1.0:
+            raise ValueError("cubic Bézier x controls must be between 0 and 1")
 
     def to_canonical(self) -> dict[str, float | str]:
         return {

@@ -1,12 +1,21 @@
-"""Constant authoring tracks. Animation is intentionally not exposed here."""
+"""Stable mutable authoring tracks with immutable keyframe snapshots."""
+
+from __future__ import annotations
 
 from math import isfinite
-from typing import Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Generic, Protocol, Self, TypeVar, cast
 
 from ._internal import _Owner
 from .values import Crop, Point
 
+if TYPE_CHECKING:
+    from .animation import CropKeyframe, InterpolationValue, PointKeyframe, ScalarKeyframe
+
 T = TypeVar("T")
+
+
+class _CanonicalKeyframe(Protocol):
+    def to_canonical(self) -> dict[str, object]: ...
 
 
 def _number(value: int | float, name: str) -> float:
@@ -19,7 +28,8 @@ def _number(value: int | float, name: str) -> float:
 
 
 class _Track(Generic[T]):
-    __slots__ = ("_owner", "_base_value")
+    __slots__ = ("_owner", "_base_value", "_keyframes")
+    _keyframes: list[_CanonicalKeyframe]
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError(f"{type(self).__name__} objects must be created by ProjectBuilder")
@@ -29,11 +39,13 @@ class _Track(Generic[T]):
         instance = object.__new__(cls)
         instance._owner = owner
         instance._base_value = instance._validate(value)
+        instance._keyframes = []
         return instance
 
     def _initialize(self, owner: _Owner, value: T) -> None:
         self._owner = owner
         self._base_value = self._validate(value)
+        self._keyframes = []
 
     @property
     def base_value(self) -> T:
@@ -50,8 +62,18 @@ class _Track(Generic[T]):
         value = self._base_value
         return value.to_canonical() if isinstance(value, Point | Crop) else value
 
+    @property
+    def keyframes(self) -> tuple[object, ...]:
+        return tuple(self._keyframes)
+
+    def clear_keyframes(self) -> None:
+        self._keyframes.clear()
+
     def to_canonical(self) -> dict[str, object]:
-        return {"base_value": self._canonical_value()}
+        data: dict[str, object] = {"base_value": self._canonical_value()}
+        if self._keyframes:
+            data["keyframes"] = [keyframe.to_canonical() for keyframe in self._keyframes]
+        return data
 
     def __repr__(self) -> str:
         if isinstance(self, CropTrack):
@@ -60,12 +82,26 @@ class _Track(Generic[T]):
             name = "PointTrack"
         else:
             name = "ScalarTrack"
-        return f"{name}(base_value={self.base_value!r})"
+        return f"{name}(base_value={self.base_value!r}, keyframes={self.keyframes!r})"
 
 
 class ScalarTrack(_Track[float]):
     def _validate(self, value: float) -> float:
         return _number(value, "base_value")
+
+    @property
+    def keyframes(self) -> tuple["ScalarKeyframe", ...]:
+        from .animation import ScalarKeyframe
+        return tuple(cast(ScalarKeyframe, keyframe) for keyframe in self._keyframes)
+
+    def keyframe(self, *, time: int | float, value: int | float,
+                 interpolation: InterpolationValue | None = None) -> ScalarKeyframe:
+        from .animation import InterpolationValue, ScalarKeyframe
+        from .values import Interpolation
+        selected: InterpolationValue = Interpolation.LINEAR if interpolation is None else interpolation
+        keyframe = ScalarKeyframe(time=time, value=self._validate(value), interpolation=selected)
+        self._keyframes.append(keyframe)
+        return keyframe
 
 
 class PointTrack(_Track[Point]):
@@ -74,12 +110,40 @@ class PointTrack(_Track[Point]):
             raise TypeError("base_value must be Point")
         return Point(value.x, value.y)
 
+    @property
+    def keyframes(self) -> tuple["PointKeyframe", ...]:
+        from .animation import PointKeyframe
+        return tuple(cast(PointKeyframe, keyframe) for keyframe in self._keyframes)
+
+    def keyframe(self, *, time: int | float, value: Point,
+                 interpolation: InterpolationValue | None = None) -> PointKeyframe:
+        from .animation import InterpolationValue, PointKeyframe
+        from .values import Interpolation
+        selected: InterpolationValue = Interpolation.LINEAR if interpolation is None else interpolation
+        keyframe = PointKeyframe(time=time, value=self._validate(value), interpolation=selected)
+        self._keyframes.append(keyframe)
+        return keyframe
+
 
 class CropTrack(_Track[Crop]):
     def _validate(self, value: Crop) -> Crop:
         if not isinstance(value, Crop):
             raise TypeError("base_value must be Crop")
         return Crop(value.x, value.y, value.width, value.height)
+
+    @property
+    def keyframes(self) -> tuple["CropKeyframe", ...]:
+        from .animation import CropKeyframe
+        return tuple(cast(CropKeyframe, keyframe) for keyframe in self._keyframes)
+
+    def keyframe(self, *, time: int | float, value: Crop,
+                 interpolation: InterpolationValue | None = None) -> CropKeyframe:
+        from .animation import CropKeyframe, InterpolationValue
+        from .values import Interpolation
+        selected: InterpolationValue = Interpolation.LINEAR if interpolation is None else interpolation
+        keyframe = CropKeyframe(time=time, value=self._validate(value), interpolation=selected)
+        self._keyframes.append(keyframe)
+        return keyframe
 
 
 class Transform:

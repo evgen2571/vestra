@@ -1,4 +1,4 @@
-from video_editor import AdapterInfo, BackendFallback, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, Project
+from video_editor import AdapterInfo, BackendFallback, CancellationToken, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, Project, RenderEvent, RenderResult
 
 project = Project.from_dict({
     "schema_version": 1,
@@ -25,3 +25,11 @@ adapter: AdapterInfo
 fallback: BackendFallback
 adapter.device_type = adapter.device_type  # E: Property "device_type" defined in "AdapterInfo" is read-only
 fallback.message = "changed"  # E: Property "message" defined in "BackendFallback" is read-only
+result: RenderResult
+result.output_path = "changed"  # E: Property "output_path" defined in "RenderResult" is read-only
+token = CancellationToken()
+token.is_cancelled = False  # E: Property "is_cancelled" defined in "CancellationToken" is read-only
+event: RenderEvent
+event.progress = 1.0  # E: Property "progress" defined in "RenderEvent" is read-only
+from video_editor import PreparedVideoRenderRequest
+PreparedVideoRenderRequest("out.mp4").overwrite = True  # E: Property "overwrite" defined in "PreparedVideoRenderRequest" is read-only

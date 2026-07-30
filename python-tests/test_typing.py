@@ -18,6 +18,16 @@ if TYPE_CHECKING:
     assert kind and diagnostics == warnings
     options = PrepareOptions(backend=video_editor.BackendPreference.CPU)
     prepared = Editor().prepare(project, options)
+    token = video_editor.CancellationToken()
+    request = video_editor.PreparedVideoRenderRequest("out.mp4")
+
+    def on_progress(event: video_editor.RenderEvent) -> object:
+        print(event.progress)
+        return None
+
+    rendered: video_editor.RenderResult = prepared.render_video(
+        request, progress=on_progress, cancellation=token
+    )
     preparation_report = prepared.preparation_report
     frame: Frame = prepared.render_frame_number(0)
     pixels: bytes = frame.to_bytes()
@@ -26,7 +36,7 @@ if TYPE_CHECKING:
         if preparation_report.adapter is not None
         else None
     )
-    assert pixels or device
+    assert pixels or device or rendered.output_path
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:
@@ -37,4 +47,15 @@ def test_negative_immutability_fixture_is_rejected() -> None:
         text=True,
     )
     assert result.returncode == 1
-    assert result.stdout.count("read-only") == 11
+    assert result.stdout.count("read-only") == 15
+
+
+def test_negative_callback_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/non_callable_progress.py"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("incompatible type") == 2

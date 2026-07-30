@@ -55,6 +55,8 @@ def test_native_runtime_names_are_exact_public_names() -> None:
         "ProjectError": video_editor.ProjectError,
         "PreparationError": video_editor.PreparationError,
         "FrameRenderError": video_editor.FrameRenderError,
+        "RenderError": video_editor.RenderError,
+        "CancelledError": video_editor.CancelledError,
         "PreparedProjectBusyError": video_editor.PreparedProjectBusyError,
         "PrepareOptions": video_editor.PrepareOptions,
         "PreparedProject": video_editor.PreparedProject,
@@ -66,6 +68,16 @@ def test_native_runtime_names_are_exact_public_names() -> None:
         "AdapterInfo": video_editor.AdapterInfo,
         "AdapterDeviceType": video_editor.AdapterDeviceType,
         "GraphicsBackend": video_editor.GraphicsBackend,
+        "RenderRequest": video_editor.RenderRequest,
+        "PreparedVideoRenderRequest": video_editor.PreparedVideoRenderRequest,
+        "CancellationToken": video_editor.CancellationToken,
+        "RenderEvent": video_editor.RenderEvent,
+        "RenderResult": video_editor.RenderResult,
+        "RenderTimingScope": video_editor.RenderTimingScope,
+        "RenderTimings": video_editor.RenderTimings,
+        "RenderPerformance": video_editor.RenderPerformance,
+        "RenderFailureContext": video_editor.RenderFailureContext,
+        "RenderFailureStage": video_editor.RenderFailureStage,
     }
     for expected_name, value in classes.items():
         assert value.__name__ == expected_name

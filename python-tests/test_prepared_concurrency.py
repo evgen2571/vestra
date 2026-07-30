@@ -103,3 +103,71 @@ def test_busy_state_is_local_to_one_prepared_object() -> None:
         worker.join(timeout=1)
     assert not worker.is_alive()
     assert worker_errors == []
+
+
+def _assert_busy(call: object) -> None:
+    with pytest.raises(video_editor.PreparedProjectBusyError) as raised:
+        call()  # type: ignore[operator]
+    assert raised.value.kind == "busy"
+    assert raised.value.diagnostics == ()
+    assert raised.value.warnings == ()
+
+
+def test_video_operation_rejects_video_and_frame_calls_while_active(tmp_path: Path) -> None:
+    import video_editor._native as native
+
+    value = prepared()
+    output = tmp_path / "active.mp4"
+    errors: list[BaseException] = []
+    completed = threading.Event()
+    native._test_arm_video_render()
+
+    def render() -> None:
+        try:
+            value.render_video(video_editor.PreparedVideoRenderRequest(output))
+        except BaseException as error:
+            errors.append(error)
+        else:
+            completed.set()
+
+    worker = threading.Thread(target=render)
+    worker.start()
+    try:
+        native._test_wait_until_video_render_entered()
+        _assert_busy(lambda: value.render_video(video_editor.PreparedVideoRenderRequest(tmp_path / "busy.mp4")))
+        _assert_busy(lambda: value.render_frame_number(0))
+    finally:
+        native._test_release_video_render()
+        worker.join()
+
+    assert not worker.is_alive()
+    assert errors == []
+    assert completed.is_set()
+    assert value.render_frame_number(0).frame_number == 0
+
+
+def test_frame_operation_rejects_video_call_while_active(tmp_path: Path) -> None:
+    import video_editor._native as native
+
+    value = prepared()
+    errors: list[BaseException] = []
+    native._test_arm_prepared_operation()
+
+    def render_frame() -> None:
+        try:
+            value.render_frame_number(0)
+        except BaseException as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=render_frame)
+    worker.start()
+    try:
+        native._test_wait_until_prepared_operation_entered()
+        _assert_busy(lambda: value.render_video(video_editor.PreparedVideoRenderRequest(tmp_path / "busy.mp4")))
+    finally:
+        native._test_release_prepared_operation()
+        worker.join()
+
+    assert not worker.is_alive()
+    assert errors == []
+    assert value.render_frame_number(0).frame_number == 0

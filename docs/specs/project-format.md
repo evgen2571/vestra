@@ -116,9 +116,11 @@ is identity and its attack and decay use effect-local time. Motion blur samples 
 transforms, derives translation direction in screen space, and caps the
 directional blur. v1 does not derive blur from rotation or scale velocity.
 
-Advanced effects, non-normal blend modes, and global post effects run on CPU.
-`auto` chooses CPU with a structured capability fallback; explicit `wgpu`
-rejects these projects before frame rendering. This avoids silent degradation.
+All valid schema-version 1 effects, blend modes, post-effects, transitions, and
+presets have WGPU plan mappings. `auto` can select CPU when no compatible
+adapter is available or WGPU preparation fails. Explicit `wgpu` reports adapter,
+device, resource, shader, or runtime failures. Once preparation selects WGPU,
+the renderer does not switch backends mid-operation.
 
 Supported coordinated transitions are `crossfade`, `zoom_crossfade`,
 `flash_cut`, `directional_push`, and `zoom_blur`. They must fit in both clips.
@@ -144,10 +146,10 @@ combined runnable project.
 
 | Feature | CPU | WGPU | Auto |
 | --- | --- | --- | --- |
-| Basic transforms and colour effects | yes | yes | prefers WGPU when available |
-| Advanced effects and blend modes | yes | no | falls back to CPU with a diagnostic |
-| Global post-effects | yes | no | falls back to CPU with a diagnostic |
-| Advanced transitions and presets | yes | no | falls back to CPU with a diagnostic |
+| Basic transforms and colour effects | yes | yes | prefers WGPU when preparation succeeds |
+| Advanced effects and blend modes | yes | yes | falls back before rendering only when WGPU preparation fails |
+| Global post-effects | yes | yes | falls back before rendering only when WGPU preparation fails |
+| Advanced transitions and presets | yes | yes | falls back before rendering only when WGPU preparation fails |
 
 Advanced image processing uses straight-alpha storage with premultiplied-alpha
 accumulation during blur passes. Gaussian blur is separable and bounded to a

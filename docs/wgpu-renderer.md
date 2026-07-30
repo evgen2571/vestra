@@ -22,6 +22,13 @@ prepared; a runtime GPU failure aborts the render and cleans up FFmpeg output.
 Reports distinguish requested and selected backends, fallback context, adapter
 metadata, and the FFmpeg encoder backend.
 
+The current WGPU implementation has plan mappings for every valid
+schema-version 1 effect, blend mode, post-effect, transition, and preset.
+Compatibility is separate from availability. A compatible plan can still fail
+to obtain an adapter or device, prepare resources, compile a shader, or run.
+`auto` falls back only during preparation. Explicit WGPU and selected WGPU
+operations report failures instead of switching to CPU.
+
 ## Assets, coordinates, and crops
 
 Images decode once into shared RGBA bytes. CPU owns its byte-budgeted crop

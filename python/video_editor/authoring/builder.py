@@ -8,8 +8,11 @@ from typing import TypeAlias
 
 from video_editor import Editor, FrameRate, Project, ValidationReport
 
-from ._internal import _IdAllocator, _Owner
-from .values import Color, DurationMode, Quality, color_to_canonical
+from ._internal import _IdAllocator, _Owner, _require_owner
+from .assets import AudioAsset, ImageAsset
+from .audio import AudioTrack
+from .clips import ImageClip, SolidColorClip
+from .values import Color, Crop, DurationMode, Quality, Sizing, color_to_canonical
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
@@ -109,6 +112,9 @@ class ProjectBuilder:
                 raise ValueError("automatic duration mode must not specify duration")
             self._duration_mode = DurationMode.EXPLICIT
             self._duration = _number(duration, "duration")
+        self._assets: list[ImageAsset | AudioAsset] = []
+        self._clips: list[ImageClip | SolidColorClip] = []
+        self._audio: AudioTrack | None = None
 
     @staticmethod
     def _frame_rate_value(value: FrameRate) -> FrameRate:
@@ -227,6 +233,86 @@ class ProjectBuilder:
         if value is DurationMode.AUTOMATIC:
             self._duration = None
 
+    @property
+    def assets(self) -> tuple[ImageAsset | AudioAsset, ...]:
+        """Registered assets in canonical registration order."""
+        return tuple(self._assets)
+
+    @property
+    def clips(self) -> tuple[ImageClip | SolidColorClip, ...]:
+        """Visual clips in canonical creation order."""
+        return tuple(self._clips)
+
+    @property
+    def audio(self) -> AudioTrack | None:
+        """The current global audio track, if configured."""
+        return self._audio
+
+    @staticmethod
+    def _asset_source(value: str | os.PathLike[str]) -> str:
+        source = _path(value, "source")
+        if not source or source.isspace():
+            raise ValueError("source must not be empty")
+        return source
+
+    def add_image_asset(self, source: str | os.PathLike[str], *, id: str | None = None) -> ImageAsset:
+        """Register an image path without probing or decoding it."""
+        identifier = self._ids.allocate("asset", "image") if id is None else self._ids.reserve("asset", id)
+        asset = ImageAsset(identifier, self._asset_source(source), self._owner)
+        self._assets.append(asset)
+        return asset
+
+    def add_audio_asset(self, source: str | os.PathLike[str], *, id: str | None = None) -> AudioAsset:
+        """Register an audio path without probing or decoding it."""
+        identifier = self._ids.allocate("asset", "audio") if id is None else self._ids.reserve("asset", id)
+        asset = AudioAsset(identifier, self._asset_source(source), self._owner)
+        self._assets.append(asset)
+        return asset
+
+    def add_image_clip(
+        self, *, source: ImageAsset, start: int | float, duration: int | float, layer: int,
+        visible: bool = True, sizing: Sizing | None = None, crop: Crop | None = None,
+        opacity: int | float = 1.0, id: str | None = None,
+    ) -> ImageClip:
+        """Create a static image clip using a registered image asset."""
+        if not isinstance(source, ImageAsset):
+            raise TypeError("source must be ImageAsset")
+        _require_owner(self._owner, source._owner)
+        identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
+        clip = ImageClip(self._owner, identifier, source, start=start, duration=duration, layer=layer,
+                         visible=visible, sizing=sizing, crop=crop, opacity=opacity)
+        self._clips.append(clip)
+        return clip
+
+    def add_solid_color_clip(
+        self, *, colour: Color | str, start: int | float, duration: int | float, layer: int,
+        visible: bool = True, opacity: int | float = 1.0, id: str | None = None,
+    ) -> SolidColorClip:
+        """Create a full-canvas static solid-colour clip."""
+        identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
+        clip = SolidColorClip(self._owner, identifier, colour, start=start, duration=duration,
+                              layer=layer, visible=visible, opacity=opacity)
+        self._clips.append(clip)
+        return clip
+
+    def set_audio(
+        self, *, asset: AudioAsset, timeline_start: int | float, trim_start: int | float,
+        trim_end: int | float | None = None, volume: int | float = 1.0,
+        fade_in: int | float = 0.0, fade_out: int | float = 0.0, mute: bool = False,
+    ) -> AudioTrack:
+        """Replace the project's one global audio track."""
+        if not isinstance(asset, AudioAsset):
+            raise TypeError("asset must be AudioAsset")
+        _require_owner(self._owner, asset._owner)
+        self._audio = AudioTrack(self._owner, asset, timeline_start=timeline_start,
+                                 trim_start=trim_start, trim_end=trim_end, volume=volume,
+                                 fade_in=fade_in, fade_out=fade_out, mute=mute)
+        return self._audio
+
+    def clear_audio(self) -> None:
+        """Remove the configured global audio track."""
+        self._audio = None
+
     def to_dict(self) -> CanonicalProject:
         output: dict[str, object] = {
             "path": self.output_path,
@@ -235,7 +321,7 @@ class ProjectBuilder:
             "frame_rate": f"{self.frame_rate.numerator}/{self.frame_rate.denominator}",
             "background": color_to_canonical(self.background),
             "quality": self.quality.to_canonical(),
-            "audio": False,
+            "audio": self._audio is not None,
             "duration_mode": self.duration_mode.to_canonical(),
         }
         if self.duration is not None:
@@ -243,9 +329,12 @@ class ProjectBuilder:
         data: CanonicalProject = {
             "schema_version": 1,
             "output": output,
-            "assets": [],
+            "assets": [
+                {"id": asset.id, "type": asset.kind, "source": asset.source}
+                for asset in self._assets
+            ],
             "visual": {
-                "clips": [],
+                "clips": [clip.to_canonical() for clip in self._clips],
                 "transitions": [],
                 "flashes": [],
                 "post_effects": [],
@@ -255,6 +344,8 @@ class ProjectBuilder:
             data["name"] = self.name
         if self.metadata is not None:
             data["metadata"] = _json_snapshot(self.metadata)
+        if self._audio is not None:
+            data["audio"] = self._audio.to_canonical()
         return data
 
     def build(self) -> Project:

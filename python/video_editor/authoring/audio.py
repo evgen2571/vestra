@@ -15,9 +15,34 @@ def _nonnegative(value: int | float, name: str) -> float:
 class AudioTrack:
     """Mutable settings for one builder-owned global audio track."""
 
-    def __init__(self, owner: _Owner, asset: AudioAsset, *, timeline_start: int | float,
-                 trim_start: int | float, trim_end: int | float | None, volume: int | float,
-                 fade_in: int | float, fade_out: int | float, mute: bool) -> None:
+    __slots__ = ("_owner", "_asset", "_timeline_start", "_trim_start", "_trim_end", "_volume",
+                 "_fade_in", "_fade_out", "_mute")
+    _owner: _Owner
+    _asset: AudioAsset
+    _timeline_start: float
+    _trim_start: float
+    _trim_end: float | None
+    _volume: float
+    _fade_in: float
+    _fade_out: float
+    _mute: bool
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("AudioTrack objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, asset: AudioAsset, *, timeline_start: int | float,
+                trim_start: int | float, trim_end: int | float | None, volume: int | float,
+                fade_in: int | float, fade_out: int | float, mute: bool) -> "AudioTrack":
+        instance = object.__new__(cls)
+        instance._initialize(owner, asset, timeline_start=timeline_start, trim_start=trim_start,
+                             trim_end=trim_end, volume=volume, fade_in=fade_in,
+                             fade_out=fade_out, mute=mute)
+        return instance
+
+    def _initialize(self, owner: _Owner, asset: AudioAsset, *, timeline_start: int | float,
+                    trim_start: int | float, trim_end: int | float | None, volume: int | float,
+                    fade_in: int | float, fade_out: int | float, mute: bool) -> None:
         self._owner = owner
         self._asset = asset
         self.timeline_start = timeline_start
@@ -27,6 +52,17 @@ class AudioTrack:
         self.fade_in = fade_in
         self.fade_out = fade_out
         self.mute = mute
+
+    def _replace_from(self, other: "AudioTrack") -> None:
+        """Install already-validated state without changing this node's identity."""
+        self._asset = other._asset
+        self._timeline_start = other._timeline_start
+        self._trim_start = other._trim_start
+        self._trim_end = other._trim_end
+        self._volume = other._volume
+        self._fade_in = other._fade_in
+        self._fade_out = other._fade_out
+        self._mute = other._mute
 
     @property
     def asset(self) -> AudioAsset:
@@ -112,3 +148,6 @@ class AudioTrack:
         if self.trim_end is not None:
             data["trim_end"] = self.trim_end
         return data
+
+    def __repr__(self) -> str:
+        return f"AudioTrack(asset={self.asset.id!r}, mute={self.mute!r})"

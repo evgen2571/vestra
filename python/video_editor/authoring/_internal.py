@@ -23,6 +23,16 @@ class _IdAllocator:
         self._reserved[key].add(identifier)
         return identifier
 
+    def validate(self, namespace: str, identifier: str, *, scope: object = None) -> str:
+        """Check an explicit identifier without changing allocator state."""
+        if not isinstance(identifier, str):
+            raise TypeError("explicit IDs must be strings")
+        if not identifier or identifier.isspace():
+            raise AuthoringError("explicit IDs must not be empty")
+        if identifier in self._reserved[(namespace, scope)]:
+            raise AuthoringError(f"duplicate {namespace} ID: {identifier!r}")
+        return identifier
+
     def allocate(self, namespace: str, prefix: str | None = None, *, scope: object = None) -> str:
         prefix = namespace if prefix is None else prefix
         reserved_key = (namespace, scope)

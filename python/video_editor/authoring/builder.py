@@ -115,6 +115,7 @@ class ProjectBuilder:
         self._assets: list[ImageAsset | AudioAsset] = []
         self._clips: list[ImageClip | SolidColorClip] = []
         self._audio: AudioTrack | None = None
+        self._has_audio = False
 
     @staticmethod
     def _frame_rate_value(value: FrameRate) -> FrameRate:
@@ -245,8 +246,16 @@ class ProjectBuilder:
 
     @property
     def audio(self) -> AudioTrack | None:
-        """The current global audio track, if configured."""
+        """The stable global audio node, once one has been configured.
+
+        Use :attr:`has_audio` to determine whether it is currently serialized.
+        """
         return self._audio
+
+    @property
+    def has_audio(self) -> bool:
+        """Whether the stable global audio node is enabled for serialization."""
+        return self._has_audio
 
     @staticmethod
     def _asset_source(value: str | os.PathLike[str]) -> str:
@@ -257,15 +266,21 @@ class ProjectBuilder:
 
     def add_image_asset(self, source: str | os.PathLike[str], *, id: str | None = None) -> ImageAsset:
         """Register an image path without probing or decoding it."""
+        normalized_source = self._asset_source(source)
+        if id is not None:
+            self._ids.validate("asset", id)
         identifier = self._ids.allocate("asset", "image") if id is None else self._ids.reserve("asset", id)
-        asset = ImageAsset(identifier, self._asset_source(source), self._owner)
+        asset = ImageAsset._create(identifier, normalized_source, self._owner)
         self._assets.append(asset)
         return asset
 
     def add_audio_asset(self, source: str | os.PathLike[str], *, id: str | None = None) -> AudioAsset:
         """Register an audio path without probing or decoding it."""
+        normalized_source = self._asset_source(source)
+        if id is not None:
+            self._ids.validate("asset", id)
         identifier = self._ids.allocate("asset", "audio") if id is None else self._ids.reserve("asset", id)
-        asset = AudioAsset(identifier, self._asset_source(source), self._owner)
+        asset = AudioAsset._create(identifier, normalized_source, self._owner)
         self._assets.append(asset)
         return asset
 
@@ -278,9 +293,13 @@ class ProjectBuilder:
         if not isinstance(source, ImageAsset):
             raise TypeError("source must be ImageAsset")
         _require_owner(self._owner, source._owner)
+        staged = ImageClip._create(self._owner, "", source, start=start, duration=duration, layer=layer,
+                                   visible=visible, sizing=sizing, crop=crop, opacity=opacity)
+        if id is not None:
+            self._ids.validate("clip", id)
         identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
-        clip = ImageClip(self._owner, identifier, source, start=start, duration=duration, layer=layer,
-                         visible=visible, sizing=sizing, crop=crop, opacity=opacity)
+        staged._id = identifier
+        clip = staged
         self._clips.append(clip)
         return clip
 
@@ -289,9 +308,13 @@ class ProjectBuilder:
         visible: bool = True, opacity: int | float = 1.0, id: str | None = None,
     ) -> SolidColorClip:
         """Create a full-canvas static solid-colour clip."""
+        staged = SolidColorClip._create(self._owner, "", colour, start=start, duration=duration,
+                                        layer=layer, visible=visible, opacity=opacity)
+        if id is not None:
+            self._ids.validate("clip", id)
         identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
-        clip = SolidColorClip(self._owner, identifier, colour, start=start, duration=duration,
-                              layer=layer, visible=visible, opacity=opacity)
+        staged._id = identifier
+        clip = staged
         self._clips.append(clip)
         return clip
 
@@ -304,14 +327,19 @@ class ProjectBuilder:
         if not isinstance(asset, AudioAsset):
             raise TypeError("asset must be AudioAsset")
         _require_owner(self._owner, asset._owner)
-        self._audio = AudioTrack(self._owner, asset, timeline_start=timeline_start,
-                                 trim_start=trim_start, trim_end=trim_end, volume=volume,
-                                 fade_in=fade_in, fade_out=fade_out, mute=mute)
+        staged = AudioTrack._create(self._owner, asset, timeline_start=timeline_start,
+                                    trim_start=trim_start, trim_end=trim_end, volume=volume,
+                                    fade_in=fade_in, fade_out=fade_out, mute=mute)
+        if self._audio is None:
+            self._audio = staged
+        else:
+            self._audio._replace_from(staged)
+        self._has_audio = True
         return self._audio
 
     def clear_audio(self) -> None:
         """Remove the configured global audio track."""
-        self._audio = None
+        self._has_audio = False
 
     def to_dict(self) -> CanonicalProject:
         output: dict[str, object] = {
@@ -321,7 +349,7 @@ class ProjectBuilder:
             "frame_rate": f"{self.frame_rate.numerator}/{self.frame_rate.denominator}",
             "background": color_to_canonical(self.background),
             "quality": self.quality.to_canonical(),
-            "audio": self._audio is not None,
+            "audio": self._has_audio,
             "duration_mode": self.duration_mode.to_canonical(),
         }
         if self.duration is not None:
@@ -344,7 +372,8 @@ class ProjectBuilder:
             data["name"] = self.name
         if self.metadata is not None:
             data["metadata"] = _json_snapshot(self.metadata)
-        if self._audio is not None:
+        if self._has_audio:
+            assert self._audio is not None
             data["audio"] = self._audio.to_canonical()
         return data
 

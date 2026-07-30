@@ -1,7 +1,7 @@
 """Constant authoring tracks. Animation is intentionally not exposed here."""
 
 from math import isfinite
-from typing import Generic, TypeVar
+from typing import Generic, Self, TypeVar
 
 from ._internal import _Owner
 from .values import Crop, Point
@@ -19,7 +19,19 @@ def _number(value: int | float, name: str) -> float:
 
 
 class _Track(Generic[T]):
-    def __init__(self, owner: _Owner, value: T) -> None:
+    __slots__ = ("_owner", "_base_value")
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError(f"{type(self).__name__} objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls: type[Self], owner: _Owner, value: T) -> Self:
+        instance = object.__new__(cls)
+        instance._owner = owner
+        instance._base_value = instance._validate(value)
+        return instance
+
+    def _initialize(self, owner: _Owner, value: T) -> None:
         self._owner = owner
         self._base_value = self._validate(value)
 
@@ -40,6 +52,15 @@ class _Track(Generic[T]):
 
     def to_canonical(self) -> dict[str, object]:
         return {"base_value": self._canonical_value()}
+
+    def __repr__(self) -> str:
+        if isinstance(self, CropTrack):
+            name = "CropTrack"
+        elif isinstance(self, PointTrack):
+            name = "PointTrack"
+        else:
+            name = "ScalarTrack"
+        return f"{name}(base_value={self.base_value!r})"
 
 
 class ScalarTrack(_Track[float]):
@@ -64,12 +85,47 @@ class CropTrack(_Track[Crop]):
 class Transform:
     """The static image transform attached to one image clip."""
 
-    def __init__(self, owner: _Owner) -> None:
+    __slots__ = ("_owner", "_position", "_anchor", "_scale", "_rotation_degrees")
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("Transform objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner) -> "Transform":
+        instance = object.__new__(cls)
+        instance._owner = owner
+        instance._position = PointTrack._create(owner, Point(0.5, 0.5))
+        instance._anchor = _AnchorTrack._create(owner, Point(0.5, 0.5))
+        instance._scale = _ScaleTrack._create(owner, Point(1.0, 1.0))
+        instance._rotation_degrees = ScalarTrack._create(owner, 0.0)
+        return instance
+
+    @property
+    def position(self) -> PointTrack:
+        return self._position
+
+    @property
+    def anchor(self) -> PointTrack:
+        return self._anchor
+
+    @property
+    def scale(self) -> PointTrack:
+        return self._scale
+
+    @property
+    def rotation_degrees(self) -> ScalarTrack:
+        return self._rotation_degrees
+
+    def __repr__(self) -> str:
+        return ("Transform(position=" f"{self.position!r}, anchor={self.anchor!r}, "
+                f"scale={self.scale!r}, rotation_degrees={self.rotation_degrees!r})")
+
+    def _initialize(self, owner: _Owner) -> None:
         self._owner = owner
-        self.position = PointTrack(owner, Point(0.5, 0.5))
-        self.anchor = _AnchorTrack(owner, Point(0.5, 0.5))
-        self.scale = _ScaleTrack(owner, Point(1.0, 1.0))
-        self.rotation_degrees = ScalarTrack(owner, 0.0)
+        self._position = PointTrack._create(owner, Point(0.5, 0.5))
+        self._anchor = _AnchorTrack._create(owner, Point(0.5, 0.5))
+        self._scale = _ScaleTrack._create(owner, Point(1.0, 1.0))
+        self._rotation_degrees = ScalarTrack._create(owner, 0.0)
 
     def to_canonical(self) -> dict[str, object]:
         return {

@@ -87,6 +87,36 @@ The tested interpreter was CPython 3.13.5 on Linux x86_64. Rust was 1.96.1.
 FFmpeg and FFprobe were available. The skipped WGPU tests do not weaken CPU
 verification.
 
+## Finalization correction — 2026-07-30
+
+The ownership finalization changed the authoring contract after the initial
+record above. Assets, clips, transforms, tracks, and audio tracks are factory
+created only; direct construction raises a clear `TypeError`. Asset and node
+representations are deterministic and omit owner identity. Track, transform,
+and crop references are read-only, while validated `base_value` mutation is
+preserved. Crop is one stable clip-owned node controlled by `has_crop`.
+
+Asset and clip arguments are validated and normalized before IDs are reserved,
+so failed creation leaves the builder dictionary and ID allocation state
+unchanged. Audio uses one stable node: repeated `set_audio()` updates it,
+`clear_audio()` disables serialization, and `has_audio` reports enablement.
+
+This finalization pass passed `cargo fmt --all -- --check`, `cargo check
+--workspace`, clippy with warnings denied, `cargo test --workspace`, schema
+validation, `maturin develop`, the full Python suite (138 passed, 4
+adapter-gated skips), mypy, and stubtest. `maturin build` passed, and a clean
+temporary virtual environment installed the wheel and imported both
+`video_editor` and `video_editor.authoring` outside the source tree. Strict
+WGPU was run with `VIDEO_EDITOR_REQUIRE_WGPU=1` and failed because no compatible
+adapter exists: this is an **expected environmental failure**, not a skip.
+
+The committed CPU authoring tests assert exact interior pixels for solid colour,
+image visibility, all five sizing modes, crop application and crop clearing,
+position, scale, rotation, opacity, layer ordering, and ID tie-breaking. They
+also verify automatic duration through native inspection (including hidden
+clips, trimmed/timeline-offset audio, and mute), plus actual visual-only,
+audio-enabled, and muted FFprobe stream behavior.
+
 ## Final verdict
 
 Phase 8B complete.

@@ -53,12 +53,21 @@ Image and audio asset IDs share one namespace. Generated IDs use `image-`,
 relative until native preflight resolves them against `base_directory`; adding
 an asset never checks the filesystem. Image clips require a static transform,
 while solid-colour clips are full-canvas and deliberately have no sizing, crop,
-or transform properties. Static transform, crop, and opacity values serialize
-as constant `{"base_value": ...}` tracks. Animation is not part of this API.
+or transform properties. Assets, clips, tracks, transforms, and audio tracks
+are created only by builder factories. Their stable owned objects cannot be
+replaced; mutate a track's `base_value` instead. Static transform, crop, and
+opacity values serialize as constant `{"base_value": ...}` tracks. Keyframes
+do not exist yet.
 
-The builder supports one optional global audio track. `set_audio()` replaces
-the prior track and makes `output.audio` true. `clear_audio()` removes it and
-makes that flag false. With `duration`, the builder emits `duration_mode:
+Every add operation validates before reserving an ID, so a failed call leaves
+the builder unchanged and does not consume an explicit or generated ID. An
+image clip always owns one crop track: `set_crop()` updates and enables it,
+and `clear_crop()` disables serialization without detaching retained handles.
+
+The builder supports one optional global audio track. `set_audio()` updates a
+stable track object and makes `output.audio` true; `clear_audio()` disables
+serialization and makes that flag false without detaching a retained handle.
+`builder.has_audio` reports whether that stable node is enabled. With `duration`, the builder emits `duration_mode:
 "explicit"`; without one it emits `"automatic"`, which native preflight
 resolves from visual and enabled audio content. `build()` parses only.
 `validate()` invokes deterministic native validation and keeps native

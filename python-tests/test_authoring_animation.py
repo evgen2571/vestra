@@ -1,6 +1,7 @@
 """Phase 8C-A keyframe authoring, serialization, and native validation."""
 
 from copy import deepcopy
+from typing import get_type_hints
 
 import pytest
 
@@ -9,6 +10,7 @@ from video_editor.authoring import (
     Crop, CropKeyframe, CubicBezier, Interpolation, Point, PointKeyframe,
     ProjectBuilder, ScalarKeyframe,
 )
+from video_editor.authoring.tracks import CropTrack, PointTrack, ScalarTrack
 
 
 def builder() -> ProjectBuilder:
@@ -80,6 +82,31 @@ def test_specialized_validation_and_crop_lifecycle_are_preserved() -> None:
     clip.set_crop(Crop(0, 0, 1, 1))
     assert clip.has_crop and clip.crop.keyframes == (keyframe,)
     assert authored.validate().is_valid
+
+
+def test_public_track_annotations_resolve_without_custom_namespaces() -> None:
+    expected = (
+        (ScalarTrack, ScalarKeyframe),
+        (PointTrack, PointKeyframe),
+        (CropTrack, CropKeyframe),
+    )
+    for track, keyframe in expected:
+        hints = get_type_hints(track.keyframe)
+        assert hints["return"] is keyframe
+        assert hints["interpolation"] == Interpolation | CubicBezier | None
+
+
+def test_clip_timing_mutations_keep_local_keyframes_and_native_snapshots() -> None:
+    authored, clip = image_clip()
+    clip.opacity.keyframe(time=2, value=1)
+    native_before = authored.build()
+    clip.duration = 1
+    assert clip.opacity.keyframes[0].time == 2
+    assert authored.to_dict()["visual"]["clips"][0]["opacity"]["keyframes"][0]["time"] == 2.0
+    report = authored.validate()
+    diagnostic = next(d for d in report.errors if d.code == "MVP-KEYFRAME-TIME")
+    assert diagnostic.pointer == "/visual/clips/0/opacity/keyframes/0/time"
+    assert native_before.to_dict()["visual"]["clips"][0]["duration"] == 2.0
 
 
 @pytest.mark.parametrize("times", [(1.0, 0.5), (0.5, 0.5), (2.1,)])

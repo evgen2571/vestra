@@ -1,8 +1,19 @@
 """Private ownership and identifier helpers for future authoring nodes."""
 
 from collections import defaultdict
+from math import isfinite
 
 from .errors import AuthoringError
+
+
+def _number(value: int | float, name: str) -> float:
+    """Normalize a public finite real number without depending on authoring nodes."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError(f"{name} must be a real number")
+    number = float(value)
+    if not isfinite(number):
+        raise ValueError(f"{name} must be finite")
+    return number
 
 
 class _IdAllocator:

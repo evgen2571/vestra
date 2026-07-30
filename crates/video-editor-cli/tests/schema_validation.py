@@ -84,6 +84,20 @@ invalid_tint["visual"]["clips"][0]["effects"] = [
 ]
 assert errors(invalid_tint), "out-of-range tint amount must not validate"
 
+out_of_range_shake_seed = copy.deepcopy(solid_colour)
+out_of_range_shake_seed["visual"]["clips"][0]["effects"] = [{
+    "id": "shake",
+    "type": "camera_shake",
+    "position_amount": {"base_value": 0},
+    "rotation_degrees": {"base_value": 0},
+    "scale_amount": {"base_value": 0},
+    "frequency": {"base_value": 1},
+    "seed": 2**64,
+    "attack": 0,
+    "decay": 1,
+}]
+assert errors(out_of_range_shake_seed), "u64 camera-shake seed must not validate"
+
 unknown_effect_field = copy.deepcopy(project)
 unknown_effect_field["visual"]["clips"][0]["effects"][0]["unknown"] = True
 assert errors(unknown_effect_field), "unknown effect fields must not validate"

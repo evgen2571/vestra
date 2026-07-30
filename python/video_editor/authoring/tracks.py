@@ -2,29 +2,17 @@
 
 from __future__ import annotations
 
-from math import isfinite
-from typing import TYPE_CHECKING, Generic, Protocol, Self, TypeVar, cast
+from typing import Generic, Protocol, Self, TypeVar, cast
 
-from ._internal import _Owner
+from ._internal import _Owner, _number
+from .animation import CropKeyframe, InterpolationValue, PointKeyframe, ScalarKeyframe
 from .values import Crop, Point
-
-if TYPE_CHECKING:
-    from .animation import CropKeyframe, InterpolationValue, PointKeyframe, ScalarKeyframe
 
 T = TypeVar("T")
 
 
 class _CanonicalKeyframe(Protocol):
     def to_canonical(self) -> dict[str, object]: ...
-
-
-def _number(value: int | float, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    number = float(value)
-    if not isfinite(number):
-        raise ValueError(f"{name} must be finite")
-    return number
 
 
 class _Track(Generic[T]):
@@ -90,13 +78,11 @@ class ScalarTrack(_Track[float]):
         return _number(value, "base_value")
 
     @property
-    def keyframes(self) -> tuple["ScalarKeyframe", ...]:
-        from .animation import ScalarKeyframe
+    def keyframes(self) -> tuple[ScalarKeyframe, ...]:
         return tuple(cast(ScalarKeyframe, keyframe) for keyframe in self._keyframes)
 
     def keyframe(self, *, time: int | float, value: int | float,
                  interpolation: InterpolationValue | None = None) -> ScalarKeyframe:
-        from .animation import InterpolationValue, ScalarKeyframe
         from .values import Interpolation
         selected: InterpolationValue = Interpolation.LINEAR if interpolation is None else interpolation
         keyframe = ScalarKeyframe(time=time, value=self._validate(value), interpolation=selected)
@@ -111,13 +97,11 @@ class PointTrack(_Track[Point]):
         return Point(value.x, value.y)
 
     @property
-    def keyframes(self) -> tuple["PointKeyframe", ...]:
-        from .animation import PointKeyframe
+    def keyframes(self) -> tuple[PointKeyframe, ...]:
         return tuple(cast(PointKeyframe, keyframe) for keyframe in self._keyframes)
 
     def keyframe(self, *, time: int | float, value: Point,
                  interpolation: InterpolationValue | None = None) -> PointKeyframe:
-        from .animation import InterpolationValue, PointKeyframe
         from .values import Interpolation
         selected: InterpolationValue = Interpolation.LINEAR if interpolation is None else interpolation
         keyframe = PointKeyframe(time=time, value=self._validate(value), interpolation=selected)
@@ -132,13 +116,11 @@ class CropTrack(_Track[Crop]):
         return Crop(value.x, value.y, value.width, value.height)
 
     @property
-    def keyframes(self) -> tuple["CropKeyframe", ...]:
-        from .animation import CropKeyframe
+    def keyframes(self) -> tuple[CropKeyframe, ...]:
         return tuple(cast(CropKeyframe, keyframe) for keyframe in self._keyframes)
 
     def keyframe(self, *, time: int | float, value: Crop,
                  interpolation: InterpolationValue | None = None) -> CropKeyframe:
-        from .animation import CropKeyframe, InterpolationValue
         from .values import Interpolation
         selected: InterpolationValue = Interpolation.LINEAR if interpolation is None else interpolation
         keyframe = CropKeyframe(time=time, value=self._validate(value), interpolation=selected)

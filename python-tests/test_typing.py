@@ -90,6 +90,15 @@ def test_negative_authoring_immutability_fixture_is_rejected() -> None:
     assert "read-only" in result.stdout
 
 
+def test_negative_authoring_track_replacement_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/authoring_track_replacement.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("read-only") == 4
+
+
 def test_negative_authoring_sizing_fixture_is_rejected() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "mypy", "python-tests/typing_failures/authoring_invalid_sizing.py"],

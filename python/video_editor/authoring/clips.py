@@ -35,15 +35,17 @@ class _OpacityTrack(ScalarTrack):
 
 
 class _Clip:
-    def __init__(self, owner: _Owner, identifier: str, *, start: int | float, duration: int | float,
-                 layer: int, visible: bool, opacity: int | float) -> None:
+    __slots__ = ("_owner", "_id", "_start", "_duration", "_layer", "_visible", "_opacity")
+
+    def _initialize(self, owner: _Owner, identifier: str, *, start: int | float, duration: int | float,
+                    layer: int, visible: bool, opacity: int | float) -> None:
         self._owner = owner
         self._id = identifier
         self._start = _timing(start, "start")
         self._duration = _timing(duration, "duration", positive=True)
         self._layer = _layer(layer)
         self._visible = _visible(visible)
-        self.opacity = _OpacityTrack(owner, opacity)
+        self._opacity = _OpacityTrack._create(owner, opacity)
 
     @property
     def id(self) -> str:
@@ -81,6 +83,10 @@ class _Clip:
     def visible(self, value: bool) -> None:
         self._visible = _visible(value)
 
+    @property
+    def opacity(self) -> ScalarTrack:
+        return self._opacity
+
     def _canonical_common(self) -> dict[str, object]:
         return {"id": self.id, "start": self.start, "duration": self.duration,
                 "layer": self.layer, "visible": self.visible,
@@ -88,15 +94,30 @@ class _Clip:
 
 
 class ImageClip(_Clip):
-    def __init__(self, owner: _Owner, identifier: str, source: ImageAsset, *, start: int | float,
-                 duration: int | float, layer: int, visible: bool, sizing: Sizing | None,
-                 crop: Crop | None, opacity: int | float) -> None:
-        super().__init__(owner, identifier, start=start, duration=duration, layer=layer,
-                         visible=visible, opacity=opacity)
+    __slots__ = ("_source", "_sizing", "_transform", "_crop", "_has_crop")
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("ImageClip objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, identifier: str, source: ImageAsset, *, start: int | float,
+                duration: int | float, layer: int, visible: bool, sizing: Sizing | None,
+                crop: Crop | None, opacity: int | float) -> "ImageClip":
+        instance = object.__new__(cls)
+        instance._initialize_image(owner, identifier, source, start=start, duration=duration, layer=layer,
+                                   visible=visible, sizing=sizing, crop=crop, opacity=opacity)
+        return instance
+
+    def _initialize_image(self, owner: _Owner, identifier: str, source: ImageAsset, *, start: int | float,
+                          duration: int | float, layer: int, visible: bool, sizing: Sizing | None,
+                          crop: Crop | None, opacity: int | float) -> None:
+        super()._initialize(owner, identifier, start=start, duration=duration, layer=layer,
+                            visible=visible, opacity=opacity)
         self._source = source
         self._sizing = self._sizing_value(sizing)
-        self.transform = Transform(owner)
-        self._crop = CropTrack(owner, crop) if crop is not None else None
+        self._transform = Transform._create(owner)
+        self._crop = CropTrack._create(owner, crop if crop is not None else Crop(0, 0, 1, 1))
+        self._has_crop = crop is not None
 
     @property
     def source(self) -> ImageAsset:
@@ -117,15 +138,24 @@ class ImageClip(_Clip):
         self._sizing = self._sizing_value(value)
 
     @property
-    def crop(self) -> CropTrack | None:
+    def transform(self) -> Transform:
+        return self._transform
+
+    @property
+    def crop(self) -> CropTrack:
         return self._crop
 
+    @property
+    def has_crop(self) -> bool:
+        return self._has_crop
+
     def set_crop(self, value: Crop) -> CropTrack:
-        self._crop = CropTrack(self._owner, value)
+        self._crop.base_value = value
+        self._has_crop = True
         return self._crop
 
     def clear_crop(self) -> None:
-        self._crop = None
+        self._has_crop = False
 
     def to_canonical(self) -> dict[str, object]:
         data = self._canonical_common()
@@ -133,16 +163,32 @@ class ImageClip(_Clip):
         data["transform"] = self.transform.to_canonical()
         if self.sizing is not None:
             data["sizing"] = self.sizing.to_canonical()
-        if self.crop is not None:
+        if self.has_crop:
             data["crop"] = self.crop.to_canonical()
         return data
 
+    def __repr__(self) -> str:
+        return f"ImageClip(id={self.id!r}, source={self.source.id!r})"
+
 
 class SolidColorClip(_Clip):
-    def __init__(self, owner: _Owner, identifier: str, colour: Color | str, *, start: int | float,
-                 duration: int | float, layer: int, visible: bool, opacity: int | float) -> None:
-        super().__init__(owner, identifier, start=start, duration=duration, layer=layer,
-                         visible=visible, opacity=opacity)
+    __slots__ = ("_colour",)
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("SolidColorClip objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, identifier: str, colour: Color | str, *, start: int | float,
+                duration: int | float, layer: int, visible: bool, opacity: int | float) -> "SolidColorClip":
+        instance = object.__new__(cls)
+        instance._initialize_solid(owner, identifier, colour, start=start, duration=duration, layer=layer,
+                                   visible=visible, opacity=opacity)
+        return instance
+
+    def _initialize_solid(self, owner: _Owner, identifier: str, colour: Color | str, *, start: int | float,
+                          duration: int | float, layer: int, visible: bool, opacity: int | float) -> None:
+        super()._initialize(owner, identifier, start=start, duration=duration, layer=layer,
+                            visible=visible, opacity=opacity)
         self._colour = color_to_canonical(colour)
 
     @property
@@ -157,3 +203,6 @@ class SolidColorClip(_Clip):
         data = self._canonical_common()
         data["source"] = {"type": "solid_color", "colour": self.colour}
         return data
+
+    def __repr__(self) -> str:
+        return f"SolidColorClip(id={self.id!r}, colour={self.colour!r})"

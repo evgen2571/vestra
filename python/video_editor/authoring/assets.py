@@ -1,15 +1,26 @@
 """Immutable builder-owned references to registered media assets."""
 
-from dataclasses import dataclass
+from typing import Self
 
 from ._internal import _Owner
 
 
-@dataclass(frozen=True, slots=True, eq=False)
 class _Asset:
+    __slots__ = ("_id", "_source", "_owner")
     _id: str
     _source: str
     _owner: _Owner
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError(f"{type(self).__name__} objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls: type[Self], identifier: str, source: str, owner: _Owner) -> Self:
+        instance = object.__new__(cls)
+        instance._id = identifier
+        instance._source = source
+        instance._owner = owner
+        return instance
 
     @property
     def id(self) -> str:
@@ -31,6 +42,9 @@ class _Asset:
 
     def __hash__(self) -> int:
         return hash((id(self._owner), type(self), self._id))
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(id={self.id!r}, source={self.source!r})"
 
 
 class ImageAsset(_Asset):

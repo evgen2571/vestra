@@ -1,4 +1,4 @@
-from video_editor import Diagnostic, Editor, PreflightOptions, Project
+from video_editor import AdapterInfo, BackendFallback, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, Project
 
 project = Project.from_dict({
     "schema_version": 1,
@@ -13,3 +13,15 @@ diagnostic: Diagnostic
 diagnostic.code = "changed"  # E: Property "code" defined in "Diagnostic" is read-only
 report.is_valid = False  # E: Property "is_valid" defined in "ValidationReport" is read-only
 options.overwrite = False  # E: Property "overwrite" defined in "PreflightOptions" is read-only
+prepared = Editor().prepare(project, PrepareOptions())
+frame = prepared.render_frame_number(0)
+prepared.preparation_report = prepared.preparation_report  # E: Property "preparation_report" defined in "PreparedProject" is read-only
+frame.width = 1  # E: Property "width" defined in "Frame" is read-only
+frame.timestamp_ns = 1  # E: Property "timestamp_ns" defined in "Frame" is read-only
+prepared.preparation_report.selected_backend = prepared.preparation_report.selected_backend  # E: Property "selected_backend" defined in "PreparationReport" is read-only
+PrepareOptions().backend = PrepareOptions().backend  # E: Property "backend" defined in "PrepareOptions" is read-only
+FrameRate(24).numerator = 1  # E: Property "numerator" defined in "FrameRate" is read-only
+adapter: AdapterInfo
+fallback: BackendFallback
+adapter.device_type = adapter.device_type  # E: Property "device_type" defined in "AdapterInfo" is read-only
+fallback.message = "changed"  # E: Property "message" defined in "BackendFallback" is read-only

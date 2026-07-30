@@ -2,7 +2,8 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import TYPE_CHECKING
-from video_editor import Editor, Project, VideoEditorError
+import video_editor
+from video_editor import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
 
 if TYPE_CHECKING:
     project: Project = Project.from_dict({"schema_version": 1, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
@@ -15,6 +16,17 @@ if TYPE_CHECKING:
     diagnostics = error.diagnostics
     warnings = error.warnings
     assert kind and diagnostics == warnings
+    options = PrepareOptions(backend=video_editor.BackendPreference.CPU)
+    prepared = Editor().prepare(project, options)
+    preparation_report = prepared.preparation_report
+    frame: Frame = prepared.render_frame_number(0)
+    pixels: bytes = frame.to_bytes()
+    device: AdapterDeviceType | None = (
+        preparation_report.adapter.device_type
+        if preparation_report.adapter is not None
+        else None
+    )
+    assert pixels or device
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:
@@ -25,4 +37,4 @@ def test_negative_immutability_fixture_is_rejected() -> None:
         text=True,
     )
     assert result.returncode == 1
-    assert result.stdout.count("read-only") == 3
+    assert result.stdout.count("read-only") == 11

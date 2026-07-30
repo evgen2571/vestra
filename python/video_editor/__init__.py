@@ -2,9 +2,15 @@
 
 from ._native import (
     BackendPreference,
+    BackendKind,
+    BackendFallback,
     Category,
     Diagnostic,
     Editor,
+    Frame,
+    FrameRate,
+    FrameRenderError,
+    GraphicsBackend,
     InspectAssets,
     InspectAudio,
     InspectionReport,
@@ -13,6 +19,15 @@ from ._native import (
     PreflightReport,
     Project,
     ProjectError,
+    PreparationError,
+    PreparationReport,
+    PreparationTimings,
+    PrepareOptions,
+    PreparedProject,
+    PreparedProjectBusyError,
+    AdapterDeviceType,
+    AdapterInfo,
+    PixelFormat,
     Severity,
     ValidationReport,
     VideoEditorError,
@@ -22,8 +37,10 @@ from ._native import (
 __version__ = native_version()
 
 __all__ = [
-    "__version__", "native_version", "BackendPreference", "Category", "Severity",
+    "__version__", "native_version", "BackendPreference", "BackendKind", "BackendFallback",
+    "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Severity",
     "Diagnostic", "Editor", "Project", "PreflightOptions", "ValidationReport",
     "PreflightReport", "InspectionReport", "InspectOutput", "InspectAssets", "InspectAudio",
-    "VideoEditorError", "ProjectError",
+    "PrepareOptions", "PreparedProject", "PreparationReport", "PreparationTimings", "FrameRate", "Frame",
+    "VideoEditorError", "ProjectError", "PreparationError", "FrameRenderError", "PreparedProjectBusyError",
 ]

@@ -21,6 +21,15 @@ def test_enums_are_immutable_hashable_and_use_sdk_strings() -> None:
     assert video_editor.BackendPreference.AUTO.value == "auto"
     assert str(video_editor.Category.PROJECT) == "project"
     assert hash(video_editor.Severity.FATAL)
+    assert video_editor.AdapterDeviceType.DISCRETE_GPU.value == "discretegpu"
+    assert video_editor.AdapterDeviceType.INTEGRATED_GPU.value == "integratedgpu"
+    assert video_editor.AdapterDeviceType.CPU.value == "cpu"
+    assert video_editor.GraphicsBackend.VULKAN.value == "vulkan"
+    assert video_editor.GraphicsBackend.DX12.value == "dx12"
+    assert video_editor.GraphicsBackend.BROWSER_WEBGPU.value == "browserwebgpu"
+    assert str(video_editor.AdapterDeviceType.DISCRETE_GPU) == "discretegpu"
+    assert hash(video_editor.GraphicsBackend.VULKAN)
+    assert "GraphicsBackend" in repr(video_editor.GraphicsBackend.VULKAN)
     with pytest.raises(TypeError):
         video_editor.BackendPreference()
 
@@ -44,6 +53,19 @@ def test_native_runtime_names_are_exact_public_names() -> None:
         "Severity": video_editor.Severity,
         "VideoEditorError": video_editor.VideoEditorError,
         "ProjectError": video_editor.ProjectError,
+        "PreparationError": video_editor.PreparationError,
+        "FrameRenderError": video_editor.FrameRenderError,
+        "PreparedProjectBusyError": video_editor.PreparedProjectBusyError,
+        "PrepareOptions": video_editor.PrepareOptions,
+        "PreparedProject": video_editor.PreparedProject,
+        "PreparationReport": video_editor.PreparationReport,
+        "PreparationTimings": video_editor.PreparationTimings,
+        "FrameRate": video_editor.FrameRate,
+        "Frame": video_editor.Frame,
+        "BackendFallback": video_editor.BackendFallback,
+        "AdapterInfo": video_editor.AdapterInfo,
+        "AdapterDeviceType": video_editor.AdapterDeviceType,
+        "GraphicsBackend": video_editor.GraphicsBackend,
     }
     for expected_name, value in classes.items():
         assert value.__name__ == expected_name

@@ -12,16 +12,24 @@ There is no second project format.
 
 ```python
 from video_editor import Editor, FrameRate, RenderRequest
-from video_editor.authoring import ProjectBuilder
+from video_editor.authoring import Point, ProjectBuilder, Sizing
 
 builder = ProjectBuilder(
     width=160,
     height=90,
     frame_rate=FrameRate(30, 1),
     output_path="canonical-output.mp4",
-    duration=1.0,
-    background="#ff0000",
+    duration=None,
+    background="#101018",
 )
+
+cover = builder.add_image_asset("examples/assets/red.png")
+music = builder.add_audio_asset("examples/assets/tone.wav")
+clip = builder.add_image_clip(
+    source=cover, start=0.0, duration=1.0, layer=0, sizing=Sizing.cover(),
+)
+clip.transform.position.base_value = Point(0.5, 0.5)
+builder.set_audio(asset=music, timeline_start=0.0, trim_start=0.0)
 
 data = builder.to_dict()
 project = builder.build()
@@ -40,12 +48,22 @@ construction and returns a fresh deep snapshot on every `to_dict()` call. A
 top-level `metadata=None` omits the field. Nested `None` values inside supplied
 metadata become JSON null.
 
-With `duration`, the builder emits `duration_mode: "explicit"`; without one it
-emits `"automatic"`. An empty automatic project can parse, but it has no
-renderable duration. The background-only example therefore uses explicit
-duration. `build()` parses only. `validate()` invokes deterministic native
-validation and keeps native diagnostics intact. Preflight and rendering remain
-separate operations and require their normal runtime dependencies.
+Image and audio asset IDs share one namespace. Generated IDs use `image-`,
+`audio-`, and `clip-` prefixes with fixed-width counters. Asset paths remain
+relative until native preflight resolves them against `base_directory`; adding
+an asset never checks the filesystem. Image clips require a static transform,
+while solid-colour clips are full-canvas and deliberately have no sizing, crop,
+or transform properties. Static transform, crop, and opacity values serialize
+as constant `{"base_value": ...}` tracks. Animation is not part of this API.
+
+The builder supports one optional global audio track. `set_audio()` replaces
+the prior track and makes `output.audio` true. `clear_audio()` removes it and
+makes that flag false. With `duration`, the builder emits `duration_mode:
+"explicit"`; without one it emits `"automatic"`, which native preflight
+resolves from visual and enabled audio content. `build()` parses only.
+`validate()` invokes deterministic native validation and keeps native
+diagnostics intact. Preflight and rendering remain separate operations and
+require their normal runtime dependencies.
 
 It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs use formats supported by the Rust `image` crate (including PNG, JPEG, GIF, WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV and MP3 are practical baseline formats).
 

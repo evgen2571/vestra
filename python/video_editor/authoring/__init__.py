@@ -3,6 +3,7 @@
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioTrack
+from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
 from .errors import AuthoringError
 from .tracks import CropTrack, PointTrack, ScalarTrack, Transform
@@ -25,6 +26,7 @@ __all__ = [
     "BlendMode",
     "Color",
     "Crop",
+    "CropKeyframe",
     "CropTrack",
     "CubicBezier",
     "DurationMode",
@@ -33,10 +35,12 @@ __all__ = [
     "ImageClip",
     "JsonValue",
     "Point",
+    "PointKeyframe",
     "PointTrack",
     "ProjectBuilder",
     "Quality",
     "ScalarTrack",
+    "ScalarKeyframe",
     "Sizing",
     "SolidColorClip",
     "Transform",

@@ -4,7 +4,10 @@ import sys
 from typing import TYPE_CHECKING
 import video_editor
 from video_editor import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
-from video_editor.authoring import AudioAsset, ImageAsset, ImageClip, Point, ProjectBuilder, Sizing, SolidColorClip
+from video_editor.authoring import (
+    AudioAsset, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
+    ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
+)
 
 if TYPE_CHECKING:
     project: Project = Project.from_dict({"schema_version": 1, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
@@ -54,7 +57,13 @@ if TYPE_CHECKING:
     image_clip: ImageClip = builder.add_image_clip(source=image, start=0.0, duration=1.0, layer=0)
     solid_clip: SolidColorClip = builder.add_solid_color_clip(colour="#112233", start=0.0, duration=1.0, layer=1)
     builder.set_audio(asset=audio, timeline_start=0.0, trim_start=0.0)
+    scalar_keyframe: ScalarKeyframe = image_clip.opacity.keyframe(
+        time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT,
+    )
+    point_keyframe: PointKeyframe = image_clip.transform.scale.keyframe(time=1.0, value=Point(1.2, 1.2))
+    crop_keyframe: CropKeyframe = image_clip.crop.keyframe(time=0.5, value=Crop(0, 0, 1, 1))
     assert authored and authored_project and authored_report and point and sizing_original and sizing_scale and sizing_stretch and image_clip and solid_clip
+    assert scalar_keyframe and point_keyframe and crop_keyframe
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:
@@ -119,3 +128,12 @@ def test_negative_authoring_asset_kind_fixture_is_rejected() -> None:
     )
     assert result.returncode == 1
     assert result.stdout.count("Argument") == 2
+
+
+def test_negative_keyframe_value_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/authoring_wrong_keyframe_value.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("Argument") == 3

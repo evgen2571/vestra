@@ -2,6 +2,51 @@
 
 `video-editor` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image and full-canvas solid-colour layers, optionally places one audio track, and writes a playable MP4 without interactive input.
 
+## Python authoring
+
+The Python package has mutable pure-Python authoring alongside immutable native
+project, execution, and report APIs. `ProjectBuilder` creates an owned canonical
+schema-version 1 dictionary, then `build()` passes that dictionary to
+`Project.from_dict()` and returns the existing immutable native `Project`.
+There is no second project format.
+
+```python
+from video_editor import Editor, FrameRate, RenderRequest
+from video_editor.authoring import ProjectBuilder
+
+builder = ProjectBuilder(
+    width=160,
+    height=90,
+    frame_rate=FrameRate(30, 1),
+    output_path="canonical-output.mp4",
+    duration=1.0,
+    background="#ff0000",
+)
+
+data = builder.to_dict()
+project = builder.build()
+validation = builder.validate()
+assert validation.is_valid
+
+result = Editor().render(project, RenderRequest("result.mp4", overwrite=True))
+print(result.output_path)
+```
+
+`output_path` is required because it remains part of the project contract,
+serialization, and default runtime behavior even when `RenderRequest` supplies
+a different destination. `base_directory` is runtime context, never appears in
+`to_dict()`, and is passed to every native build. The builder copies metadata at
+construction and returns a fresh deep snapshot on every `to_dict()` call. A
+top-level `metadata=None` omits the field. Nested `None` values inside supplied
+metadata become JSON null.
+
+With `duration`, the builder emits `duration_mode: "explicit"`; without one it
+emits `"automatic"`. An empty automatic project can parse, but it has no
+renderable duration. The background-only example therefore uses explicit
+duration. `build()` parses only. `validate()` invokes deterministic native
+validation and keeps native diagnostics intact. Preflight and rendering remain
+separate operations and require their normal runtime dependencies.
+
 It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs use formats supported by the Rust `image` crate (including PNG, JPEG, GIF, WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV and MP3 are practical baseline formats).
 
 ```bash

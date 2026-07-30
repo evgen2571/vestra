@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "video-editor"
 version = "0.1.0"
-description = "Immutable Python SDK for JSON-driven video-editor projects"
+description = "Python SDK with typed project authoring and immutable native rendering APIs"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

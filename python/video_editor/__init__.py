@@ -1,4 +1,4 @@
-"""Immutable Python bindings for the video-editor Rust SDK."""
+"""Python SDK with mutable authoring and immutable native rendering APIs."""
 
 from ._native import (
     BackendPreference,

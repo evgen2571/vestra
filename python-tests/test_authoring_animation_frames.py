@@ -35,6 +35,51 @@ def test_cpu_frame_evaluates_named_interpolation_and_bezier() -> None:
     assert bezier < linear
 
 
+def test_cpu_frame_has_complete_track_lifecycle_semantics() -> None:
+    authored = ProjectBuilder(
+        width=4, height=4, frame_rate=FrameRate(4, 1), output_path="out.mp4", duration=2,
+        background="#000000",
+    )
+    clip = authored.add_solid_color_clip(colour="#ffffff", start=0, duration=2, layer=0, opacity=0.2)
+    clip.opacity.keyframe(time=0.5, value=0)
+    clip.opacity.keyframe(time=1, value=1, interpolation=Interpolation.LINEAR)
+    prepared = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    # Before first, at first, midway, at final, and after final respectively.
+    values = [prepared.render_frame_number(frame).to_bytes()[0] for frame in range(5)]
+    assert values == [51, 51, 0, 128, 255]
+
+    single = ProjectBuilder(
+        width=4, height=4, frame_rate=FrameRate(4, 1), output_path="out.mp4", duration=2,
+        background="#000000",
+    )
+    single_clip = single.add_solid_color_clip(colour="#ffffff", start=0, duration=2, layer=0, opacity=0.2)
+    single_clip.opacity.keyframe(time=0.5, value=0.8)
+    single_prepared = video_editor.Editor().prepare(
+        single.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    assert [single_prepared.render_frame_number(frame).to_bytes()[0] for frame in (0, 2, 5)] == [51, 204, 204]
+
+
+def test_cpu_frame_uses_clip_local_keyframes_after_clip_start_mutation() -> None:
+    authored = ProjectBuilder(
+        width=4, height=4, frame_rate=FrameRate(2, 1), output_path="out.mp4", duration=4,
+        background="#000000",
+    )
+    clip = authored.add_solid_color_clip(colour="#ffffff", start=2, duration=2, layer=0, opacity=0)
+    clip.opacity.keyframe(time=0.5, value=1)
+    native_before = authored.build()
+    clip.start = 3
+    assert clip.opacity.keyframes[0].time == 0.5
+    assert native_before.to_dict()["visual"]["clips"][0]["start"] == 2.0
+    prepared = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    assert prepared.render_frame_number(5).to_bytes()[0] == 0
+    assert prepared.render_frame_number(7).to_bytes()[0] == 255
+
+
 def test_cpu_frames_change_for_each_animated_image_track() -> None:
     def render(mutate: object | None = None) -> bytes:
         authored = ProjectBuilder(

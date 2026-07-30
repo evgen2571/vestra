@@ -85,6 +85,46 @@ environmental failure, not runtime animation verification.
 Phase 8C-B effect authoring is not included. No effect, post-effect,
 transition, preset, flash, video-asset, or multi-audio API was added.
 
+## Finalization correction — 2026-07-30
+
+The initial pass kept `_number` in `tracks.py`, while `animation.py` imported it
+and tracks hid animation types under `TYPE_CHECKING`.  That cycle made public
+postponed annotations fail under `typing.get_type_hints()`.  `_number` now
+lives in the neutral `authoring._internal` module.  `animation` and `tracks`
+depend on `_internal`; `tracks` imports the public animation values at runtime.
+`get_type_hints()` now resolves `ScalarTrack.keyframe`, `PointTrack.keyframe`,
+and `CropTrack.keyframe` without custom namespaces, including their respective
+`ScalarKeyframe`, `PointKeyframe`, and `CropKeyframe` returns and the public
+`Interpolation | CubicBezier | None` parameter type.
+
+README examples now put segment interpolation on the destination keyframe. The
+focused native CPU checks cover base value before the first keyframe, exact
+first and final keyframes, midpoint interpolation, holding after the final
+keyframe, and all three single-keyframe states. They also prove that times are
+clip-local: moving a clip preserves its canonical keyframe time, shifts the
+project-time evaluation, and does not mutate an already-built project. Reducing
+a clip duration likewise preserves an out-of-range keyframe in canonical data;
+native validation reports `MVP-KEYFRAME-TIME` at
+`/visual/clips/0/opacity/keyframes/0/time`.
+
+The interpolation test samples ease-in/out behavior separately from its linear
+midpoint check and verifies non-linear Bézier output. Existing frame coverage
+continues to exercise anchor, crop, and geometric transform animation; lifecycle
+assertions now use stable native frame pixels rather than a dictionary-only
+proxy.
+
+| Command | Result |
+| --- | --- |
+| focused animation authoring and CPU-frame tests | passed: 13 tests |
+| full Python suite | passed: 152 tests, 4 adapter-gated WGPU skips |
+| `mypy` | passed |
+| `stubtest` | passed |
+| schema validation | passed |
+| `cargo fmt --all -- --check` | passed |
+| `cargo check --workspace` | passed |
+| clippy with warnings denied | passed |
+| workspace and public Rust tests | passed |
+
 ## Final verdict
 
 Phase 8C-A complete

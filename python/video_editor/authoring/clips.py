@@ -1,9 +1,10 @@
 """Mutable static visual clips owned by a project builder."""
 
-from ._internal import _Owner
+from ._internal import _Owner, _number
 from .assets import ImageAsset
-from .tracks import CropTrack, ScalarTrack, Transform, _number
-from .values import Color, Crop, Sizing, color_to_canonical
+from .effects import ClipEffectCollection
+from .tracks import CropTrack, ScalarTrack, Transform
+from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
 
 
 def _timing(value: int | float, name: str, *, positive: bool = False) -> float:
@@ -35,7 +36,7 @@ class _OpacityTrack(ScalarTrack):
 
 
 class _Clip:
-    __slots__ = ("_owner", "_id", "_start", "_duration", "_layer", "_visible", "_opacity")
+    __slots__ = ("_owner", "_id", "_start", "_duration", "_layer", "_visible", "_opacity", "_effects", "_blend_mode")
 
     def _initialize(self, owner: _Owner, identifier: str, *, start: int | float, duration: int | float,
                     layer: int, visible: bool, opacity: int | float) -> None:
@@ -46,6 +47,10 @@ class _Clip:
         self._layer = _layer(layer)
         self._visible = _visible(visible)
         self._opacity = _OpacityTrack._create(owner, opacity)
+        self._blend_mode = BlendMode.NORMAL
+
+    def _attach_effects(self, effects: ClipEffectCollection) -> None:
+        self._effects = effects
 
     @property
     def id(self) -> str:
@@ -87,10 +92,27 @@ class _Clip:
     def opacity(self) -> ScalarTrack:
         return self._opacity
 
+    @property
+    def effects(self) -> ClipEffectCollection:
+        return self._effects
+
+    @property
+    def blend_mode(self) -> BlendMode:
+        return self._blend_mode
+
+    @blend_mode.setter
+    def blend_mode(self, value: BlendMode) -> None:
+        if not isinstance(value, BlendMode):
+            raise TypeError("blend_mode must be BlendMode")
+        self._blend_mode = value
+
     def _canonical_common(self) -> dict[str, object]:
-        return {"id": self.id, "start": self.start, "duration": self.duration,
+        data: dict[str, object] = {"id": self.id, "start": self.start, "duration": self.duration,
                 "layer": self.layer, "visible": self.visible,
-                "opacity": self.opacity.to_canonical()}
+                "opacity": self.opacity.to_canonical(), "effects": [effect.to_canonical() for effect in self.effects.items]}
+        if self.blend_mode is not BlendMode.NORMAL:
+            data["blend_mode"] = self.blend_mode.to_canonical()
+        return data
 
 
 class ImageClip(_Clip):

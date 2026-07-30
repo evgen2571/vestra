@@ -8,10 +8,11 @@ from typing import TypeAlias
 
 from video_editor import Editor, FrameRate, Project, ValidationReport
 
-from ._internal import _IdAllocator, _Owner, _require_owner
+from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioTrack
 from .clips import ImageClip, SolidColorClip
+from .effects import ClipEffectCollection, PostEffectCollection
 from .values import Color, Crop, DurationMode, Quality, Sizing, color_to_canonical
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -23,15 +24,6 @@ def _integer(value: int, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
     return value
-
-
-def _number(value: int | float, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    number = float(value)
-    if not isfinite(number):
-        raise ValueError(f"{name} must be finite")
-    return number
 
 
 def _path(value: str | os.PathLike[str], name: str) -> str:
@@ -116,6 +108,7 @@ class ProjectBuilder:
         self._clips: list[ImageClip | SolidColorClip] = []
         self._audio: AudioTrack | None = None
         self._has_audio = False
+        self._post_effects = PostEffectCollection(self._owner, self._ids, self)
 
     @staticmethod
     def _frame_rate_value(value: FrameRate) -> FrameRate:
@@ -257,6 +250,10 @@ class ProjectBuilder:
         """Whether the stable global audio node is enabled for serialization."""
         return self._has_audio
 
+    @property
+    def post_effects(self) -> PostEffectCollection:
+        return self._post_effects
+
     @staticmethod
     def _asset_source(value: str | os.PathLike[str]) -> str:
         source = _path(value, "source")
@@ -300,6 +297,7 @@ class ProjectBuilder:
         identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
         staged._id = identifier
         clip = staged
+        clip._attach_effects(ClipEffectCollection(self._owner, self._ids, clip))
         self._clips.append(clip)
         return clip
 
@@ -315,6 +313,7 @@ class ProjectBuilder:
         identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
         staged._id = identifier
         clip = staged
+        clip._attach_effects(ClipEffectCollection(self._owner, self._ids, clip))
         self._clips.append(clip)
         return clip
 
@@ -365,7 +364,7 @@ class ProjectBuilder:
                 "clips": [clip.to_canonical() for clip in self._clips],
                 "transitions": [],
                 "flashes": [],
-                "post_effects": [],
+                "post_effects": [effect.to_canonical() for effect in self.post_effects.items],
             },
         }
         if self.name is not None:

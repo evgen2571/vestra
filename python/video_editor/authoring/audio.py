@@ -1,8 +1,7 @@
 """The one optional global audio track supported by the project model."""
 
-from ._internal import _Owner
+from ._internal import _Owner, _number
 from .assets import AudioAsset
-from .tracks import _number
 
 
 def _nonnegative(value: int | float, name: str) -> float:

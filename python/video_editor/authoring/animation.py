@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .tracks import _number
+from ._internal import _number
 from .values import Crop, CubicBezier, Interpolation, Point
 
 InterpolationValue = Interpolation | CubicBezier

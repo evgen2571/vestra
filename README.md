@@ -29,8 +29,8 @@ clip = builder.add_image_clip(
     source=cover, start=0.0, duration=1.0, layer=0, sizing=Sizing.cover(),
 )
 clip.transform.position.base_value = Point(0.5, 0.5)
-clip.opacity.keyframe(time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT)
-clip.opacity.keyframe(time=0.5, value=1.0)
+clip.opacity.keyframe(time=0.0, value=0.0)
+clip.opacity.keyframe(time=0.5, value=1.0, interpolation=Interpolation.EASE_OUT)
 builder.set_audio(asset=music, timeline_start=0.0, trim_start=0.0)
 
 data = builder.to_dict()
@@ -70,6 +70,30 @@ the segment ending at it, and the final keyframe holds. Use
 are finite and unrestricted. `clear_keyframes()` keeps the stable track and
 its base value. A disabled crop retains its animated state and serializes again
 when `set_crop()` re-enables it.
+
+Clip effects and global post-effects are ordered builder-owned collections.
+Every numeric effect parameter uses the same `ScalarTrack` contract as opacity:
+mutate `base_value` or append clip-local keyframes. Effect IDs are unique within
+a clip or within `builder.post_effects`, not across those scopes. The order in
+`items` is the rendering and canonical serialization order.
+
+```python
+from video_editor.authoring import BlendMode, Interpolation
+
+clip.blend_mode = BlendMode.SCREEN
+brightness = clip.effects.add_brightness(amount=0.0)
+brightness.amount.keyframe(time=0.0, value=0.0)
+brightness.amount.keyframe(time=0.5, value=0.3, interpolation=Interpolation.EASE_OUT)
+builder.post_effects.add_vignette(amount=0.25, radius=0.8, softness=0.3, colour="#000000")
+```
+
+The supported blend modes are `normal`, `add`, `screen`, `multiply`, and
+`overlay`. All ordinary effects are available on clip and post-effect
+collections; `camera_shake` and `motion_blur` are clip-only because they depend
+on a clip's local transform and motion. `ActiveInterval(start, duration)` is a
+finite half-open clip-local interval for camera shake. Python rejects malformed
+local types and non-finite values; native validation remains responsible for
+semantic ranges, timeline fitting, and preparation capability.
 
 Every add operation validates before reserving an ID, so a failed call leaves
 the builder unchanged and does not consume an explicit or generated ID. An

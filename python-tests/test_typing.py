@@ -137,3 +137,12 @@ def test_negative_keyframe_value_fixture_is_rejected() -> None:
     )
     assert result.returncode == 1
     assert result.stdout.count("Argument") == 3
+
+
+def test_clip_only_post_effect_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/authoring_invalid_post_effect.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert "add_camera_shake" in result.stdout

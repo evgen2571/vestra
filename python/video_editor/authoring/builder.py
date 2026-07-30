@@ -108,7 +108,7 @@ class ProjectBuilder:
         self._clips: list[ImageClip | SolidColorClip] = []
         self._audio: AudioTrack | None = None
         self._has_audio = False
-        self._post_effects = PostEffectCollection(self._owner, self._ids, self)
+        self._post_effects = PostEffectCollection._create(self._owner, self._ids, self)
 
     @staticmethod
     def _frame_rate_value(value: FrameRate) -> FrameRate:
@@ -297,7 +297,7 @@ class ProjectBuilder:
         identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
         staged._id = identifier
         clip = staged
-        clip._attach_effects(ClipEffectCollection(self._owner, self._ids, clip))
+        clip._attach_effects(ClipEffectCollection._create(self._owner, self._ids, clip))
         self._clips.append(clip)
         return clip
 
@@ -313,7 +313,7 @@ class ProjectBuilder:
         identifier = self._ids.allocate("clip") if id is None else self._ids.reserve("clip", id)
         staged._id = identifier
         clip = staged
-        clip._attach_effects(ClipEffectCollection(self._owner, self._ids, clip))
+        clip._attach_effects(ClipEffectCollection._create(self._owner, self._ids, clip))
         self._clips.append(clip)
         return clip
 

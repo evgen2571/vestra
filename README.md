@@ -73,9 +73,13 @@ when `set_crop()` re-enables it.
 
 Clip effects and global post-effects are ordered builder-owned collections.
 Every numeric effect parameter uses the same `ScalarTrack` contract as opacity:
-mutate `base_value` or append clip-local keyframes. Effect IDs are unique within
-a clip or within `builder.post_effects`, not across those scopes. The order in
-`items` is the rendering and canonical serialization order.
+mutate `base_value` or append keyframes. Ordinary clip-effect tracks use
+clip-relative time. Camera-shake tracks use time relative to the effect's active
+interval start. Global post-effect tracks use project-relative time. Effect IDs
+are unique within a clip or within `builder.post_effects`, not across those
+scopes. Obtain collections only through `clip.effects` and
+`builder.post_effects`. The order in `items` is the rendering and canonical
+serialization order.
 
 ```python
 from video_editor.authoring import BlendMode, Interpolation

@@ -7,7 +7,9 @@ collections. Both expose a tuple `items`, retain identity, and serialize in
 declaration order. Effects are factory-created handles with read-only `id` and
 `kind`; equality includes builder owner, collection scope, ID, and kind.
 Generated IDs are fixed-width `effect-000001` values. Each clip owns an ID
-scope; global post-effects use a separate scope. Creation validates values
+scope; global post-effects use a separate scope. Collections are created only
+by their owning clip or builder, so their public constructors expose no owner,
+ID allocator, or scope token. Creation validates values
 before reserving an ID, so failures do not alter output or consume identifiers.
 
 The supported factories are `add_brightness`, `add_contrast`,
@@ -37,6 +39,31 @@ optional `duration`. It is immutable, finite, clip-local, and half-open.
 Numeric effect parameters reuse Phase 8C-A `ScalarTrack`, named interpolation,
 and cubic Bézier keyframes; there is no second animation model.
 
+`SharpenEffect`, `VignetteEffect`, and `ChromaticAberrationEffect` are now
+independent public classes. Their tracks map directly to their canonical fields,
+so no unrelated inherited property leaks into their API. Python validates the
+Rust representation ranges for zoom-blur and motion-blur `u8` samples and the
+camera-shake `u64` seed before reserving an ID. Rejected values leave the
+collection and its generated-ID counter unchanged.
+The schema now mirrors that `u64` seed maximum, so direct JSON validation and
+Python authoring reject the same unrepresentable values before Rust parsing.
+
+Ordinary clip-effect tracks use clip-relative seconds. Camera-shake tracks use
+seconds relative to the active interval start. Global post-effect tracks use
+project-relative seconds. The CPU motion-blur test compares two otherwise
+identical moving clips, with the effect as the only difference. The committed
+CPU video test uses two clips, screen blending, ordered clip effects, an
+animated brightness track, and ordered global post-effects; it validates,
+prepares, renders, probes a video-only MP4, and checks cleanup.
+
+The public API test table records the concrete type and complete property set
+for all fourteen effects. It catches inherited properties as well as missing
+ones, mutates every scalar track, checks its canonical field, and rejects track
+replacement. The negative typing fixture rejects the removed inherited
+properties and invalid integer types. Runtime tests separately prove a normal clip effect at a clip-local
+timestamp, a global post-effect at a project-relative timestamp, and a
+camera-shake parameter that starts at its active interval.
+
 Image and solid-colour clips expose `BlendMode`: `normal`, `add`, `screen`,
 `multiply`, and `overlay`. Normal is omitted to preserve existing static output;
 non-normal values serialize as `blend_mode`.
@@ -50,10 +77,10 @@ interactions, and renderer preparation.
 
 | Command | Result |
 | --- | --- |
-| `python-tests/test_authoring_effects.py` | passed: 25 tests |
+| `python-tests/test_authoring_effects.py` | passed: 31 tests |
 | `mypy python/video_editor python-tests/test_typing.py` | passed |
 | `stubtest` | passed |
-| full Python suite | passed: 162 tests, 4 adapter-gated skips |
+| full Python suite | passed: 185 tests, 4 adapter-gated skips |
 | schema validation | passed |
 | formatting | passed |
 | Cargo check, clippy, workspace tests | passed |

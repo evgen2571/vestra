@@ -1,15 +1,24 @@
 """Phase 8C-B authoring, ordering, scope, and native round-trip checks."""
 
 from copy import deepcopy
+import json
 from pathlib import Path
+import inspect
+import subprocess
 from typing import get_type_hints
 
 import pytest
 
 import video_editor
 from video_editor import FrameRate
-from video_editor.authoring import ActiveInterval, BlendMode, BrightnessEffect, Interpolation, Point, ProjectBuilder, Sizing, VignetteEffect
+from video_editor.authoring import (
+    ActiveInterval, BlendMode, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
+    ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect, GaussianBlurEffect, GlowEffect,
+    Interpolation, MotionBlurEffect, Point, ProjectBuilder, SaturationEffect, SharpenEffect,
+    Sizing, TintEffect, VignetteEffect, ZoomBlurEffect,
+)
 from video_editor.authoring.effects import ClipEffectCollection, PostEffectCollection
+from video_editor.authoring.tracks import ScalarTrack
 
 
 def builder() -> tuple[ProjectBuilder, object]:
@@ -93,6 +102,83 @@ def test_effect_animation_has_snapshot_isolation() -> None:
     assert authored.to_dict()["visual"]["clips"][0]["effects"][0]["amount"]["keyframes"][0]["time"] == 1.0
 
 
+def test_effect_tracks_use_their_source_backed_time_domains() -> None:
+    clip_project = ProjectBuilder(
+        width=4,
+        height=4,
+        frame_rate=FrameRate(2, 1),
+        output_path="out.mp4",
+        duration=4,
+        background="#000000",
+    )
+    clip = clip_project.add_solid_color_clip(
+        colour="#ffffff", start=2, duration=2, layer=0,
+    )
+    brightness = clip.effects.add_brightness(amount=0)
+    brightness.amount.keyframe(time=0.5, value=-1)
+    clip_prepared = video_editor.Editor().prepare(
+        clip_project.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    assert clip_prepared.render_frame_number(4).to_bytes()[0] == 255
+    assert clip_prepared.render_frame_number(5).to_bytes()[0] == 0
+
+    post_project = ProjectBuilder(
+        width=4,
+        height=4,
+        frame_rate=FrameRate(2, 1),
+        output_path="out.mp4",
+        duration=2,
+        background="#000000",
+    )
+    post_project.add_solid_color_clip(colour="#ffffff", start=0, duration=2, layer=0)
+    post_brightness = post_project.post_effects.add_brightness(amount=0)
+    post_brightness.amount.keyframe(time=0.5, value=-1)
+    post_prepared = video_editor.Editor().prepare(
+        post_project.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    assert post_prepared.render_frame_number(0).to_bytes()[0] == 255
+    assert post_prepared.render_frame_number(1).to_bytes()[0] == 0
+
+
+def test_camera_shake_track_time_starts_at_its_active_interval() -> None:
+    authored = ProjectBuilder(
+        width=8,
+        height=6,
+        frame_rate=FrameRate(10, 1),
+        output_path="out.mp4",
+        duration=2,
+        base_directory=Path.cwd(),
+    )
+    asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
+    clip = authored.add_image_clip(
+        source=asset,
+        start=0,
+        duration=2,
+        layer=0,
+        sizing=Sizing.stretch(width=4, height=3),
+    )
+    shake = clip.effects.add_camera_shake(
+        active_interval=ActiveInterval(0.5, 1),
+        position_amount=0,
+        rotation_degrees=0,
+        scale_amount=0,
+        frequency=8,
+        seed=7,
+        attack=0,
+        decay=1,
+    )
+    shake.position_amount.keyframe(time=0, value=0)
+    shake.position_amount.keyframe(time=0.5, value=0.25)
+    prepared = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    before = prepared.render_frame_number(4).to_bytes()
+    at_active_start = prepared.render_frame_number(5).to_bytes()
+    after_local_keyframe = prepared.render_frame_number(10).to_bytes()
+    assert at_active_start == before
+    assert after_local_keyframe != at_active_start
+
+
 def test_effect_collection_and_identity_state_are_read_only() -> None:
     authored, clip = builder()
     effect = clip.effects.add_brightness(amount=0)
@@ -113,8 +199,130 @@ def test_effect_collection_and_identity_state_are_read_only() -> None:
 
 
 def test_public_effect_factory_annotations_resolve_at_runtime() -> None:
+    collections = (ClipEffectCollection, PostEffectCollection)
+    for collection in collections:
+        for cls in collection.__mro__:
+            for name, method in vars(cls).items():
+                if name.startswith("add_"):
+                    hints = get_type_hints(method)
+                    assert "return" in hints
+                    assert all("_Owner" not in str(hint) for hint in hints.values())
     assert get_type_hints(ClipEffectCollection.add_brightness)["return"] is BrightnessEffect
     assert get_type_hints(PostEffectCollection.add_vignette)["return"] is VignetteEffect
+
+
+def test_effect_public_properties_match_the_canonical_model() -> None:
+    authored, clip = builder()
+    sharpen: SharpenEffect = clip.effects.add_sharpen(amount=0.3, radius=1)
+    vignette: VignetteEffect = clip.effects.add_vignette(
+        amount=0.2, radius=0.8, softness=0.3, colour="#000000",
+    )
+    chromatic: ChromaticAberrationEffect = clip.effects.add_chromatic_aberration(
+        amount=0.02, angle_degrees=45,
+    )
+    assert sharpen.amount is not sharpen.radius
+    assert not hasattr(sharpen, "angle_degrees")
+    assert not hasattr(vignette, "threshold")
+    assert not hasattr(vignette, "intensity")
+    assert not hasattr(chromatic, "radius")
+    sharpen.amount.base_value = 0.5
+    sharpen.radius.base_value = 2
+    chromatic.amount.base_value = 0.1
+    chromatic.angle_degrees.base_value = 90
+    data = authored.to_dict()["visual"]["clips"][0]["effects"]
+    assert data[0] == {"id": sharpen.id, "type": "sharpen", "amount": {"base_value": 0.5}, "radius": {"base_value": 2.0}}
+    assert data[2] == {"id": chromatic.id, "type": "chromatic_aberration", "amount": {"base_value": 0.1}, "angle_degrees": {"base_value": 90.0}}
+
+
+def test_every_effect_has_the_exact_public_property_contract() -> None:
+    authored, clip = builder()
+    effects = (
+        clip.effects.add_brightness(amount=0),
+        clip.effects.add_contrast(amount=1),
+        clip.effects.add_saturation(amount=1),
+        clip.effects.add_tint(colour="#000000", amount=0),
+        clip.effects.add_gaussian_blur(radius=0),
+        clip.effects.add_directional_blur(radius=0, angle_degrees=0),
+        clip.effects.add_zoom_blur(radius=0, samples=2, anchor=Point(0.5, 0.5)),
+        clip.effects.add_glow(threshold=0, radius=0, intensity=0, colour="#ffffff"),
+        clip.effects.add_chromatic_aberration(amount=0, angle_degrees=0),
+        clip.effects.add_vignette(amount=0, radius=1, softness=0, colour="#000000"),
+        clip.effects.add_sharpen(amount=0, radius=1),
+        clip.effects.add_color_adjust(exposure=0, gamma=1, black_point=0, white_point=1),
+        clip.effects.add_camera_shake(
+            position_amount=0,
+            rotation_degrees=0,
+            scale_amount=0,
+            frequency=1,
+            seed=0,
+            attack=0,
+            decay=1,
+        ),
+        clip.effects.add_motion_blur(intensity=0, shutter_angle=0, max_radius=0, samples=2),
+    )
+    expected = (
+        (BrightnessEffect, {"id", "kind", "amount"}),
+        (ContrastEffect, {"id", "kind", "amount"}),
+        (SaturationEffect, {"id", "kind", "amount"}),
+        (TintEffect, {"id", "kind", "colour", "amount"}),
+        (GaussianBlurEffect, {"id", "kind", "radius"}),
+        (DirectionalBlurEffect, {"id", "kind", "radius", "angle_degrees"}),
+        (ZoomBlurEffect, {"id", "kind", "radius", "samples", "anchor", "direction"}),
+        (GlowEffect, {"id", "kind", "threshold", "radius", "intensity", "colour"}),
+        (ChromaticAberrationEffect, {"id", "kind", "amount", "angle_degrees"}),
+        (VignetteEffect, {"id", "kind", "amount", "radius", "softness", "colour"}),
+        (SharpenEffect, {"id", "kind", "amount", "radius"}),
+        (ColorAdjustEffect, {"id", "kind", "exposure", "gamma", "black_point", "white_point"}),
+        (CameraShakeEffect, {"id", "kind", "active_interval", "position_amount", "rotation_degrees", "scale_amount", "frequency", "seed", "attack", "decay"}),
+        (MotionBlurEffect, {"id", "kind", "intensity", "shutter_angle", "max_radius", "samples"}),
+    )
+    for effect, (effect_type, properties) in zip(effects, expected, strict=True):
+        public_properties = {
+            name
+            for cls in type(effect).__mro__
+            for name, descriptor in vars(cls).items()
+            if isinstance(descriptor, property)
+        }
+        assert type(effect) is effect_type
+        assert public_properties == properties
+        for property_name in properties - {"id", "kind", "active_interval", "seed", "attack", "decay", "samples", "anchor", "direction", "colour"}:
+            track = getattr(effect, property_name)
+            assert isinstance(track, ScalarTrack)
+            assert getattr(effect, property_name) is track
+            track.base_value = 0.123
+            with pytest.raises(AttributeError):
+                setattr(effect, property_name, track)
+    canonical = authored.to_dict()["visual"]["clips"][0]["effects"]
+    for effect_data, (_, properties) in zip(canonical, expected, strict=True):
+        for property_name in properties:
+            value = effect_data.get(property_name)
+            if isinstance(value, dict) and "base_value" in value:
+                assert value["base_value"] == 0.123
+
+
+def test_effect_collections_hide_owner_construction_and_integer_ranges_are_transactional() -> None:
+    assert str(inspect.signature(ClipEffectCollection)) == "() -> 'None'"
+    assert str(inspect.signature(PostEffectCollection)) == "() -> 'None'"
+    with pytest.raises(TypeError, match="obtained"):
+        ClipEffectCollection()
+    with pytest.raises(TypeError, match="obtained"):
+        PostEffectCollection()
+    authored, clip = builder()
+    before = authored.to_dict()
+    for value in (1, 0, -1, 33, 300, True, 2.5, "8"):
+        with pytest.raises((TypeError, ValueError)):
+            clip.effects.add_zoom_blur(radius=1, samples=value, anchor=Point(0.5, 0.5))  # type: ignore[arg-type]
+        assert authored.to_dict() == before
+    for value in (1, 0, -1, 33, 300, True, 2.5, "8"):
+        with pytest.raises((TypeError, ValueError)):
+            clip.effects.add_motion_blur(intensity=1, shutter_angle=180, max_radius=4, samples=value)  # type: ignore[arg-type]
+        assert authored.to_dict() == before
+    for value in (-1, True, 1.5, 2**64):
+        with pytest.raises((TypeError, ValueError)):
+            clip.effects.add_camera_shake(position_amount=0, rotation_degrees=0, scale_amount=0,
+                                           frequency=1, seed=value, attack=0, decay=0.1)  # type: ignore[arg-type]
+        assert authored.to_dict() == before
+    assert clip.effects.add_zoom_blur(radius=1, samples=2, anchor=Point(0.5, 0.5)).id == "effect-000001"
 
 
 @pytest.mark.parametrize(
@@ -212,18 +420,49 @@ def test_vignette_and_motion_blur_have_stable_cpu_frame_regions() -> None:
     assert vignette_frame[:4] == bytes((0, 0, 0, 255))
     assert vignette_frame[(4 * 8 + 4) * 4:(4 * 8 + 5) * 4] == bytes((255, 255, 255, 255))
 
-    def render_motion(animated: bool) -> bytes:
+    def render_motion(with_effect: bool) -> bytes:
         authored = ProjectBuilder(width=8, height=6, frame_rate=FrameRate(10, 1), output_path="out.mp4",
                                   duration=1, base_directory=Path.cwd())
         asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
         clip = authored.add_image_clip(source=asset, start=0, duration=1, layer=0,
                                        sizing=Sizing.stretch(width=4, height=3))
-        if animated:
-            clip.transform.position.keyframe(time=0, value=Point(0.25, 0.5))
-            clip.transform.position.keyframe(time=1, value=Point(0.75, 0.5))
+        clip.transform.position.keyframe(time=0, value=Point(0.25, 0.5))
+        clip.transform.position.keyframe(time=1, value=Point(0.75, 0.5))
+        if with_effect:
             clip.effects.add_motion_blur(intensity=0.8, shutter_angle=180, max_radius=8, samples=8)
         return video_editor.Editor().prepare(
             authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
         ).render_frame_number(5).to_bytes()
 
+    # The moving project is identical in both cases. Only motion blur changes.
     assert render_motion(True) != render_motion(False)
+
+
+def test_cpu_effect_video_exercises_ordered_clip_and_post_effects(tmp_path: Path) -> None:
+    authored = ProjectBuilder(
+        width=16, height=12, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1,
+    )
+    authored.add_solid_color_clip(colour="#203040", start=0, duration=1, layer=0)
+    foreground = authored.add_solid_color_clip(colour="#806020", start=0, duration=1, layer=1)
+    foreground.blend_mode = BlendMode.SCREEN
+    brightness = foreground.effects.add_brightness(amount=0)
+    brightness.amount.keyframe(time=0, value=0)
+    brightness.amount.keyframe(time=1, value=0.2, interpolation=Interpolation.EASE_OUT)
+    foreground.effects.add_gaussian_blur(radius=1)
+    authored.post_effects.add_vignette(amount=0.1, radius=0.8, softness=0.3, colour="#000000")
+    authored.post_effects.add_color_adjust(exposure=0, gamma=1, black_point=0, white_point=1)
+    assert authored.validate().is_valid
+    prepared = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    output = tmp_path / "effects.mp4"
+    result = prepared.render_video(video_editor.PreparedVideoRenderRequest(output))
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height,nb_frames,duration", "-of", "json", str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    streams = json.loads(probe.stdout)["streams"]
+    assert output.is_file() and output.stat().st_size > 0
+    assert result.total_frames == 10 and result.audio_present is False
+    assert streams == [{"codec_type": "video", "width": 16, "height": 12, "duration": "1.000000", "nb_frames": "10"}]
+    assert not list(tmp_path.glob("*.tmp"))

@@ -107,8 +107,9 @@ a clip duration likewise preserves an out-of-range keyframe in canonical data;
 native validation reports `MVP-KEYFRAME-TIME` at
 `/visual/clips/0/opacity/keyframes/0/time`.
 
-The interpolation test samples ease-in/out behavior separately from its linear
-midpoint check and verifies non-linear Bézier output. Existing frame coverage
+The interpolation test samples ease-in/out behavior at 0.25, away from the
+linear midpoint, and verifies non-linear Bézier output. Cubic Bézier curves are
+attached to destination keyframes in committed examples and tests. Existing frame coverage
 continues to exercise anchor, crop, and geometric transform animation; lifecycle
 assertions now use stable native frame pixels rather than a dictionary-only
 proxy.

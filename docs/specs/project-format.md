@@ -52,6 +52,13 @@ saturation uses `1` as identity, and tint blends toward its colour with an
 amount in `0..=1`. Effects are applied in declared order and their parameters
 may be animated. Values are clamped only after the combined affine operation.
 
+Ordinary clip-effect tracks are evaluated in seconds relative to the start of
+their clip. Camera shake has an active interval, and its parameter tracks use
+seconds relative to that interval's start. Global post-effect tracks are
+evaluated in project-relative seconds. These time domains are deliberate: a
+post effect has no owning clip, while a camera-shake envelope starts when its
+active interval starts.
+
 Render results report the runtime `requested_render_backend` (`auto`, `cpu`, or
 `wgpu`) and selected `render_backend` (`cpu` or `wgpu`) separately from
 `encoder_backend: "ffmpeg"`. An automatic pre-render fallback records a

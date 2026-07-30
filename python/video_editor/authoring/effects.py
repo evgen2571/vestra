@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
+from typing import Callable, Self, TypeVar
 
 from ._internal import _IdAllocator, _Owner, _number
 from .tracks import ScalarTrack
@@ -13,7 +13,7 @@ from .values import Color, Point, color_to_canonical
 
 @dataclass(frozen=True, slots=True)
 class ActiveInterval:
-    """A finite half-open clip-local interval for transient effects."""
+    """A finite half-open interval, measured in clip-local seconds."""
 
     start: float = 0.0
     duration: float | None = None
@@ -42,13 +42,17 @@ class ZoomBlurDirection(Enum):
     CENTERED = "centered"
 
 
-def _integer(value: int, name: str) -> int:
+def _integer_in_range(value: int, name: str, minimum: int, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
     return value
 
 
 class Effect:
+    """Base class for factory-created effects. It has no public parameters."""
+
     __slots__ = ("_owner", "_scope", "_id", "_kind")
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -69,8 +73,13 @@ class Effect:
         return self._kind
 
     def __eq__(self, other: object) -> bool:
-        return (isinstance(other, Effect) and self._owner is other._owner and self._scope is other._scope
-                and self.id == other.id and self.kind == other.kind)
+        return (
+            isinstance(other, Effect)
+            and self._owner is other._owner
+            and self._scope is other._scope
+            and self.id == other.id
+            and self.kind == other.kind
+        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(id={self.id!r})"
@@ -83,11 +92,15 @@ class Effect:
 
 
 class _AmountEffect(Effect):
+    """Private implementation shared only by effects with one amount track."""
+
     __slots__ = ("_amount",)
     _amount: ScalarTrack
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, kind: str, amount: int | float) -> _AmountEffect:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str, kind: str, amount: int | float
+    ) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, kind)
         instance._amount = ScalarTrack._create(owner, amount)
@@ -98,58 +111,91 @@ class _AmountEffect(Effect):
         return self._amount
 
     def to_canonical(self) -> dict[str, object]:
-        data = self._canonical()
-        data["amount"] = self.amount.to_canonical()
-        return data
+        return {**self._canonical(), "amount": self.amount.to_canonical()}
 
 
-class BrightnessEffect(_AmountEffect): pass
-class ContrastEffect(_AmountEffect): pass
-class SaturationEffect(_AmountEffect): pass
+class BrightnessEffect(_AmountEffect):
+    pass
+
+
+class ContrastEffect(_AmountEffect):
+    pass
+
+
+class SaturationEffect(_AmountEffect):
+    pass
 
 
 class TintEffect(_AmountEffect):
     __slots__ = ("_colour",)
     _colour: str
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, colour: Color | str, amount: int | float) -> TintEffect:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str, colour: Color | str, amount: int | float
+    ) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "tint")
         instance._amount = ScalarTrack._create(owner, amount)
         instance._colour = color_to_canonical(colour)
         return instance
+
     @property
-    def colour(self) -> str: return self._colour
+    def colour(self) -> str:
+        return self._colour
+
     @colour.setter
-    def colour(self, value: Color | str) -> None: self._colour = color_to_canonical(value)
+    def colour(self, value: Color | str) -> None:
+        self._colour = color_to_canonical(value)
+
     def to_canonical(self) -> dict[str, object]:
-        data = super().to_canonical(); data["colour"] = self.colour
-        return {"id": data.pop("id"), "type": data.pop("type"), "colour": data.pop("colour"), "amount": data.pop("amount")}
+        return {**self._canonical(), "colour": self.colour, "amount": self.amount.to_canonical()}
 
 
 class GaussianBlurEffect(Effect):
     __slots__ = ("_radius",)
     _radius: ScalarTrack
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float) -> GaussianBlurEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "gaussian_blur"); instance._radius = ScalarTrack._create(owner, radius); return instance
+    def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "gaussian_blur")
+        instance._radius = ScalarTrack._create(owner, radius)
+        return instance
+
     @property
-    def radius(self) -> ScalarTrack: return self._radius
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "radius": self.radius.to_canonical()}
+    def radius(self) -> ScalarTrack:
+        return self._radius
+
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "radius": self.radius.to_canonical()}
 
 
 class DirectionalBlurEffect(Effect):
     __slots__ = ("_radius", "_angle_degrees")
     _radius: ScalarTrack
     _angle_degrees: ScalarTrack
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float, angle_degrees: int | float) -> DirectionalBlurEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "directional_blur"); instance._radius = ScalarTrack._create(owner, radius); instance._angle_degrees = ScalarTrack._create(owner, angle_degrees); return instance
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str, radius: int | float, angle_degrees: int | float
+    ) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "directional_blur")
+        instance._radius = ScalarTrack._create(owner, radius)
+        instance._angle_degrees = ScalarTrack._create(owner, angle_degrees)
+        return instance
+
     @property
-    def radius(self) -> ScalarTrack: return self._radius
+    def radius(self) -> ScalarTrack:
+        return self._radius
+
     @property
-    def angle_degrees(self) -> ScalarTrack: return self._angle_degrees
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "radius": self.radius.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
+    def angle_degrees(self) -> ScalarTrack:
+        return self._angle_degrees
+
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "radius": self.radius.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
 
 
 class ZoomBlurEffect(Effect):
@@ -158,18 +204,32 @@ class ZoomBlurEffect(Effect):
     _samples: int
     _anchor: Point
     _direction: ZoomBlurDirection
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float, samples: int, anchor: Point, direction: ZoomBlurDirection) -> ZoomBlurEffect:
-        if not isinstance(anchor, Point): raise TypeError("anchor must be Point")
-        if not 0 <= anchor.x <= 1 or not 0 <= anchor.y <= 1: raise ValueError("anchor must be within unit space")
-        if not isinstance(direction, ZoomBlurDirection): raise TypeError("direction must be ZoomBlurDirection")
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "zoom_blur"); instance._radius = ScalarTrack._create(owner, radius); instance._samples = _integer(samples, "samples"); instance._anchor = Point(anchor.x, anchor.y); instance._direction = direction; return instance
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str, radius: int | float, samples: int,
+        anchor: Point, direction: ZoomBlurDirection,
+    ) -> Self:
+        if not isinstance(anchor, Point):
+            raise TypeError("anchor must be Point")
+        if not 0 <= anchor.x <= 1 or not 0 <= anchor.y <= 1:
+            raise ValueError("anchor must be within unit space")
+        if not isinstance(direction, ZoomBlurDirection):
+            raise TypeError("direction must be ZoomBlurDirection")
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "zoom_blur")
+        instance._radius = ScalarTrack._create(owner, radius)
+        instance._samples = _integer_in_range(samples, "samples", 2, 32)
+        instance._anchor = Point(anchor.x, anchor.y)
+        instance._direction = direction
+        return instance
+
     @property
     def radius(self) -> ScalarTrack: return self._radius
     @property
     def samples(self) -> int: return self._samples
     @samples.setter
-    def samples(self, value: int) -> None: self._samples = _integer(value, "samples")
+    def samples(self, value: int) -> None: self._samples = _integer_in_range(value, "samples", 2, 32)
     @property
     def anchor(self) -> Point: return self._anchor
     @anchor.setter
@@ -183,7 +243,9 @@ class ZoomBlurEffect(Effect):
     def direction(self, value: ZoomBlurDirection) -> None:
         if not isinstance(value, ZoomBlurDirection): raise TypeError("direction must be ZoomBlurDirection")
         self._direction = value
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "radius": self.radius.to_canonical(), "samples": self.samples, "anchor": self.anchor.to_canonical(), "direction": self.direction.value}
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "radius": self.radius.to_canonical(), "samples": self.samples,
+                "anchor": self.anchor.to_canonical(), "direction": self.direction.value}
 
 
 class GlowEffect(Effect):
@@ -192,9 +254,18 @@ class GlowEffect(Effect):
     _radius: ScalarTrack
     _intensity: ScalarTrack
     _colour: str
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, threshold: int | float, radius: int | float, intensity: int | float, colour: Color | str) -> GlowEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "glow"); instance._threshold = ScalarTrack._create(owner, threshold); instance._radius = ScalarTrack._create(owner, radius); instance._intensity = ScalarTrack._create(owner, intensity); instance._colour = color_to_canonical(colour); return instance
+    def _create(cls, owner: _Owner, scope: object, identifier: str, threshold: int | float,
+                radius: int | float, intensity: int | float, colour: Color | str) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "glow")
+        instance._threshold = ScalarTrack._create(owner, threshold)
+        instance._radius = ScalarTrack._create(owner, radius)
+        instance._intensity = ScalarTrack._create(owner, intensity)
+        instance._colour = color_to_canonical(colour)
+        return instance
+
     @property
     def threshold(self) -> ScalarTrack: return self._threshold
     @property
@@ -205,41 +276,86 @@ class GlowEffect(Effect):
     def colour(self) -> str: return self._colour
     @colour.setter
     def colour(self, value: Color | str) -> None: self._colour = color_to_canonical(value)
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "threshold": self.threshold.to_canonical(), "radius": self.radius.to_canonical(), "intensity": self.intensity.to_canonical(), "colour": self.colour}
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "threshold": self.threshold.to_canonical(), "radius": self.radius.to_canonical(),
+                "intensity": self.intensity.to_canonical(), "colour": self.colour}
 
 
-class ChromaticAberrationEffect(DirectionalBlurEffect):
-    __slots__ = ()
-    @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float, angle_degrees: int | float) -> ChromaticAberrationEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "chromatic_aberration"); instance._radius = ScalarTrack._create(owner, amount); instance._angle_degrees = ScalarTrack._create(owner, angle_degrees); return instance
-    @property
-    def amount(self) -> ScalarTrack: return self._radius
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "amount": self.amount.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
-
-
-class VignetteEffect(GlowEffect):
-    __slots__ = ("_amount", "_softness")
+class ChromaticAberrationEffect(Effect):
+    __slots__ = ("_amount", "_angle_degrees")
     _amount: ScalarTrack
-    _softness: ScalarTrack
+    _angle_degrees: ScalarTrack
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float, radius: int | float, softness: int | float, colour: Color | str) -> VignetteEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "vignette"); instance._amount = ScalarTrack._create(owner, amount); instance._radius = ScalarTrack._create(owner, radius); instance._softness = ScalarTrack._create(owner, softness); instance._colour = color_to_canonical(colour); return instance
+    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
+                angle_degrees: int | float) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "chromatic_aberration")
+        instance._amount = ScalarTrack._create(owner, amount)
+        instance._angle_degrees = ScalarTrack._create(owner, angle_degrees)
+        return instance
+
     @property
     def amount(self) -> ScalarTrack: return self._amount
     @property
-    def softness(self) -> ScalarTrack: return self._softness
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self.radius.to_canonical(), "softness": self.softness.to_canonical(), "colour": self.colour}
+    def angle_degrees(self) -> ScalarTrack: return self._angle_degrees
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "amount": self.amount.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
 
 
-class SharpenEffect(DirectionalBlurEffect):
-    __slots__ = ()
+class VignetteEffect(Effect):
+    __slots__ = ("_amount", "_radius", "_softness", "_colour")
+    _amount: ScalarTrack
+    _radius: ScalarTrack
+    _softness: ScalarTrack
+    _colour: str
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float, angle_degrees: int | float) -> SharpenEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "sharpen"); instance._radius = ScalarTrack._create(owner, radius); instance._angle_degrees = ScalarTrack._create(owner, angle_degrees); return instance
+    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
+                radius: int | float, softness: int | float, colour: Color | str) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "vignette")
+        instance._amount = ScalarTrack._create(owner, amount)
+        instance._radius = ScalarTrack._create(owner, radius)
+        instance._softness = ScalarTrack._create(owner, softness)
+        instance._colour = color_to_canonical(colour)
+        return instance
+
     @property
-    def amount(self) -> ScalarTrack: return self._radius
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self._angle_degrees.to_canonical()}
+    def amount(self) -> ScalarTrack: return self._amount
+    @property
+    def radius(self) -> ScalarTrack: return self._radius
+    @property
+    def softness(self) -> ScalarTrack: return self._softness
+    @property
+    def colour(self) -> str: return self._colour
+    @colour.setter
+    def colour(self, value: Color | str) -> None: self._colour = color_to_canonical(value)
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self.radius.to_canonical(),
+                "softness": self.softness.to_canonical(), "colour": self.colour}
+
+
+class SharpenEffect(Effect):
+    __slots__ = ("_amount", "_radius")
+    _amount: ScalarTrack
+    _radius: ScalarTrack
+
+    @classmethod
+    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
+                radius: int | float) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "sharpen")
+        instance._amount = ScalarTrack._create(owner, amount)
+        instance._radius = ScalarTrack._create(owner, radius)
+        return instance
+
+    @property
+    def amount(self) -> ScalarTrack: return self._amount
+    @property
+    def radius(self) -> ScalarTrack: return self._radius
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self.radius.to_canonical()}
 
 
 class ColorAdjustEffect(Effect):
@@ -248,9 +364,18 @@ class ColorAdjustEffect(Effect):
     _gamma: ScalarTrack
     _black_point: ScalarTrack
     _white_point: ScalarTrack
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, exposure: int | float, gamma: int | float, black_point: int | float, white_point: int | float) -> ColorAdjustEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "color_adjust"); instance._exposure = ScalarTrack._create(owner, exposure); instance._gamma = ScalarTrack._create(owner, gamma); instance._black_point = ScalarTrack._create(owner, black_point); instance._white_point = ScalarTrack._create(owner, white_point); return instance
+    def _create(cls, owner: _Owner, scope: object, identifier: str, exposure: int | float,
+                gamma: int | float, black_point: int | float, white_point: int | float) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "color_adjust")
+        instance._exposure = ScalarTrack._create(owner, exposure)
+        instance._gamma = ScalarTrack._create(owner, gamma)
+        instance._black_point = ScalarTrack._create(owner, black_point)
+        instance._white_point = ScalarTrack._create(owner, white_point)
+        return instance
+
     @property
     def exposure(self) -> ScalarTrack: return self._exposure
     @property
@@ -259,7 +384,9 @@ class ColorAdjustEffect(Effect):
     def black_point(self) -> ScalarTrack: return self._black_point
     @property
     def white_point(self) -> ScalarTrack: return self._white_point
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "exposure": self.exposure.to_canonical(), "gamma": self.gamma.to_canonical(), "black_point": self.black_point.to_canonical(), "white_point": self.white_point.to_canonical()}
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "exposure": self.exposure.to_canonical(), "gamma": self.gamma.to_canonical(),
+                "black_point": self.black_point.to_canonical(), "white_point": self.white_point.to_canonical()}
 
 
 class CameraShakeEffect(Effect):
@@ -272,10 +399,24 @@ class CameraShakeEffect(Effect):
     _seed: int
     _attack: float
     _decay: float
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, active_interval: ActiveInterval, position_amount: int | float, rotation_degrees: int | float, scale_amount: int | float, frequency: int | float, seed: int, attack: int | float, decay: int | float) -> CameraShakeEffect:
+    def _create(cls, owner: _Owner, scope: object, identifier: str, active_interval: ActiveInterval,
+                position_amount: int | float, rotation_degrees: int | float, scale_amount: int | float,
+                frequency: int | float, seed: int, attack: int | float, decay: int | float) -> Self:
         if not isinstance(active_interval, ActiveInterval): raise TypeError("active_interval must be ActiveInterval")
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "camera_shake"); instance._active_interval = active_interval; instance._position_amount = ScalarTrack._create(owner, position_amount); instance._rotation_degrees = ScalarTrack._create(owner, rotation_degrees); instance._scale_amount = ScalarTrack._create(owner, scale_amount); instance._frequency = ScalarTrack._create(owner, frequency); instance._seed = _integer(seed, "seed"); instance._attack = _number(attack, "attack"); instance._decay = _number(decay, "decay"); return instance
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "camera_shake")
+        instance._active_interval = active_interval
+        instance._position_amount = ScalarTrack._create(owner, position_amount)
+        instance._rotation_degrees = ScalarTrack._create(owner, rotation_degrees)
+        instance._scale_amount = ScalarTrack._create(owner, scale_amount)
+        instance._frequency = ScalarTrack._create(owner, frequency)
+        instance._seed = _integer_in_range(seed, "seed", 0, 2**64 - 1)
+        instance._attack = _number(attack, "attack")
+        instance._decay = _number(decay, "decay")
+        return instance
+
     @property
     def active_interval(self) -> ActiveInterval: return self._active_interval
     @active_interval.setter
@@ -293,7 +434,7 @@ class CameraShakeEffect(Effect):
     @property
     def seed(self) -> int: return self._seed
     @seed.setter
-    def seed(self, value: int) -> None: self._seed = _integer(value, "seed")
+    def seed(self, value: int) -> None: self._seed = _integer_in_range(value, "seed", 0, 2**64 - 1)
     @property
     def attack(self) -> float: return self._attack
     @attack.setter
@@ -302,7 +443,10 @@ class CameraShakeEffect(Effect):
     def decay(self) -> float: return self._decay
     @decay.setter
     def decay(self, value: int | float) -> None: self._decay = _number(value, "decay")
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), **self.active_interval.to_canonical(), "position_amount": self.position_amount.to_canonical(), "rotation_degrees": self.rotation_degrees.to_canonical(), "scale_amount": self.scale_amount.to_canonical(), "frequency": self.frequency.to_canonical(), "seed": self.seed, "attack": self.attack, "decay": self.decay}
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), **self.active_interval.to_canonical(), "position_amount": self.position_amount.to_canonical(),
+                "rotation_degrees": self.rotation_degrees.to_canonical(), "scale_amount": self.scale_amount.to_canonical(),
+                "frequency": self.frequency.to_canonical(), "seed": self.seed, "attack": self.attack, "decay": self.decay}
 
 
 class MotionBlurEffect(Effect):
@@ -311,9 +455,18 @@ class MotionBlurEffect(Effect):
     _shutter_angle: ScalarTrack
     _max_radius: ScalarTrack
     _samples: int
+
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, intensity: int | float, shutter_angle: int | float, max_radius: int | float, samples: int) -> MotionBlurEffect:
-        instance = object.__new__(cls); instance._initialize(owner, scope, identifier, "motion_blur"); instance._intensity = ScalarTrack._create(owner, intensity); instance._shutter_angle = ScalarTrack._create(owner, shutter_angle); instance._max_radius = ScalarTrack._create(owner, max_radius); instance._samples = _integer(samples, "samples"); return instance
+    def _create(cls, owner: _Owner, scope: object, identifier: str, intensity: int | float,
+                shutter_angle: int | float, max_radius: int | float, samples: int) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "motion_blur")
+        instance._intensity = ScalarTrack._create(owner, intensity)
+        instance._shutter_angle = ScalarTrack._create(owner, shutter_angle)
+        instance._max_radius = ScalarTrack._create(owner, max_radius)
+        instance._samples = _integer_in_range(samples, "samples", 2, 32)
+        return instance
+
     @property
     def intensity(self) -> ScalarTrack: return self._intensity
     @property
@@ -323,42 +476,61 @@ class MotionBlurEffect(Effect):
     @property
     def samples(self) -> int: return self._samples
     @samples.setter
-    def samples(self, value: int) -> None: self._samples = _integer(value, "samples")
-    def to_canonical(self) -> dict[str, object]: return {**self._canonical(), "intensity": self.intensity.to_canonical(), "shutter_angle": self.shutter_angle.to_canonical(), "max_radius": self.max_radius.to_canonical(), "samples": self.samples}
+    def samples(self, value: int) -> None: self._samples = _integer_in_range(value, "samples", 2, 32)
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(), "intensity": self.intensity.to_canonical(), "shutter_angle": self.shutter_angle.to_canonical(),
+                "max_radius": self.max_radius.to_canonical(), "samples": self.samples}
+
+
+EffectType = TypeVar("EffectType", bound=Effect)
 
 
 class _EffectCollection:
     __slots__ = ("_owner", "_ids", "_scope", "_items")
+    _owner: _Owner
+    _ids: _IdAllocator
+    _scope: object
     _items: list[Effect]
-    def __init__(self, owner: _Owner, ids: _IdAllocator, scope: object) -> None: self._owner, self._ids, self._scope, self._items = owner, ids, scope, []
+
+    def __init__(self) -> None:
+        raise TypeError(f"{type(self).__name__} objects must be obtained from a clip or ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, ids: _IdAllocator, scope: object) -> Self:
+        instance = object.__new__(cls)
+        instance._owner = owner
+        instance._ids = ids
+        instance._scope = scope
+        instance._items = []
+        return instance
+
     @property
     def items(self) -> tuple[Effect, ...]: return tuple(self._items)
     def _identifier(self, identifier: str | None) -> str:
         if identifier is not None: self._ids.validate("effect", identifier, scope=self._scope)
         return self._ids.allocate("effect", scope=self._scope) if identifier is None else self._ids.reserve("effect", identifier, scope=self._scope)
-    def _append(self, factory: Callable[..., Effect], identifier: str | None, *args: object) -> Effect:
-        # Factories validate all arguments before this allocation, preserving transactionality.
+    def _append(self, factory: Callable[..., EffectType], identifier: str | None, *args: object) -> EffectType:
         staged = factory(self._owner, self._scope, "", *args)
         staged._id = self._identifier(identifier)
         self._items.append(staged)
         return staged
-    def add_brightness(self, *, amount: int | float, id: str | None = None) -> BrightnessEffect: return self._append(BrightnessEffect._create, id, "brightness", amount)  # type: ignore[return-value]
-    def add_contrast(self, *, amount: int | float, id: str | None = None) -> ContrastEffect: return self._append(ContrastEffect._create, id, "contrast", amount)  # type: ignore[return-value]
-    def add_saturation(self, *, amount: int | float, id: str | None = None) -> SaturationEffect: return self._append(SaturationEffect._create, id, "saturation", amount)  # type: ignore[return-value]
-    def add_tint(self, *, colour: Color | str, amount: int | float, id: str | None = None) -> TintEffect: return self._append(TintEffect._create, id, colour, amount)  # type: ignore[return-value]
-    def add_gaussian_blur(self, *, radius: int | float, id: str | None = None) -> GaussianBlurEffect: return self._append(GaussianBlurEffect._create, id, radius)  # type: ignore[return-value]
-    def add_directional_blur(self, *, radius: int | float, angle_degrees: int | float, id: str | None = None) -> DirectionalBlurEffect: return self._append(DirectionalBlurEffect._create, id, radius, angle_degrees)  # type: ignore[return-value]
-    def add_zoom_blur(self, *, radius: int | float, samples: int, anchor: Point, direction: ZoomBlurDirection = ZoomBlurDirection.CENTERED, id: str | None = None) -> ZoomBlurEffect: return self._append(ZoomBlurEffect._create, id, radius, samples, anchor, direction)  # type: ignore[return-value]
-    def add_glow(self, *, threshold: int | float, radius: int | float, intensity: int | float, colour: Color | str, id: str | None = None) -> GlowEffect: return self._append(GlowEffect._create, id, threshold, radius, intensity, colour)  # type: ignore[return-value]
-    def add_chromatic_aberration(self, *, amount: int | float, angle_degrees: int | float, id: str | None = None) -> ChromaticAberrationEffect: return self._append(ChromaticAberrationEffect._create, id, amount, angle_degrees)  # type: ignore[return-value]
-    def add_vignette(self, *, amount: int | float, radius: int | float, softness: int | float, colour: Color | str, id: str | None = None) -> VignetteEffect: return self._append(VignetteEffect._create, id, amount, radius, softness, colour)  # type: ignore[return-value]
-    def add_sharpen(self, *, amount: int | float, radius: int | float, id: str | None = None) -> SharpenEffect: return self._append(SharpenEffect._create, id, amount, radius)  # type: ignore[return-value]
-    def add_color_adjust(self, *, exposure: int | float, gamma: int | float, black_point: int | float, white_point: int | float, id: str | None = None) -> ColorAdjustEffect: return self._append(ColorAdjustEffect._create, id, exposure, gamma, black_point, white_point)  # type: ignore[return-value]
+    def add_brightness(self, *, amount: int | float, id: str | None = None) -> BrightnessEffect: return self._append(BrightnessEffect._create, id, "brightness", amount)
+    def add_contrast(self, *, amount: int | float, id: str | None = None) -> ContrastEffect: return self._append(ContrastEffect._create, id, "contrast", amount)
+    def add_saturation(self, *, amount: int | float, id: str | None = None) -> SaturationEffect: return self._append(SaturationEffect._create, id, "saturation", amount)
+    def add_tint(self, *, colour: Color | str, amount: int | float, id: str | None = None) -> TintEffect: return self._append(TintEffect._create, id, colour, amount)
+    def add_gaussian_blur(self, *, radius: int | float, id: str | None = None) -> GaussianBlurEffect: return self._append(GaussianBlurEffect._create, id, radius)
+    def add_directional_blur(self, *, radius: int | float, angle_degrees: int | float, id: str | None = None) -> DirectionalBlurEffect: return self._append(DirectionalBlurEffect._create, id, radius, angle_degrees)
+    def add_zoom_blur(self, *, radius: int | float, samples: int, anchor: Point, direction: ZoomBlurDirection = ZoomBlurDirection.CENTERED, id: str | None = None) -> ZoomBlurEffect: return self._append(ZoomBlurEffect._create, id, radius, samples, anchor, direction)
+    def add_glow(self, *, threshold: int | float, radius: int | float, intensity: int | float, colour: Color | str, id: str | None = None) -> GlowEffect: return self._append(GlowEffect._create, id, threshold, radius, intensity, colour)
+    def add_chromatic_aberration(self, *, amount: int | float, angle_degrees: int | float, id: str | None = None) -> ChromaticAberrationEffect: return self._append(ChromaticAberrationEffect._create, id, amount, angle_degrees)
+    def add_vignette(self, *, amount: int | float, radius: int | float, softness: int | float, colour: Color | str, id: str | None = None) -> VignetteEffect: return self._append(VignetteEffect._create, id, amount, radius, softness, colour)
+    def add_sharpen(self, *, amount: int | float, radius: int | float, id: str | None = None) -> SharpenEffect: return self._append(SharpenEffect._create, id, amount, radius)
+    def add_color_adjust(self, *, exposure: int | float, gamma: int | float, black_point: int | float, white_point: int | float, id: str | None = None) -> ColorAdjustEffect: return self._append(ColorAdjustEffect._create, id, exposure, gamma, black_point, white_point)
 
 
 class ClipEffectCollection(_EffectCollection):
-    def add_camera_shake(self, *, active_interval: ActiveInterval = ActiveInterval(), position_amount: int | float, rotation_degrees: int | float, scale_amount: int | float, frequency: int | float, seed: int, attack: int | float, decay: int | float, id: str | None = None) -> CameraShakeEffect: return self._append(CameraShakeEffect._create, id, active_interval, position_amount, rotation_degrees, scale_amount, frequency, seed, attack, decay)  # type: ignore[return-value]
-    def add_motion_blur(self, *, intensity: int | float, shutter_angle: int | float, max_radius: int | float, samples: int, id: str | None = None) -> MotionBlurEffect: return self._append(MotionBlurEffect._create, id, intensity, shutter_angle, max_radius, samples)  # type: ignore[return-value]
+    def add_camera_shake(self, *, active_interval: ActiveInterval = ActiveInterval(), position_amount: int | float, rotation_degrees: int | float, scale_amount: int | float, frequency: int | float, seed: int, attack: int | float, decay: int | float, id: str | None = None) -> CameraShakeEffect: return self._append(CameraShakeEffect._create, id, active_interval, position_amount, rotation_degrees, scale_amount, frequency, seed, attack, decay)
+    def add_motion_blur(self, *, intensity: int | float, shutter_angle: int | float, max_radius: int | float, samples: int, id: str | None = None) -> MotionBlurEffect: return self._append(MotionBlurEffect._create, id, intensity, shutter_angle, max_radius, samples)
 
 
 class PostEffectCollection(_EffectCollection):

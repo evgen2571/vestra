@@ -23,6 +23,7 @@ use video_editor::{
 };
 
 mod conversion;
+mod prepared;
 
 create_exception!(
     video_editor._native,
@@ -30,6 +31,13 @@ create_exception!(
     pyo3::exceptions::PyException
 );
 create_exception!(video_editor._native, ProjectError, VideoEditorError);
+create_exception!(video_editor._native, PreparationError, VideoEditorError);
+create_exception!(video_editor._native, FrameRenderError, VideoEditorError);
+create_exception!(
+    video_editor._native,
+    PreparedProjectBusyError,
+    VideoEditorError
+);
 
 fn attach_error_context(
     py: Python<'_>,
@@ -61,7 +69,7 @@ fn project_error(py: Python<'_>, error: LoadError) -> PyResult<PyErr> {
     Ok(exception)
 }
 
-fn editor_error(py: Python<'_>, error: EditorError) -> PyResult<PyErr> {
+pub(crate) fn editor_error(py: Python<'_>, error: EditorError) -> PyResult<PyErr> {
     let error_diagnostics = diagnostics(error.diagnostics());
     let warnings = diagnostics(error.warnings());
     let message = error.to_string();
@@ -222,6 +230,33 @@ impl PyEditor {
             Err(error) => Err(editor_error(py, error)?),
         }
     }
+
+    #[pyo3(signature = (project, options = None))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "the binding retains structured SDK preparation failures until Python reattaches"
+    )]
+    fn prepare(
+        &self,
+        py: Python<'_>,
+        project: &PyProject,
+        options: Option<&prepared::PyPrepareOptions>,
+    ) -> PyResult<prepared::PyPreparedProject> {
+        let options =
+            options.map_or_else(video_editor::PrepareOptions::default, |value| value.inner);
+        match py.detach(|| {
+            if !prepared::wait_for_test_barrier() {
+                return Err(None);
+            }
+            self.inner.prepare(&project.inner, options).map_err(Some)
+        }) {
+            Ok(value) => Ok(prepared::PyPreparedProject::new(value)),
+            Err(Some(error)) => prepared::preparation_error(py, error),
+            Err(None) => Err(PyRuntimeError::new_err(
+                "prepared test synchronization failed",
+            )),
+        }
+    }
 }
 
 #[pyclass(
@@ -319,7 +354,7 @@ impl PyPreflightOptions {
     module = "video_editor._native"
 )]
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
-enum PyBackendPreference {
+pub(crate) enum PyBackendPreference {
     #[pyo3(name = "AUTO")]
     Auto,
     #[pyo3(name = "CPU")]
@@ -467,7 +502,7 @@ impl PySeverity {
     module = "video_editor._native"
 )]
 #[derive(Clone)]
-struct PyDiagnostic {
+pub(crate) struct PyDiagnostic {
     #[pyo3(get)]
     code: String,
     #[pyo3(get)]
@@ -514,7 +549,7 @@ fn diagnostics(values: &[NativeDiagnostic]) -> Vec<PyDiagnostic> {
     values.iter().cloned().map(PyDiagnostic::from).collect()
 }
 
-fn diagnostic_tuple(py: Python<'_>, values: &[PyDiagnostic]) -> PyResult<Py<PyAny>> {
+pub(crate) fn diagnostic_tuple(py: Python<'_>, values: &[PyDiagnostic]) -> PyResult<Py<PyAny>> {
     let values = values
         .iter()
         .cloned()
@@ -790,6 +825,18 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<VideoEditorError>(),
     )?;
     module.add("ProjectError", module.py().get_type::<ProjectError>())?;
+    module.add(
+        "PreparationError",
+        module.py().get_type::<PreparationError>(),
+    )?;
+    module.add(
+        "FrameRenderError",
+        module.py().get_type::<FrameRenderError>(),
+    )?;
+    module.add(
+        "PreparedProjectBusyError",
+        module.py().get_type::<PreparedProjectBusyError>(),
+    )?;
     module.add_class::<PyProject>()?;
     module.add_class::<PyEditor>()?;
     module.add_class::<PyPreflightOptions>()?;
@@ -803,6 +850,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyInspectAssets>()?;
     module.add_class::<PyInspectAudio>()?;
     module.add_class::<PyInspectionReport>()?;
+    prepared::register(module)?;
     module.add_function(wrap_pyfunction!(native_version, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_until_detached_entered, module)?)?;
@@ -814,6 +862,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             [
                 "VideoEditorError",
                 "ProjectError",
+                "PreparationError",
+                "FrameRenderError",
+                "PreparedProjectBusyError",
                 "Project",
                 "Editor",
                 "PreflightOptions",
@@ -827,6 +878,18 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "InspectAssets",
                 "InspectAudio",
                 "InspectionReport",
+                "PrepareOptions",
+                "PreparedProject",
+                "PreparationReport",
+                "PreparationTimings",
+                "FrameRate",
+                "Frame",
+                "PixelFormat",
+                "BackendKind",
+                "BackendFallback",
+                "AdapterInfo",
+                "AdapterDeviceType",
+                "GraphicsBackend",
                 "native_version",
             ],
         )?,

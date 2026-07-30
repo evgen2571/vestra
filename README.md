@@ -157,6 +157,32 @@ callbacks run on the calling thread. The supported SDK surface is the API export
 by `video-editor`; renderer crates and renderer-oriented implementation DTOs are
 workspace internals rather than contracts for future bindings.
 
+## Python prepared frames
+
+The Python package wraps the public Rust SDK. Prepare once, then request owned
+RGBA8 frames by frame number or exact integer nanoseconds:
+
+```python
+import video_editor
+
+project = video_editor.Project.load("project.json")
+prepared = video_editor.Editor().prepare(
+    project,
+    video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+)
+frame = prepared.render_frame_number(0)
+assert frame.width == prepared.preparation_report.width
+pixels = frame.to_bytes()
+```
+
+`render_frame_ns()` is the exact timestamp path. `render_frame_seconds()` is a
+float convenience method that truncates to nanoseconds, so it is not exact.
+The final project duration is exclusive. A prepared object permits one operation
+at a time; a concurrent call raises `PreparedProjectBusyError` immediately.
+Frames own their Rust pixel allocation, and `to_bytes()` copies it into Python
+bytes. The package does not expose a buffer protocol, NumPy arrays, Pillow
+images, or GPU memory.
+
 ### API stability
 
 The public exports are classified as follows:
@@ -205,8 +231,13 @@ git archive --format=zip --output=video-editor.zip HEAD
 ## Python package development
 
 Phase 7A provides immutable Python bindings for project loading, conversion,
-validation, preflight, and inspection. It deliberately excludes preparation and
-rendering.
+validation, preflight, inspection, diagnostics, and reports. Phase 7B adds
+preparation, `PreparedProject`, `PreparationReport`, exact frame timing, and
+synchronous CPU or WGPU single-frame rendering with copied frame bytes. A
+prepared object permits one operation at a time.
+
+Phase 7C is still deferred. It will cover video rendering, progress events,
+cancellation, callback exceptions, render results, and performance reports.
 
 ```bash
 python3 -m venv .venv
@@ -219,7 +250,6 @@ Use `import video_editor`. `Project.from_dict()` follows the same native path
 as JSON, and package path properties return `pathlib.Path` values. The full
 binding contract is recorded in `docs/audits/phase7a.md`.
 
-The currently exposed Python API is immutable: `Project`, `Editor`,
-`PreflightOptions`, diagnostics, validation/preflight reports, and inspection
-reports. `Project.from_dict()` accepts `collections.abc.Mapping` values.
-Prepared execution, frames, and all rendering APIs are intentionally deferred.
+The currently exposed Python API is immutable. `Project.from_dict()` accepts
+`collections.abc.Mapping` values. Python does not yet expose video rendering,
+callbacks, cancellation, or asynchronous rendering.

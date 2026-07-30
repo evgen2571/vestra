@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  VIDEO_EDITOR_WGPU_BACKEND: vulkan
+  VIDEO_EDITOR_WGPU_FORCE_FALLBACK: "1"
+
+jobs:
+  rust:
+    name: Rust checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg libvulkan1 mesa-vulkan-drivers
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install schema-check dependency
+        run: python3 -m pip install --requirement requirements-dev.txt
+
+      - name: Run canonical checks
+        run: ./scripts/check.sh
+
+  python:
+    name: Python bindings
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg libvulkan1 mesa-vulkan-drivers
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Python tooling
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install maturin 'mypy>=1.13' 'pytest>=8'
+
+      - name: Build and install the native extension
+        run: |
+          source .venv/bin/activate
+          maturin develop --release
+
+      - name: Test Python bindings
+        run: .venv/bin/python -m pytest python-tests
+
+      - name: Check Python types
+        run: |
+          .venv/bin/python -m mypy python/video_editor python-tests/test_typing.py
+          .venv/bin/python -m mypy.stubtest --ignore-unused-allowlist --allowlist python-tests/stubtest-private-hooks.txt video_editor

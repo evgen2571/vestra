@@ -201,3 +201,25 @@ outputs, reports, temporary files, benchmark output, and Cargo build artifacts.
 ```bash
 git archive --format=zip --output=video-editor.zip HEAD
 ```
+
+## Python package development
+
+Phase 7A provides immutable Python bindings for project loading, conversion,
+validation, preflight, and inspection. It deliberately excludes preparation and
+rendering.
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install maturin pytest mypy
+.venv/bin/maturin develop
+.venv/bin/python -m pytest python-tests
+```
+
+Use `import video_editor`. `Project.from_dict()` follows the same native path
+as JSON, and package path properties return `pathlib.Path` values. The full
+binding contract is recorded in `docs/audits/phase7a.md`.
+
+The currently exposed Python API is immutable: `Project`, `Editor`,
+`PreflightOptions`, diagnostics, validation/preflight reports, and inspection
+reports. `Project.from_dict()` accepts `collections.abc.Mapping` values.
+Prepared execution, frames, and all rendering APIs are intentionally deferred.

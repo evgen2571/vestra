@@ -126,6 +126,61 @@ def test_cpu_frames_change_for_each_animated_image_track() -> None:
         assert render(mutate) != baseline
 
 
+def test_animated_anchor_crop_and_position_have_stable_geometric_regions() -> None:
+    """Exercise axes, clip-local interpolation, and crop geometry without edge-only checks."""
+    def image_clip() -> tuple[ProjectBuilder, object]:
+        authored = ProjectBuilder(width=8, height=6, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1, base_directory=Path.cwd())
+        asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
+        return authored, authored.add_image_clip(source=asset, start=0, duration=1, layer=0, sizing=Sizing.stretch(width=4, height=3))
+
+    def pixel(authored: ProjectBuilder, frame: int, x: int, y: int) -> tuple[int, int, int, int]:
+        rendered = video_editor.Editor().prepare(authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU)).render_frame_number(frame).to_bytes()
+        offset = (y * 8 + x) * 4
+        return tuple(rendered[offset:offset + 4])  # type: ignore[return-value]
+
+    anchored, clip = image_clip()
+    clip.transform.anchor.keyframe(time=0, value=Point(0.5, 0.5))
+    clip.transform.anchor.keyframe(time=1, value=Point(0, 0))
+    assert pixel(anchored, 0, 3, 2) == (254, 254, 254, 255)
+    assert pixel(anchored, 5, 4, 3) == (254, 254, 254, 255)
+    assert pixel(anchored, 5, 3, 2) == (0, 0, 0, 255)
+
+    cropped, clip = image_clip()
+    clip.set_crop(Crop(0, 0, 1, 1))
+    clip.crop.keyframe(time=0, value=Crop(0, 0, 1, 1))
+    clip.crop.keyframe(time=1, value=Crop(0.5, 0, 0.5, 1))
+    assert pixel(cropped, 0, 3, 2) == (254, 254, 254, 255)
+    assert pixel(cropped, 5, 3, 2) == (218, 229, 251, 255)
+    assert pixel(cropped, 9, 4, 2) == (0, 0, 0, 255)
+
+    moved, clip = image_clip()
+    clip.transform.position.keyframe(time=0, value=Point(0.5, 0.5))
+    clip.transform.position.keyframe(time=1, value=Point(0.25, 0.25))
+    assert pixel(moved, 0, 3, 2) == (254, 254, 254, 255)
+    assert pixel(moved, 5, 2, 2) == (253, 184, 2, 255)
+
+
+def test_animated_gaussian_blur_and_brightness_have_stable_metrics() -> None:
+    blurred = ProjectBuilder(width=8, height=6, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1, base_directory=Path.cwd())
+    asset = blurred.add_image_asset("tests/assets/wgpu-small-rgba.png")
+    clip = blurred.add_image_clip(source=asset, start=0, duration=1, layer=0, sizing=Sizing.stretch(width=4, height=3))
+    effect = clip.effects.add_gaussian_blur(radius=0)
+    effect.radius.keyframe(time=0, value=0)
+    effect.radius.keyframe(time=1, value=3)
+    prepared = video_editor.Editor().prepare(blurred.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    assert prepared.render_frame_number(0).to_bytes()[(2 * 8 + 3) * 4] == 254
+    assert prepared.render_frame_number(5).to_bytes()[(2 * 8 + 3) * 4] == 163
+    assert prepared.render_frame_number(9).to_bytes()[(2 * 8 + 3) * 4] == 66
+
+    coloured = ProjectBuilder(width=4, height=4, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1)
+    solid = coloured.add_solid_color_clip(colour="#808080", start=0, duration=1, layer=0)
+    brightness = solid.effects.add_brightness(amount=0)
+    brightness.amount.keyframe(time=0, value=0)
+    brightness.amount.keyframe(time=1, value=0.2)
+    prepared = video_editor.Editor().prepare(coloured.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    assert [prepared.render_frame_number(frame).to_bytes()[0] for frame in (0, 5, 9)] == [128, 154, 174]
+
+
 def test_cpu_video_renders_authored_animation_without_audio(tmp_path: Path) -> None:
     authored = ProjectBuilder(
         width=160, height=90, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1,

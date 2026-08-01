@@ -13,6 +13,11 @@ from .effects import (
     SaturationEffect, SharpenEffect, TintEffect, VignetteEffect, ZoomBlurDirection,
     ZoomBlurEffect,
 )
+from .flashes import Flash, FlashCollection
+from .transitions import (
+    CrossfadeTransition, DirectionalPushTransition, FlashCutTransition,
+    Transition, TransitionCollection, ZoomBlurTransition, ZoomCrossfadeTransition,
+)
 from .tracks import CropTrack, PointTrack, ScalarTrack, Transform
 from .values import (
     BlendMode,
@@ -70,4 +75,13 @@ __all__ = [
     "VignetteEffect",
     "ZoomBlurDirection",
     "ZoomBlurEffect",
+    "CrossfadeTransition",
+    "DirectionalPushTransition",
+    "Flash",
+    "FlashCollection",
+    "FlashCutTransition",
+    "Transition",
+    "TransitionCollection",
+    "ZoomBlurTransition",
+    "ZoomCrossfadeTransition",
 ]

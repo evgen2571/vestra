@@ -91,6 +91,23 @@ brightness.amount.keyframe(time=0.5, value=0.3, interpolation=Interpolation.EASE
 builder.post_effects.add_vignette(amount=0.25, radius=0.8, softness=0.3, colour="#000000")
 ```
 
+Coordinated transitions and flashes are project-level collections. Transitions
+require two owned `ImageClip` objects. The builder checks handle ownership and
+type immediately; native validation reports timeline fit, hidden clips, and
+overlapping transition associations after later clip edits.
+
+```python
+incoming = builder.add_image_clip(
+    source=cover, start=1.0, duration=1.0, layer=0, sizing=Sizing.cover(),
+)
+builder.transitions.add_crossfade(
+    outgoing=clip, incoming=incoming, start=1.0, duration=0.25,
+)
+builder.flashes.add(
+    start=1.2, duration=0.08, colour="#ffffff", opacity=0.8, fade_out=0.08,
+)
+```
+
 The supported blend modes are `normal`, `add`, `screen`, `multiply`, and
 `overlay`. All ordinary effects are available on clip and post-effect
 collections; `camera_shake` and `motion_blur` are clip-only because they depend

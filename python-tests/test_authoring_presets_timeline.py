@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
+import typing
+
 import pytest
 
 from video_editor import FrameRate
-from video_editor.authoring import AuthoringError, ProjectBuilder, Sizing
+from video_editor.authoring import AuthoringError, PresetCollection, ProjectBuilder, Sizing, Timeline
 
 
 def builder() -> tuple[ProjectBuilder, object]:
@@ -61,3 +64,25 @@ def test_crossfade_helper_uses_existing_overlap_without_moving_clips() -> None:
     assert transition.start == 2 and (first.start, second.start) == (1, 2)
     with pytest.raises(ValueError):
         authored.timeline.add_crossfade_between(first, second, duration=2)
+
+
+def test_public_preset_and_timeline_annotations_and_signatures_hide_owner_machinery() -> None:
+    methods = (
+        PresetCollection.apply_slow_drift,
+        PresetCollection.apply_zoom_punch,
+        PresetCollection.apply_impact,
+        PresetCollection.apply_heavy_impact,
+        PresetCollection.apply_focus_reveal,
+        Timeline.shift_clip,
+        Timeline.shift_clips,
+        Timeline.add_crossfade_between,
+    )
+    for method in methods:
+        hints = typing.get_type_hints(method)
+        assert hints
+        signature = str(inspect.signature(method))
+        assert "_Owner" not in signature and "_IdAllocator" not in signature
+    with pytest.raises(TypeError, match="owned"):
+        PresetCollection()
+    with pytest.raises(TypeError, match="owned"):
+        Timeline()

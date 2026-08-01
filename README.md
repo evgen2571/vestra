@@ -110,9 +110,12 @@ builder.flashes.add(
 # Presets are canonical nodes. Native compilation supplies their animation.
 clip.presets.apply_impact(seed=17, intensity=0.8)
 
-# Timeline helpers only move the selected clips. They leave flashes and
-# transitions where they were authored.
+# Timeline helpers only move the selected clips. They leave flashes,
+# transitions, and post-effect keyframes where they were authored. Shift an
+# incoming clip before creating its transition; a later shift can make the
+# existing transition invalid and `builder.validate()` will report that fit.
 builder.timeline.shift_clip(incoming, delta=0.25)
+builder.timeline.add_crossfade_between(clip, incoming, duration=0.25)
 ```
 
 The supported blend modes are `normal`, `add`, `screen`, `multiply`, and
@@ -137,6 +140,13 @@ resolves from visual and enabled audio content. `build()` parses only.
 `validate()` invokes deterministic native validation and keeps native
 diagnostics intact. Preflight and rendering remain separate operations and
 require their normal runtime dependencies.
+
+Time domains are intentional: `clip.start`, transition starts, flash starts,
+and post-effect keyframes are project-relative. Transform, opacity, crop, and
+ordinary clip-effect keyframes are clip-local. Camera-shake tracks are relative
+to their active interval. Preset timing follows the native preset's clip-local
+active interval. Presets and timeline helpers are deterministic convenience
+operations over the same canonical model as the low-level typed primitives.
 
 It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs use formats supported by the Rust `image` crate (including PNG, JPEG, GIF, WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV and MP3 are practical baseline formats).
 

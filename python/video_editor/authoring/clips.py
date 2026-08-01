@@ -4,6 +4,7 @@ from ._internal import _Owner, _number
 from .assets import ImageAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ScalarTrack, Transform
+from .presets import PresetCollection
 from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
 
 
@@ -116,7 +117,7 @@ class _Clip:
 
 
 class ImageClip(_Clip):
-    __slots__ = ("_source", "_sizing", "_transform", "_crop", "_has_crop")
+    __slots__ = ("_source", "_sizing", "_transform", "_crop", "_has_crop", "_presets")
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError("ImageClip objects must be created by ProjectBuilder")
@@ -140,6 +141,7 @@ class ImageClip(_Clip):
         self._transform = Transform._create(owner)
         self._crop = CropTrack._create(owner, crop if crop is not None else Crop(0, 0, 1, 1))
         self._has_crop = crop is not None
+        self._presets = PresetCollection._create(self)
 
     @property
     def source(self) -> ImageAsset:
@@ -171,6 +173,10 @@ class ImageClip(_Clip):
     def has_crop(self) -> bool:
         return self._has_crop
 
+    @property
+    def presets(self) -> PresetCollection:
+        return self._presets
+
     def set_crop(self, value: Crop) -> CropTrack:
         self._crop.base_value = value
         self._has_crop = True
@@ -187,6 +193,8 @@ class ImageClip(_Clip):
             data["sizing"] = self.sizing.to_canonical()
         if self.has_crop:
             data["crop"] = self.crop.to_canonical()
+        if self.presets.current is not None:
+            data["preset"] = self.presets.current.to_canonical()
         return data
 
     def __repr__(self) -> str:

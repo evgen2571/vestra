@@ -5,6 +5,8 @@ from .assets import AudioAsset, ImageAsset
 from .audio import AudioTrack
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
+from .presets import Preset, PresetCollection
+from .timeline import Timeline
 from .errors import AuthoringError
 from .effects import (
     ActiveInterval, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
@@ -63,6 +65,8 @@ __all__ = [
     "MotionBlurEffect",
     "PostEffectCollection",
     "ProjectBuilder",
+    "Preset",
+    "PresetCollection",
     "Quality",
     "ScalarTrack",
     "SaturationEffect",
@@ -71,6 +75,7 @@ __all__ = [
     "Sizing",
     "SolidColorClip",
     "Transform",
+    "Timeline",
     "TintEffect",
     "VignetteEffect",
     "ZoomBlurDirection",

@@ -49,7 +49,7 @@ def test_cpu_frame_has_complete_track_lifecycle_semantics() -> None:
     prepared = video_editor.Editor().prepare(
         authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
     )
-    # Before first, at first, midway, at final, and after final respectively.
+    # Initial base value, before first, at first, midway, and final respectively.
     values = [prepared.render_frame_number(frame).to_bytes()[0] for frame in range(5)]
     assert values == [51, 51, 0, 128, 255]
 
@@ -179,6 +179,21 @@ def test_animated_gaussian_blur_and_brightness_have_stable_metrics() -> None:
     brightness.amount.keyframe(time=1, value=0.2)
     prepared = video_editor.Editor().prepare(coloured.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
     assert [prepared.render_frame_number(frame).to_bytes()[0] for frame in (0, 5, 9)] == [128, 154, 174]
+
+
+def test_animated_tint_uses_the_native_colour_effect_track() -> None:
+    authored = ProjectBuilder(width=4, height=4, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1)
+    clip = authored.add_solid_color_clip(colour="#808080", start=0, duration=1, layer=0)
+    tint = clip.effects.add_tint(colour="#ff0000", amount=0)
+    tint.amount.keyframe(time=0, value=0)
+    tint.amount.keyframe(time=1, value=1)
+    prepared = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    )
+    before, middle, final = [prepared.render_frame_number(frame).to_bytes()[:4] for frame in (0, 5, 9)]
+    assert tuple(before) == (128, 128, 128, 255)
+    assert 188 <= middle[0] <= 193 and 62 <= middle[1] <= 66 and middle[1] == middle[2]
+    assert final[0] > 240 and final[1] < 16 and final[1] == final[2]
 
 
 def test_cpu_video_renders_authored_animation_without_audio(tmp_path: Path) -> None:

@@ -66,6 +66,19 @@ def test_crossfade_helper_uses_existing_overlap_without_moving_clips() -> None:
         authored.timeline.add_crossfade_between(first, second, duration=2)
 
 
+def test_readme_shift_then_crossfade_workflow_is_valid() -> None:
+    authored = ProjectBuilder(width=8, height=6, frame_rate=FrameRate(10, 1), output_path="out.mp4")
+    asset = authored.add_image_asset("fixtures/wgpu-small-rgba.png")
+    outgoing = authored.add_image_clip(source=asset, start=0, duration=1, layer=0, sizing=Sizing.cover())
+    incoming = authored.add_image_clip(source=asset, start=0.5, duration=1, layer=1, sizing=Sizing.cover())
+
+    authored.timeline.shift_clip(incoming, delta=0.25)
+    transition = authored.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
+
+    assert transition.start == 0.75
+    assert authored.validate().is_valid
+
+
 def test_public_preset_and_timeline_annotations_and_signatures_hide_owner_machinery() -> None:
     methods = (
         PresetCollection.apply_slow_drift,

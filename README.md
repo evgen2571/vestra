@@ -10,6 +10,11 @@ schema-version 1 dictionary, then `build()` passes that dictionary to
 `Project.from_dict()` and returns the existing immutable native `Project`.
 There is no second project format.
 
+Phase 8 provides complete typed Python authoring coverage for the current
+schema-version 1 project model. It does not mean the overall video editor is
+feature-complete. New capabilities require native project-model and schema work
+before either authoring path can express them.
+
 ```python
 from video_editor import Editor, FrameRate, RenderRequest
 from video_editor.authoring import Interpolation, Point, ProjectBuilder, Sizing
@@ -98,10 +103,7 @@ overlapping transition associations after later clip edits.
 
 ```python
 incoming = builder.add_image_clip(
-    source=cover, start=1.0, duration=1.0, layer=0, sizing=Sizing.cover(),
-)
-builder.transitions.add_crossfade(
-    outgoing=clip, incoming=incoming, start=1.0, duration=0.25,
+    source=cover, start=0.5, duration=1.0, layer=1, sizing=Sizing.cover(),
 )
 builder.flashes.add(
     start=1.2, duration=0.08, colour="#ffffff", opacity=0.8, fade_out=0.08,
@@ -110,13 +112,24 @@ builder.flashes.add(
 # Presets are canonical nodes. Native compilation supplies their animation.
 clip.presets.apply_impact(seed=17, intensity=0.8)
 
-# Timeline helpers only move the selected clips. They leave flashes,
-# transitions, and post-effect keyframes where they were authored. Shift an
-# incoming clip before creating its transition; a later shift can make the
-# existing transition invalid and `builder.validate()` will report that fit.
+# `incoming` moves from [0.50, 1.50] to [0.75, 1.75], leaving exactly
+# 0.25 seconds of overlap with `clip`, which spans [0.00, 1.00].
 builder.timeline.shift_clip(incoming, delta=0.25)
 builder.timeline.add_crossfade_between(clip, incoming, duration=0.25)
 ```
+
+`builder.timeline.shift_clip(...)` changes `clip.start` only. It does not move
+existing transitions, standalone flashes, global post-effect keyframes, or
+other project-relative events. Clip-local transform, opacity, crop, and
+clip-effect keyframes, plus preset-local timing, stay unchanged, so those
+visual behaviors move with the clip. Shift a clip before creating a related
+transition. If a later shift makes an existing transition invalid,
+`builder.validate()` reports the native validation problem. This helper is
+deliberately narrow. It does not repair a timeline.
+
+`builder.timeline.add_crossfade_between(...)` never moves or trims clips. It
+uses the beginning of their existing overlap and requires that overlap to be at
+least the requested duration.
 
 The supported blend modes are `normal`, `add`, `screen`, `multiply`, and
 `overlay`. All ordinary effects are available on clip and post-effect
@@ -422,8 +435,15 @@ python3 -m venv .venv
 ```
 
 Use `import video_editor`. `Project.from_dict()` follows the same native path
-as JSON, and package path properties return `pathlib.Path` values. The binding
-audits are recorded in `docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and
+as JSON. It is a lower-level way to construct the same current canonical
+schema-version 1 model, useful for existing canonical JSON, low-level
+integrations, and generated project dictionaries. It does not expose
+capabilities absent from that model. Video assets, multi-track audio and mixer
+features, nested compositions, and audio-reactive visual systems require future
+native project-model and schema work before `Project.from_dict()` or
+`ProjectBuilder` can represent them. Package path properties return
+`pathlib.Path` values. The binding audits are recorded in
+`docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and
 `docs/audits/phase7c.md`; together they record Phase 7 finalization.
 
 The exposed Python API is immutable. `Project.from_dict()` accepts

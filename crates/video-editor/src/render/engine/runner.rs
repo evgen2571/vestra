@@ -421,6 +421,26 @@ where
     // This lets a failed operation invalidate the reusable state immediately.
     let plan = Arc::clone(&prepared.plan);
     let total_started = Instant::now();
+    if plan.audio_output_enabled
+        && plan.audio_mix.audible_clip_count() > 1
+        && plan.encoder.audio.is_none()
+    {
+        return Err(RenderError {
+            diagnostic: Diagnostic::error(
+                "MVP-AUDIO-MIX-UNSUPPORTED",
+                Category::Render,
+                "rendering more than one audible audio clip is not supported by this encoder",
+                "/audio",
+            ),
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::OutputPreparation,
+                &plan,
+            ),
+            timings: failure_timings(RenderTimings::default(), total_started),
+        });
+    }
     let output = OutputTarget::prepare(
         options
             .output_override

@@ -13,13 +13,13 @@ import video_editor
 from video_editor import FrameRate, Project
 from video_editor import authoring as api
 from video_editor.authoring import (
-    AudioAsset, AudioTrack, Crop, ImageAsset, ImageClip, Point, PresetCollection, ProjectBuilder,
+    AudioAsset, AudioClip, AudioTimeline, AudioTrack, Crop, ImageAsset, ImageClip, Point, PresetCollection, ProjectBuilder,
     ScalarTrack, Sizing, SolidColorClip, Timeline, Transform,
 )
 
 
 PUBLIC_NAMES = {
-    "ActiveInterval", "AudioAsset", "AudioTrack", "AuthoringError", "BlendMode", "BrightnessEffect",
+    "ActiveInterval", "AudioAsset", "AudioClip", "AudioTimeline", "AudioTrack", "AuthoringError", "BlendMode", "BrightnessEffect",
     "CameraShakeEffect", "ChromaticAberrationEffect", "ClipEffectCollection", "Color", "ColorAdjustEffect",
     "ContrastEffect", "Crop", "CropKeyframe", "CropTrack", "CubicBezier", "DirectionalBlurEffect",
     "DirectionalPushTransition", "DurationMode", "Effect", "Flash", "FlashCollection", "FlashCutTransition",
@@ -55,7 +55,7 @@ def _complete() -> ProjectBuilder:
     builder.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
     builder.flashes.add(start=1.8, duration=0.1, colour="#ffffff", opacity=0.4, layer=3)
     builder.post_effects.add_contrast(amount=1)
-    builder.set_audio(asset=audio, timeline_start=0, trim_start=0, trim_end=0.2)
+    builder.audio.add_track(id="music").add_clip(asset=audio, start=0, trim_end=0.2)
     return builder
 
 
@@ -66,7 +66,7 @@ def test_explicit_public_surface_excludes_private_implementation_names() -> None
 
 
 def test_constructor_policy_and_runtime_annotations_are_public_only() -> None:
-    for factory in (ImageAsset, ImageClip, SolidColorClip, AudioTrack, Transform, ScalarTrack, PresetCollection, Timeline):
+    for factory in (ImageAsset, ImageClip, SolidColorClip, AudioTimeline, AudioTrack, AudioClip, Transform, ScalarTrack, PresetCollection, Timeline):
         with pytest.raises(TypeError):
             factory()
     for value in (api.Point(0, 0), api.Crop(0, 0, 1, 1), api.Color("#112233"), api.Sizing.cover(), api.CubicBezier(0, 0, 1, 1), api.Preset("zoom_punch")):
@@ -74,7 +74,7 @@ def test_constructor_policy_and_runtime_annotations_are_public_only() -> None:
     builder, audio, outgoing, incoming = _builder()
     callables = [
         ProjectBuilder.add_image_asset, ProjectBuilder.add_audio_asset, ProjectBuilder.add_image_clip,
-        ProjectBuilder.add_solid_color_clip, ProjectBuilder.set_audio, outgoing.effects.add_brightness,
+        ProjectBuilder.add_solid_color_clip, builder.audio.add_track, AudioTrack.add_clip, outgoing.effects.add_brightness,
         builder.post_effects.add_contrast, builder.transitions.add_crossfade, builder.flashes.add,
         outgoing.presets.apply_impact, builder.timeline.shift_clip, builder.timeline.shift_clips,
         builder.timeline.add_crossfade_between, outgoing.opacity.keyframe,
@@ -101,7 +101,7 @@ def test_authoring_round_trips_through_native_canonical_project(kind: str) -> No
     if kind in {"preset", "complete"}:
         outgoing.presets.apply_focus_reveal(duration=0.4)
     if kind in {"audio", "complete"}:
-        builder.set_audio(asset=audio, timeline_start=0, trim_start=0, trim_end=0.2)
+        builder.audio.add_track(id="music").add_clip(asset=audio, start=0, trim_end=0.2)
     native = builder.build()
     round_trip = Project.from_dict(native.to_dict(), base_directory=native.base_directory)
     assert native.to_dict() == round_trip.to_dict()
@@ -127,6 +127,7 @@ def test_snapshots_and_dependent_structures_are_not_hiddenly_repaired() -> None:
 
 def test_transactions_ids_and_independent_builder_determinism() -> None:
     builder, audio, outgoing, incoming = _builder()
+    audio_track = builder.audio.add_track()
     before = builder.to_dict()
     with pytest.raises(ValueError):
         builder.add_image_asset("", id="never")
@@ -137,7 +138,7 @@ def test_transactions_ids_and_independent_builder_determinism() -> None:
     with pytest.raises(TypeError):
         outgoing.presets.apply_impact(seed=True)
     with pytest.raises(ValueError):
-        builder.set_audio(asset=audio, timeline_start=0, trim_start=1, trim_end=1)
+        audio_track.add_clip(asset=audio, start=0, trim_start=1, trim_end=1)
     with pytest.raises(TypeError):
         outgoing.effects.add_brightness(amount=True)
     with pytest.raises(TypeError):

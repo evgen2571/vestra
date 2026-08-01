@@ -1,12 +1,9 @@
-//! Encoder audio settings derived from a validated project.
+//! Logical audio plan derived from a validated project.
 
-use crate::{Diagnostic, media::AudioSettings, plan::PlanCompileInput};
+use crate::{Diagnostic, plan::PlanCompileInput, plan_audio::AudioMixPlan};
 
-pub(super) fn compile(
-    validated: &PlanCompileInput<'_>,
-) -> Result<Option<AudioSettings>, Diagnostic> {
+pub(super) fn compile(validated: &PlanCompileInput<'_>) -> Result<AudioMixPlan, Diagnostic> {
     crate::plan_audio::compile(
-        validated.project.output.audio,
         validated.project.audio.as_ref(),
         validated.asset_paths,
         validated.audio_durations,

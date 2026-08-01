@@ -20,7 +20,7 @@ def cpu_prepared() -> video_editor.PreparedProject:
 def multi_frame_prepared(tmp_path: Path) -> video_editor.PreparedProject:
     project = video_editor.Project.from_dict(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": False,

@@ -90,7 +90,7 @@ impl LoadError {
         Self::Diagnostics(vec![Diagnostic::error(
             "MVP-SCHEMA-VERSION",
             crate::Category::Project,
-            format!("unsupported project schema version {version}; supported version is 1"),
+            format!("unsupported project schema version {version}; supported version is 2"),
             "/schema_version",
         )])
     }

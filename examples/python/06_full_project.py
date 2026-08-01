@@ -24,7 +24,8 @@ outgoing.presets.apply_impact(seed=7, duration=0.4)
 builder.timeline.shift_clip(incoming, delta=0.25)
 builder.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
 builder.flashes.add(start=1.8, duration=0.1, colour="#ffffff", opacity=0.4, layer=3)
-builder.set_audio(asset=audio, timeline_start=0, trim_start=0, trim_end=0.2)
+music = builder.audio.add_track(id="music")
+music.add_clip(asset=audio, start=0, trim_start=0, trim_end=0.2)
 
 assert builder.validate().is_valid
 project = builder.build()

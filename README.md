@@ -1,19 +1,18 @@
 # video-editor
 
-`video-editor` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image and full-canvas solid-colour layers, optionally places one audio track, and writes a playable MP4 without interactive input.
+`video-editor` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image and full-canvas solid-colour layers, and can author an ordered audio timeline of mixer tracks and clips.
 
 ## Python authoring
 
 The Python package has mutable pure-Python authoring alongside immutable native
 project, execution, and report APIs. `ProjectBuilder` creates an owned canonical
-schema-version 1 dictionary, then `build()` passes that dictionary to
+schema-version 2 dictionary, then `build()` passes that dictionary to
 `Project.from_dict()` and returns the existing immutable native `Project`.
 There is no second project format.
 
-Phase 8 provides complete typed Python authoring coverage for the current
-schema-version 1 project model. It does not mean the overall video editor is
-feature-complete. New capabilities require native project-model and schema work
-before either authoring path can express them.
+Phase 9A provides typed schema-version 2 audio timeline authoring. The old
+single global audio placement and schema version 1 are intentionally rejected;
+there is no automatic migration.
 
 ```python
 from video_editor import Editor, FrameRate, RenderRequest
@@ -25,6 +24,7 @@ builder = ProjectBuilder(
     frame_rate=FrameRate(30, 1),
     output_path="canonical-output.mp4",
     duration=None,
+    output_audio=True,
     background="#101018",
 )
 
@@ -36,7 +36,8 @@ clip = builder.add_image_clip(
 clip.transform.position.base_value = Point(0.5, 0.5)
 clip.opacity.keyframe(time=0.0, value=0.0)
 clip.opacity.keyframe(time=0.5, value=1.0, interpolation=Interpolation.EASE_OUT)
-builder.set_audio(asset=music, timeline_start=0.0, trim_start=0.0)
+track = builder.audio.add_track(id="music")
+track.add_clip(asset=music, start=0.0)
 
 data = builder.to_dict()
 project = builder.build()
@@ -144,12 +145,14 @@ the builder unchanged and does not consume an explicit or generated ID. An
 image clip always owns one crop track: `set_crop()` updates and enables it,
 and `clear_crop()` disables serialization without detaching retained handles.
 
-The builder supports one optional global audio track. `set_audio()` updates a
-stable track object and makes `output.audio` true; `clear_audio()` disables
-serialization and makes that flag false without detaching a retained handle.
-`builder.has_audio` reports whether that stable node is enabled. With `duration`, the builder emits `duration_mode:
+Schema version 2 uses a stable `builder.audio` timeline. Add ordered mixer
+tracks with `builder.audio.add_track()` and ordered placements with
+`track.add_clip()`. `output_audio` is an independent constructor/property
+switch; it controls mux eligibility and does not change authored timeline
+duration or validation. With `duration`, the builder emits `duration_mode:
 "explicit"`; without one it emits `"automatic"`, which native preflight
-resolves from visual and enabled audio content. `build()` parses only.
+resolves from visual and authored audio content. Mute, gain, and output muxing
+do not change structural duration. `build()` parses only.
 `validate()` invokes deterministic native validation and keeps native
 diagnostics intact. Preflight and rendering remain separate operations and
 require their normal runtime dependencies.
@@ -436,12 +439,11 @@ python3 -m venv .venv
 
 Use `import video_editor`. `Project.from_dict()` follows the same native path
 as JSON. It is a lower-level way to construct the same current canonical
-schema-version 1 model, useful for existing canonical JSON, low-level
-integrations, and generated project dictionaries. It does not expose
-capabilities absent from that model. Video assets, multi-track audio and mixer
-features, nested compositions, and audio-reactive visual systems require future
-native project-model and schema work before `Project.from_dict()` or
-`ProjectBuilder` can represent them. Package path properties return
+schema-version 2 model, useful for canonical JSON, low-level integrations, and
+generated project dictionaries. It represents ordered multi-track audio
+timelines but, in Phase 9A, runtime muxing supports only one audible clip;
+general multi-input mixing is deferred to Phase 9B. Video assets, nested
+compositions, and audio-reactive visual systems remain future work. Package path properties return
 `pathlib.Path` values. The binding audits are recorded in
 `docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and
 `docs/audits/phase7c.md`; together they record Phase 7 finalization.

@@ -30,7 +30,6 @@ pub(crate) fn preflight(
     let assets = assets::validate(&canonical.assets, project.base_directory(), &mut errors);
     let audio_end = audio::validate(
         canonical.audio.as_ref(),
-        canonical.output.audio,
         &assets.kinds,
         &assets.audio_durations,
         &mut errors,
@@ -61,6 +60,17 @@ pub(crate) fn preflight(
             0
         }
     };
+    // Core validation already enforced visual-only limits. Once media probing
+    // resolves audio placement, apply that same authority to the final project
+    // timeline so a late audio clip cannot bypass either limit.
+    if validation.is_valid() {
+        video_editor_core::validation::enforce_final_timeline_limits(
+            total_frames,
+            duration,
+            options.limits,
+            &mut errors,
+        );
+    }
     let mut diagnostics = errors;
     diagnostics.extend(warnings.iter().cloned());
     let resolved = if diagnostics
@@ -90,4 +100,110 @@ pub(crate) fn preflight(
 
 pub(super) const fn positive(value: f64) -> bool {
     value.is_finite() && value > 0.0
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use video_editor_core::validation::{ResourceLimits, validate as core_validate};
+
+    use super::preflight;
+    use crate::project::{Project, ValidationOptions};
+
+    fn tone_path() -> String {
+        format!(
+            "{}/../../examples/assets/tone.wav",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    }
+
+    fn audio_project(start: f64, frame_rate: &str) -> Project {
+        Project::from_value(
+            json!({
+                "schema_version": 2,
+                "output": {
+                    "path": "out.mp4", "width": 2, "height": 2,
+                    "frame_rate": frame_rate, "background": "#000000",
+                    "quality": "balanced", "audio": false,
+                    "duration_mode": "automatic"
+                },
+                "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
+                "visual": {"clips": []},
+                "audio": {"tracks": [{"id": "music", "clips": [{
+                    "id": "tone-clip", "asset": "tone", "start": start, "trim_start": 0.0
+                }]}]}
+            }),
+            ".",
+        )
+        .expect("project")
+    }
+
+    fn run(project: &Project, limits: ResourceLimits) -> super::PreflightOutcome {
+        let validation = crate::ValidationReport {
+            diagnostics: core_validate(project.canonical(), limits).into_diagnostics(),
+        };
+        preflight(project, &validation, &ValidationOptions { limits })
+    }
+
+    #[test]
+    fn final_audio_duration_limit_is_inclusive_and_cannot_be_bypassed() {
+        let defaults = ResourceLimits::default();
+        let source_duration =
+            video_editor_media::probe_audio_duration(std::path::Path::new(&tone_path()))
+                .expect("tone duration");
+        let limits = ResourceLimits {
+            maximum_frames: u64::MAX,
+            ..defaults
+        };
+
+        for (offset, accepted) in [
+            (-source_duration, true),
+            (0.0, true),
+            (source_duration, false),
+        ] {
+            let project = audio_project(
+                limits.maximum_duration_seconds - source_duration + offset,
+                "30/1",
+            );
+            let outcome = run(&project, limits);
+            assert_eq!(outcome.resolved.is_some(), accepted, "offset={offset}");
+            assert_eq!(
+                outcome
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "MVP-LIMIT-TIMELINE"),
+                !accepted,
+            );
+        }
+    }
+
+    #[test]
+    fn final_audio_frame_limit_is_inclusive_and_uses_checked_frame_count() {
+        let defaults = ResourceLimits::default();
+        let source_duration =
+            video_editor_media::probe_audio_duration(std::path::Path::new(&tone_path()))
+                .expect("tone duration");
+        let limits = ResourceLimits {
+            maximum_duration_seconds: f64::MAX,
+            ..defaults
+        };
+        let frame_seconds = limits.maximum_frames as f64 / 30.0;
+
+        for (offset, accepted) in [
+            (-source_duration, true),
+            (0.0, true),
+            (source_duration, false),
+        ] {
+            let project = audio_project(frame_seconds - source_duration + offset, "30/1");
+            let outcome = run(&project, limits);
+            assert_eq!(outcome.resolved.is_some(), accepted, "offset={offset}");
+            assert_eq!(
+                outcome
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "MVP-LIMIT-TIMELINE"),
+                !accepted,
+            );
+        }
+    }
 }

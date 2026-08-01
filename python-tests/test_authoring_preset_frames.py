@@ -138,7 +138,8 @@ def test_full_phase8_authoring_project_renders_frames_and_video_with_audio(tmp_p
     builder.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
     builder.flashes.add(start=1.8, duration=0.1, colour="#ffffff", opacity=0.4, layer=3)
     builder.post_effects.add_contrast(amount=1.0)
-    builder.set_audio(asset=audio, timeline_start=0, trim_start=0, trim_end=0.2)
+    builder.output_audio = True
+    builder.audio.add_track(id="music").add_clip(asset=audio, start=0, trim_end=0.2)
     assert builder.validate().is_valid
     native = builder.build()
     prepared = _frames(builder)

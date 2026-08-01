@@ -10,7 +10,7 @@ from video_editor import Editor, FrameRate, Project, ValidationReport
 
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
-from .audio import AudioTrack
+from .audio import AudioTimeline
 from .clips import ImageClip, SolidColorClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .flashes import FlashCollection
@@ -83,6 +83,7 @@ class ProjectBuilder:
         base_directory: str | os.PathLike[str] = ".",
         name: str | None = None,
         metadata: JsonValue | None = None,
+        output_audio: bool = False,
     ) -> None:
         self._owner = _Owner()
         self._ids = _IdAllocator()
@@ -109,8 +110,10 @@ class ProjectBuilder:
             self._duration = _number(duration, "duration")
         self._assets: list[ImageAsset | AudioAsset] = []
         self._clips: list[ImageClip | SolidColorClip] = []
-        self._audio: AudioTrack | None = None
-        self._has_audio = False
+        if not isinstance(output_audio, bool):
+            raise TypeError("output_audio must be a boolean")
+        self._output_audio = output_audio
+        self._audio = AudioTimeline._create(self._owner, self._ids)
         self._post_effects = PostEffectCollection._create(self._owner, self._ids, self)
         self._transitions = TransitionCollection._create(self._owner, self._ids, self)
         self._flashes = FlashCollection._create(self._owner, self._ids, self)
@@ -244,17 +247,18 @@ class ProjectBuilder:
         return tuple(self._clips)
 
     @property
-    def audio(self) -> AudioTrack | None:
-        """The stable global audio node, once one has been configured.
-
-        Use :attr:`has_audio` to determine whether it is currently serialized.
-        """
+    def audio(self) -> AudioTimeline:
+        """Stable builder-owned schema-v2 audio timeline."""
         return self._audio
 
     @property
-    def has_audio(self) -> bool:
-        """Whether the stable global audio node is enabled for serialization."""
-        return self._has_audio
+    def output_audio(self) -> bool:
+        return self._output_audio
+
+    @output_audio.setter
+    def output_audio(self, value: bool) -> None:
+        if not isinstance(value, bool): raise TypeError("output_audio must be a boolean")
+        self._output_audio = value
 
     @property
     def post_effects(self) -> PostEffectCollection:
@@ -338,29 +342,6 @@ class ProjectBuilder:
         self._clips.append(clip)
         return clip
 
-    def set_audio(
-        self, *, asset: AudioAsset, timeline_start: int | float, trim_start: int | float,
-        trim_end: int | float | None = None, volume: int | float = 1.0,
-        fade_in: int | float = 0.0, fade_out: int | float = 0.0, mute: bool = False,
-    ) -> AudioTrack:
-        """Replace the project's one global audio track."""
-        if not isinstance(asset, AudioAsset):
-            raise TypeError("asset must be AudioAsset")
-        _require_owner(self._owner, asset._owner)
-        staged = AudioTrack._create(self._owner, asset, timeline_start=timeline_start,
-                                    trim_start=trim_start, trim_end=trim_end, volume=volume,
-                                    fade_in=fade_in, fade_out=fade_out, mute=mute)
-        if self._audio is None:
-            self._audio = staged
-        else:
-            self._audio._replace_from(staged)
-        self._has_audio = True
-        return self._audio
-
-    def clear_audio(self) -> None:
-        """Remove the configured global audio track."""
-        self._has_audio = False
-
     def to_dict(self) -> CanonicalProject:
         output: dict[str, object] = {
             "path": self.output_path,
@@ -369,13 +350,13 @@ class ProjectBuilder:
             "frame_rate": f"{self.frame_rate.numerator}/{self.frame_rate.denominator}",
             "background": color_to_canonical(self.background),
             "quality": self.quality.to_canonical(),
-            "audio": self._has_audio,
+            "audio": self._output_audio,
             "duration_mode": self.duration_mode.to_canonical(),
         }
         if self.duration is not None:
             output["duration"] = self.duration
         data: CanonicalProject = {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": output,
             "assets": [
                 {"id": asset.id, "type": asset.kind, "source": asset.source}
@@ -392,8 +373,7 @@ class ProjectBuilder:
             data["name"] = self.name
         if self.metadata is not None:
             data["metadata"] = _json_snapshot(self.metadata)
-        if self._has_audio:
-            assert self._audio is not None
+        if self._audio.tracks:
             data["audio"] = self._audio.to_canonical()
         return data
 

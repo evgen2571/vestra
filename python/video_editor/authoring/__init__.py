@@ -2,7 +2,7 @@
 
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset
-from .audio import AudioTrack
+from .audio import AudioClip, AudioTimeline, AudioTrack
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
 from .presets import Preset, PresetCollection
@@ -37,6 +37,8 @@ __all__ = [
     "AuthoringError",
     "ActiveInterval",
     "AudioAsset",
+    "AudioClip",
+    "AudioTimeline",
     "AudioTrack",
     "BlendMode",
     "BrightnessEffect",

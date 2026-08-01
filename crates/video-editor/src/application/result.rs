@@ -60,24 +60,77 @@ pub struct InspectAssets {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectAudio {
+    pub track_count: usize,
+    pub clip_count: usize,
+    pub end: f64,
+    pub tracks: Vec<InspectAudioTrack>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InspectAudioTrack {
+    pub id: String,
+    pub mute: bool,
+    pub gain: f64,
+    pub clips: Vec<InspectAudioClip>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InspectAudioClip {
+    pub id: String,
     pub asset: String,
     pub start: f64,
     pub end: f64,
+    pub trim_start: f64,
+    pub trim_end: f64,
+    pub mute: bool,
+    pub gain: f64,
+    pub fade_in: f64,
+    pub fade_out: f64,
 }
 
 pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
-    let audio = inspection
-        .validated
-        .project
-        .audio
-        .as_ref()
-        .and_then(|track| {
-            (inspection.validated.project.output.audio && !track.mute).then(|| InspectAudio {
-                asset: track.asset.clone(),
-                start: track.timeline_start,
-                end: inspection.audio_end.unwrap_or(track.timeline_start),
+    let audio = inspection.validated.project.audio.as_ref().map(|timeline| {
+        let tracks = timeline
+            .tracks
+            .iter()
+            .map(|track| InspectAudioTrack {
+                id: track.id.clone(),
+                mute: track.mute,
+                gain: track.gain,
+                clips: track
+                    .clips
+                    .iter()
+                    .filter_map(|clip| {
+                        inspection
+                            .validated
+                            .audio_durations
+                            .get(&clip.asset)
+                            .map(|duration| {
+                                let trim_end = clip.trim_end.unwrap_or(*duration);
+                                InspectAudioClip {
+                                    id: clip.id.clone(),
+                                    asset: clip.asset.clone(),
+                                    start: clip.start,
+                                    end: clip.start + trim_end - clip.trim_start,
+                                    trim_start: clip.trim_start,
+                                    trim_end,
+                                    mute: clip.mute,
+                                    gain: clip.gain,
+                                    fade_in: clip.fade_in,
+                                    fade_out: clip.fade_out,
+                                }
+                            })
+                    })
+                    .collect(),
             })
-        });
+            .collect::<Vec<_>>();
+        InspectAudio {
+            track_count: tracks.len(),
+            clip_count: tracks.iter().map(|track| track.clips.len()).sum(),
+            end: inspection.audio_end.unwrap_or(0.0),
+            tracks,
+        }
+    });
     InspectResult {
         project: path.to_path_buf(),
         name: inspection.validated.project.name.clone(),

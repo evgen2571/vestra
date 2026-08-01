@@ -23,7 +23,7 @@ def builder() -> ProjectBuilder:
 def test_owned_nodes_are_factory_only_and_have_deterministic_representations() -> None:
     for factory in (ImageAsset, AudioAsset, ImageClip, SolidColorClip, AudioTrack, Transform,
                     ScalarTrack, PointTrack, CropTrack):
-        with pytest.raises(TypeError, match="ProjectBuilder"):
+        with pytest.raises(TypeError):
             factory()
 
     authored = builder()
@@ -31,7 +31,8 @@ def test_owned_nodes_are_factory_only_and_have_deterministic_representations() -
     audio = authored.add_audio_asset("music.wav")
     clip = authored.add_image_clip(source=image, start=0, duration=1, layer=0)
     solid = authored.add_solid_color_clip(colour="#112233", start=0, duration=1, layer=1)
-    track = authored.set_audio(asset=audio, timeline_start=0, trim_start=0)
+    track = authored.audio.add_track()
+    track.add_clip(asset=audio, start=0)
     for value in (image, audio, clip, solid, track, clip.transform, clip.opacity):
         representation = repr(value)
         assert "_Owner" not in representation
@@ -110,7 +111,7 @@ def test_all_failure_paths_preserve_builder_state_and_shared_namespaces() -> Non
     assert authored.to_dict() == before
     assert authored.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0, id="solid").id == "solid"
     with pytest.raises(TypeError):
-        authored.set_audio(asset=image, timeline_start=0, trim_start=0)  # type: ignore[arg-type]
+        authored.audio.add_track().add_clip(asset=image, start=0)  # type: ignore[arg-type]
 
 
 def test_explicit_duration_retains_native_truncation_warning() -> None:
@@ -141,15 +142,15 @@ def test_crop_and_audio_nodes_are_stable_and_failed_updates_are_transactional() 
     crop.base_value = Crop(0.25, 0, 0.75, 1)
     assert "crop" not in clip.to_canonical()
 
-    track = authored.set_audio(asset=sound, timeline_start=0, trim_start=0)
-    assert track is authored.audio and authored.has_audio
+    timeline = authored.audio
+    track = timeline.add_track()
+    clip = track.add_clip(asset=sound, start=0)
+    assert timeline is authored.audio and track.clips == (clip,)
     before_audio = authored.to_dict()
     with pytest.raises(ValueError):
-        authored.set_audio(asset=sound, timeline_start=0, trim_start=1, trim_end=1)
+        track.add_clip(asset=sound, start=0, trim_start=1, trim_end=1)
     assert authored.to_dict() == before_audio
-    assert authored.set_audio(asset=sound, timeline_start=1, trim_start=0) is track
-    authored.clear_audio()
-    assert authored.audio is track and not authored.has_audio and "audio" not in authored.to_dict()
+    assert timeline.add_track().id == "audio-track-000002"
 
 
 @pytest.mark.parametrize(
@@ -182,19 +183,19 @@ def test_native_inspection_resolves_visual_and_audio_automatic_duration() -> Non
     audio = builder()
     asset = audio.add_audio_asset("examples/assets/tone.wav")
     audio.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
-    audio.set_audio(asset=asset, timeline_start=1, trim_start=0, trim_end=2)
+    track = audio.audio.add_track(id="music")
+    track.add_clip(asset=asset, start=1, trim_end=2)
     audio_report = video_editor.Editor().inspect(audio.build())
     assert audio_report.output.duration == 3.0
     assert audio_report.assets.audio == 1
     assert audio_report.audio is not None
-    assert audio_report.audio.asset == asset.id and audio_report.audio.start == 1.0
+    assert audio_report.audio.track_count == 1 and audio_report.audio.clip_count == 1
     assert audio_report.audio.end == 3.0
 
-    assert audio.audio is not None
-    audio.audio.mute = True
+    track.mute = True
     muted_report = video_editor.Editor().inspect(audio.build())
-    assert muted_report.output.duration == 1.0
-    assert muted_report.audio is None
+    assert muted_report.output.duration == 3.0
+    assert muted_report.audio is not None
 
 
 def test_muted_audio_serializes_but_cpu_video_has_no_audio_stream(tmp_path: Path) -> None:
@@ -202,8 +203,9 @@ def test_muted_audio_serializes_but_cpu_video_has_no_audio_stream(tmp_path: Path
     authored.base_directory = Path.cwd()
     asset = authored.add_audio_asset("examples/assets/tone.wav")
     authored.add_solid_color_clip(colour="#000000", start=0, duration=0.2, layer=0)
-    track = authored.set_audio(asset=asset, timeline_start=0, trim_start=0, trim_end=0.2, mute=True)
-    assert authored.to_dict()["audio"] == track.to_canonical()
+    track = authored.audio.add_track(mute=True)
+    track.add_clip(asset=asset, start=0, trim_end=0.2)
+    assert authored.to_dict()["audio"] == authored.audio.to_canonical()
     output = tmp_path / "muted.mp4"
     result = video_editor.Editor().render(
         authored.build(), video_editor.RenderRequest(

@@ -14,6 +14,8 @@ pub struct RenderPlan {
     pub frame_rate: (u64, u64),
     pub frame_count: u64,
     pub encoder: EncoderSettings,
+    pub audio_mix: crate::plan_audio::AudioMixPlan,
+    pub audio_output_enabled: bool,
     pub limits: crate::validation::ResourceLimits,
     pub images: Vec<ImageAsset>,
     pub layers: Vec<CompiledLayer>,

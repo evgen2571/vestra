@@ -121,6 +121,8 @@ pub fn compile(
         .collect::<Result<Vec<_>, _>>()?;
     metrics::record(&mut compilation, &layers, &post_effects);
     limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
+    let audio_mix = audio::compile(&validated)?;
+    let encoder_audio = audio_mix.single_input_settings(project.output.audio);
     Ok(RenderPlan {
         configured_output: output::resolve_path(&validated),
         canvas: Canvas {
@@ -139,8 +141,10 @@ pub fn compile(
             frame_count: validated.frame_count,
             duration: validated.duration,
             quality_crf: project.output.quality.crf(),
-            audio: audio::compile(&validated)?,
+            audio: encoder_audio,
         },
+        audio_mix,
+        audio_output_enabled: project.output.audio,
         limits: validated.limits,
         images: image_table.images,
         layers,

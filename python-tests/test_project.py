@@ -5,7 +5,7 @@ import video_editor
 
 
 PROJECT = {
-    "schema_version": 1,
+    "schema_version": 2,
     "output": {
         "path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1",
         "background": "#000000", "quality": "balanced", "audio": False,
@@ -46,7 +46,7 @@ class CustomPath:
 def test_project_errors_and_custom_pathlike(tmp_path: Path) -> None:
     source = tmp_path / "project.json"
     payload = dict(PROJECT)
-    payload["schema_version"] = 2
+    payload["schema_version"] = 3
     source.write_text(json.dumps(payload), encoding="utf-8")
     try:
         video_editor.Project.load(CustomPath(source))

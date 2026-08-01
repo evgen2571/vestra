@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from video_editor import (
     BackendPreference, CancellationToken, CancelledError, Editor, FrameRate, PrepareOptions,
-    PreparedVideoRenderRequest, Project, RenderRequest,
+    PreparedVideoRenderRequest, Project, RenderRequest, InspectAudioGainKeyframe,
 )
 
 from video_editor.authoring import (
@@ -42,6 +42,55 @@ def test_gain_automation_failure_is_transactional() -> None:
     with pytest.raises(AuthoringError):
         clip.set_gain_automation([AudioGainKeyframe(0.1, 1)])
     assert clip.gain_automation == (AudioGainKeyframe(0, 1),)
+
+
+def test_clip_mutators_validate_and_preserve_canonical_state() -> None:
+    _, clip, _ = clips()
+    clip.start = 0.25
+    clip.trim_start = 0.1
+    clip.trim_end = 0.75
+    clip.gain = 0.5
+    clip.mute = True
+    clip.fade_in = 0.2
+    clip.fade_out = 0.3
+    clip.fade_in_curve = AudioFadeCurve.EQUAL_POWER
+    clip.fade_out_curve = AudioFadeCurve.EQUAL_POWER
+    assert clip.to_canonical() == {
+        "id": clip.id, "asset": "audio-000001", "start": 0.25,
+        "trim_start": 0.1, "trim_end": 0.75, "mute": True, "gain": 0.5,
+        "fade_in": 0.2, "fade_out": 0.3, "fade_in_curve": "equal_power",
+        "fade_out_curve": "equal_power",
+    }
+    with pytest.raises(ValueError):
+        clip.trim_start = 0.75
+    with pytest.raises(TypeError):
+        clip.fade_in_curve = "linear"  # type: ignore[assignment]
+    assert (clip.trim_start, clip.fade_in_curve) == (0.1, AudioFadeCurve.EQUAL_POWER)
+
+
+def test_audio_handles_have_builder_owned_identity_and_collections_are_snapshots() -> None:
+    project, outgoing, _ = clips()
+    track = project.audio.tracks[0]
+    assert project.audio is project.audio
+    assert project.audio.tracks is not project.audio.tracks
+    assert track.clips is not track.clips
+    assert project.audio.tracks[0] is track
+    assert track.clips[0] is outgoing
+    other, other_outgoing, _ = clips()
+    assert outgoing == track.clips[0]
+    assert outgoing != other_outgoing
+    assert track != other.audio.tracks[0]
+    assert len({outgoing, other_outgoing}) == 2
+
+
+def test_gain_automation_can_be_cleared_without_mutating_prior_snapshot() -> None:
+    _, clip, _ = clips()
+    clip.set_gain_automation([AudioGainKeyframe(0, 1)])
+    snapshot = clip.gain_automation
+    clip.clear_gain_automation()
+    assert snapshot == (AudioGainKeyframe(0, 1),)
+    assert clip.gain_automation == ()
+    assert "gain_automation" not in clip.to_canonical()
 
 
 def test_equal_power_crossfade_uses_existing_overlap_without_moving_or_trimming() -> None:
@@ -99,10 +148,23 @@ def test_automation_round_trips_and_inspection_exposes_canonical_details() -> No
     assert native.to_dict() == authored
     inspection = Editor().inspect(native)
     clip = inspection.audio.tracks[0].clips[0]  # type: ignore[union-attr]
+    assert isinstance(clip.gain_automation[0], InspectAudioGainKeyframe)
     assert [(point.time, point.gain, point.interpolation) for point in clip.gain_automation] == [
         (0.0, 0.5, "hold"), (0.12345, 1.25, "linear"),
     ]
     assert clip.fade_out_curve == "equal_power"
+
+
+def test_audio_json_round_trip_stabilizes() -> None:
+    project, outgoing, incoming = clips()
+    outgoing.set_gain_automation([
+        AudioGainKeyframe(0, 0.5, AudioGainInterpolation.HOLD),
+        AudioGainKeyframe(0.12345, 1.25),
+    ])
+    project.audio.crossfade(outgoing, incoming, curve=AudioFadeCurve.EQUAL_POWER)
+    first = Project.from_json(Project.from_dict(project.to_dict()).to_json())
+    second = Project.from_json(first.to_json())
+    assert first.to_dict() == second.to_dict() == project.to_dict()
 
 
 def test_public_automation_and_equal_power_crossfade_render_aac(tmp_path: Path) -> None:

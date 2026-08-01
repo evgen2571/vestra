@@ -10,7 +10,7 @@ schema-version 2 dictionary, then `build()` passes that dictionary to
 `Project.from_dict()` and returns the existing immutable native `Project`.
 There is no second project format.
 
-Phase 9B executes typed schema-version 2 audio mixer timelines. The old
+Phase 9 executes typed schema-version 2 audio mixer timelines. The old
 single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
@@ -152,10 +152,13 @@ switch; it controls mux eligibility and does not change authored timeline
 duration or validation. With `duration`, the builder emits `duration_mode:
 "explicit"`; without one it emits `"automatic"`, which native preflight
 resolves from visual and authored audio content. A clip may also have
-clip-local gain automation with immutable `AudioGainKeyframe` values. It starts
-at zero seconds, uses `AudioGainInterpolation.LINEAR` or `.HOLD`, and holds its
-last multiplier through the selected clip end. Static clip gain multiplies the
-automation and fade envelopes. `builder.audio.crossfade(outgoing, incoming,
+clip-local gain automation with immutable `AudioGainKeyframe` values. Audio
+uses source-keyframe interpolation: each keyframe's interpolation controls the
+segment from that keyframe to the following keyframe. This differs from visual
+animation tracks, whose keyframe interpolation controls the segment ending at
+that keyframe. The last audio gain keyframe's interpolation has no effect,
+because its gain holds through the selected clip end. Static clip gain
+multiplies the automation and fade envelopes. `builder.audio.crossfade(outgoing, incoming,
 curve=AudioFadeCurve.EQUAL_POWER)` configures matching fades over an existing,
 authoring-resolvable overlap; it never moves or trims either clip. Mute, gain, and output muxing
 do not change structural duration. `build()` parses only.
@@ -177,13 +180,31 @@ incoming = builder.audio.add_track(id="incoming").add_clip(
 )
 outgoing.set_gain_automation([
     AudioGainKeyframe(0.0, 0.0, AudioGainInterpolation.LINEAR),
-    AudioGainKeyframe(0.5, 1.0),
+    AudioGainKeyframe(0.5, 1.0, AudioGainInterpolation.HOLD),
+    AudioGainKeyframe(1.0, 0.8),
 ])
 builder.audio.crossfade(outgoing, incoming, curve=AudioFadeCurve.EQUAL_POWER)
 ```
 
 This uses the existing one-second overlap. The helper changes only fade
 durations and curves. It does not move either clip or rewrite source trims.
+
+### Audio capabilities and limits
+
+The audio timeline supports multiple tracks, multiple overlapping clips, source
+trims, sample-accurate placement at the 48 kHz mixer resolution, static clip
+and track gain, clip gain automation with linear or hold interpolation, linear
+and equal-power fades, and an explicit crossfade helper. FFmpeg mixes the
+declared graph deterministically. It does not normalize automatically and does
+not apply an automatic limiter.
+
+The authored limits are 256 audio tracks, 4,096 audio clips, and 16,384 gain
+automation keyframes. A render may open 128 unique audible source paths after
+deduplication. That is an execution limit, not an authored graph limit.
+
+Track gain automation, pan, EQ, compression, reverb, ducking, time stretching,
+pitch shifting, beat detection, FFT, and audio-reactive effects are not
+implemented. The mixer is a timeline mixer, not a mastering chain.
 
 Time domains are intentional: `clip.start`, transition starts, flash starts,
 and post-effect keyframes are project-relative. Transform, opacity, crop, and
@@ -384,7 +405,8 @@ The public exports are classified as follows:
 - Stable SDK-owned DTOs: `Frame`, `PixelFormat`, `FrameRate`,
   `FrameRateError`, `PreparationReport`, `PreparationTimings`,
   `ValidationReport`, `PreflightReport`, `InspectionReport`, `InspectOutput`,
-  `InspectAssets`, `InspectAudio`, `VersionResult`,
+  `InspectAssets`, `InspectAudio`, `InspectAudioTrack`, `InspectAudioClip`,
+  `InspectAudioGainKeyframe`, `VersionResult`,
   `Diagnostic`, `Category`, `Severity`, `BackendPreference`, `BackendKind`,
   `BackendFallback`, `AdapterInfo`, `AdapterDeviceType`, `GraphicsBackend`,
   `RenderPerformance`, `RenderFailureContext`,

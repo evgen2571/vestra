@@ -48,6 +48,9 @@ def test_native_runtime_names_are_exact_public_names() -> None:
         "InspectOutput": video_editor.InspectOutput,
         "InspectAssets": video_editor.InspectAssets,
         "InspectAudio": video_editor.InspectAudio,
+        "InspectAudioTrack": video_editor.InspectAudioTrack,
+        "InspectAudioClip": video_editor.InspectAudioClip,
+        "InspectAudioGainKeyframe": video_editor.InspectAudioGainKeyframe,
         "BackendPreference": video_editor.BackendPreference,
         "Category": video_editor.Category,
         "Severity": video_editor.Severity,
@@ -84,6 +87,17 @@ def test_native_runtime_names_are_exact_public_names() -> None:
         assert value.__module__ == "video_editor._native"
     assert not any(name.startswith("Py") for name in dir(native))
     assert not any(name.startswith("_test_") for name in native.__all__)
+
+
+def test_audio_inspection_dtos_are_top_level_public_symbols() -> None:
+    names = {
+        "InspectAudio",
+        "InspectAudioTrack",
+        "InspectAudioClip",
+        "InspectAudioGainKeyframe",
+    }
+    assert names <= set(video_editor.__all__)
+    assert all(hasattr(video_editor, name) for name in names)
 
 
 def test_frozen_values_and_diagnostic_ownership() -> None:

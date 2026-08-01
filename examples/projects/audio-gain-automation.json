@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "name": "Audio gain automation",
+  "output": {"path": "../output/audio-gain-automation.mp4", "width": 64, "height": 64, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": true, "duration_mode": "explicit", "duration": 2},
+  "assets": [{"id": "tone", "type": "audio", "source": "../assets/tone.wav"}],
+  "audio": {"tracks": [{"id": "music", "clips": [{"id": "automated", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 2, "gain_automation": {"keyframes": [{"time": 0, "gain": 0, "interpolation": "linear"}, {"time": 0.5, "gain": 1, "interpolation": "hold"}, {"time": 1.5, "gain": 0.4, "interpolation": "linear"}]}}]}]},
+  "visual": {"clips": [{"id": "canvas", "source": {"type": "solid_color", "colour": "#101018"}, "start": 0, "duration": 2, "layer": 0, "opacity": {"base_value": 1}}]}
+}

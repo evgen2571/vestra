@@ -44,6 +44,20 @@ def test_audio_timeline_is_ordered_and_round_trips() -> None:
     assert [clip.id for clip in inspection.audio.tracks[0].clips] == [first.id, second.id]
 
 
+def test_audio_inspection_preserves_declaration_order_when_ids_are_unsorted() -> None:
+    project_builder = builder()
+    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    zulu = project_builder.audio.add_track(id="zulu")
+    alpha = project_builder.audio.add_track(id="alpha")
+    zulu.add_clip(asset=asset, start=0, trim_end=0.5, id="z-clip")
+    zulu.add_clip(asset=asset, start=0.1, trim_end=0.5, id="a-clip")
+    alpha.add_clip(asset=asset, start=0, trim_end=0.5, id="b-clip")
+    inspection = Editor().inspect(project_builder.build())
+    assert inspection.audio is not None
+    assert [track.id for track in inspection.audio.tracks] == ["zulu", "alpha"]
+    assert [clip.id for clip in inspection.audio.tracks[0].clips] == ["z-clip", "a-clip"]
+
+
 def test_audio_ids_and_ownership_are_global_and_transactional() -> None:
     project_builder = builder()
     asset = project_builder.add_audio_asset("tone.wav")

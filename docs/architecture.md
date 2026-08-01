@@ -193,9 +193,14 @@ clips into tracks, applies track gain, and mixes the tracks with
 Clip-local gain automation and audio fades run in the FFmpeg `aeval` stage,
 which evaluates the envelope for every 48 kHz sample. The automation compiler
 uses a balanced conditional dispatch tree, so expression nesting grows
-logarithmically with the number of keyframes. `volume` remains static gain only
-because FFmpeg evaluates it only once or per audio frame. Equal-power fades use
+logarithmically with the number of keyframes. FFmpeg's `volume` filter applies
+static gain only because it evaluates a value once or per audio frame. Equal-power fades use
 sine for fade-in and cosine for fade-out.
+Audio gain automation uses source-keyframe interpolation: a keyframe controls
+the segment from itself to the next keyframe. Visual animation tracks instead
+assign interpolation to the segment ending at a keyframe. The final audio gain
+keyframe has no following segment, so its interpolation is unused and its gain
+holds through the selected clip end.
 Seconds round to the nearest mixer sample, with ties upward for non-negative
 schema times. The master is padded or trimmed to the resolved project length.
 Large generated filtergraphs use a temporary file passed through FFmpeg 7+'s

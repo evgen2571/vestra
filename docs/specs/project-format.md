@@ -14,16 +14,60 @@ with a unique `id`, optional `mute` (default `false`), optional linear `gain`
 (default `1.0`), and ordered `clips`. A clip has globally unique `id`, `asset`,
 `start`, `trim_start`, optional `trim_end`, `mute`, `gain`, `fade_in`, and
 `fade_out`. Omit optional `trim_end`; never serialize it as `null`.
+
+```json
+"audio": {
+  "tracks": [{
+    "id": "music",
+    "gain": 0.8,
+    "mute": false,
+    "clips": [{
+      "id": "intro",
+      "asset": "song-a",
+      "start": 0.0,
+      "trim_start": 3.0,
+      "trim_end": 8.0,
+      "gain": 1.0,
+      "fade_out": 1.0,
+      "fade_out_curve": "equal_power"
+    }]
+  }]
+}
+```
+
 Optional `gain_automation` is `{ "keyframes": [...] }`; each keyframe has
 `time`, `gain`, and optional `interpolation` (`linear` by default, or `hold`).
 Automation is clip-local after source trimming, must contain at least one point,
 must start at `0`, and has strictly increasing finite nonnegative times and
-finite nonnegative gains. The final gain holds through clip end. Execution rounds
+finite nonnegative gains. Audio gain automation uses source-keyframe
+interpolation: a keyframe's `interpolation` controls the segment from that
+keyframe to the following keyframe. This differs from visual animation tracks,
+where a keyframe's interpolation controls the segment ending at that keyframe.
+The last audio gain keyframe's `interpolation` has no effect because it has no
+following segment. Its gain holds through the selected clip end. For example,
+this clip ramps from `0.0` to `1.0` over `0.0..0.5`, holds at `1.0` over
+`0.5..1.0`, then holds `0.8` to clip end:
+
+```json
+"gain_automation": {
+  "keyframes": [
+    { "time": 0.0, "gain": 0.0, "interpolation": "linear" },
+    { "time": 0.5, "gain": 1.0, "interpolation": "hold" },
+    { "time": 1.0, "gain": 0.8 }
+  ]
+}
+```
+
+Execution rounds
 each keyframe time to the nearest 48 kHz mixer sample, and successive keyframes
 must resolve to strictly increasing samples. Keyframes that collapse to one
 mixer sample are rejected during preflight. `fade_in_curve`
 and `fade_out_curve` are `linear` by default or `equal_power`. Equal-power uses
 `sin(pi*u/2)` for a fade-in and `cos(pi*u/2)` for a fade-out.
+For paired equal-power envelopes over the same interval,
+`gain_in^2 + gain_out^2 = 1`. The Python crossfade helper only configures these
+ordinary clip fields over an existing overlap. It creates no separate canonical
+crossfade node, moves no clip, and changes no trim.
 
 Clips may overlap both within and across tracks. Tracks and clips preserve
 declaration order. Linear gain is finite and non-negative: 0 is silence, 1 is
@@ -45,7 +89,7 @@ stream.
 
 One render may open at most 128 unique audible resolved source paths. This is
 an execution-resource limit, separate from the 4,096 authored audio-clip
-limit. The backend applies it after deduplication and before starting FFmpeg;
+limit and the 256 authored audio-track limit. The backend applies it after deduplication and before starting FFmpeg;
 muted and zero-effective-gain branches do not consume the budget.
 Projects may contain at most 16,384 authored audio gain keyframes, regardless
 of mute or output-audio settings.

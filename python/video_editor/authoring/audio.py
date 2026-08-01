@@ -86,10 +86,24 @@ class AudioClip:
     def asset(self) -> AudioAsset: return self._asset
     @property
     def start(self) -> float: return self._start
+    @start.setter
+    def start(self, value: int | float) -> None: self._start = _nonnegative(value, "start")
     @property
     def trim_start(self) -> float: return self._trim_start
+    @trim_start.setter
+    def trim_start(self, value: int | float) -> None:
+        staged = _nonnegative(value, "trim_start")
+        if self._trim_end is not None and staged >= self._trim_end:
+            raise ValueError("trim_start must be less than trim_end")
+        self._trim_start = staged
     @property
     def trim_end(self) -> float | None: return self._trim_end
+    @trim_end.setter
+    def trim_end(self, value: int | float | None) -> None:
+        staged = None if value is None else _nonnegative(value, "trim_end")
+        if staged is not None and staged <= self._trim_start:
+            raise ValueError("trim_end must be greater than trim_start")
+        self._trim_end = staged
     @property
     def mute(self) -> bool: return self._mute
     @mute.setter
@@ -100,12 +114,26 @@ class AudioClip:
     def gain(self, value: int | float) -> None: self._gain = _nonnegative(value, "gain")
     @property
     def fade_in(self) -> float: return self._fade_in
+    @fade_in.setter
+    def fade_in(self, value: int | float) -> None: self._fade_in = _nonnegative(value, "fade_in")
     @property
     def fade_out(self) -> float: return self._fade_out
+    @fade_out.setter
+    def fade_out(self, value: int | float) -> None: self._fade_out = _nonnegative(value, "fade_out")
     @property
     def fade_in_curve(self) -> AudioFadeCurve: return self._fade_in_curve
+    @fade_in_curve.setter
+    def fade_in_curve(self, value: AudioFadeCurve) -> None:
+        if not isinstance(value, AudioFadeCurve):
+            raise TypeError("fade_in_curve must be AudioFadeCurve")
+        self._fade_in_curve = value
     @property
     def fade_out_curve(self) -> AudioFadeCurve: return self._fade_out_curve
+    @fade_out_curve.setter
+    def fade_out_curve(self, value: AudioFadeCurve) -> None:
+        if not isinstance(value, AudioFadeCurve):
+            raise TypeError("fade_out_curve must be AudioFadeCurve")
+        self._fade_out_curve = value
     @property
     def gain_automation(self) -> tuple[AudioGainKeyframe, ...]: return self._gain_automation or ()
 
@@ -130,6 +158,15 @@ class AudioClip:
         if self.fade_out_curve is not AudioFadeCurve.LINEAR: data["fade_out_curve"] = self.fade_out_curve.value
         return data
 
+    def _same_identity(self, other: object) -> bool:
+        return (
+            type(self) is type(other)
+            and self._owner is other._owner
+            and self._id == other._id
+        )
+
+    def __eq__(self, other: object) -> bool: return self._same_identity(other)
+    def __hash__(self) -> int: return hash((id(self._owner), type(self), self._id))
     def __repr__(self) -> str: return f"AudioClip(id={self.id!r}, asset={self.asset.id!r})"
 
 
@@ -165,6 +202,14 @@ class AudioTrack:
         staged._id = self._ids.allocate("audio-clip") if id is None else self._ids.reserve("audio-clip", id)
         self._clips.append(staged); return staged
     def to_canonical(self) -> dict[str, object]: return {"id": self.id, "mute": self.mute, "gain": self.gain, "clips": [clip.to_canonical() for clip in self._clips]}
+    def _same_identity(self, other: object) -> bool:
+        return (
+            type(self) is type(other)
+            and self._owner is other._owner
+            and self._id == other._id
+        )
+    def __eq__(self, other: object) -> bool: return self._same_identity(other)
+    def __hash__(self) -> int: return hash((id(self._owner), type(self), self._id))
     def __repr__(self) -> str: return f"AudioTrack(id={self.id!r}, clips={len(self.clips)})"
 
 

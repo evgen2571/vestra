@@ -3,8 +3,9 @@
 use video_editor::{
     AdapterDeviceType, AdapterInfo, BackendFallback, BackendKind, BackendPreference,
     CancellationToken, Category, Diagnostic, Editor, EditorBuilder, EditorError, EditorErrorKind,
-    Frame, FrameRate, FrameRateError, GraphicsBackend, InspectAssets, InspectAudio, InspectOutput,
-    InspectionReport, LoadError, PixelFormat, PreflightOptions, PreflightReport, PreparationReport,
+    Frame, FrameRate, FrameRateError, GraphicsBackend, InspectAssets, InspectAudio,
+    InspectAudioClip, InspectAudioGainKeyframe, InspectAudioTrack, InspectOutput, InspectionReport,
+    LoadError, PixelFormat, PreflightOptions, PreflightReport, PreparationReport,
     PreparationTimings, PrepareOptions, PreparedProject, PreparedVideoRenderRequest, Project,
     RenderEvent, RenderFailureContext, RenderFailureStage, RenderObserverControl,
     RenderPerformance, RenderRequest, RenderResult, RenderTimingScope, RenderTimings, Severity,
@@ -44,6 +45,9 @@ fn supported_sdk_exports_are_importable_by_an_external_crate() {
     assert_sized::<InspectOutput>();
     assert_sized::<InspectAssets>();
     assert_sized::<InspectAudio>();
+    assert_sized::<InspectAudioTrack>();
+    assert_sized::<InspectAudioClip>();
+    assert_sized::<InspectAudioGainKeyframe>();
     assert_sized::<ValidateResult>();
     assert_sized::<VersionResult>();
     assert_sized::<Diagnostic>();
@@ -67,11 +71,23 @@ fn inspection_nested_dtos_are_nameable_by_external_callers() {
     fn output(_: &InspectOutput) {}
     fn assets(_: &InspectAssets) {}
     fn audio(_: &InspectAudio) {}
+    fn audio_track(_: &InspectAudioTrack) {}
+    fn audio_clip(_: &InspectAudioClip) {}
+    fn audio_keyframe(_: &InspectAudioGainKeyframe) {}
     fn fields(report: &InspectionReport) {
         output(&report.output);
         assets(&report.assets);
         if let Some(audio_report) = report.audio.as_ref() {
             audio(audio_report);
+            for track in &audio_report.tracks {
+                audio_track(track);
+                for clip in &track.clips {
+                    audio_clip(clip);
+                    for keyframe in &clip.gain_automation {
+                        audio_keyframe(keyframe);
+                    }
+                }
+            }
         }
     }
     let _ = fields;

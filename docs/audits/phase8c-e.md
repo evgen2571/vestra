@@ -33,9 +33,13 @@ textually identical to its first native serialization.
 policy, runtime hints/signatures, static/animation/effect/transition-flash/
 preset/audio/full native round trips, snapshots, failed-operation atomicity,
 cross-scope IDs, deterministic complete builders, and no hidden repair after
-dependent mutation. `phase8-authoring-conformance.md` records every relevant
-schema-v1 feature and intentional deferrals. The Stage 1 full project provides
-prepared-frame and CPU-video coverage including audio and safe cleanup.
+dependent mutation. `test_authoring_presets_timeline.py` also protects the
+README workflow: shifting an incoming clip from 0.50 to 0.75 seconds leaves a
+0.25-second overlap with an outgoing 0.00-to-1.00-second clip, then the helper
+adds a valid crossfade. `phase8-authoring-conformance.md` records every current
+schema-v1 field family. No current schema-v1 field is raw-only. The Stage 1 full
+project provides prepared-frame and CPU-video coverage including audio and safe
+cleanup.
 
 ## IDs, transactions, and error boundaries
 
@@ -65,22 +69,39 @@ the full audio/render pipeline.
 
 ## Environment and verdict
 
-CPython 3.13.5, Rust/Cargo 1.96.1, Maturin 1.14.1, and FFmpeg/FFprobe 7.1.5
-were exercised on Linux x86_64. The full Python suite passed (230 passed, four
-adapter-gated skips); mypy and stubtest passed. Formatting, workspace check,
-strict Clippy, workspace tests, and schema validation passed. `maturin build`
-produced a wheel containing every authoring module, `py.typed`, and the native
-extension. A new isolated virtual environment installed that wheel with no
-source-tree import path, resolved public hints, authored a complete project,
-validated and built it, prepared a CPU frame, rendered CPU video, confirmed
-FFprobe video and audio streams, and verified temporary cleanup.
+The final-state checks ran on Linux x86_64 with CPython 3.13.5, Rust/Cargo
+1.96.1, Maturin 1.14.1, and FFmpeg/FFprobe 7.1.5.
 
-Normal WGPU tests skipped because no compatible adapter was available. The
-strict selection failed all four adapter-backed tests with `WGPU adapter request
-returned no compatible adapter`; this is an expected environmental failure, not
-a skip or a runtime-parity claim. WGPU compilation and normal capability tests
-remain covered by the workspace and adapter-gated suites.
+| Gate | Final-state result |
+| --- | --- |
+| `cargo fmt --all -- --check` | passed |
+| `cargo check --workspace` | passed |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | passed |
+| `cargo test --workspace` and the requested `video-editor` and `video-editor-python` package/public-SDK/public-export selections | passed |
+| `python3 crates/video-editor-cli/tests/schema_validation.py` | passed |
+| `maturin develop` | passed with the repository CPython 3.13 environment |
+| Full Python suite | 231 passed, 4 adapter-gated skips |
+| Mypy | passed for 18 source files and 17 modules |
+| Stubtest | passed |
+| CPU complete-project render and FFprobe video/audio-stream checks | passed through the full Python suite |
+| Normal WGPU selection | 4 adapter-gated skips in the full Python suite, because no compatible adapter was available |
+| Strict WGPU selection | 4 failed with `WGPU adapter request returned no compatible adapter`; expected environmental failure, not a skip |
+| `maturin build` | passed after disk space was restored |
+| Clean-wheel smoke | passed from an isolated virtual environment outside the source tree: wheel import, public authoring imports and hints, `py.typed`, complete project construction, validation, CPU frame preparation, CPU video render, FFprobe video/audio streams, and temporary-output cleanup |
+
+The source tree contains no Python bytecode caches, `.pytest_cache`, or
+`.mypy_cache` after cleanup. The existing `target` directory is a normal build
+tree and was retained.
+
+## Completion definition
+
+Phase 8 complete means complete typed Python authoring coverage for the current
+schema-version 1 project model. `Project.from_dict()` is a lower-level
+construction path for the same model, not access to nonexistent features.
+Video assets, multi-track audio and mixer features, nested compositions, and
+audio-reactive visual systems require future native project-model and schema
+work.
 
 ## Final verdict
 
-Phase 8C-E complete
+Phase 8C-E complete.

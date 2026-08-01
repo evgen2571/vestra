@@ -74,7 +74,31 @@ def test_directionality_and_overlapping_flashes_are_deterministic() -> None:
     overlap = frames(flashes).render_frame_number(8).to_bytes()
     single, _, _ = project()
     single.flashes.add(start=0.8, duration=0.3, colour="#ffffff", opacity=0.25, layer=2)
-    assert overlap != frames(single).render_frame_number(8).to_bytes()
+    single_pixel = frames(single).render_frame_number(8).to_bytes()
+    # Draw-key order is layer then ID. The red overlay follows white, so red wins.
+    assert overlap[0] > overlap[1]
+    assert overlap[0] > single_pixel[0]
+
+
+def test_standalone_flash_fades_are_linear_and_colour_aware() -> None:
+    authored = ProjectBuilder(width=4, height=4, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1,
+                              background="#808080")
+    authored.flashes.add(start=0.1, duration=0.6, colour="#ff0000", opacity=0.5,
+                         fade_in=0.2, fade_out=0.2, layer=1)
+    prepared = frames(authored)
+    before = prepared.render_frame_number(0).to_bytes()
+    fade_in = prepared.render_frame_number(2).to_bytes()
+    peak = prepared.render_frame_number(4).to_bytes()
+    fade_out = prepared.render_frame_number(6).to_bytes()
+    after = prepared.render_frame_number(8).to_bytes()
+    assert tuple(before[:4]) == (128, 128, 128, 255)
+    assert tuple(after[:4]) == tuple(before[:4])
+    # Linear alpha compositing over 128 grey: halfway to a 0.5 red flash is ~160/96/96.
+    assert 156 <= fade_in[0] <= 161 and 94 <= fade_in[1] <= 98 and fade_in[1] == fade_in[2]
+    assert 190 <= peak[0] <= 193 and 62 <= peak[1] <= 66 and peak[1] == peak[2]
+    assert tuple(fade_out[:4]) == tuple(fade_in[:4])
+    assert peak[0] > fade_in[0] > before[0]
+    assert peak[1] < fade_in[1] < before[1]
 
 
 def test_cpu_video_combines_transition_flash_effect_post_effect_and_blend_mode(tmp_path: Path) -> None:

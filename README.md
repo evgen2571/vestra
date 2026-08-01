@@ -106,6 +106,13 @@ builder.transitions.add_crossfade(
 builder.flashes.add(
     start=1.2, duration=0.08, colour="#ffffff", opacity=0.8, fade_out=0.08,
 )
+
+# Presets are canonical nodes. Native compilation supplies their animation.
+clip.presets.apply_impact(seed=17, intensity=0.8)
+
+# Timeline helpers only move the selected clips. They leave flashes and
+# transitions where they were authored.
+builder.timeline.shift_clip(incoming, delta=0.25)
 ```
 
 The supported blend modes are `normal`, `add`, `screen`, `multiply`, and

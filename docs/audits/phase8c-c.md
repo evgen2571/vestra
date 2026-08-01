@@ -44,21 +44,22 @@ exact interior regions. Anchor, crop, and position tests check fixed pixels at
 known times. Gaussian blur checks edge-spread values at start, midpoint, and
 end. Brightness checks the complete channel progression.
 
-`python-tests/test_authoring_transitions_flashes.py` covers all five canonical
+`python-tests/test_authoring_transitions_flashes.py` has 7 focused tests and covers all five canonical
 transition discriminators, concrete return classes, collection identity,
 serialization, transactional IDs, ownership, same-clip rejection, later
 hidden-clip validation, interval fitting, conflicts, snapshots, and flash
-ordering. `python-tests/test_authoring_transition_flash_frames.py` checks
+ordering. `python-tests/test_authoring_transition_flash_frames.py` has 5 focused frame tests and checks
 crossfade and flash pixels, all variant midpoint behaviour, and a CPU video
 with a transition, flash, clip effect, post-effect, and screen blend mode.
 
 The CPU video probe reports one `video` stream at 8x6 with 20 frames and no
-temporary output. The full Python suite passes with adapter-gated WGPU tests
-skipped when no adapter is available. Formatting, workspace checking, Clippy,
-schema validation, mypy, wheel build, and a clean-wheel authoring smoke pass.
-The strict WGPU command was also run and failed with `WGPU adapter request
-returned no compatible adapter`; this is an environmental result, not a runtime
-parity claim.
+temporary output. Phase 8C-D re-ran the full Python suite: 209 passed and 4
+adapter-gated WGPU tests skipped. `cargo fmt --all -- --check`, `cargo check
+--workspace`, strict workspace Clippy, schema validation, mypy, stubtest, and
+wheel build passed. The wheel contains `py.typed`. Python was 3.13.5, Rust was
+1.96.1, Maturin was 1.14.1, and FFmpeg/FFprobe were 7.1.5. Normal WGPU status
+is adapter-gated; strict WGPU was not rerun in this phase, so no new strict
+runtime claim is made.
 
 ## Verdict
 

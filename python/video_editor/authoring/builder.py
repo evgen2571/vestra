@@ -15,6 +15,7 @@ from .clips import ImageClip, SolidColorClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .flashes import FlashCollection
 from .transitions import TransitionCollection
+from .timeline import Timeline
 from .values import Color, Crop, DurationMode, Quality, Sizing, color_to_canonical
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -113,6 +114,7 @@ class ProjectBuilder:
         self._post_effects = PostEffectCollection._create(self._owner, self._ids, self)
         self._transitions = TransitionCollection._create(self._owner, self._ids, self)
         self._flashes = FlashCollection._create(self._owner, self._ids, self)
+        self._timeline = Timeline._create(self)
 
     @staticmethod
     def _frame_rate_value(value: FrameRate) -> FrameRate:
@@ -267,6 +269,11 @@ class ProjectBuilder:
     def flashes(self) -> FlashCollection:
         """Stable ordered project-level flash overlays."""
         return self._flashes
+
+    @property
+    def timeline(self) -> Timeline:
+        """Stable non-canonical helpers for explicit timeline mutations."""
+        return self._timeline
 
     @staticmethod
     def _asset_source(value: str | os.PathLike[str]) -> str:

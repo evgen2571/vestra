@@ -13,6 +13,8 @@ from .assets import AudioAsset, ImageAsset
 from .audio import AudioTrack
 from .clips import ImageClip, SolidColorClip
 from .effects import ClipEffectCollection, PostEffectCollection
+from .flashes import FlashCollection
+from .transitions import TransitionCollection
 from .values import Color, Crop, DurationMode, Quality, Sizing, color_to_canonical
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -109,6 +111,8 @@ class ProjectBuilder:
         self._audio: AudioTrack | None = None
         self._has_audio = False
         self._post_effects = PostEffectCollection._create(self._owner, self._ids, self)
+        self._transitions = TransitionCollection._create(self._owner, self._ids, self)
+        self._flashes = FlashCollection._create(self._owner, self._ids, self)
 
     @staticmethod
     def _frame_rate_value(value: FrameRate) -> FrameRate:
@@ -254,6 +258,16 @@ class ProjectBuilder:
     def post_effects(self) -> PostEffectCollection:
         return self._post_effects
 
+    @property
+    def transitions(self) -> TransitionCollection:
+        """Stable ordered project-level coordinated transitions."""
+        return self._transitions
+
+    @property
+    def flashes(self) -> FlashCollection:
+        """Stable ordered project-level flash overlays."""
+        return self._flashes
+
     @staticmethod
     def _asset_source(value: str | os.PathLike[str]) -> str:
         source = _path(value, "source")
@@ -362,8 +376,8 @@ class ProjectBuilder:
             ],
             "visual": {
                 "clips": [clip.to_canonical() for clip in self._clips],
-                "transitions": [],
-                "flashes": [],
+                "transitions": [transition.to_canonical() for transition in self.transitions.items],
+                "flashes": [flash.to_canonical() for flash in self.flashes.items],
                 "post_effects": [effect.to_canonical() for effect in self.post_effects.items],
             },
         }

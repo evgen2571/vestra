@@ -740,11 +740,59 @@ struct PyInspectAssets {
 #[derive(Clone)]
 struct PyInspectAudio {
     #[pyo3(get)]
+    track_count: usize,
+    #[pyo3(get)]
+    clip_count: usize,
+    #[pyo3(get)]
+    end: f64,
+    #[pyo3(get)]
+    tracks: Vec<PyInspectAudioTrack>,
+}
+#[pyclass(
+    name = "InspectAudioTrack",
+    frozen,
+    skip_from_py_object,
+    module = "video_editor._native"
+)]
+#[derive(Clone)]
+struct PyInspectAudioTrack {
+    #[pyo3(get)]
+    id: String,
+    #[pyo3(get)]
+    mute: bool,
+    #[pyo3(get)]
+    gain: f64,
+    #[pyo3(get)]
+    clips: Vec<PyInspectAudioClip>,
+}
+#[pyclass(
+    name = "InspectAudioClip",
+    frozen,
+    skip_from_py_object,
+    module = "video_editor._native"
+)]
+#[derive(Clone)]
+struct PyInspectAudioClip {
+    #[pyo3(get)]
+    id: String,
+    #[pyo3(get)]
     asset: String,
     #[pyo3(get)]
     start: f64,
     #[pyo3(get)]
     end: f64,
+    #[pyo3(get)]
+    trim_start: f64,
+    #[pyo3(get)]
+    trim_end: f64,
+    #[pyo3(get)]
+    mute: bool,
+    #[pyo3(get)]
+    gain: f64,
+    #[pyo3(get)]
+    fade_in: f64,
+    #[pyo3(get)]
+    fade_out: f64,
 }
 #[pyclass(
     name = "InspectionReport",
@@ -794,9 +842,34 @@ impl From<NativeInspection> for PyInspectionReport {
             flashes: value.flashes,
             transitions: value.transitions,
             audio: value.audio.map(|a| PyInspectAudio {
-                asset: a.asset,
-                start: a.start,
+                track_count: a.track_count,
+                clip_count: a.clip_count,
                 end: a.end,
+                tracks: a
+                    .tracks
+                    .into_iter()
+                    .map(|track| PyInspectAudioTrack {
+                        id: track.id,
+                        mute: track.mute,
+                        gain: track.gain,
+                        clips: track
+                            .clips
+                            .into_iter()
+                            .map(|clip| PyInspectAudioClip {
+                                id: clip.id,
+                                asset: clip.asset,
+                                start: clip.start,
+                                end: clip.end,
+                                trim_start: clip.trim_start,
+                                trim_end: clip.trim_end,
+                                mute: clip.mute,
+                                gain: clip.gain,
+                                fade_in: clip.fade_in,
+                                fade_out: clip.fade_out,
+                            })
+                            .collect(),
+                    })
+                    .collect(),
             }),
             warnings: diagnostics(&value.warnings),
         }
@@ -905,6 +978,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyInspectOutput>()?;
     module.add_class::<PyInspectAssets>()?;
     module.add_class::<PyInspectAudio>()?;
+    module.add_class::<PyInspectAudioTrack>()?;
+    module.add_class::<PyInspectAudioClip>()?;
     module.add_class::<PyInspectionReport>()?;
     prepared::register(module)?;
     render::register(module)?;
@@ -936,6 +1011,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "InspectOutput",
                 "InspectAssets",
                 "InspectAudio",
+                "InspectAudioTrack",
+                "InspectAudioClip",
                 "InspectionReport",
                 "PrepareOptions",
                 "PreparedProject",

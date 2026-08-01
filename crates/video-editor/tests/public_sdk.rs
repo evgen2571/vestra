@@ -15,7 +15,7 @@ fn fixture(path: &str) -> PathBuf {
 
 fn background_project(directory: &std::path::Path) -> video_editor::Project {
     video_editor::Project::from_json(
-        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
         directory,
     )
     .expect("project")
@@ -687,7 +687,7 @@ fn stable_sdk_enum_strings_match_report_names() {
 fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
     let directory = tempdir().expect("temporary directory");
     let project = video_editor::Project::from_json(
-        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
         directory.path(),
     )
     .expect("project");
@@ -750,7 +750,7 @@ fn prepared_cpu_video_operation_uses_an_operation_request() {
 fn prepared_frames_have_exact_rational_timestamps_and_owned_pixels() {
     let directory = tempdir().expect("temporary directory");
     let project = video_editor::Project::from_json(
-        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
         directory.path(),
     ).expect("project");
     let mut prepared = Editor::new()
@@ -826,7 +826,7 @@ fn prepared_frames_have_exact_rational_timestamps_and_owned_pixels() {
 #[test]
 fn render_validation_and_preflight_failures_keep_operation_timings() {
     let directory = tempdir().expect("temporary directory");
-    let invalid = r##"{"schema_version":1,"output":{"path":"out.mp4","width":0,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let invalid = r##"{"schema_version":2,"output":{"path":"out.mp4","width":0,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let project = video_editor::Project::from_json(invalid, directory.path()).expect("project");
     let validation_error = Editor::new()
         .render(
@@ -845,7 +845,7 @@ fn render_validation_and_preflight_failures_keep_operation_timings() {
     assert!(timings.operation_total_ms >= timings.semantic_validation_ms);
     assert!(timings.operation_total_ms >= timings.preflight_ms);
 
-    let valid = r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let valid = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let project = video_editor::Project::from_json(valid, directory.path()).expect("project");
     let preflight_error = Editor::new()
         .render(
@@ -868,7 +868,7 @@ fn render_validation_and_preflight_failures_keep_operation_timings() {
 #[test]
 fn project_parse_time_stays_separate_from_sdk_operation_time() {
     let directory = tempdir().expect("temporary directory");
-    let json = r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let from_value = video_editor::Project::from_value(
         serde_json::from_str(json).expect("JSON value"),
         directory.path(),
@@ -897,7 +897,7 @@ fn project_parse_time_stays_separate_from_sdk_operation_time() {
 fn project_loading_keeps_relative_paths_and_does_not_preflight() {
     let directory = tempdir().expect("temporary directory");
     let json = r##"{
-        "schema_version": 1,
+        "schema_version": 2,
         "output": {"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"missing","type":"image","source":"missing.png"}],
         "visual":{"clips":[]}
@@ -920,7 +920,7 @@ fn project_loading_keeps_relative_paths_and_does_not_preflight() {
 
 #[test]
 fn unsupported_schema_version_is_rejected() {
-    let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let json = r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let error = video_editor::Project::from_json(json, ".").expect_err("schema rejection");
     assert_eq!(error.diagnostics()[0].code, "MVP-SCHEMA-VERSION");
 }
@@ -938,7 +938,7 @@ fn file_loading_uses_its_parent_and_round_trips_without_relocating_paths() {
     let path = directory.path().join("project.json");
     let copy = directory.path().join("copy.json");
     let json = r##"{
-        "schema_version": 1,
+        "schema_version": 2,
         "output": {"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"image","type":"image","source":"assets/image.png"}],
         "visual":{"clips":[]}
@@ -949,7 +949,7 @@ fn file_loading_uses_its_parent_and_round_trips_without_relocating_paths() {
     project.save(&copy).expect("save project");
     let saved = std::fs::read_to_string(copy).expect("read copy");
     assert!(saved.contains("assets/image.png"));
-    assert!(saved.contains("\"schema_version\":1"));
+    assert!(saved.contains("\"schema_version\":2"));
 }
 
 #[test]
@@ -963,7 +963,7 @@ fn in_memory_projects_resolve_assets_and_output_against_their_base_directory() {
     )
     .expect("copy image");
     let json = r##"{
-        "schema_version": 1,
+        "schema_version": 2,
         "output": {"path":"result.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"image","type":"image","source":"assets/image.png"}],
         "visual":{"clips":[]}
@@ -993,7 +993,7 @@ fn absolute_output_path_is_not_rebased() {
     let directory = tempdir().expect("temporary directory");
     let output = directory.path().join("absolute.mp4");
     let json = format!(
-        r##"{{"schema_version":1,"output":{{"path":"{}","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1}},"assets":[],"visual":{{"clips":[]}}}}"##,
+        r##"{{"schema_version":2,"output":{{"path":"{}","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1}},"assets":[],"visual":{{"clips":[]}}}}"##,
         output.display()
     );
     let project =
@@ -1011,7 +1011,7 @@ fn absolute_output_path_is_not_rebased() {
 #[test]
 fn render_preflight_checks_the_requested_output_override() {
     let directory = tempdir().expect("temporary directory");
-    let json = r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let project = video_editor::Project::from_json(json, directory.path()).expect("project");
     let report = Editor::new().preflight(
         &project,
@@ -1029,7 +1029,7 @@ fn render_preflight_checks_the_requested_output_override() {
 fn preflight_preserves_pure_warnings_when_asset_resolution_fails() {
     let directory = tempdir().expect("temporary directory");
     let json = r##"{
-        "schema_version": 1,
+        "schema_version": 2,
         "output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"unused","type":"image","source":"missing.png"}],
         "visual":{"clips":[{"id":"solid","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":1,"layer":0,"opacity":{"base_value":1}}]}

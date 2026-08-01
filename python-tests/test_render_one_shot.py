@@ -17,7 +17,7 @@ def request(output: Path, **kwargs: object) -> video_editor.RenderRequest:
 def multi_frame_project(tmp_path: Path) -> video_editor.Project:
     return video_editor.Project.from_dict(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": False,

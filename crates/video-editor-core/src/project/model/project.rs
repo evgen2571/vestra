@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{Asset, AudioTrack, Output, Visual, optional_metadata_non_null, optional_non_null};
+use super::{Asset, AudioTimeline, Output, Visual, optional_metadata_non_null, optional_non_null};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -15,8 +15,12 @@ pub struct Project {
     pub output: Output,
     pub assets: Vec<Asset>,
     pub visual: Visual,
-    #[serde(default, deserialize_with = "optional_non_null")]
-    pub audio: Option<AudioTrack>,
+    #[serde(
+        default,
+        deserialize_with = "optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub audio: Option<AudioTimeline>,
 }
 
 impl Project {

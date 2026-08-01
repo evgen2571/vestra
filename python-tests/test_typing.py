@@ -10,7 +10,7 @@ from video_editor.authoring import (
 )
 
 if TYPE_CHECKING:
-    project: Project = Project.from_dict({"schema_version": 1, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
+    project: Project = Project.from_dict({"schema_version": 2, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
     report = Editor().validate(project)
     path: Path = project.base_directory
     assert report.is_valid
@@ -56,7 +56,8 @@ if TYPE_CHECKING:
     audio: AudioAsset = builder.add_audio_asset("music.wav")
     image_clip: ImageClip = builder.add_image_clip(source=image, start=0.0, duration=1.0, layer=0)
     solid_clip: SolidColorClip = builder.add_solid_color_clip(colour="#112233", start=0.0, duration=1.0, layer=1)
-    builder.set_audio(asset=audio, timeline_start=0.0, trim_start=0.0)
+    track = builder.audio.add_track(id="music")
+    audio_clip = track.add_clip(asset=audio, start=0.0)
     scalar_keyframe: ScalarKeyframe = image_clip.opacity.keyframe(
         time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT,
     )
@@ -67,7 +68,7 @@ if TYPE_CHECKING:
     preset: Preset = image_clip.presets.apply_impact(seed=7, intensity=1.0)
     builder.timeline.shift_clip(image_clip, delta=0.0)
     builder.timeline.shift_clips([image_clip], delta=0.0)
-    assert preset
+    assert preset and audio_clip
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:

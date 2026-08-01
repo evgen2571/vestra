@@ -18,7 +18,7 @@ def cpu_request(output: Path, *, preview: bool = False) -> video_editor.RenderRe
 def audio_project() -> video_editor.Project:
     return video_editor.Project.from_dict(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": True,
@@ -26,10 +26,13 @@ def audio_project() -> video_editor.Project:
             },
             "assets": [{"id": "tone", "type": "audio", "source": "assets/tone.wav"}],
             "visual": {"clips": []},
-            "audio": {
-                "asset": "tone", "timeline_start": 0, "trim_start": 0,
-                "trim_end": 1, "volume": 1,
-            },
+            "audio": {"tracks": [{
+                "id": "tone", "gain": 1, "mute": False, "clips": [{
+                    "id": "tone-clip", "asset": "tone", "start": 0,
+                    "trim_start": 0, "trim_end": 1, "gain": 1,
+                    "fade_in": 0, "fade_out": 0, "mute": False,
+                }],
+            }]},
         },
         base_directory=Path("examples"),
     )

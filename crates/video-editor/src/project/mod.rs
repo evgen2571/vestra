@@ -18,7 +18,7 @@ use serde_json::Value;
 pub(crate) use loader::load_and_validate;
 pub use validated::LoadError;
 pub(crate) use validated::{ValidatedProject, ValidationOptions};
-pub(crate) use video_editor_core::project::{Asset, AssetType, AudioTrack, DurationMode};
+pub(crate) use video_editor_core::project::{Asset, AssetType, AudioTimeline, DurationMode};
 
 type CanonicalProject = video_editor_core::project::Project;
 
@@ -67,7 +67,7 @@ impl Project {
         source_path: Option<PathBuf>,
         parse_elapsed: Duration,
     ) -> Result<Self, LoadError> {
-        if canonical.schema_version != 1 {
+        if canonical.schema_version != 2 {
             return Err(LoadError::unsupported_schema(canonical.schema_version));
         }
         Ok(Self {
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn serialized_optional_fields_are_omitted_and_reloadable() {
         let project = Project::from_json(
-            r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#000000","quality":"balanced","audio":false,"duration_mode":"automatic"},"assets":[],"visual":{"clips":[]}}"##,
+            r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#000000","quality":"balanced","audio":false,"duration_mode":"automatic"},"assets":[],"visual":{"clips":[]}}"##,
             ".",
         )
         .expect("fixture is valid");

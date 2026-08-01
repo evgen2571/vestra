@@ -18,20 +18,37 @@ pub(super) fn enforce(
             "/output",
         ));
     }
-    if frame_count > limits.maximum_frames || duration > limits.maximum_duration_seconds {
-        errors.push(Diagnostic::error(
-            "MVP-LIMIT-TIMELINE",
-            Category::Semantic,
-            "project duration or frame count exceeds configured resource limits",
-            "/output/duration",
-        ));
-    }
+    enforce_timeline(frame_count, duration, limits, errors);
     if clips > limits.maximum_clips {
         errors.push(Diagnostic::error(
             "MVP-LIMIT-CLIPS",
             Category::Semantic,
             "project exceeds the clip limit",
             "/visual/clips",
+        ));
+    }
+}
+
+pub(crate) fn enforce_timeline(
+    frame_count: u64,
+    duration: f64,
+    limits: video_editor_core::validation::ResourceLimits,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if duration > limits.maximum_duration_seconds {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-TIMELINE",
+            Category::Semantic,
+            "project duration exceeds the configured resource limit",
+            "/output/duration",
+        ));
+    }
+    if frame_count > limits.maximum_frames {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-TIMELINE",
+            Category::Semantic,
+            "project frame count exceeds the configured resource limit",
+            "/output/frame_rate",
         ));
     }
 }

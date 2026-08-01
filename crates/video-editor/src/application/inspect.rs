@@ -1,5 +1,4 @@
 use crate::{
-    Category, Diagnostic,
     plan::{CompileOptions, compile},
     project::{LoadError, Project, ValidatedProject},
 };
@@ -23,24 +22,18 @@ pub fn inspect(
 ) -> Result<Inspection, LoadError> {
     let plan = compile(&validated, CompileOptions { preview })
         .map_err(|diagnostic| LoadError::Diagnostics(vec![diagnostic]))?;
-    let audio_end = validated
-        .project
-        .audio
-        .as_ref()
-        .filter(|track| validated.project.output.audio && !track.mute)
-        .map(|track| {
-            let source_duration = validated.audio_durations.get(&track.asset).ok_or_else(|| {
-                LoadError::Diagnostics(vec![Diagnostic::error(
-                    "MVP-INSPECT-AUDIO",
-                    Category::Internal,
-                    "validated audio duration is missing",
-                    "/audio/asset",
-                )])
-            })?;
-            Ok(track.timeline_start
-                + (track.trim_end.unwrap_or(*source_duration) - track.trim_start))
-        })
-        .transpose()?;
+    let audio_end = validated.project.audio.as_ref().map(|timeline| {
+        timeline
+            .tracks
+            .iter()
+            .flat_map(|track| track.clips.iter())
+            .filter_map(|clip| {
+                validated.audio_durations.get(&clip.asset).map(|duration| {
+                    clip.start + clip.trim_end.unwrap_or(*duration) - clip.trim_start
+                })
+            })
+            .fold(0.0, f64::max)
+    });
     Ok(Inspection {
         output_path: plan.configured_output,
         width: plan.canvas.width,

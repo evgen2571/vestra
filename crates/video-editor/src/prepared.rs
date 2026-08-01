@@ -532,7 +532,7 @@ mod tests {
     #[test]
     fn editor_prepare_deduplicates_fallback_warning_and_keeps_its_report_immutable() {
         let project = Project::from_json(
-            r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+            r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
             ".",
         )
         .expect("project");

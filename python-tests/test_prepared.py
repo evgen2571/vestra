@@ -30,7 +30,7 @@ def cpu_options() -> video_editor.PrepareOptions:
 def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> video_editor.Project:
     return video_editor.Project.from_dict(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": {
                 "path": "unused.mp4",
                 "width": 2,
@@ -67,7 +67,7 @@ def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vide
 def multi_frame_project(tmp_path: Path) -> video_editor.Project:
     return video_editor.Project.from_dict(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": {
                 "path": "unused.mp4",
                 "width": 2,
@@ -200,7 +200,7 @@ def test_prepared_values_are_immutable() -> None:
 def test_fractional_frame_rate_uses_native_canonical_timestamp_boundaries(tmp_path: Path) -> None:
     project = video_editor.Project.from_dict(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "output": {
                 "path": "unused.mp4",
                 "width": 2,

@@ -2,9 +2,24 @@
 
 `video-editor` accepts one JSON project format, described by
 [`schemas/project.schema.json`](../../schemas/project.schema.json). Project
-objects carry a required `schema_version` field. Version `1` is the only
-accepted version. Missing and unsupported versions fail during loading; the
+objects carry a required `schema_version` field. Version `2` is the only
+accepted version. Version 1 is historical and rejected without migration.
+Missing and unsupported versions fail during loading; the
 editor does not guess a version or migrate project data.
+
+## Audio timeline
+
+The optional `audio` object is `{ "tracks": [...] }`. Tracks are mixer lanes
+with a unique `id`, optional `mute` (default `false`), optional linear `gain`
+(default `1.0`), and ordered `clips`. A clip has globally unique `id`, `asset`,
+`start`, `trim_start`, optional `trim_end`, `mute`, `gain`, `fade_in`, and
+`fade_out`. Omit optional `trim_end`; never serialize it as `null`.
+
+Clips may overlap both within and across tracks. Tracks and clips preserve
+declaration order. Linear gain is finite and non-negative: 0 is silence, 1 is
+unity, and values above 1 amplify. Mute, zero gain, and `output.audio` do not
+change validation or structural automatic duration. `output.audio` only makes
+authored audio eligible for muxing.
 
 Every image clip has a typed source, local timeline interval, layer, transform
 tracks, opacity track, and optional ordered colour effects. A track has a
@@ -123,7 +138,7 @@ is identity and its attack and decay use effect-local time. Motion blur samples 
 transforms, derives translation direction in screen space, and caps the
 directional blur. v1 does not derive blur from rotation or scale velocity.
 
-All valid schema-version 1 effects, blend modes, post-effects, transitions, and
+All valid schema-version 2 effects, blend modes, post-effects, transitions, and
 presets have WGPU plan mappings. `auto` can select CPU when no compatible
 adapter is available or WGPU preparation fails. Explicit `wgpu` reports adapter,
 device, resource, shader, or runtime failures. Once preparation selects WGPU,

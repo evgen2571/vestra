@@ -121,3 +121,16 @@ for pointer in [("name",), ("metadata",), ("audio",), ("output", "duration"), ("
 null_audio_trim = copy.deepcopy(project)
 null_audio_trim["audio"] = {"asset": "audio", "timeline_start": 0, "trim_start": 0, "trim_end": None, "volume": 1}
 assert errors(null_audio_trim), "explicit null audio trim_end must not validate"
+
+audio_timeline = copy.deepcopy(solid_colour)
+audio_timeline["assets"] = [{"id": "audio", "type": "audio", "source": "tone.wav"}]
+audio_timeline["audio"] = {"tracks": [{"id": "music", "gain": 1, "mute": False, "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "gain": 1, "fade_in": 0, "fade_out": 0, "mute": False}]}]}
+assert not errors(audio_timeline), "schema-v2 audio timeline must validate"
+
+old_audio_shape = copy.deepcopy(audio_timeline)
+old_audio_shape["audio"] = {"asset": "audio", "timeline_start": 0, "trim_start": 0, "volume": 1}
+assert errors(old_audio_shape), "old global audio shape must not validate"
+
+schema_v1 = copy.deepcopy(audio_timeline)
+schema_v1["schema_version"] = 1
+assert errors(schema_v1), "schema v1 must not validate"

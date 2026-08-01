@@ -13,7 +13,14 @@ pub(super) fn add_unused_assets(project: &Project, warnings: &mut Vec<Diagnostic
             crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
             crate::project::VisualSource::SolidColor { .. } => None,
         })
-        .chain(project.audio.iter().map(|track| track.asset.as_str()))
+        .chain(
+            project
+                .audio
+                .iter()
+                .flat_map(|timeline| timeline.tracks.iter())
+                .flat_map(|track| track.clips.iter())
+                .map(|clip| clip.asset.as_str()),
+        )
         .collect();
     for (index, asset) in project.assets.iter().enumerate() {
         if !used_assets.contains(asset.id.as_str()) {

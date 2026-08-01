@@ -179,3 +179,12 @@ WGPU execution in `crates/video-editor-render/src/wgpu`, parameter encoding,
 shader and pipeline mapping, prepared bind groups, capability coverage, a parity
 fixture, and a benchmark. Keep the effect-plan and evaluation behavior unchanged
 so neither renderer rediscovers ordering.
+# Audio timeline (schema v2)
+
+Audio semantics live in `video-editor-core`: `AudioTimeline` owns ordered
+`AudioTrack` lanes, and each track owns ordered `AudioClip` placements. Clips
+may overlap within or across tracks. The compiler produces a backend-neutral
+`AudioMixPlan`; FFmpeg syntax stays in the media crate. Phase 9A retains a
+temporary one-audible-clip bridge and deliberately rejects multi-clip muxing.
+Mute, zero gain, and `output.audio` do not skip validation or change automatic
+project duration.

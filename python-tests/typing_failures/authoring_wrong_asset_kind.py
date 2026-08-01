@@ -7,4 +7,4 @@ builder = ProjectBuilder(
 image = builder.add_image_asset("cover.png")
 audio = builder.add_audio_asset("music.wav")
 builder.add_image_clip(source=audio, start=0.0, duration=1.0, layer=0)
-builder.set_audio(asset=image, timeline_start=0.0, trim_start=0.0)
+builder.audio.add_track().add_clip(asset=image, start=0.0)

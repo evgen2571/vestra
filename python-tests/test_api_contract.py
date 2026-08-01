@@ -10,7 +10,7 @@ import video_editor
 
 
 VALID = {
-    "schema_version": 1,
+    "schema_version": 2,
     "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
     "assets": [],
     "visual": {"clips": []},
@@ -138,8 +138,8 @@ def test_every_preflight_constructor_preserves_its_exposed_state(tmp_path: Path)
 
 
 def test_from_dict_accepts_general_mappings() -> None:
-    assert video_editor.Project.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 1
-    assert video_editor.Project.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 1
+    assert video_editor.Project.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 2
+    assert video_editor.Project.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 2
 
     class DeterministicMapping(Mapping[str, object]):
         def __init__(self, values: dict[str, object]) -> None:

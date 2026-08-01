@@ -19,7 +19,7 @@ def builder(**changes: object) -> ProjectBuilder:
 
 
 def test_assets_clips_and_audio_serialize_in_registration_order() -> None:
-    authored = builder()
+    authored = builder(output_audio=True)
     image = authored.add_image_asset("examples/assets/red.png")
     audio = authored.add_audio_asset(Path("examples/assets/tone.wav"))
     second_image = authored.add_image_asset("examples/assets/blue.png")
@@ -27,7 +27,8 @@ def test_assets_clips_and_audio_serialize_in_registration_order() -> None:
     solid = authored.add_solid_color_clip(colour="#112233", start=1, duration=1, layer=-1)
     clip.transform.position.base_value = Point(0.25, 0.75)
     clip.set_crop(Crop(0, 0, 1, 1))
-    authored.set_audio(asset=audio, timeline_start=0, trim_start=0, fade_in=0.1)
+    track = authored.audio.add_track(id="music")
+    track.add_clip(asset=audio, start=0, fade_in=0.1)
 
     data = authored.to_dict()
     assets = cast(list[dict[str, Any]], data["assets"])
@@ -40,7 +41,7 @@ def test_assets_clips_and_audio_serialize_in_registration_order() -> None:
     assert first["crop"] == {"base_value": {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0}}
     assert clips[1]["source"] == {"type": "solid_color", "colour": "#112233"}
     assert cast(dict[str, Any], data["output"])["audio"] is True
-    assert cast(dict[str, Any], data["audio"])["asset"] == audio.id
+    assert cast(dict[str, Any], data["audio"])["tracks"][0]["clips"][0]["asset"] == audio.id
     assert authored.validate().is_valid
 
 
@@ -53,12 +54,13 @@ def test_asset_and_clip_ownership_and_category_rules() -> None:
         left.add_audio_asset("other.wav", id="same")
     with pytest.raises(TypeError):
         left.add_image_clip(source=audio, start=0, duration=1, layer=0)  # type: ignore[arg-type]
+    track = left.audio.add_track()
     with pytest.raises(TypeError):
-        left.set_audio(asset=image, timeline_start=0, trim_start=0)  # type: ignore[arg-type]
+        track.add_clip(asset=image, start=0)  # type: ignore[arg-type]
     with pytest.raises(AuthoringError):
         right.add_image_clip(source=image, start=0, duration=1, layer=0)
     with pytest.raises(AuthoringError):
-        right.set_audio(asset=audio, timeline_start=0, trim_start=0)
+        right.audio.add_track().add_clip(asset=audio, start=0)
     assert image != right.add_image_asset("image.png", id="same")
 
 
@@ -80,12 +82,12 @@ def test_mutation_is_validated_and_snapshots_are_isolated() -> None:
 
 
 def test_cpu_frame_and_video_cover_solid_image_and_audio(tmp_path: Path) -> None:
-    authored = builder(base_directory=Path.cwd(), duration=None)
+    authored = builder(base_directory=Path.cwd(), duration=None, output_audio=True)
     image = authored.add_image_asset("examples/assets/red.png")
     audio = authored.add_audio_asset("examples/assets/tone.wav")
     authored.add_solid_color_clip(colour="#0000ff", start=0, duration=0.2, layer=0)
     authored.add_image_clip(source=image, start=0, duration=0.2, layer=1, sizing=Sizing.stretch(width=160, height=90))
-    authored.set_audio(asset=audio, timeline_start=0, trim_start=0, trim_end=0.2)
+    authored.audio.add_track().add_clip(asset=audio, start=0, trim_end=0.2)
     project = authored.build()
     prepared = video_editor.Editor().prepare(
         project, video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),

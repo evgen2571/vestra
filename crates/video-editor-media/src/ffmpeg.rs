@@ -426,6 +426,9 @@ mod tests {
                         gain: 1.0 / 512.0,
                         fade_in: 0.0,
                         fade_out: 0.0,
+                        gain_automation: None,
+                        fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                        fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
                     })
                     .collect(),
             }],
@@ -470,6 +473,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let settings = EncoderSettings {
             width: 2,
@@ -528,13 +534,13 @@ mod tests {
     }
 
     #[test]
-    fn production_aac_decodes_reused_tones_and_overlap() {
+    fn production_aac_decodes_phase9c_automation_and_equal_power_crossfade() {
         let directory = tempfile::tempdir().expect("temporary render directory");
         let low = directory.path().join("440.wav");
         let high = directory.path().join("880.wav");
         write_sine_wav(&low, 440.0, 2.0);
         write_sine_wav(&high, 880.0, 2.0);
-        let clip = |id: &str, path: std::path::PathBuf, start: f64, gain: f64| AudioClipPlan {
+        let clip = |id: &str, path: std::path::PathBuf, start: f64| AudioClipPlan {
             id: id.to_owned(),
             asset: id.to_owned(),
             path,
@@ -542,9 +548,12 @@ mod tests {
             trim_start: 0.0,
             selected_duration: 1.0,
             mute: false,
-            gain,
+            gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let settings = EncoderSettings {
             width: 2,
@@ -557,19 +566,38 @@ mod tests {
             audio_mix: Some(AudioMixPlan {
                 tracks: vec![
                     AudioTrackPlan {
-                        id: "low".to_owned(),
+                        id: "outgoing".to_owned(),
                         mute: false,
-                        gain: 0.5,
-                        clips: vec![
-                            clip("low-first", low.clone(), 0.12345, 1.0),
-                            clip("low-second", low, 0.75, 0.5),
-                        ],
+                        gain: 1.0,
+                        clips: vec![AudioClipPlan {
+                            fade_out: 0.5,
+                            fade_out_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+                            ..clip("low", low, 0.0)
+                        }],
                     },
                     AudioTrackPlan {
-                        id: "high".to_owned(),
+                        id: "incoming".to_owned(),
                         mute: false,
-                        gain: 0.25,
-                        clips: vec![clip("high", high, 0.12345, 1.0)],
+                        gain: 1.0,
+                        clips: vec![AudioClipPlan {
+                            fade_in: 0.5,
+                            fade_in_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+                            gain_automation: Some(video_editor_core::project::AudioGainAutomation {
+                                keyframes: vec![
+                                    video_editor_core::project::AudioGainKeyframe {
+                                        time: 0.0,
+                                        gain: 0.4,
+                                        interpolation: video_editor_core::project::AudioGainInterpolation::Hold,
+                                    },
+                                    video_editor_core::project::AudioGainKeyframe {
+                                        time: 0.12345,
+                                        gain: 1.0,
+                                        interpolation: video_editor_core::project::AudioGainInterpolation::Hold,
+                                    },
+                                ],
+                            }),
+                            ..clip("high", high, 0.5)
+                        }],
                     },
                 ],
             }),
@@ -608,21 +636,31 @@ mod tests {
             .chunks_exact(4)
             .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("f32")))
             .collect::<Vec<_>>();
-        let quiet = rms(&samples[..(0.08 * 48_000.0) as usize * 2]);
-        let overlap_start = (0.25 * 48_000.0) as usize * 2;
-        let overlap_end = (0.65 * 48_000.0) as usize * 2;
-        let overlap = &samples[overlap_start..overlap_end];
+        let window = |start: f64| {
+            let first = (start * 48_000.0) as usize * 2;
+            let last = ((start + 0.05) * 48_000.0) as usize * 2;
+            &samples[first..last]
+        };
+        let early = window(0.60);
+        let middle = window(0.73);
+        let late = window(0.90);
+        assert!(rms(early) > 0.01, "decoded AAC contains audible audio");
         assert!(
-            rms(overlap) > quiet * 10.0,
-            "AAC pre-onset region must stay quiet"
+            tone_correlation(early, 440.0, 0.60) > tone_correlation(early, 880.0, 0.10) * 3.0,
+            "outgoing 440 Hz dominates early in the overlap"
         );
         assert!(
-            tone_correlation(overlap, 440.0, 0.25) > 0.005,
-            "AAC retained 440 Hz"
+            tone_correlation(middle, 440.0, 0.73) > 0.01
+                && tone_correlation(middle, 880.0, 0.23) > 0.01,
+            "both tones remain present around the equal-power midpoint"
         );
         assert!(
-            tone_correlation(overlap, 880.0, 0.25) > 0.002,
-            "AAC retained 880 Hz"
+            tone_correlation(late, 880.0, 0.40) > tone_correlation(late, 440.0, 0.90) * 3.0,
+            "incoming 880 Hz dominates late in the overlap"
+        );
+        assert!(
+            tone_correlation(middle, 880.0, 0.23) > tone_correlation(early, 880.0, 0.10) * 1.5,
+            "incoming automation produces a measurable louder region after its 0.12345 s boundary"
         );
     }
 
@@ -693,6 +731,9 @@ mod tests {
                 gain: 1.0,
                 fade_in: 0.0,
                 fade_out: 0.0,
+                gain_automation: None,
+                fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
             })
             .collect();
         let graph = audio_graph::compile(
@@ -725,6 +766,9 @@ mod tests {
             gain,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let graph = audio_graph::compile(
             &AudioMixPlan {
@@ -869,6 +913,9 @@ mod tests {
                         gain: 1.0,
                         fade_in: 0.0,
                         fade_out: 0.0,
+                        gain_automation: None,
+                        fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                        fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
                     }],
                 }],
             }),

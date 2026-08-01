@@ -555,6 +555,27 @@
                       "type": "number",
                       "minimum": 0
                     },
+                    "gain_automation": {
+                      "type": "object",
+                      "required": ["keyframes"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "keyframes": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "type": "object",
+                            "required": ["time", "gain"],
+                            "additionalProperties": false,
+                            "properties": {
+                              "time": {"type": "number", "minimum": 0},
+                              "gain": {"type": "number", "minimum": 0},
+                              "interpolation": {"enum": ["linear", "hold"]}
+                            }
+                          }
+                        }
+                      }
+                    },
                     "fade_in": {
                       "type": "number",
                       "minimum": 0
@@ -562,6 +583,12 @@
                     "fade_out": {
                       "type": "number",
                       "minimum": 0
+                    },
+                    "fade_in_curve": {
+                      "enum": ["linear", "equal_power"]
+                    },
+                    "fade_out_curve": {
+                      "enum": ["linear", "equal_power"]
                     }
                   }
                 }

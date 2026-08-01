@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import video_editor
 from video_editor import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
 from video_editor.authoring import (
-    AudioAsset, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
+    AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
     Preset, ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
 )
 
@@ -58,6 +58,12 @@ if TYPE_CHECKING:
     solid_clip: SolidColorClip = builder.add_solid_color_clip(colour="#112233", start=0.0, duration=1.0, layer=1)
     track = builder.audio.add_track(id="music")
     audio_clip = track.add_clip(asset=audio, start=0.0)
+    audio_clip.set_gain_automation([
+        AudioGainKeyframe(time=0.0, gain=0.0, interpolation=AudioGainInterpolation.LINEAR),
+        AudioGainKeyframe(time=0.25, gain=1.0, interpolation=AudioGainInterpolation.HOLD),
+    ])
+    incoming_audio_clip = track.add_clip(asset=audio, start=0.5, trim_end=1.0)
+    builder.audio.crossfade(audio_clip, incoming_audio_clip, curve=AudioFadeCurve.EQUAL_POWER)
     scalar_keyframe: ScalarKeyframe = image_clip.opacity.keyframe(
         time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT,
     )
@@ -68,7 +74,7 @@ if TYPE_CHECKING:
     preset: Preset = image_clip.presets.apply_impact(seed=7, intensity=1.0)
     builder.timeline.shift_clip(image_clip, delta=0.0)
     builder.timeline.shift_clips([image_clip], delta=0.0)
-    assert preset and audio_clip
+    assert preset and audio_clip and incoming_audio_clip
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:
@@ -173,3 +179,12 @@ def test_invalid_transition_fixture_is_rejected() -> None:
     assert result.returncode == 1
     assert "Argument" in result.stdout
     assert result.stdout.count("read-only") == 4
+
+
+def test_invalid_audio_automation_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/authoring_invalid_audio_automation.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("error:") == 4

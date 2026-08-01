@@ -10,9 +10,9 @@ mod project;
 mod render;
 
 pub use application::{
-    InspectAssets, InspectAudio, InspectAudioClip, InspectAudioTrack, InspectOutput,
-    InspectResult as InspectionReport, RenderResult, RenderTimingScope, ValidateResult,
-    VersionResult,
+    InspectAssets, InspectAudio, InspectAudioClip, InspectAudioGainKeyframe, InspectAudioTrack,
+    InspectOutput, InspectResult as InspectionReport, RenderResult, RenderTimingScope,
+    ValidateResult, VersionResult,
 };
 pub use cancellation::CancellationToken;
 pub use dto::{AdapterDeviceType, AdapterInfo, GraphicsBackend, RenderPerformance};
@@ -29,6 +29,7 @@ pub use render::{
     BackendFallback, RenderBackendPreference as BackendPreference, RenderEvent,
     RenderFailureContext, RenderFailureStage, RenderObserverControl, RenderTimings,
 };
+pub use video_editor_core::project::{AudioFadeCurve, AudioGainInterpolation};
 pub use video_editor_core::{Category, Diagnostic, Severity};
 
 /// Structured outcome of deterministic project validation.

@@ -46,6 +46,7 @@ pub struct ResourceLimits {
     pub maximum_clips: usize,
     pub maximum_audio_tracks: usize,
     pub maximum_audio_clips: usize,
+    pub maximum_audio_gain_keyframes: usize,
     /// Maximum distinct resolved audio paths a single FFmpeg render may open.
     /// This is an execution resource bound, rather than a schema complexity bound.
     pub maximum_audio_sources: usize,
@@ -68,6 +69,7 @@ impl Default for ResourceLimits {
             maximum_clips: 10_000,
             maximum_audio_tracks: 256,
             maximum_audio_clips: 4_096,
+            maximum_audio_gain_keyframes: 16_384,
             // 128 leaves ample headroom below common per-process descriptor
             // limits for video stdin, output, pipes, demuxers, and FFmpeg internals.
             maximum_audio_sources: 128,
@@ -240,6 +242,7 @@ fn validate_audio(
     let mut track_ids = BTreeSet::new();
     let mut clip_ids = BTreeSet::new();
     let mut total = 0;
+    let mut total_gain_keyframes = 0;
     for (track_index, track) in audio.tracks.iter().enumerate() {
         let path = format!("/audio/tracks/{track_index}");
         if track.id.trim().is_empty() || !track_ids.insert(track.id.clone()) {
@@ -313,6 +316,37 @@ fn validate_audio(
                     &clip_path,
                 ));
             }
+            if let Some(automation) = &clip.gain_automation {
+                total_gain_keyframes += automation.keyframes.len();
+                if automation.keyframes.is_empty() {
+                    errors.push(Diagnostic::error(
+                        "MVP-AUDIO-AUTOMATION",
+                        Category::Semantic,
+                        "audio gain automation must contain at least one keyframe",
+                        format!("{clip_path}/gain_automation/keyframes"),
+                    ));
+                }
+                let mut previous = None;
+                for (keyframe_index, keyframe) in automation.keyframes.iter().enumerate() {
+                    let keyframe_path =
+                        format!("{clip_path}/gain_automation/keyframes/{keyframe_index}");
+                    if !nonnegative(keyframe.time)
+                        || (keyframe_index == 0 && keyframe.time != 0.0)
+                        || previous.is_some_and(|time| keyframe.time <= time)
+                    {
+                        errors.push(Diagnostic::error("MVP-AUDIO-AUTOMATION-TIME", Category::Semantic, "audio gain keyframe times must be finite, start at zero, and strictly increase", format!("{keyframe_path}/time")));
+                    }
+                    if !nonnegative(keyframe.gain) {
+                        errors.push(Diagnostic::error(
+                            "MVP-AUDIO-AUTOMATION-GAIN",
+                            Category::Semantic,
+                            "audio gain keyframe gain must be finite and non-negative",
+                            format!("{keyframe_path}/gain"),
+                        ));
+                    }
+                    previous = Some(keyframe.time);
+                }
+            }
         }
     }
     if total > limits.maximum_audio_clips {
@@ -320,6 +354,14 @@ fn validate_audio(
             "MVP-LIMIT-AUDIO-CLIPS",
             Category::Semantic,
             "audio timeline exceeds the clip limit",
+            "/audio/tracks",
+        ));
+    }
+    if total_gain_keyframes > limits.maximum_audio_gain_keyframes {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-AUDIO-GAIN-KEYFRAMES",
+            Category::Semantic,
+            "audio gain automation exceeds the project keyframe limit",
             "/audio/tracks",
         ));
     }
@@ -497,6 +539,79 @@ mod tests {
             non_finite_codes
                 .iter()
                 .any(|code| code == "MVP-AUDIO-CLIP-GAIN")
+        );
+    }
+
+    #[test]
+    fn audio_gain_automation_validates_order_values_and_audibility_independently() {
+        let automation = |keyframes: Value| {
+            json!({"tracks": [json!({"id": "music", "clips": [json!({
+                "id": "clip-a", "asset": "audio", "start": 0.0, "trim_start": 0.0,
+                "gain_automation": {"keyframes": keyframes}
+            })]})]})
+        };
+        let valid = project(automation(json!([
+            {"time": 0.0, "gain": 1.5, "interpolation": "linear"},
+            {"time": 0.25, "gain": 0.0, "interpolation": "hold"},
+            {"time": 0.5, "gain": 2.0}
+        ])));
+        assert!(accepted(&valid, ResourceLimits::default()));
+        for (keyframes, code) in [
+            (json!([]), "MVP-AUDIO-AUTOMATION"),
+            (
+                json!([{"time": 0.1, "gain": 1.0}]),
+                "MVP-AUDIO-AUTOMATION-TIME",
+            ),
+            (
+                json!([{"time": 0.0, "gain": 1.0}, {"time": 0.0, "gain": 1.0}]),
+                "MVP-AUDIO-AUTOMATION-TIME",
+            ),
+            (
+                json!([{"time": 0.0, "gain": -1.0}]),
+                "MVP-AUDIO-AUTOMATION-GAIN",
+            ),
+        ] {
+            assert!(has(&project(automation(keyframes)), code));
+        }
+        let mut non_finite = valid.clone();
+        non_finite.audio.as_mut().expect("audio").tracks[0].clips[0]
+            .gain_automation
+            .as_mut()
+            .expect("automation")
+            .keyframes[0]
+            .gain = f64::NAN;
+        assert!(has(&non_finite, "MVP-AUDIO-AUTOMATION-GAIN"));
+        let mut muted = project(automation(json!([{"time": 0.1, "gain": 1.0}])));
+        muted.audio.as_mut().expect("audio").tracks[0].mute = true;
+        muted.output.audio = false;
+        assert!(has(&muted, "MVP-AUDIO-AUTOMATION-TIME"));
+    }
+
+    #[test]
+    fn audio_gain_keyframe_limit_is_inclusive() {
+        let limits = ResourceLimits {
+            maximum_audio_gain_keyframes: 2,
+            ..ResourceLimits::default()
+        };
+        let points = |count| {
+            (0..count)
+                .map(|index| json!({"time": index as f64, "gain": 1.0}))
+                .collect::<Vec<_>>()
+        };
+        assert!(accepted(
+            &project(
+                json!({"tracks": [json!({"id": "music", "clips": [json!({"id": "clip", "asset": "audio", "start": 0.0, "trim_start": 0.0, "gain_automation": {"keyframes": points(2)}})]})]})
+            ),
+            limits
+        ));
+        let over = project(
+            json!({"tracks": [json!({"id": "music", "clips": [json!({"id": "clip", "asset": "audio", "start": 0.0, "trim_start": 0.0, "gain_automation": {"keyframes": points(3)}})]})]}),
+        );
+        assert!(
+            validate(&over, limits)
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "MVP-LIMIT-AUDIO-GAIN-KEYFRAMES")
         );
     }
 

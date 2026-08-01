@@ -2,7 +2,10 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use video_editor_core::plan_audio::{AudioClipPlan, AudioMixPlan};
+use video_editor_core::{
+    plan_audio::{AudioClipPlan, AudioMixPlan},
+    project::{AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation},
+};
 
 use crate::MediaError;
 
@@ -17,7 +20,7 @@ pub(crate) struct FfmpegAudioGraph {
 
 /// Convert non-negative timeline seconds to the nearest 48 kHz sample. Ties
 /// round away from zero, which for the schema's non-negative times is upward.
-pub(crate) fn seconds_to_samples(seconds: f64) -> Result<u64, MediaError> {
+pub fn seconds_to_samples(seconds: f64) -> Result<u64, MediaError> {
     if !seconds.is_finite() || seconds < 0.0 {
         return Err(MediaError::InvalidAudioTiming(format!(
             "seconds must be finite and non-negative, got {seconds}"
@@ -206,13 +209,18 @@ impl GraphBuilder {
             "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS,volume=volume={}",
             number(clip.gain)
         )];
-        if fade_in > 0 {
-            filters.push(format!("afade=t=in:ss=0:ns={fade_in}:curve=tri"));
-        }
-        if fade_out > 0 {
+        let envelope = envelope_expression(
+            clip.gain_automation.as_ref(),
+            fade_in,
+            fade_out,
+            selected,
+            clip,
+        )?;
+        if envelope != "1" {
+            // `aeval` evaluates its expression for every input sample. `volume`
+            // cannot do this: it only supports once or audio-frame evaluation.
             filters.push(format!(
-                "afade=t=out:ss={}:ns={fade_out}:curve=tri",
-                selected - fade_out
+                "aeval=exprs='val(0)*({envelope})|val(1)*({envelope})':c=stereo,aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo"
             ));
         }
         filters.push(format!("adelay={timeline_start}S:all=1[{label}]"));
@@ -240,13 +248,157 @@ impl GraphBuilder {
     }
 }
 
+fn envelope_expression(
+    automation: Option<&AudioGainAutomation>,
+    fade_in: u64,
+    fade_out: u64,
+    selected: u64,
+    clip: &AudioClipPlan,
+) -> Result<String, MediaError> {
+    let mut factors = Vec::new();
+    if let Some(automation) = automation {
+        factors.push(automation_expression(automation, clip)?);
+    }
+    if fade_in > 0 {
+        let duration = number(fade_in as f64 / MIX_SAMPLE_RATE as f64);
+        factors.push(fade_expression(true, &clip.fade_in_curve, "t", &duration));
+    }
+    if fade_out > 0 {
+        let start = number((selected - fade_out) as f64 / MIX_SAMPLE_RATE as f64);
+        let duration = number(fade_out as f64 / MIX_SAMPLE_RATE as f64);
+        let progress = format!("(t-{start})/{duration}");
+        factors.push(format!(
+            "if(lt(t,{start}),1,{})",
+            fade_expression(false, &clip.fade_out_curve, &progress, "1")
+        ));
+    }
+    if factors.is_empty() {
+        Ok("1".to_owned())
+    } else {
+        Ok(factors.join("*"))
+    }
+}
+
+fn automation_expression(
+    automation: &AudioGainAutomation,
+    clip: &AudioClipPlan,
+) -> Result<String, MediaError> {
+    if automation.keyframes.is_empty() {
+        return Ok("1".to_owned());
+    }
+
+    let sample_times = automation
+        .keyframes
+        .iter()
+        .map(|keyframe| seconds_to_samples(keyframe.time))
+        .collect::<Result<Vec<_>, _>>()?;
+    for (index, pair) in sample_times.windows(2).enumerate() {
+        if pair[1] <= pair[0] {
+            return Err(MediaError::InvalidAudioTiming(format!(
+                "gain automation for audio clip '{}' has keyframes {} and {} at the same 48 kHz mixer sample",
+                clip.id,
+                index,
+                index + 1
+            )));
+        }
+    }
+
+    // There is one leaf for every linear or hold segment plus the final hold.
+    // A midpoint dispatch keeps parser nesting logarithmic while this single
+    // String is appended in-place, avoiding repeated copies of completed trees.
+    let mut expression = String::new();
+    append_automation_tree(
+        &mut expression,
+        &automation.keyframes,
+        &sample_times,
+        0,
+        automation.keyframes.len(),
+    );
+    Ok(expression)
+}
+
+fn append_automation_tree(
+    output: &mut String,
+    keyframes: &[video_editor_core::project::AudioGainKeyframe],
+    sample_times: &[u64],
+    start: usize,
+    end: usize,
+) {
+    if end - start == 1 {
+        append_automation_leaf(output, keyframes, sample_times, start);
+        return;
+    }
+    let middle = start + (end - start) / 2;
+    output.push_str("if(lt(t,");
+    output.push_str(&number(
+        sample_times[middle] as f64 / MIX_SAMPLE_RATE as f64,
+    ));
+    output.push_str("),");
+    append_automation_tree(output, keyframes, sample_times, start, middle);
+    output.push(',');
+    append_automation_tree(output, keyframes, sample_times, middle, end);
+    output.push(')');
+}
+
+fn append_automation_leaf(
+    output: &mut String,
+    keyframes: &[video_editor_core::project::AudioGainKeyframe],
+    sample_times: &[u64],
+    index: usize,
+) {
+    let first = &keyframes[index];
+    if index + 1 == keyframes.len() {
+        output.push_str(&number(first.gain));
+        return;
+    }
+    match first.interpolation {
+        AudioGainInterpolation::Hold => output.push_str(&number(first.gain)),
+        AudioGainInterpolation::Linear => {
+            let second = &keyframes[index + 1];
+            let first_time = number(sample_times[index] as f64 / MIX_SAMPLE_RATE as f64);
+            let second_time = number(sample_times[index + 1] as f64 / MIX_SAMPLE_RATE as f64);
+            output.push_str(&number(first.gain));
+            output.push_str("+(");
+            output.push_str(&number(second.gain));
+            output.push('-');
+            output.push_str(&number(first.gain));
+            output.push_str(")*(t-");
+            output.push_str(&first_time);
+            output.push_str(")/(");
+            output.push_str(&second_time);
+            output.push('-');
+            output.push_str(&first_time);
+            output.push(')');
+        }
+    }
+}
+
+fn fade_expression(
+    incoming: bool,
+    curve: &AudioFadeCurve,
+    progress: &str,
+    linear_duration: &str,
+) -> String {
+    let progress = if linear_duration == "1" {
+        progress.to_owned()
+    } else {
+        format!("({progress})/{linear_duration}")
+    };
+    match (incoming, curve) {
+        (true, AudioFadeCurve::Linear) => format!("min(1,{progress})"),
+        (false, AudioFadeCurve::Linear) => format!("max(0,1-({progress}))"),
+        (true, AudioFadeCurve::EqualPower) => format!("sin(PI*min(1,{progress})/2)"),
+        (false, AudioFadeCurve::EqualPower) => format!("cos(PI*min(1,{progress})/2)"),
+    }
+}
+
 fn number(value: f64) -> String {
     format!("{value:.17}")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{compile, seconds_to_samples};
+    use super::{automation_expression, compile, seconds_to_samples};
     use std::{
         fs,
         path::PathBuf,
@@ -264,6 +416,74 @@ mod tests {
     }
 
     #[test]
+    fn balanced_automation_expressions_are_deterministic_and_parse_at_scale() {
+        for keyframe_count in [100, 1_000] {
+            let automation = automation_with_keyframes(keyframe_count);
+            let clip = automation_test_clip();
+            let first = automation_expression(&automation, &clip).expect("expression");
+            let second = automation_expression(&automation, &clip).expect("same expression");
+            assert_eq!(first, second);
+            assert!(
+                maximum_expression_depth(&first) <= 12,
+                "depth must be logarithmic"
+            );
+            assert_expression_parses(&first);
+        }
+    }
+
+    #[test]
+    fn configured_automation_limit_builds_with_logarithmic_depth() {
+        let automation = automation_with_keyframes(16_384);
+        let expression =
+            automation_expression(&automation, &automation_test_clip()).expect("expression");
+        assert!(
+            maximum_expression_depth(&expression) <= 20,
+            "depth must be logarithmic"
+        );
+        assert!(
+            expression.len() > 1_000_000,
+            "full configured limit was built"
+        );
+        assert_expression_parses(&expression);
+    }
+
+    #[test]
+    fn large_automation_executes_and_changes_the_signal() {
+        let directory = tempfile::tempdir().expect("temporary fixtures");
+        let source = directory.path().join("constant.wav");
+        write_mono_wav(&source, 48_000, 60_000, 0.1);
+        let automation = video_editor_core::project::AudioGainAutomation {
+            keyframes: (0..128)
+                .map(|index| video_editor_core::project::AudioGainKeyframe {
+                    time: index as f64 * 0.01,
+                    gain: if index % 2 == 0 { 0.25 } else { 0.75 },
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Hold,
+                })
+                .collect(),
+        };
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "automation".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![AudioClipPlan {
+                    path: source,
+                    selected_duration: 1.4,
+                    gain_automation: Some(automation),
+                    ..automation_test_clip()
+                }],
+            }],
+        };
+        let samples = render_pcm(&compile(&mix, 1.4).expect("large automation graph"), 1.4);
+        let amplitude = |frame: usize| samples[frame * 2].abs();
+        assert!(
+            amplitude(720) > amplitude(240) * 2.0,
+            "second hold is louder"
+        );
+        assert!(amplitude(720) > 0.02, "FFmpeg produced audible audio");
+    }
+
+    #[test]
     fn graph_order_and_normalization_are_deterministic() {
         let clip = |id: &str, path: &str| AudioClipPlan {
             id: id.to_owned(),
@@ -276,6 +496,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -324,6 +547,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -371,6 +597,9 @@ mod tests {
                         gain: 1.0,
                         fade_in: 0.0,
                         fade_out: 0.0,
+                        gain_automation: None,
+                        fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                        fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
                     })
                     .collect(),
             })
@@ -415,16 +644,67 @@ mod tests {
                     gain: 1.0,
                     fade_in: 0.5 / 48_000.0,
                     fade_out: 0.5 / 48_000.0,
+                    gain_automation: None,
+                    fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                    fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
                 }],
             }],
         };
         let graph = compile(&mix, 1.0).expect("quantized fades remain executable");
-        assert!(
-            graph
-                .filter_complex
-                .contains("afade=t=in:ss=0:ns=1:curve=tri")
-        );
-        assert!(!graph.filter_complex.contains("afade=t=out"));
+        assert!(graph.filter_complex.contains("aeval=exprs="));
+        assert!(graph.filter_complex.contains("min(1,(t)/"));
+    }
+
+    #[test]
+    fn automation_and_equal_power_fades_compile_to_sample_envelopes() {
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![AudioClipPlan {
+                    id: "clip".to_owned(),
+                    asset: "asset".to_owned(),
+                    path: PathBuf::from("tone.wav"),
+                    start: 0.0,
+                    trim_start: 0.0,
+                    selected_duration: 1.0,
+                    mute: false,
+                    gain: 0.5,
+                    gain_automation: Some(video_editor_core::project::AudioGainAutomation {
+                        keyframes: vec![
+                            video_editor_core::project::AudioGainKeyframe {
+                                time: 0.0,
+                                gain: 0.0,
+                                interpolation:
+                                    video_editor_core::project::AudioGainInterpolation::Linear,
+                            },
+                            video_editor_core::project::AudioGainKeyframe {
+                                time: 0.12345,
+                                gain: 1.0,
+                                interpolation:
+                                    video_editor_core::project::AudioGainInterpolation::Hold,
+                            },
+                            video_editor_core::project::AudioGainKeyframe {
+                                time: 0.5,
+                                gain: 0.25,
+                                interpolation:
+                                    video_editor_core::project::AudioGainInterpolation::Linear,
+                            },
+                        ],
+                    }),
+                    fade_in: 0.5,
+                    fade_out: 0.5,
+                    fade_in_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+                    fade_out_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+                }],
+            }],
+        };
+        let graph = compile(&mix, 1.0).expect("automation graph");
+        assert!(graph.filter_complex.contains("aeval=exprs="));
+        assert!(graph.filter_complex.contains("0.12345833333333334"));
+        assert!(graph.filter_complex.contains("sin(PI"));
+        assert!(graph.filter_complex.contains("cos(PI"));
     }
 
     #[test]
@@ -443,6 +723,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -534,6 +817,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -573,6 +859,9 @@ mod tests {
                     gain: 0.5,
                     fade_in: 0.1,
                     fade_out: 0.1,
+                    gain_automation: None,
+                    fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                    fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
                 }],
             }],
         };
@@ -598,6 +887,253 @@ mod tests {
     }
 
     #[test]
+    fn pcm_graph_applies_linear_hold_and_equal_power_envelopes_per_sample() {
+        let directory = tempfile::tempdir().expect("temporary fixtures");
+        let source = directory.path().join("constant.wav");
+        write_mono_wav(&source, 48_000, 96_000, 0.1);
+        let clip = |automation, fade_in, fade_out, fade_in_curve, fade_out_curve| AudioClipPlan {
+            id: "clip".to_owned(),
+            asset: "source".to_owned(),
+            path: source.clone(),
+            start: 0.0,
+            trim_start: 0.0,
+            selected_duration: 2.0,
+            mute: false,
+            gain: 1.0,
+            gain_automation: automation,
+            fade_in,
+            fade_out,
+            fade_in_curve,
+            fade_out_curve,
+        };
+        let automation = video_editor_core::project::AudioGainAutomation {
+            keyframes: vec![
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 0.0,
+                    gain: 0.0,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Linear,
+                },
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 1.0,
+                    gain: 1.0,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Hold,
+                },
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 1.12345,
+                    gain: 0.25,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Linear,
+                },
+            ],
+        };
+        let mix = |clip| AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+            }],
+        };
+        let automated = render_pcm(
+            &compile(
+                &mix(clip(
+                    Some(automation),
+                    0.0,
+                    0.0,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                )),
+                2.0,
+            )
+            .expect("automation graph"),
+            2.0,
+        );
+        let channel = |samples: &[f32], frame: usize| samples[frame * 2].abs();
+        let unity = channel(&automated, 48_000);
+        assert!((channel(&automated, 12_000) / unity - 0.25).abs() < 0.02);
+        assert!((channel(&automated, 36_000) / unity - 0.75).abs() < 0.02);
+        let boundary = seconds_to_samples(1.12345).expect("boundary") as usize;
+        assert!((channel(&automated, boundary - 1) / unity - 1.0).abs() < 0.02);
+        assert!((channel(&automated, boundary + 1) / unity - 0.25).abs() < 0.02);
+
+        let descending = video_editor_core::project::AudioGainAutomation {
+            keyframes: vec![
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 0.0,
+                    gain: 1.0,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Linear,
+                },
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 1.0,
+                    gain: 0.0,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Linear,
+                },
+            ],
+        };
+        let descending_pcm = render_pcm(
+            &compile(
+                &mix(clip(
+                    Some(descending),
+                    0.0,
+                    0.0,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                )),
+                2.0,
+            )
+            .expect("descending graph"),
+            2.0,
+        );
+        let descending_unity = channel(&descending_pcm, 1);
+        assert!((channel(&descending_pcm, 12_000) / descending_unity - 0.75).abs() < 0.02);
+        assert!((channel(&descending_pcm, 36_000) / descending_unity - 0.25).abs() < 0.02);
+
+        let equal = render_pcm(
+            &compile(
+                &mix(clip(
+                    None,
+                    1.0,
+                    0.0,
+                    video_editor_core::project::AudioFadeCurve::EqualPower,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                )),
+                2.0,
+            )
+            .expect("fade graph"),
+            2.0,
+        );
+        let reference = channel(&equal, 72_000);
+        assert!(
+            (channel(&equal, 24_000) / reference - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.02
+        );
+        let linear = render_pcm(
+            &compile(
+                &mix(clip(
+                    None,
+                    1.0,
+                    0.0,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                    video_editor_core::project::AudioFadeCurve::Linear,
+                )),
+                2.0,
+            )
+            .expect("linear fade graph"),
+            2.0,
+        );
+        let linear_reference = channel(&linear, 72_000);
+        assert!((channel(&linear, 24_000) / linear_reference - 0.5).abs() < 0.02);
+    }
+
+    #[test]
+    fn pcm_graph_multiplies_track_clip_and_automation_gain() {
+        let directory = tempfile::tempdir().expect("temporary fixtures");
+        let source = directory.path().join("constant.wav");
+        write_mono_wav(&source, 48_000, 48_000, 0.1);
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 0.5,
+                clips: vec![AudioClipPlan {
+                    id: "clip".to_owned(),
+                    asset: "source".to_owned(),
+                    path: source,
+                    start: 0.0,
+                    trim_start: 0.0,
+                    selected_duration: 1.0,
+                    mute: false,
+                    gain: 0.5,
+                    gain_automation: Some(video_editor_core::project::AudioGainAutomation {
+                        keyframes: vec![video_editor_core::project::AudioGainKeyframe {
+                            time: 0.0,
+                            gain: 0.5,
+                            interpolation:
+                                video_editor_core::project::AudioGainInterpolation::Linear,
+                        }],
+                    }),
+                    fade_in: 0.0,
+                    fade_out: 0.0,
+                    fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                    fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                }],
+            }],
+        };
+        let samples = render_pcm(&compile(&mix, 1.0).expect("composition graph"), 1.0);
+        // Mono normalization contributes 1/sqrt(2), then all three gains
+        // multiply: 0.1 * 1/sqrt(2) * 0.5 * 0.5 * 0.5.
+        assert!((samples[2_000 * 2] - 0.008_838_8).abs() < 0.001);
+    }
+
+    #[test]
+    fn equal_power_crossfade_keeps_squared_component_sum_near_one() {
+        let directory = tempfile::tempdir().expect("temporary fixtures");
+        let low = directory.path().join("440.wav");
+        let high = directory.path().join("880.wav");
+        write_sine_wav(&low, 440.0, 0.05);
+        write_sine_wav(&high, 880.0, 0.05);
+        let clip = |id: &str, path: PathBuf, fade_in: f64, fade_out: f64| AudioClipPlan {
+            id: id.to_owned(),
+            asset: id.to_owned(),
+            path,
+            start: 0.0,
+            trim_start: 0.0,
+            selected_duration: 0.5,
+            mute: false,
+            gain: 1.0,
+            gain_automation: None,
+            fade_in,
+            fade_out,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+        };
+        let mix = |clips| AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips,
+            }],
+        };
+        let reference = render_pcm(
+            &compile(
+                &mix(vec![
+                    clip("low", low.clone(), 0.0, 0.0),
+                    clip("high", high.clone(), 0.0, 0.0),
+                ]),
+                0.5,
+            )
+            .expect("reference graph"),
+            0.5,
+        );
+        let crossed = render_pcm(
+            &compile(
+                &mix(vec![
+                    clip("low", low, 0.0, 0.5),
+                    clip("high", high, 0.5, 0.0),
+                ]),
+                0.5,
+            )
+            .expect("crossfade graph"),
+            0.5,
+        );
+        for (frame, expected_low, expected_high) in [
+            (
+                12_000,
+                std::f64::consts::FRAC_1_SQRT_2,
+                std::f64::consts::FRAC_1_SQRT_2,
+            ),
+            (23_000, 0.07, 1.0),
+        ] {
+            let low_gain = tone_window_correlation(&crossed, 440.0, frame, 1_000)
+                / tone_window_correlation(&reference, 440.0, frame, 1_000);
+            let high_gain = tone_window_correlation(&crossed, 880.0, frame, 1_000)
+                / tone_window_correlation(&reference, 880.0, frame, 1_000);
+            assert!((low_gain - expected_low).abs() < 0.03);
+            assert!((high_gain - expected_high).abs() < 0.03);
+            assert!((low_gain * low_gain + high_gain * high_gain - 1.0).abs() < 0.06);
+        }
+    }
+
+    #[test]
     fn reused_source_branches_keep_independent_trim_gain_fade_and_placement() {
         let directory = tempfile::tempdir().expect("temporary fixtures");
         let source = directory.path().join("piecewise.wav");
@@ -616,6 +1152,9 @@ mod tests {
             gain,
             fade_in,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -665,6 +1204,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -707,6 +1249,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -748,6 +1293,9 @@ mod tests {
             gain: 1.0,
             fade_in: 0.0,
             fade_out: 0.0,
+            gain_automation: None,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -760,6 +1308,88 @@ mod tests {
         let samples = render_pcm(&compile(&mix, 0.5).expect("production graph"), 0.5);
         assert!(tone_correlation(&samples, 440.0) > 0.01);
         assert!(tone_correlation(&samples, 880.0) > 0.01);
+    }
+
+    fn automation_with_keyframes(count: usize) -> video_editor_core::project::AudioGainAutomation {
+        video_editor_core::project::AudioGainAutomation {
+            keyframes: (0..count)
+                .map(|index| video_editor_core::project::AudioGainKeyframe {
+                    time: index as f64 / 48_000.0,
+                    gain: if index % 2 == 0 { 0.25 } else { 0.75 },
+                    interpolation: if index % 3 == 0 {
+                        video_editor_core::project::AudioGainInterpolation::Hold
+                    } else {
+                        video_editor_core::project::AudioGainInterpolation::Linear
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    fn automation_test_clip() -> AudioClipPlan {
+        AudioClipPlan {
+            id: "automation-test".to_owned(),
+            asset: "source".to_owned(),
+            path: PathBuf::from("source.wav"),
+            start: 0.0,
+            trim_start: 0.0,
+            selected_duration: 1.0,
+            mute: false,
+            gain: 1.0,
+            gain_automation: None,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+        }
+    }
+
+    fn maximum_expression_depth(expression: &str) -> usize {
+        let mut depth = 0;
+        let mut maximum = 0;
+        for character in expression.chars() {
+            match character {
+                '(' => {
+                    depth += 1;
+                    maximum = maximum.max(depth);
+                }
+                ')' => depth -= 1,
+                _ => {}
+            }
+        }
+        maximum
+    }
+
+    fn assert_expression_parses(expression: &str) {
+        let directory = tempfile::tempdir().expect("temporary graph directory");
+        let graph_path = directory.path().join("automation-filtergraph.txt");
+        fs::write(
+            &graph_path,
+            format!("[0:a]aeval=exprs='val(0)*({expression})|val(1)*({expression})'[audio]"),
+        )
+        .expect("graph file");
+        let output = Command::new("ffmpeg")
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-t",
+                "0.01",
+                "-i",
+                "anullsrc=r=48000:cl=stereo",
+                "-/filter_complex",
+            ])
+            .arg(&graph_path)
+            .args(["-map", "[audio]", "-f", "null", "-"])
+            .output()
+            .expect("FFmpeg starts");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     fn render_pcm(graph: &super::FfmpegAudioGraph, duration: f64) -> Vec<f32> {
@@ -862,6 +1492,22 @@ mod tests {
     fn tone_correlation(samples: &[f32], frequency: f64) -> f64 {
         let frames = samples.len() / 2;
         (0..frames)
+            .map(|index| {
+                samples[index * 2] as f64
+                    * (std::f64::consts::TAU * frequency * index as f64 / 48_000.0).sin()
+            })
+            .sum::<f64>()
+            .abs()
+            / frames as f64
+    }
+
+    fn tone_window_correlation(
+        samples: &[f32],
+        frequency: f64,
+        start: usize,
+        frames: usize,
+    ) -> f64 {
+        (start..start + frames)
             .map(|index| {
                 samples[index * 2] as f64
                     * (std::f64::consts::TAU * frequency * index as f64 / 48_000.0).sin()

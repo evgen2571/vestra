@@ -12,6 +12,7 @@ mod output;
 mod probe;
 mod sink;
 
+pub use audio_graph::seconds_to_samples;
 pub use error::MediaError;
 pub use ffmpeg::FfmpegSink;
 pub use output::{OutputTarget, check_output, effective_parent};

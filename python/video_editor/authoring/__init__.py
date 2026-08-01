@@ -2,7 +2,7 @@
 
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset
-from .audio import AudioClip, AudioTimeline, AudioTrack
+from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
 from .presets import Preset, PresetCollection
@@ -38,6 +38,9 @@ __all__ = [
     "ActiveInterval",
     "AudioAsset",
     "AudioClip",
+    "AudioFadeCurve",
+    "AudioGainInterpolation",
+    "AudioGainKeyframe",
     "AudioTimeline",
     "AudioTrack",
     "BlendMode",

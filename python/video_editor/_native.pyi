@@ -5,7 +5,7 @@ from typing import Callable, ClassVar, final
 
 __all__ = [
     "BackendPreference", "BackendKind", "BackendFallback", "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Diagnostic", "Editor", "InspectAssets",
-    "InspectAudio", "InspectAudioClip", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
+    "InspectAudio", "InspectAudioClip", "InspectAudioGainKeyframe", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
     "PreflightReport", "Project", "ProjectError", "Severity", "ValidationReport",
     "VideoEditorError", "PreparationError", "FrameRenderError", "RenderError", "CancelledError", "PreparedProjectBusyError", "PrepareOptions", "PreparedProject", "PreparationReport", "PreparationTimings", "FrameRate", "Frame", "PreparedVideoRenderRequest", "RenderRequest", "CancellationToken", "RenderEvent", "RenderResult", "RenderTimingScope", "RenderTimings", "RenderPerformance", "RenderFailureContext", "RenderFailureStage", "native_version",
 ]
@@ -260,9 +260,24 @@ class InspectAudioClip:
     @property
     def gain(self) -> float: ...
     @property
+    def gain_automation(self) -> list[InspectAudioGainKeyframe]: ...
+    @property
     def fade_in(self) -> float: ...
     @property
     def fade_out(self) -> float: ...
+    @property
+    def fade_in_curve(self) -> str: ...
+    @property
+    def fade_out_curve(self) -> str: ...
+
+@final
+class InspectAudioGainKeyframe:
+    @property
+    def time(self) -> float: ...
+    @property
+    def gain(self) -> float: ...
+    @property
+    def interpolation(self) -> str: ...
 
 @final
 class InspectionReport:

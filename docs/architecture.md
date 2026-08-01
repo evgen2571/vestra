@@ -190,6 +190,12 @@ to 48 kHz stereo `fltp`, and uses `asplit` for repeated clip branches. Each
 branch trims and places itself in the sample domain, then the executor mixes
 clips into tracks, applies track gain, and mixes the tracks with
 `amix=...:duration=longest:dropout_transition=0:normalize=0`.
+Clip-local gain automation and audio fades run in the FFmpeg `aeval` stage,
+which evaluates the envelope for every 48 kHz sample. The automation compiler
+uses a balanced conditional dispatch tree, so expression nesting grows
+logarithmically with the number of keyframes. `volume` remains static gain only
+because FFmpeg evaluates it only once or per audio frame. Equal-power fades use
+sine for fade-in and cosine for fade-out.
 Seconds round to the nearest mixer sample, with ties upward for non-negative
 schema times. The master is padded or trimmed to the resolved project length.
 Large generated filtergraphs use a temporary file passed through FFmpeg 7+'s

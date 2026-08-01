@@ -14,6 +14,16 @@ with a unique `id`, optional `mute` (default `false`), optional linear `gain`
 (default `1.0`), and ordered `clips`. A clip has globally unique `id`, `asset`,
 `start`, `trim_start`, optional `trim_end`, `mute`, `gain`, `fade_in`, and
 `fade_out`. Omit optional `trim_end`; never serialize it as `null`.
+Optional `gain_automation` is `{ "keyframes": [...] }`; each keyframe has
+`time`, `gain`, and optional `interpolation` (`linear` by default, or `hold`).
+Automation is clip-local after source trimming, must contain at least one point,
+must start at `0`, and has strictly increasing finite nonnegative times and
+finite nonnegative gains. The final gain holds through clip end. Execution rounds
+each keyframe time to the nearest 48 kHz mixer sample, and successive keyframes
+must resolve to strictly increasing samples. Keyframes that collapse to one
+mixer sample are rejected during preflight. `fade_in_curve`
+and `fade_out_curve` are `linear` by default or `equal_power`. Equal-power uses
+`sin(pi*u/2)` for a fade-in and `cos(pi*u/2)` for a fade-out.
 
 Clips may overlap both within and across tracks. Tracks and clips preserve
 declaration order. Linear gain is finite and non-negative: 0 is silence, 1 is
@@ -37,6 +47,8 @@ One render may open at most 128 unique audible resolved source paths. This is
 an execution-resource limit, separate from the 4,096 authored audio-clip
 limit. The backend applies it after deduplication and before starting FFmpeg;
 muted and zero-effective-gain branches do not consume the budget.
+Projects may contain at most 16,384 authored audio gain keyframes, regardless
+of mute or output-audio settings.
 
 Every image clip has a typed source, local timeline interval, layer, transform
 tracks, opacity track, and optional ordered colour effects. A track has a

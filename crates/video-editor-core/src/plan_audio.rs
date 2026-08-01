@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, path::PathBuf};
 
-use crate::{Category, Diagnostic, output::AudioSettings, project::AudioTimeline};
+use crate::{Category, Diagnostic, project::AudioTimeline};
 
 #[derive(Clone, Debug, Default)]
 pub struct AudioMixPlan {
@@ -50,32 +50,6 @@ impl AudioMixPlan {
                     .count()
             })
             .sum()
-    }
-
-    /// Temporary Phase 9A bridge to the legacy one-input media sink.
-    #[must_use]
-    pub fn single_input_settings(&self, output_audio: bool) -> Option<AudioSettings> {
-        if !output_audio || self.audible_clip_count() != 1 {
-            return None;
-        }
-        self.tracks
-            .iter()
-            .filter(|track| !track.mute && track.gain > 0.0)
-            .find_map(|track| {
-                track
-                    .clips
-                    .iter()
-                    .find(|clip| !clip.mute && clip.gain > 0.0)
-                    .map(|clip| AudioSettings {
-                        path: clip.path.clone(),
-                        trim_start: clip.trim_start,
-                        selected_duration: clip.selected_duration,
-                        timeline_start: clip.start,
-                        volume: track.gain * clip.gain,
-                        fade_in: clip.fade_in,
-                        fade_out: clip.fade_out,
-                    })
-            })
     }
 }
 

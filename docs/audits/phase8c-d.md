@@ -44,15 +44,36 @@ remains deterministic colour-path coverage.
 
 ## Focused verification
 
-The focused preset, animation, and flash selection has 21 passing tests. The
-full Python suite has 209 passing tests and 4 adapter-gated WGPU skips. Rust
-workspace tests, formatting, workspace check, strict Clippy, schema validation,
-mypy, stubtest, and wheel build pass. The wheel includes the two new modules
-and `py.typed`. Python is 3.13.5, Rust is 1.96.1, Maturin is 1.14.1, and
-FFmpeg/FFprobe are 7.1.5. Normal WGPU remains adapter-gated; strict WGPU was
-not rerun here. A clean virtual environment installed the wheel outside the
-source tree, imported the new APIs, authored and validated a preset project,
-and resolved the timeline-helper signature.
+`test_authoring_preset_frames.py` adds five CPU frame tests using the
+asymmetric image fixture. Slow drift proves the clip-local start and its
+position/scale contribution; zoom punch proves peak and return; seeded impact
+proves the generated chromatic/tint pulse; heavy impact proves a distinct
+stronger native frame; focus reveal proves blur-to-focused progression.
+
+The same file proves all three finite invalid interval cases preserve authored
+data and report native `MVP-EFFECT-INTERVAL` at either
+`/visual/clips/0/preset/start` or `/visual/clips/0/preset/duration`. Its full
+project test includes solid and image clips, transform/opacity/crop animation,
+an animated clip effect, screen blending, a preset, an explicit clip shift,
+crossfade, flash, post-effect, global audio, CPU prepared frames, FFmpeg, and
+FFprobe. The probe finds a 32×24, 50-frame video stream and an audio stream;
+the temporary output is absent.
+
+`test_authoring_presets_timeline.py` resolves runtime hints and inspects every
+preset factory plus the timeline helpers, and confirms their constructors stay
+builder-owned. `test_typing.py` covers impact and both shift helpers; its
+negative fixture rejects a solid clip in the image-only helper, solid preset
+access, and replacement of helper collections. README now shifts before
+creating the helper transition and explicitly documents that existing
+transitions, flashes, and post-effect keyframes do not move.
+
+Focused Stage 1 tests: 28 passed. Full Python: 219 passed, 4 adapter-gated WGPU
+skips. `cargo fmt --all -- --check`, `cargo check --workspace`, strict Clippy,
+workspace tests, schema validation, mypy, stubtest, `maturin develop`, and
+`maturin build` passed. Python is 3.13.5, Rust/Cargo 1.96.1, Maturin 1.14.1,
+and FFmpeg/FFprobe 7.1.5. Normal WGPU remains adapter-gated; strict WGPU was
+not rerun in this environment. The wheel contains `py.typed` and the authoring
+modules; the release-candidate clean-wheel exercise belongs to Phase 8C-E.
 
 ## Verdict
 

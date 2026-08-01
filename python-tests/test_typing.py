@@ -6,7 +6,7 @@ import video_editor
 from video_editor import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
 from video_editor.authoring import (
     AudioAsset, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
-    ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
+    Preset, ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
 )
 
 if TYPE_CHECKING:
@@ -64,6 +64,10 @@ if TYPE_CHECKING:
     crop_keyframe: CropKeyframe = image_clip.crop.keyframe(time=0.5, value=Crop(0, 0, 1, 1))
     assert authored and authored_project and authored_report and point and sizing_original and sizing_scale and sizing_stretch and image_clip and solid_clip
     assert scalar_keyframe and point_keyframe and crop_keyframe
+    preset: Preset = image_clip.presets.apply_impact(seed=7, intensity=1.0)
+    builder.timeline.shift_clip(image_clip, delta=0.0)
+    builder.timeline.shift_clips([image_clip], delta=0.0)
+    assert preset
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:
@@ -167,4 +171,4 @@ def test_invalid_transition_fixture_is_rejected() -> None:
     )
     assert result.returncode == 1
     assert "Argument" in result.stdout
-    assert result.stdout.count("read-only") == 2
+    assert result.stdout.count("read-only") == 4

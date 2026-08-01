@@ -35,6 +35,42 @@ pub(crate) fn validate(
                 ));
                 continue;
             }
+            if clip.gain_automation.as_ref().is_some_and(|automation| {
+                automation
+                    .keyframes
+                    .last()
+                    .is_some_and(|keyframe| keyframe.time > trim_end - clip.trim_start + 1e-9)
+            }) {
+                errors.push(Diagnostic::error(
+                    "MVP-AUDIO-AUTOMATION-DURATION",
+                    Category::Semantic,
+                    "audio gain automation exceeds the selected source duration",
+                    format!("{path}/gain_automation/keyframes"),
+                ));
+                continue;
+            }
+            if let Some(automation) = &clip.gain_automation {
+                let mut previous = None;
+                for (keyframe_index, keyframe) in automation.keyframes.iter().enumerate() {
+                    let sample = match video_editor_media::seconds_to_samples(keyframe.time) {
+                        Ok(sample) => sample,
+                        Err(_) => continue,
+                    };
+                    if previous.is_some_and(|previous| sample <= previous) {
+                        errors.push(Diagnostic::error(
+                            "MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION",
+                            Category::Semantic,
+                            format!(
+                                "gain automation keyframe {keyframe_index} at {} seconds resolves to the same 48 kHz mixer sample as the preceding keyframe",
+                                keyframe.time
+                            ),
+                            format!("{path}/gain_automation/keyframes/{keyframe_index}"),
+                        ));
+                        break;
+                    }
+                    previous = Some(sample);
+                }
+            }
             end = Some(
                 end.unwrap_or(0.0)
                     .max(clip.start + trim_end - clip.trim_start),

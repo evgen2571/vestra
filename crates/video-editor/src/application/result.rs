@@ -84,8 +84,18 @@ pub struct InspectAudioClip {
     pub trim_end: f64,
     pub mute: bool,
     pub gain: f64,
+    pub gain_automation: Vec<InspectAudioGainKeyframe>,
     pub fade_in: f64,
     pub fade_out: f64,
+    pub fade_in_curve: video_editor_core::project::AudioFadeCurve,
+    pub fade_out_curve: video_editor_core::project::AudioFadeCurve,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InspectAudioGainKeyframe {
+    pub time: f64,
+    pub gain: f64,
+    pub interpolation: video_editor_core::project::AudioGainInterpolation,
 }
 
 pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
@@ -116,8 +126,24 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                                     trim_end,
                                     mute: clip.mute,
                                     gain: clip.gain,
+                                    gain_automation: clip.gain_automation.as_ref().map_or_else(
+                                        Vec::new,
+                                        |automation| {
+                                            automation
+                                                .keyframes
+                                                .iter()
+                                                .map(|keyframe| InspectAudioGainKeyframe {
+                                                    time: keyframe.time,
+                                                    gain: keyframe.gain,
+                                                    interpolation: keyframe.interpolation,
+                                                })
+                                                .collect()
+                                        },
+                                    ),
                                     fade_in: clip.fade_in,
                                     fade_out: clip.fade_out,
+                                    fade_in_curve: clip.fade_in_curve,
+                                    fade_out_curve: clip.fade_out_curve,
                                 }
                             })
                     })

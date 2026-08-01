@@ -206,4 +206,105 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn preflight_validates_automation_against_explicit_and_implicit_selected_duration() {
+        let source_duration =
+            video_editor_media::probe_audio_duration(std::path::Path::new(&tone_path()))
+                .expect("tone duration");
+        let project = |trim_end: Option<f64>, keyframe_time: f64| {
+            let mut value = json!({
+                "schema_version": 2,
+                "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": false, "duration_mode": "automatic"},
+                "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
+                "visual": {"clips": []},
+                "audio": {"tracks": [{"id": "music", "clips": [{"id": "clip", "asset": "tone", "start": 0.0, "trim_start": 0.0, "trim_end": trim_end, "gain_automation": {"keyframes": [{"time": 0.0, "gain": 1.0}, {"time": keyframe_time, "gain": 0.5}]}}]}]}
+            });
+            if trim_end.is_none() {
+                value["audio"]["tracks"][0]["clips"][0]
+                    .as_object_mut()
+                    .expect("clip object")
+                    .remove("trim_end");
+            }
+            Project::from_value(value, ".").expect("project")
+        };
+        let limits = ResourceLimits::default();
+        assert!(run(&project(Some(0.2), 0.2), limits).resolved.is_some());
+        let explicit_over = run(&project(Some(0.2), 0.21), limits);
+        assert!(
+            explicit_over
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "MVP-AUDIO-AUTOMATION-DURATION")
+        );
+        assert!(
+            run(&project(None, source_duration), limits)
+                .resolved
+                .is_some()
+        );
+        let implicit_over = run(&project(None, source_duration + 0.1), limits);
+        assert!(
+            implicit_over
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "MVP-AUDIO-AUTOMATION-DURATION")
+        );
+    }
+
+    #[test]
+    fn preflight_rejects_gain_keyframes_that_collapse_to_one_mixer_sample() {
+        let project = |second_time: f64, interpolation: &str| {
+            Project::from_value(
+                json!({
+                    "schema_version": 2,
+                    "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": false, "duration_mode": "automatic"},
+                    "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
+                    "visual": {"clips": []},
+                    "audio": {"tracks": [{"id": "music", "clips": [{"id": "clip", "asset": "tone", "start": 0.0, "trim_start": 0.0, "trim_end": 0.2, "gain_automation": {"keyframes": [
+                        {"time": 0.0, "gain": 1.0, "interpolation": interpolation},
+                        {"time": second_time, "gain": 0.5}
+                    ]}}]}]}
+                }),
+                ".",
+            )
+            .expect("project")
+        };
+        let limits = ResourceLimits::default();
+        assert!(
+            run(&project(1.0 / 48_000.0, "linear"), limits)
+                .resolved
+                .is_some()
+        );
+        for (time, interpolation) in [(0.000_001, "linear"), (0.000_001, "hold")] {
+            let outcome = run(&project(time, interpolation), limits);
+            assert!(outcome.resolved.is_none());
+            assert!(
+                outcome.diagnostics.iter().any(|diagnostic| {
+                    diagnostic.code == "MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION"
+                })
+            );
+        }
+
+        let nonzero = Project::from_value(
+            json!({
+                "schema_version": 2,
+                "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": false, "duration_mode": "automatic"},
+                "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
+                "visual": {"clips": []},
+                "audio": {"tracks": [{"id": "music", "clips": [{"id": "clip", "asset": "tone", "start": 0.0, "trim_start": 0.0, "trim_end": 0.75, "gain_automation": {"keyframes": [
+                    {"time": 0.0, "gain": 1.0}, {"time": 0.5, "gain": 0.8}, {"time": 0.500001, "gain": 0.5}
+                ]}}]}]}
+            }),
+            ".",
+        )
+        .expect("project");
+        let outcome = run(&nonzero, limits);
+        assert!(outcome.resolved.is_none());
+        assert!(
+            outcome
+                .diagnostics
+                .iter()
+                .any(|diagnostic| { diagnostic.code == "MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION" })
+        );
+    }
 }

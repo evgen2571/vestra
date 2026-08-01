@@ -790,9 +790,30 @@ struct PyInspectAudioClip {
     #[pyo3(get)]
     gain: f64,
     #[pyo3(get)]
+    gain_automation: Vec<PyInspectAudioGainKeyframe>,
+    #[pyo3(get)]
     fade_in: f64,
     #[pyo3(get)]
     fade_out: f64,
+    #[pyo3(get)]
+    fade_in_curve: String,
+    #[pyo3(get)]
+    fade_out_curve: String,
+}
+#[pyclass(
+    name = "InspectAudioGainKeyframe",
+    frozen,
+    skip_from_py_object,
+    module = "video_editor._native"
+)]
+#[derive(Clone)]
+struct PyInspectAudioGainKeyframe {
+    #[pyo3(get)]
+    time: f64,
+    #[pyo3(get)]
+    gain: f64,
+    #[pyo3(get)]
+    interpolation: String,
 }
 #[pyclass(
     name = "InspectionReport",
@@ -864,8 +885,36 @@ impl From<NativeInspection> for PyInspectionReport {
                                 trim_end: clip.trim_end,
                                 mute: clip.mute,
                                 gain: clip.gain,
+                                gain_automation: clip
+                                    .gain_automation
+                                    .into_iter()
+                                    .map(|keyframe| PyInspectAudioGainKeyframe {
+                                        time: keyframe.time,
+                                        gain: keyframe.gain,
+                                        interpolation: match keyframe.interpolation {
+                                            video_editor::AudioGainInterpolation::Linear => {
+                                                "linear".to_owned()
+                                            }
+                                            video_editor::AudioGainInterpolation::Hold => {
+                                                "hold".to_owned()
+                                            }
+                                        },
+                                    })
+                                    .collect(),
                                 fade_in: clip.fade_in,
                                 fade_out: clip.fade_out,
+                                fade_in_curve: match clip.fade_in_curve {
+                                    video_editor::AudioFadeCurve::Linear => "linear".to_owned(),
+                                    video_editor::AudioFadeCurve::EqualPower => {
+                                        "equal_power".to_owned()
+                                    }
+                                },
+                                fade_out_curve: match clip.fade_out_curve {
+                                    video_editor::AudioFadeCurve::Linear => "linear".to_owned(),
+                                    video_editor::AudioFadeCurve::EqualPower => {
+                                        "equal_power".to_owned()
+                                    }
+                                },
                             })
                             .collect(),
                     })
@@ -980,6 +1029,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyInspectAudio>()?;
     module.add_class::<PyInspectAudioTrack>()?;
     module.add_class::<PyInspectAudioClip>()?;
+    module.add_class::<PyInspectAudioGainKeyframe>()?;
     module.add_class::<PyInspectionReport>()?;
     prepared::register(module)?;
     render::register(module)?;
@@ -1013,6 +1063,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "InspectAudio",
                 "InspectAudioTrack",
                 "InspectAudioClip",
+                "InspectAudioGainKeyframe",
                 "InspectionReport",
                 "PrepareOptions",
                 "PreparedProject",

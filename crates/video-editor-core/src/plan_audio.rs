@@ -2,7 +2,10 @@
 
 use std::{collections::BTreeMap, path::PathBuf};
 
-use crate::{Category, Diagnostic, project::AudioTimeline};
+use crate::{
+    Category, Diagnostic,
+    project::{AudioFadeCurve, AudioGainAutomation, AudioTimeline},
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct AudioMixPlan {
@@ -27,8 +30,11 @@ pub struct AudioClipPlan {
     pub selected_duration: f64,
     pub mute: bool,
     pub gain: f64,
+    pub gain_automation: Option<AudioGainAutomation>,
     pub fade_in: f64,
     pub fade_out: f64,
+    pub fade_in_curve: AudioFadeCurve,
+    pub fade_out_curve: AudioFadeCurve,
 }
 
 impl AudioMixPlan {
@@ -98,8 +104,11 @@ pub fn compile(
                         selected_duration: clip.trim_end.unwrap_or(duration) - clip.trim_start,
                         mute: clip.mute,
                         gain: clip.gain,
+                        gain_automation: clip.gain_automation.clone(),
                         fade_in: clip.fade_in,
                         fade_out: clip.fade_out,
+                        fade_in_curve: clip.fade_in_curve,
+                        fade_out_curve: clip.fade_out_curve,
                     })
                 })
                 .collect::<Result<Vec<_>, Diagnostic>>()?;
@@ -119,7 +128,10 @@ mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
     use super::compile;
-    use crate::project::{AudioClip, AudioTimeline, AudioTrack};
+    use crate::project::{
+        AudioClip, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation, AudioGainKeyframe,
+        AudioTimeline, AudioTrack,
+    };
 
     fn clip(id: &str, asset: &str, start: f64) -> AudioClip {
         AudioClip {
@@ -129,8 +141,29 @@ mod tests {
             trim_start: 0.25,
             trim_end: Some(1.25),
             gain: 1.5,
+            gain_automation: Some(AudioGainAutomation {
+                keyframes: vec![
+                    AudioGainKeyframe {
+                        time: 0.0,
+                        gain: 0.4,
+                        interpolation: AudioGainInterpolation::Linear,
+                    },
+                    AudioGainKeyframe {
+                        time: 0.37,
+                        gain: 1.3,
+                        interpolation: AudioGainInterpolation::Hold,
+                    },
+                    AudioGainKeyframe {
+                        time: 0.91,
+                        gain: 0.2,
+                        interpolation: AudioGainInterpolation::Linear,
+                    },
+                ],
+            }),
             fade_in: 0.1,
             fade_out: 0.2,
+            fade_in_curve: AudioFadeCurve::EqualPower,
+            fade_out_curve: AudioFadeCurve::EqualPower,
             mute: id == "clip-a",
         }
     }
@@ -212,5 +245,22 @@ mod tests {
         assert_eq!(clip.gain, 1.5);
         assert_eq!(clip.fade_in, 0.1);
         assert_eq!(clip.fade_out, 0.2);
+        assert_eq!(clip.fade_in_curve, AudioFadeCurve::EqualPower);
+        assert_eq!(clip.fade_out_curve, AudioFadeCurve::EqualPower);
+        let keyframes = &clip
+            .gain_automation
+            .as_ref()
+            .expect("automation is preserved")
+            .keyframes;
+        assert_eq!(keyframes.len(), 3);
+        assert_eq!(keyframes[0].time, 0.0);
+        assert_eq!(keyframes[0].gain, 0.4);
+        assert_eq!(keyframes[0].interpolation, AudioGainInterpolation::Linear);
+        assert_eq!(keyframes[1].time, 0.37);
+        assert_eq!(keyframes[1].gain, 1.3);
+        assert_eq!(keyframes[1].interpolation, AudioGainInterpolation::Hold);
+        assert_eq!(keyframes[2].time, 0.91);
+        assert_eq!(keyframes[2].gain, 0.2);
+        assert_eq!(keyframes[2].interpolation, AudioGainInterpolation::Linear);
     }
 }

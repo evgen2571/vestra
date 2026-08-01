@@ -151,11 +151,39 @@ tracks with `builder.audio.add_track()` and ordered placements with
 switch; it controls mux eligibility and does not change authored timeline
 duration or validation. With `duration`, the builder emits `duration_mode:
 "explicit"`; without one it emits `"automatic"`, which native preflight
-resolves from visual and authored audio content. Mute, gain, and output muxing
+resolves from visual and authored audio content. A clip may also have
+clip-local gain automation with immutable `AudioGainKeyframe` values. It starts
+at zero seconds, uses `AudioGainInterpolation.LINEAR` or `.HOLD`, and holds its
+last multiplier through the selected clip end. Static clip gain multiplies the
+automation and fade envelopes. `builder.audio.crossfade(outgoing, incoming,
+curve=AudioFadeCurve.EQUAL_POWER)` configures matching fades over an existing,
+authoring-resolvable overlap; it never moves or trims either clip. Mute, gain, and output muxing
 do not change structural duration. `build()` parses only.
 `validate()` invokes deterministic native validation and keeps native
 diagnostics intact. Preflight and rendering remain separate operations and
 require their normal runtime dependencies.
+
+```python
+from video_editor.authoring import (
+    AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe,
+)
+
+music = builder.add_audio_asset("music.wav")
+outgoing = builder.audio.add_track(id="outgoing").add_clip(
+    asset=music, start=0.0, trim_end=4.0,
+)
+incoming = builder.audio.add_track(id="incoming").add_clip(
+    asset=music, start=3.0, trim_end=5.0,
+)
+outgoing.set_gain_automation([
+    AudioGainKeyframe(0.0, 0.0, AudioGainInterpolation.LINEAR),
+    AudioGainKeyframe(0.5, 1.0),
+])
+builder.audio.crossfade(outgoing, incoming, curve=AudioFadeCurve.EQUAL_POWER)
+```
+
+This uses the existing one-second overlap. The helper changes only fade
+durations and curves. It does not move either clip or rewrite source trims.
 
 Time domains are intentional: `clip.start`, transition starts, flash starts,
 and post-effect keyframes are project-relative. Transform, opacity, crop, and

@@ -18,7 +18,10 @@ pub use animation::{
     ActiveInterval, CubicBezier, CubicBezierKind, Interpolation, InterpolationName, Keyframe, Track,
 };
 pub use assets::{Asset, AssetType};
-pub use audio::{AudioClip, AudioTimeline, AudioTrack};
+pub use audio::{
+    AudioClip, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation, AudioGainKeyframe,
+    AudioTimeline, AudioTrack,
+};
 pub use colour::parse_colour;
 pub use effects::{Effect, ZoomBlurDirection};
 pub use output::{DurationMode, FrameRate, Output, Quality};

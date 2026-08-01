@@ -31,14 +31,55 @@ pub struct AudioClip {
     pub trim_end: Option<f64>,
     #[serde(default = "unity_gain")]
     pub gain: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_automation: Option<AudioGainAutomation>,
     #[serde(default)]
     pub fade_in: f64,
     #[serde(default)]
     pub fade_out: f64,
+    #[serde(default, skip_serializing_if = "is_linear_fade_curve")]
+    pub fade_in_curve: AudioFadeCurve,
+    #[serde(default, skip_serializing_if = "is_linear_fade_curve")]
+    pub fade_out_curve: AudioFadeCurve,
     #[serde(default)]
     pub mute: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AudioGainAutomation {
+    pub keyframes: Vec<AudioGainKeyframe>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AudioGainKeyframe {
+    pub time: f64,
+    pub gain: f64,
+    #[serde(default)]
+    pub interpolation: AudioGainInterpolation,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioGainInterpolation {
+    #[default]
+    Linear,
+    Hold,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioFadeCurve {
+    #[default]
+    Linear,
+    EqualPower,
+}
+
 const fn unity_gain() -> f64 {
     1.0
+}
+
+const fn is_linear_fade_curve(curve: &AudioFadeCurve) -> bool {
+    matches!(curve, AudioFadeCurve::Linear)
 }

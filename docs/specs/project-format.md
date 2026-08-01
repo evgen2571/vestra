@@ -21,6 +21,23 @@ unity, and values above 1 amplify. Mute, zero gain, and `output.audio` do not
 change validation or structural automatic duration. `output.audio` only makes
 authored audio eligible for muxing.
 
+When muxing is enabled, the FFmpeg backend opens each unique audible resolved
+source path once, in first track-and-clip-use order. Repeated clips fan out
+from that normalized 48 kHz stereo floating-point source with `asplit`, then
+perform their own trim, gain, fades, and placement. It rounds all non-negative
+logical seconds to the nearest 48 kHz sample, uses those samples for source
+trim and timeline placement, then linearly sums clips within each track and
+tracks at the master. FFmpeg mix normalization is disabled and the encoder
+adds no limiter or peak normalization. The final stream is padded or trimmed
+to the resolved project duration. Muted and zero-gain content remains part of
+project validation and duration calculation but does not create an output
+stream.
+
+One render may open at most 128 unique audible resolved source paths. This is
+an execution-resource limit, separate from the 4,096 authored audio-clip
+limit. The backend applies it after deduplication and before starting FFmpeg;
+muted and zero-effective-gain branches do not consume the budget.
+
 Every image clip has a typed source, local timeline interval, layer, transform
 tracks, opacity track, and optional ordered colour effects. A track has a
 `base_value` and strictly increasing keyframes. Keyframes are clip-local and

@@ -5,6 +5,7 @@
 //! deliberately does not render pixels, evaluate plans, coordinate progress,
 //! or present CLI diagnostics. Its workspace API is unstable.
 
+mod audio_graph;
 mod error;
 mod ffmpeg;
 mod output;
@@ -20,4 +21,4 @@ pub use probe::{
 };
 pub use sink::{FrameSink, SinkResult};
 
-pub use video_editor_core::output::{AudioSettings, EncoderSettings};
+pub use video_editor_core::output::EncoderSettings;

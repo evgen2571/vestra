@@ -10,7 +10,7 @@ schema-version 2 dictionary, then `build()` passes that dictionary to
 `Project.from_dict()` and returns the existing immutable native `Project`.
 There is no second project format.
 
-Phase 9A provides typed schema-version 2 audio timeline authoring. The old
+Phase 9B executes typed schema-version 2 audio mixer timelines. The old
 single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
@@ -441,8 +441,7 @@ Use `import video_editor`. `Project.from_dict()` follows the same native path
 as JSON. It is a lower-level way to construct the same current canonical
 schema-version 2 model, useful for canonical JSON, low-level integrations, and
 generated project dictionaries. It represents ordered multi-track audio
-timelines but, in Phase 9A, runtime muxing supports only one audible clip;
-general multi-input mixing is deferred to Phase 9B. Video assets, nested
+timelines and renders arbitrary valid static multi-input mixes. Video assets, nested
 compositions, and audio-reactive visual systems remain future work. Package path properties return
 `pathlib.Path` values. The binding audits are recorded in
 `docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and

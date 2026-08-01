@@ -1,6 +1,6 @@
 //! Backend-neutral output settings produced by render-plan compilation.
 
-use std::path::PathBuf;
+use crate::plan_audio::AudioMixPlan;
 
 #[derive(Clone, Debug)]
 pub struct EncoderSettings {
@@ -10,16 +10,9 @@ pub struct EncoderSettings {
     pub frame_count: u64,
     pub duration: f64,
     pub quality_crf: u8,
-    pub audio: Option<AudioSettings>,
-}
-
-#[derive(Clone, Debug)]
-pub struct AudioSettings {
-    pub path: PathBuf,
-    pub trim_start: f64,
-    pub selected_duration: f64,
-    pub timeline_start: f64,
-    pub volume: f64,
-    pub fade_in: f64,
-    pub fade_out: f64,
+    /// Per-operation FFmpeg input-resource bound from `ResourceLimits`.
+    pub maximum_audio_sources: usize,
+    /// The one logical audio description consumed by the media executor.
+    /// `None` means this operation produces video only.
+    pub audio_mix: Option<AudioMixPlan>,
 }

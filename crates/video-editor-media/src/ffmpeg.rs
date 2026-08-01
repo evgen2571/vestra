@@ -1,12 +1,17 @@
 use std::{
+    fs,
     io::{Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
 };
 
 use video_editor_render::CompletedFrame;
 
-use crate::{AudioSettings, EncoderSettings, FrameSink, MediaError, SinkResult};
+use crate::{EncoderSettings, FrameSink, MediaError, SinkResult, audio_graph, effective_parent};
+
+/// Keep the generated filtergraph comfortably below common command-line
+/// budgets. This is an execution detail, not a project limit.
+pub(crate) const FILTERGRAPH_SCRIPT_THRESHOLD_BYTES: usize = 64 * 1024;
 
 pub struct FfmpegSink {
     child: Option<Child>,
@@ -15,6 +20,7 @@ pub struct FfmpegSink {
     expected_frame: u64,
     expected_bytes: usize,
     state: SinkState,
+    filtergraph_file: Option<TemporaryFiltergraph>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,6 +33,7 @@ enum SinkState {
 impl FfmpegSink {
     pub fn start(settings: &EncoderSettings, output: &Path) -> Result<Self, MediaError> {
         let mut command = Command::new("ffmpeg");
+        let mut filtergraph_file = None;
         command
             .args([
                 "-hide_banner",
@@ -46,8 +53,11 @@ impl FfmpegSink {
                 settings.frame_rate.0, settings.frame_rate.1
             ))
             .args(["-i", "pipe:0"]);
-        if let Some(audio) = &settings.audio {
-            add_audio(&mut command, audio, settings.duration);
+        if let Some(audio_mix) = &settings.audio_mix {
+            let audio = audio_graph::compile(audio_mix, settings.duration)?;
+            debug_assert_eq!(audio.clip_branch_count, audio_mix.audible_clip_count());
+            filtergraph_file =
+                add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
         } else {
             command.args(["-map", "0:v:0"]);
         }
@@ -61,9 +71,18 @@ impl FfmpegSink {
             "-pix_fmt",
             "yuv420p",
         ]);
-        if settings.audio.is_some() {
+        if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
+        Self::spawn(command, settings, output, filtergraph_file)
+    }
+
+    fn spawn(
+        mut command: Command,
+        settings: &EncoderSettings,
+        output: &Path,
+        filtergraph_file: Option<TemporaryFiltergraph>,
+    ) -> Result<Self, MediaError> {
         let mut child = command
             .args(["-movflags", "+faststart"])
             .arg(output)
@@ -98,6 +117,7 @@ impl FfmpegSink {
             expected_frame: 0,
             expected_bytes,
             state: SinkState::Active,
+            filtergraph_file,
         })
     }
 
@@ -121,6 +141,7 @@ impl FfmpegSink {
 
         self.child.take();
         self.state = SinkState::Aborted;
+        self.cleanup_filtergraph();
         self.join_stderr().map(|_| ())
     }
 
@@ -134,6 +155,10 @@ impl FfmpegSink {
             })
             .transpose()
             .map(|stderr| stderr.unwrap_or_default())
+    }
+
+    fn cleanup_filtergraph(&mut self) {
+        self.filtergraph_file.take();
     }
 }
 
@@ -172,6 +197,7 @@ impl FrameSink for FfmpegSink {
                     .trim()
                     .to_owned();
                 self.state = SinkState::Aborted;
+                self.cleanup_filtergraph();
                 return Err(MediaError::ProcessFailed {
                     program: "FFmpeg",
                     status,
@@ -206,6 +232,7 @@ impl FrameSink for FfmpegSink {
             .trim()
             .to_owned();
         self.state = SinkState::Finished;
+        self.cleanup_filtergraph();
         if status.success() {
             Ok(SinkResult {
                 frames_written: self.expected_frame,
@@ -230,6 +257,7 @@ impl FrameSink for FfmpegSink {
 impl Drop for FfmpegSink {
     fn drop(&mut self) {
         let _ = self.abort();
+        self.cleanup_filtergraph();
     }
 }
 
@@ -273,58 +301,76 @@ fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
     collected
 }
 
-fn add_audio(command: &mut Command, audio: &AudioSettings, project_duration: f64) {
-    command
-        .arg("-ss")
-        .arg(seconds(audio.trim_start))
-        .arg("-t")
-        .arg(seconds(audio.selected_duration))
-        .arg("-i")
-        .arg(&audio.path)
-        .args([
-            "-filter_complex",
-            &audio_filter(audio, project_duration),
-            "-map",
-            "0:v:0",
-            "-map",
-            "[audio]",
-        ]);
+fn add_audio(
+    command: &mut Command,
+    audio: &audio_graph::FfmpegAudioGraph,
+    maximum_audio_sources: usize,
+    output: &Path,
+) -> Result<Option<TemporaryFiltergraph>, MediaError> {
+    enforce_audio_source_limit(audio, maximum_audio_sources)?;
+    for path in &audio.input_paths {
+        command.args(["-i"]).arg(path);
+    }
+    let filtergraph_file = if audio.filter_complex.len() > FILTERGRAPH_SCRIPT_THRESHOLD_BYTES {
+        let file = TemporaryFiltergraph::create(output, &audio.filter_complex)?;
+        command.arg("-/filter_complex").arg(&file.path);
+        Some(file)
+    } else {
+        command.arg("-filter_complex").arg(&audio.filter_complex);
+        None
+    };
+    command.args(["-map", "0:v:0", "-map", "[audio]"]);
+    Ok(filtergraph_file)
 }
 
-fn audio_filter(audio: &AudioSettings, project_duration: f64) -> String {
-    let mut filters = vec![
-        "[1:a]asetpts=PTS-STARTPTS".to_owned(),
-        format!("volume={}", seconds(audio.volume)),
-    ];
-    if audio.fade_in > 0.0 {
-        filters.push(format!("afade=t=in:st=0:d={}", seconds(audio.fade_in)));
+fn enforce_audio_source_limit(
+    audio: &audio_graph::FfmpegAudioGraph,
+    maximum_audio_sources: usize,
+) -> Result<(), MediaError> {
+    let actual = audio.input_paths.len();
+    if actual > maximum_audio_sources {
+        return Err(MediaError::AudioSourceLimit {
+            actual,
+            maximum: maximum_audio_sources,
+        });
     }
-    if audio.fade_out > 0.0 {
-        filters.push(format!(
-            "afade=t=out:st={}:d={}",
-            seconds((audio.selected_duration - audio.fade_out).max(0.0)),
-            seconds(audio.fade_out)
+    Ok(())
+}
+
+#[derive(Debug)]
+struct TemporaryFiltergraph {
+    path: PathBuf,
+}
+
+impl TemporaryFiltergraph {
+    fn create(output: &Path, contents: &str) -> Result<Self, MediaError> {
+        let path = effective_parent(output).join(format!(
+            ".video-editor-{}.filtergraph",
+            uuid::Uuid::new_v4()
         ));
+        fs::write(&path, contents).map_err(|source| MediaError::TemporaryFile {
+            operation: "writing FFmpeg filtergraph script",
+            source,
+        })?;
+        Ok(Self { path })
     }
-    filters.push(format!(
-        "adelay={}:all=1",
-        (audio.timeline_start * 1000.0).round() as u64
-    ));
-    filters.push(format!("apad=whole_dur={}", seconds(project_duration)));
-    filters.push(format!(
-        "atrim=duration={}[audio]",
-        seconds(project_duration)
-    ));
-    filters.join(",")
 }
 
-fn seconds(value: f64) -> String {
-    format!("{value:.9}")
+impl Drop for TemporaryFiltergraph {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+    use video_editor_core::{
+        output::EncoderSettings,
+        plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan},
+    };
 
     fn active_test_sink() -> FfmpegSink {
         test_sink("exec sleep 30")
@@ -346,6 +392,56 @@ mod tests {
             expected_frame: 0,
             expected_bytes: 4,
             state: SinkState::Active,
+            filtergraph_file: None,
+        }
+    }
+
+    fn filtergraph_paths(directory: &Path) -> Vec<PathBuf> {
+        fs::read_dir(directory)
+            .expect("reads temporary render directory")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "filtergraph")
+            })
+            .collect()
+    }
+
+    fn large_reused_mix(path: PathBuf) -> AudioMixPlan {
+        AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: (0..512)
+                    .map(|index| AudioClipPlan {
+                        id: format!("clip-{index}"),
+                        asset: "tone".to_owned(),
+                        path: path.clone(),
+                        start: 0.0,
+                        trim_start: 0.0,
+                        selected_duration: 0.01,
+                        mute: false,
+                        gain: 1.0 / 512.0,
+                        fade_in: 0.0,
+                        fade_out: 0.0,
+                    })
+                    .collect(),
+            }],
+        }
+    }
+
+    fn large_graph_settings(mix: AudioMixPlan) -> EncoderSettings {
+        EncoderSettings {
+            width: 2,
+            height: 2,
+            frame_rate: (1, 1),
+            frame_count: 1,
+            duration: 1.0,
+            quality_crf: 30,
+            maximum_audio_sources: 1,
+            audio_mix: Some(mix),
         }
     }
 
@@ -354,6 +450,509 @@ mod tests {
             frame_number: number,
             rgba: vec![0; 4],
         }
+    }
+
+    #[test]
+    fn multi_input_mix_muxes_aac_audio_with_raw_video() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let first = directory.path().join("first.wav");
+        let second = directory.path().join("second.wav");
+        write_mono_wav(&first, 48_000, 48_000, 0.08);
+        write_mono_wav(&second, 44_100, 44_100, 0.06);
+        let clip = |id: &str, path: std::path::PathBuf, start: f64| AudioClipPlan {
+            id: id.to_owned(),
+            asset: id.to_owned(),
+            path,
+            start,
+            trim_start: 0.0,
+            selected_duration: 0.5,
+            mute: false,
+            gain: 1.0,
+            fade_in: 0.0,
+            fade_out: 0.0,
+        };
+        let settings = EncoderSettings {
+            width: 2,
+            height: 2,
+            frame_rate: (30, 1),
+            frame_count: 30,
+            duration: 1.0,
+            quality_crf: 30,
+            maximum_audio_sources: 128,
+            audio_mix: Some(AudioMixPlan {
+                tracks: vec![
+                    AudioTrackPlan {
+                        id: "music".to_owned(),
+                        mute: false,
+                        gain: 1.0,
+                        clips: vec![clip("a", first, 0.0), clip("b", second, 0.12345)],
+                    },
+                    AudioTrackPlan {
+                        id: "muted".to_owned(),
+                        mute: true,
+                        gain: 1.0,
+                        clips: vec![],
+                    },
+                ],
+            }),
+        };
+        let output = directory.path().join("mixed.mp4");
+        let mut sink = FfmpegSink::start(&settings, &output).expect("starts multi-input ffmpeg");
+        for number in 0..30 {
+            sink.write_frame(&CompletedFrame {
+                frame_number: number,
+                rgba: vec![0; 16],
+            })
+            .expect("writes frame");
+        }
+        sink.finish().expect("FFmpeg muxes AAC output");
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name,sample_rate,channels",
+                "-of",
+                "default=nw=1",
+            ])
+            .arg(&output)
+            .output()
+            .expect("ffprobe starts");
+        assert!(probe.status.success());
+        let report = String::from_utf8_lossy(&probe.stdout);
+        assert!(report.contains("codec_name=aac"), "{report}");
+        assert!(report.contains("sample_rate=48000"), "{report}");
+        assert!(report.contains("channels=2"), "{report}");
+    }
+
+    #[test]
+    fn production_aac_decodes_reused_tones_and_overlap() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let low = directory.path().join("440.wav");
+        let high = directory.path().join("880.wav");
+        write_sine_wav(&low, 440.0, 2.0);
+        write_sine_wav(&high, 880.0, 2.0);
+        let clip = |id: &str, path: std::path::PathBuf, start: f64, gain: f64| AudioClipPlan {
+            id: id.to_owned(),
+            asset: id.to_owned(),
+            path,
+            start,
+            trim_start: 0.0,
+            selected_duration: 1.0,
+            mute: false,
+            gain,
+            fade_in: 0.0,
+            fade_out: 0.0,
+        };
+        let settings = EncoderSettings {
+            width: 2,
+            height: 2,
+            frame_rate: (30, 1),
+            frame_count: 60,
+            duration: 2.0,
+            quality_crf: 30,
+            maximum_audio_sources: 128,
+            audio_mix: Some(AudioMixPlan {
+                tracks: vec![
+                    AudioTrackPlan {
+                        id: "low".to_owned(),
+                        mute: false,
+                        gain: 0.5,
+                        clips: vec![
+                            clip("low-first", low.clone(), 0.12345, 1.0),
+                            clip("low-second", low, 0.75, 0.5),
+                        ],
+                    },
+                    AudioTrackPlan {
+                        id: "high".to_owned(),
+                        mute: false,
+                        gain: 0.25,
+                        clips: vec![clip("high", high, 0.12345, 1.0)],
+                    },
+                ],
+            }),
+        };
+        let output = directory.path().join("mixed.mp4");
+        let mut sink = FfmpegSink::start(&settings, &output).expect("starts AAC render");
+        for number in 0..60 {
+            sink.write_frame(&CompletedFrame {
+                frame_number: number,
+                rgba: vec![0; 16],
+            })
+            .expect("writes frame");
+        }
+        sink.finish().expect("AAC render succeeds");
+        let decoded = Command::new("ffmpeg")
+            .args(["-hide_banner", "-loglevel", "error", "-i"])
+            .arg(&output)
+            .args([
+                "-map",
+                "0:a:0",
+                "-f",
+                "f32le",
+                "-acodec",
+                "pcm_f32le",
+                "pipe:1",
+            ])
+            .output()
+            .expect("FFmpeg decodes AAC");
+        assert!(
+            decoded.status.success(),
+            "{}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        let samples = decoded
+            .stdout
+            .chunks_exact(4)
+            .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("f32")))
+            .collect::<Vec<_>>();
+        let quiet = rms(&samples[..(0.08 * 48_000.0) as usize * 2]);
+        let overlap_start = (0.25 * 48_000.0) as usize * 2;
+        let overlap_end = (0.65 * 48_000.0) as usize * 2;
+        let overlap = &samples[overlap_start..overlap_end];
+        assert!(
+            rms(overlap) > quiet * 10.0,
+            "AAC pre-onset region must stay quiet"
+        );
+        assert!(
+            tone_correlation(overlap, 440.0, 0.25) > 0.005,
+            "AAC retained 440 Hz"
+        );
+        assert!(
+            tone_correlation(overlap, 880.0, 0.25) > 0.002,
+            "AAC retained 880 Hz"
+        );
+    }
+
+    #[test]
+    fn large_filtergraph_uses_and_cleans_a_script_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let output = directory.path().join("output.mp4");
+        let audio = audio_graph::FfmpegAudioGraph {
+            input_paths: vec![],
+            filter_complex: "a".repeat(FILTERGRAPH_SCRIPT_THRESHOLD_BYTES + 1),
+            clip_branch_count: 0,
+        };
+        let mut command = Command::new("ffmpeg");
+        let graph_file = add_audio(&mut command, &audio, 128, &output).expect("script is created");
+        let path = graph_file
+            .as_ref()
+            .expect("large graph script")
+            .path
+            .clone();
+        assert!(path.exists());
+        assert!(command.get_args().any(|arg| arg == "-/filter_complex"));
+        drop(graph_file);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn unique_audio_source_limit_accepts_the_exact_boundary() {
+        let audio = audio_graph::FfmpegAudioGraph {
+            input_paths: (0..4)
+                .map(|index| PathBuf::from(format!("{index}.wav")))
+                .collect(),
+            filter_complex: "anull".to_owned(),
+            clip_branch_count: 4,
+        };
+        enforce_audio_source_limit(&audio, 4).expect("exact limit is accepted before spawning");
+    }
+
+    #[test]
+    fn unique_audio_source_limit_rejects_one_over_the_boundary() {
+        let audio = audio_graph::FfmpegAudioGraph {
+            input_paths: (0..5)
+                .map(|index| PathBuf::from(format!("{index}.wav")))
+                .collect(),
+            filter_complex: "anull".to_owned(),
+            clip_branch_count: 5,
+        };
+        let error = enforce_audio_source_limit(&audio, 4).expect_err("one over the limit fails");
+        assert!(matches!(
+            error,
+            MediaError::AudioSourceLimit {
+                actual: 5,
+                maximum: 4
+            }
+        ));
+    }
+
+    #[test]
+    fn source_limit_counts_deduplicated_audible_paths_not_clip_branches() {
+        let clips = (0..256)
+            .map(|index| AudioClipPlan {
+                id: format!("clip-{index}"),
+                asset: format!("asset-{}", index % 4),
+                path: PathBuf::from(format!("source-{}.wav", index % 4)),
+                start: 0.0,
+                trim_start: 0.0,
+                selected_duration: 0.01,
+                mute: false,
+                gain: 1.0,
+                fade_in: 0.0,
+                fade_out: 0.0,
+            })
+            .collect();
+        let graph = audio_graph::compile(
+            &AudioMixPlan {
+                tracks: vec![AudioTrackPlan {
+                    id: "track".to_owned(),
+                    mute: false,
+                    gain: 1.0,
+                    clips,
+                }],
+            },
+            1.0,
+        )
+        .expect("graph");
+        assert_eq!(graph.clip_branch_count, 256);
+        assert_eq!(graph.input_paths.len(), 4);
+        enforce_audio_source_limit(&graph, 4).expect("reused clips do not consume inputs");
+    }
+
+    #[test]
+    fn source_limit_omits_muted_and_zero_gain_only_paths() {
+        let clip = |id: &str, path: &str, mute: bool, gain: f64| AudioClipPlan {
+            id: id.to_owned(),
+            asset: id.to_owned(),
+            path: PathBuf::from(path),
+            start: 0.0,
+            trim_start: 0.0,
+            selected_duration: 0.01,
+            mute,
+            gain,
+            fade_in: 0.0,
+            fade_out: 0.0,
+        };
+        let graph = audio_graph::compile(
+            &AudioMixPlan {
+                tracks: vec![AudioTrackPlan {
+                    id: "track".to_owned(),
+                    mute: false,
+                    gain: 1.0,
+                    clips: vec![
+                        clip("muted", "muted.wav", true, 1.0),
+                        clip("silent", "silent.wav", false, 0.0),
+                        clip("audible", "audible.wav", false, 1.0),
+                    ],
+                }],
+            },
+            1.0,
+        )
+        .expect("graph");
+        assert_eq!(graph.input_paths, [PathBuf::from("audible.wav")]);
+        enforce_audio_source_limit(&graph, 1).expect("inaudible paths do not consume budget");
+    }
+
+    #[test]
+    fn executes_a_large_filtergraph_from_a_temporary_file() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let source = directory.path().join("tone.wav");
+        write_sine_wav(&source, 440.0, 0.05);
+        let mix = large_reused_mix(source.clone());
+        let graph = audio_graph::compile(&mix, 1.0).expect("large graph compiles");
+        assert!(graph.filter_complex.len() > FILTERGRAPH_SCRIPT_THRESHOLD_BYTES);
+        assert_eq!(graph.clip_branch_count, 512);
+        assert_eq!(graph.input_paths, std::slice::from_ref(&source));
+        let settings = large_graph_settings(mix);
+        let output = directory.path().join("large.mp4");
+        let mut sink = FfmpegSink::start(&settings, &output).expect("large graph starts FFmpeg");
+        let graph_paths = filtergraph_paths(directory.path());
+        assert_eq!(graph_paths.len(), 1, "large graph is file-backed");
+        sink.write_frame(&CompletedFrame {
+            frame_number: 0,
+            rgba: vec![0; 16],
+        })
+        .expect("writes frame");
+        sink.finish().expect("FFmpeg consumes large graph file");
+        assert!(output.exists());
+        assert!(fs::metadata(&output).expect("output metadata").len() > 0);
+        assert!(filtergraph_paths(directory.path()).is_empty());
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name",
+                "-of",
+                "default=nw=1",
+            ])
+            .arg(&output)
+            .output()
+            .expect("ffprobe starts");
+        assert!(probe.status.success());
+        assert!(String::from_utf8_lossy(&probe.stdout).contains("codec_name=aac"));
+    }
+
+    #[test]
+    fn large_filtergraph_is_removed_after_an_ffmpeg_input_failure() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let output = directory.path().join("missing.mp4");
+        let settings = large_graph_settings(large_reused_mix(directory.path().join("missing.wav")));
+        let mut sink = FfmpegSink::start(&settings, &output).expect("FFmpeg process starts");
+        assert_eq!(filtergraph_paths(directory.path()).len(), 1);
+        assert!(matches!(
+            sink.finish(),
+            Err(MediaError::ProcessFailed { .. })
+        ));
+        assert!(filtergraph_paths(directory.path()).is_empty());
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn large_filtergraph_is_removed_after_cancellation() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let source = directory.path().join("tone.wav");
+        write_sine_wav(&source, 440.0, 0.05);
+        let output = directory.path().join("cancelled.mp4");
+        let settings = large_graph_settings(large_reused_mix(source));
+        let mut sink = FfmpegSink::start(&settings, &output).expect("FFmpeg process starts");
+        assert_eq!(filtergraph_paths(directory.path()).len(), 1);
+        sink.abort().expect("cancellation reaps FFmpeg");
+        assert!(filtergraph_paths(directory.path()).is_empty());
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn abort_cleans_temporary_filtergraph() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let graph = TemporaryFiltergraph::create(&directory.path().join("output.mp4"), "anull")
+            .expect("graph file");
+        let path = graph.path.clone();
+        let mut sink = active_test_sink();
+        sink.filtergraph_file = Some(graph);
+        sink.abort().expect("abort");
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn failed_finish_cleans_temporary_filtergraph() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let graph = TemporaryFiltergraph::create(&directory.path().join("output.mp4"), "anull")
+            .expect("graph file");
+        let path = graph.path.clone();
+        let mut sink = test_sink("echo encoder-broke >&2; exit 1");
+        sink.filtergraph_file = Some(graph);
+        sink.finish().expect_err("encoder failure");
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn missing_operation_time_audio_source_reports_ffmpeg_failure_without_output() {
+        let directory = tempfile::tempdir().expect("temporary output directory");
+        let output = directory.path().join("missing.mp4");
+        let settings = EncoderSettings {
+            width: 2,
+            height: 2,
+            frame_rate: (1, 1),
+            frame_count: 1,
+            duration: 1.0,
+            quality_crf: 30,
+            maximum_audio_sources: 128,
+            audio_mix: Some(AudioMixPlan {
+                tracks: vec![AudioTrackPlan {
+                    id: "track".to_owned(),
+                    mute: false,
+                    gain: 1.0,
+                    clips: vec![AudioClipPlan {
+                        id: "clip".to_owned(),
+                        asset: "missing".to_owned(),
+                        path: directory.path().join("missing.wav"),
+                        start: 0.0,
+                        trim_start: 0.0,
+                        selected_duration: 0.5,
+                        mute: false,
+                        gain: 1.0,
+                        fade_in: 0.0,
+                        fade_out: 0.0,
+                    }],
+                }],
+            }),
+        };
+        let mut sink = FfmpegSink::start(&settings, &output).expect("process starts");
+        let error = sink.finish().expect_err("missing input fails FFmpeg");
+        assert!(matches!(error, MediaError::ProcessFailed { .. }));
+        assert!(!output.exists());
+    }
+
+    fn write_mono_wav(path: &std::path::Path, sample_rate: u32, samples: usize, amplitude: f32) {
+        let pcm = (amplitude * i16::MAX as f32).round() as i16;
+        let data_length = (samples * 2) as u32;
+        let mut bytes = Vec::with_capacity(44 + data_length as usize);
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&16_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&sample_rate.to_le_bytes());
+        bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+        bytes.extend_from_slice(&2_u16.to_le_bytes());
+        bytes.extend_from_slice(&16_u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_length.to_le_bytes());
+        for _ in 0..samples {
+            bytes.extend_from_slice(&pcm.to_le_bytes());
+        }
+        fs::write(path, bytes).expect("fixture WAV");
+    }
+
+    fn write_sine_wav(path: &std::path::Path, frequency: f64, seconds: f64) {
+        let samples = (0..(seconds * 48_000.0) as usize)
+            .map(|index| {
+                (0.1 * (std::f64::consts::TAU * frequency * index as f64 / 48_000.0).sin()) as f32
+            })
+            .collect::<Vec<_>>();
+        write_mono_wav_samples(path, 48_000, &samples);
+    }
+
+    fn write_mono_wav_samples(path: &std::path::Path, sample_rate: u32, samples: &[f32]) {
+        let data_length = (samples.len() * 2) as u32;
+        let mut bytes = Vec::with_capacity(44 + data_length as usize);
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&16_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&sample_rate.to_le_bytes());
+        bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+        bytes.extend_from_slice(&2_u16.to_le_bytes());
+        bytes.extend_from_slice(&16_u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_length.to_le_bytes());
+        for sample in samples {
+            bytes.extend_from_slice(&((sample * i16::MAX as f32).round() as i16).to_le_bytes());
+        }
+        fs::write(path, bytes).expect("fixture WAV");
+    }
+
+    fn rms(samples: &[f32]) -> f64 {
+        (samples
+            .iter()
+            .map(|sample| f64::from(*sample) * f64::from(*sample))
+            .sum::<f64>()
+            / samples.len() as f64)
+            .sqrt()
+    }
+
+    fn tone_correlation(samples: &[f32], frequency: f64, start_seconds: f64) -> f64 {
+        let frames = samples.len() / 2;
+        (0..frames)
+            .map(|index| {
+                samples[index * 2] as f64
+                    * (std::f64::consts::TAU
+                        * frequency
+                        * (start_seconds + index as f64 / 48_000.0))
+                        .sin()
+            })
+            .sum::<f64>()
+            .abs()
+            / frames as f64
     }
 
     #[test]
@@ -380,6 +979,7 @@ mod tests {
             expected_frame: 0,
             expected_bytes: 4,
             state: SinkState::Finished,
+            filtergraph_file: None,
         };
         let frame = CompletedFrame {
             frame_number: 0,

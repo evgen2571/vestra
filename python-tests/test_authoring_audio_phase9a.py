@@ -2,7 +2,18 @@ from pathlib import Path
 
 import pytest
 
-from video_editor import BackendPreference, Editor, FrameRate, Project, ProjectError, RenderError, RenderRequest
+from video_editor import (
+    BackendPreference,
+    CancellationToken,
+    CancelledError,
+    Editor,
+    FrameRate,
+    PrepareOptions,
+    PreparedVideoRenderRequest,
+    Project,
+    ProjectError,
+    RenderRequest,
+)
 from video_editor.authoring import AuthoringError, ProjectBuilder
 
 
@@ -67,7 +78,7 @@ def test_schema_v1_and_old_global_audio_shape_are_rejected() -> None:
         Project.from_dict(data)
 
 
-def test_multi_clip_audio_fails_before_output_publication(tmp_path: Path) -> None:
+def test_multi_clip_audio_renders_and_preserves_legacy_shape_rejection(tmp_path: Path) -> None:
     project_builder = builder(output_audio=True)
     project_builder.base_directory = Path.cwd()
     project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
@@ -75,11 +86,89 @@ def test_multi_clip_audio_fails_before_output_publication(tmp_path: Path) -> Non
     track = project_builder.audio.add_track()
     track.add_clip(asset=asset, start=0, trim_end=0.2)
     track.add_clip(asset=asset, start=0.1, trim_end=0.2)
-    output = tmp_path / "unsupported.mp4"
-    with pytest.raises(RenderError, match="more than one audible"):
-        Editor().render(project_builder.build(), RenderRequest(output, backend=BackendPreference.CPU))
-    assert not output.exists()
+    output = tmp_path / "mixed.mp4"
+    result = Editor().render(project_builder.build(), RenderRequest(output, backend=BackendPreference.CPU))
+    assert output.exists()
+    assert result.audio_present is True
     data = builder().to_dict()
     data["audio"] = {"asset": "tone", "timeline_start": 0, "trim_start": 0, "volume": 1}
     with pytest.raises(ProjectError):
         Project.from_dict(data)
+
+
+def test_prepared_multi_clip_audio_renders_twice(tmp_path: Path) -> None:
+    project_builder = builder(output_audio=True)
+    project_builder.base_directory = Path.cwd()
+    project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
+    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    music = project_builder.audio.add_track(id="music", gain=0.75)
+    music.add_clip(asset=asset, start=0, trim_end=0.4)
+    music.add_clip(asset=asset, start=0.12345, trim_end=0.5, gain=0.5)
+    prepared = Editor().prepare(
+        project_builder.build(),
+        PrepareOptions(backend=BackendPreference.CPU),
+    )
+    first = prepared.render_video(PreparedVideoRenderRequest(tmp_path / "first.mp4"))
+    second = prepared.render_video(PreparedVideoRenderRequest(tmp_path / "second.mp4"))
+    assert first.audio_present is True
+    assert second.audio_present is True
+    assert (tmp_path / "first.mp4").exists()
+    assert (tmp_path / "second.mp4").exists()
+
+
+@pytest.mark.parametrize(
+    ("output_audio", "track_mute", "clip_gain"),
+    [(False, False, 1.0), (True, True, 1.0), (True, False, 0.0)],
+)
+def test_disabled_or_inaudible_multi_track_audio_produces_video_only(
+    tmp_path: Path, output_audio: bool, track_mute: bool, clip_gain: float
+) -> None:
+    project_builder = builder(output_audio=output_audio)
+    project_builder.base_directory = Path.cwd()
+    project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
+    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    music = project_builder.audio.add_track(id="music", mute=track_mute)
+    ambience = project_builder.audio.add_track(id="ambience", gain=0.0)
+    music.add_clip(asset=asset, start=0, trim_end=0.2, gain=clip_gain)
+    ambience.add_clip(asset=asset, start=0.12345, trim_end=0.2)
+    result = Editor().render(
+        project_builder.build(),
+        RenderRequest(tmp_path / "video-only.mp4", backend=BackendPreference.CPU),
+    )
+    assert result.audio_present is False
+
+
+def test_multi_input_render_cancellation_removes_temporary_output(tmp_path: Path) -> None:
+    project_builder = ProjectBuilder(
+        width=16,
+        height=16,
+        frame_rate=FrameRate(60, 1),
+        output_path="out.mp4",
+        duration=2,
+        output_audio=True,
+        base_directory=Path.cwd(),
+    )
+    project_builder.add_solid_color_clip(colour="#000000", start=0, duration=2, layer=0)
+    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    first = project_builder.audio.add_track(id="first")
+    second = project_builder.audio.add_track(id="second")
+    first.add_clip(asset=asset, start=0, trim_end=0.8)
+    second.add_clip(asset=asset, start=0.12345, trim_end=0.8)
+    token = CancellationToken()
+
+    def cancel_on_progress(event: object) -> None:
+        if getattr(event, "kind") == "progress":
+            token.cancel()
+
+    output = tmp_path / "cancelled.mp4"
+    with pytest.raises(CancelledError) as raised:
+        Editor().render(
+            project_builder.build(),
+            RenderRequest(output, backend=BackendPreference.CPU),
+            progress=cancel_on_progress,
+            cancellation=token,
+        )
+    assert raised.value.temporary_removed is True
+    assert token.is_cancelled
+    assert not output.exists()
+    assert list(tmp_path.iterdir()) == []

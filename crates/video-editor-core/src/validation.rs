@@ -46,6 +46,9 @@ pub struct ResourceLimits {
     pub maximum_clips: usize,
     pub maximum_audio_tracks: usize,
     pub maximum_audio_clips: usize,
+    /// Maximum distinct resolved audio paths a single FFmpeg render may open.
+    /// This is an execution resource bound, rather than a schema complexity bound.
+    pub maximum_audio_sources: usize,
     pub maximum_effects_per_clip: usize,
     pub maximum_keyframes_per_track: usize,
     pub maximum_cache_bytes: u64,
@@ -65,6 +68,9 @@ impl Default for ResourceLimits {
             maximum_clips: 10_000,
             maximum_audio_tracks: 256,
             maximum_audio_clips: 4_096,
+            // 128 leaves ample headroom below common per-process descriptor
+            // limits for video stdin, output, pipes, demuxers, and FFmpeg internals.
+            maximum_audio_sources: 128,
             maximum_effects_per_clip: 32,
             maximum_keyframes_per_track: 1_000,
             maximum_cache_bytes: 256 * 1024 * 1024,

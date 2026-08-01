@@ -184,7 +184,17 @@ so neither renderer rediscovers ordering.
 Audio semantics live in `video-editor-core`: `AudioTimeline` owns ordered
 `AudioTrack` lanes, and each track owns ordered `AudioClip` placements. Clips
 may overlap within or across tracks. The compiler produces a backend-neutral
-`AudioMixPlan`; FFmpeg syntax stays in the media crate. Phase 9A retains a
-temporary one-audible-clip bridge and deliberately rejects multi-clip muxing.
+`AudioMixPlan`; FFmpeg syntax stays in the media crate. The media executor
+opens each unique audible resolved path once in first-use order, normalizes it
+to 48 kHz stereo `fltp`, and uses `asplit` for repeated clip branches. Each
+branch trims and places itself in the sample domain, then the executor mixes
+clips into tracks, applies track gain, and mixes the tracks with
+`amix=...:duration=longest:dropout_transition=0:normalize=0`.
+Seconds round to the nearest mixer sample, with ties upward for non-negative
+schema times. The master is padded or trimmed to the resolved project length.
+Large generated filtergraphs use a temporary file passed through FFmpeg 7+'s
+`-/filter_complex` option once their UTF-8 text exceeds 64 KiB; smaller graphs
+use `-filter_complex`. A render opens at most 128 deduplicated audible source
+paths, checked before FFmpeg starts.
 Mute, zero gain, and `output.audio` do not skip validation or change automatic
 project duration.

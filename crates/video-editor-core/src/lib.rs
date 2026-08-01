@@ -13,10 +13,9 @@ pub mod diagnostic;
 pub mod domain;
 pub mod effects;
 pub mod output;
-/// Compatibility namespace used by the transitional plan model. It contains
-/// only deterministic output configuration, never media process behavior.
+/// Deterministic output configuration, never media process behavior.
 pub mod media {
-    pub use crate::output::{AudioSettings, EncoderSettings};
+    pub use crate::output::EncoderSettings;
 }
 /// Deterministic camera-shake transform evaluation.
 pub mod camera_shake;

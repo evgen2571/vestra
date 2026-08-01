@@ -122,7 +122,11 @@ pub fn compile(
     metrics::record(&mut compilation, &layers, &post_effects);
     limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     let audio_mix = audio::compile(&validated)?;
-    let encoder_audio = audio_mix.single_input_settings(project.output.audio);
+    let encoder_audio_mix = project
+        .output
+        .audio
+        .then(|| audio_mix.clone())
+        .filter(|mix| mix.audible_clip_count() > 0);
     Ok(RenderPlan {
         configured_output: output::resolve_path(&validated),
         canvas: Canvas {
@@ -141,7 +145,8 @@ pub fn compile(
             frame_count: validated.frame_count,
             duration: validated.duration,
             quality_crf: project.output.quality.crf(),
-            audio: encoder_audio,
+            maximum_audio_sources: validated.limits.maximum_audio_sources,
+            audio_mix: encoder_audio_mix,
         },
         audio_mix,
         audio_output_enabled: project.output.audio,

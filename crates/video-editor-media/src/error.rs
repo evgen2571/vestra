@@ -24,6 +24,10 @@ pub enum MediaError {
     MissingAudioDuration,
     #[error("invalid audio duration: {0}")]
     InvalidAudioDuration(String),
+    #[error("invalid deterministic audio timing: {0}")]
+    InvalidAudioTiming(String),
+    #[error("unique executable audio sources ({actual}) exceed the supported limit ({maximum})")]
+    AudioSourceLimit { actual: usize, maximum: usize },
     #[error("FFmpeg did not expose a frame input pipe")]
     MissingFrameInput,
     #[error("FFmpeg did not expose an error output pipe")]
@@ -64,4 +68,10 @@ pub enum MediaError {
     OutputMetadata(#[source] io::Error),
     #[error("cannot publish output: {0}")]
     Publication(#[source] io::Error),
+    #[error("cannot manage temporary file while {operation}: {source}")]
+    TemporaryFile {
+        operation: &'static str,
+        #[source]
+        source: io::Error,
+    },
 }

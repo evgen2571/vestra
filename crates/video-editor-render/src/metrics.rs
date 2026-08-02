@@ -55,6 +55,37 @@ pub struct PreparationStats {
     /// Every physical static-layer execution, including cache populations,
     /// pending-key fallbacks, and budget bypasses.
     pub static_layers_rendered: u64,
+    /// Renderer-owned CPU output buffers allocated for independently owned completed frames.
+    #[serde(skip)]
+    pub cpu_full_frame_allocations: u64,
+    /// New mutable CPU scratch images allocated by the fixed renderer pool.
+    #[serde(skip)]
+    pub cpu_scratch_allocations: u64,
+    /// Effect passes served by existing CPU scratch images.
+    #[serde(skip)]
+    pub cpu_scratch_reuses: u64,
+    /// Current fixed CPU scratch-pool capacity and logical RGBA bytes.
+    #[serde(skip)]
+    pub cpu_scratch_buffers_retained: usize,
+    #[serde(skip)]
+    pub cpu_scratch_bytes_retained: u64,
+    /// Explicit full-frame CPU copies for post-effect input/output transfers.
+    #[serde(skip)]
+    pub cpu_full_frame_copy_bytes: u64,
+    /// Renderer-owned WGPU working textures created at preparation and their later reuse.
+    #[serde(skip)]
+    pub wgpu_temporary_texture_allocations: u64,
+    #[serde(skip)]
+    pub wgpu_temporary_texture_reuses: u64,
+    #[serde(skip)]
+    pub wgpu_temporary_texture_estimated_bytes: u64,
+    #[serde(skip)]
+    pub wgpu_temporary_textures_retained: usize,
+    /// Final tight RGBA vectors and bytes copied from padded mapped WGPU rows.
+    #[serde(skip)]
+    pub readback_tight_rgba_allocations: u64,
+    #[serde(skip)]
+    pub readback_repack_bytes: u64,
     pub schedule_event_count: usize,
     pub active_item_consideration_count: u64,
     pub rendered_frame_count: u64,

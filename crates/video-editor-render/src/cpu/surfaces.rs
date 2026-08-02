@@ -7,6 +7,9 @@ pub(crate) struct EffectSurfacePool {
     second: RgbaImage,
     horizontal: RgbaImage,
     first_is_current: bool,
+    allocations: u64,
+    reuses: u64,
+    copy_bytes: u64,
 }
 
 impl EffectSurfacePool {
@@ -17,6 +20,9 @@ impl EffectSurfacePool {
             second: RgbaImage::new(width, height),
             horizontal: RgbaImage::new(width, height),
             first_is_current: true,
+            allocations: 3,
+            reuses: 0,
+            copy_bytes: 0,
         }
     }
 
@@ -26,6 +32,7 @@ impl EffectSurfacePool {
             self.second = RgbaImage::new(width, height);
             self.horizontal = RgbaImage::new(width, height);
             self.first_is_current = true;
+            self.allocations += 3;
         }
     }
 
@@ -44,6 +51,7 @@ impl EffectSurfacePool {
     }
 
     pub(super) fn run(&mut self, execute: impl FnOnce(&RgbaImage, &mut RgbaImage, &mut RgbaImage)) {
+        self.reuses += 1;
         if self.first_is_current {
             execute(&self.first, &mut self.second, &mut self.horizontal);
         } else {
@@ -56,6 +64,7 @@ impl EffectSurfacePool {
         self.first
             .copy_from(source, 0, 0)
             .expect("matching effect surface dimensions");
+        self.copy_bytes += image_bytes(source);
         self.first_is_current = true;
     }
 
@@ -63,5 +72,59 @@ impl EffectSurfacePool {
         destination
             .copy_from(self.current(), 0, 0)
             .expect("matching effect surface dimensions");
+        self.copy_bytes += image_bytes(destination);
+    }
+
+    pub(super) fn take_current(&mut self) -> RgbaImage {
+        let replacement = RgbaImage::new(self.current().width(), self.current().height());
+        self.allocations += 1;
+        if self.first_is_current {
+            std::mem::replace(&mut self.first, replacement)
+        } else {
+            std::mem::replace(&mut self.second, replacement)
+        }
+    }
+
+    pub(super) fn stats(&self) -> SurfacePoolStats {
+        SurfacePoolStats {
+            allocations: self.allocations,
+            reuses: self.reuses,
+            retained_buffers: 3,
+            retained_bytes: image_bytes(&self.first) * 3,
+            copy_bytes: self.copy_bytes,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct SurfacePoolStats {
+    pub(super) allocations: u64,
+    pub(super) reuses: u64,
+    pub(super) retained_buffers: usize,
+    pub(super) retained_bytes: u64,
+    pub(super) copy_bytes: u64,
+}
+
+fn image_bytes(image: &RgbaImage) -> u64 {
+    u64::from(image.width()) * u64::from(image.height()) * 4
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reuses_a_fixed_ping_pong_set_and_transfers_cached_output() {
+        let mut pool = EffectSurfacePool::new(4, 2);
+        pool.run(|source, target, _| target.copy_from(source, 0, 0).expect("matching surfaces"));
+        pool.run(|source, target, _| target.copy_from(source, 0, 0).expect("matching surfaces"));
+        assert_eq!(pool.stats().allocations, 3);
+        assert_eq!(pool.stats().reuses, 2);
+
+        let cached = pool.take_current();
+        assert_eq!(cached.dimensions(), (4, 2));
+        assert_eq!(pool.stats().allocations, 4);
+        assert_eq!(pool.stats().retained_buffers, 3);
+        assert_eq!(pool.stats().retained_bytes, 96);
     }
 }

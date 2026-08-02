@@ -46,19 +46,31 @@ pub fn compose(
             }
             surfaces.clear();
             static_layer_renders += 1;
-            draw_layer(
-                surfaces.current(),
-                assets,
-                layer,
-                1.0,
-                layer.colour_transform,
-            );
-            effects::apply_chain(surfaces, &layer.effects);
+            if uses_direct_colour_path(layer) {
+                draw_layer(
+                    surfaces.current(),
+                    assets,
+                    layer,
+                    1.0,
+                    layer.colour_transform,
+                );
+            } else {
+                draw_layer(
+                    surfaces.current(),
+                    assets,
+                    layer,
+                    1.0,
+                    ColourTransform::default(),
+                );
+                effects::apply_chain(surfaces, &layer.effects);
+            }
             let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
-            static_layers.insert_with(layer.compiled_layer_index, bytes, || {
-                Arc::new(surfaces.current().clone())
-            });
-            blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+            // Cache publication takes this finished mutable surface instead of
+            // cloning it. The pool immediately receives a fresh replacement;
+            // immutable cache entries are never borrowed as scratch.
+            let cached = Arc::new(surfaces.take_current());
+            static_layers.insert(layer.compiled_layer_index, Arc::clone(&cached), bytes);
+            blend_surface(canvas, &cached, layer.blend_mode, layer.opacity);
             continue;
         }
         if uses_direct_colour_path(layer) {

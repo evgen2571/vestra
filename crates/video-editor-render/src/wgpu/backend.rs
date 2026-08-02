@@ -63,6 +63,7 @@ pub struct WgpuBackend {
     static_layer_renders: u64,
     static_cache_population_renders: u64,
     pending_static_layers: PendingStaticLayers,
+    temporary_texture_reuses: u64,
 }
 
 struct FrameSlotResources {
@@ -280,6 +281,7 @@ impl WgpuBackend {
             static_layer_renders: 0,
             static_cache_population_renders: 0,
             pending_static_layers: PendingStaticLayers::default(),
+            temporary_texture_reuses: 0,
         })
     }
 
@@ -452,6 +454,9 @@ impl RenderBackend for WgpuBackend {
             self.abort();
             return Err(error);
         }
+        if self.staged.submitted_frames > 0 {
+            self.temporary_texture_reuses += self.frame.working.texture_count() as u64;
+        }
         self.staged.submitted_frames += 1;
         self.staged.peak_frames_in_flight = self.staged.peak_frames_in_flight.max(self.in_flight());
         self.last_execution = execution.clone();
@@ -612,6 +617,13 @@ impl RenderBackend for WgpuBackend {
             cache.oversized_entries_skipped + self.static_cache_budget_bypasses;
         self.stats.static_cache_population_renders = self.static_cache_population_renders;
         self.stats.static_layers_rendered = self.static_layer_renders;
+        self.stats.wgpu_temporary_texture_allocations = self.frame.working.texture_count() as u64;
+        self.stats.wgpu_temporary_texture_reuses = self.temporary_texture_reuses;
+        self.stats.wgpu_temporary_texture_estimated_bytes = self.frame.working.estimated_bytes();
+        self.stats.wgpu_temporary_textures_retained = self.frame.working.texture_count();
+        let readback = self.readback.metrics();
+        self.stats.readback_tight_rgba_allocations = readback.tight_rgba_allocations;
+        self.stats.readback_repack_bytes = readback.repack_bytes;
         self.stats.clone()
     }
 

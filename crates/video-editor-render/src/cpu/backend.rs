@@ -24,6 +24,7 @@ pub struct CpuBackend {
     static_layers: ByteLruCache<usize, Arc<RgbaImage>>,
     static_layer_renders: u64,
     static_cache_population_renders: u64,
+    full_frame_allocations: u64,
     metrics: StagedMetrics,
 }
 
@@ -37,6 +38,7 @@ impl CpuBackend {
             static_layers: ByteLruCache::new(plan.limits.maximum_cache_bytes),
             static_layer_renders: 0,
             static_cache_population_renders: 0,
+            full_frame_allocations: 0,
             metrics: StagedMetrics {
                 configured_pipeline_depth: 1,
                 allocated_slot_count: 1,
@@ -66,6 +68,7 @@ impl RenderBackend for CpuBackend {
     ) -> Result<(), Diagnostic> {
         debug_assert!(self.completed.is_empty());
         let mut destination = RgbaImage::new(frame.width, frame.height);
+        self.full_frame_allocations += 1;
         let insertions_before = self.static_layers.stats().insertions;
         self.static_layer_renders += compositor::compose(
             frame,
@@ -124,6 +127,13 @@ impl RenderBackend for CpuBackend {
         stats.static_cache_budget_bypasses = cache.oversized_entries_skipped;
         stats.static_cache_population_renders = self.static_cache_population_renders;
         stats.static_layers_rendered = self.static_layer_renders;
+        let scratch = self.effects.stats();
+        stats.cpu_full_frame_allocations = self.full_frame_allocations;
+        stats.cpu_scratch_allocations = scratch.allocations;
+        stats.cpu_scratch_reuses = scratch.reuses;
+        stats.cpu_scratch_buffers_retained = scratch.retained_buffers;
+        stats.cpu_scratch_bytes_retained = scratch.retained_bytes;
+        stats.cpu_full_frame_copy_bytes = scratch.copy_bytes;
         stats
     }
 
@@ -190,8 +200,8 @@ mod tests {
     use super::*;
     use crate::{
         plan::{
-            ColourTransform, CompileOptions, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
-            ScheduledItem, TemporalDependency, compile, evaluate,
+            ColourTransform, CompileOptions, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer,
+            EvaluatedSource, ScheduledItem, TemporalDependency, compile, evaluate,
         },
         project::{ValidationOptions, load_and_validate},
     };
@@ -231,7 +241,16 @@ mod tests {
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
         let mut backend = CpuBackend::new(&plan, decoded);
-        let frame = static_frame();
+        let mut frame = static_frame();
+        frame.layers[0].effects = vec![
+            EvaluatedEffect::Brightness { amount: 0.1 },
+            EvaluatedEffect::Tint {
+                colour: [0, 0, 255, 255],
+                amount: 0.5,
+            },
+        ];
+        frame.layers[0].colour_transform =
+            ColourTransform::from_effects(frame.layers[0].effects.clone());
 
         backend.submit_frame(0, &frame).expect("first submission");
         let first = backend
@@ -266,7 +285,16 @@ mod tests {
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
         let mut backend = CpuBackend::new(&plan, decoded);
-        let frame = static_frame();
+        let mut frame = static_frame();
+        frame.layers[0].effects = vec![
+            EvaluatedEffect::Brightness { amount: 0.1 },
+            EvaluatedEffect::Tint {
+                colour: [0, 0, 255, 255],
+                amount: 0.5,
+            },
+        ];
+        frame.layers[0].colour_transform =
+            ColourTransform::from_effects(frame.layers[0].effects.clone());
 
         for frame_number in 0..100 {
             backend
@@ -333,7 +361,16 @@ mod tests {
         .expect("fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let frame = static_frame();
+        let mut frame = static_frame();
+        frame.layers[0].effects = vec![
+            EvaluatedEffect::Brightness { amount: 0.1 },
+            EvaluatedEffect::Tint {
+                colour: [0, 0, 255, 255],
+                amount: 0.5,
+            },
+        ];
+        frame.layers[0].colour_transform =
+            ColourTransform::from_effects(frame.layers[0].effects.clone());
         let mut cached = CpuBackend::new(&plan, Arc::clone(&decoded));
         let mut reference = CpuBackend::new(&plan, decoded);
         let mut reference_frame = frame.clone();
@@ -353,6 +390,43 @@ mod tests {
             .expect("reference completion");
 
         assert_eq!(cached.rgba, reference.rgba);
+    }
+
+    #[test]
+    fn dynamic_effect_scratch_allocations_stabilize_after_warmup() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.canvas.width = 4;
+        plan.canvas.height = 4;
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut frame = static_frame();
+        frame.layers[0].content_dependency = TemporalDependency::Dynamic;
+        frame.layers[0].effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
+
+        for frame_number in 0..100 {
+            backend
+                .submit_frame(frame_number, &frame)
+                .expect("frame submits");
+            backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("frame poll")
+                .expect("frame completion");
+        }
+
+        let stats = backend.stats();
+        assert_eq!(stats.cpu_full_frame_allocations, 100);
+        assert_eq!(stats.cpu_scratch_allocations, 3);
+        assert_eq!(stats.cpu_scratch_reuses, 100);
+        assert_eq!(stats.cpu_scratch_buffers_retained, 3);
+        assert_eq!(stats.cpu_scratch_bytes_retained, 192);
     }
 
     #[test]

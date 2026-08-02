@@ -64,8 +64,9 @@ proves one miss, one hit, one entry, one static-layer render, and equal output
 across two frames. `wgpu::frame_plan::tests::static_layer_store_then_reuse_stays_before_destination_composition`
 proves the planned boundary. The adapter-aware WGPU test
 `gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available`
-ran here and proved one miss, one hit, one entry, one static render, equal
-pixels, and only the final readback copy on the hit frame.
+compiles and verifies one miss, one hit, one entry, one static render, equal
+pixels, and only the final readback copy on the hit frame when a compatible
+adapter is available; runtime execution was unavailable in this environment.
 
 `static_cache_matches_the_dynamic_reference_path` compares cached static output
 against the normal dynamic renderer path. `dynamic_layers_bypass_the_whole_layer_cache` proves a Dynamic layer creates no
@@ -131,6 +132,7 @@ public API, and rendered the same frame twice with identical bytes.
 
 This Linux environment has no compatible WGPU adapter (`WGPU-ADAPTER-NOT-FOUND`),
 so the adapter-backed abort, multi-key in-flight budget, cache texture reuse,
-and no-readback runtime tests were structurally compiled and correctly skipped.
+and no-readback runtime tests were structurally compiled but returned early at
+runtime. They are not `#[ignore]` or test-harness skipped tests.
 Adapter-independent WGPU planning, pending-state, readback, and shader tests
 ran in the 135-test render suite.

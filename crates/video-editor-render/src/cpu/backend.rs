@@ -8,7 +8,8 @@ use crate::{
     Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
-        AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
+        AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
+        RenderBackendKind,
         metrics::{PreparationStats, PreparationTimings, StagedMetrics},
     },
 };
@@ -20,6 +21,9 @@ pub struct CpuBackend {
     assets: PreparedAssets,
     effects: compositor::EffectSurfacePool,
     completed: VecDeque<CompletedFrame>,
+    static_layers: ByteLruCache<usize, Arc<RgbaImage>>,
+    static_layer_renders: u64,
+    static_cache_population_renders: u64,
     metrics: StagedMetrics,
 }
 
@@ -30,6 +34,9 @@ impl CpuBackend {
             assets: PreparedAssets::from_decoded(plan, decoded),
             effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
             completed: VecDeque::new(),
+            static_layers: ByteLruCache::new(plan.limits.maximum_cache_bytes),
+            static_layer_renders: 0,
+            static_cache_population_renders: 0,
             metrics: StagedMetrics {
                 configured_pipeline_depth: 1,
                 allocated_slot_count: 1,
@@ -59,7 +66,16 @@ impl RenderBackend for CpuBackend {
     ) -> Result<(), Diagnostic> {
         debug_assert!(self.completed.is_empty());
         let mut destination = RgbaImage::new(frame.width, frame.height);
-        compositor::compose(frame, &mut self.assets, &mut destination, &mut self.effects);
+        let insertions_before = self.static_layers.stats().insertions;
+        self.static_layer_renders += compositor::compose(
+            frame,
+            &mut self.assets,
+            &mut destination,
+            &mut self.effects,
+            &mut self.static_layers,
+        );
+        self.static_cache_population_renders +=
+            self.static_layers.stats().insertions - insertions_before;
         self.completed.push_back(CompletedFrame {
             frame_number,
             rgba: destination.into_raw(),
@@ -99,7 +115,16 @@ impl RenderBackend for CpuBackend {
     }
 
     fn stats(&mut self) -> PreparationStats {
-        self.assets.stats().clone()
+        let mut stats = self.assets.stats().clone();
+        let cache = self.static_layers.stats();
+        stats.static_cache_hits = cache.hits;
+        stats.static_cache_misses = cache.misses;
+        stats.static_cache_entries = cache.current_entries;
+        stats.static_cached_bytes = cache.current_bytes;
+        stats.static_cache_budget_bypasses = cache.oversized_entries_skipped;
+        stats.static_cache_population_renders = self.static_cache_population_renders;
+        stats.static_layers_rendered = self.static_layer_renders;
+        stats
     }
 
     fn timings(&self) -> PreparationTimings {
@@ -164,9 +189,296 @@ impl CpuBackend {
 mod tests {
     use super::*;
     use crate::{
-        plan::{CompileOptions, ScheduledItem, compile, evaluate},
+        plan::{
+            ColourTransform, CompileOptions, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
+            ScheduledItem, TemporalDependency, compile, evaluate,
+        },
         project::{ValidationOptions, load_and_validate},
     };
+
+    fn static_frame() -> EvaluatedFrame {
+        EvaluatedFrame {
+            time: 0,
+            background: [0, 0, 0, 255],
+            width: 4,
+            height: 4,
+            layers: vec![EvaluatedLayer {
+                compiled_layer_index: 7,
+                content_dependency: TemporalDependency::Static,
+                source: EvaluatedSource::SolidColor {
+                    colour: [30, 60, 90, 255],
+                },
+                opacity: 0.5,
+                effects: Vec::new(),
+                colour_transform: ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        }
+    }
+
+    #[test]
+    fn reuses_complete_static_layer_surfaces_without_mutating_them() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let frame = static_frame();
+
+        backend.submit_frame(0, &frame).expect("first submission");
+        let first = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("first poll")
+            .expect("first completion");
+        backend.submit_frame(1, &frame).expect("second submission");
+        let second = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("second poll")
+            .expect("second completion");
+
+        assert_eq!(first.rgba, second.rgba);
+        let stats = backend.stats();
+        assert_eq!(stats.static_cache_misses, 1);
+        assert_eq!(stats.static_cache_hits, 1);
+        assert_eq!(stats.static_cache_entries, 1);
+        assert_eq!(stats.static_cache_population_renders, 1);
+        assert_eq!(stats.static_layers_rendered, 1);
+    }
+
+    #[test]
+    fn static_layer_renders_once_across_one_hundred_frames() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let frame = static_frame();
+
+        for frame_number in 0..100 {
+            backend
+                .submit_frame(frame_number, &frame)
+                .expect("frame submits");
+            backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("frame poll")
+                .expect("frame completion");
+        }
+
+        let stats = backend.stats();
+        assert_eq!(stats.static_cache_misses, 1);
+        assert_eq!(stats.static_cache_hits, 99);
+        assert_eq!(stats.static_cache_population_renders, 1);
+        assert_eq!(stats.static_layers_rendered, 1);
+    }
+
+    #[test]
+    fn static_layer_activity_does_not_affect_its_cache_identity() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut inactive = static_frame();
+        inactive.layers.clear();
+        let active = static_frame();
+
+        for (number, frame) in [
+            (10, &inactive),
+            (30, &active),
+            (45, &active),
+            (100, &inactive),
+        ] {
+            backend.submit_frame(number, frame).expect("frame submits");
+            backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("frame poll")
+                .expect("frame completion");
+        }
+
+        let stats = backend.stats();
+        assert_eq!(stats.static_cache_misses, 1);
+        assert_eq!(stats.static_cache_hits, 1);
+        assert_eq!(stats.static_cache_entries, 1);
+    }
+
+    #[test]
+    fn static_cache_matches_the_dynamic_reference_path() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frame = static_frame();
+        let mut cached = CpuBackend::new(&plan, Arc::clone(&decoded));
+        let mut reference = CpuBackend::new(&plan, decoded);
+        let mut reference_frame = frame.clone();
+        reference_frame.layers[0].content_dependency = TemporalDependency::Dynamic;
+
+        cached.submit_frame(0, &frame).expect("cached submission");
+        reference
+            .submit_frame(0, &reference_frame)
+            .expect("reference submission");
+        let cached = cached
+            .poll_completed(PollMode::WaitForOne)
+            .expect("cached poll")
+            .expect("cached completion");
+        let reference = reference
+            .poll_completed(PollMode::WaitForOne)
+            .expect("reference poll")
+            .expect("reference completion");
+
+        assert_eq!(cached.rgba, reference.rgba);
+    }
+
+    #[test]
+    fn dynamic_layers_bypass_the_whole_layer_cache() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut frame = static_frame();
+        frame.layers[0].content_dependency = TemporalDependency::Dynamic;
+
+        backend.submit_frame(0, &frame).expect("first submission");
+        backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("first poll");
+        backend.submit_frame(1, &frame).expect("second submission");
+        backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("second poll");
+
+        let stats = backend.stats();
+        assert_eq!(stats.static_cache_hits, 0);
+        assert_eq!(stats.static_cache_misses, 0);
+        assert_eq!(stats.static_cache_entries, 0);
+        assert_eq!(stats.static_layers_rendered, 0);
+    }
+
+    #[test]
+    fn over_budget_static_layers_render_without_retention() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.limits.maximum_cache_bytes = 1;
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let frame = static_frame();
+
+        backend.submit_frame(0, &frame).expect("first submission");
+        let first = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("first poll")
+            .expect("first completion");
+        backend.submit_frame(1, &frame).expect("second submission");
+        let second = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("second poll")
+            .expect("second completion");
+
+        assert_eq!(first.rgba, second.rgba);
+        let stats = backend.stats();
+        assert_eq!(stats.static_cache_entries, 0);
+        assert_eq!(stats.static_cache_hits, 0);
+        assert_eq!(stats.static_cache_misses, 2);
+        assert_eq!(stats.static_cache_budget_bypasses, 2);
+        assert_eq!(stats.static_layers_rendered, 2);
+    }
+
+    #[test]
+    fn distinct_static_layers_do_not_alias_or_mutate_under_dynamic_composition() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut base = static_frame();
+        let mut second = base.layers[0].clone();
+        second.compiled_layer_index = 8;
+        second.source = EvaluatedSource::SolidColor {
+            colour: [180, 20, 40, 255],
+        };
+        base.layers.push(second);
+
+        backend.submit_frame(0, &base).expect("base submission");
+        let first = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("base poll")
+            .expect("base completion");
+
+        let mut changed = base.clone();
+        let mut dynamic = changed.layers[0].clone();
+        dynamic.compiled_layer_index = 9;
+        dynamic.content_dependency = TemporalDependency::Dynamic;
+        dynamic.source = EvaluatedSource::SolidColor {
+            colour: [5, 220, 30, 255],
+        };
+        dynamic.opacity = 0.4;
+        changed.layers.push(dynamic);
+        backend
+            .submit_frame(1, &changed)
+            .expect("dynamic submission");
+        backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("dynamic poll")
+            .expect("dynamic completion");
+
+        backend.submit_frame(2, &base).expect("restored submission");
+        let restored = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("restored poll")
+            .expect("restored completion");
+
+        assert_eq!(first.rgba, restored.rgba);
+        let stats = backend.stats();
+        assert_eq!(stats.static_cache_entries, 2);
+        assert_eq!(stats.static_cache_misses, 2);
+        assert_eq!(stats.static_cache_hits, 4);
+    }
 
     #[test]
     fn completed_pixels_remain_owned_after_later_submission_and_polling() {

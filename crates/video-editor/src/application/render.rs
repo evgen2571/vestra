@@ -367,6 +367,105 @@ mod tests {
     }
 
     #[test]
+    fn prepared_operations_report_cache_deltas_and_reuse_static_layers() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/projects/audio-static-mix.json");
+        let validated =
+            load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
+        let request = RenderRequest {
+            backend_preference: RenderBackendPreference::Cpu,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            output_override: None,
+            overwrite: true,
+            preview: false,
+        };
+        let mut prepared = prepare_project(
+            validated,
+            &request,
+            Vec::new(),
+            PreparationTimings::default(),
+        )
+        .expect("prepare CPU");
+        let workspace = tempfile::tempdir().expect("temporary output directory");
+        let mut summaries = Vec::new();
+        let mut operations = Vec::new();
+        for name in ["first.mp4", "second.mp4"] {
+            let captured = Arc::new(Mutex::new(Vec::new()));
+            let sink_frames = Arc::clone(&captured);
+            let summary = render_prepared_project_with_sink(
+                &mut prepared,
+                RenderRequest {
+                    output_override: Some(workspace.path().join(name)),
+                    ..request.clone()
+                },
+                &mut |_| RenderObserverControl::Continue,
+                move |_settings, temporary_path| {
+                    Ok(CaptureSink {
+                        frames: sink_frames,
+                        temporary_path: temporary_path.to_path_buf(),
+                    })
+                },
+            )
+            .expect("prepared operation succeeds");
+            summaries.push(summary);
+            operations.push(
+                Arc::try_unwrap(captured)
+                    .expect("only sink retains capture")
+                    .into_inner()
+                    .expect("capture lock"),
+            );
+        }
+
+        let first = &summaries[0].performance;
+        let second = &summaries[1].performance;
+        // `canvas` is static for two seconds at 30 fps: one population, then
+        // 59 reuse hits in the first operation and 60 in the second.
+        assert_eq!(
+            (first.static_cache_misses, first.static_cache_hits),
+            (1, 59)
+        );
+        assert_eq!(first.static_cache_population_renders, 1);
+        assert_eq!(first.static_layers_rendered, 1);
+        assert_eq!(
+            (first.static_cache_entries, first.static_cached_bytes),
+            (1, 64 * 64 * 4),
+        );
+        assert_eq!(
+            (second.static_cache_misses, second.static_cache_hits),
+            (0, 60)
+        );
+        assert_eq!(second.static_cache_population_renders, 0);
+        assert_eq!(second.static_layers_rendered, 0);
+        assert_eq!(
+            (second.static_cache_entries, second.static_cached_bytes),
+            (1, 64 * 64 * 4),
+        );
+        assert_eq!(operations[0], operations[1]);
+        let lifetime = prepared.prepared.backend_stats();
+        assert_eq!(
+            lifetime.static_cache_misses,
+            first.static_cache_misses + second.static_cache_misses
+        );
+        assert_eq!(
+            lifetime.static_cache_hits,
+            first.static_cache_hits + second.static_cache_hits
+        );
+        assert_eq!(
+            lifetime.static_cache_population_renders,
+            first.static_cache_population_renders + second.static_cache_population_renders,
+        );
+        assert_eq!(
+            lifetime.static_layers_rendered,
+            first.static_layers_rendered + second.static_layers_rendered,
+        );
+
+        for frame_number in [50, 5, 30] {
+            let random = prepared.render_frame(frame_number).expect("random frame");
+            assert_eq!(random.rgba, operations[0][frame_number as usize].1);
+        }
+    }
+
+    #[test]
     fn random_cpu_frame_matches_the_pre_encoding_video_frame() {
         let fixture =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/wgpu-small-rgba.json");

@@ -3,7 +3,10 @@
 use crate::{
     animation::Transform2D,
     domain::Crop,
-    plan::{CompiledSizing, CompiledVisualSource, RenderPlan, ScheduledItem},
+    plan::{
+        ColourTransform, CompiledSizing, CompiledVisualSource, RenderPlan, ScheduledItem,
+        TemporalDependency,
+    },
 };
 
 mod colour;
@@ -11,8 +14,8 @@ mod effects;
 mod motion;
 mod transform;
 
-pub use colour::ColourTransform;
 pub use effects::EvaluatedEffect;
+pub(crate) use effects::evaluate as evaluate_effect;
 
 #[derive(Clone, Debug)]
 pub struct EvaluatedFrame {
@@ -27,6 +30,12 @@ pub struct EvaluatedFrame {
 
 #[derive(Clone, Debug)]
 pub struct EvaluatedLayer {
+    /// Stable index in the immutable compiled plan. Render caches use this
+    /// plan-local identity, never a frame number.
+    pub compiled_layer_index: usize,
+    /// Compiler-owned cacheability proof. Renderers consume it without
+    /// reclassifying tracks or effect parameters.
+    pub content_dependency: TemporalDependency,
     pub source: EvaluatedSource,
     pub opacity: f64,
     /// Ordered local effect chain. Image effects consume and produce complete
@@ -157,6 +166,8 @@ pub fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> Eval
             }
         }
         layers.push(EvaluatedLayer {
+            compiled_layer_index: *index,
+            content_dependency: layer.content_dependency,
             source,
             opacity,
             colour_transform: ColourTransform::from_effects(effects.clone()),

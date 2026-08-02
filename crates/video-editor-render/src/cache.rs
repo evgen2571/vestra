@@ -116,9 +116,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
     }
 
     pub fn insert(&mut self, key: K, value: V, bytes: u64) {
+        self.insert_with(key, bytes, || value);
+    }
+
+    /// Inserts only when the candidate fits, so callers can defer an expensive
+    /// clone or allocation until after the budget decision.
+    pub fn insert_with(&mut self, key: K, bytes: u64, create: impl FnOnce() -> V) -> bool {
         if bytes > self.stats.budget_bytes {
             self.stats.oversized_entries_skipped += 1;
-            return;
+            return false;
         }
         if let Some(previous) = self.entries.remove(&key) {
             self.stats.current_bytes -= previous.bytes;
@@ -146,12 +152,45 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
         self.entries.insert(
             key,
             Entry {
-                value,
+                value: create(),
                 bytes,
                 last_used: self.clock,
             },
         );
         self.sync_entry_count();
+        true
+    }
+
+    /// Evicts retained entries until a caller can reserve `bytes` alongside
+    /// externally tracked pending bytes. The reservation itself remains with
+    /// the caller because pending resources are not yet cache entries.
+    pub fn reserve(&mut self, bytes: u64, pending_bytes: u64) -> bool {
+        if bytes > self.stats.budget_bytes {
+            return false;
+        }
+        while self
+            .stats
+            .current_bytes
+            .saturating_add(pending_bytes)
+            .saturating_add(bytes)
+            > self.stats.budget_bytes
+        {
+            let Some(lru_key) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            else {
+                return false;
+            };
+            let removed = self
+                .entries
+                .remove(&lru_key)
+                .expect("LRU key was selected from cache");
+            self.stats.current_bytes -= removed.bytes;
+            self.stats.evictions += 1;
+        }
+        true
     }
 
     #[must_use]
@@ -227,5 +266,28 @@ mod tests {
         assert_eq!(stats.insertions, 3);
         assert_eq!(stats.evictions, 2);
         assert_eq!(stats.requests, stats.hits + stats.misses);
+    }
+
+    #[test]
+    fn oversized_insert_does_not_create_the_value() {
+        let mut cache = ByteLruCache::new(4);
+        let mut created = false;
+        assert!(!cache.insert_with("large", 5, || {
+            created = true;
+            1
+        }));
+        assert!(!created);
+        assert!(cache.is_empty());
+        assert_eq!(cache.stats().oversized_entries_skipped, 1);
+    }
+
+    #[test]
+    fn pending_reservation_evicts_retained_entries_without_oversubscription() {
+        let mut cache = ByteLruCache::new(8);
+        cache.insert("retained", 1, 4);
+        assert!(cache.reserve(4, 0));
+        assert!(cache.reserve(4, 4));
+        assert!(cache.is_empty());
+        assert!(!cache.reserve(1, 8));
     }
 }

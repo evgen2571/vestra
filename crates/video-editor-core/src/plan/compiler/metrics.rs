@@ -13,6 +13,10 @@ pub(super) fn record(
     post_effects: &[crate::plan::TimedEffect],
 ) {
     for layer in layers {
+        match layer.content_dependency {
+            crate::plan::TemporalDependency::Static => compilation.static_layer_count += 1,
+            crate::plan::TemporalDependency::Dynamic => compilation.dynamic_layer_count += 1,
+        }
         compilation.local_effect_count += layer.effects.len();
         compilation.generated_transform_contribution_count += layer.transform_contributions.len();
         compilation.keyframe_count += track_keyframe_count(&layer.opacity)

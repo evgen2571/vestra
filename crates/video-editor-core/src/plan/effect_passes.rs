@@ -118,6 +118,11 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
         return EffectPassPlan::new(&[]);
     }
     match effect {
+        EvaluatedEffect::ColourTransform { transform } => {
+            EffectPassPlan::new(&[EffectPass::ApplyColourTransform {
+                transform: *transform,
+            }])
+        }
         EvaluatedEffect::GaussianBlur { radius } => EffectPassPlan::new(&[
             EffectPass::GaussianHorizontal {
                 radius: canonical_gaussian_radius(*radius),

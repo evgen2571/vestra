@@ -87,5 +87,6 @@ pub(super) fn compile(
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
         blend_mode: BlendMode::Normal,
+        content_dependency: crate::plan::TemporalDependency::Static,
     })
 }

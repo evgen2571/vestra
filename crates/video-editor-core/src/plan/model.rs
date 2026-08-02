@@ -20,6 +20,9 @@ pub struct RenderPlan {
     pub images: Vec<ImageAsset>,
     pub layers: Vec<CompiledLayer>,
     pub post_effects: Vec<TimedEffect>,
+    /// Whether the complete post-effect result can vary with project time.
+    /// This excludes the normal fact that frames occur at different times.
+    pub post_effect_dependency: TemporalDependency,
     pub compilation: CompilationStats,
     pub warnings: Vec<crate::Diagnostic>,
 }
@@ -40,12 +43,25 @@ pub struct CompilationStats {
     pub saturation_effect_count: usize,
     pub tint_effect_count: usize,
     pub local_effect_count: usize,
-    /// Effects synthesized from presets, included in `local_effect_count`.
+    /// Effects synthesized before Phase 10A normalization, included in the
+    /// pre-normalization generated local-effect count even when normalization
+    /// later removes an identity effect.
     pub generated_local_effect_count: usize,
     pub global_effect_count: usize,
     pub advanced_effect_count: usize,
     pub generated_transform_contribution_count: usize,
     pub effect_pass_count: usize,
+    /// Authored and generated executable local and post effects before
+    /// compiler-owned Phase 10A normalization.
+    pub effect_count_before_normalization: usize,
+    /// Executable effects after compiler-owned Phase 10A normalization.
+    pub effect_count_after_normalization: usize,
+    /// Compiled visual layers whose final content is independent of render time.
+    pub static_layer_count: usize,
+    /// Compiled visual layers whose final content can vary with render time.
+    pub dynamic_layer_count: usize,
+    /// Authored track-shaped values reduced to a compiled constant track.
+    pub constant_track_normalization_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -83,6 +99,46 @@ pub struct CompiledLayer {
     pub opacity_contributions: Vec<Track<f64>>,
     pub effects: Vec<TimedEffect>,
     pub blend_mode: crate::project::BlendMode,
+    /// Whether this layer's rendered content can vary while it is active.
+    /// Timeline activity itself is deliberately not part of this classification.
+    pub content_dependency: TemporalDependency,
+}
+
+/// Backend-neutral time dependency of compiled visual work.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TemporalDependency {
+    #[default]
+    Static,
+    Dynamic,
+}
+
+/// Internal affine RGB operation in the renderer's encoded byte space.
+///
+/// This is compiled-plan data, never a project effect or serialized format.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColourTransform {
+    pub matrix: [[f64; 3]; 3],
+    pub offset: [f64; 3],
+}
+
+impl Default for ColourTransform {
+    fn default() -> Self {
+        Self {
+            matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            offset: [0.0; 3],
+        }
+    }
+}
+
+impl TemporalDependency {
+    #[must_use]
+    pub const fn combine(self, other: Self) -> Self {
+        if matches!(self, Self::Dynamic) || matches!(other, Self::Dynamic) {
+            Self::Dynamic
+        } else {
+            Self::Static
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -130,6 +186,10 @@ impl TransformContribution {
 
 #[derive(Clone, Debug)]
 pub enum CompiledEffect {
+    /// A compiler-fused contiguous static basic-colour chain.
+    ColourTransform {
+        transform: ColourTransform,
+    },
     Brightness {
         amount: Track<f64>,
     },
@@ -211,7 +271,8 @@ impl CompiledEffect {
     #[must_use]
     pub const fn class(&self) -> EffectClass {
         match self {
-            Self::Brightness { .. }
+            Self::ColourTransform { .. }
+            | Self::Brightness { .. }
             | Self::Contrast { .. }
             | Self::Saturation { .. }
             | Self::Tint { .. } => EffectClass::BasicColour,
@@ -231,6 +292,7 @@ impl CompiledEffect {
     #[must_use]
     pub fn keyframe_count(&self) -> u64 {
         match self {
+            Self::ColourTransform { .. } => 0,
             Self::Brightness { amount }
             | Self::Contrast { amount }
             | Self::Saturation { amount }
@@ -312,7 +374,8 @@ impl CompiledEffect {
             Self::Glow { .. } => 4,
             Self::Sharpen { .. } => 3,
             Self::CameraShake { .. } => 0,
-            Self::Brightness { .. }
+            Self::ColourTransform { .. }
+            | Self::Brightness { .. }
             | Self::Contrast { .. }
             | Self::Saturation { .. }
             | Self::Tint { .. }
@@ -333,6 +396,9 @@ pub struct TimedEffect {
     pub start: u128,
     pub end: u128,
     pub effect: CompiledEffect,
+    /// Compiler-owned temporal classification of this operation and its
+    /// active interval within its owner.
+    pub dependency: TemporalDependency,
 }
 
 impl TimedEffect {
@@ -373,6 +439,7 @@ mod tests {
             effect: CompiledEffect::Brightness {
                 amount: Track::new(0.0),
             },
+            dependency: TemporalDependency::Static,
         };
         assert!(!effect.active_at(9));
         assert!(effect.active_at(10));

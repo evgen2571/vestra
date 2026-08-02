@@ -55,6 +55,20 @@ settings, time conversion, and workload metrics. `plan/evaluation` evaluates
 the plan for one frame. It owns transform contributions, effects, colour
 transforms, camera shake, and motion calculations.
 
+The compiler also normalizes its private visual plan. `TemporalDependency::Static`
+means a layer, timed effect, or post-effect chain has the same rendered content
+at every time in its active domain; `Dynamic` means a track or active interval
+can change that content. Transform contributions use half-open intervals and a
+non-identity contribution is dynamic unless it covers its owner duration. A
+layer's timeline activation is separate from that classification. Exact identity
+effects are omitted before evaluation. A complete
+normal-blend static basic-colour chain may become one internal `ColourTransform`;
+renderers execute that compiled operation and do not rediscover identities or
+fusion opportunities. This metadata is not project JSON. Phase 10B consumes it
+by caching completed layer-local output before destination-dependent composition:
+CPU retains immutable `Arc<RgbaImage>` values and WGPU retains sampled GPU
+textures. Both caches are bounded by the prepared plan's existing cache budget.
+
 ## Rendering
 
 `render/geometry` owns crop materialization, image sizing, and resolved forward
@@ -110,9 +124,13 @@ visual assets, compiles the schedule, selects and constructs the backend, and
 uploads GPU resources once. It retains a stable preparation-timing snapshot and
 preparation facts. A video operation separately owns its output check,
 `FfmpegSink`, ordering buffer, operation metrics, and publication. Cumulative
-backend counters are sampled at the operation boundary and rendered as deltas;
-cache request fields are per-operation deltas while cache occupancy fields are
-the persistent snapshot after that operation.
+backend counters are sampled at the operation boundary and rendered as deltas.
+Static-cache hits, misses, budget bypasses, and layer renders are per-operation
+deltas. Static-cache entries and estimated bytes are gauges after that
+operation. WGPU reserves a static-cache entry before allocating its texture;
+retained estimated bytes plus pending reservations never exceed the configured
+static-cache budget. The limit applies independently to each internal cache,
+not to total renderer memory or physical VRAM.
 
 After the staged frame loop succeeds, the runner verifies backend idleness
 before encoder finalization and publication. CPU requires an empty completion

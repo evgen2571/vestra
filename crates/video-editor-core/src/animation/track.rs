@@ -97,6 +97,24 @@ impl<T: Interpolate> Track<T> {
     }
 }
 
+impl<T: Interpolate + PartialEq> Track<T> {
+    /// Collapses a track that has one value for every non-negative time.
+    /// Compilation uses this only on its private copy of authored tracks.
+    #[must_use]
+    pub fn normalized_from_zero(mut self) -> Self {
+        let value = self.evaluate(0);
+        if self
+            .keyframes
+            .iter()
+            .all(|keyframe| keyframe.value == value)
+        {
+            self.base_value = value;
+            self.keyframes.clear();
+        }
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

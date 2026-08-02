@@ -6,6 +6,8 @@
 //! allocated `Auxiliary` are fixed slots,
 //! so the normal path never needs a frame-sized allocation after preparation.
 
+use std::collections::BTreeSet;
+
 use crate::{
     Category, Diagnostic,
     plan::{CompiledEffect, EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan},
@@ -84,6 +86,20 @@ pub(super) enum GpuOperation {
         result_value: u64,
         parameters_index: u32,
     },
+    StoreStaticLayer {
+        cache_key: usize,
+        source: TextureSlot,
+        expected_source_value: u64,
+    },
+    CompositeCachedLayer {
+        cache_key: usize,
+        layer_index: usize,
+        canvas_source: TextureSlot,
+        expected_canvas_value: u64,
+        canvas_destination: TextureSlot,
+        result_value: u64,
+        parameters_index: u32,
+    },
     CopyForReadback {
         source: TextureSlot,
         expected_value: u64,
@@ -101,7 +117,16 @@ impl GpuFramePlan {
     /// Builds the complete deterministic texture flow.  Logical effect pass
     /// expansion is shared with the CPU executor; this type only assigns its
     /// source, destination, and retained-original texture roles.
+    #[cfg(test)]
     pub(super) fn build(frame: &EvaluatedFrame) -> Self {
+        Self::build_with_static_cache(frame, &BTreeSet::new(), &BTreeSet::new())
+    }
+
+    pub(super) fn build_with_static_cache(
+        frame: &EvaluatedFrame,
+        cached_layers: &BTreeSet<usize>,
+        cache_targets: &BTreeSet<usize>,
+    ) -> Self {
         let mut operations =
             Vec::with_capacity(2 + frame.layers.len() * 4 + frame.post_effects.len() * 2);
         let mut parameter_count = 0_u32;
@@ -116,6 +141,23 @@ impl GpuFramePlan {
 
         let mut canvas = TextureSlot::CanvasA;
         for (layer_index, layer) in frame.layers.iter().enumerate() {
+            if cached_layers.contains(&layer.compiled_layer_index) {
+                let destination = alternate_canvas(canvas);
+                operations.push(GpuOperation::CompositeCachedLayer {
+                    cache_key: layer.compiled_layer_index,
+                    layer_index,
+                    canvas_source: canvas,
+                    expected_canvas_value: canvas_value,
+                    canvas_destination: destination,
+                    result_value: next_value,
+                    parameters_index: parameter_count,
+                });
+                parameter_count += 1;
+                canvas = destination;
+                canvas_value = next_value;
+                next_value += 1;
+                continue;
+            }
             match layer.source {
                 EvaluatedSource::Image { asset_index, .. } => {
                     operations.push(GpuOperation::RenderImageLayer {
@@ -149,6 +191,13 @@ impl GpuFramePlan {
                     &mut layer_value,
                     &mut next_value,
                 );
+            }
+            if cache_targets.contains(&layer.compiled_layer_index) {
+                operations.push(GpuOperation::StoreStaticLayer {
+                    cache_key: layer.compiled_layer_index,
+                    source: layer_result,
+                    expected_source_value: layer_value,
+                });
             }
             let destination = alternate_canvas(canvas);
             operations.push(GpuOperation::CompositeLayer {
@@ -213,8 +262,13 @@ impl GpuFramePlan {
                 }
                 | GpuOperation::CompositeLayer {
                     parameters_index, ..
+                }
+                | GpuOperation::CompositeCachedLayer {
+                    parameters_index, ..
                 } => Some(*parameters_index),
-                GpuOperation::CopyForEffect { .. } | GpuOperation::CopyForReadback { .. } => None,
+                GpuOperation::CopyForEffect { .. }
+                | GpuOperation::StoreStaticLayer { .. }
+                | GpuOperation::CopyForReadback { .. } => None,
             };
             if let Some(parameter_index) = parameter_index
                 && parameter_index >= self.parameter_count
@@ -371,6 +425,42 @@ impl GpuFramePlan {
                         return Err(invalid(
                             operation_index,
                             "has invalid canvas ping-pong sequencing",
+                        ));
+                    }
+                    states[index(*canvas_destination)] = TextureState::written(*result_value);
+                    next_value += 1;
+                    expected_canvas = *canvas_destination;
+                }
+                GpuOperation::StoreStaticLayer {
+                    source,
+                    expected_source_value,
+                    ..
+                } => {
+                    if states[index(*source)].value != Some(*expected_source_value) {
+                        return Err(stale_value(
+                            operation_index,
+                            "static cache source",
+                            *source,
+                            *expected_source_value,
+                            states[index(*source)].value,
+                        ));
+                    }
+                }
+                GpuOperation::CompositeCachedLayer {
+                    canvas_source,
+                    expected_canvas_value,
+                    canvas_destination,
+                    result_value,
+                    ..
+                } => {
+                    if states[index(*canvas_source)].value != Some(*expected_canvas_value)
+                        || *canvas_source != expected_canvas
+                        || *canvas_destination != alternate_canvas(expected_canvas)
+                        || *result_value != next_value
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "has invalid cached-layer canvas sequencing",
                         ));
                     }
                     states[index(*canvas_destination)] = TextureState::written(*result_value);
@@ -566,6 +656,55 @@ mod tests {
         compile(&validated, CompileOptions::default()).expect("fixture compiles")
     }
 
+    fn static_frame() -> EvaluatedFrame {
+        EvaluatedFrame {
+            time: 0,
+            background: [0, 0, 0, 255],
+            width: 4,
+            height: 4,
+            layers: vec![crate::plan::EvaluatedLayer {
+                compiled_layer_index: 3,
+                content_dependency: crate::plan::TemporalDependency::Static,
+                source: EvaluatedSource::SolidColor {
+                    colour: [20, 40, 60, 255],
+                },
+                opacity: 0.75,
+                effects: Vec::new(),
+                colour_transform: crate::plan::ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        }
+    }
+
+    #[test]
+    fn static_layer_store_then_reuse_stays_before_destination_composition() {
+        let frame = static_frame();
+        let targets = BTreeSet::from([3]);
+        let miss = GpuFramePlan::build_with_static_cache(&frame, &BTreeSet::new(), &targets);
+        miss.validate(0).expect("cache population plan is valid");
+        assert!(
+            miss.operations
+                .iter()
+                .any(|operation| matches!(operation, GpuOperation::StoreStaticLayer { .. }))
+        );
+
+        let hit =
+            GpuFramePlan::build_with_static_cache(&frame, &BTreeSet::from([3]), &BTreeSet::new());
+        hit.validate(0).expect("cache reuse plan is valid");
+        assert!(hit.operations.iter().any(|operation| matches!(
+            operation,
+            GpuOperation::CompositeCachedLayer { cache_key: 3, .. }
+        )));
+        assert!(!hit.operations.iter().any(|operation| matches!(
+            operation,
+            GpuOperation::RenderImageLayer { .. }
+                | GpuOperation::RenderSolidLayer { .. }
+                | GpuOperation::StoreStaticLayer { .. }
+        )));
+    }
+
     #[test]
     fn zero_odd_and_even_layers_choose_the_correct_final_canvas() {
         let plan = fixture();
@@ -755,6 +894,8 @@ mod tests {
             width: 7,
             height: 5,
             layers: vec![crate::plan::EvaluatedLayer {
+                compiled_layer_index: 0,
+                content_dependency: crate::plan::TemporalDependency::Dynamic,
                 source: EvaluatedSource::SolidColor {
                     colour: [20, 40, 80, 255],
                 },
@@ -1064,6 +1205,8 @@ mod tests {
             width: 9,
             height: 7,
             layers: vec![crate::plan::EvaluatedLayer {
+                compiled_layer_index: 0,
+                content_dependency: crate::plan::TemporalDependency::Dynamic,
                 source: EvaluatedSource::SolidColor {
                     colour: [100, 80, 60, 255],
                 },
@@ -1161,6 +1304,8 @@ mod tests {
             width: 7,
             height: 5,
             layers: vec![crate::plan::EvaluatedLayer {
+                compiled_layer_index: 0,
+                content_dependency: crate::plan::TemporalDependency::Dynamic,
                 source: EvaluatedSource::SolidColor {
                     colour: [20, 40, 80, 255],
                 },
@@ -1196,6 +1341,42 @@ mod tests {
     }
 
     #[test]
+    fn compiler_fused_colour_transform_is_one_wgpu_operation() {
+        let transform = crate::plan::ColourTransform::from_effects([
+            EvaluatedEffect::Brightness { amount: 0.1 },
+            EvaluatedEffect::Contrast { amount: 1.1 },
+        ]);
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 7,
+            height: 5,
+            layers: vec![crate::plan::EvaluatedLayer {
+                compiled_layer_index: 0,
+                content_dependency: crate::plan::TemporalDependency::Dynamic,
+                source: EvaluatedSource::SolidColor {
+                    colour: [20, 40, 80, 255],
+                },
+                opacity: 1.0,
+                effects: vec![EvaluatedEffect::ColourTransform { transform }],
+                colour_transform: transform,
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: vec![],
+            evaluated_track_count: 0,
+        };
+        let plan = GpuFramePlan::build(&frame);
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(operation, GpuOperation::ApplyEffect { .. }))
+                .count(),
+            1
+        );
+        plan.validate(0).expect("fused operation is valid");
+    }
+
+    #[test]
     fn chained_multipass_effects_retain_and_validate_their_original_values() {
         let frame = EvaluatedFrame {
             time: 0,
@@ -1203,6 +1384,8 @@ mod tests {
             width: 7,
             height: 5,
             layers: vec![crate::plan::EvaluatedLayer {
+                compiled_layer_index: 0,
+                content_dependency: crate::plan::TemporalDependency::Dynamic,
                 source: EvaluatedSource::SolidColor {
                     colour: [20, 40, 80, 255],
                 },

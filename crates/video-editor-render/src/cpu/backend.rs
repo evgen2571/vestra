@@ -238,7 +238,9 @@ mod tests {
             },
         )
         .expect("fixture validates");
-        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.canvas.width = 4;
+        plan.canvas.height = 4;
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
         let mut backend = CpuBackend::new(&plan, decoded);
         let mut frame = static_frame();
@@ -270,6 +272,7 @@ mod tests {
         assert_eq!(stats.static_cache_entries, 1);
         assert_eq!(stats.static_cache_population_renders, 1);
         assert_eq!(stats.static_layers_rendered, 1);
+        assert_eq!(stats.cpu_scratch_allocations, 4);
     }
 
     #[test]
@@ -473,28 +476,44 @@ mod tests {
         .expect("fixture validates");
         let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         plan.limits.maximum_cache_bytes = 1;
+        plan.canvas.width = 4;
+        plan.canvas.height = 4;
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new(&plan, Arc::clone(&decoded));
+        let mut reference = CpuBackend::new(&plan, decoded);
         let frame = static_frame();
+        let mut reference_frame = frame.clone();
+        reference_frame.layers[0].content_dependency = TemporalDependency::Dynamic;
 
-        backend.submit_frame(0, &frame).expect("first submission");
-        let first = backend
-            .poll_completed(PollMode::WaitForOne)
-            .expect("first poll")
-            .expect("first completion");
-        backend.submit_frame(1, &frame).expect("second submission");
-        let second = backend
-            .poll_completed(PollMode::WaitForOne)
-            .expect("second poll")
-            .expect("second completion");
+        let mut outputs = Vec::new();
+        for frame_number in 0..100 {
+            backend
+                .submit_frame(frame_number, &frame)
+                .expect("frame submits");
+            let output = backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("frame poll")
+                .expect("frame completion")
+                .rgba;
+            reference
+                .submit_frame(frame_number, &reference_frame)
+                .expect("reference frame submits");
+            let reference = reference
+                .poll_completed(PollMode::WaitForOne)
+                .expect("reference frame poll")
+                .expect("reference frame completion");
+            assert_eq!(output, reference.rgba);
+            outputs.push(output);
+        }
 
-        assert_eq!(first.rgba, second.rgba);
+        assert!(outputs.windows(2).all(|frames| frames[0] == frames[1]));
         let stats = backend.stats();
         assert_eq!(stats.static_cache_entries, 0);
         assert_eq!(stats.static_cache_hits, 0);
-        assert_eq!(stats.static_cache_misses, 2);
-        assert_eq!(stats.static_cache_budget_bypasses, 2);
-        assert_eq!(stats.static_layers_rendered, 2);
+        assert_eq!(stats.static_cache_misses, 100);
+        assert_eq!(stats.static_cache_budget_bypasses, 100);
+        assert_eq!(stats.static_layers_rendered, 100);
+        assert_eq!(stats.cpu_scratch_allocations, 3);
     }
 
     #[test]

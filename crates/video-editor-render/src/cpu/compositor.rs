@@ -65,12 +65,15 @@ pub fn compose(
                 effects::apply_chain(surfaces, &layer.effects);
             }
             let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
-            // Cache publication takes this finished mutable surface instead of
-            // cloning it. The pool immediately receives a fresh replacement;
-            // immutable cache entries are never borrowed as scratch.
-            let cached = Arc::new(surfaces.take_current());
-            static_layers.insert(layer.compiled_layer_index, Arc::clone(&cached), bytes);
-            blend_surface(canvas, &cached, layer.blend_mode, layer.opacity);
+            if let Some(cached) =
+                static_layers.insert_with(layer.compiled_layer_index, bytes, || {
+                    Arc::new(surfaces.take_current())
+                })
+            {
+                blend_surface(canvas, cached, layer.blend_mode, layer.opacity);
+            } else {
+                blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+            }
             continue;
         }
         if uses_direct_colour_path(layer) {

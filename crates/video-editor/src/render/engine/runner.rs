@@ -802,6 +802,46 @@ fn operation_backend_metrics(
             before.static_layers_rendered,
             after.static_layers_rendered,
         ),
+        (
+            "CPU full-frame allocation",
+            before.cpu_full_frame_allocations,
+            after.cpu_full_frame_allocations,
+        ),
+        (
+            "CPU scratch allocation",
+            before.cpu_scratch_allocations,
+            after.cpu_scratch_allocations,
+        ),
+        (
+            "CPU scratch reuse",
+            before.cpu_scratch_reuses,
+            after.cpu_scratch_reuses,
+        ),
+        (
+            "CPU full-frame copy bytes",
+            before.cpu_full_frame_copy_bytes,
+            after.cpu_full_frame_copy_bytes,
+        ),
+        (
+            "WGPU temporary texture allocation",
+            before.wgpu_temporary_texture_allocations,
+            after.wgpu_temporary_texture_allocations,
+        ),
+        (
+            "WGPU prepared working-texture reuse slots",
+            before.wgpu_temporary_texture_reuses,
+            after.wgpu_temporary_texture_reuses,
+        ),
+        (
+            "WGPU tight RGBA readback allocation",
+            before.readback_tight_rgba_allocations,
+            after.readback_tight_rgba_allocations,
+        ),
+        (
+            "WGPU readback repack bytes",
+            before.readback_repack_bytes,
+            after.readback_repack_bytes,
+        ),
     ];
     if let Some((name, _, _)) = counters.iter().find(|(_, before, after)| after < before) {
         return Err(RenderError {
@@ -851,6 +891,33 @@ fn operation_backend_metrics(
     );
     performance.static_layers_rendered =
         delta(before.static_layers_rendered, after.static_layers_rendered);
+    performance.cpu_full_frame_allocations = delta(
+        before.cpu_full_frame_allocations,
+        after.cpu_full_frame_allocations,
+    );
+    performance.cpu_scratch_allocations = delta(
+        before.cpu_scratch_allocations,
+        after.cpu_scratch_allocations,
+    );
+    performance.cpu_scratch_reuses = delta(before.cpu_scratch_reuses, after.cpu_scratch_reuses);
+    performance.cpu_full_frame_copy_bytes = delta(
+        before.cpu_full_frame_copy_bytes,
+        after.cpu_full_frame_copy_bytes,
+    );
+    performance.wgpu_temporary_texture_allocations = delta(
+        before.wgpu_temporary_texture_allocations,
+        after.wgpu_temporary_texture_allocations,
+    );
+    performance.wgpu_temporary_texture_reuses = delta(
+        before.wgpu_temporary_texture_reuses,
+        after.wgpu_temporary_texture_reuses,
+    );
+    performance.readback_tight_rgba_allocations = delta(
+        before.readback_tight_rgba_allocations,
+        after.readback_tight_rgba_allocations,
+    );
+    performance.readback_repack_bytes =
+        delta(before.readback_repack_bytes, after.readback_repack_bytes);
     performance.bitmap_cache_hit_rate = (performance.bitmap_cache_requests != 0)
         .then(|| performance.bitmap_cache_hits as f64 / performance.bitmap_cache_requests as f64);
     Ok(())

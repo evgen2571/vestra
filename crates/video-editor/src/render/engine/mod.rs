@@ -327,6 +327,8 @@ mod tests {
         assert_eq!(failure_progress(24, 24), None);
     }
 
+    #[path = "phase10.rs"]
+    mod phase10_tests;
     #[path = "selection.rs"]
     mod selection_tests;
     #[path = "staged.rs"]

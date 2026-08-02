@@ -13,6 +13,33 @@ use crate::{
 
 pub(crate) use super::surfaces::EffectSurfacePool;
 
+/// Immutable complete layer output retained by the CPU static-layer cache.
+pub(crate) struct CachedCpuLayerSurface {
+    image: RgbaImage,
+    fully_opaque: bool,
+}
+
+impl CachedCpuLayerSurface {
+    fn from_image(image: RgbaImage) -> Self {
+        let fully_opaque = image
+            .as_raw()
+            .chunks_exact(4)
+            .all(|pixel| pixel[3] == u8::MAX);
+        Self {
+            image,
+            fully_opaque,
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct ComposeStats {
+    pub static_layer_renders: u64,
+    pub opaque_copy_fast_path_hits: u64,
+    pub opaque_copy_fast_path_bytes: u64,
+    pub generic_blend_surface_calls: u64,
+}
+
 #[cfg(test)]
 use crate::cpu::effects::blur;
 #[cfg(test)]
@@ -26,13 +53,23 @@ pub fn compose(
     assets: &mut PreparedAssets,
     canvas: &mut RgbaImage,
     surfaces: &mut EffectSurfacePool,
-    static_layers: &mut ByteLruCache<usize, Arc<RgbaImage>>,
-) -> u64 {
-    let mut static_layer_renders = 0;
+    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+) -> ComposeStats {
+    let mut stats = ComposeStats::default();
     let _time = frame.time;
+    let first_is_opaque_cached = frame.layers.first().and_then(|layer| {
+        static_layers
+            .peek(&layer.compiled_layer_index)
+            .map(|cached| is_opaque_copy(layer, cached, frame.width, frame.height))
+    }) == Some(true);
     if canvas.width() != frame.width || canvas.height() != frame.height {
-        *canvas = RgbaImage::from_pixel(frame.width, frame.height, Rgba(frame.background));
-    } else {
+        *canvas = RgbaImage::new(frame.width, frame.height);
+        if !first_is_opaque_cached {
+            for pixel in canvas.pixels_mut() {
+                *pixel = Rgba(frame.background);
+            }
+        }
+    } else if !first_is_opaque_cached {
         for pixel in canvas.pixels_mut() {
             *pixel = Rgba(frame.background);
         }
@@ -41,11 +78,11 @@ pub fn compose(
     for layer in &frame.layers {
         if layer.content_dependency == TemporalDependency::Static {
             if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
-                blend_surface(canvas, &cached, layer.blend_mode, layer.opacity);
+                composite_cached_surface(canvas, &cached, layer, &mut stats);
                 continue;
             }
             surfaces.clear();
-            static_layer_renders += 1;
+            stats.static_layer_renders += 1;
             if uses_direct_colour_path(layer) {
                 draw_layer(
                     surfaces.current(),
@@ -67,12 +104,13 @@ pub fn compose(
             let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
             if let Some(cached) =
                 static_layers.insert_with(layer.compiled_layer_index, bytes, || {
-                    Arc::new(surfaces.take_current())
+                    Arc::new(CachedCpuLayerSurface::from_image(surfaces.take_current()))
                 })
             {
-                blend_surface(canvas, cached, layer.blend_mode, layer.opacity);
+                composite_cached_surface(canvas, cached, layer, &mut stats);
             } else {
                 blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+                stats.generic_blend_surface_calls += 1;
             }
             continue;
         }
@@ -90,9 +128,39 @@ pub fn compose(
         );
         effects::apply_chain(surfaces, &layer.effects);
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+        stats.generic_blend_surface_calls += 1;
     }
     effects::apply_to(surfaces, canvas, &frame.post_effects);
-    static_layer_renders
+    stats
+}
+
+fn is_opaque_copy(
+    layer: &EvaluatedLayer,
+    cached: &CachedCpuLayerSurface,
+    width: u32,
+    height: u32,
+) -> bool {
+    matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+        && layer.opacity == 1.0
+        && cached.fully_opaque
+        && cached.image.width() == width
+        && cached.image.height() == height
+}
+
+fn composite_cached_surface(
+    canvas: &mut RgbaImage,
+    cached: &CachedCpuLayerSurface,
+    layer: &EvaluatedLayer,
+    stats: &mut ComposeStats,
+) {
+    if is_opaque_copy(layer, cached, canvas.width(), canvas.height()) {
+        canvas.as_mut().copy_from_slice(cached.image.as_raw());
+        stats.opaque_copy_fast_path_hits += 1;
+        stats.opaque_copy_fast_path_bytes += cached.image.as_raw().len() as u64;
+    } else {
+        blend_surface(canvas, &cached.image, layer.blend_mode, layer.opacity);
+        stats.generic_blend_surface_calls += 1;
+    }
 }
 
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
@@ -145,6 +213,69 @@ mod tests {
             }
         }
         rgb
+    }
+
+    fn cached(alpha: u8) -> CachedCpuLayerSurface {
+        CachedCpuLayerSurface::from_image(RgbaImage::from_pixel(2, 2, Rgba([30, 60, 90, alpha])))
+    }
+
+    fn layer(opacity: f64, blend_mode: crate::project::BlendMode) -> EvaluatedLayer {
+        EvaluatedLayer {
+            compiled_layer_index: 0,
+            content_dependency: TemporalDependency::Static,
+            source: EvaluatedSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            opacity,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode,
+        }
+    }
+
+    #[test]
+    fn opaque_normal_cached_surface_uses_bulk_copy_only_at_exact_opacity() {
+        let mut canvas = RgbaImage::from_pixel(2, 2, Rgba([1, 2, 3, 255]));
+        let cached = cached(255);
+        let mut stats = ComposeStats::default();
+        composite_cached_surface(
+            &mut canvas,
+            &cached,
+            &layer(1.0, crate::project::BlendMode::Normal),
+            &mut stats,
+        );
+        assert_eq!(canvas.as_raw(), cached.image.as_raw());
+        assert_eq!(stats.opaque_copy_fast_path_hits, 1);
+        assert_eq!(stats.generic_blend_surface_calls, 0);
+
+        composite_cached_surface(
+            &mut canvas,
+            &cached,
+            &layer(0.999, crate::project::BlendMode::Normal),
+            &mut stats,
+        );
+        assert_eq!(stats.opaque_copy_fast_path_hits, 1);
+        assert_eq!(stats.generic_blend_surface_calls, 1);
+    }
+
+    #[test]
+    fn transparent_or_non_normal_cached_surface_uses_generic_blending() {
+        let mut canvas = RgbaImage::from_pixel(2, 2, Rgba([1, 2, 3, 255]));
+        let mut stats = ComposeStats::default();
+        composite_cached_surface(
+            &mut canvas,
+            &cached(254),
+            &layer(1.0, crate::project::BlendMode::Normal),
+            &mut stats,
+        );
+        composite_cached_surface(
+            &mut canvas,
+            &cached(255),
+            &layer(1.0, crate::project::BlendMode::Screen),
+            &mut stats,
+        );
+        assert_eq!(stats.opaque_copy_fast_path_hits, 0);
+        assert_eq!(stats.generic_blend_surface_calls, 2);
     }
     #[test]
     fn alpha_composition_is_known() {

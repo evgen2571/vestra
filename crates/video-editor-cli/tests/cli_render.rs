@@ -59,11 +59,26 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     ] {
         assert!(performance[key].is_u64(), "missing flat metric {key}");
     }
+    assert!(performance.values().all(|value| {
+        value.is_number() || value.is_boolean() || value.is_string() || value.is_null()
+    }));
+    assert!(matches!(
+        performance
+            .get("visual_temporal_dependency")
+            .and_then(Value::as_str),
+        Some("static" | "dynamic")
+    ));
     assert!(
         performance
-            .values()
-            .all(|value| { value.is_u64() || value.is_f64() || value.is_null() })
+            .get("static_visual_ffmpeg_fast_path_used")
+            .is_some_and(Value::is_boolean)
     );
+    assert!(matches!(
+        performance
+            .get("encoder_video_input_mode")
+            .and_then(Value::as_str),
+        Some("raw_rgba_frames" | "looped_static_image")
+    ));
     assert!(report.get("backend_fallback").is_none());
     assert!(output.is_file());
 }

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use crate::{
     Category, Diagnostic,
     media::EncoderSettings,
-    plan::{Canvas, CompilationStats, PlanCompileInput, RenderPlan},
+    plan::{Canvas, CompilationStats, PlanCompileInput, RenderPlan, TemporalDependency},
     project::parse_colour,
 };
 
@@ -132,6 +132,17 @@ pub fn compile(
         time::to_nanos(validated.duration, "project")?,
         &mut compilation,
     );
+    let visual_dependency = layers
+        .iter()
+        .fold(post_effect_dependency, |dependency, layer| {
+            dependency.combine(layer.content_dependency).combine(
+                if layer.start_frame == 0 && layer.end_frame == validated.frame_count {
+                    TemporalDependency::Static
+                } else {
+                    TemporalDependency::Dynamic
+                },
+            )
+        });
     compilation.effect_count_after_normalization = layers
         .iter()
         .map(|layer| layer.effects.len())
@@ -173,6 +184,7 @@ pub fn compile(
         layers,
         post_effects,
         post_effect_dependency,
+        visual_dependency,
         compilation,
         warnings: validated.warnings.to_vec(),
     })

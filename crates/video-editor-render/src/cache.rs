@@ -60,6 +60,11 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
         }
     }
 
+    #[must_use]
+    pub fn peek(&self, key: &K) -> Option<&V> {
+        self.entries.get(key).map(|entry| &entry.value)
+    }
+
     /// Resolves one logical request. A request records exactly one hit or one
     /// miss, including a miss that cannot be cached because it exceeds budget.
     pub fn get_or_insert_with(

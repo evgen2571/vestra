@@ -116,15 +116,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
     }
 
     pub fn insert(&mut self, key: K, value: V, bytes: u64) {
-        self.insert_with(key, bytes, || value);
+        let _ = self.insert_with(key, bytes, || value);
     }
 
     /// Inserts only when the candidate fits, so callers can defer an expensive
     /// clone or allocation until after the budget decision.
-    pub fn insert_with(&mut self, key: K, bytes: u64, create: impl FnOnce() -> V) -> bool {
+    pub fn insert_with(&mut self, key: K, bytes: u64, create: impl FnOnce() -> V) -> Option<&V> {
         if bytes > self.stats.budget_bytes {
             self.stats.oversized_entries_skipped += 1;
-            return false;
+            return None;
         }
         if let Some(previous) = self.entries.remove(&key) {
             self.stats.current_bytes -= previous.bytes;
@@ -150,7 +150,7 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
         self.stats.peak_bytes = self.stats.peak_bytes.max(self.stats.current_bytes);
         self.stats.insertions += 1;
         self.entries.insert(
-            key,
+            key.clone(),
             Entry {
                 value: create(),
                 bytes,
@@ -158,7 +158,13 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
             },
         );
         self.sync_entry_count();
-        true
+        Some(
+            &self
+                .entries
+                .get(&key)
+                .expect("inserted cache entry is present")
+                .value,
+        )
     }
 
     /// Evicts retained entries until a caller can reserve `bytes` alongside
@@ -272,10 +278,14 @@ mod tests {
     fn oversized_insert_does_not_create_the_value() {
         let mut cache = ByteLruCache::new(4);
         let mut created = false;
-        assert!(!cache.insert_with("large", 5, || {
-            created = true;
-            1
-        }));
+        assert!(
+            cache
+                .insert_with("large", 5, || {
+                    created = true;
+                    1
+                })
+                .is_none()
+        );
         assert!(!created);
         assert!(cache.is_empty());
         assert_eq!(cache.stats().oversized_entries_skipped, 1);

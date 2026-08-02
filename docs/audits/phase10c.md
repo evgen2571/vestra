@@ -13,9 +13,11 @@ and cannot grow with frame count; it retains exactly three full-canvas surfaces.
 Before this change, publishing a cacheable static layer cloned its full RGBA
 surface. The current path has zero such clones: it retains the completed image
 as `Arc<RgbaImage>` and installs one same-sized replacement in the pool. This
-preserves cache immutability and avoids the full-frame copy. A cache-budget
-bypass still renders correctly; the transferred image is dropped after
-composition rather than retained.
+preserves cache immutability and avoids the full-frame copy. The cache now
+checks its budget before calling `take_current()`. An oversized candidate is
+blended directly from the current scratch surface, so a 100-frame over-budget
+layer keeps the pool at three allocations instead of allocating one replacement
+per frame.
 
 Completed CPU frames remain independently owned `Vec<u8>` values. They cannot
 return to the renderer pool because the completion ordering queue and public
@@ -51,11 +53,20 @@ instrumentation and removal of static-cache cloning, not a second pool layered
 over the existing one.
 
 The WGPU working set is already prepared once, so its allocation counter equals
-the compatible working-texture count and its reuse counter increases on later
-successful submissions. Logical bytes are `width × height × 4` per retained
-`Rgba8Unorm` working texture. Runtime adapter tests returned early in this
+the compatible working-texture count. `wgpu_temporary_texture_reuses` is a
+structural prepared-working-texture reuse-slot count: on each successful
+submission after the first it adds the fixed working-set texture count. It does
+not claim every working texture was referenced by that frame's GPU plan.
+Logical bytes are `width × height × 4` per retained `Rgba8Unorm` working
+texture. Runtime adapter tests returned early in this
 environment because no compatible adapter was available; adapter-independent
 frame-plan, resource-count, and padded-row tests ran.
+
+`RenderSummary.performance` now reports CPU allocation, scratch reuse, and
+copy fields plus WGPU working-texture and readback fields as operation deltas.
+CPU scratch capacity and WGPU retained working-texture capacity are sampled as
+end-of-operation gauges. Prepared WGPU texture allocation belongs to the
+preparation snapshot, not a later render operation.
 
 ## Deliberately retained copies
 
@@ -65,14 +76,18 @@ frame-plan, resource-count, and padded-row tests ran.
   source and target surfaces.
 - WGPU mapped rows → final tight RGBA: required CPU-accessible ownership.
 
-Phase 10D benchmarking is deferred.
+Phase 10D benchmarking and the final performance audit are recorded in
+`docs/audits/phase10d.md` with release CPU results and a documented WGPU
+adapter limitation.
 
 ## Verification
 
 - `cargo fmt --all -- --check`, `cargo check --workspace`, strict workspace
   Clippy, and `cargo test --workspace` passed.
 - Focused CPU tests cover static-cache versus dynamic pixel parity for a fused
-  basic-colour chain and the 100-frame scratch-reuse bound. Existing WGPU
+  basic-colour chain, successful zero-copy cache publication with one pool
+  replacement, the 100-frame over-budget allocation bound, and the 100-frame
+  dynamic scratch-reuse bound. Existing WGPU
   readback tests cover aligned and unaligned rows.
 - Schema validation, `maturin develop --release`, `python -m pytest
   python-tests` (259 passed, 4 adapter-gated runtime early returns), mypy, and

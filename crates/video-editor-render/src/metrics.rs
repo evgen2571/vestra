@@ -202,6 +202,13 @@ impl PreparationStats {
         // operation deltas by the render runner.
         self.static_cache_entries = backend.static_cache_entries;
         self.static_cached_bytes = backend.static_cached_bytes;
+        // Workspace capacity is an end-of-operation gauge. Allocation, reuse,
+        // and copy event counters are set as deltas by the render runner.
+        self.cpu_scratch_buffers_retained = backend.cpu_scratch_buffers_retained;
+        self.cpu_scratch_bytes_retained = backend.cpu_scratch_bytes_retained;
+        self.wgpu_temporary_texture_estimated_bytes =
+            backend.wgpu_temporary_texture_estimated_bytes;
+        self.wgpu_temporary_textures_retained = backend.wgpu_temporary_textures_retained;
         self.source_texture_count = backend.source_texture_count;
         self.source_texture_bytes = backend.source_texture_bytes;
         self.sampler_count = backend.sampler_count;

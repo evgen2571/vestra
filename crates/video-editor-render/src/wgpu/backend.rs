@@ -455,6 +455,9 @@ impl RenderBackend for WgpuBackend {
             return Err(error);
         }
         if self.staged.submitted_frames > 0 {
+            // This is a structural slot count, not a record of textures used
+            // by this frame's plan. Every later submission reuses the fixed
+            // prepared working set.
             self.temporary_texture_reuses += self.frame.working.texture_count() as u64;
         }
         self.staged.submitted_frames += 1;

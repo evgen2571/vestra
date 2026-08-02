@@ -19,6 +19,8 @@ pub(super) struct ReadbackMetrics {
     pub(super) submission_to_map_ready: Duration,
     pub(super) slot_lifetime: Duration,
     pub(super) mapping_failure_count: u64,
+    pub(super) tight_rgba_allocations: u64,
+    pub(super) repack_bytes: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -221,6 +223,7 @@ impl ReadbackRing {
                         let mapped = slot.buffer.slice(..).get_mapped_range();
                         let repack_started = Instant::now();
                         let mut packed = vec![0_u8; self.packed_bytes];
+                        self.metrics.tight_rgba_allocations += 1;
                         let repack_result = repack_rows(
                             &mapped,
                             &mut packed,
@@ -236,6 +239,7 @@ impl ReadbackRing {
                             return Err(error);
                         }
                         slot.packed_bytes = packed;
+                        self.metrics.repack_bytes += self.packed_bytes as u64;
                         if let Some(submitted_at) = slot.submitted_at {
                             self.metrics.submission_to_map_ready += submitted_at.elapsed();
                         }

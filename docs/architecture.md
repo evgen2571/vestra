@@ -69,6 +69,25 @@ by caching completed layer-local output before destination-dependent composition
 CPU retains immutable `Arc<RgbaImage>` values and WGPU retains sampled GPU
 textures. Both caches are bounded by the prepared plan's existing cache budget.
 
+Phase 10C keeps mutable workspace separate from that immutable cache. The CPU
+backend owns three fixed RGBA8 full-canvas effect surfaces (`current`,
+ping-pong target, and Gaussian horizontal scratch), bounded by its single-frame
+capacity. They are reset only when a pass needs prior pixels cleared, reused for
+layer-local and post effects, and never alias a cached `Arc<RgbaImage>` or a
+completed frame. Cache publication transfers the finished scratch image into
+the immutable cache and replaces that pool member. Final CPU frames still own a
+new RGBA vector because the completion queue and `FrameSink` may retain it.
+
+WGPU owns a fixed canvas/layer/effect texture set for the prepared project's
+dimensions, `Rgba8Unorm` format, and working usage flags. The queue orders each
+submitted command buffer, including its final texture-to-readback-buffer copy,
+before the next command buffer writes the same transient textures; readback
+slots separately retain per-submission buffers until map completion. Static
+cache textures are never part of this mutable working set. Readback allocates
+one final owned tight RGBA vector and copies each valid mapped row directly into
+it; there is no second tight-packed intermediate. FFmpeg synchronously writes
+that vector by slice without a renderer-side clone.
+
 ## Rendering
 
 `render/geometry` owns crop materialization, image sizing, and resolved forward

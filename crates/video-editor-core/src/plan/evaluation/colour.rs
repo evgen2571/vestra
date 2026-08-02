@@ -1,22 +1,8 @@
 //! Renderer-neutral colour-matrix composition for evaluated basic effects.
 
+use crate::plan::ColourTransform;
+
 use super::EvaluatedEffect;
-
-/// An affine RGB operation in byte colour space: `matrix * rgb + offset`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ColourTransform {
-    pub matrix: [[f64; 3]; 3],
-    pub offset: [f64; 3],
-}
-
-impl Default for ColourTransform {
-    fn default() -> Self {
-        Self {
-            matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-            offset: [0.0; 3],
-        }
-    }
-}
 
 impl ColourTransform {
     fn then(mut self, matrix: [[f64; 3]; 3], offset: [f64; 3]) -> Self {
@@ -32,6 +18,7 @@ impl ColourTransform {
         effects
             .into_iter()
             .fold(Self::default(), |transform, effect| match effect {
+                EvaluatedEffect::ColourTransform { transform } => transform,
                 EvaluatedEffect::Brightness { amount } => transform.then(
                     [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
                     [amount * 255.0; 3],

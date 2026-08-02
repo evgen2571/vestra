@@ -264,7 +264,7 @@ impl ReadbackRing {
         Ok(())
     }
 
-    pub(super) fn take_ready(&mut self) -> Option<CompletedFrame> {
+    pub(super) fn take_ready_with_token(&mut self) -> Option<(SlotToken, CompletedFrame)> {
         if let Some(token) = self.lifecycle.first_ready() {
             let slot = &mut self.slots[token.slot_index];
             let frame_number = token.frame_number;
@@ -280,9 +280,14 @@ impl ReadbackRing {
             slot.state = ReadbackState::Available;
             slot.submitted_at = None;
             slot.mapped_at = None;
-            return Some(CompletedFrame { frame_number, rgba });
+            return Some((token, CompletedFrame { frame_number, rgba }));
         }
         None
+    }
+
+    #[cfg(test)]
+    pub(super) fn take_ready(&mut self) -> Option<CompletedFrame> {
+        self.take_ready_with_token().map(|(_, frame)| frame)
     }
 
     pub(super) fn metrics(&self) -> ReadbackMetrics {

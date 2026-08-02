@@ -179,6 +179,20 @@ def test_camera_shake_track_time_starts_at_its_active_interval() -> None:
     assert after_local_keyframe != at_active_start
 
 
+def test_zero_camera_shake_matches_no_shake() -> None:
+    authored, clip = builder()
+    baseline = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    ).render_frame_number(5).to_bytes()
+    clip.effects.add_camera_shake(
+        position_amount=0, rotation_degrees=0, scale_amount=0, frequency=8, seed=7, attack=0, decay=1,
+    )
+    shaken = video_editor.Editor().prepare(
+        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    ).render_frame_number(5).to_bytes()
+    assert shaken == baseline
+
+
 def test_effect_collection_and_identity_state_are_read_only() -> None:
     authored, clip = builder()
     effect = clip.effects.add_brightness(amount=0)

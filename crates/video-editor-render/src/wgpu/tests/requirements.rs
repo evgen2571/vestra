@@ -223,6 +223,7 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
             intensity: Track::new(0.8),
             colour: [255, 180, 60, 255],
         },
+        dependency: crate::plan::TemporalDependency::Static,
     }];
     plan.compilation.effect_pass_count = 4;
     let requirements = GpuRequirements::from_plan(

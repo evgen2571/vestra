@@ -180,9 +180,12 @@ pub(super) fn apply(
     compilation.generated_local_effect_count += generated.len();
     layer.effects.splice(
         0..0,
-        generated
-            .into_iter()
-            .map(|effect| TimedEffect { start, end, effect }),
+        generated.into_iter().map(|effect| TimedEffect {
+            start,
+            end,
+            effect,
+            dependency: crate::plan::TemporalDependency::Static,
+        }),
     );
     Ok(())
 }

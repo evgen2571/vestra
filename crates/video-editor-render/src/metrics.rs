@@ -22,7 +22,8 @@ pub struct PreparationStats {
     pub saturation_effect_count: usize,
     pub tint_effect_count: usize,
     pub local_effect_count: usize,
-    /// Preset-generated effects, included in `local_effect_count`.
+    /// Generated local effects before Phase 10A normalization. Identity
+    /// elimination means this count may exceed executable local effects.
     pub generated_local_effect_count: usize,
     pub global_effect_count: usize,
     pub advanced_effect_count: usize,
@@ -43,6 +44,17 @@ pub struct PreparationStats {
     pub cache_peak_bytes: u64,
     pub cache_evictions: u64,
     pub cache_oversized_entries_skipped: u64,
+    /// Whole rendered layers reused because Phase 10A proved their content static.
+    pub static_cache_hits: u64,
+    pub static_cache_misses: u64,
+    pub static_cache_entries: usize,
+    pub static_cached_bytes: u64,
+    pub static_cache_budget_bypasses: u64,
+    /// Static-layer executions whose output was selected to populate the cache.
+    pub static_cache_population_renders: u64,
+    /// Every physical static-layer execution, including cache populations,
+    /// pending-key fallbacks, and budget bypasses.
+    pub static_layers_rendered: u64,
     pub schedule_event_count: usize,
     pub active_item_consideration_count: u64,
     pub rendered_frame_count: u64,
@@ -154,6 +166,11 @@ impl PreparationStats {
         self.cache_peak_bytes = backend.cache_peak_bytes;
         self.cache_evictions = backend.cache_evictions;
         self.cache_oversized_entries_skipped = backend.cache_oversized_entries_skipped;
+        // Static-cache entries and bytes are end-of-operation gauges. The
+        // corresponding hit, miss, bypass, and rendered counters are set as
+        // operation deltas by the render runner.
+        self.static_cache_entries = backend.static_cache_entries;
+        self.static_cached_bytes = backend.static_cached_bytes;
         self.source_texture_count = backend.source_texture_count;
         self.source_texture_bytes = backend.source_texture_bytes;
         self.sampler_count = backend.sampler_count;

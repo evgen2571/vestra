@@ -76,6 +76,11 @@ impl PreparedState {
             self.plan.images.len(),
         )
     }
+
+    #[cfg(test)]
+    pub(crate) fn backend_stats(&mut self) -> crate::render::PreparationStats {
+        self.backend.stats()
+    }
     pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
         self.requested_backend
     }
@@ -772,6 +777,31 @@ fn operation_backend_metrics(
             before.cache_oversized_entries_skipped,
             after.cache_oversized_entries_skipped,
         ),
+        (
+            "static cache hit",
+            before.static_cache_hits,
+            after.static_cache_hits,
+        ),
+        (
+            "static cache miss",
+            before.static_cache_misses,
+            after.static_cache_misses,
+        ),
+        (
+            "static cache budget bypass",
+            before.static_cache_budget_bypasses,
+            after.static_cache_budget_bypasses,
+        ),
+        (
+            "static cache population render",
+            before.static_cache_population_renders,
+            after.static_cache_population_renders,
+        ),
+        (
+            "static layer render",
+            before.static_layers_rendered,
+            after.static_layers_rendered,
+        ),
     ];
     if let Some((name, _, _)) = counters.iter().find(|(_, before, after)| after < before) {
         return Err(RenderError {
@@ -809,6 +839,18 @@ fn operation_backend_metrics(
         before.cache_oversized_entries_skipped,
         after.cache_oversized_entries_skipped,
     );
+    performance.static_cache_hits = delta(before.static_cache_hits, after.static_cache_hits);
+    performance.static_cache_misses = delta(before.static_cache_misses, after.static_cache_misses);
+    performance.static_cache_budget_bypasses = delta(
+        before.static_cache_budget_bypasses,
+        after.static_cache_budget_bypasses,
+    );
+    performance.static_cache_population_renders = delta(
+        before.static_cache_population_renders,
+        after.static_cache_population_renders,
+    );
+    performance.static_layers_rendered =
+        delta(before.static_layers_rendered, after.static_layers_rendered);
     performance.bitmap_cache_hit_rate = (performance.bitmap_cache_requests != 0)
         .then(|| performance.bitmap_cache_hits as f64 / performance.bitmap_cache_requests as f64);
     Ok(())

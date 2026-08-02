@@ -165,5 +165,6 @@ pub(super) fn compile_timed(
         start,
         end: start.saturating_add(duration),
         effect: compile(effect, id)?,
+        dependency: crate::plan::TemporalDependency::Static,
     })
 }

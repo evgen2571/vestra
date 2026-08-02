@@ -244,6 +244,7 @@ fn add_style(
                             ],
                         },
                     },
+                    dependency: crate::plan::TemporalDependency::Dynamic,
                 });
             }
         }
@@ -329,6 +330,7 @@ pub(super) fn zoom_layer(
                 anchor: Point { x: 0.5, y: 0.5 },
                 direction: crate::project::ZoomBlurDirection::Centered,
             },
+            dependency: crate::plan::TemporalDependency::Dynamic,
         });
     }
 }
@@ -397,6 +399,7 @@ pub(super) fn push_layer(
             },
             angle_degrees: Track::new(angle.to_degrees()),
         },
+        dependency: crate::plan::TemporalDependency::Dynamic,
     });
 }
 

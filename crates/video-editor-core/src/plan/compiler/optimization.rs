@@ -1,0 +1,732 @@
+//! Compiler-owned Phase 10A visual-plan normalization.
+
+use crate::{
+    animation::{Interpolate, Track},
+    effects::gaussian_radius_is_identity,
+    effects::{effect_amount_is_identity, sampling_blur_radius_is_identity},
+    plan::{ColourTransform, CompiledEffect, CompiledLayer, TemporalDependency, TimedEffect},
+};
+
+pub(super) fn normalize(
+    layers: &mut [CompiledLayer],
+    post_effects: &mut Vec<TimedEffect>,
+    project_duration: u128,
+    compilation: &mut crate::plan::CompilationStats,
+) -> TemporalDependency {
+    for layer in layers {
+        compilation.constant_track_normalization_count += normalize_source(layer);
+        compilation.constant_track_normalization_count += normalize_track(&mut layer.opacity);
+        for track in &mut layer.opacity_contributions {
+            compilation.constant_track_normalization_count += normalize_track(track);
+        }
+        compilation.constant_track_normalization_count +=
+            normalize_transform(&mut layer.transform.position);
+        compilation.constant_track_normalization_count +=
+            normalize_transform(&mut layer.transform.anchor);
+        compilation.constant_track_normalization_count +=
+            normalize_transform(&mut layer.transform.scale);
+        compilation.constant_track_normalization_count +=
+            normalize_track(&mut layer.transform.rotation_radians);
+        for contribution in &mut layer.transform_contributions {
+            compilation.constant_track_normalization_count +=
+                normalize_transform(&mut contribution.position_offset);
+            compilation.constant_track_normalization_count +=
+                normalize_transform(&mut contribution.scale_multiplier);
+            compilation.constant_track_normalization_count +=
+                normalize_track(&mut contribution.rotation_radians_offset);
+        }
+        layer
+            .transform_contributions
+            .retain(|contribution| !is_static_identity_transform_contribution(contribution));
+        layer
+            .effects
+            .retain_mut(|effect| normalize_timed_effect(effect, layer.duration_nanos, compilation));
+        fuse_static_colour_chain(layer);
+        layer.content_dependency = layer_dependency(layer);
+    }
+    post_effects.retain_mut(|effect| normalize_timed_effect(effect, project_duration, compilation));
+    post_effects
+        .iter()
+        .fold(TemporalDependency::Static, |dependency, effect| {
+            dependency.combine(effect.dependency)
+        })
+}
+
+fn normalize_timed_effect(
+    timed: &mut TimedEffect,
+    owner_duration: u128,
+    compilation: &mut crate::plan::CompilationStats,
+) -> bool {
+    compilation.constant_track_normalization_count += normalize_effect(&mut timed.effect);
+    timed.dependency = effect_dependency(&timed.effect);
+    if timed.start != 0 || timed.end < owner_duration {
+        timed.dependency = TemporalDependency::Dynamic;
+    }
+    !is_static_identity(&timed.effect)
+}
+
+fn normalize_source(layer: &mut CompiledLayer) -> usize {
+    if let crate::plan::CompiledVisualSource::Image {
+        crop,
+        cacheable_crop,
+        ..
+    } = &mut layer.source
+    {
+        let normalized = normalize_track(crop);
+        *cacheable_crop = static_track(crop);
+        normalized
+    } else {
+        0
+    }
+}
+
+fn normalize_effect(effect: &mut CompiledEffect) -> usize {
+    match effect {
+        CompiledEffect::ColourTransform { .. } => 0,
+        CompiledEffect::Brightness { amount }
+        | CompiledEffect::Contrast { amount }
+        | CompiledEffect::Saturation { amount }
+        | CompiledEffect::Tint { amount, .. }
+        | CompiledEffect::GaussianBlur { radius: amount }
+        | CompiledEffect::ZoomBlur { radius: amount, .. } => normalize_track(amount),
+        CompiledEffect::DirectionalBlur {
+            radius,
+            angle_degrees,
+        }
+        | CompiledEffect::ChromaticAberration {
+            amount: radius,
+            angle_degrees,
+        } => normalize_track(radius) + normalize_track(angle_degrees),
+        CompiledEffect::Glow {
+            threshold,
+            radius,
+            intensity,
+            ..
+        } => normalize_track(threshold) + normalize_track(radius) + normalize_track(intensity),
+        CompiledEffect::Vignette {
+            amount,
+            radius,
+            softness,
+            ..
+        } => normalize_track(amount) + normalize_track(radius) + normalize_track(softness),
+        CompiledEffect::Sharpen { amount, radius } => {
+            normalize_track(amount) + normalize_track(radius)
+        }
+        CompiledEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => {
+            normalize_track(exposure)
+                + normalize_track(gamma)
+                + normalize_track(black_point)
+                + normalize_track(white_point)
+        }
+        CompiledEffect::CameraShake {
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            ..
+        } => {
+            normalize_track(position_amount)
+                + normalize_track(rotation_degrees)
+                + normalize_track(scale_amount)
+                + normalize_track(frequency)
+        }
+        CompiledEffect::MotionBlur {
+            intensity,
+            shutter_angle,
+            max_radius,
+            ..
+        } => {
+            normalize_track(intensity)
+                + normalize_track(shutter_angle)
+                + normalize_track(max_radius)
+        }
+    }
+}
+
+fn is_static_identity(effect: &CompiledEffect) -> bool {
+    match effect {
+        CompiledEffect::ColourTransform { transform } => *transform == ColourTransform::default(),
+        CompiledEffect::Brightness { amount } => static_track(amount) && amount.base_value == 0.0,
+        CompiledEffect::Contrast { amount } | CompiledEffect::Saturation { amount } => {
+            static_track(amount) && amount.base_value == 1.0
+        }
+        CompiledEffect::Tint { amount, .. } => static_track(amount) && amount.base_value == 0.0,
+        CompiledEffect::GaussianBlur { radius } => {
+            static_track(radius) && gaussian_radius_is_identity(radius.base_value)
+        }
+        CompiledEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => {
+            static_track(exposure)
+                && static_track(gamma)
+                && static_track(black_point)
+                && static_track(white_point)
+                && exposure.base_value == 0.0
+                && gamma.base_value == 1.0
+                && black_point.base_value == 0.0
+                && white_point.base_value == 1.0
+        }
+        CompiledEffect::DirectionalBlur { radius, .. }
+        | CompiledEffect::ZoomBlur { radius, .. }
+        | CompiledEffect::ChromaticAberration { amount: radius, .. } => {
+            static_track(radius) && sampling_blur_radius_is_identity(radius.base_value)
+        }
+        CompiledEffect::Glow {
+            radius, intensity, ..
+        } => {
+            static_track(radius)
+                && static_track(intensity)
+                && (gaussian_radius_is_identity(radius.base_value)
+                    || effect_amount_is_identity(intensity.base_value))
+        }
+        CompiledEffect::Vignette { amount, .. } => {
+            static_track(amount) && effect_amount_is_identity(amount.base_value)
+        }
+        CompiledEffect::Sharpen { amount, radius } => {
+            static_track(amount)
+                && static_track(radius)
+                && (effect_amount_is_identity(amount.base_value)
+                    || gaussian_radius_is_identity(radius.base_value))
+        }
+        CompiledEffect::MotionBlur { intensity, .. } => {
+            static_track(intensity) && effect_amount_is_identity(intensity.base_value)
+        }
+        CompiledEffect::CameraShake {
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            ..
+        } => {
+            static_track(position_amount)
+                && static_track(rotation_degrees)
+                && static_track(scale_amount)
+                && position_amount.base_value == 0.0
+                && rotation_degrees.base_value == 0.0
+                && scale_amount.base_value == 0.0
+        }
+    }
+}
+
+fn is_static_identity_transform_contribution(
+    contribution: &crate::plan::TransformContribution,
+) -> bool {
+    static_track(&contribution.position_offset)
+        && static_track(&contribution.scale_multiplier)
+        && static_track(&contribution.rotation_radians_offset)
+        && contribution.position_offset.base_value == crate::domain::Point { x: 0.0, y: 0.0 }
+        && contribution.scale_multiplier.base_value == crate::domain::Point { x: 1.0, y: 1.0 }
+        && contribution.rotation_radians_offset.base_value == 0.0
+}
+
+fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
+    let mut dependency = TemporalDependency::Static;
+    for dynamic in [
+        matches!(
+            &layer.source,
+            crate::plan::CompiledVisualSource::Image { crop, .. } if !static_track(crop)
+        ),
+        !static_track(&layer.opacity),
+        layer
+            .opacity_contributions
+            .iter()
+            .any(|track| !static_track(track)),
+        !static_track(&layer.transform.position),
+        !static_track(&layer.transform.anchor),
+        !static_track(&layer.transform.scale),
+        !static_track(&layer.transform.rotation_radians),
+        layer.transform_contributions.iter().any(|contribution| {
+            !static_track(&contribution.position_offset)
+                || !static_track(&contribution.scale_multiplier)
+                || !static_track(&contribution.rotation_radians_offset)
+                || contribution.start != 0
+                || contribution.end < layer.duration_nanos
+        }),
+        layer
+            .effects
+            .iter()
+            .any(|effect| effect.dependency == TemporalDependency::Dynamic),
+    ] {
+        if dynamic {
+            dependency = dependency.combine(TemporalDependency::Dynamic);
+        }
+    }
+    dependency
+}
+
+pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
+    let dynamic = match effect {
+        CompiledEffect::ColourTransform { .. } => false,
+        CompiledEffect::Brightness { amount }
+        | CompiledEffect::Contrast { amount }
+        | CompiledEffect::Saturation { amount }
+        | CompiledEffect::Tint { amount, .. }
+        | CompiledEffect::GaussianBlur { radius: amount }
+        | CompiledEffect::ZoomBlur { radius: amount, .. } => !static_track(amount),
+        CompiledEffect::DirectionalBlur {
+            radius,
+            angle_degrees,
+        }
+        | CompiledEffect::ChromaticAberration {
+            amount: radius,
+            angle_degrees,
+        } => !static_track(radius) || !static_track(angle_degrees),
+        CompiledEffect::Glow {
+            threshold,
+            radius,
+            intensity,
+            ..
+        } => !static_track(threshold) || !static_track(radius) || !static_track(intensity),
+        CompiledEffect::Vignette {
+            amount,
+            radius,
+            softness,
+            ..
+        } => !static_track(amount) || !static_track(radius) || !static_track(softness),
+        CompiledEffect::Sharpen { amount, radius } => {
+            !static_track(amount) || !static_track(radius)
+        }
+        CompiledEffect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => {
+            !static_track(exposure)
+                || !static_track(gamma)
+                || !static_track(black_point)
+                || !static_track(white_point)
+        }
+        CompiledEffect::CameraShake { .. } | CompiledEffect::MotionBlur { .. } => true,
+    };
+    if dynamic {
+        TemporalDependency::Dynamic
+    } else {
+        TemporalDependency::Static
+    }
+}
+
+fn fuse_static_colour_chain(layer: &mut CompiledLayer) {
+    if !matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+        || layer.effects.len() < 2
+        || !layer.effects.iter().all(|effect| {
+            effect.start == 0
+                && effect.end >= layer.duration_nanos
+                && effect.dependency == TemporalDependency::Static
+                && matches!(effect.effect.class(), crate::plan::EffectClass::BasicColour)
+        })
+    {
+        return;
+    }
+    let transform = ColourTransform::from_effects(
+        layer
+            .effects
+            .iter()
+            .map(|effect| crate::plan::evaluation::evaluate_effect(&effect.effect, 0)),
+    );
+    layer.effects = vec![TimedEffect {
+        start: 0,
+        end: layer.duration_nanos,
+        effect: CompiledEffect::ColourTransform { transform },
+        dependency: TemporalDependency::Static,
+    }];
+}
+
+fn normalize_track<T: Interpolate + PartialEq>(track: &mut Track<T>) -> usize {
+    let had_keyframes = !track.keyframes.is_empty();
+    *track = track.clone().normalized_from_zero();
+    usize::from(had_keyframes && track.keyframes.is_empty())
+}
+
+fn normalize_transform<T: Interpolate + PartialEq>(track: &mut Track<T>) -> usize {
+    normalize_track(track)
+}
+
+fn static_track<T>(track: &Track<T>) -> bool {
+    track.keyframes.is_empty()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        animation::{Interpolation, Keyframe},
+        domain::Point,
+    };
+
+    fn normalize_for_test(effect: &mut TimedEffect, owner_duration: u128) -> bool {
+        normalize_timed_effect(
+            effect,
+            owner_duration,
+            &mut crate::plan::CompilationStats::default(),
+        )
+    }
+
+    #[test]
+    fn equal_valued_keyframes_are_compiled_as_static() {
+        let mut track = Track {
+            base_value: 1.0,
+            keyframes: vec![
+                Keyframe {
+                    time: 0,
+                    value: 1.0,
+                    interpolation: Interpolation::Linear,
+                },
+                Keyframe {
+                    time: 2,
+                    value: 1.0,
+                    interpolation: Interpolation::EaseInOut,
+                },
+            ],
+        };
+        normalize_track(&mut track);
+        assert!(track.keyframes.is_empty());
+        let mut varying = Track {
+            base_value: 1.0,
+            keyframes: vec![Keyframe {
+                time: 2,
+                value: 0.5,
+                interpolation: Interpolation::Linear,
+            }],
+        };
+        normalize_track(&mut varying);
+        assert!(!varying.keyframes.is_empty());
+    }
+
+    #[test]
+    fn effects_classify_static_dynamic_and_remove_only_exact_identities() {
+        let static_brightness = CompiledEffect::Brightness {
+            amount: Track::new(0.2),
+        };
+        assert_eq!(
+            effect_dependency(&static_brightness),
+            TemporalDependency::Static
+        );
+        let dynamic_brightness = CompiledEffect::Brightness {
+            amount: Track {
+                base_value: 0.0,
+                keyframes: vec![Keyframe {
+                    time: 1,
+                    value: 0.2,
+                    interpolation: Interpolation::Linear,
+                }],
+            },
+        };
+        assert_eq!(
+            effect_dependency(&dynamic_brightness),
+            TemporalDependency::Dynamic
+        );
+        let mut identity = TimedEffect {
+            start: 0,
+            end: 10,
+            effect: CompiledEffect::Brightness {
+                amount: Track::new(0.0),
+            },
+            dependency: TemporalDependency::Static,
+        };
+        assert!(!normalize_for_test(&mut identity, 10));
+        let mut near_identity = TimedEffect {
+            start: 0,
+            end: 10,
+            effect: CompiledEffect::Brightness {
+                amount: Track::new(0.000_001),
+            },
+            dependency: TemporalDependency::Static,
+        };
+        assert!(normalize_for_test(&mut near_identity, 10));
+        let mut animated_identity_at_start = TimedEffect {
+            start: 0,
+            end: 10,
+            effect: CompiledEffect::Brightness {
+                amount: Track {
+                    base_value: 0.0,
+                    keyframes: vec![Keyframe {
+                        time: 1,
+                        value: 0.2,
+                        interpolation: Interpolation::Linear,
+                    }],
+                },
+            },
+            dependency: TemporalDependency::Static,
+        };
+        assert!(normalize_for_test(&mut animated_identity_at_start, 10));
+    }
+
+    #[test]
+    fn every_compiler_eliminated_identity_is_omitted() {
+        let identities = vec![
+            CompiledEffect::Brightness {
+                amount: Track::new(0.0),
+            },
+            CompiledEffect::Contrast {
+                amount: Track::new(1.0),
+            },
+            CompiledEffect::Saturation {
+                amount: Track::new(1.0),
+            },
+            CompiledEffect::Tint {
+                colour: [1, 2, 3, 255],
+                amount: Track::new(0.0),
+            },
+            CompiledEffect::GaussianBlur {
+                radius: Track::new(0.0),
+            },
+            CompiledEffect::DirectionalBlur {
+                radius: Track::new(0.0),
+                angle_degrees: Track::new(30.0),
+            },
+            CompiledEffect::ZoomBlur {
+                radius: Track::new(0.0),
+                samples: 2,
+                anchor: Point { x: 0.5, y: 0.5 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            CompiledEffect::Glow {
+                threshold: Track::new(0.5),
+                radius: Track::new(2.0),
+                intensity: Track::new(0.0),
+                colour: [255, 255, 255, 255],
+            },
+            CompiledEffect::ChromaticAberration {
+                amount: Track::new(0.0),
+                angle_degrees: Track::new(30.0),
+            },
+            CompiledEffect::Vignette {
+                amount: Track::new(0.0),
+                radius: Track::new(0.5),
+                softness: Track::new(0.5),
+                colour: [0, 0, 0, 255],
+            },
+            CompiledEffect::Sharpen {
+                amount: Track::new(0.0),
+                radius: Track::new(2.0),
+            },
+            CompiledEffect::ColorAdjust {
+                exposure: Track::new(0.0),
+                gamma: Track::new(1.0),
+                black_point: Track::new(0.0),
+                white_point: Track::new(1.0),
+            },
+            CompiledEffect::MotionBlur {
+                intensity: Track::new(0.0),
+                shutter_angle: Track::new(180.0),
+                max_radius: Track::new(8.0),
+                samples: 4,
+            },
+        ];
+        for effect in identities {
+            let mut timed = TimedEffect {
+                start: 0,
+                end: 10,
+                effect,
+                dependency: TemporalDependency::Static,
+            };
+            assert!(!normalize_for_test(&mut timed, 10));
+        }
+    }
+
+    #[test]
+    fn layer_dependency_includes_transform_and_effect_work() {
+        let mut layer = CompiledLayer {
+            id: "test".into(),
+            start_nanos: 0,
+            duration_nanos: 10,
+            start_frame: 0,
+            end_frame: 1,
+            draw_key: crate::plan::DrawKey {
+                layer: 0,
+                start_nanos: 0,
+                id: "test".into(),
+            },
+            source: crate::plan::CompiledVisualSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            transform: crate::plan::CompiledTransformTracks {
+                position: Track::new(Point { x: 0.5, y: 0.5 }),
+                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+                scale: Track::new(Point { x: 1.0, y: 1.0 }),
+                rotation_radians: Track::new(0.0),
+            },
+            transform_contributions: vec![],
+            opacity: Track::new(1.0),
+            opacity_contributions: vec![],
+            effects: vec![],
+            blend_mode: crate::project::BlendMode::Normal,
+            content_dependency: TemporalDependency::Static,
+        };
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
+        layer.transform.scale.keyframes.push(Keyframe {
+            time: 1,
+            value: Point { x: 1.1, y: 1.1 },
+            interpolation: Interpolation::Linear,
+        });
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
+    }
+
+    #[test]
+    fn transform_contribution_dependency_includes_half_open_activity_interval() {
+        let mut layer = CompiledLayer {
+            id: "test".into(),
+            start_nanos: 0,
+            duration_nanos: 10,
+            start_frame: 0,
+            end_frame: 1,
+            draw_key: crate::plan::DrawKey {
+                layer: 0,
+                start_nanos: 0,
+                id: "test".into(),
+            },
+            source: crate::plan::CompiledVisualSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            transform: crate::plan::CompiledTransformTracks {
+                position: Track::new(Point { x: 0.5, y: 0.5 }),
+                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+                scale: Track::new(Point { x: 1.0, y: 1.0 }),
+                rotation_radians: Track::new(0.0),
+            },
+            transform_contributions: vec![],
+            opacity: Track::new(1.0),
+            opacity_contributions: vec![],
+            effects: vec![],
+            blend_mode: crate::project::BlendMode::Normal,
+            content_dependency: TemporalDependency::Static,
+        };
+        let mut contribution = crate::plan::TransformContribution::identity();
+        contribution.start = 2;
+        contribution.end = 8;
+        contribution.position_offset = Track::new(Point { x: 0.1, y: 0.0 });
+        layer.transform_contributions = vec![contribution.clone()];
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
+
+        contribution.start = 0;
+        contribution.end = 10;
+        layer.transform_contributions = vec![contribution.clone()];
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
+
+        contribution.position_offset.keyframes.push(Keyframe {
+            time: 5,
+            value: Point { x: 0.2, y: 0.0 },
+            interpolation: Interpolation::Linear,
+        });
+        layer.transform_contributions = vec![contribution];
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
+    }
+
+    #[test]
+    fn zero_amplitude_camera_shake_is_removed_but_non_zero_shake_remains_dynamic() {
+        let shake = |position_amount, rotation_degrees, scale_amount| TimedEffect {
+            start: 0,
+            end: 10,
+            effect: CompiledEffect::CameraShake {
+                position_amount: Track::new(position_amount),
+                rotation_degrees: Track::new(rotation_degrees),
+                scale_amount: Track::new(scale_amount),
+                frequency: Track::new(5.0),
+                seed: 7,
+                attack: 0.0,
+                decay: 1.0,
+            },
+            dependency: TemporalDependency::Static,
+        };
+        let mut zero = shake(0.0, 0.0, 0.0);
+        assert!(!normalize_for_test(&mut zero, 10));
+        for effect in [
+            shake(0.001, 0.0, 0.0),
+            shake(0.0, 0.001, 0.0),
+            shake(0.0, 0.0, 0.001),
+        ] {
+            let mut effect = effect;
+            assert!(normalize_for_test(&mut effect, 10));
+            assert_eq!(effect.dependency, TemporalDependency::Dynamic);
+        }
+    }
+
+    #[test]
+    fn timed_static_effects_are_dynamic_when_their_interval_changes_content() {
+        let mut effect = TimedEffect {
+            start: 2,
+            end: 8,
+            effect: CompiledEffect::Contrast {
+                amount: Track::new(1.2),
+            },
+            dependency: TemporalDependency::Static,
+        };
+        assert!(normalize_for_test(&mut effect, 10));
+        assert_eq!(effect.dependency, TemporalDependency::Dynamic);
+    }
+
+    #[test]
+    fn static_normal_blend_colour_chain_fuses_once_and_keeps_boundaries() {
+        let mut layer = CompiledLayer {
+            id: "test".into(),
+            start_nanos: 0,
+            duration_nanos: 10,
+            start_frame: 0,
+            end_frame: 1,
+            draw_key: crate::plan::DrawKey {
+                layer: 0,
+                start_nanos: 0,
+                id: "test".into(),
+            },
+            source: crate::plan::CompiledVisualSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            transform: crate::plan::CompiledTransformTracks {
+                position: Track::new(Point { x: 0.5, y: 0.5 }),
+                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+                scale: Track::new(Point { x: 1.0, y: 1.0 }),
+                rotation_radians: Track::new(0.0),
+            },
+            transform_contributions: vec![],
+            opacity: Track::new(1.0),
+            opacity_contributions: vec![],
+            effects: [
+                CompiledEffect::Brightness {
+                    amount: Track::new(0.1),
+                },
+                CompiledEffect::Contrast {
+                    amount: Track::new(1.1),
+                },
+                CompiledEffect::Saturation {
+                    amount: Track::new(0.9),
+                },
+            ]
+            .into_iter()
+            .map(|effect| TimedEffect {
+                start: 0,
+                end: 10,
+                effect,
+                dependency: TemporalDependency::Static,
+            })
+            .collect(),
+            blend_mode: crate::project::BlendMode::Normal,
+            content_dependency: TemporalDependency::Static,
+        };
+        fuse_static_colour_chain(&mut layer);
+        assert!(matches!(
+            layer.effects.as_slice(),
+            [TimedEffect {
+                effect: CompiledEffect::ColourTransform { .. },
+                ..
+            }]
+        ));
+        layer.effects.push(TimedEffect {
+            start: 0,
+            end: 10,
+            effect: CompiledEffect::GaussianBlur {
+                radius: Track::new(1.0),
+            },
+            dependency: TemporalDependency::Static,
+        });
+        fuse_static_colour_chain(&mut layer);
+        assert_eq!(layer.effects.len(), 2);
+    }
+}

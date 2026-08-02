@@ -113,6 +113,7 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
             intensity: Track::new(0.8),
             colour: [255, 170, 60, 255],
         },
+        dependency: crate::plan::TemporalDependency::Static,
     }];
     let mut frame = crate::plan::evaluate(&base, &[ScheduledItem(0)], 0);
     frame.layers[0].effects = vec![
@@ -407,6 +408,7 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
             softness: Track::new(0.2),
             colour: [0, 255, 1, 255],
         },
+        dependency: crate::plan::TemporalDependency::Static,
     }];
     plan.layers[0].opacity = Track::new(1.0);
     plan.layers.push(upper);
@@ -670,6 +672,7 @@ fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
                     softness: Track::new(0.35),
                     colour: [0, 0, 0, 255],
                 },
+                dependency: crate::plan::TemporalDependency::Static,
             });
             plan.compilation.effect_pass_count += 1;
         }
@@ -780,6 +783,7 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
             start: 0,
             end: u128::MAX,
             effect,
+            dependency: crate::plan::TemporalDependency::Static,
         })
         .collect();
         let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
@@ -902,6 +906,7 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             intensity: Track::new(0.8),
             colour: [255, 170, 60, 255],
         },
+        dependency: crate::plan::TemporalDependency::Static,
     }];
     plan.compilation.effect_pass_count = 4;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");

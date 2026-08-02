@@ -1,6 +1,7 @@
 //! Prepared WGPU texture-frame backend.
 
 use std::{
+    collections::{BTreeMap, BTreeSet},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -17,7 +18,8 @@ use crate::{
     Diagnostic,
     plan::{EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::{
-        AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
+        AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
+        RenderBackendKind,
         metrics::{PreparationStats, PreparationTimings, StagedMetrics},
     },
 };
@@ -33,6 +35,7 @@ use super::{
     readback::ReadbackRing,
     requirements::{GpuRequirements, ResourceEstimates},
     resources::{FrameResources, SourceResources},
+    texture_pool::{StaticLayerTexture, create_static_layer_texture, static_layer_texture_bytes},
 };
 use crate::{
     project::{BlendMode, ZoomBlurDirection},
@@ -55,6 +58,11 @@ pub struct WgpuBackend {
     timings: PreparationTimings,
     staged: StagedMetrics,
     aborted: bool,
+    static_layers: ByteLruCache<usize, Arc<StaticLayerTexture>>,
+    static_cache_budget_bypasses: u64,
+    static_layer_renders: u64,
+    static_cache_population_renders: u64,
+    pending_static_layers: PendingStaticLayers,
 }
 
 struct FrameSlotResources {
@@ -62,6 +70,65 @@ struct FrameSlotResources {
     parameter_buffer: wgpu::Buffer,
     bind_groups: FrameBindGroups,
     uses: u64,
+}
+
+struct PendingStaticLayer {
+    key: usize,
+    bytes: u64,
+    texture: Option<Arc<StaticLayerTexture>>,
+}
+
+#[derive(Default)]
+struct PendingStaticLayers {
+    by_submission: BTreeMap<(usize, u64), Vec<PendingStaticLayer>>,
+    keys: BTreeSet<usize>,
+    reserved_bytes: u64,
+}
+
+impl PendingStaticLayers {
+    fn contains(&self, key: usize) -> bool {
+        self.keys.contains(&key)
+    }
+
+    fn reserve(&mut self, token: (usize, u64), key: usize, bytes: u64) {
+        assert!(self.keys.insert(key), "static cache key reserved twice");
+        self.reserved_bytes += bytes;
+        self.by_submission
+            .entry(token)
+            .or_default()
+            .push(PendingStaticLayer {
+                key,
+                bytes,
+                texture: None,
+            });
+    }
+
+    fn attach(&mut self, token: (usize, u64), key: usize, texture: Arc<StaticLayerTexture>) {
+        let entry = self
+            .by_submission
+            .get_mut(&token)
+            .and_then(|entries| entries.iter_mut().find(|entry| entry.key == key))
+            .expect("reserved static cache entry is attached to its submission");
+        entry.texture = Some(texture);
+    }
+
+    fn release(&mut self, token: (usize, u64)) -> Vec<(usize, Arc<StaticLayerTexture>)> {
+        let entries = self.by_submission.remove(&token).unwrap_or_default();
+        entries
+            .into_iter()
+            .filter_map(|entry| {
+                self.keys.remove(&entry.key);
+                self.reserved_bytes -= entry.bytes;
+                entry.texture.map(|texture| (entry.key, texture))
+            })
+            .collect()
+    }
+
+    fn clear(&mut self) {
+        self.by_submission.clear();
+        self.keys.clear();
+        self.reserved_bytes = 0;
+    }
 }
 
 impl WgpuBackend {
@@ -208,6 +275,11 @@ impl WgpuBackend {
                 ..StagedMetrics::default()
             },
             aborted: false,
+            static_layers: ByteLruCache::new(plan.limits.maximum_cache_bytes),
+            static_cache_budget_bypasses: 0,
+            static_layer_renders: 0,
+            static_cache_population_renders: 0,
+            pending_static_layers: PendingStaticLayers::default(),
         })
     }
 
@@ -241,11 +313,20 @@ impl WgpuBackend {
         self.readback.process_callbacks()?;
         let after = self.readback.metrics();
         self.timings.row_repack += after.row_repack_duration - before.row_repack_duration;
-        let ready = self.readback.take_ready();
-        if ready.is_some() {
-            self.staged.backend_completed_frames += 1;
+        Ok(self.take_ready())
+    }
+
+    fn take_ready(&mut self) -> Option<CompletedFrame> {
+        let (token, ready) = self.readback.take_ready_with_token()?;
+        for (key, texture) in self
+            .pending_static_layers
+            .release((token.slot_index, token.generation))
+        {
+            self.static_layers
+                .insert(key, texture.clone(), texture.estimated_bytes);
         }
-        Ok(ready)
+        self.staged.backend_completed_frames += 1;
+        Some(ready)
     }
 }
 
@@ -285,7 +366,49 @@ impl RenderBackend for WgpuBackend {
             self.staged.parameter_slot_reuse_count += 1;
         }
         slot.uses += 1;
-        let plan = GpuFramePlan::build(evaluated);
+        let mut cached_layers = BTreeSet::new();
+        let mut cache_targets = BTreeSet::new();
+        let mut textures = BTreeMap::new();
+        for layer in &evaluated.layers {
+            if layer.content_dependency != crate::plan::TemporalDependency::Static {
+                continue;
+            }
+            let key = layer.compiled_layer_index;
+            if self.pending_static_layers.contains(key) {
+                self.static_layer_renders += 1;
+                continue;
+            }
+            if let Some(texture) = self.static_layers.get(&key).cloned() {
+                cached_layers.insert(key);
+                textures.insert(key, texture);
+                continue;
+            }
+            self.static_layer_renders += 1;
+            let bytes = static_layer_texture_bytes(evaluated.width, evaluated.height);
+            if !self
+                .static_layers
+                .reserve(bytes, self.pending_static_layers.reserved_bytes)
+            {
+                self.static_cache_budget_bypasses += 1;
+                continue;
+            }
+            self.pending_static_layers
+                .reserve((token.slot_index, token.generation), key, bytes);
+            self.static_cache_population_renders += 1;
+            let texture = Arc::new(create_static_layer_texture(
+                &self.context.device,
+                evaluated.width,
+                evaluated.height,
+            ));
+            cache_targets.insert(key);
+            self.pending_static_layers.attach(
+                (token.slot_index, token.generation),
+                key,
+                texture.clone(),
+            );
+            textures.insert(key, texture);
+        }
+        let plan = GpuFramePlan::build_with_static_cache(evaluated, &cached_layers, &cache_targets);
         if let Err(error) = plan.validate(self.sources.textures.len()).and_then(|()| {
             slot.parameters.reset();
             encode_parameters(&mut slot.parameters, evaluated, &plan, &self.sources)
@@ -304,6 +427,7 @@ impl RenderBackend for WgpuBackend {
             &slot.parameters,
             &slot.parameter_buffer,
             self.readback.buffer(&token)?,
+            &textures,
             evaluated.width,
             evaluated.height,
         ) {
@@ -424,8 +548,7 @@ impl RenderBackend for WgpuBackend {
                 completed.push(frame);
             }
         }
-        while let Some(frame) = self.readback.take_ready() {
-            self.staged.backend_completed_frames += 1;
+        while let Some(frame) = self.take_ready() {
             completed.push(frame);
         }
         if !self.readback.all_available() {
@@ -447,6 +570,7 @@ impl RenderBackend for WgpuBackend {
         let started = Instant::now();
         self.aborted = true;
         self.readback.abort();
+        self.pending_static_layers.clear();
         self.staged.abort_drain_duration += started.elapsed();
     }
 
@@ -479,6 +603,15 @@ impl RenderBackend for WgpuBackend {
             self.stats.readback_buffer_bytes,
             self.resource_estimates.readback_buffer_bytes
         );
+        let cache = self.static_layers.stats();
+        self.stats.static_cache_hits = cache.hits;
+        self.stats.static_cache_misses = cache.misses;
+        self.stats.static_cache_entries = cache.current_entries;
+        self.stats.static_cached_bytes = cache.current_bytes;
+        self.stats.static_cache_budget_bypasses =
+            cache.oversized_entries_skipped + self.static_cache_budget_bypasses;
+        self.stats.static_cache_population_renders = self.static_cache_population_renders;
+        self.stats.static_layers_rendered = self.static_layer_renders;
         self.stats.clone()
     }
 
@@ -552,6 +685,13 @@ impl WgpuBackend {
 
     pub(super) fn resource_estimates(&self) -> ResourceEstimates {
         self.resource_estimates
+    }
+
+    pub(super) fn pending_static_cache_state(&self) -> (usize, u64) {
+        (
+            self.pending_static_layers.keys.len(),
+            self.pending_static_layers.reserved_bytes,
+        )
     }
 }
 
@@ -646,7 +786,8 @@ fn encode_parameters(
                     ..LayerParameters::zeroed()
                 }
             }
-            GpuOperation::CompositeLayer { layer_index, .. } => LayerParameters {
+            GpuOperation::CompositeLayer { layer_index, .. }
+            | GpuOperation::CompositeCachedLayer { layer_index, .. } => LayerParameters {
                 header: [
                     frame.width,
                     frame.height,
@@ -659,7 +800,9 @@ fn encode_parameters(
             GpuOperation::ApplyEffect { pass, .. } => {
                 effect_parameters(frame.width, frame.height, *pass)
             }
-            GpuOperation::CopyForEffect { .. } | GpuOperation::CopyForReadback { .. } => {
+            GpuOperation::CopyForEffect { .. }
+            | GpuOperation::StoreStaticLayer { .. }
+            | GpuOperation::CopyForReadback { .. } => {
                 continue;
             }
         };
@@ -821,5 +964,22 @@ mod configuration_tests {
             let error = validate_pipeline_depth(depth).expect_err("invalid pipeline depth");
             assert_eq!(error.code, "WGPU-IN-FLIGHT");
         }
+    }
+
+    #[test]
+    fn pending_static_keys_reserve_once_and_release_on_completion_or_abort() {
+        let mut pending = PendingStaticLayers::default();
+        pending.reserve((0, 1), 7, 16);
+        assert!(pending.contains(7));
+        assert_eq!(pending.reserved_bytes, 16);
+        assert!(!pending.contains(8));
+        assert!(pending.release((0, 1)).is_empty());
+        assert!(!pending.contains(7));
+        assert_eq!(pending.reserved_bytes, 0);
+
+        pending.reserve((1, 2), 7, 16);
+        pending.clear();
+        assert!(!pending.contains(7));
+        assert_eq!(pending.reserved_bytes, 0);
     }
 }

@@ -7,11 +7,216 @@ use super::{
     gpu::{wgpu_backend_or_skip, wgpu_backend_or_skip_depth},
 };
 use crate::{
-    plan::{CompileOptions, compile},
+    plan::{
+        ColourTransform, CompileOptions, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
+        TemporalDependency, compile,
+    },
     project::{ValidationOptions, load_and_validate},
     render::{CompletedFrame, CpuBackend, PollMode, RenderBackend, StagedMetrics, WgpuBackend},
 };
 use image::RgbaImage;
+
+fn static_frame(
+    plan: &crate::plan::RenderPlan,
+    keys: impl IntoIterator<Item = usize>,
+) -> EvaluatedFrame {
+    EvaluatedFrame {
+        time: 0,
+        background: [0, 0, 0, 255],
+        width: plan.canvas.width,
+        height: plan.canvas.height,
+        layers: keys
+            .into_iter()
+            .map(|compiled_layer_index| EvaluatedLayer {
+                compiled_layer_index,
+                content_dependency: TemporalDependency::Static,
+                source: EvaluatedSource::SolidColor {
+                    colour: [30, 60, 90, 255],
+                },
+                opacity: 1.0,
+                effects: Vec::new(),
+                colour_transform: ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            })
+            .collect(),
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    }
+}
+
+#[test]
+fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let frame = EvaluatedFrame {
+        time: 0,
+        background: [0, 0, 0, 255],
+        width: plan.canvas.width,
+        height: plan.canvas.height,
+        layers: vec![EvaluatedLayer {
+            compiled_layer_index: 99,
+            content_dependency: TemporalDependency::Static,
+            source: EvaluatedSource::SolidColor {
+                colour: [30, 60, 90, 255],
+            },
+            opacity: 0.75,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Screen,
+        }],
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    };
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    let mut first = RgbaImage::new(frame.width, frame.height);
+    let mut second = RgbaImage::new(frame.width, frame.height);
+    gpu.render_frame(&frame, &mut first)
+        .expect("first frame renders");
+    gpu.render_frame(&frame, &mut second)
+        .expect("cached frame renders");
+
+    assert_eq!(first, second);
+    let execution = gpu.last_execution_metrics();
+    assert_eq!(execution.texture_copies, 1, "final readback only");
+    let stats = gpu.stats();
+    assert_eq!(stats.static_cache_misses, 1);
+    assert_eq!(stats.static_cache_hits, 1);
+    assert_eq!(stats.static_cache_entries, 1);
+    assert_eq!(stats.static_layers_rendered, 1);
+    assert_eq!(stats.static_cache_population_renders, 1);
+}
+
+#[test]
+fn gpu_in_flight_static_cache_population_reserves_one_key_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let frame = EvaluatedFrame {
+        time: 0,
+        background: [0, 0, 0, 255],
+        width: plan.canvas.width,
+        height: plan.canvas.height,
+        layers: vec![EvaluatedLayer {
+            compiled_layer_index: 101,
+            content_dependency: TemporalDependency::Static,
+            source: EvaluatedSource::SolidColor {
+                colour: [30, 60, 90, 255],
+            },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }],
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    };
+    let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, decoded, 2) else {
+        return;
+    };
+    gpu.submit_frame(0, &frame).expect("first submission");
+    gpu.submit_frame(1, &frame).expect("second submission");
+    assert_eq!(
+        gpu.pending_static_cache_state(),
+        (1, u64::from(frame.width) * u64::from(frame.height) * 4)
+    );
+    let stats = gpu.stats();
+    assert_eq!(stats.static_cache_misses, 1);
+    assert_eq!(stats.static_layers_rendered, 2);
+    assert_eq!(stats.static_cache_population_renders, 1);
+    let frames = gpu.flush().expect("frames flush");
+    assert_eq!(frames.len(), 2);
+    assert_eq!(gpu.pending_static_cache_state(), (0, 0));
+    let stats = gpu.stats();
+    assert_eq!(stats.static_cache_entries, 1);
+    gpu.submit_frame(2, &frame).expect("cached submission");
+    gpu.flush().expect("cached frame flushes");
+    assert_eq!(gpu.stats().static_cache_hits, 1);
+}
+
+#[test]
+fn gpu_abort_clears_pending_static_cache_reservations_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, decoded, 2) else {
+        return;
+    };
+    let frame = static_frame(&plan, [102]);
+    gpu.submit_frame(0, &frame)
+        .expect("cache population submits");
+    assert_eq!(
+        gpu.pending_static_cache_state(),
+        (1, u64::from(frame.width) * u64::from(frame.height) * 4),
+    );
+
+    gpu.abort();
+
+    assert_eq!(gpu.pending_static_cache_state(), (0, 0));
+    let stats = gpu.stats();
+    assert_eq!(stats.static_cache_entries, 0);
+    assert_eq!(stats.static_cached_bytes, 0);
+}
+
+#[test]
+fn gpu_multi_key_pending_cache_reservations_stay_within_budget_when_an_adapter_is_available() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let bytes = u64::from(plan.canvas.width) * u64::from(plan.canvas.height) * 4;
+    plan.limits.maximum_cache_bytes = bytes * 2;
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, decoded, 2) else {
+        return;
+    };
+    let frame = static_frame(&plan, [201, 202, 203]);
+    gpu.submit_frame(0, &frame).expect("first submission");
+    gpu.submit_frame(1, &frame)
+        .expect("second in-flight submission");
+
+    assert_eq!(gpu.pending_static_cache_state(), (2, bytes * 2));
+    let stats = gpu.stats();
+    assert_eq!(stats.static_cache_entries, 0);
+    assert_eq!(stats.static_cached_bytes, 0);
+    assert_eq!(stats.static_cache_misses, 4);
+    assert_eq!(stats.static_cache_budget_bypasses, 2);
+    assert_eq!(stats.static_cache_population_renders, 2);
+    assert_eq!(stats.static_layers_rendered, 6);
+    assert!(stats.static_cached_bytes + gpu.pending_static_cache_state().1 <= bytes * 2);
+
+    gpu.abort();
+    assert_eq!(gpu.pending_static_cache_state(), (0, 0));
+    assert_eq!(gpu.stats().static_cache_entries, 0);
+}
 
 #[test]
 fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {

@@ -30,7 +30,8 @@ fn validate_effect(effect: &CompiledEffect) -> Result<(), Diagnostic> {
     // This match intentionally has no wildcard.  Adding an effect requires an
     // explicit WGPU parameter/shader declaration instead of inheriting success.
     match effect {
-        CompiledEffect::Brightness { .. }
+        CompiledEffect::ColourTransform { .. }
+        | CompiledEffect::Brightness { .. }
         | CompiledEffect::Contrast { .. }
         | CompiledEffect::Saturation { .. }
         | CompiledEffect::Tint { .. }

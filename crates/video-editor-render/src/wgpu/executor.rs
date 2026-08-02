@@ -1,6 +1,10 @@
 //! Encodes the complete texture frame graph into one command buffer.
 
-use std::time::{Duration, Instant};
+use std::{
+    collections::BTreeMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::Diagnostic;
 
@@ -9,6 +13,7 @@ use super::{
     parameters::FrameParameterArena,
     pipeline::GpuPipelines,
     resources::{FrameResources, SourceResources},
+    texture_pool::StaticLayerTexture,
 };
 
 #[allow(dead_code)]
@@ -246,6 +251,7 @@ pub(super) fn encode_and_submit(
     parameters: &FrameParameterArena,
     parameter_buffer: &wgpu::Buffer,
     readback: &wgpu::Buffer,
+    static_layers: &BTreeMap<usize, Arc<StaticLayerTexture>>,
     width: u32,
     height: u32,
 ) -> Result<FrameExecutionMetrics, Diagnostic> {
@@ -338,6 +344,73 @@ pub(super) fn encode_and_submit(
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
+            }
+            GpuOperation::StoreStaticLayer {
+                cache_key, source, ..
+            } => {
+                let cached = static_layers.get(cache_key).ok_or_else(|| {
+                    Diagnostic::error(
+                        "WGPU-STATIC-CACHE",
+                        crate::Category::Backend,
+                        "frame plan references a missing static cache texture",
+                        "",
+                    )
+                })?;
+                encoder.copy_texture_to_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &frame.working.get(*source).texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: &cached.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                metrics.texture_copies += 1;
+            }
+            GpuOperation::CompositeCachedLayer {
+                cache_key,
+                canvas_source,
+                canvas_destination,
+                parameters_index,
+                ..
+            } => {
+                let cached = static_layers.get(cache_key).ok_or_else(|| {
+                    Diagnostic::error(
+                        "WGPU-STATIC-CACHE",
+                        crate::Category::Backend,
+                        "frame plan references a missing static cache texture",
+                        "",
+                    )
+                })?;
+                let group = composite_group(
+                    device,
+                    &pipelines.composite_bindings,
+                    &frame.working.get(*canvas_source).view,
+                    &cached.view,
+                    &frame.working.get(*canvas_destination).view,
+                    parameter_buffer,
+                );
+                dispatch(
+                    &mut encoder,
+                    &pipelines.composite,
+                    &group,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_groups_created += 1;
             }
             GpuOperation::CopyForEffect {
                 source,

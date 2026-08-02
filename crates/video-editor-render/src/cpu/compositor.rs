@@ -1,9 +1,14 @@
+use std::sync::Arc;
+
 use image::{Rgba, RgbaImage};
 
-use crate::plan::{ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer};
+use crate::plan::{
+    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, TemporalDependency,
+};
 use crate::{
     blend::blend_surface,
     cpu::{assets::PreparedAssets, effects, raster::draw_layer},
+    render::ByteLruCache,
 };
 
 pub(crate) use super::surfaces::EffectSurfacePool;
@@ -21,7 +26,9 @@ pub fn compose(
     assets: &mut PreparedAssets,
     canvas: &mut RgbaImage,
     surfaces: &mut EffectSurfacePool,
-) {
+    static_layers: &mut ByteLruCache<usize, Arc<RgbaImage>>,
+) -> u64 {
+    let mut static_layer_renders = 0;
     let _time = frame.time;
     if canvas.width() != frame.width || canvas.height() != frame.height {
         *canvas = RgbaImage::from_pixel(frame.width, frame.height, Rgba(frame.background));
@@ -32,6 +39,28 @@ pub fn compose(
     }
     surfaces.resize(frame.width, frame.height);
     for layer in &frame.layers {
+        if layer.content_dependency == TemporalDependency::Static {
+            if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
+                blend_surface(canvas, &cached, layer.blend_mode, layer.opacity);
+                continue;
+            }
+            surfaces.clear();
+            static_layer_renders += 1;
+            draw_layer(
+                surfaces.current(),
+                assets,
+                layer,
+                1.0,
+                layer.colour_transform,
+            );
+            effects::apply_chain(surfaces, &layer.effects);
+            let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
+            static_layers.insert_with(layer.compiled_layer_index, bytes, || {
+                Arc::new(surfaces.current().clone())
+            });
+            blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+            continue;
+        }
         if uses_direct_colour_path(layer) {
             draw_layer(canvas, assets, layer, layer.opacity, layer.colour_transform);
             continue;
@@ -48,6 +77,7 @@ pub fn compose(
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
     }
     effects::apply_to(surfaces, canvas, &frame.post_effects);
+    static_layer_renders
 }
 
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
@@ -204,6 +234,8 @@ mod tests {
     #[test]
     fn basic_colour_effects_keep_the_direct_render_path() {
         let base = EvaluatedLayer {
+            compiled_layer_index: 0,
+            content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },

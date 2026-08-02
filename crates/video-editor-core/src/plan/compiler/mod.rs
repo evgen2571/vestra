@@ -19,6 +19,7 @@ mod effects;
 mod flashes;
 mod limits;
 mod metrics;
+mod optimization;
 mod output;
 mod presets;
 mod transitions;
@@ -119,6 +120,23 @@ pub fn compile(
         .iter()
         .map(|effect| effects::compile_timed(effect, "global post effect", validated.duration))
         .collect::<Result<Vec<_>, _>>()?;
+    let mut post_effects = post_effects;
+    compilation.effect_count_before_normalization = layers
+        .iter()
+        .map(|layer| layer.effects.len())
+        .sum::<usize>()
+        + post_effects.len();
+    let post_effect_dependency = optimization::normalize(
+        &mut layers,
+        &mut post_effects,
+        time::to_nanos(validated.duration, "project")?,
+        &mut compilation,
+    );
+    compilation.effect_count_after_normalization = layers
+        .iter()
+        .map(|layer| layer.effects.len())
+        .sum::<usize>()
+        + post_effects.len();
     metrics::record(&mut compilation, &layers, &post_effects);
     limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     let audio_mix = audio::compile(&validated)?;
@@ -154,6 +172,7 @@ pub fn compile(
         images: image_table.images,
         layers,
         post_effects,
+        post_effect_dependency,
         compilation,
         warnings: validated.warnings.to_vec(),
     })

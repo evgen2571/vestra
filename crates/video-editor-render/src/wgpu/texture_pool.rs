@@ -29,6 +29,46 @@ pub(super) struct WorkingTexture {
     pub(super) estimated_bytes: u64,
 }
 
+/// Immutable completed layer-local output retained for Phase 10B reuse.
+/// It is sampled by composition and never used as a render target after
+/// publication.
+pub(super) struct StaticLayerTexture {
+    pub(super) texture: wgpu::Texture,
+    pub(super) view: wgpu::TextureView,
+    pub(super) estimated_bytes: u64,
+}
+
+pub(super) fn static_layer_texture_bytes(width: u32, height: u32) -> u64 {
+    u64::from(width) * u64::from(height) * 4
+}
+
+pub(super) fn create_static_layer_texture(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+) -> StaticLayerTexture {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("video-editor cached static layer"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: WORKING_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    StaticLayerTexture {
+        texture,
+        view,
+        estimated_bytes: static_layer_texture_bytes(width, height),
+    }
+}
+
 /// Effect textures are fixed reusable full-frame slots. They are created with
 /// the canvas resources during preparation, never while encoding a frame.
 pub(super) struct TexturePool {

@@ -3,10 +3,17 @@
 use crate::effects::{
     effect_amount_is_identity, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
 };
-use crate::{domain::Point, plan::CompiledEffect, project::ZoomBlurDirection};
+use crate::{
+    domain::Point,
+    plan::{ColourTransform, CompiledEffect},
+    project::ZoomBlurDirection,
+};
 
 #[derive(Clone, Debug)]
 pub enum EvaluatedEffect {
+    ColourTransform {
+        transform: ColourTransform,
+    },
     Brightness {
         amount: f64,
     },
@@ -83,6 +90,7 @@ impl EvaluatedEffect {
     #[must_use]
     pub fn is_identity(&self) -> bool {
         match self {
+            Self::ColourTransform { transform } => *transform == ColourTransform::default(),
             Self::Brightness { amount } => *amount == 0.0,
             Self::Contrast { amount } | Self::Saturation { amount } => *amount == 1.0,
             Self::Tint { amount, .. }
@@ -116,12 +124,16 @@ impl EvaluatedEffect {
                 | Self::Contrast { .. }
                 | Self::Saturation { .. }
                 | Self::Tint { .. }
+                | Self::ColourTransform { .. }
         )
     }
 }
 
 pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
     match effect {
+        CompiledEffect::ColourTransform { transform } => EvaluatedEffect::ColourTransform {
+            transform: *transform,
+        },
         CompiledEffect::Brightness { amount } => EvaluatedEffect::Brightness {
             amount: amount.evaluate(time),
         },

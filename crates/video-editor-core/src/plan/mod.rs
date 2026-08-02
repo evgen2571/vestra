@@ -290,6 +290,33 @@ mod tests {
     }
 
     #[test]
+    fn compiler_classifies_whole_visual_activity_conservatively() {
+        let mut project = canonical_project();
+        project.visual.transitions.clear();
+        assert_eq!(
+            compile_project(project.clone()).visual_dependency,
+            TemporalDependency::Dynamic
+        );
+
+        let clip = project.visual.clips.remove(1);
+        project.visual.clips = vec![clip];
+        project.visual.clips[0].start = 0.0;
+        project.visual.clips[0].duration = 6.0;
+        project.visual.flashes.clear();
+        project.visual.post_effects.clear();
+        assert_eq!(
+            compile_project(project.clone()).visual_dependency,
+            TemporalDependency::Static
+        );
+
+        project.visual.clips.clear();
+        assert_eq!(
+            compile_project(project).visual_dependency,
+            TemporalDependency::Static
+        );
+    }
+
+    #[test]
     fn compiler_normalization_is_deterministic() {
         let mut project = canonical_project();
         let blue = project

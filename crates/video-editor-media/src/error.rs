@@ -32,6 +32,8 @@ pub enum MediaError {
     MissingFrameInput,
     #[error("FFmpeg did not expose an error output pipe")]
     MissingErrorOutput,
+    #[error("FFmpeg did not expose a progress output pipe")]
+    MissingProgressOutput,
     #[error("cannot stream frame to FFmpeg: {0}")]
     FrameWrite(#[source] io::Error),
     #[error("FFmpeg frame input is closed")]
@@ -56,6 +58,8 @@ pub enum MediaError {
     },
     #[error("cannot clean up FFmpeg while {operation}: stderr reader panicked")]
     StderrCollection { operation: &'static str },
+    #[error("cannot clean up FFmpeg while {operation}: progress reader panicked")]
+    ProgressCollection { operation: &'static str },
     #[error("output '{0}' already exists; pass --overwrite to replace it")]
     OutputAlreadyExists(PathBuf),
     #[error("output directory '{0}' does not exist")]

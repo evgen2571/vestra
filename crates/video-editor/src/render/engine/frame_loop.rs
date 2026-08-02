@@ -24,6 +24,10 @@ pub(super) struct FrameLoopResult {
     pub(super) frame_composition: Duration,
     pub(super) track_evaluation: Duration,
     pub(super) encoder_write: Duration,
+    pub(super) static_visual_hits: u64,
+    pub(super) static_visual_misses: u64,
+    pub(super) static_visual_copy_bytes: u64,
+    pub(super) static_visual_budget_bypasses: u64,
 }
 
 #[expect(
@@ -43,7 +47,21 @@ pub(super) fn run<S: FrameSink + ?Sized>(
     encoder: &mut S,
     performance: &mut PreparationStats,
     emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    static_template: &mut Option<std::sync::Arc<[u8]>>,
 ) -> Result<FrameLoopResult, RenderError> {
+    if plan.visual_dependency == video_editor_core::plan::TemporalDependency::Static {
+        return run_static(
+            plan,
+            options,
+            output,
+            schedule,
+            backend,
+            encoder,
+            performance,
+            emit,
+            static_template,
+        );
+    }
     let capacity = backend.capacity();
     debug_assert!(capacity > 0);
     let ready_limit = capacity;
@@ -392,7 +410,184 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         frame_composition,
         track_evaluation,
         encoder_write,
+        static_visual_hits: 0,
+        static_visual_misses: 0,
+        static_visual_copy_bytes: 0,
+        static_visual_budget_bypasses: 0,
     })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the static path keeps the normal frame-loop ownership boundary"
+)]
+#[expect(
+    clippy::result_large_err,
+    reason = "static rendering preserves structured render failures"
+)]
+fn run_static<S: FrameSink + ?Sized>(
+    plan: &RenderPlan,
+    options: &RenderOptions,
+    output: &OutputTarget,
+    schedule: &ActiveSchedule,
+    backend: &mut dyn RenderBackend,
+    encoder: &mut S,
+    performance: &mut PreparationStats,
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    template: &mut Option<std::sync::Arc<[u8]>>,
+) -> Result<FrameLoopResult, RenderError> {
+    let mut composition = Duration::ZERO;
+    let mut evaluation = Duration::ZERO;
+    let mut write = Duration::ZERO;
+    let mut hits = 0;
+    let mut misses = 0;
+    let bytes = usize::try_from(plan.canvas.width)
+        .unwrap_or(0)
+        .saturating_mul(usize::try_from(plan.canvas.height).unwrap_or(0))
+        .saturating_mul(4);
+    let cache_eligible = bytes as u64 <= plan.limits.maximum_cache_bytes;
+    let mut budget_bypasses = 0;
+    let rgba = if let Some(template) = template.as_ref() {
+        hits = plan.frame_count;
+        template.clone()
+    } else {
+        let active = schedule.active_at(plan, 0);
+        let time = frame_time_nanos(0, plan.frame_rate.0, plan.frame_rate.1).map_err(|_| {
+            static_error(
+                output,
+                plan,
+                0,
+                Diagnostic::error(
+                    "MVP-TIMELINE-OVERFLOW",
+                    Category::Render,
+                    "frame timestamp cannot be represented",
+                    "",
+                ),
+            )
+        })?;
+        let started = Instant::now();
+        let frame = evaluate(plan, &active, time);
+        evaluation += started.elapsed();
+        performance.evaluated_track_count += frame.evaluated_track_count;
+        let started = Instant::now();
+        backend
+            .submit_frame(0, &frame)
+            .map_err(|diagnostic| static_error(output, plan, 0, diagnostic))?;
+        let completed = backend
+            .poll_completed(PollMode::WaitForOne)
+            .map_err(|diagnostic| static_error(output, plan, 0, diagnostic))?
+            .ok_or_else(|| {
+                static_error(
+                    output,
+                    plan,
+                    0,
+                    Diagnostic::error(
+                        "MVP-FRAME-COMPLETION",
+                        Category::Backend,
+                        "backend did not complete the static frame",
+                        "",
+                    ),
+                )
+            })?;
+        let extras = backend
+            .flush()
+            .map_err(|diagnostic| static_error(output, plan, 0, diagnostic))?;
+        if !extras.is_empty() || completed.rgba.len() != bytes {
+            return Err(static_error(
+                output,
+                plan,
+                0,
+                Diagnostic::error(
+                    "MVP-BACKEND-CONTRACT",
+                    Category::Backend,
+                    "backend completed an invalid static frame",
+                    "",
+                ),
+            ));
+        }
+        composition += started.elapsed();
+        misses = 1;
+        let rgba: std::sync::Arc<[u8]> = completed.rgba.into();
+        if cache_eligible {
+            *template = Some(rgba.clone());
+        } else {
+            budget_bypasses = 1;
+        }
+        rgba
+    };
+    for frame_number in 0..plan.frame_count {
+        if options.cancelled.load(Ordering::Relaxed) {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                frame_number,
+                Some(frame_number),
+            );
+        }
+        let started = Instant::now();
+        encoder
+            .write_frame(&CompletedFrame {
+                frame_number,
+                rgba: rgba.to_vec(),
+            })
+            .map_err(|error| {
+                static_error(
+                    output,
+                    plan,
+                    frame_number,
+                    Diagnostic::error("MVP-RENDER-WRITE", Category::Render, error.to_string(), ""),
+                )
+            })?;
+        write += started.elapsed();
+        backend.record_written(frame_number);
+        performance.rendered_frame_count = frame_number + 1;
+        if frame_number + 1 < plan.frame_count
+            && emit_progress(frame_number + 1, plan.frame_count, emit)
+                == RenderObserverControl::Cancel
+        {
+            return cancellation(
+                backend,
+                encoder,
+                output,
+                plan,
+                frame_number + 1,
+                Some(frame_number),
+            );
+        }
+    }
+    if misses > 0 {
+        hits = plan.frame_count.saturating_sub(1);
+    }
+    Ok(FrameLoopResult {
+        completed_frames: plan.frame_count,
+        frame_composition: composition,
+        track_evaluation: evaluation,
+        encoder_write: write,
+        static_visual_hits: hits,
+        static_visual_misses: misses,
+        // Every generic sink frame receives its own owned Vec from the immutable
+        // template, including frame zero after a first-operation population.
+        static_visual_copy_bytes: plan.frame_count.saturating_mul(bytes as u64),
+        static_visual_budget_bypasses: budget_bypasses,
+    })
+}
+
+fn static_error(
+    output: &OutputTarget,
+    plan: &RenderPlan,
+    completed: u64,
+    diagnostic: Diagnostic,
+) -> RenderError {
+    cleanup_error(
+        output,
+        plan,
+        RenderFailureStage::FrameComposition,
+        completed,
+        Some(completed),
+        diagnostic,
+    )
 }
 
 #[expect(

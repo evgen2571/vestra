@@ -618,10 +618,6 @@ impl PyPreparedProject {
     fn supports_single_frame_rendering(&self) -> bool {
         self.report.supports_single_frame_rendering
     }
-    #[expect(
-        clippy::result_large_err,
-        reason = "the public SDK preserves structured frame failures"
-    )]
     fn render_frame_number(
         &self,
         py: Python<'_>,
@@ -634,10 +630,6 @@ impl PyPreparedProject {
             Err(error) => Err(slot_error(py, error)?),
         }
     }
-    #[expect(
-        clippy::result_large_err,
-        reason = "the public SDK preserves structured frame failures"
-    )]
     fn render_frame_ns(
         &self,
         py: Python<'_>,
@@ -650,10 +642,6 @@ impl PyPreparedProject {
             Err(error) => Err(slot_error(py, error)?),
         }
     }
-    #[expect(
-        clippy::result_large_err,
-        reason = "the public SDK preserves structured frame failures"
-    )]
     fn render_frame_seconds(
         &self,
         py: Python<'_>,

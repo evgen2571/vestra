@@ -418,12 +418,11 @@ mod tests {
 
         let first = &summaries[0].performance;
         let second = &summaries[1].performance;
-        // `canvas` is static for two seconds at 30 fps: one population, then
-        // 59 reuse hits in the first operation and 60 in the second.
-        assert_eq!(
-            (first.static_cache_misses, first.static_cache_hits),
-            (1, 59)
-        );
+        // `canvas` is static for two seconds at 30 fps: one backend render,
+        // then whole-final-frame reuse for this and later operations.
+        assert_eq!((first.static_cache_misses, first.static_cache_hits), (1, 0));
+        assert_eq!(first.static_visual_frame_cache_misses, 1);
+        assert_eq!(first.static_visual_frame_cache_hits, 59);
         assert_eq!(first.static_cache_population_renders, 1);
         assert_eq!(first.static_layers_rendered, 1);
         assert_eq!(first.cpu_scratch_allocations, 1);
@@ -434,8 +433,10 @@ mod tests {
         );
         assert_eq!(
             (second.static_cache_misses, second.static_cache_hits),
-            (0, 60)
+            (0, 0)
         );
+        assert_eq!(second.static_visual_frame_cache_misses, 0);
+        assert_eq!(second.static_visual_frame_cache_hits, 60);
         assert_eq!(second.static_cache_population_renders, 0);
         assert_eq!(second.static_layers_rendered, 0);
         assert_eq!(second.cpu_scratch_allocations, 0);

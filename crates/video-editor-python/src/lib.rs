@@ -250,10 +250,6 @@ impl PyEditor {
         )
     }
     #[pyo3(signature = (project, *, preview = false))]
-    #[expect(
-        clippy::result_large_err,
-        reason = "the binding must retain the SDK EditorError until Python is reattached"
-    )]
     fn inspect(
         &self,
         py: Python<'_>,
@@ -267,10 +263,6 @@ impl PyEditor {
     }
 
     #[pyo3(signature = (project, options = None))]
-    #[expect(
-        clippy::result_large_err,
-        reason = "the binding retains structured SDK preparation failures until Python reattaches"
-    )]
     fn prepare(
         &self,
         py: Python<'_>,

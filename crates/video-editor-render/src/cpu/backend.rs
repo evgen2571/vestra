@@ -21,10 +21,13 @@ pub struct CpuBackend {
     assets: PreparedAssets,
     effects: compositor::EffectSurfacePool,
     completed: VecDeque<CompletedFrame>,
-    static_layers: ByteLruCache<usize, Arc<RgbaImage>>,
+    static_layers: ByteLruCache<usize, Arc<compositor::CachedCpuLayerSurface>>,
     static_layer_renders: u64,
     static_cache_population_renders: u64,
     full_frame_allocations: u64,
+    opaque_copy_fast_path_hits: u64,
+    opaque_copy_fast_path_bytes: u64,
+    generic_blend_surface_calls: u64,
     metrics: StagedMetrics,
 }
 
@@ -39,6 +42,9 @@ impl CpuBackend {
             static_layer_renders: 0,
             static_cache_population_renders: 0,
             full_frame_allocations: 0,
+            opaque_copy_fast_path_hits: 0,
+            opaque_copy_fast_path_bytes: 0,
+            generic_blend_surface_calls: 0,
             metrics: StagedMetrics {
                 configured_pipeline_depth: 1,
                 allocated_slot_count: 1,
@@ -70,13 +76,17 @@ impl RenderBackend for CpuBackend {
         let mut destination = RgbaImage::new(frame.width, frame.height);
         self.full_frame_allocations += 1;
         let insertions_before = self.static_layers.stats().insertions;
-        self.static_layer_renders += compositor::compose(
+        let compose = compositor::compose(
             frame,
             &mut self.assets,
             &mut destination,
             &mut self.effects,
             &mut self.static_layers,
         );
+        self.static_layer_renders += compose.static_layer_renders;
+        self.opaque_copy_fast_path_hits += compose.opaque_copy_fast_path_hits;
+        self.opaque_copy_fast_path_bytes += compose.opaque_copy_fast_path_bytes;
+        self.generic_blend_surface_calls += compose.generic_blend_surface_calls;
         self.static_cache_population_renders +=
             self.static_layers.stats().insertions - insertions_before;
         self.completed.push_back(CompletedFrame {
@@ -134,6 +144,9 @@ impl RenderBackend for CpuBackend {
         stats.cpu_scratch_buffers_retained = scratch.retained_buffers;
         stats.cpu_scratch_bytes_retained = scratch.retained_bytes;
         stats.cpu_full_frame_copy_bytes = scratch.copy_bytes;
+        stats.cpu_opaque_copy_fast_path_hits = self.opaque_copy_fast_path_hits;
+        stats.cpu_opaque_copy_fast_path_bytes = self.opaque_copy_fast_path_bytes;
+        stats.cpu_generic_blend_surface_calls = self.generic_blend_surface_calls;
         stats
     }
 

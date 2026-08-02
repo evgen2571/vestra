@@ -1,8 +1,12 @@
 use std::{
     fs,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use video_editor_render::CompletedFrame;
@@ -17,10 +21,14 @@ pub struct FfmpegSink {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     stderr_reader: Option<std::thread::JoinHandle<Vec<u8>>>,
+    progress_reader: Option<std::thread::JoinHandle<()>>,
+    static_progress_frames: Option<Arc<AtomicU64>>,
     expected_frame: u64,
     expected_bytes: usize,
     state: SinkState,
     filtergraph_file: Option<TemporaryFiltergraph>,
+    static_image: Option<PathBuf>,
+    static_frame_count: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,7 +82,104 @@ impl FfmpegSink {
         if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
-        Self::spawn(command, settings, output, filtergraph_file)
+        Self::spawn(
+            command,
+            settings,
+            output,
+            filtergraph_file,
+            None,
+            true,
+            false,
+        )
+    }
+
+    pub fn start_static(
+        settings: &EncoderSettings,
+        output: &Path,
+        image: PathBuf,
+    ) -> Result<Self, MediaError> {
+        let mut command = Command::new("ffmpeg");
+        let mut filtergraph_file = None;
+        command
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-loop",
+                "1",
+                "-progress",
+                "pipe:1",
+                "-nostats",
+                "-framerate",
+            ])
+            .arg(format!(
+                "{}/{}",
+                settings.frame_rate.0, settings.frame_rate.1
+            ))
+            .args(["-i"])
+            .arg(&image);
+        if let Some(audio_mix) = &settings.audio_mix {
+            let audio = audio_graph::compile(audio_mix, settings.duration)?;
+            filtergraph_file =
+                add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
+        } else {
+            command.args(["-map", "0:v:0"]);
+        }
+        command
+            .args([
+                "-frames:v",
+                &settings.frame_count.to_string(),
+                "-c:v",
+                "libx264",
+                "-crf",
+            ])
+            .arg(settings.quality_crf.to_string())
+            .args(["-pix_fmt", "yuv420p"]);
+        if settings.audio_mix.is_some() {
+            command.args(["-c:a", "aac", "-b:a", "192k"]);
+        }
+        Self::spawn(
+            command,
+            settings,
+            output,
+            filtergraph_file,
+            Some(image),
+            false,
+            true,
+        )
+    }
+
+    /// Returns the latest frame count reported by FFmpeg's `-progress` stream
+    /// for a static-image encode. Dynamic/rawvideo sinks return `None`.
+    #[must_use]
+    pub fn static_progress_frames(&self) -> Option<u64> {
+        self.static_progress_frames
+            .as_ref()
+            .map(|frames| frames.load(Ordering::Relaxed))
+    }
+
+    /// Non-blocking completion probe used by the static-image render path so
+    /// cancellation and progress observers remain responsive while FFmpeg
+    /// performs the long-running encode internally.
+    pub fn try_finish_static(&mut self) -> Result<Option<SinkResult>, MediaError> {
+        if self.state != SinkState::Active || self.static_frame_count.is_none() {
+            return Err(MediaError::InvalidSinkState);
+        }
+        let status = match self
+            .child
+            .as_mut()
+            .ok_or(MediaError::InvalidSinkState)?
+            .try_wait()
+        {
+            Ok(Some(status)) => status,
+            Ok(None) => return Ok(None),
+            Err(error) => {
+                let _ = self.abort_active();
+                return Err(MediaError::ProcessWait(error));
+            }
+        };
+        self.finish_with_status(status).map(Some)
     }
 
     fn spawn(
@@ -82,24 +187,39 @@ impl FfmpegSink {
         settings: &EncoderSettings,
         output: &Path,
         filtergraph_file: Option<TemporaryFiltergraph>,
+        static_image: Option<PathBuf>,
+        pipe_stdin: bool,
+        pipe_progress: bool,
     ) -> Result<Self, MediaError> {
         let mut child = command
             .args(["-movflags", "+faststart"])
             .arg(output)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
+            .stdin(if pipe_stdin {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(if pipe_progress {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|source| MediaError::ProcessStart {
                 program: "FFmpeg",
                 source,
             })?;
-        let stdin = match child.stdin.take() {
-            Some(stdin) => stdin,
-            None => {
-                let _ = terminate_and_reap(&mut child);
-                return Err(MediaError::MissingFrameInput);
+        let stdin = if pipe_stdin {
+            match child.stdin.take() {
+                Some(stdin) => Some(stdin),
+                None => {
+                    let _ = terminate_and_reap(&mut child);
+                    return Err(MediaError::MissingFrameInput);
+                }
             }
+        } else {
+            None
         };
         let stderr = match child.stderr.take() {
             Some(stderr) => stderr,
@@ -109,15 +229,36 @@ impl FfmpegSink {
                 return Err(MediaError::MissingErrorOutput);
             }
         };
+        let (progress_reader, static_progress_frames) = if pipe_progress {
+            let stdout = match child.stdout.take() {
+                Some(stdout) => stdout,
+                None => {
+                    drop(stdin);
+                    let _ = terminate_and_reap(&mut child);
+                    return Err(MediaError::MissingProgressOutput);
+                }
+            };
+            let frames = Arc::new(AtomicU64::new(0));
+            let progress = Arc::clone(&frames);
+            let reader = std::thread::spawn(move || collect_progress(stdout, &progress));
+            (Some(reader), Some(frames))
+        } else {
+            (None, None)
+        };
         let expected_bytes = settings.width as usize * settings.height as usize * 4;
+        let static_frame_count = static_image.as_ref().map(|_| settings.frame_count);
         Ok(Self {
             child: Some(child),
-            stdin: Some(stdin),
+            stdin,
             stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+            progress_reader,
+            static_progress_frames,
             expected_frame: 0,
             expected_bytes,
             state: SinkState::Active,
             filtergraph_file,
+            static_image,
+            static_frame_count,
         })
     }
 
@@ -142,6 +283,8 @@ impl FfmpegSink {
         self.child.take();
         self.state = SinkState::Aborted;
         self.cleanup_filtergraph();
+        self.cleanup_static_image();
+        self.join_progress()?;
         self.join_stderr().map(|_| ())
     }
 
@@ -157,8 +300,56 @@ impl FfmpegSink {
             .map(|stderr| stderr.unwrap_or_default())
     }
 
+    fn join_progress(&mut self) -> Result<(), MediaError> {
+        self.progress_reader
+            .take()
+            .map(|reader| {
+                reader.join().map_err(|_| MediaError::ProgressCollection {
+                    operation: "joining FFmpeg progress reader",
+                })
+            })
+            .transpose()?;
+        Ok(())
+    }
+
+    fn finish_with_status(
+        &mut self,
+        status: std::process::ExitStatus,
+    ) -> Result<SinkResult, MediaError> {
+        self.child.take();
+        self.join_progress()?;
+        let stderr = String::from_utf8_lossy(&self.join_stderr()?)
+            .trim()
+            .to_owned();
+        self.state = SinkState::Finished;
+        self.cleanup_filtergraph();
+        let static_frame_count = self.static_frame_count;
+        let reported_static_frames = self.static_progress_frames();
+        self.cleanup_static_image();
+        if status.success() {
+            Ok(SinkResult {
+                frames_written: reported_static_frames
+                    .filter(|frames| *frames > 0)
+                    .or(static_frame_count)
+                    .unwrap_or(self.expected_frame),
+            })
+        } else {
+            Err(MediaError::ProcessFailed {
+                program: "FFmpeg",
+                status,
+                stderr,
+            })
+        }
+    }
+
     fn cleanup_filtergraph(&mut self) {
         self.filtergraph_file.take();
+    }
+
+    fn cleanup_static_image(&mut self) {
+        if let Some(path) = self.static_image.take() {
+            let _ = fs::remove_file(path);
+        }
     }
 }
 
@@ -227,23 +418,7 @@ impl FrameSink for FfmpegSink {
                 return Err(MediaError::ProcessWait(error));
             }
         };
-        self.child.take();
-        let stderr = String::from_utf8_lossy(&self.join_stderr()?)
-            .trim()
-            .to_owned();
-        self.state = SinkState::Finished;
-        self.cleanup_filtergraph();
-        if status.success() {
-            Ok(SinkResult {
-                frames_written: self.expected_frame,
-            })
-        } else {
-            Err(MediaError::ProcessFailed {
-                program: "FFmpeg",
-                status,
-                stderr,
-            })
-        }
+        self.finish_with_status(status)
     }
 
     fn abort(&mut self) -> Result<(), MediaError> {
@@ -258,6 +433,7 @@ impl Drop for FfmpegSink {
     fn drop(&mut self) {
         let _ = self.abort();
         self.cleanup_filtergraph();
+        self.cleanup_static_image();
     }
 }
 
@@ -274,6 +450,16 @@ fn terminate_and_reap(child: &mut Child) -> Result<(), MediaError> {
         source,
     })?;
     Ok(())
+}
+
+fn collect_progress(stdout: impl Read, frames: &AtomicU64) {
+    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+        if let Some(value) = line.strip_prefix("frame=")
+            && let Ok(frame) = value.trim().parse::<u64>()
+        {
+            frames.store(frame, Ordering::Relaxed);
+        }
+    }
 }
 
 fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
@@ -389,10 +575,14 @@ mod tests {
             child: Some(child),
             stdin: Some(stdin),
             stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+            progress_reader: None,
+            static_progress_frames: None,
             expected_frame: 0,
             expected_bytes: 4,
             state: SinkState::Active,
             filtergraph_file: None,
+            static_image: None,
+            static_frame_count: None,
         }
     }
 
@@ -406,6 +596,25 @@ mod tests {
                     .is_some_and(|extension| extension == "filtergraph")
             })
             .collect()
+    }
+
+    fn write_test_ppm(path: &Path) {
+        let mut bytes = b"P6\n2 2\n255\n".to_vec();
+        bytes.extend_from_slice(&[255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
+        fs::write(path, bytes).expect("writes test PPM");
+    }
+
+    fn static_settings(frame_count: u64) -> EncoderSettings {
+        EncoderSettings {
+            width: 2,
+            height: 2,
+            frame_rate: (30, 1),
+            frame_count,
+            duration: frame_count as f64 / 30.0,
+            quality_crf: 30,
+            maximum_audio_sources: 128,
+            audio_mix: None,
+        }
     }
 
     fn large_reused_mix(path: PathBuf) -> AudioMixPlan {
@@ -1003,6 +1212,40 @@ mod tests {
     }
 
     #[test]
+    fn static_sink_reports_progress_finishes_nonblocking_and_removes_image() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let image = directory.path().join("static.ppm");
+        let output = directory.path().join("static.mp4");
+        write_test_ppm(&image);
+        let settings = static_settings(12);
+        let mut sink =
+            FfmpegSink::start_static(&settings, &output, image.clone()).expect("static FFmpeg");
+        let result = loop {
+            match sink.try_finish_static().expect("polls static FFmpeg") {
+                Some(result) => break result,
+                None => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        };
+        assert_eq!(result.frames_written, settings.frame_count);
+        assert_eq!(sink.static_progress_frames(), Some(settings.frame_count));
+        assert!(output.exists());
+        assert!(!image.exists(), "static input is cleaned after finish");
+    }
+
+    #[test]
+    fn aborting_static_sink_removes_static_input() {
+        let directory = tempfile::tempdir().expect("temporary render directory");
+        let image = directory.path().join("static.ppm");
+        let output = directory.path().join("static.mp4");
+        write_test_ppm(&image);
+        let settings = static_settings(3_000);
+        let mut sink =
+            FfmpegSink::start_static(&settings, &output, image.clone()).expect("static FFmpeg");
+        sink.abort().expect("aborts static FFmpeg");
+        assert!(!image.exists(), "static input is cleaned after abort");
+    }
+
+    #[test]
     fn rejects_out_of_order_frames_before_writing() {
         let error = MediaError::FrameOutOfOrder {
             expected: 0,
@@ -1023,10 +1266,14 @@ mod tests {
             child: None,
             stdin: None,
             stderr_reader: None,
+            progress_reader: None,
+            static_progress_frames: None,
             expected_frame: 0,
             expected_bytes: 4,
             state: SinkState::Finished,
             filtergraph_file: None,
+            static_image: None,
+            static_frame_count: None,
         };
         let frame = CompletedFrame {
             frame_number: 0,

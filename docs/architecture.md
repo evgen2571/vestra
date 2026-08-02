@@ -188,6 +188,12 @@ finalization reports the expected frame count. Failure handling removes temporar
 output. Cancellation remains the primary diagnostic, while a sink cleanup failure
 is attached as a secondary hint.
 
+For a compiler-proven static final visual, the prepared state retains one
+immutable final RGBA template. Normal FFmpeg file output writes that template
+once as a temporary PNG and gives FFmpeg a looping image input at index zero.
+Audio inputs therefore remain indexed from one. FFmpeg receives the compiled
+frame count and performs the repeated video-frame generation internally.
+
 ## Effect and geometry flow
 
 ```text

@@ -23,6 +23,9 @@ pub struct RenderPlan {
     /// Whether the complete post-effect result can vary with project time.
     /// This excludes the normal fact that frames occur at different times.
     pub post_effect_dependency: TemporalDependency,
+    /// Whether the complete composited visual is invariant for every output
+    /// frame. This includes layer activity, unlike `content_dependency`.
+    pub visual_dependency: TemporalDependency,
     pub compilation: CompilationStats,
     pub warnings: Vec<crate::Diagnostic>,
 }
@@ -105,7 +108,8 @@ pub struct CompiledLayer {
 }
 
 /// Backend-neutral time dependency of compiled visual work.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TemporalDependency {
     #[default]
     Static,

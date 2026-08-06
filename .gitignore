@@ -68,3 +68,5 @@ wheels/
 
 # Rust build output
 target/
+
+.codegraph/

@@ -250,6 +250,10 @@ impl PyEditor {
         )
     }
     #[pyo3(signature = (project, *, preview = false))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native editor diagnostics"
+    )]
     fn inspect(
         &self,
         py: Python<'_>,
@@ -263,6 +267,10 @@ impl PyEditor {
     }
 
     #[pyo3(signature = (project, options = None))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native preparation diagnostics"
+    )]
     fn prepare(
         &self,
         py: Python<'_>,

@@ -74,6 +74,7 @@ pub(crate) struct PreparationTimings {
     pub(crate) validation_ms: u128,
     pub(crate) preflight_ms: u128,
     pub(crate) plan_compile_ms: u128,
+    pub(crate) audio_analysis_ms: u128,
     pub(crate) renderer: crate::render::PreparationTimings,
 }
 
@@ -170,6 +171,7 @@ pub(crate) fn prepare_project(
         ..metadata
     };
     let renderer_preparation_timings = prepared.preparation_timings();
+    let audio_analysis_ms = prepared.audio_analysis_duration().as_millis();
     Ok(PreparedRender {
         metadata,
         requested_backend: prepared.requested_backend(),
@@ -179,6 +181,7 @@ pub(crate) fn prepare_project(
         preparation_warnings,
         preparation_timings: PreparationTimings {
             plan_compile_ms: plan_compile_elapsed_ms,
+            audio_analysis_ms,
             renderer: renderer_preparation_timings,
             ..preparation_timings
         },

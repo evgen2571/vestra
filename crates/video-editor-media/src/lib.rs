@@ -5,6 +5,7 @@
 //! deliberately does not render pixels, evaluate plans, coordinate progress,
 //! or present CLI diagnostics. Its workspace API is unstable.
 
+mod audio_analysis;
 mod audio_graph;
 mod error;
 mod ffmpeg;
@@ -12,6 +13,7 @@ mod output;
 mod probe;
 mod sink;
 
+pub use audio_analysis::{MasterPcmSpec, consume_master_pcm, validate_master_pcm_request};
 pub use audio_graph::seconds_to_samples;
 pub use error::MediaError;
 pub use ffmpeg::FfmpegSink;

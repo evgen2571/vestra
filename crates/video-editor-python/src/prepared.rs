@@ -339,6 +339,8 @@ pub(crate) struct PyPreparationTimings {
     #[pyo3(get)]
     asset_decode_ms: u128,
     #[pyo3(get)]
+    audio_analysis_ms: u128,
+    #[pyo3(get)]
     backend_initialization_ms: Option<u128>,
     #[pyo3(get)]
     total_ms: u128,
@@ -350,6 +352,7 @@ impl From<&NativePreparationTimings> for PyPreparationTimings {
             preflight_ms: value.preflight_ms,
             plan_compile_ms: value.plan_compile_ms,
             asset_decode_ms: value.asset_decode_ms,
+            audio_analysis_ms: value.audio_analysis_ms,
             backend_initialization_ms: value.backend_initialization_ms,
             total_ms: value.total_ms,
         }
@@ -618,6 +621,10 @@ impl PyPreparedProject {
     fn supports_single_frame_rendering(&self) -> bool {
         self.report.supports_single_frame_rendering
     }
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native frame diagnostics"
+    )]
     fn render_frame_number(
         &self,
         py: Python<'_>,
@@ -630,6 +637,10 @@ impl PyPreparedProject {
             Err(error) => Err(slot_error(py, error)?),
         }
     }
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native frame diagnostics"
+    )]
     fn render_frame_ns(
         &self,
         py: Python<'_>,
@@ -642,6 +653,10 @@ impl PyPreparedProject {
             Err(error) => Err(slot_error(py, error)?),
         }
     }
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native frame diagnostics"
+    )]
     fn render_frame_seconds(
         &self,
         py: Python<'_>,

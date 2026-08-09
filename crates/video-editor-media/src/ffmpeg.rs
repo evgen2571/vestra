@@ -533,7 +533,7 @@ fn add_audio(
     Ok(filtergraph_file)
 }
 
-fn enforce_audio_source_limit(
+pub(crate) fn enforce_audio_source_limit(
     audio: &audio_graph::FfmpegAudioGraph,
     maximum_audio_sources: usize,
 ) -> Result<(), MediaError> {
@@ -548,13 +548,17 @@ fn enforce_audio_source_limit(
 }
 
 #[derive(Debug)]
-struct TemporaryFiltergraph {
-    path: PathBuf,
+pub(crate) struct TemporaryFiltergraph {
+    pub(crate) path: PathBuf,
 }
 
 impl TemporaryFiltergraph {
     fn create(output: &Path, contents: &str) -> Result<Self, MediaError> {
-        let path = effective_parent(output).join(format!(
+        Self::create_in(effective_parent(output), contents)
+    }
+
+    pub(crate) fn create_in(directory: &Path, contents: &str) -> Result<Self, MediaError> {
+        let path = directory.join(format!(
             ".video-editor-{}.filtergraph",
             uuid::Uuid::new_v4()
         ));

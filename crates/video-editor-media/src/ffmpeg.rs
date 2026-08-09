@@ -92,7 +92,13 @@ impl FfmpegSink {
             ))
             .args(["-i", "pipe:0"]);
         if let Some(audio_mix) = &settings.audio_mix {
-            let audio = audio_graph::compile(audio_mix, settings.duration)?;
+            let audio = audio_graph::compile_with_options(
+                audio_mix,
+                settings.duration,
+                audio_graph::AudioGraphCompileOptions {
+                    first_audio_input_index: 1,
+                },
+            )?;
             debug_assert_eq!(audio.clip_branch_count, audio_mix.audible_clip_count());
             filtergraph_file =
                 add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
@@ -141,7 +147,13 @@ impl FfmpegSink {
             .args(["-i"])
             .arg(&image);
         if let Some(audio_mix) = &settings.audio_mix {
-            let audio = audio_graph::compile(audio_mix, settings.duration)?;
+            let audio = audio_graph::compile_with_options(
+                audio_mix,
+                settings.duration,
+                audio_graph::AudioGraphCompileOptions {
+                    first_audio_input_index: 1,
+                },
+            )?;
             filtergraph_file =
                 add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
         } else {

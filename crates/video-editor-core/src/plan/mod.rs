@@ -22,9 +22,12 @@ pub use scalar_property::{
 pub use schedule::{
     ActiveSchedule, ScheduleAction, ScheduleCursor, ScheduleEvent, sort_active_items,
 };
+pub(crate) use signals::ScalarSignalInterner;
 pub use signals::{
-    EvaluationContext, EvaluationError, PreparedScalarSignal, PreparedScalarSignalError,
-    PreparedScalarSignals, ScalarSignalId,
+    AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioFrequencyBand,
+    AudioScalarFeature, AudioScalarSignal, AudioSignalContractError, CompiledScalarSignal,
+    CompiledScalarSignals, EvaluationContext, EvaluationError, PreparedScalarSignal,
+    PreparedScalarSignalError, PreparedScalarSignals, ScalarSignalId,
 };
 
 #[cfg(test)]
@@ -115,6 +118,8 @@ mod tests {
             plan.configured_output,
             PathBuf::from("/projects/../output/animation-effects.mp4")
         );
+        assert!(plan.scalar_signals.is_empty());
+        assert!(plan.audio_analysis_requirements.is_empty());
     }
 
     #[test]
@@ -414,5 +419,38 @@ mod tests {
         let first = compile_project(project.clone());
         let second = compile_project(project);
         assert_eq!(format!("{first:?}"), format!("{second:?}"));
+    }
+
+    #[test]
+    fn disabled_output_audio_preserves_the_authored_master_mix() {
+        let mut project: Project = serde_json::from_str(include_str!(
+            "../../../../examples/projects/audio-static-mix.json"
+        ))
+        .expect("fixture project");
+        project.output.audio = false;
+        let project = Box::leak(Box::new(project));
+        let assets = Box::leak(Box::new(BTreeMap::from([(
+            "tone".to_owned(),
+            PathBuf::from("/resolved/tone.wav"),
+        )])));
+        let durations = Box::leak(Box::new(BTreeMap::from([("tone".to_owned(), 2.0)])));
+        let plan = compile(
+            PlanCompileInput::new(
+                project,
+                ResourceLimits::default(),
+                std::path::Path::new("/projects"),
+                assets,
+                durations,
+                2.0,
+                (30, 1),
+                60,
+                &[],
+            ),
+            CompileOptions::default(),
+        )
+        .expect("plan");
+        assert!(!plan.audio_output_enabled);
+        assert!(plan.encoder.audio_mix.is_none());
+        assert!(plan.audio_mix.has_authored_material());
     }
 }

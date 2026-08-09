@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::plan::CompiledScalarProperty;
+use crate::plan::{AudioAnalysisRequirements, CompiledScalarProperty, CompiledScalarSignals};
 use crate::{
     animation::Track,
     domain::{Crop, Point},
@@ -16,6 +16,8 @@ pub struct RenderPlan {
     pub frame_count: u64,
     pub encoder: EncoderSettings,
     pub audio_mix: crate::plan_audio::AudioMixPlan,
+    pub scalar_signals: CompiledScalarSignals,
+    pub audio_analysis_requirements: AudioAnalysisRequirements,
     pub audio_output_enabled: bool,
     pub limits: crate::validation::ResourceLimits,
     pub images: Vec<ImageAsset>,

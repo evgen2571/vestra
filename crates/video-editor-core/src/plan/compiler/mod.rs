@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 use crate::{
     Category, Diagnostic,
     media::EncoderSettings,
-    plan::{Canvas, CompilationStats, PlanCompileInput, RenderPlan, TemporalDependency},
+    plan::{
+        Canvas, CompilationStats, PlanCompileInput, RenderPlan, ScalarSignalInterner,
+        TemporalDependency,
+    },
     project::parse_colour,
 };
 
@@ -126,12 +129,17 @@ pub fn compile(
         .map(|layer| layer.effects.len())
         .sum::<usize>()
         + post_effects.len();
-    let post_effect_dependency = optimization::normalize(
+    optimization::normalize(
         &mut layers,
         &mut post_effects,
         time::to_nanos(validated.duration, "project")?,
         &mut compilation,
     );
+    let post_effect_dependency = post_effects
+        .iter()
+        .fold(TemporalDependency::Static, |dependency, effect| {
+            dependency.combine(effect.dependency)
+        });
     let visual_dependency = layers
         .iter()
         .fold(post_effect_dependency, |dependency, layer| {
@@ -151,6 +159,8 @@ pub fn compile(
     metrics::record(&mut compilation, &layers, &post_effects);
     limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     let audio_mix = audio::compile(&validated)?;
+    let scalar_signals = ScalarSignalInterner::default().finish();
+    let audio_analysis_requirements = scalar_signals.audio_analysis_requirements();
     let encoder_audio_mix = project
         .output
         .audio
@@ -178,6 +188,8 @@ pub fn compile(
             audio_mix: encoder_audio_mix,
         },
         audio_mix,
+        scalar_signals,
+        audio_analysis_requirements,
         audio_output_enabled: project.output.audio,
         limits: validated.limits,
         images: image_table.images,

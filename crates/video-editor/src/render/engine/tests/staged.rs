@@ -47,7 +47,7 @@ fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
     write_mono_wav(&source, source_frames, 0.25);
 
     let band = AudioFrequencyBand::new(40.0, 160.0).expect("valid band");
-    let signal = CompiledScalarSignal::Audio(AudioScalarSignal {
+    let signal = CompiledScalarSignal::raw_audio(AudioScalarSignal {
         tap: AudioAnalysisTap::Master,
         feature: AudioScalarFeature::BandEnergy(band),
     });

@@ -25,9 +25,11 @@ pub use schedule::{
 pub(crate) use signals::ScalarSignalInterner;
 pub use signals::{
     AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioFrequencyBand,
-    AudioScalarFeature, AudioScalarSignal, AudioSignalContractError, CompiledScalarSignal,
-    CompiledScalarSignals, EvaluationContext, EvaluationError, PreparedScalarSignal,
-    PreparedScalarSignalError, PreparedScalarSignals, ScalarSignalId,
+    AudioScalarFeature, AudioScalarSignal, AudioSignalContractError, ClampTransform,
+    CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, EvaluationContext,
+    EvaluationError, GainTransform, PreparedScalarSignal, PreparedScalarSignalError,
+    PreparedScalarSignals, RawScalarSignal, RemapTransform, ScalarSignalId, SignalPreparationError,
+    SignalTransformContractError, prepare_scalar_signals, prepare_transformed_scalar_signal,
 };
 
 #[cfg(test)]

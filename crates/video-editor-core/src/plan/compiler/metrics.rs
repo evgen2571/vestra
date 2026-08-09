@@ -19,7 +19,7 @@ pub(super) fn record(
         }
         compilation.local_effect_count += layer.effects.len();
         compilation.generated_transform_contribution_count += layer.transform_contributions.len();
-        compilation.keyframe_count += track_keyframe_count(&layer.opacity)
+        compilation.keyframe_count += track_keyframe_count(&layer.opacity.authored_track)
             + layer
                 .opacity_contributions
                 .iter()

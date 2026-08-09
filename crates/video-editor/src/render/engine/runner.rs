@@ -41,6 +41,7 @@ pub(crate) struct PreparedState {
     backend_fallback: Option<BackendFallback>,
     preparation_timings: crate::render::PreparationTimings,
     static_visual_template: Option<Arc<[u8]>>,
+    scalar_signals: video_editor_core::plan::PreparedScalarSignals,
     lifecycle: PreparedLifecycle,
 }
 
@@ -194,6 +195,7 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
         backend_fallback,
         preparation_timings,
         static_visual_template: None,
+        scalar_signals: video_editor_core::plan::PreparedScalarSignals::empty(),
         lifecycle: PreparedLifecycle::Ready,
     })
 }
@@ -239,7 +241,15 @@ pub(crate) fn render_prepared_frame(
             ),
         )
     })?;
-    let evaluated = video_editor_core::plan::evaluate(&prepared.plan, &active, time);
+    let context = video_editor_core::plan::EvaluationContext::new(&prepared.scalar_signals);
+    let evaluated =
+        video_editor_core::plan::evaluate_with_context(&prepared.plan, &active, time, &context)
+            .map_err(|error| {
+                frame_error(
+                    prepared,
+                    frame_diagnostic("MVP-EVALUATION", &error.to_string()),
+                )
+            })?;
     prepared.backend.reset_operation_metrics();
     if let Err(diagnostic) = prepared.backend.submit_frame(frame_number, &evaluated) {
         prepared.backend.abort();
@@ -841,6 +851,7 @@ where
         })?;
     let frame_loop = run_frame_loop(
         &plan,
+        &prepared.scalar_signals,
         options,
         &output,
         &prepared.schedule,

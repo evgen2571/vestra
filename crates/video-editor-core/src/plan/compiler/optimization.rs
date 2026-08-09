@@ -15,7 +15,8 @@ pub(super) fn normalize(
 ) -> TemporalDependency {
     for layer in layers {
         compilation.constant_track_normalization_count += normalize_source(layer);
-        compilation.constant_track_normalization_count += normalize_track(&mut layer.opacity);
+        compilation.constant_track_normalization_count +=
+            normalize_track(&mut layer.opacity.authored_track);
         for track in &mut layer.opacity_contributions {
             compilation.constant_track_normalization_count += normalize_track(track);
         }
@@ -83,8 +84,8 @@ fn normalize_source(layer: &mut CompiledLayer) -> usize {
 fn normalize_effect(effect: &mut CompiledEffect) -> usize {
     match effect {
         CompiledEffect::ColourTransform { .. } => 0,
-        CompiledEffect::Brightness { amount }
-        | CompiledEffect::Contrast { amount }
+        CompiledEffect::Brightness { amount } => normalize_track(&mut amount.authored_track),
+        CompiledEffect::Contrast { amount }
         | CompiledEffect::Saturation { amount }
         | CompiledEffect::Tint { amount, .. }
         | CompiledEffect::GaussianBlur { radius: amount }
@@ -151,7 +152,11 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
 fn is_static_identity(effect: &CompiledEffect) -> bool {
     match effect {
         CompiledEffect::ColourTransform { transform } => *transform == ColourTransform::default(),
-        CompiledEffect::Brightness { amount } => static_track(amount) && amount.base_value == 0.0,
+        CompiledEffect::Brightness { amount } => {
+            !amount.has_modifiers()
+                && static_track(&amount.authored_track)
+                && amount.authored_track.base_value == 0.0
+        }
         CompiledEffect::Contrast { amount } | CompiledEffect::Saturation { amount } => {
             static_track(amount) && amount.base_value == 1.0
         }
@@ -233,7 +238,7 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
             &layer.source,
             crate::plan::CompiledVisualSource::Image { crop, .. } if !static_track(crop)
         ),
-        !static_track(&layer.opacity),
+        layer.opacity.has_modifiers() || !static_track(&layer.opacity.authored_track),
         layer
             .opacity_contributions
             .iter()
@@ -264,8 +269,10 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
 pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
     let dynamic = match effect {
         CompiledEffect::ColourTransform { .. } => false,
-        CompiledEffect::Brightness { amount }
-        | CompiledEffect::Contrast { amount }
+        CompiledEffect::Brightness { amount } => {
+            amount.has_modifiers() || !static_track(&amount.authored_track)
+        }
+        CompiledEffect::Contrast { amount }
         | CompiledEffect::Saturation { amount }
         | CompiledEffect::Tint { amount, .. }
         | CompiledEffect::GaussianBlur { radius: amount }
@@ -325,12 +332,17 @@ fn fuse_static_colour_chain(layer: &mut CompiledLayer) {
     {
         return;
     }
-    let transform = ColourTransform::from_effects(
-        layer
-            .effects
-            .iter()
-            .map(|effect| crate::plan::evaluation::evaluate_effect(&effect.effect, 0)),
-    );
+    let signals = crate::plan::PreparedScalarSignals::empty();
+    let context = crate::plan::EvaluationContext::new(&signals);
+    let effects = layer
+        .effects
+        .iter()
+        .map(|effect| crate::plan::evaluation::evaluate_effect(&effect.effect, 0, 0, &context))
+        .collect::<Result<Vec<_>, _>>();
+    let Ok(effects) = effects else {
+        return;
+    };
+    let transform = ColourTransform::from_effects(effects);
     layer.effects = vec![TimedEffect {
         start: 0,
         end: layer.duration_nanos,
@@ -403,31 +415,52 @@ mod tests {
     #[test]
     fn effects_classify_static_dynamic_and_remove_only_exact_identities() {
         let static_brightness = CompiledEffect::Brightness {
-            amount: Track::new(0.2),
+            amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.2)),
         };
         assert_eq!(
             effect_dependency(&static_brightness),
             TemporalDependency::Static
         );
         let dynamic_brightness = CompiledEffect::Brightness {
-            amount: Track {
+            amount: crate::plan::CompiledScalarProperty::authored(Track {
                 base_value: 0.0,
                 keyframes: vec![Keyframe {
                     time: 1,
                     value: 0.2,
                     interpolation: Interpolation::Linear,
                 }],
-            },
+            }),
         };
         assert_eq!(
             effect_dependency(&dynamic_brightness),
             TemporalDependency::Dynamic
         );
+        let modulated_identity = CompiledEffect::Brightness {
+            amount: crate::plan::CompiledScalarProperty {
+                authored_track: Track::new(0.0),
+                modifiers: vec![crate::plan::CompiledScalarModifier {
+                    operation: crate::plan::ScalarModifierOperation::Add,
+                    signal: crate::plan::ScalarSignalId::new(0),
+                }],
+                constraint: crate::plan::ScalarPropertyConstraint::Unconstrained,
+            },
+        };
+        assert_eq!(
+            effect_dependency(&modulated_identity),
+            TemporalDependency::Dynamic
+        );
+        let mut modulated_timed = TimedEffect {
+            start: 0,
+            end: 10,
+            effect: modulated_identity,
+            dependency: TemporalDependency::Static,
+        };
+        assert!(normalize_for_test(&mut modulated_timed, 10));
         let mut identity = TimedEffect {
             start: 0,
             end: 10,
             effect: CompiledEffect::Brightness {
-                amount: Track::new(0.0),
+                amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.0)),
             },
             dependency: TemporalDependency::Static,
         };
@@ -436,7 +469,7 @@ mod tests {
             start: 0,
             end: 10,
             effect: CompiledEffect::Brightness {
-                amount: Track::new(0.000_001),
+                amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.000_001)),
             },
             dependency: TemporalDependency::Static,
         };
@@ -445,14 +478,14 @@ mod tests {
             start: 0,
             end: 10,
             effect: CompiledEffect::Brightness {
-                amount: Track {
+                amount: crate::plan::CompiledScalarProperty::authored(Track {
                     base_value: 0.0,
                     keyframes: vec![Keyframe {
                         time: 1,
                         value: 0.2,
                         interpolation: Interpolation::Linear,
                     }],
-                },
+                }),
             },
             dependency: TemporalDependency::Static,
         };
@@ -463,7 +496,7 @@ mod tests {
     fn every_compiler_eliminated_identity_is_omitted() {
         let identities = vec![
             CompiledEffect::Brightness {
-                amount: Track::new(0.0),
+                amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.0)),
             },
             CompiledEffect::Contrast {
                 amount: Track::new(1.0),
@@ -555,7 +588,7 @@ mod tests {
                 rotation_radians: Track::new(0.0),
             },
             transform_contributions: vec![],
-            opacity: Track::new(1.0),
+            opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
             effects: vec![],
             blend_mode: crate::project::BlendMode::Normal,
@@ -593,7 +626,7 @@ mod tests {
                 rotation_radians: Track::new(0.0),
             },
             transform_contributions: vec![],
-            opacity: Track::new(1.0),
+            opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
             effects: vec![],
             blend_mode: crate::project::BlendMode::Normal,
@@ -686,11 +719,11 @@ mod tests {
                 rotation_radians: Track::new(0.0),
             },
             transform_contributions: vec![],
-            opacity: Track::new(1.0),
+            opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
             effects: [
                 CompiledEffect::Brightness {
-                    amount: Track::new(0.1),
+                    amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.1)),
                 },
                 CompiledEffect::Contrast {
                     amount: Track::new(1.1),
@@ -728,5 +761,86 @@ mod tests {
         });
         fuse_static_colour_chain(&mut layer);
         assert_eq!(layer.effects.len(), 2);
+    }
+
+    #[test]
+    fn modulated_brightness_prevents_static_colour_fusion() {
+        let mut layer = CompiledLayer {
+            id: "test".into(),
+            start_nanos: 0,
+            duration_nanos: 10,
+            start_frame: 0,
+            end_frame: 1,
+            draw_key: crate::plan::DrawKey {
+                layer: 0,
+                start_nanos: 0,
+                id: "test".into(),
+            },
+            source: crate::plan::CompiledVisualSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            transform: crate::plan::CompiledTransformTracks {
+                position: Track::new(Point { x: 0.5, y: 0.5 }),
+                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+                scale: Track::new(Point { x: 1.0, y: 1.0 }),
+                rotation_radians: Track::new(0.0),
+            },
+            transform_contributions: vec![],
+            opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
+            opacity_contributions: vec![],
+            effects: vec![
+                TimedEffect {
+                    start: 0,
+                    end: 10,
+                    effect: CompiledEffect::Brightness {
+                        amount: crate::plan::CompiledScalarProperty {
+                            authored_track: Track::new(0.1),
+                            modifiers: vec![crate::plan::CompiledScalarModifier {
+                                operation: crate::plan::ScalarModifierOperation::Add,
+                                signal: crate::plan::ScalarSignalId::new(0),
+                            }],
+                            constraint: crate::plan::ScalarPropertyConstraint::Unconstrained,
+                        },
+                    },
+                    dependency: TemporalDependency::Static,
+                },
+                TimedEffect {
+                    start: 0,
+                    end: 10,
+                    effect: CompiledEffect::Contrast {
+                        amount: Track::new(1.1),
+                    },
+                    dependency: TemporalDependency::Static,
+                },
+            ],
+            blend_mode: crate::project::BlendMode::Normal,
+            content_dependency: TemporalDependency::Static,
+        };
+
+        let mut compilation = crate::plan::CompilationStats::default();
+        let mut post_effects = Vec::new();
+        let dependency = normalize(
+            std::slice::from_mut(&mut layer),
+            &mut post_effects,
+            10,
+            &mut compilation,
+        );
+
+        assert_eq!(dependency, TemporalDependency::Dynamic);
+        assert_eq!(layer.content_dependency, TemporalDependency::Dynamic);
+        assert_eq!(layer.effects.len(), 2);
+        assert_eq!(layer.effects[0].dependency, TemporalDependency::Dynamic);
+        assert!(matches!(
+            &layer.effects[0].effect,
+            CompiledEffect::Brightness { .. }
+        ));
+        assert!(matches!(
+            &layer.effects[1].effect,
+            CompiledEffect::Contrast { .. }
+        ));
+        assert!(!layer.effects.iter().any(|effect| matches!(
+            &effect.effect,
+            CompiledEffect::ColourTransform { .. }
+        )));
     }
 }

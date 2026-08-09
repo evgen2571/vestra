@@ -8,7 +8,10 @@ use std::{
 
 use crate::{
     Category, Diagnostic,
-    plan::{ActiveSchedule, RenderPlan, ScheduleAction, evaluate},
+    plan::{
+        ActiveSchedule, EvaluationContext, PreparedScalarSignals, RenderPlan, ScheduleAction,
+        evaluate_with_context,
+    },
     render::{CompletedFrame, PollMode, PreparationStats, RenderBackend},
 };
 use video_editor_core::timeline::frame_time_nanos;
@@ -40,6 +43,7 @@ pub(super) struct FrameLoopResult {
 )]
 pub(super) fn run<S: FrameSink + ?Sized>(
     plan: &RenderPlan,
+    scalar_signals: &PreparedScalarSignals,
     options: &RenderOptions,
     output: &OutputTarget,
     schedule: &ActiveSchedule,
@@ -52,6 +56,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
     if plan.visual_dependency == video_editor_core::plan::TemporalDependency::Static {
         return run_static(
             plan,
+            scalar_signals,
             options,
             output,
             schedule,
@@ -121,7 +126,23 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                     )
                 })?;
             let evaluation_started = Instant::now();
-            let evaluated = evaluate(plan, &active, time);
+            let context = EvaluationContext::new(scalar_signals);
+            let evaluated =
+                evaluate_with_context(plan, &active, time, &context).map_err(|error| {
+                    cleanup_error(
+                        output,
+                        plan,
+                        RenderFailureStage::FrameComposition,
+                        completed_frames,
+                        Some(frame_number),
+                        Diagnostic::error(
+                            "MVP-EVALUATION",
+                            Category::Internal,
+                            error.to_string(),
+                            "",
+                        ),
+                    )
+                })?;
             performance.evaluated_track_count += evaluated.evaluated_track_count;
             track_evaluation += evaluation_started.elapsed();
 
@@ -427,6 +448,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
 )]
 fn run_static<S: FrameSink + ?Sized>(
     plan: &RenderPlan,
+    scalar_signals: &PreparedScalarSignals,
     options: &RenderOptions,
     output: &OutputTarget,
     schedule: &ActiveSchedule,
@@ -466,7 +488,15 @@ fn run_static<S: FrameSink + ?Sized>(
             )
         })?;
         let started = Instant::now();
-        let frame = evaluate(plan, &active, time);
+        let context = EvaluationContext::new(scalar_signals);
+        let frame = evaluate_with_context(plan, &active, time, &context).map_err(|error| {
+            static_error(
+                output,
+                plan,
+                0,
+                Diagnostic::error("MVP-EVALUATION", Category::Internal, error.to_string(), ""),
+            )
+        })?;
         evaluation += started.elapsed();
         performance.evaluated_track_count += frame.evaluated_track_count;
         let started = Instant::now();

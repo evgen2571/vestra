@@ -28,6 +28,17 @@ pub mod plan {
         self::compile_input(*input, options)
     }
 
+    /// Existing renderer fixtures do not prepare procedural runtime resources.
+    #[cfg(test)]
+    pub fn evaluate(
+        plan: &RenderPlan,
+        active: &[ScheduledItem],
+        project_time: u128,
+    ) -> EvaluatedFrame {
+        video_editor_core::plan::evaluate(plan, active, project_time)
+            .expect("unmodulated renderer fixture")
+    }
+
     #[cfg(test)]
     use video_editor_core::plan::compile as compile_input;
 }

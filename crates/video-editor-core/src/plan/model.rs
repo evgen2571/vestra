@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::plan::CompiledScalarProperty;
 use crate::{
     animation::Track,
     domain::{Crop, Point},
@@ -96,7 +97,7 @@ pub struct CompiledLayer {
     /// Generated motion stays separate from user-authored tracks. Evaluation
     /// adds position/rotation offsets and multiplies scale in declaration order.
     pub transform_contributions: Vec<TransformContribution>,
-    pub opacity: Track<f64>,
+    pub opacity: CompiledScalarProperty,
     /// Independent opacity contributors compose multiplicatively. Transitions
     /// populate one contributor instead of a transition variant.
     pub opacity_contributions: Vec<Track<f64>>,
@@ -195,7 +196,7 @@ pub enum CompiledEffect {
         transform: ColourTransform,
     },
     Brightness {
-        amount: Track<f64>,
+        amount: CompiledScalarProperty,
     },
     Contrast {
         amount: Track<f64>,
@@ -297,8 +298,8 @@ impl CompiledEffect {
     pub fn keyframe_count(&self) -> u64 {
         match self {
             Self::ColourTransform { .. } => 0,
-            Self::Brightness { amount }
-            | Self::Contrast { amount }
+            Self::Brightness { amount } => amount.authored_track.keyframes.len() as u64,
+            Self::Contrast { amount }
             | Self::Saturation { amount }
             | Self::Tint { amount, .. }
             | Self::GaussianBlur { radius: amount }
@@ -441,7 +442,7 @@ mod tests {
             start: 10,
             end: 20,
             effect: CompiledEffect::Brightness {
-                amount: Track::new(0.0),
+                amount: CompiledScalarProperty::authored(Track::new(0.0)),
             },
             dependency: TemporalDependency::Static,
         };

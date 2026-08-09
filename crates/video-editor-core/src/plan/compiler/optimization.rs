@@ -27,7 +27,7 @@ pub(super) fn normalize(
         compilation.constant_track_normalization_count +=
             normalize_transform(&mut layer.transform.scale);
         compilation.constant_track_normalization_count +=
-            normalize_track(&mut layer.transform.rotation_radians);
+            normalize_track(&mut layer.transform.rotation_degrees.authored_track);
         for contribution in &mut layer.transform_contributions {
             compilation.constant_track_normalization_count +=
                 normalize_transform(&mut contribution.position_offset);
@@ -145,6 +145,9 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
 }
 
 fn is_static_identity(effect: &CompiledEffect) -> bool {
+    if effect_has_modifiers(effect) {
+        return false;
+    }
     match effect {
         CompiledEffect::ColourTransform { transform } => *transform == ColourTransform::default(),
         CompiledEffect::Brightness { amount } => {
@@ -241,7 +244,12 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
         !static_track(&layer.transform.position),
         !static_track(&layer.transform.anchor),
         !static_track(&layer.transform.scale),
-        !static_track(&layer.transform.rotation_radians),
+        !layer.transform.position_x_modifiers.is_empty(),
+        !layer.transform.position_y_modifiers.is_empty(),
+        !layer.transform.scale_x_modifiers.is_empty(),
+        !layer.transform.scale_y_modifiers.is_empty(),
+        layer.transform.rotation_degrees.has_modifiers()
+            || !static_track(&layer.transform.rotation_degrees.authored_track),
         layer.transform_contributions.iter().any(|contribution| {
             !static_track(&contribution.position_offset)
                 || !static_track(&contribution.scale_multiplier)
@@ -262,16 +270,69 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
 }
 
 pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
-    let dynamic = match effect {
+    let dynamic = effect_has_modifiers(effect)
+        || match effect {
+            CompiledEffect::ColourTransform { .. } => false,
+            CompiledEffect::Brightness { amount } => {
+                amount.has_modifiers() || !static_track(&amount.authored_track)
+            }
+            CompiledEffect::Contrast { amount }
+            | CompiledEffect::Saturation { amount }
+            | CompiledEffect::Tint { amount, .. }
+            | CompiledEffect::GaussianBlur { radius: amount }
+            | CompiledEffect::ZoomBlur { radius: amount, .. } => !static_track(amount),
+            CompiledEffect::DirectionalBlur {
+                radius,
+                angle_degrees,
+            }
+            | CompiledEffect::ChromaticAberration {
+                amount: radius,
+                angle_degrees,
+            } => !static_track(radius) || !static_track(angle_degrees),
+            CompiledEffect::Glow {
+                threshold,
+                radius,
+                intensity,
+                ..
+            } => !static_track(threshold) || !static_track(radius) || !static_track(intensity),
+            CompiledEffect::Vignette {
+                amount,
+                radius,
+                softness,
+                ..
+            } => !static_track(amount) || !static_track(radius) || !static_track(softness),
+            CompiledEffect::Sharpen { amount, radius } => {
+                !static_track(amount) || !static_track(radius)
+            }
+            CompiledEffect::ColorAdjust {
+                exposure,
+                gamma,
+                black_point,
+                white_point,
+            } => {
+                !static_track(exposure)
+                    || !static_track(gamma)
+                    || !static_track(black_point)
+                    || !static_track(white_point)
+            }
+            CompiledEffect::CameraShake { .. } | CompiledEffect::MotionBlur { .. } => true,
+        };
+    if dynamic {
+        TemporalDependency::Dynamic
+    } else {
+        TemporalDependency::Static
+    }
+}
+
+fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
+    match effect {
         CompiledEffect::ColourTransform { .. } => false,
-        CompiledEffect::Brightness { amount } => {
-            amount.has_modifiers() || !static_track(&amount.authored_track)
-        }
-        CompiledEffect::Contrast { amount }
+        CompiledEffect::Brightness { amount }
+        | CompiledEffect::Contrast { amount }
         | CompiledEffect::Saturation { amount }
         | CompiledEffect::Tint { amount, .. }
         | CompiledEffect::GaussianBlur { radius: amount }
-        | CompiledEffect::ZoomBlur { radius: amount, .. } => !static_track(amount),
+        | CompiledEffect::ZoomBlur { radius: amount, .. } => amount.has_modifiers(),
         CompiledEffect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -279,39 +340,42 @@ pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
         | CompiledEffect::ChromaticAberration {
             amount: radius,
             angle_degrees,
-        } => !static_track(radius) || !static_track(angle_degrees),
+        } => radius.has_modifiers() || angle_degrees.has_modifiers(),
         CompiledEffect::Glow {
             threshold,
             radius,
             intensity,
             ..
-        } => !static_track(threshold) || !static_track(radius) || !static_track(intensity),
-        CompiledEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            ..
-        } => !static_track(amount) || !static_track(radius) || !static_track(softness),
+        } => threshold.has_modifiers() || radius.has_modifiers() || intensity.has_modifiers(),
+        CompiledEffect::Vignette { amount, radius, .. } => {
+            amount.has_modifiers() || radius.has_modifiers()
+        }
         CompiledEffect::Sharpen { amount, radius } => {
-            !static_track(amount) || !static_track(radius)
+            amount.has_modifiers() || radius.has_modifiers()
         }
         CompiledEffect::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
+            exposure, gamma, ..
+        } => exposure.has_modifiers() || gamma.has_modifiers(),
+        CompiledEffect::CameraShake {
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            ..
         } => {
-            !static_track(exposure)
-                || !static_track(gamma)
-                || !static_track(black_point)
-                || !static_track(white_point)
+            position_amount.has_modifiers()
+                || rotation_degrees.has_modifiers()
+                || scale_amount.has_modifiers()
+                || frequency.has_modifiers()
         }
-        CompiledEffect::CameraShake { .. } | CompiledEffect::MotionBlur { .. } => true,
-    };
-    if dynamic {
-        TemporalDependency::Dynamic
-    } else {
-        TemporalDependency::Static
+        CompiledEffect::MotionBlur {
+            intensity,
+            shutter_angle,
+            max_radius,
+            ..
+        } => {
+            intensity.has_modifiers() || shutter_angle.has_modifiers() || max_radius.has_modifiers()
+        }
     }
 }
 
@@ -367,6 +431,23 @@ mod tests {
         animation::{Interpolation, Keyframe},
         domain::Point,
     };
+
+    fn scalar(value: f64) -> crate::plan::CompiledScalarProperty {
+        crate::plan::CompiledScalarProperty::authored(Track::new(value))
+    }
+
+    fn transform() -> crate::plan::CompiledTransformTracks {
+        crate::plan::CompiledTransformTracks {
+            position: Track::new(Point { x: 0.5, y: 0.5 }),
+            position_x_modifiers: vec![],
+            position_y_modifiers: vec![],
+            anchor: Track::new(Point { x: 0.5, y: 0.5 }),
+            scale: Track::new(Point { x: 1.0, y: 1.0 }),
+            scale_x_modifiers: vec![],
+            scale_y_modifiers: vec![],
+            rotation_degrees: scalar(0.0),
+        }
+    }
 
     fn normalize_for_test(effect: &mut TimedEffect, owner_duration: u128) -> bool {
         normalize_timed_effect(
@@ -437,7 +518,7 @@ mod tests {
                     operation: crate::plan::ScalarModifierOperation::Add,
                     signal: crate::plan::ScalarSignalId::new(0),
                 }],
-                constraint: crate::plan::ScalarPropertyConstraint::Unconstrained,
+                constraint: crate::plan::ScalarPropertyConstraint::Finite,
             },
         };
         assert_eq!(
@@ -494,58 +575,58 @@ mod tests {
                 amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.0)),
             },
             CompiledEffect::Contrast {
-                amount: Track::new(1.0),
+                amount: scalar(1.0),
             },
             CompiledEffect::Saturation {
-                amount: Track::new(1.0),
+                amount: scalar(1.0),
             },
             CompiledEffect::Tint {
                 colour: [1, 2, 3, 255],
-                amount: Track::new(0.0),
+                amount: scalar(0.0),
             },
             CompiledEffect::GaussianBlur {
-                radius: Track::new(0.0),
+                radius: scalar(0.0),
             },
             CompiledEffect::DirectionalBlur {
-                radius: Track::new(0.0),
-                angle_degrees: Track::new(30.0),
+                radius: scalar(0.0),
+                angle_degrees: scalar(30.0),
             },
             CompiledEffect::ZoomBlur {
-                radius: Track::new(0.0),
+                radius: scalar(0.0),
                 samples: 2,
                 anchor: Point { x: 0.5, y: 0.5 },
                 direction: crate::project::ZoomBlurDirection::Centered,
             },
             CompiledEffect::Glow {
-                threshold: Track::new(0.5),
-                radius: Track::new(2.0),
-                intensity: Track::new(0.0),
+                threshold: scalar(0.5),
+                radius: scalar(2.0),
+                intensity: scalar(0.0),
                 colour: [255, 255, 255, 255],
             },
             CompiledEffect::ChromaticAberration {
-                amount: Track::new(0.0),
-                angle_degrees: Track::new(30.0),
+                amount: scalar(0.0),
+                angle_degrees: scalar(30.0),
             },
             CompiledEffect::Vignette {
-                amount: Track::new(0.0),
-                radius: Track::new(0.5),
+                amount: scalar(0.0),
+                radius: scalar(0.5),
                 softness: Track::new(0.5),
                 colour: [0, 0, 0, 255],
             },
             CompiledEffect::Sharpen {
-                amount: Track::new(0.0),
-                radius: Track::new(2.0),
+                amount: scalar(0.0),
+                radius: scalar(2.0),
             },
             CompiledEffect::ColorAdjust {
-                exposure: Track::new(0.0),
-                gamma: Track::new(1.0),
+                exposure: scalar(0.0),
+                gamma: scalar(1.0),
                 black_point: Track::new(0.0),
                 white_point: Track::new(1.0),
             },
             CompiledEffect::MotionBlur {
-                intensity: Track::new(0.0),
-                shutter_angle: Track::new(180.0),
-                max_radius: Track::new(8.0),
+                intensity: scalar(0.0),
+                shutter_angle: scalar(180.0),
+                max_radius: scalar(8.0),
                 samples: 4,
             },
         ];
@@ -576,12 +657,7 @@ mod tests {
             source: crate::plan::CompiledVisualSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },
-            transform: crate::plan::CompiledTransformTracks {
-                position: Track::new(Point { x: 0.5, y: 0.5 }),
-                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
-                scale: Track::new(Point { x: 1.0, y: 1.0 }),
-                rotation_radians: Track::new(0.0),
-            },
+            transform: transform(),
             transform_contributions: vec![],
             opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
@@ -614,12 +690,7 @@ mod tests {
             source: crate::plan::CompiledVisualSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },
-            transform: crate::plan::CompiledTransformTracks {
-                position: Track::new(Point { x: 0.5, y: 0.5 }),
-                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
-                scale: Track::new(Point { x: 1.0, y: 1.0 }),
-                rotation_radians: Track::new(0.0),
-            },
+            transform: transform(),
             transform_contributions: vec![],
             opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
@@ -654,10 +725,10 @@ mod tests {
             start: 0,
             end: 10,
             effect: CompiledEffect::CameraShake {
-                position_amount: Track::new(position_amount),
-                rotation_degrees: Track::new(rotation_degrees),
-                scale_amount: Track::new(scale_amount),
-                frequency: Track::new(5.0),
+                position_amount: scalar(position_amount),
+                rotation_degrees: scalar(rotation_degrees),
+                scale_amount: scalar(scale_amount),
+                frequency: scalar(5.0),
                 seed: 7,
                 attack: 0.0,
                 decay: 1.0,
@@ -683,7 +754,7 @@ mod tests {
             start: 2,
             end: 8,
             effect: CompiledEffect::Contrast {
-                amount: Track::new(1.2),
+                amount: scalar(1.2),
             },
             dependency: TemporalDependency::Static,
         };
@@ -707,12 +778,7 @@ mod tests {
             source: crate::plan::CompiledVisualSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },
-            transform: crate::plan::CompiledTransformTracks {
-                position: Track::new(Point { x: 0.5, y: 0.5 }),
-                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
-                scale: Track::new(Point { x: 1.0, y: 1.0 }),
-                rotation_radians: Track::new(0.0),
-            },
+            transform: transform(),
             transform_contributions: vec![],
             opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
@@ -721,10 +787,10 @@ mod tests {
                     amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.1)),
                 },
                 CompiledEffect::Contrast {
-                    amount: Track::new(1.1),
+                    amount: scalar(1.1),
                 },
                 CompiledEffect::Saturation {
-                    amount: Track::new(0.9),
+                    amount: scalar(0.9),
                 },
             ]
             .into_iter()
@@ -750,7 +816,7 @@ mod tests {
             start: 0,
             end: 10,
             effect: CompiledEffect::GaussianBlur {
-                radius: Track::new(1.0),
+                radius: scalar(1.0),
             },
             dependency: TemporalDependency::Static,
         });
@@ -774,12 +840,7 @@ mod tests {
             source: crate::plan::CompiledVisualSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },
-            transform: crate::plan::CompiledTransformTracks {
-                position: Track::new(Point { x: 0.5, y: 0.5 }),
-                anchor: Track::new(Point { x: 0.5, y: 0.5 }),
-                scale: Track::new(Point { x: 1.0, y: 1.0 }),
-                rotation_radians: Track::new(0.0),
-            },
+            transform: transform(),
             transform_contributions: vec![],
             opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
@@ -794,7 +855,7 @@ mod tests {
                                 operation: crate::plan::ScalarModifierOperation::Add,
                                 signal: crate::plan::ScalarSignalId::new(0),
                             }],
-                            constraint: crate::plan::ScalarPropertyConstraint::Unconstrained,
+                            constraint: crate::plan::ScalarPropertyConstraint::Finite,
                         },
                     },
                     dependency: TemporalDependency::Static,
@@ -803,7 +864,7 @@ mod tests {
                     start: 0,
                     end: 10,
                     effect: CompiledEffect::Contrast {
-                        amount: Track::new(1.1),
+                        amount: scalar(1.1),
                     },
                     dependency: TemporalDependency::Static,
                 },

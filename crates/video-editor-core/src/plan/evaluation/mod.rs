@@ -97,6 +97,9 @@ pub fn evaluate_with_context(
             opacity *= track.evaluate(relative);
             evaluated_track_count += 1;
         }
+        if !opacity.is_finite() {
+            return Err(EvaluationError::NonFiniteScalarProperty);
+        }
         let opacity = opacity.clamp(0.0, 1.0);
         if opacity <= 0.0 {
             continue;
@@ -114,7 +117,13 @@ pub fn evaluate_with_context(
                     crop: crop.evaluate(relative),
                     sizing: sizing.clone(),
                     cacheable_crop: *cacheable_crop,
-                    transform: transform::evaluate(layer, relative, &mut evaluated_track_count),
+                    transform: transform::evaluate(
+                        layer,
+                        relative,
+                        project_time,
+                        context,
+                        &mut evaluated_track_count,
+                    )?,
                 }
             }
             CompiledVisualSource::SolidColor { colour } => {
@@ -153,8 +162,24 @@ pub fn evaluate_with_context(
                 let before = relative.saturating_sub(half_window).max(lower);
                 let after = relative.saturating_add(half_window).min(upper);
                 let mut ignored_tracks = 0;
-                let start = transform::evaluate(layer, before, &mut ignored_tracks).position;
-                let end = transform::evaluate(layer, after, &mut ignored_tracks).position;
+                let before_project_time = layer.start_nanos.saturating_add(before);
+                let after_project_time = layer.start_nanos.saturating_add(after);
+                let start = transform::evaluate(
+                    layer,
+                    before,
+                    before_project_time,
+                    context,
+                    &mut ignored_tracks,
+                )?
+                .position;
+                let end = transform::evaluate(
+                    layer,
+                    after,
+                    after_project_time,
+                    context,
+                    &mut ignored_tracks,
+                )?
+                .position;
                 let dx = (end.x - start.x) * f64::from(plan.canvas.width);
                 let dy = (end.y - start.y) * f64::from(plan.canvas.height);
                 let displacement = (dx * dx + dy * dy).sqrt();

@@ -6,9 +6,13 @@ use super::{
 };
 use crate::{
     animation::Track,
-    plan::{CompileOptions, CompiledEffect, TimedEffect, compile},
+    plan::{CompileOptions, CompiledEffect, CompiledScalarProperty, TimedEffect, compile},
     project::{ValidationOptions, load_and_validate},
 };
+
+fn scalar(track: Track<f64>) -> CompiledScalarProperty {
+    CompiledScalarProperty::authored(track)
+}
 
 fn fixture_requirements() -> (
     crate::plan::RenderPlan,
@@ -218,9 +222,9 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
         start: 0,
         end: u128::MAX,
         effect: CompiledEffect::Glow {
-            threshold: Track::new(0.4),
-            radius: Track::new(2.0),
-            intensity: Track::new(0.8),
+            threshold: scalar(Track::new(0.4)),
+            radius: scalar(Track::new(2.0)),
+            intensity: scalar(Track::new(0.8)),
             colour: [255, 180, 60, 255],
         },
         dependency: crate::plan::TemporalDependency::Static,

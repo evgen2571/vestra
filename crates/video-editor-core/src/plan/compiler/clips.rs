@@ -7,8 +7,9 @@ use crate::{
     animation::Track,
     domain::{Crop, Point},
     plan::{
-        CompilationStats, CompiledLayer, CompiledSizing, CompiledTransformTracks,
-        CompiledVisualSource, DrawKey, PlanCompileInput,
+        CompilationStats, CompiledLayer, CompiledScalarProperty, CompiledSizing,
+        CompiledTransformTracks, CompiledVisualSource, DrawKey, PlanCompileInput,
+        ScalarPropertyConstraint,
     },
     project::{Clip, VisualSource, parse_colour},
 };
@@ -98,12 +99,16 @@ fn compile_transform(clip: &Clip) -> Result<CompiledTransformTracks, Diagnostic>
     match (&clip.source, &clip.transform) {
         (_, Some(transform)) => Ok(CompiledTransformTracks {
             position: tracks::compile(&transform.position, &clip.id)?,
+            position_x_modifiers: Vec::new(),
+            position_y_modifiers: Vec::new(),
             anchor: tracks::compile(&transform.anchor, &clip.id)?,
             scale: tracks::compile(&transform.scale, &clip.id)?,
-            rotation_radians: tracks::degrees_to_radians(tracks::compile(
-                &transform.rotation_degrees,
-                &clip.id,
-            )?),
+            scale_x_modifiers: Vec::new(),
+            scale_y_modifiers: Vec::new(),
+            rotation_degrees: CompiledScalarProperty::constrained(
+                tracks::compile(&transform.rotation_degrees, &clip.id)?,
+                ScalarPropertyConstraint::Finite,
+            ),
         }),
         (VisualSource::SolidColor { .. }, None) => Ok(canvas_transform()),
         (VisualSource::Image { .. }, None) => Err(Diagnostic::error(
@@ -121,8 +126,15 @@ fn compile_transform(clip: &Clip) -> Result<CompiledTransformTracks, Diagnostic>
 pub(super) fn canvas_transform() -> CompiledTransformTracks {
     CompiledTransformTracks {
         position: Track::new(Point { x: 0.5, y: 0.5 }),
+        position_x_modifiers: Vec::new(),
+        position_y_modifiers: Vec::new(),
         anchor: Track::new(Point { x: 0.5, y: 0.5 }),
         scale: Track::new(Point { x: 1.0, y: 1.0 }),
-        rotation_radians: Track::new(0.0),
+        scale_x_modifiers: Vec::new(),
+        scale_y_modifiers: Vec::new(),
+        rotation_degrees: CompiledScalarProperty::constrained(
+            Track::new(0.0),
+            ScalarPropertyConstraint::Finite,
+        ),
     }
 }

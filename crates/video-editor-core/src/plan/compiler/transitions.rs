@@ -6,11 +6,18 @@ use crate::{
     Category, Diagnostic,
     animation::{Interpolation, Keyframe, Track},
     domain::Point,
-    plan::{CompilationStats, CompiledEffect, CompiledLayer, TimedEffect, TransformContribution},
+    plan::{
+        CompilationStats, CompiledEffect, CompiledLayer, CompiledScalarProperty, TimedEffect,
+        TransformContribution,
+    },
     project::{Transition, parse_colour},
 };
 
 use super::{to_nanos, tracks};
+
+fn scalar(track: Track<f64>) -> CompiledScalarProperty {
+    CompiledScalarProperty::authored(track)
+}
 
 pub(super) fn compile(
     transitions: &[Transition],
@@ -223,7 +230,7 @@ fn add_style(
                     end: relative_end,
                     effect: CompiledEffect::Tint {
                         colour,
-                        amount: Track {
+                        amount: scalar(Track {
                             base_value: 0.0,
                             keyframes: vec![
                                 Keyframe {
@@ -242,7 +249,7 @@ fn add_style(
                                     interpolation: Interpolation::Linear,
                                 },
                             ],
-                        },
+                        }),
                     },
                     dependency: crate::plan::TemporalDependency::Dynamic,
                 });
@@ -306,7 +313,7 @@ pub(super) fn zoom_layer(
             start: a,
             end: b,
             effect: CompiledEffect::ZoomBlur {
-                radius: Track {
+                radius: scalar(Track {
                     base_value: 0.0,
                     keyframes: vec![
                         Keyframe {
@@ -325,7 +332,7 @@ pub(super) fn zoom_layer(
                             interpolation: Interpolation::Linear,
                         },
                     ],
-                },
+                }),
                 samples: 12,
                 anchor: Point { x: 0.5, y: 0.5 },
                 direction: crate::project::ZoomBlurDirection::Centered,
@@ -377,7 +384,7 @@ pub(super) fn push_layer(
         start: a,
         end: b,
         effect: CompiledEffect::DirectionalBlur {
-            radius: Track {
+            radius: scalar(Track {
                 base_value: 0.0,
                 keyframes: vec![
                     Keyframe {
@@ -396,8 +403,8 @@ pub(super) fn push_layer(
                         interpolation: Interpolation::Linear,
                     },
                 ],
-            },
-            angle_degrees: Track::new(angle.to_degrees()),
+            }),
+            angle_degrees: scalar(Track::new(angle.to_degrees())),
         },
         dependency: crate::plan::TemporalDependency::Dynamic,
     });

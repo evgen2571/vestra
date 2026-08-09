@@ -16,8 +16,8 @@ pub use evaluation::{evaluate, evaluate_with_context};
 pub use input::PlanCompileInput;
 pub use model::*;
 pub use scalar_property::{
-    CompiledScalarModifier, CompiledScalarProperty, ScalarModifierOperation,
-    ScalarPropertyConstraint,
+    CompiledScalarModifier, CompiledScalarProperty, MIN_POSITIVE_PROPERTY_VALUE,
+    ScalarModifierOperation, ScalarPropertyConstraint,
 };
 pub use schedule::{
     ActiveSchedule, ScheduleAction, ScheduleCursor, ScheduleEvent, sort_active_items,
@@ -149,6 +149,8 @@ mod tests {
         let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
         let layer = &mut plan.layers[0];
         layer.start_nanos = 5_000_000_000;
+        layer.start_frame = 120;
+        layer.end_frame = layer.start_frame + 144;
         layer.opacity.authored_track = CompiledTrack {
             base_value: 0.4,
             keyframes: vec![CompiledKeyframe {
@@ -172,7 +174,7 @@ mod tests {
                         operation: ScalarModifierOperation::Add,
                         signal: ScalarSignalId::new(0),
                     }],
-                    constraint: ScalarPropertyConstraint::Unconstrained,
+                    constraint: ScalarPropertyConstraint::Finite,
                 },
             },
             dependency: TemporalDependency::Dynamic,
@@ -204,6 +206,8 @@ mod tests {
         let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
         let layer = &mut plan.layers[0];
         layer.start_nanos = 5_000_000_000;
+        layer.start_frame = 120;
+        layer.end_frame = layer.start_frame + 144;
         layer.effects.push(TimedEffect {
             start: 0,
             end: layer.duration_nanos,
@@ -221,7 +225,7 @@ mod tests {
                         operation: ScalarModifierOperation::Replace,
                         signal: ScalarSignalId::new(0),
                     }],
-                    constraint: ScalarPropertyConstraint::Unconstrained,
+                    constraint: ScalarPropertyConstraint::Finite,
                 },
             },
             dependency: TemporalDependency::Dynamic,
@@ -263,6 +267,50 @@ mod tests {
                 Some(super::EvaluatedEffect::Brightness { amount }) if (*amount - expected).abs() < 1.0e-12
             ));
         }
+    }
+
+    #[test]
+    fn motion_blur_samples_transform_modifiers_at_each_historical_project_time() {
+        let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
+        let index = plan
+            .layers
+            .iter()
+            .position(|layer| matches!(layer.source, super::CompiledVisualSource::Image { .. }))
+            .expect("image layer");
+        let layer = &mut plan.layers[index];
+        layer.start_nanos = 5_000_000_000;
+        layer.start_frame = 120;
+        layer.end_frame = layer.start_frame + 144;
+        layer.transform.position_x_modifiers = vec![CompiledScalarModifier {
+            operation: ScalarModifierOperation::Add,
+            signal: ScalarSignalId::new(0),
+        }];
+        layer.effects.push(TimedEffect {
+            start: 0,
+            end: layer.duration_nanos,
+            effect: CompiledEffect::MotionBlur {
+                intensity: CompiledScalarProperty::authored(CompiledTrack::new(1.0)),
+                shutter_angle: CompiledScalarProperty::authored(CompiledTrack::new(360.0)),
+                max_radius: CompiledScalarProperty::authored(CompiledTrack::new(32.0)),
+                samples: 8,
+            },
+            dependency: TemporalDependency::Dynamic,
+        });
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(5_000_000_000, 1_000_000_000, vec![0.0, 1.0, 2.0])
+                .expect("signal"),
+        ]);
+        let frame = evaluate_with_context(
+            &plan,
+            &[super::ScheduledItem(index)],
+            6_000_000_000,
+            &EvaluationContext::new(&signals),
+        )
+        .expect("evaluation");
+        assert!(matches!(
+            frame.layers[0].effects.last(),
+            Some(super::EvaluatedEffect::MotionBlur { radius, .. }) if *radius > 1.0
+        ));
     }
 
     #[test]

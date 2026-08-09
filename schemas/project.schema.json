@@ -101,6 +101,80 @@
         }
       }
     },
+    "scalar_property": {
+      "type": "object",
+      "required": ["base_value"],
+      "additionalProperties": false,
+      "properties": {
+        "base_value": { "type": "number" },
+        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/scalar_keyframe" } },
+        "modifiers": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
+      }
+    },
+    "opacity_property": {
+      "type": "object",
+      "required": ["base_value"],
+      "additionalProperties": false,
+      "properties": {
+        "base_value": { "type": "number", "minimum": 0, "maximum": 1 },
+        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/unit_scalar_keyframe" } },
+        "modifiers": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
+      }
+    },
+    "unit_scalar_property": {
+      "type": "object",
+      "required": ["base_value"],
+      "additionalProperties": false,
+      "properties": {
+        "base_value": { "type": "number", "minimum": 0, "maximum": 1 },
+        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/unit_scalar_keyframe" } },
+        "modifiers": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
+      }
+    },
+    "scalar_modifier": {
+      "type": "object",
+      "required": ["operation", "signal"],
+      "additionalProperties": false,
+      "properties": {
+        "operation": { "enum": ["replace", "add", "multiply"] },
+        "signal": { "$ref": "#/$defs/scalar_signal" }
+      }
+    },
+    "scalar_signal": {
+      "type": "object",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/scalar_signal_source" },
+        "transforms": { "type": "array", "items": { "$ref": "#/$defs/signal_transform" } }
+      }
+    },
+    "scalar_signal_source": {
+      "type": "object",
+      "required": ["type", "tap", "feature"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "audio" },
+        "tap": { "const": "master" },
+        "feature": { "$ref": "#/$defs/audio_scalar_feature" }
+      }
+    },
+    "audio_scalar_feature": {
+      "oneOf": [
+        { "type": "object", "required": ["type"], "additionalProperties": false, "properties": { "type": { "const": "rms" } } },
+        { "type": "object", "required": ["type"], "additionalProperties": false, "properties": { "type": { "const": "peak" } } },
+        { "type": "object", "required": ["type", "min_hz", "max_hz"], "additionalProperties": false, "properties": { "type": { "const": "band_energy" }, "min_hz": { "type": "number", "minimum": 0 }, "max_hz": { "type": "number", "maximum": 24000 } } }
+      ]
+    },
+    "signal_transform": {
+      "oneOf": [
+        { "type": "object", "required": ["type", "gain"], "additionalProperties": false, "properties": { "type": { "const": "gain" }, "gain": { "type": "number" } } },
+        { "type": "object", "required": ["type", "input_min", "input_max", "output_start", "output_end"], "additionalProperties": false, "properties": { "type": { "const": "remap" }, "input_min": { "type": "number" }, "input_max": { "type": "number" }, "output_start": { "type": "number" }, "output_end": { "type": "number" } } },
+        { "type": "object", "required": ["type", "min", "max"], "additionalProperties": false, "properties": { "type": { "const": "clamp" }, "min": { "type": "number" }, "max": { "type": "number" } } },
+        { "type": "object", "required": ["type", "attack", "release"], "additionalProperties": false, "properties": { "type": { "const": "envelope" }, "attack": { "type": "number", "minimum": 0 }, "release": { "type": "number", "minimum": 0 } } },
+        { "type": "object", "required": ["type", "x1", "y1", "x2", "y2"], "additionalProperties": false, "properties": { "type": { "const": "response_curve" }, "x1": { "type": "number", "minimum": 0, "maximum": 1 }, "y1": { "type": "number" }, "x2": { "type": "number", "minimum": 0, "maximum": 1 }, "y2": { "type": "number" } } }
+      ]
+    },
     "point_track": {
       "type": "object",
       "required": [
@@ -713,7 +787,17 @@
           "$ref": "#/$defs/scale_track"
         },
         "rotation_degrees": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
+        },
+        "component_modifiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position_x": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } },
+            "position_y": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } },
+            "scale_x": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } },
+            "scale_y": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
+          }
         }
       }
     },
@@ -778,7 +862,7 @@
           ]
         },
         "amount": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         }
       }
     },
@@ -803,7 +887,7 @@
           "$ref": "#/$defs/colour"
         },
         "amount": {
-          "$ref": "#/$defs/opacity_track"
+          "$ref": "#/$defs/unit_scalar_property"
         }
       }
     },
@@ -824,7 +908,7 @@
           "const": "gaussian_blur"
         },
         "radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         }
       }
     },
@@ -846,10 +930,10 @@
           "const": "directional_blur"
         },
         "radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "angle_degrees": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         }
       }
     },
@@ -872,7 +956,7 @@
           "const": "zoom_blur"
         },
         "radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "samples": {
           "type": "integer",
@@ -911,13 +995,13 @@
           "const": "glow"
         },
         "threshold": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "intensity": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "colour": {
           "$ref": "#/$defs/colour"
@@ -942,10 +1026,10 @@
           "const": "chromatic_aberration"
         },
         "amount": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "angle_degrees": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         }
       }
     },
@@ -969,10 +1053,10 @@
           "const": "vignette"
         },
         "amount": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "softness": {
           "$ref": "#/$defs/scalar_track"
@@ -1000,10 +1084,10 @@
           "const": "sharpen"
         },
         "amount": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         }
       }
     },
@@ -1027,10 +1111,10 @@
           "const": "color_adjust"
         },
         "exposure": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "gamma": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "black_point": {
           "$ref": "#/$defs/scalar_track"
@@ -1071,16 +1155,16 @@
           "const": "camera_shake"
         },
         "position_amount": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "rotation_degrees": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "scale_amount": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "frequency": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "seed": {
           "type": "integer",
@@ -1117,13 +1201,13 @@
           "const": "motion_blur"
         },
         "intensity": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "shutter_angle": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "max_radius": {
-          "$ref": "#/$defs/scalar_track"
+          "$ref": "#/$defs/scalar_property"
         },
         "samples": {
           "type": "integer",
@@ -1175,7 +1259,7 @@
           "$ref": "#/$defs/transform"
         },
         "opacity": {
-          "$ref": "#/$defs/opacity_track"
+          "$ref": "#/$defs/opacity_property"
         },
         "effects": {
           "type": "array",

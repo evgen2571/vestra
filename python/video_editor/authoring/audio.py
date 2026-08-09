@@ -6,6 +6,7 @@ from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset
 from .errors import AuthoringError
 from .values import _CanonicalStrEnum
+from .signals import MasterAudioSignals
 
 
 def _nonnegative(value: int | float, name: str) -> float:
@@ -214,16 +215,19 @@ class AudioTrack:
 
 
 class AudioTimeline:
-    __slots__ = ("_owner", "_ids", "_tracks")
+    __slots__ = ("_owner", "_ids", "_tracks", "_master")
     _owner: _Owner
     _ids: _IdAllocator
     _tracks: list[AudioTrack]
+    _master: MasterAudioSignals
     def __init__(self, *args: object, **kwargs: object) -> None: raise TypeError("AudioTimeline objects must be created by ProjectBuilder")
     @classmethod
     def _create(cls, owner: _Owner, ids: _IdAllocator) -> "AudioTimeline":
-        item = object.__new__(cls); item._owner, item._ids, item._tracks = owner, ids, []; return item
+        item = object.__new__(cls); item._owner, item._ids, item._tracks, item._master = owner, ids, [], MasterAudioSignals(); return item
     @property
     def tracks(self) -> tuple[AudioTrack, ...]: return tuple(self._tracks)
+    @property
+    def master(self) -> MasterAudioSignals: return self._master
     def add_track(self, *, id: str | None = None, mute: bool = False, gain: int | float = 1.0) -> AudioTrack:
         staged = AudioTrack._create(self._owner, self._ids, "", mute=mute, gain=gain)
         if id is not None: self._ids.validate("audio-track", id)

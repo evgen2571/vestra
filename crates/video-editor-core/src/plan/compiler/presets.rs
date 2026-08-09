@@ -3,16 +3,16 @@ use crate::{
     animation::{Interpolation, Keyframe, Track},
     domain::Point,
     plan::{
-        CompilationStats, CompiledEffect, CompiledLayer, CompiledScalarProperty, TimedEffect,
-        TransformContribution,
+        CompilationStats, CompiledEffect, CompiledLayer, CompiledScalarProperty,
+        ScalarPropertyTarget, TimedEffect, TransformContribution,
     },
     project::Preset,
 };
 
 use super::to_nanos;
 
-fn scalar(track: Track<f64>) -> CompiledScalarProperty {
-    CompiledScalarProperty::authored(track)
+fn scalar(track: Track<f64>, target: ScalarPropertyTarget) -> CompiledScalarProperty {
+    CompiledScalarProperty::constrained(track, target.constraint())
 }
 
 pub(super) fn apply(
@@ -36,10 +36,19 @@ pub(super) fn apply(
     let mut generated = Vec::new();
     let add_shake = |effects: &mut Vec<CompiledEffect>, intensity: f64, seed: u64| {
         effects.push(CompiledEffect::CameraShake {
-            position_amount: scalar(Track::new(0.012 * intensity)),
-            rotation_degrees: scalar(Track::new(1.2 * intensity)),
-            scale_amount: scalar(Track::new(0.01 * intensity)),
-            frequency: scalar(Track::new(14.0)),
+            position_amount: scalar(
+                Track::new(0.012 * intensity),
+                ScalarPropertyTarget::CameraShakePositionAmount,
+            ),
+            rotation_degrees: scalar(
+                Track::new(1.2 * intensity),
+                ScalarPropertyTarget::CameraShakeRotationDegrees,
+            ),
+            scale_amount: scalar(
+                Track::new(0.01 * intensity),
+                ScalarPropertyTarget::CameraShakeScaleAmount,
+            ),
+            frequency: scalar(Track::new(14.0), ScalarPropertyTarget::CameraShakeFrequency),
             seed,
             attack: 0.03,
             decay: 0.22,
@@ -101,22 +110,28 @@ pub(super) fn apply(
             add_zoom_punch(layer, start, span, *intensity, 0.20);
             add_shake(&mut generated, *intensity, *seed);
             generated.push(CompiledEffect::ChromaticAberration {
-                amount: scalar(Track {
-                    base_value: 0.0,
-                    keyframes: vec![
-                        Keyframe {
-                            time: span / 8,
-                            value: 3.0 * intensity,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                        Keyframe {
-                            time: span / 3,
-                            value: 0.0,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                    ],
-                }),
-                angle_degrees: scalar(Track::new(0.0)),
+                amount: scalar(
+                    Track {
+                        base_value: 0.0,
+                        keyframes: vec![
+                            Keyframe {
+                                time: span / 8,
+                                value: 3.0 * intensity,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                            Keyframe {
+                                time: span / 3,
+                                value: 0.0,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                        ],
+                    },
+                    ScalarPropertyTarget::ChromaticAberrationAmount,
+                ),
+                angle_degrees: scalar(
+                    Track::new(0.0),
+                    ScalarPropertyTarget::ChromaticAberrationAngleDegrees,
+                ),
             });
             generated.push(pulse_tint(span, *intensity));
         }
@@ -126,26 +141,38 @@ pub(super) fn apply(
             add_zoom_punch(layer, start, span, *intensity, 0.28);
             add_shake(&mut generated, *intensity * 1.8, *seed);
             generated.push(CompiledEffect::DirectionalBlur {
-                radius: scalar(Track {
-                    base_value: 0.0,
-                    keyframes: vec![
-                        Keyframe {
-                            time: span / 8,
-                            value: 10.0 * intensity,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                        Keyframe {
-                            time: span / 3,
-                            value: 0.0,
-                            interpolation: Interpolation::EaseInOut,
-                        },
-                    ],
-                }),
-                angle_degrees: scalar(Track::new(0.0)),
+                radius: scalar(
+                    Track {
+                        base_value: 0.0,
+                        keyframes: vec![
+                            Keyframe {
+                                time: span / 8,
+                                value: 10.0 * intensity,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                            Keyframe {
+                                time: span / 3,
+                                value: 0.0,
+                                interpolation: Interpolation::EaseInOut,
+                            },
+                        ],
+                    },
+                    ScalarPropertyTarget::DirectionalBlurRadius,
+                ),
+                angle_degrees: scalar(
+                    Track::new(0.0),
+                    ScalarPropertyTarget::DirectionalBlurAngleDegrees,
+                ),
             });
             generated.push(CompiledEffect::ChromaticAberration {
-                amount: scalar(pulse_track(span, 5.0 * intensity)),
-                angle_degrees: scalar(Track::new(0.0)),
+                amount: scalar(
+                    pulse_track(span, 5.0 * intensity),
+                    ScalarPropertyTarget::ChromaticAberrationAmount,
+                ),
+                angle_degrees: scalar(
+                    Track::new(0.0),
+                    ScalarPropertyTarget::ChromaticAberrationAngleDegrees,
+                ),
             });
             generated.push(pulse_tint(span, *intensity * 0.75));
         }
@@ -162,25 +189,31 @@ pub(super) fn apply(
             };
             layer.transform_contributions.push(contribution);
             generated.push(CompiledEffect::GaussianBlur {
-                radius: scalar(Track {
-                    base_value: 8.0 * intensity,
-                    keyframes: vec![Keyframe {
-                        time: span / 2,
-                        value: 0.0,
-                        interpolation: Interpolation::EaseInOut,
-                    }],
-                }),
+                radius: scalar(
+                    Track {
+                        base_value: 8.0 * intensity,
+                        keyframes: vec![Keyframe {
+                            time: span / 2,
+                            value: 0.0,
+                            interpolation: Interpolation::EaseInOut,
+                        }],
+                    },
+                    ScalarPropertyTarget::GaussianBlurRadius,
+                ),
             });
             generated.push(CompiledEffect::Sharpen {
-                amount: scalar(Track {
-                    base_value: 0.0,
-                    keyframes: vec![Keyframe {
-                        time: span / 2,
-                        value: 0.35 * intensity,
-                        interpolation: Interpolation::EaseInOut,
-                    }],
-                }),
-                radius: scalar(Track::new(1.0)),
+                amount: scalar(
+                    Track {
+                        base_value: 0.0,
+                        keyframes: vec![Keyframe {
+                            time: span / 2,
+                            value: 0.35 * intensity,
+                            interpolation: Interpolation::EaseInOut,
+                        }],
+                    },
+                    ScalarPropertyTarget::SharpenAmount,
+                ),
+                radius: scalar(Track::new(1.0), ScalarPropertyTarget::SharpenRadius),
             });
         }
     }
@@ -254,6 +287,9 @@ fn pulse_track(end: u128, amount: f64) -> Track<f64> {
 fn pulse_tint(end: u128, intensity: f64) -> CompiledEffect {
     CompiledEffect::Tint {
         colour: [255, 255, 255, 255],
-        amount: scalar(pulse_track(end, (0.25 * intensity).clamp(0.0, 1.0))),
+        amount: scalar(
+            pulse_track(end, (0.25 * intensity).clamp(0.0, 1.0)),
+            ScalarPropertyTarget::TintAmount,
+        ),
     }
 }

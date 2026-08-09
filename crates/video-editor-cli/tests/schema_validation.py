@@ -127,6 +127,37 @@ audio_timeline["assets"] = [{"id": "audio", "type": "audio", "source": "tone.wav
 audio_timeline["audio"] = {"tracks": [{"id": "music", "gain": 1, "mute": False, "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "gain": 1, "fade_in": 0, "fade_out": 0, "mute": False}]}]}
 assert not errors(audio_timeline), "schema-v2 audio timeline must validate"
 
+audio_reactive = copy.deepcopy(audio_timeline)
+audio_reactive["visual"]["clips"][0]["opacity"]["modifiers"] = [{
+    "operation": "add",
+    "signal": {
+        "source": {"type": "audio", "tap": "master", "feature": {"type": "band_energy", "min_hz": 40, "max_hz": 160}},
+        "transforms": [
+            {"type": "gain", "gain": 2},
+            {"type": "remap", "input_min": 0, "input_max": 1, "output_start": 0, "output_end": 1},
+            {"type": "clamp", "min": 0, "max": 1},
+            {"type": "envelope", "attack": 0.02, "release": 0.18},
+            {"type": "response_curve", "x1": 0.42, "y1": 0, "x2": 0.58, "y2": 1},
+        ],
+    },
+}]
+assert not errors(audio_reactive), "supported scalar properties must accept inline audio signals"
+
+point_modifiers = copy.deepcopy(project)
+point_modifiers["visual"]["clips"][0]["transform"]["position"]["modifiers"] = []
+assert errors(point_modifiers), "point tracks must not expose scalar modifiers"
+
+component_modifiers = copy.deepcopy(project)
+component_modifiers["visual"]["clips"][0]["transform"]["component_modifiers"] = {
+    "position_x": audio_reactive["visual"]["clips"][0]["opacity"]["modifiers"],
+    "scale_y": audio_reactive["visual"]["clips"][0]["opacity"]["modifiers"],
+}
+assert not errors(component_modifiers), "transform component modifiers must be accepted separately from point tracks"
+
+unsupported_softness = copy.deepcopy(audio_reactive)
+unsupported_softness["visual"]["clips"][0]["effects"] = [{"id": "vignette", "type": "vignette", "amount": {"base_value": 0.5}, "radius": {"base_value": 1}, "softness": {"base_value": 0.2, "modifiers": []}, "colour": "#000000"}]
+assert errors(unsupported_softness), "deferred scalar properties must not expose modifiers"
+
 old_audio_shape = copy.deepcopy(audio_timeline)
 old_audio_shape["audio"] = {"asset": "audio", "timeline_start": 0, "trim_start": 0, "volume": 1}
 assert errors(old_audio_shape), "old global audio shape must not validate"

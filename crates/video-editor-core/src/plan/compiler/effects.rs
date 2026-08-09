@@ -1,40 +1,30 @@
 //! Conversion from project effects to timed compiled effects.
 
-use crate::plan::{CompiledScalarProperty, MIN_POSITIVE_PROPERTY_VALUE, ScalarPropertyConstraint};
+use crate::plan::{ScalarPropertyTarget, ScalarSignalInterner};
 use crate::{Category, Diagnostic, project::parse_colour};
-
-fn scalar(
-    track: crate::animation::Track<f64>,
-    constraint: ScalarPropertyConstraint,
-) -> CompiledScalarProperty {
-    CompiledScalarProperty::constrained(track, constraint)
-}
 
 pub(super) fn compile(
     effect: &crate::project::Effect,
     id: &str,
+    interner: &mut ScalarSignalInterner,
 ) -> Result<crate::plan::CompiledEffect, Diagnostic> {
+    macro_rules! scalar {
+        ($property:expr, $target:expr) => {
+            super::signals::compile_property($property, id, $target.constraint(), interner)?
+        };
+    }
     Ok(match effect {
         crate::project::Effect::Brightness { amount, .. } => {
             crate::plan::CompiledEffect::Brightness {
-                amount: scalar(
-                    super::tracks::compile(amount, id)?,
-                    ScalarPropertyConstraint::Finite,
-                ),
+                amount: scalar!(amount, ScalarPropertyTarget::BrightnessAmount),
             }
         }
         crate::project::Effect::Contrast { amount, .. } => crate::plan::CompiledEffect::Contrast {
-            amount: scalar(
-                super::tracks::compile(amount, id)?,
-                ScalarPropertyConstraint::Finite,
-            ),
+            amount: scalar!(amount, ScalarPropertyTarget::ContrastAmount),
         },
         crate::project::Effect::Saturation { amount, .. } => {
             crate::plan::CompiledEffect::Saturation {
-                amount: scalar(
-                    super::tracks::compile(amount, id)?,
-                    ScalarPropertyConstraint::Finite,
-                ),
+                amount: scalar!(amount, ScalarPropertyTarget::SaturationAmount),
             }
         }
         crate::project::Effect::Tint { colour, amount, .. } => crate::plan::CompiledEffect::Tint {
@@ -46,20 +36,11 @@ pub(super) fn compile(
                     "",
                 )
             })?,
-            amount: scalar(
-                super::tracks::compile(amount, id)?,
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
-            ),
+            amount: scalar!(amount, ScalarPropertyTarget::TintAmount),
         },
         crate::project::Effect::GaussianBlur { radius, .. } => {
             crate::plan::CompiledEffect::GaussianBlur {
-                radius: scalar(
-                    super::tracks::compile(radius, id)?,
-                    ScalarPropertyConstraint::ClosedRange {
-                        min: 0.0,
-                        max: 32.0,
-                    },
-                ),
+                radius: scalar!(radius, ScalarPropertyTarget::GaussianBlurRadius),
             }
         }
         crate::project::Effect::DirectionalBlur {
@@ -67,16 +48,10 @@ pub(super) fn compile(
             angle_degrees,
             ..
         } => crate::plan::CompiledEffect::DirectionalBlur {
-            radius: scalar(
-                super::tracks::compile(radius, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: 0.0,
-                    max: 32.0,
-                },
-            ),
-            angle_degrees: scalar(
-                super::tracks::compile(angle_degrees, id)?,
-                ScalarPropertyConstraint::Finite,
+            radius: scalar!(radius, ScalarPropertyTarget::DirectionalBlurRadius),
+            angle_degrees: scalar!(
+                angle_degrees,
+                ScalarPropertyTarget::DirectionalBlurAngleDegrees
             ),
         },
         crate::project::Effect::ZoomBlur {
@@ -86,13 +61,7 @@ pub(super) fn compile(
             direction,
             ..
         } => crate::plan::CompiledEffect::ZoomBlur {
-            radius: scalar(
-                super::tracks::compile(radius, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: 0.0,
-                    max: 32.0,
-                },
-            ),
+            radius: scalar!(radius, ScalarPropertyTarget::ZoomBlurRadius),
             samples: *samples,
             anchor: *anchor,
             direction: *direction,
@@ -104,21 +73,9 @@ pub(super) fn compile(
             colour,
             ..
         } => crate::plan::CompiledEffect::Glow {
-            threshold: scalar(
-                super::tracks::compile(threshold, id)?,
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
-            ),
-            radius: scalar(
-                super::tracks::compile(radius, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: 0.0,
-                    max: 32.0,
-                },
-            ),
-            intensity: scalar(
-                super::tracks::compile(intensity, id)?,
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 },
-            ),
+            threshold: scalar!(threshold, ScalarPropertyTarget::GlowThreshold),
+            radius: scalar!(radius, ScalarPropertyTarget::GlowRadius),
+            intensity: scalar!(intensity, ScalarPropertyTarget::GlowIntensity),
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
                     "MVP-PLAN-EFFECT-COLOUR",
@@ -133,16 +90,10 @@ pub(super) fn compile(
             angle_degrees,
             ..
         } => crate::plan::CompiledEffect::ChromaticAberration {
-            amount: scalar(
-                super::tracks::compile(amount, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: 0.0,
-                    max: 32.0,
-                },
-            ),
-            angle_degrees: scalar(
-                super::tracks::compile(angle_degrees, id)?,
-                ScalarPropertyConstraint::Finite,
+            amount: scalar!(amount, ScalarPropertyTarget::ChromaticAberrationAmount),
+            angle_degrees: scalar!(
+                angle_degrees,
+                ScalarPropertyTarget::ChromaticAberrationAngleDegrees
             ),
         },
         crate::project::Effect::Vignette {
@@ -152,14 +103,8 @@ pub(super) fn compile(
             colour,
             ..
         } => crate::plan::CompiledEffect::Vignette {
-            amount: scalar(
-                super::tracks::compile(amount, id)?,
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
-            ),
-            radius: scalar(
-                super::tracks::compile(radius, id)?,
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 2.0 },
-            ),
+            amount: scalar!(amount, ScalarPropertyTarget::VignetteAmount),
+            radius: scalar!(radius, ScalarPropertyTarget::VignetteRadius),
             softness: super::tracks::compile(softness, id)?,
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
@@ -172,17 +117,8 @@ pub(super) fn compile(
         },
         crate::project::Effect::Sharpen { amount, radius, .. } => {
             crate::plan::CompiledEffect::Sharpen {
-                amount: scalar(
-                    super::tracks::compile(amount, id)?,
-                    ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 },
-                ),
-                radius: scalar(
-                    super::tracks::compile(radius, id)?,
-                    ScalarPropertyConstraint::ClosedRange {
-                        min: 0.0,
-                        max: 16.0,
-                    },
-                ),
+                amount: scalar!(amount, ScalarPropertyTarget::SharpenAmount),
+                radius: scalar!(radius, ScalarPropertyTarget::SharpenRadius),
             }
         }
         crate::project::Effect::ColorAdjust {
@@ -192,20 +128,8 @@ pub(super) fn compile(
             white_point,
             ..
         } => crate::plan::CompiledEffect::ColorAdjust {
-            exposure: scalar(
-                super::tracks::compile(exposure, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: -8.0,
-                    max: 8.0,
-                },
-            ),
-            gamma: scalar(
-                super::tracks::compile(gamma, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: MIN_POSITIVE_PROPERTY_VALUE,
-                    max: 8.0,
-                },
-            ),
+            exposure: scalar!(exposure, ScalarPropertyTarget::ColorAdjustExposure),
+            gamma: scalar!(gamma, ScalarPropertyTarget::ColorAdjustGamma),
             black_point: super::tracks::compile(black_point, id)?,
             white_point: super::tracks::compile(white_point, id)?,
         },
@@ -219,24 +143,16 @@ pub(super) fn compile(
             decay,
             ..
         } => crate::plan::CompiledEffect::CameraShake {
-            position_amount: scalar(
-                super::tracks::compile(position_amount, id)?,
-                ScalarPropertyConstraint::NonNegative,
+            position_amount: scalar!(
+                position_amount,
+                ScalarPropertyTarget::CameraShakePositionAmount
             ),
-            rotation_degrees: scalar(
-                super::tracks::compile(rotation_degrees, id)?,
-                ScalarPropertyConstraint::NonNegative,
+            rotation_degrees: scalar!(
+                rotation_degrees,
+                ScalarPropertyTarget::CameraShakeRotationDegrees
             ),
-            scale_amount: scalar(
-                super::tracks::compile(scale_amount, id)?,
-                ScalarPropertyConstraint::NonNegative,
-            ),
-            frequency: scalar(
-                super::tracks::compile(frequency, id)?,
-                ScalarPropertyConstraint::PositiveFloor {
-                    minimum: MIN_POSITIVE_PROPERTY_VALUE,
-                },
-            ),
+            scale_amount: scalar!(scale_amount, ScalarPropertyTarget::CameraShakeScaleAmount),
+            frequency: scalar!(frequency, ScalarPropertyTarget::CameraShakeFrequency),
             seed: *seed,
             attack: *attack,
             decay: *decay,
@@ -248,24 +164,9 @@ pub(super) fn compile(
             samples,
             ..
         } => crate::plan::CompiledEffect::MotionBlur {
-            intensity: scalar(
-                super::tracks::compile(intensity, id)?,
-                ScalarPropertyConstraint::NonNegative,
-            ),
-            shutter_angle: scalar(
-                super::tracks::compile(shutter_angle, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: 0.0,
-                    max: 360.0,
-                },
-            ),
-            max_radius: scalar(
-                super::tracks::compile(max_radius, id)?,
-                ScalarPropertyConstraint::ClosedRange {
-                    min: 0.0,
-                    max: 32.0,
-                },
-            ),
+            intensity: scalar!(intensity, ScalarPropertyTarget::MotionBlurIntensity),
+            shutter_angle: scalar!(shutter_angle, ScalarPropertyTarget::MotionBlurShutterAngle),
+            max_radius: scalar!(max_radius, ScalarPropertyTarget::MotionBlurMaxRadius),
             samples: *samples,
         },
     })
@@ -275,6 +176,7 @@ pub(super) fn compile_timed(
     effect: &crate::project::Effect,
     id: &str,
     owner_duration: f64,
+    interner: &mut ScalarSignalInterner,
 ) -> Result<crate::plan::TimedEffect, Diagnostic> {
     let timing = effect.timing();
     let start = super::to_nanos(timing.start, id)?;
@@ -282,7 +184,7 @@ pub(super) fn compile_timed(
     Ok(crate::plan::TimedEffect {
         start,
         end: start.saturating_add(duration),
-        effect: compile(effect, id)?,
+        effect: compile(effect, id, interner)?,
         dependency: crate::plan::TemporalDependency::Static,
     })
 }

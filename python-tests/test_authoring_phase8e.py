@@ -14,7 +14,7 @@ from video_editor import FrameRate, Project
 from video_editor import authoring as api
 from video_editor.authoring import (
     AudioAsset, AudioClip, AudioTimeline, AudioTrack, Crop, ImageAsset, ImageClip, Point, PresetCollection, ProjectBuilder,
-    ScalarTrack, Sizing, SolidColorClip, Timeline, Transform,
+    ScalarSignal, ScalarTrack, Sizing, SolidColorClip, Timeline, Transform,
 )
 
 
@@ -25,7 +25,7 @@ PUBLIC_NAMES = {
     "DirectionalPushTransition", "DurationMode", "Effect", "Flash", "FlashCollection", "FlashCutTransition",
     "GaussianBlurEffect", "GlowEffect", "ImageAsset", "ImageClip", "Interpolation", "JsonValue", "MotionBlurEffect",
     "Point", "PointKeyframe", "PointTrack", "PostEffectCollection", "Preset", "PresetCollection", "ProjectBuilder",
-    "Quality", "SaturationEffect", "ScalarKeyframe", "ScalarTrack", "SharpenEffect", "Sizing", "SolidColorClip",
+    "Quality", "SaturationEffect", "ScalarKeyframe", "ScalarSignal", "ScalarTrack", "SharpenEffect", "Sizing", "SolidColorClip",
     "Timeline", "TintEffect", "Transform", "Transition", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection",
     "ZoomBlurEffect", "ZoomBlurTransition", "ZoomCrossfadeTransition", "CrossfadeTransition",
 }

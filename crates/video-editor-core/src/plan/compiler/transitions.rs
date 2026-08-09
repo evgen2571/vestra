@@ -7,16 +7,16 @@ use crate::{
     animation::{Interpolation, Keyframe, Track},
     domain::Point,
     plan::{
-        CompilationStats, CompiledEffect, CompiledLayer, CompiledScalarProperty, TimedEffect,
-        TransformContribution,
+        CompilationStats, CompiledEffect, CompiledLayer, CompiledScalarProperty,
+        ScalarPropertyTarget, TimedEffect, TransformContribution,
     },
     project::{Transition, parse_colour},
 };
 
 use super::{to_nanos, tracks};
 
-fn scalar(track: Track<f64>) -> CompiledScalarProperty {
-    CompiledScalarProperty::authored(track)
+fn scalar(track: Track<f64>, target: ScalarPropertyTarget) -> CompiledScalarProperty {
+    CompiledScalarProperty::constrained(track, target.constraint())
 }
 
 pub(super) fn compile(
@@ -230,26 +230,29 @@ fn add_style(
                     end: relative_end,
                     effect: CompiledEffect::Tint {
                         colour,
-                        amount: scalar(Track {
-                            base_value: 0.0,
-                            keyframes: vec![
-                                Keyframe {
-                                    time: 0,
-                                    value: 0.0,
-                                    interpolation: Interpolation::Linear,
-                                },
-                                Keyframe {
-                                    time: (relative_end - relative_start) / 2,
-                                    value: intensity,
-                                    interpolation: Interpolation::Linear,
-                                },
-                                Keyframe {
-                                    time: relative_end - relative_start,
-                                    value: 0.0,
-                                    interpolation: Interpolation::Linear,
-                                },
-                            ],
-                        }),
+                        amount: scalar(
+                            Track {
+                                base_value: 0.0,
+                                keyframes: vec![
+                                    Keyframe {
+                                        time: 0,
+                                        value: 0.0,
+                                        interpolation: Interpolation::Linear,
+                                    },
+                                    Keyframe {
+                                        time: (relative_end - relative_start) / 2,
+                                        value: intensity,
+                                        interpolation: Interpolation::Linear,
+                                    },
+                                    Keyframe {
+                                        time: relative_end - relative_start,
+                                        value: 0.0,
+                                        interpolation: Interpolation::Linear,
+                                    },
+                                ],
+                            },
+                            ScalarPropertyTarget::TintAmount,
+                        ),
                     },
                     dependency: crate::plan::TemporalDependency::Dynamic,
                 });
@@ -313,26 +316,29 @@ pub(super) fn zoom_layer(
             start: a,
             end: b,
             effect: CompiledEffect::ZoomBlur {
-                radius: scalar(Track {
-                    base_value: 0.0,
-                    keyframes: vec![
-                        Keyframe {
-                            time: 0,
-                            value: 0.0,
-                            interpolation: Interpolation::Linear,
-                        },
-                        Keyframe {
-                            time: (b - a) / 2,
-                            value: radius,
-                            interpolation: Interpolation::Linear,
-                        },
-                        Keyframe {
-                            time: b - a,
-                            value: 0.0,
-                            interpolation: Interpolation::Linear,
-                        },
-                    ],
-                }),
+                radius: scalar(
+                    Track {
+                        base_value: 0.0,
+                        keyframes: vec![
+                            Keyframe {
+                                time: 0,
+                                value: 0.0,
+                                interpolation: Interpolation::Linear,
+                            },
+                            Keyframe {
+                                time: (b - a) / 2,
+                                value: radius,
+                                interpolation: Interpolation::Linear,
+                            },
+                            Keyframe {
+                                time: b - a,
+                                value: 0.0,
+                                interpolation: Interpolation::Linear,
+                            },
+                        ],
+                    },
+                    ScalarPropertyTarget::ZoomBlurRadius,
+                ),
                 samples: 12,
                 anchor: Point { x: 0.5, y: 0.5 },
                 direction: crate::project::ZoomBlurDirection::Centered,
@@ -384,27 +390,33 @@ pub(super) fn push_layer(
         start: a,
         end: b,
         effect: CompiledEffect::DirectionalBlur {
-            radius: scalar(Track {
-                base_value: 0.0,
-                keyframes: vec![
-                    Keyframe {
-                        time: 0,
-                        value: 0.0,
-                        interpolation: Interpolation::Linear,
-                    },
-                    Keyframe {
-                        time: (b - a) / 2,
-                        value: blur,
-                        interpolation: Interpolation::Linear,
-                    },
-                    Keyframe {
-                        time: b - a,
-                        value: 0.0,
-                        interpolation: Interpolation::Linear,
-                    },
-                ],
-            }),
-            angle_degrees: scalar(Track::new(angle.to_degrees())),
+            radius: scalar(
+                Track {
+                    base_value: 0.0,
+                    keyframes: vec![
+                        Keyframe {
+                            time: 0,
+                            value: 0.0,
+                            interpolation: Interpolation::Linear,
+                        },
+                        Keyframe {
+                            time: (b - a) / 2,
+                            value: blur,
+                            interpolation: Interpolation::Linear,
+                        },
+                        Keyframe {
+                            time: b - a,
+                            value: 0.0,
+                            interpolation: Interpolation::Linear,
+                        },
+                    ],
+                },
+                ScalarPropertyTarget::DirectionalBlurRadius,
+            ),
+            angle_degrees: scalar(
+                Track::new(angle.to_degrees()),
+                ScalarPropertyTarget::DirectionalBlurAngleDegrees,
+            ),
         },
         dependency: crate::plan::TemporalDependency::Dynamic,
     });

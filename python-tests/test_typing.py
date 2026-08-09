@@ -69,6 +69,16 @@ if TYPE_CHECKING:
     )
     point_keyframe: PointKeyframe = image_clip.transform.scale.keyframe(time=1.0, value=Point(1.2, 1.2))
     crop_keyframe: CropKeyframe = image_clip.crop.keyframe(time=0.5, value=Crop(0, 0, 1, 1))
+    signal = builder.audio.master.rms()
+    image_clip.opacity.modulate(signal)
+    image_clip.transform.position_x.modulate(signal)
+    image_clip.transform.scale.react_to(signal)
+    image_clip.effects.add_vignette(
+        amount=0,
+        radius=1,
+        softness=0.5,
+        colour="#000000",
+    ).amount.modulate(signal)
     assert authored and authored_project and authored_report and point and sizing_original and sizing_scale and sizing_stretch and image_clip and solid_clip
     assert scalar_keyframe and point_keyframe and crop_keyframe
     preset: Preset = image_clip.presets.apply_impact(seed=7, intensity=1.0)
@@ -169,6 +179,23 @@ def test_invalid_effect_property_fixture_is_rejected() -> None:
     assert result.returncode == 1
     assert result.stdout.count("has no attribute") == 4
     assert "samples" in result.stdout
+
+
+def test_invalid_signal_modulation_surface_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/authoring_invalid_signal_modulation.py"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("has no attribute") == 5
+    assert "ScalarModifierTarget" in result.stdout
+    assert "ScalarTrack" in result.stdout
+    assert "keyframe" in result.stdout
+    assert "base_value" in result.stdout
+    assert "modulate" in result.stdout
+    assert "react_to" in result.stdout
 
 
 def test_invalid_transition_fixture_is_rejected() -> None:

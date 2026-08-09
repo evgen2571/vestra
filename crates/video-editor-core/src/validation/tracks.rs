@@ -70,6 +70,26 @@ pub(super) fn validate_track<T>(
     }
 }
 
+pub(super) fn validate_scalar_property(
+    property: &crate::project::ScalarProperty,
+    duration: f64,
+    path: &str,
+    maximum_keyframes: usize,
+    errors: &mut Vec<Diagnostic>,
+    valid: impl Fn(&f64) -> bool,
+    has_authored_audio: bool,
+) {
+    validate_track(
+        &property.track,
+        duration,
+        path,
+        maximum_keyframes,
+        errors,
+        valid,
+    );
+    super::signals::validate_modifiers(&property.modifiers, path, has_authored_audio, errors);
+}
+
 /// Samples a scalar project track using the same interpolation conversion as
 /// compilation. Relationship validators use this without owning track logic.
 #[must_use]

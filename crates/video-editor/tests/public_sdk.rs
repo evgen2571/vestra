@@ -415,6 +415,64 @@ fn public_sdk_prepares_and_renders_a_final_phase9_audio_project() {
 }
 
 #[test]
+fn public_sdk_prepares_canonical_audio_reactive_video_without_output_audio() {
+    let directory = tempdir().expect("temporary directory");
+    let project = video_editor::Project::from_json(
+        r##"
+        {
+          "schema_version": 2,
+          "output": {"path": "unused.mp4", "width": 16, "height": 16, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
+          "assets": [{"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}],
+          "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
+          "visual": {"clips": [{
+            "id": "canvas", "source": {"type": "solid_color", "colour": "#000000"}, "start": 0, "duration": 1, "layer": 0,
+            "opacity": {"base_value": 1},
+            "effects": [{"id": "reactive-brightness", "type": "brightness", "amount": {
+              "base_value": 0,
+              "modifiers": [{"operation": "add", "signal": {
+                "source": {"type": "audio", "tap": "master", "feature": {"type": "band_energy", "min_hz": 40, "max_hz": 160}},
+                "transforms": [
+                  {"type": "gain", "gain": 2},
+                  {"type": "remap", "input_min": 0, "input_max": 1, "output_start": 0, "output_end": 1},
+                  {"type": "clamp", "min": 0, "max": 1},
+                  {"type": "envelope", "attack": 0.02, "release": 0.18},
+                  {"type": "response_curve", "x1": 0.42, "y1": 0, "x2": 0.58, "y2": 1}
+                ]
+              }}]
+            }}]
+          }]}
+        }
+        "##,
+        fixture("."),
+    )
+    .expect("canonical audio-reactive project");
+    let serialized = project.to_json().expect("serialize signal project");
+    assert!(serialized.contains("\"modifiers\""));
+    video_editor::Project::from_json(&serialized, fixture("."))
+        .expect("reload serialized signal project");
+    let editor = Editor::new();
+    assert!(editor.validate(&project).is_valid());
+    let mut prepared = editor
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare audio-reactive CPU project");
+    let frame = prepared
+        .render_frame(Duration::ZERO)
+        .expect("evaluate audio-reactive frame");
+    assert_eq!(frame.width(), 16);
+    assert_eq!(frame.height(), 16);
+    let result = prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(directory.path().join("reactive.mp4"))
+                .with_overwrite(true),
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("render video without output audio");
+    assert!(!result.audio_present);
+    assert!(result.output.is_file());
+}
+
+#[test]
 fn public_sdk_cpu_render_emits_ordered_terminal_event() {
     let editor = Editor::new();
     let project_path = fixture("tests/fixtures/wgpu-small-rgba.json");

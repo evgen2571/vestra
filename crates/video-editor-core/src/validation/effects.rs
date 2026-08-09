@@ -82,6 +82,7 @@ pub(super) fn validate_global(
     maximum_effects: usize,
     maximum_keyframes: usize,
     errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
 ) {
     if effects.len() > maximum_effects {
         errors.push(Diagnostic::error(
@@ -113,7 +114,14 @@ pub(super) fn validate_global(
                 path.clone(),
             ));
         }
-        validate_parameters(effect, duration, &path, maximum_keyframes, errors);
+        validate_parameters(
+            effect,
+            duration,
+            &path,
+            maximum_keyframes,
+            errors,
+            has_authored_audio,
+        );
     }
 }
 
@@ -127,16 +135,21 @@ pub(super) fn validate_parameters(
     path: &str,
     maximum_keyframes: usize,
     errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
 ) {
     let active_duration = super::intervals::validate(effect.timing(), duration, path, errors);
-    let track = |track, field, valid: fn(&f64) -> bool, errors: &mut Vec<Diagnostic>| {
-        tracks::validate_track(
+    let track = |track: &crate::project::ScalarProperty,
+                 field,
+                 valid: fn(&f64) -> bool,
+                 errors: &mut Vec<Diagnostic>| {
+        tracks::validate_scalar_property(
             track,
             active_duration,
             &format!("{path}/{field}"),
             maximum_keyframes,
             errors,
             valid,
+            has_authored_audio,
         );
     };
     match effect {
@@ -250,11 +263,13 @@ pub(super) fn validate_parameters(
                 |value| value.is_finite() && (0.0..=2.0).contains(value),
                 errors,
             );
-            track(
+            tracks::validate_track(
                 softness,
-                "softness",
-                |value| value.is_finite() && *value > 0.0 && *value <= 2.0,
+                active_duration,
+                &format!("{path}/softness"),
+                maximum_keyframes,
                 errors,
+                |value| value.is_finite() && *value > 0.0 && *value <= 2.0,
             );
         }
         crate::project::Effect::Sharpen { amount, radius, .. } => {
@@ -290,17 +305,21 @@ pub(super) fn validate_parameters(
                 |value| value.is_finite() && *value > 0.0 && *value <= 8.0,
                 errors,
             );
-            track(
+            tracks::validate_track(
                 black_point,
-                "black_point",
+                active_duration,
+                &format!("{path}/black_point"),
+                maximum_keyframes,
+                errors,
                 |value| value.is_finite() && (0.0..1.0).contains(value),
-                errors,
             );
-            track(
+            tracks::validate_track(
                 white_point,
-                "white_point",
-                |value| value.is_finite() && *value > 0.0 && *value <= 1.0,
+                active_duration,
+                &format!("{path}/white_point"),
+                maximum_keyframes,
                 errors,
+                |value| value.is_finite() && *value > 0.0 && *value <= 1.0,
             );
             validate_colour_points(black_point, white_point, path, errors);
         }
@@ -385,8 +404,8 @@ mod tests {
     use super::*;
     use crate::project::{ActiveInterval, Effect, Point, Track};
 
-    fn scalar(value: f64) -> Track<f64> {
-        Track::constant(value)
+    fn scalar(value: f64) -> crate::project::ScalarProperty {
+        Track::constant(value).into()
     }
 
     fn camera_shake(decay: f64) -> Effect {
@@ -418,7 +437,7 @@ mod tests {
 
     fn validation_errors(effect: &Effect) -> Vec<Diagnostic> {
         let mut errors = Vec::new();
-        validate_parameters(effect, 2.0, "/effect", 16, &mut errors);
+        validate_parameters(effect, 2.0, "/effect", 16, &mut errors, true);
         errors
     }
 
@@ -474,7 +493,7 @@ mod tests {
                 id: "vignette".to_owned(),
                 amount: scalar(0.5),
                 radius: scalar(1.0),
-                softness: scalar(1.0),
+                softness: Track::constant(1.0),
                 colour: "#000000".to_owned(),
             },
             Effect::Sharpen {
@@ -486,8 +505,8 @@ mod tests {
                 id: "colour".to_owned(),
                 exposure: scalar(0.0),
                 gamma: scalar(1.0),
-                black_point: scalar(0.0),
-                white_point: scalar(1.0),
+                black_point: Track::constant(0.0),
+                white_point: Track::constant(1.0),
             },
             camera_shake(0.5),
             motion_blur(8),
@@ -582,7 +601,7 @@ mod tests {
                     id: "vignette".to_owned(),
                     amount: scalar(0.5),
                     radius: scalar(1.0),
-                    softness: scalar(0.0),
+                    softness: Track::constant(0.0),
                     colour: "#000000".to_owned(),
                 },
                 "MVP-TRACK-VALUE",
@@ -600,8 +619,8 @@ mod tests {
                     id: "colour".to_owned(),
                     exposure: scalar(0.0),
                     gamma: scalar(0.0),
-                    black_point: scalar(0.0),
-                    white_point: scalar(1.0),
+                    black_point: Track::constant(0.0),
+                    white_point: Track::constant(1.0),
                 },
                 "MVP-TRACK-VALUE",
             ),

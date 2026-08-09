@@ -9,7 +9,7 @@ use crate::{
     plan::{
         CompilationStats, CompiledLayer, CompiledScalarProperty, CompiledSizing,
         CompiledTransformTracks, CompiledVisualSource, DrawKey, PlanCompileInput,
-        ScalarPropertyConstraint,
+        ScalarPropertyConstraint, ScalarPropertyTarget, ScalarSignalInterner,
     },
     project::{Clip, VisualSource, parse_colour},
 };
@@ -21,6 +21,7 @@ pub(super) fn compile(
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
     compilation: &mut CompilationStats,
+    scalar_signal_interner: &mut ScalarSignalInterner,
 ) -> Result<CompiledLayer, Diagnostic> {
     let start_nanos = time::to_nanos(clip.start, &clip.id)?;
     let end_nanos = start_nanos.saturating_add(time::to_nanos(clip.duration, &clip.id)?);
@@ -62,7 +63,9 @@ pub(super) fn compile(
     let effects = clip
         .effects
         .iter()
-        .map(|effect| effects::compile_timed(effect, &clip.id, clip.duration))
+        .map(|effect| {
+            effects::compile_timed(effect, &clip.id, clip.duration, scalar_signal_interner)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(CompiledLayer {
         id: clip.id.clone(),
@@ -77,17 +80,19 @@ pub(super) fn compile(
             id: clip.id.clone(),
         },
         source,
-        transform: compile_transform(clip)?,
+        transform: compile_transform(clip, scalar_signal_interner)?,
         transform_contributions: Vec::new(),
         // Opacity is constrained only after generated transition/preset
         // contributions are applied during evaluation. Clamping inside the
         // scalar property would change the required ordering once modifiers
         // are present: authored -> modifiers -> generated contributions ->
         // final target constraint.
-        opacity: crate::plan::CompiledScalarProperty::authored(tracks::compile(
+        opacity: super::signals::compile_property(
             &clip.opacity,
             &clip.id,
-        )?),
+            ScalarPropertyConstraint::Finite,
+            scalar_signal_interner,
+        )?,
         opacity_contributions: Vec::new(),
         effects,
         blend_mode: clip.blend_mode,
@@ -95,20 +100,37 @@ pub(super) fn compile(
     })
 }
 
-fn compile_transform(clip: &Clip) -> Result<CompiledTransformTracks, Diagnostic> {
+fn compile_transform(
+    clip: &Clip,
+    scalar_signal_interner: &mut ScalarSignalInterner,
+) -> Result<CompiledTransformTracks, Diagnostic> {
     match (&clip.source, &clip.transform) {
         (_, Some(transform)) => Ok(CompiledTransformTracks {
             position: tracks::compile(&transform.position, &clip.id)?,
-            position_x_modifiers: Vec::new(),
-            position_y_modifiers: Vec::new(),
+            position_x_modifiers: super::signals::compile_modifiers(
+                &transform.component_modifiers.position_x,
+                scalar_signal_interner,
+            )?,
+            position_y_modifiers: super::signals::compile_modifiers(
+                &transform.component_modifiers.position_y,
+                scalar_signal_interner,
+            )?,
             anchor: tracks::compile(&transform.anchor, &clip.id)?,
             scale: tracks::compile(&transform.scale, &clip.id)?,
-            scale_x_modifiers: Vec::new(),
-            scale_y_modifiers: Vec::new(),
-            rotation_degrees: CompiledScalarProperty::constrained(
-                tracks::compile(&transform.rotation_degrees, &clip.id)?,
-                ScalarPropertyConstraint::Finite,
-            ),
+            scale_x_modifiers: super::signals::compile_modifiers(
+                &transform.component_modifiers.scale_x,
+                scalar_signal_interner,
+            )?,
+            scale_y_modifiers: super::signals::compile_modifiers(
+                &transform.component_modifiers.scale_y,
+                scalar_signal_interner,
+            )?,
+            rotation_degrees: super::signals::compile_property(
+                &transform.rotation_degrees,
+                &clip.id,
+                ScalarPropertyTarget::RotationDegrees.constraint(),
+                scalar_signal_interner,
+            )?,
         }),
         (VisualSource::SolidColor { .. }, None) => Ok(canvas_transform()),
         (VisualSource::Image { .. }, None) => Err(Diagnostic::error(
@@ -134,7 +156,7 @@ pub(super) fn canvas_transform() -> CompiledTransformTracks {
         scale_y_modifiers: Vec::new(),
         rotation_degrees: CompiledScalarProperty::constrained(
             Track::new(0.0),
-            ScalarPropertyConstraint::Finite,
+            ScalarPropertyTarget::RotationDegrees.constraint(),
         ),
     }
 }

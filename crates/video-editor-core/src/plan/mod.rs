@@ -15,6 +15,7 @@ pub use evaluation::{EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedS
 pub use evaluation::{evaluate, evaluate_with_context};
 pub use input::PlanCompileInput;
 pub use model::*;
+pub(crate) use scalar_property::ScalarPropertyTarget;
 pub use scalar_property::{
     CompiledScalarModifier, CompiledScalarProperty, MIN_POSITIVE_PROPERTY_VALUE,
     ScalarModifierOperation, ScalarPropertyConstraint,
@@ -51,7 +52,11 @@ mod tests {
         },
         plan::{CompiledEffect, TemporalDependency},
         project::{
-            ActiveInterval, Effect, Interpolation, InterpolationName, Keyframe, Project, Track,
+            ActiveInterval, AudioAnalysisTap as ProjectAudioAnalysisTap,
+            AudioScalarFeature as ProjectAudioScalarFeature, Effect, Interpolation,
+            InterpolationName, Keyframe, Preset, Project, ScalarModifier,
+            ScalarModifierOperation as ProjectScalarModifierOperation, ScalarSignal,
+            ScalarSignalSource, SignalTransform, Track,
         },
         validation::ResourceLimits,
     };
@@ -112,6 +117,22 @@ mod tests {
         .expect("fixture project")
     }
 
+    fn stage_layer_from_five_to_six_seconds(layer: &mut super::CompiledLayer) {
+        stage_layer(layer, 5.0, 6.0);
+    }
+
+    fn stage_layer(layer: &mut super::CompiledLayer, start_seconds: f64, end_seconds: f64) {
+        let start = crate::plan_time::to_nanos(start_seconds, "test layer").expect("start time");
+        let end = crate::plan_time::to_nanos(end_seconds, "test layer").expect("end time");
+        layer.start_nanos = start;
+        layer.duration_nanos = end - start;
+        layer.start_frame =
+            crate::plan_time::first_frame_at_or_after(start, (24, 1)).expect("start frame");
+        layer.end_frame =
+            crate::plan_time::first_frame_at_or_after(end, (24, 1)).expect("end frame");
+        layer.draw_key.start_nanos = start;
+    }
+
     #[test]
     fn canonical_fixture_compiles_from_supplied_preflight_data() {
         let plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
@@ -124,6 +145,72 @@ mod tests {
         );
         assert!(plan.scalar_signals.is_empty());
         assert!(plan.audio_analysis_requirements.is_empty());
+    }
+
+    #[test]
+    fn canonical_inline_signals_deduplicate_complete_and_raw_work() {
+        let mut project = canonical_project();
+        let signal = ScalarSignal {
+            source: ScalarSignalSource::Audio {
+                tap: ProjectAudioAnalysisTap::Master,
+                feature: ProjectAudioScalarFeature::Rms,
+            },
+            transforms: vec![SignalTransform::Gain { gain: 2.0 }],
+        };
+        let alternate = ScalarSignal {
+            source: ScalarSignalSource::Audio {
+                tap: ProjectAudioAnalysisTap::Master,
+                feature: ProjectAudioScalarFeature::Rms,
+            },
+            transforms: vec![SignalTransform::Gain { gain: 3.0 }],
+        };
+        let first = &mut project.visual.clips[0];
+        first.effects = vec![Effect::Brightness {
+            id: "public-modulated-brightness".into(),
+            amount: crate::project::ScalarProperty {
+                track: Track::constant(0.0),
+                modifiers: vec![ScalarModifier {
+                    operation: ProjectScalarModifierOperation::Add,
+                    signal: signal.clone(),
+                }],
+            },
+        }];
+        first.opacity.modifiers = vec![ScalarModifier {
+            operation: ProjectScalarModifierOperation::Add,
+            signal: signal.clone(),
+        }];
+        first
+            .transform
+            .as_mut()
+            .expect("image transform")
+            .component_modifiers
+            .position_x = vec![ScalarModifier {
+            operation: ProjectScalarModifierOperation::Add,
+            signal,
+        }];
+        project.visual.clips[1].opacity.modifiers = vec![ScalarModifier {
+            operation: ProjectScalarModifierOperation::Add,
+            signal: alternate,
+        }];
+        let plan = compile_project(project);
+        assert_eq!(plan.scalar_signals.len(), 2);
+        assert_eq!(plan.audio_analysis_requirements.iter().len(), 1);
+        assert_eq!(
+            plan.layers[0].opacity.modifiers[0].signal,
+            plan.layers[0].transform.position_x_modifiers[0].signal
+        );
+        assert!(matches!(
+            plan.layers[0].effects.as_slice(),
+            [super::TimedEffect {
+                effect: CompiledEffect::Brightness { .. },
+                dependency: TemporalDependency::Dynamic,
+                ..
+            }]
+        ));
+        assert_eq!(
+            plan.layers[0].content_dependency,
+            TemporalDependency::Dynamic
+        );
     }
 
     #[test]
@@ -148,13 +235,11 @@ mod tests {
     fn evaluation_applies_scalar_properties_with_project_time_signals() {
         let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
         let layer = &mut plan.layers[0];
-        layer.start_nanos = 5_000_000_000;
-        layer.start_frame = 120;
-        layer.end_frame = layer.start_frame + 144;
+        stage_layer_from_five_to_six_seconds(layer);
         layer.opacity.authored_track = CompiledTrack {
             base_value: 0.4,
             keyframes: vec![CompiledKeyframe {
-                time: 1_000_000_000,
+                time: 500_000_000,
                 value: 0.8,
                 interpolation: CompiledInterpolation::Linear,
             }],
@@ -180,21 +265,24 @@ mod tests {
             dependency: TemporalDependency::Dynamic,
         });
         let signals = PreparedScalarSignals::new(vec![
-            PreparedScalarSignal::new(5_000_000_000, 1_000_000_000, vec![0.0, 1.0])
-                .expect("signal"),
+            PreparedScalarSignal::new(5_000_000_000, 500_000_000, vec![0.0, 1.0]).expect("signal"),
         ]);
         let frame = evaluate_with_context(
             &plan,
             &[super::ScheduledItem(0)],
-            6_000_000_000,
+            5_500_000_000,
             &EvaluationContext::new(&signals),
         )
         .expect("evaluation");
-        // At project time 6s the authored track uses clip-local time 1s
-        // (0.8), while the signal uses absolute project time 6s (1.0).
+        // At project time 5.5s the authored track uses clip-local time 0.5s
+        // (0.8), while the signal uses absolute project time 5.5s (1.0).
         // Generated opacity then multiplies the modulated value before the
         // final clamp: (0.8 + 1.0) * 0.5 = 0.9.
-        assert!((frame.layers[0].opacity - 0.9).abs() < 1.0e-12);
+        assert!(
+            (frame.layers[0].opacity - 0.9).abs() < 1.0e-12,
+            "opacity was {}",
+            frame.layers[0].opacity
+        );
         assert!(matches!(
             frame.layers[0].effects.last(),
             Some(super::EvaluatedEffect::Brightness { amount }) if (*amount - 1.1).abs() < 1.0e-12
@@ -205,9 +293,7 @@ mod tests {
     fn prepared_envelope_signal_replaces_brightness_at_absolute_project_time() {
         let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
         let layer = &mut plan.layers[0];
-        layer.start_nanos = 5_000_000_000;
-        layer.start_frame = 120;
-        layer.end_frame = layer.start_frame + 144;
+        stage_layer(layer, 5.0, 9.0);
         layer.effects.push(TimedEffect {
             start: 0,
             end: layer.duration_nanos,
@@ -278,9 +364,7 @@ mod tests {
             .position(|layer| matches!(layer.source, super::CompiledVisualSource::Image { .. }))
             .expect("image layer");
         let layer = &mut plan.layers[index];
-        layer.start_nanos = 5_000_000_000;
-        layer.start_frame = 120;
-        layer.end_frame = layer.start_frame + 144;
+        stage_layer(layer, 5.0, 7.0);
         layer.transform.position_x_modifiers = vec![CompiledScalarModifier {
             operation: ScalarModifierOperation::Add,
             signal: ScalarSignalId::new(0),
@@ -336,27 +420,28 @@ mod tests {
                     interpolation: Interpolation::Named(InterpolationName::EaseInOut),
                 },
             ],
-        };
+        }
+        .into();
         blue.effects = vec![
             Effect::Brightness {
                 id: "brightness".into(),
-                amount: Track::constant(0.1),
+                amount: Track::constant(0.1).into(),
             },
             Effect::Contrast {
                 id: "contrast".into(),
-                amount: Track::constant(1.1),
+                amount: Track::constant(1.1).into(),
             },
             Effect::Saturation {
                 id: "saturation".into(),
-                amount: Track::constant(0.9),
+                amount: Track::constant(0.9).into(),
             },
             Effect::CameraShake {
                 id: "zero-shake".into(),
                 timing: ActiveInterval::default(),
-                position_amount: Track::constant(0.0),
-                rotation_degrees: Track::constant(0.0),
-                scale_amount: Track::constant(0.0),
-                frequency: Track::constant(5.0),
+                position_amount: Track::constant(0.0).into(),
+                rotation_degrees: Track::constant(0.0).into(),
+                scale_amount: Track::constant(0.0).into(),
+                frequency: Track::constant(5.0).into(),
                 seed: 7,
                 attack: 0.0,
                 decay: 1.0,
@@ -392,16 +477,53 @@ mod tests {
     }
 
     #[test]
+    fn authored_and_generated_gaussian_blur_share_the_target_constraint() {
+        let mut project = canonical_project();
+        let clip = &mut project.visual.clips[0];
+        clip.effects = vec![Effect::GaussianBlur {
+            id: "authored-blur".into(),
+            radius: Track::constant(2.0).into(),
+        }];
+        clip.preset = Some(Preset::FocusReveal {
+            timing: ActiveInterval {
+                start: 0.0,
+                duration: Some(0.5),
+            },
+            intensity: 1.0,
+        });
+
+        let plan = compile_project(project);
+        let layer = &plan.layers[0];
+        let constraints = layer
+            .effects
+            .iter()
+            .filter_map(|timed| match &timed.effect {
+                CompiledEffect::GaussianBlur { radius } => Some(radius.constraint),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(constraints.len(), 2);
+        assert!(constraints.windows(2).all(|pair| pair[0] == pair[1]));
+        assert_eq!(
+            constraints[0],
+            ScalarPropertyConstraint::ClosedRange {
+                min: 0.0,
+                max: 32.0,
+            }
+        );
+    }
+
+    #[test]
     fn compiler_removes_exact_identities_but_keeps_near_values_and_classifies_post_effects() {
         let mut project = canonical_project();
         project.visual.post_effects = vec![
             Effect::Brightness {
                 id: "identity".into(),
-                amount: Track::constant(0.0),
+                amount: Track::constant(0.0).into(),
             },
             Effect::Contrast {
                 id: "near".into(),
-                amount: Track::constant(1.000_001),
+                amount: Track::constant(1.000_001).into(),
             },
         ];
         let plan = compile_project(project.clone());
@@ -417,7 +539,8 @@ mod tests {
                     value: 1.1,
                     interpolation: Interpolation::Named(InterpolationName::Linear),
                 }],
-            },
+            }
+            .into(),
         };
         let plan = compile_project(project);
         assert_eq!(plan.post_effect_dependency, TemporalDependency::Dynamic);
@@ -472,7 +595,7 @@ mod tests {
             .scale
             .keyframes
             .clear();
-        blue.opacity.keyframes = vec![Keyframe {
+        blue.opacity.track.keyframes = vec![Keyframe {
             time: 1.0,
             value: 0.5,
             interpolation: Interpolation::Named(InterpolationName::Linear),
@@ -527,11 +650,11 @@ mod tests {
         blue.effects = vec![
             Effect::Brightness {
                 id: "brightness".into(),
-                amount: Track::constant(0.1),
+                amount: Track::constant(0.1).into(),
             },
             Effect::Contrast {
                 id: "contrast".into(),
-                amount: Track::constant(1.1),
+                amount: Track::constant(1.1).into(),
             },
         ];
         let first = compile_project(project.clone());

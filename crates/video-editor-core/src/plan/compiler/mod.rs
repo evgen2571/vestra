@@ -25,6 +25,7 @@ mod metrics;
 mod optimization;
 mod output;
 mod presets;
+mod signals;
 mod transitions;
 
 /// Transitional facade for compiler submodules while time conversion is owned
@@ -66,6 +67,7 @@ pub fn compile(
     })?;
     let image_table = assets::build(&validated, project);
     let mut layers = Vec::new();
+    let mut scalar_signal_interner = ScalarSignalInterner::default();
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
         declared_clip_count: project.visual.clips.len(),
@@ -83,6 +85,7 @@ pub fn compile(
             &validated,
             &image_table.indices,
             &mut compilation,
+            &mut scalar_signal_interner,
         )?);
         if let Some(preset) = &clip.preset {
             presets::apply(
@@ -121,7 +124,14 @@ pub fn compile(
         .visual
         .post_effects
         .iter()
-        .map(|effect| effects::compile_timed(effect, "global post effect", validated.duration))
+        .map(|effect| {
+            effects::compile_timed(
+                effect,
+                "global post effect",
+                validated.duration,
+                &mut scalar_signal_interner,
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let mut post_effects = post_effects;
     compilation.effect_count_before_normalization = layers
@@ -159,7 +169,7 @@ pub fn compile(
     metrics::record(&mut compilation, &layers, &post_effects);
     limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     let audio_mix = audio::compile(&validated)?;
-    let scalar_signals = ScalarSignalInterner::default().finish();
+    let scalar_signals = scalar_signal_interner.finish();
     let audio_analysis_requirements = scalar_signals.audio_analysis_requirements();
     let encoder_audio_mix = project
         .output

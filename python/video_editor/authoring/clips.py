@@ -3,7 +3,7 @@
 from ._internal import _Owner, _number
 from .assets import ImageAsset
 from .effects import ClipEffectCollection
-from .tracks import CropTrack, ScalarTrack, Transform
+from .tracks import CropTrack, ModulatableScalarTrack, Transform
 from .presets import PresetCollection
 from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
 
@@ -28,7 +28,7 @@ def _visible(value: bool) -> bool:
     return value
 
 
-class _OpacityTrack(ScalarTrack):
+class _OpacityTrack(ModulatableScalarTrack):
     def _validate(self, value: float) -> float:
         number = super()._validate(value)
         if not 0.0 <= number <= 1.0:
@@ -90,7 +90,7 @@ class _Clip:
         self._visible = _visible(value)
 
     @property
-    def opacity(self) -> ScalarTrack:
+    def opacity(self) -> ModulatableScalarTrack:
         return self._opacity
 
     @property

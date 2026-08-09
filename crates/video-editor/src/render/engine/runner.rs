@@ -11,9 +11,7 @@ use crate::{
     plan::{ActiveSchedule, RenderPlan},
     render::{CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind},
 };
-use video_editor_core::plan::{
-    AudioAnalysisRequirement, CompiledScalarSignal, PreparedScalarSignals,
-};
+use video_editor_core::plan::{PreparedScalarSignals, prepare_scalar_signals};
 use video_editor_media::{EncoderSettings, FfmpegSink, FrameSink, MediaError, OutputTarget};
 
 use super::{
@@ -185,29 +183,15 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
     let scalar_signals = if plan.audio_analysis_requirements.is_empty() {
         PreparedScalarSignals::empty()
     } else {
-        let mut features = video_editor_media::analyze_master_audio(
+        let raw_features = video_editor_media::analyze_master_audio(
             &plan.audio_analysis_requirements,
             &plan.audio_mix,
             plan.duration,
             plan.limits.maximum_audio_sources,
         )
         .map_err(|error| analysis_error(&plan, &decoded, error))?;
-        let mut prepared = Vec::with_capacity(plan.scalar_signals.len());
-        for (_, signal) in plan.scalar_signals.iter() {
-            let CompiledScalarSignal::Audio(audio) = signal;
-            let requirement = AudioAnalysisRequirement::Master(audio.feature);
-            let feature = features.remove(&requirement).ok_or_else(|| {
-                analysis_error(
-                    &plan,
-                    &decoded,
-                    video_editor_media::MediaError::AudioAnalysis(
-                        video_editor_media::AudioAnalysisError::MissingPreparedFeature,
-                    ),
-                )
-            })?;
-            prepared.push(feature);
-        }
-        PreparedScalarSignals::new(prepared)
+        prepare_scalar_signals(&plan.scalar_signals, raw_features)
+            .map_err(|error| signal_preparation_error(&plan, &decoded, error))?
     };
     let audio_analysis_duration = if plan.audio_analysis_requirements.is_empty() {
         Duration::ZERO
@@ -246,6 +230,28 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
         scalar_signals,
         lifecycle: PreparedLifecycle::Ready,
     })
+}
+
+fn signal_preparation_error(
+    plan: &RenderPlan,
+    decoded: &Arc<DecodedAssets>,
+    error: video_editor_core::plan::SignalPreparationError,
+) -> RenderError {
+    RenderError {
+        diagnostic: Diagnostic::error(
+            "MVP-SIGNAL-PREPARATION",
+            Category::Render,
+            error.to_string(),
+            "",
+        ),
+        warnings: Vec::new(),
+        temporary_removed: true,
+        context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, plan),
+        timings: RenderTimings {
+            asset_decode_ms: milliseconds(decoded.timings().decode),
+            ..RenderTimings::default()
+        },
+    }
 }
 
 fn analysis_error(

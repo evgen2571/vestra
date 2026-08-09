@@ -527,18 +527,6 @@ pub fn consume_master_pcm(
     Ok(spec)
 }
 
-/// Validate the prerequisites for future Master-derived feature preparation
-/// without starting FFmpeg. C1 uses this to reject impossible requests while
-/// C2/C3 own the actual feature processors.
-pub fn validate_master_pcm_request(
-    mix: &AudioMixPlan,
-    project_duration: f64,
-    maximum_audio_sources: usize,
-) -> Result<u64, MediaError> {
-    master_pcm_execution(mix, project_duration, maximum_audio_sources)
-        .map(|(expected_frames, _)| expected_frames)
-}
-
 fn master_pcm_execution(
     mix: &AudioMixPlan,
     project_duration: f64,
@@ -938,7 +926,11 @@ mod tests {
 
     #[test]
     fn band_energy_uses_shared_prefix_sums_for_overlapping_ranges() {
-        let bands = vec![band(40.0, 500.0), band(100.0, 2_000.0), band(500.0, 12_000.0)];
+        let bands = vec![
+            band(40.0, 500.0),
+            band(100.0, 2_000.0),
+            band(500.0, 12_000.0),
+        ];
         let mut analyzer = StftAnalyzer::new(bands, 1).expect("STFT analyzer");
         let pcm = bin_sine(64, 0.5, 1.0, STFT_SIZE_FRAMES / 2);
         for frame in pcm.chunks_exact(CHANNELS as usize) {
@@ -962,9 +954,8 @@ mod tests {
         let left_only = (0..frames)
             .flat_map(|n| {
                 let sample = 0.5_f32
-                    * (2.0 * std::f64::consts::PI * 8.0 * n as f64
-                        / STFT_SIZE_FRAMES as f64)
-                        .sin() as f32;
+                    * (2.0 * std::f64::consts::PI * 8.0 * n as f64 / STFT_SIZE_FRAMES as f64).sin()
+                        as f32;
                 [sample, 0.0]
             })
             .collect::<Vec<_>>();
@@ -1017,8 +1008,7 @@ mod tests {
             &long[&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))];
         let start = long_signal.sample(0);
         let interior = long_signal.sample(FEATURE_HOP_NANOS * 5);
-        let end_hop = ((long_frames + AUDIO_FEATURE_HOP_FRAMES - 1)
-            / AUDIO_FEATURE_HOP_FRAMES) as u128;
+        let end_hop = long_frames.div_ceil(AUDIO_FEATURE_HOP_FRAMES) as u128;
         let end = long_signal.sample(FEATURE_HOP_NANOS * end_hop);
         assert!(start > 0.0 && start < interior);
         assert!(end >= 0.0 && end < interior);

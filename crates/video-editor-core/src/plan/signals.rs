@@ -118,12 +118,195 @@ pub struct AudioScalarSignal {
     pub feature: AudioScalarFeature,
 }
 
+/// A scalar source before generic signal transforms are applied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CompiledScalarSignal {
+pub enum RawScalarSignal {
     Audio(AudioScalarSignal),
 }
 
-/// Raw audio work needed by future preparation, independent of signal transforms.
+impl RawScalarSignal {
+    const fn audio_analysis_requirement(self) -> AudioAnalysisRequirement {
+        match self {
+            Self::Audio(AudioScalarSignal {
+                tap: AudioAnalysisTap::Master,
+                feature,
+            }) => AudioAnalysisRequirement::Master(feature),
+        }
+    }
+}
+
+/// A finite canonical scalar parameter suitable for structural signal identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct CanonicalF64(u64);
+
+impl CanonicalF64 {
+    fn new(value: f64) -> Result<Self, SignalTransformContractError> {
+        if !value.is_finite() {
+            return Err(SignalTransformContractError::NonFiniteParameter);
+        }
+        Ok(Self(if value == 0.0 {
+            0.0_f64.to_bits()
+        } else {
+            value.to_bits()
+        }))
+    }
+
+    const fn value(self) -> f64 {
+        f64::from_bits(self.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignalTransformContractError {
+    NonFiniteParameter,
+    InvalidRemapInputRange,
+    InvalidClampRange,
+}
+
+impl fmt::Display for SignalTransformContractError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NonFiniteParameter => "signal transform parameters must be finite",
+            Self::InvalidRemapInputRange => "remap requires input_min < input_max",
+            Self::InvalidClampRange => "clamp requires min <= max",
+        })
+    }
+}
+
+impl std::error::Error for SignalTransformContractError {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GainTransform(CanonicalF64);
+
+impl GainTransform {
+    pub fn new(gain: f64) -> Result<Self, SignalTransformContractError> {
+        Ok(Self(CanonicalF64::new(gain)?))
+    }
+
+    #[must_use]
+    pub const fn gain(self) -> f64 {
+        self.0.value()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RemapTransform {
+    input_min: CanonicalF64,
+    input_max: CanonicalF64,
+    output_start: CanonicalF64,
+    output_end: CanonicalF64,
+}
+
+impl RemapTransform {
+    pub fn new(
+        input_min: f64,
+        input_max: f64,
+        output_start: f64,
+        output_end: f64,
+    ) -> Result<Self, SignalTransformContractError> {
+        let input_min = CanonicalF64::new(input_min)?;
+        let input_max = CanonicalF64::new(input_max)?;
+        if input_min.value() >= input_max.value() {
+            return Err(SignalTransformContractError::InvalidRemapInputRange);
+        }
+        Ok(Self {
+            input_min,
+            input_max,
+            output_start: CanonicalF64::new(output_start)?,
+            output_end: CanonicalF64::new(output_end)?,
+        })
+    }
+
+    #[must_use]
+    pub const fn input_min(self) -> f64 {
+        self.input_min.value()
+    }
+    #[must_use]
+    pub const fn input_max(self) -> f64 {
+        self.input_max.value()
+    }
+    #[must_use]
+    pub const fn output_start(self) -> f64 {
+        self.output_start.value()
+    }
+    #[must_use]
+    pub const fn output_end(self) -> f64 {
+        self.output_end.value()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ClampTransform {
+    min: CanonicalF64,
+    max: CanonicalF64,
+}
+
+impl ClampTransform {
+    pub fn new(min: f64, max: f64) -> Result<Self, SignalTransformContractError> {
+        let min = CanonicalF64::new(min)?;
+        let max = CanonicalF64::new(max)?;
+        if min.value() > max.value() {
+            return Err(SignalTransformContractError::InvalidClampRange);
+        }
+        Ok(Self { min, max })
+    }
+
+    #[must_use]
+    pub const fn min(self) -> f64 {
+        self.min.value()
+    }
+    #[must_use]
+    pub const fn max(self) -> f64 {
+        self.max.value()
+    }
+}
+
+/// Generic transforms applied in declaration order during signal preparation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CompiledSignalTransform {
+    Gain(GainTransform),
+    Remap(RemapTransform),
+    Clamp(ClampTransform),
+}
+
+impl CompiledSignalTransform {
+    fn apply(self, input: f64) -> f64 {
+        match self {
+            Self::Gain(transform) => input * transform.gain(),
+            Self::Remap(transform) => {
+                let unit = (input - transform.input_min())
+                    / (transform.input_max() - transform.input_min());
+                transform.output_start()
+                    + unit * (transform.output_end() - transform.output_start())
+            }
+            Self::Clamp(transform) => input.clamp(transform.min(), transform.max()),
+        }
+    }
+}
+
+/// A complete scalar signal: one raw source plus an ordered generic transform chain.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CompiledScalarSignal {
+    pub source: RawScalarSignal,
+    pub transforms: Vec<CompiledSignalTransform>,
+}
+
+impl CompiledScalarSignal {
+    #[must_use]
+    pub const fn raw_audio(audio: AudioScalarSignal) -> Self {
+        Self {
+            source: RawScalarSignal::Audio(audio),
+            transforms: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn new(source: RawScalarSignal, transforms: Vec<CompiledSignalTransform>) -> Self {
+        Self { source, transforms }
+    }
+}
+
+/// Raw audio work needed for scalar sources, independent of signal transforms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AudioAnalysisRequirement {
     Master(AudioScalarFeature),
@@ -209,12 +392,7 @@ impl CompiledScalarSignals {
         let mut requirements = self
             .signals
             .iter()
-            .map(|signal| match signal {
-                CompiledScalarSignal::Audio(AudioScalarSignal {
-                    tap: AudioAnalysisTap::Master,
-                    feature,
-                }) => AudioAnalysisRequirement::Master(*feature),
-            })
+            .map(|signal| signal.source.audio_analysis_requirement())
             .collect::<Vec<_>>();
         requirements.sort_unstable();
         requirements.dedup();
@@ -239,8 +417,8 @@ impl ScalarSignalInterner {
         }
         debug_assert!(u32::try_from(self.signals.len()).is_ok());
         let id = ScalarSignalId::from_index(self.signals.len() as u32);
+        self.ids.insert(signal.clone(), id);
         self.signals.push(signal);
-        self.ids.insert(signal, id);
         id
     }
 
@@ -271,6 +449,31 @@ impl fmt::Display for PreparedScalarSignalError {
 }
 
 impl std::error::Error for PreparedScalarSignalError {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SignalPreparationError {
+    MissingRawFeature(AudioAnalysisRequirement),
+    NonFiniteTransformedSample,
+    IncompletePreparedSignals,
+}
+
+impl fmt::Display for SignalPreparationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingRawFeature(requirement) => {
+                write!(formatter, "missing raw scalar feature {requirement:?}")
+            }
+            Self::NonFiniteTransformedSample => {
+                formatter.write_str("signal transform produced a non-finite sample")
+            }
+            Self::IncompletePreparedSignals => {
+                formatter.write_str("scalar signal preparation did not fill every signal")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SignalPreparationError {}
 
 /// An immutable, random-access fixed-hop scalar sample series.
 #[derive(Clone, Debug)]
@@ -325,6 +528,88 @@ impl PreparedScalarSignal {
         let fraction = (elapsed % self.sample_interval) as f64 / self.sample_interval as f64;
         self.samples[index] * (1.0 - fraction) + self.samples[index + 1] * fraction
     }
+}
+
+/// Applies an ordered transform chain to one immutable raw series.
+///
+/// This deliberately allocates only the output values. The raw input remains
+/// borrowed so one analyzed feature can feed many complete scalar signals.
+pub fn prepare_transformed_scalar_signal(
+    raw: &PreparedScalarSignal,
+    transforms: &[CompiledSignalTransform],
+) -> Result<PreparedScalarSignal, SignalPreparationError> {
+    let mut values = Vec::with_capacity(raw.samples.len());
+    for &sample in &raw.samples {
+        let value = transforms
+            .iter()
+            .copied()
+            .fold(sample, |value, transform| transform.apply(value));
+        if !value.is_finite() {
+            return Err(SignalPreparationError::NonFiniteTransformedSample);
+        }
+        values.push(value);
+    }
+    PreparedScalarSignal::new(raw.start_time, raw.sample_interval, values)
+        .map_err(|_| SignalPreparationError::NonFiniteTransformedSample)
+}
+
+/// Expands raw source features into dense complete scalar signals in ID order.
+pub fn prepare_scalar_signals(
+    compiled: &CompiledScalarSignals,
+    mut raw_features: BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal>,
+) -> Result<PreparedScalarSignals, SignalPreparationError> {
+    let mut prepared = std::iter::repeat_with(|| None)
+        .take(compiled.len())
+        .collect::<Vec<Option<PreparedScalarSignal>>>();
+
+    // Prepare transformed consumers first so empty chains can move one raw
+    // series only after every borrowing consumer has finished.
+    for (id, signal) in compiled.iter() {
+        if signal.transforms.is_empty() {
+            continue;
+        }
+        let requirement = signal.source.audio_analysis_requirement();
+        let raw = raw_features
+            .get(&requirement)
+            .ok_or(SignalPreparationError::MissingRawFeature(requirement))?;
+        prepared[id.index()] = Some(prepare_transformed_scalar_signal(raw, &signal.transforms)?);
+    }
+
+    let mut remaining_empty = BTreeMap::<AudioAnalysisRequirement, usize>::new();
+    for (_, signal) in compiled
+        .iter()
+        .filter(|(_, signal)| signal.transforms.is_empty())
+    {
+        *remaining_empty
+            .entry(signal.source.audio_analysis_requirement())
+            .or_default() += 1;
+    }
+    for (id, signal) in compiled
+        .iter()
+        .filter(|(_, signal)| signal.transforms.is_empty())
+    {
+        let requirement = signal.source.audio_analysis_requirement();
+        let remaining = remaining_empty
+            .get_mut(&requirement)
+            .expect("empty signal count is established before ownership transfer");
+        *remaining -= 1;
+        prepared[id.index()] = Some(if *remaining == 0 {
+            raw_features
+                .remove(&requirement)
+                .ok_or(SignalPreparationError::MissingRawFeature(requirement))?
+        } else {
+            raw_features
+                .get(&requirement)
+                .ok_or(SignalPreparationError::MissingRawFeature(requirement))?
+                .clone()
+        });
+    }
+
+    prepared
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .map(PreparedScalarSignals::new)
+        .ok_or(SignalPreparationError::IncompletePreparedSignals)
 }
 
 /// Immutable direct-index signal storage shared by a rendering evaluation.
@@ -405,8 +690,10 @@ impl std::error::Error for EvaluationError {}
 mod tests {
     use super::{
         AudioAnalysisTap, AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal,
-        AudioSignalContractError, CompiledScalarSignal, PreparedScalarSignal,
-        PreparedScalarSignalError, ScalarSignalInterner, master_audio_nyquist_hz,
+        AudioSignalContractError, ClampTransform, CompiledScalarSignal, CompiledSignalTransform,
+        GainTransform, PreparedScalarSignal, PreparedScalarSignalError, RawScalarSignal,
+        RemapTransform, ScalarSignalInterner, SignalPreparationError, SignalTransformContractError,
+        master_audio_nyquist_hz, prepare_scalar_signals, prepare_transformed_scalar_signal,
     };
     use crate::plan_audio::{MASTER_AUDIO_SAMPLE_RATE, master_audio_nyquist_hz as plan_nyquist};
 
@@ -509,37 +796,216 @@ mod tests {
     fn interner_assigns_dense_deterministic_ids_and_requirements() {
         let band = AudioFrequencyBand::new(40.0, 160.0).expect("valid band");
         let other_band = AudioFrequencyBand::new(160.0, 500.0).expect("valid band");
-        let rms = CompiledScalarSignal::Audio(AudioScalarSignal {
+        let rms = CompiledScalarSignal::raw_audio(AudioScalarSignal {
             tap: AudioAnalysisTap::Master,
             feature: AudioScalarFeature::Rms,
         });
-        let peak = CompiledScalarSignal::Audio(AudioScalarSignal {
+        let peak = CompiledScalarSignal::raw_audio(AudioScalarSignal {
             tap: AudioAnalysisTap::Master,
             feature: AudioScalarFeature::Peak,
         });
-        let band_signal = CompiledScalarSignal::Audio(AudioScalarSignal {
+        let band_signal = CompiledScalarSignal::raw_audio(AudioScalarSignal {
             tap: AudioAnalysisTap::Master,
             feature: AudioScalarFeature::BandEnergy(band),
         });
-        let other_band_signal = CompiledScalarSignal::Audio(AudioScalarSignal {
+        let other_band_signal = CompiledScalarSignal::raw_audio(AudioScalarSignal {
             tap: AudioAnalysisTap::Master,
             feature: AudioScalarFeature::BandEnergy(other_band),
         });
         let mut interner = ScalarSignalInterner::default();
-        let rms_id = interner.intern(rms);
-        assert_eq!(rms_id, interner.intern(rms));
+        let rms_id = interner.intern(rms.clone());
+        assert_eq!(rms_id, interner.intern(rms.clone()));
         assert_eq!(interner.intern(peak).index(), 1);
-        assert_eq!(interner.intern(band_signal).index(), 2);
-        assert_eq!(interner.intern(other_band_signal).index(), 3);
+        assert_eq!(interner.intern(band_signal.clone()).index(), 2);
+        assert_eq!(interner.intern(other_band_signal.clone()).index(), 3);
         let signals = interner.finish();
         assert_eq!(signals.len(), 4);
         assert_eq!(signals.audio_analysis_requirements().iter().len(), 4);
 
         let duplicate_raw_work = super::CompiledScalarSignals {
-            signals: vec![rms, rms, band_signal, band_signal, other_band_signal],
+            signals: vec![
+                rms.clone(),
+                rms,
+                band_signal.clone(),
+                band_signal,
+                other_band_signal,
+            ],
         };
         let requirements = duplicate_raw_work.audio_analysis_requirements();
         assert_eq!(requirements.iter().len(), 3);
         assert!(requirements.requires_master_audio());
+    }
+
+    fn rms_source() -> RawScalarSignal {
+        RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::Rms,
+        })
+    }
+
+    #[test]
+    fn transforms_apply_in_declaration_order_and_remap_extrapolates() {
+        let raw = signal(10, 10, &[-1.0, 0.0, 0.5, 1.0, 2.0]);
+        let remap =
+            CompiledSignalTransform::Remap(RemapTransform::new(0.0, 1.0, 0.0, 10.0).unwrap());
+        let clamped = prepare_transformed_scalar_signal(
+            &raw,
+            &[
+                remap,
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 10.0).unwrap()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            prepare_transformed_scalar_signal(&raw, &[remap])
+                .unwrap()
+                .samples,
+            [-10.0, 0.0, 5.0, 10.0, 20.0]
+        );
+        assert_eq!(clamped.samples, [0.0, 0.0, 5.0, 10.0, 10.0]);
+
+        let input = signal(0, 1, &[2.0]);
+        let gain_then_clamp = prepare_transformed_scalar_signal(
+            &input,
+            &[
+                CompiledSignalTransform::Gain(GainTransform::new(3.0).unwrap()),
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 5.0).unwrap()),
+            ],
+        )
+        .unwrap();
+        let clamp_then_gain = prepare_transformed_scalar_signal(
+            &input,
+            &[
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 5.0).unwrap()),
+                CompiledSignalTransform::Gain(GainTransform::new(3.0).unwrap()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(gain_then_clamp.samples, [5.0]);
+        assert_eq!(clamp_then_gain.samples, [6.0]);
+    }
+
+    #[test]
+    fn remap_descends_and_transform_contracts_validate() {
+        let raw = signal(0, 1, &[0.0, 0.25, 0.5, 0.75, 1.0]);
+        let descending = prepare_transformed_scalar_signal(
+            &raw,
+            &[CompiledSignalTransform::Remap(
+                RemapTransform::new(0.0, 1.0, 10.0, 0.0).unwrap(),
+            )],
+        )
+        .unwrap();
+        assert_eq!(descending.samples, [10.0, 7.5, 5.0, 2.5, 0.0]);
+        assert_eq!(
+            GainTransform::new(f64::NAN),
+            Err(SignalTransformContractError::NonFiniteParameter)
+        );
+        assert_eq!(
+            RemapTransform::new(1.0, 1.0, 0.0, 1.0),
+            Err(SignalTransformContractError::InvalidRemapInputRange)
+        );
+        assert!(RemapTransform::new(0.0, 1.0, 5.0, 5.0).is_ok());
+        assert_eq!(
+            ClampTransform::new(1.0, 0.0),
+            Err(SignalTransformContractError::InvalidClampRange)
+        );
+        assert!(ClampTransform::new(5.0, 5.0).is_ok());
+    }
+
+    #[test]
+    fn transformed_preparation_preserves_metadata_and_rejects_overflow() {
+        let raw = signal(100, 10, &[0.0, 0.25, 0.5, 1.0]);
+        let transformed = prepare_transformed_scalar_signal(
+            &raw,
+            &[
+                CompiledSignalTransform::Gain(GainTransform::new(2.0).unwrap()),
+                CompiledSignalTransform::Remap(RemapTransform::new(0.0, 2.0, 0.0, 10.0).unwrap()),
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 8.0).unwrap()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(transformed.start_time, raw.start_time);
+        assert_eq!(transformed.sample_interval, raw.sample_interval);
+        assert_eq!(transformed.samples, [0.0, 2.5, 5.0, 8.0]);
+        assert_eq!(transformed.sample(130), 8.0);
+        assert_eq!(transformed.sample(105), 1.25);
+        assert!(matches!(
+            prepare_transformed_scalar_signal(
+                &signal(0, 1, &[f64::MAX]),
+                &[CompiledSignalTransform::Gain(
+                    GainTransform::new(f64::MAX).unwrap()
+                ),]
+            ),
+            Err(SignalPreparationError::NonFiniteTransformedSample)
+        ));
+    }
+
+    #[test]
+    fn complete_signal_identity_and_raw_requirement_sharing_are_separate() {
+        let gain_two = CompiledSignalTransform::Gain(GainTransform::new(2.0).unwrap());
+        let clamp = CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).unwrap());
+        let same_a = CompiledScalarSignal::new(rms_source(), vec![gain_two, clamp]);
+        let same_b = CompiledScalarSignal::new(rms_source(), vec![gain_two, clamp]);
+        let different_gain = CompiledScalarSignal::new(
+            rms_source(),
+            vec![CompiledSignalTransform::Gain(
+                GainTransform::new(3.0).unwrap(),
+            )],
+        );
+        let reversed = CompiledScalarSignal::new(rms_source(), vec![clamp, gain_two]);
+        let zero_a = CompiledScalarSignal::new(
+            rms_source(),
+            vec![CompiledSignalTransform::Gain(
+                GainTransform::new(-0.0).unwrap(),
+            )],
+        );
+        let zero_b = CompiledScalarSignal::new(
+            rms_source(),
+            vec![CompiledSignalTransform::Gain(
+                GainTransform::new(0.0).unwrap(),
+            )],
+        );
+        let mut interner = ScalarSignalInterner::default();
+        assert_eq!(interner.intern(same_a), interner.intern(same_b));
+        assert_ne!(interner.intern(different_gain), interner.intern(reversed));
+        assert_eq!(interner.intern(zero_a), interner.intern(zero_b));
+        let signals = interner.finish();
+        assert_eq!(signals.len(), 4);
+        assert_eq!(signals.audio_analysis_requirements().iter().len(), 1);
+    }
+
+    #[test]
+    fn one_raw_feature_prepares_multiple_complete_signals() {
+        use super::{AudioAnalysisRequirement, CompiledScalarSignals};
+        use std::collections::BTreeMap;
+        let raw = signal(0, 10, &[0.0, 0.5, 1.0]);
+        let source = rms_source();
+        let compiled = CompiledScalarSignals::from_signals(vec![
+            CompiledScalarSignal::new(source, vec![]),
+            CompiledScalarSignal::new(
+                source,
+                vec![CompiledSignalTransform::Gain(
+                    GainTransform::new(2.0).unwrap(),
+                )],
+            ),
+            CompiledScalarSignal::new(
+                source,
+                vec![CompiledSignalTransform::Gain(
+                    GainTransform::new(4.0).unwrap(),
+                )],
+            ),
+        ]);
+        let prepared = prepare_scalar_signals(
+            &compiled,
+            BTreeMap::from([(
+                AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
+                raw,
+            )]),
+        )
+        .unwrap();
+        assert_eq!(prepared.len(), 3);
+        assert_eq!(prepared.signals[0].samples, [0.0, 0.5, 1.0]);
+        assert_eq!(prepared.signals[1].samples, [0.0, 1.0, 2.0]);
+        assert_eq!(prepared.signals[2].samples, [0.0, 2.0, 4.0]);
     }
 }

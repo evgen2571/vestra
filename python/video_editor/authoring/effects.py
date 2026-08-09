@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Callable, Self, TypeVar
 
 from ._internal import _IdAllocator, _Owner, _number
-from .tracks import ScalarTrack
+from .tracks import ModulatableScalarTrack, ScalarTrack
 from .values import Color, Point, color_to_canonical
 
 
@@ -95,7 +95,7 @@ class _AmountEffect(Effect):
     """Private implementation shared only by effects with one amount track."""
 
     __slots__ = ("_amount",)
-    _amount: ScalarTrack
+    _amount: ModulatableScalarTrack
 
     @classmethod
     def _create(
@@ -103,11 +103,11 @@ class _AmountEffect(Effect):
     ) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, kind)
-        instance._amount = ScalarTrack._create(owner, amount)
+        instance._amount = ModulatableScalarTrack._create(owner, amount)
         return instance
 
     @property
-    def amount(self) -> ScalarTrack:
+    def amount(self) -> ModulatableScalarTrack:
         return self._amount
 
     def to_canonical(self) -> dict[str, object]:
@@ -136,7 +136,7 @@ class TintEffect(_AmountEffect):
     ) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "tint")
-        instance._amount = ScalarTrack._create(owner, amount)
+        instance._amount = ModulatableScalarTrack._create(owner, amount)
         instance._colour = color_to_canonical(colour)
         return instance
 
@@ -154,17 +154,17 @@ class TintEffect(_AmountEffect):
 
 class GaussianBlurEffect(Effect):
     __slots__ = ("_radius",)
-    _radius: ScalarTrack
+    _radius: ModulatableScalarTrack
 
     @classmethod
     def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "gaussian_blur")
-        instance._radius = ScalarTrack._create(owner, radius)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
         return instance
 
     @property
-    def radius(self) -> ScalarTrack:
+    def radius(self) -> ModulatableScalarTrack:
         return self._radius
 
     def to_canonical(self) -> dict[str, object]:
@@ -173,8 +173,8 @@ class GaussianBlurEffect(Effect):
 
 class DirectionalBlurEffect(Effect):
     __slots__ = ("_radius", "_angle_degrees")
-    _radius: ScalarTrack
-    _angle_degrees: ScalarTrack
+    _radius: ModulatableScalarTrack
+    _angle_degrees: ModulatableScalarTrack
 
     @classmethod
     def _create(
@@ -182,16 +182,16 @@ class DirectionalBlurEffect(Effect):
     ) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "directional_blur")
-        instance._radius = ScalarTrack._create(owner, radius)
-        instance._angle_degrees = ScalarTrack._create(owner, angle_degrees)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
+        instance._angle_degrees = ModulatableScalarTrack._create(owner, angle_degrees)
         return instance
 
     @property
-    def radius(self) -> ScalarTrack:
+    def radius(self) -> ModulatableScalarTrack:
         return self._radius
 
     @property
-    def angle_degrees(self) -> ScalarTrack:
+    def angle_degrees(self) -> ModulatableScalarTrack:
         return self._angle_degrees
 
     def to_canonical(self) -> dict[str, object]:
@@ -200,7 +200,7 @@ class DirectionalBlurEffect(Effect):
 
 class ZoomBlurEffect(Effect):
     __slots__ = ("_radius", "_samples", "_anchor", "_direction")
-    _radius: ScalarTrack
+    _radius: ModulatableScalarTrack
     _samples: int
     _anchor: Point
     _direction: ZoomBlurDirection
@@ -218,14 +218,14 @@ class ZoomBlurEffect(Effect):
             raise TypeError("direction must be ZoomBlurDirection")
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "zoom_blur")
-        instance._radius = ScalarTrack._create(owner, radius)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
         instance._samples = _integer_in_range(samples, "samples", 2, 32)
         instance._anchor = Point(anchor.x, anchor.y)
         instance._direction = direction
         return instance
 
     @property
-    def radius(self) -> ScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack: return self._radius
     @property
     def samples(self) -> int: return self._samples
     @samples.setter
@@ -250,9 +250,9 @@ class ZoomBlurEffect(Effect):
 
 class GlowEffect(Effect):
     __slots__ = ("_threshold", "_radius", "_intensity", "_colour")
-    _threshold: ScalarTrack
-    _radius: ScalarTrack
-    _intensity: ScalarTrack
+    _threshold: ModulatableScalarTrack
+    _radius: ModulatableScalarTrack
+    _intensity: ModulatableScalarTrack
     _colour: str
 
     @classmethod
@@ -260,18 +260,18 @@ class GlowEffect(Effect):
                 radius: int | float, intensity: int | float, colour: Color | str) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "glow")
-        instance._threshold = ScalarTrack._create(owner, threshold)
-        instance._radius = ScalarTrack._create(owner, radius)
-        instance._intensity = ScalarTrack._create(owner, intensity)
+        instance._threshold = ModulatableScalarTrack._create(owner, threshold)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
+        instance._intensity = ModulatableScalarTrack._create(owner, intensity)
         instance._colour = color_to_canonical(colour)
         return instance
 
     @property
-    def threshold(self) -> ScalarTrack: return self._threshold
+    def threshold(self) -> ModulatableScalarTrack: return self._threshold
     @property
-    def radius(self) -> ScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack: return self._radius
     @property
-    def intensity(self) -> ScalarTrack: return self._intensity
+    def intensity(self) -> ModulatableScalarTrack: return self._intensity
     @property
     def colour(self) -> str: return self._colour
     @colour.setter
@@ -283,30 +283,30 @@ class GlowEffect(Effect):
 
 class ChromaticAberrationEffect(Effect):
     __slots__ = ("_amount", "_angle_degrees")
-    _amount: ScalarTrack
-    _angle_degrees: ScalarTrack
+    _amount: ModulatableScalarTrack
+    _angle_degrees: ModulatableScalarTrack
 
     @classmethod
     def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
                 angle_degrees: int | float) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "chromatic_aberration")
-        instance._amount = ScalarTrack._create(owner, amount)
-        instance._angle_degrees = ScalarTrack._create(owner, angle_degrees)
+        instance._amount = ModulatableScalarTrack._create(owner, amount)
+        instance._angle_degrees = ModulatableScalarTrack._create(owner, angle_degrees)
         return instance
 
     @property
-    def amount(self) -> ScalarTrack: return self._amount
+    def amount(self) -> ModulatableScalarTrack: return self._amount
     @property
-    def angle_degrees(self) -> ScalarTrack: return self._angle_degrees
+    def angle_degrees(self) -> ModulatableScalarTrack: return self._angle_degrees
     def to_canonical(self) -> dict[str, object]:
         return {**self._canonical(), "amount": self.amount.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
 
 
 class VignetteEffect(Effect):
     __slots__ = ("_amount", "_radius", "_softness", "_colour")
-    _amount: ScalarTrack
-    _radius: ScalarTrack
+    _amount: ModulatableScalarTrack
+    _radius: ModulatableScalarTrack
     _softness: ScalarTrack
     _colour: str
 
@@ -315,16 +315,16 @@ class VignetteEffect(Effect):
                 radius: int | float, softness: int | float, colour: Color | str) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "vignette")
-        instance._amount = ScalarTrack._create(owner, amount)
-        instance._radius = ScalarTrack._create(owner, radius)
+        instance._amount = ModulatableScalarTrack._create(owner, amount)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
         instance._softness = ScalarTrack._create(owner, softness)
         instance._colour = color_to_canonical(colour)
         return instance
 
     @property
-    def amount(self) -> ScalarTrack: return self._amount
+    def amount(self) -> ModulatableScalarTrack: return self._amount
     @property
-    def radius(self) -> ScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack: return self._radius
     @property
     def softness(self) -> ScalarTrack: return self._softness
     @property
@@ -338,30 +338,30 @@ class VignetteEffect(Effect):
 
 class SharpenEffect(Effect):
     __slots__ = ("_amount", "_radius")
-    _amount: ScalarTrack
-    _radius: ScalarTrack
+    _amount: ModulatableScalarTrack
+    _radius: ModulatableScalarTrack
 
     @classmethod
     def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
                 radius: int | float) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "sharpen")
-        instance._amount = ScalarTrack._create(owner, amount)
-        instance._radius = ScalarTrack._create(owner, radius)
+        instance._amount = ModulatableScalarTrack._create(owner, amount)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
         return instance
 
     @property
-    def amount(self) -> ScalarTrack: return self._amount
+    def amount(self) -> ModulatableScalarTrack: return self._amount
     @property
-    def radius(self) -> ScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack: return self._radius
     def to_canonical(self) -> dict[str, object]:
         return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self.radius.to_canonical()}
 
 
 class ColorAdjustEffect(Effect):
     __slots__ = ("_exposure", "_gamma", "_black_point", "_white_point")
-    _exposure: ScalarTrack
-    _gamma: ScalarTrack
+    _exposure: ModulatableScalarTrack
+    _gamma: ModulatableScalarTrack
     _black_point: ScalarTrack
     _white_point: ScalarTrack
 
@@ -370,16 +370,16 @@ class ColorAdjustEffect(Effect):
                 gamma: int | float, black_point: int | float, white_point: int | float) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "color_adjust")
-        instance._exposure = ScalarTrack._create(owner, exposure)
-        instance._gamma = ScalarTrack._create(owner, gamma)
+        instance._exposure = ModulatableScalarTrack._create(owner, exposure)
+        instance._gamma = ModulatableScalarTrack._create(owner, gamma)
         instance._black_point = ScalarTrack._create(owner, black_point)
         instance._white_point = ScalarTrack._create(owner, white_point)
         return instance
 
     @property
-    def exposure(self) -> ScalarTrack: return self._exposure
+    def exposure(self) -> ModulatableScalarTrack: return self._exposure
     @property
-    def gamma(self) -> ScalarTrack: return self._gamma
+    def gamma(self) -> ModulatableScalarTrack: return self._gamma
     @property
     def black_point(self) -> ScalarTrack: return self._black_point
     @property
@@ -392,10 +392,10 @@ class ColorAdjustEffect(Effect):
 class CameraShakeEffect(Effect):
     __slots__ = ("_active_interval", "_position_amount", "_rotation_degrees", "_scale_amount", "_frequency", "_seed", "_attack", "_decay")
     _active_interval: ActiveInterval
-    _position_amount: ScalarTrack
-    _rotation_degrees: ScalarTrack
-    _scale_amount: ScalarTrack
-    _frequency: ScalarTrack
+    _position_amount: ModulatableScalarTrack
+    _rotation_degrees: ModulatableScalarTrack
+    _scale_amount: ModulatableScalarTrack
+    _frequency: ModulatableScalarTrack
     _seed: int
     _attack: float
     _decay: float
@@ -408,10 +408,10 @@ class CameraShakeEffect(Effect):
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "camera_shake")
         instance._active_interval = active_interval
-        instance._position_amount = ScalarTrack._create(owner, position_amount)
-        instance._rotation_degrees = ScalarTrack._create(owner, rotation_degrees)
-        instance._scale_amount = ScalarTrack._create(owner, scale_amount)
-        instance._frequency = ScalarTrack._create(owner, frequency)
+        instance._position_amount = ModulatableScalarTrack._create(owner, position_amount)
+        instance._rotation_degrees = ModulatableScalarTrack._create(owner, rotation_degrees)
+        instance._scale_amount = ModulatableScalarTrack._create(owner, scale_amount)
+        instance._frequency = ModulatableScalarTrack._create(owner, frequency)
         instance._seed = _integer_in_range(seed, "seed", 0, 2**64 - 1)
         instance._attack = _number(attack, "attack")
         instance._decay = _number(decay, "decay")
@@ -424,13 +424,13 @@ class CameraShakeEffect(Effect):
         if not isinstance(value, ActiveInterval): raise TypeError("active_interval must be ActiveInterval")
         self._active_interval = value
     @property
-    def position_amount(self) -> ScalarTrack: return self._position_amount
+    def position_amount(self) -> ModulatableScalarTrack: return self._position_amount
     @property
-    def rotation_degrees(self) -> ScalarTrack: return self._rotation_degrees
+    def rotation_degrees(self) -> ModulatableScalarTrack: return self._rotation_degrees
     @property
-    def scale_amount(self) -> ScalarTrack: return self._scale_amount
+    def scale_amount(self) -> ModulatableScalarTrack: return self._scale_amount
     @property
-    def frequency(self) -> ScalarTrack: return self._frequency
+    def frequency(self) -> ModulatableScalarTrack: return self._frequency
     @property
     def seed(self) -> int: return self._seed
     @seed.setter
@@ -451,9 +451,9 @@ class CameraShakeEffect(Effect):
 
 class MotionBlurEffect(Effect):
     __slots__ = ("_intensity", "_shutter_angle", "_max_radius", "_samples")
-    _intensity: ScalarTrack
-    _shutter_angle: ScalarTrack
-    _max_radius: ScalarTrack
+    _intensity: ModulatableScalarTrack
+    _shutter_angle: ModulatableScalarTrack
+    _max_radius: ModulatableScalarTrack
     _samples: int
 
     @classmethod
@@ -461,18 +461,18 @@ class MotionBlurEffect(Effect):
                 shutter_angle: int | float, max_radius: int | float, samples: int) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "motion_blur")
-        instance._intensity = ScalarTrack._create(owner, intensity)
-        instance._shutter_angle = ScalarTrack._create(owner, shutter_angle)
-        instance._max_radius = ScalarTrack._create(owner, max_radius)
+        instance._intensity = ModulatableScalarTrack._create(owner, intensity)
+        instance._shutter_angle = ModulatableScalarTrack._create(owner, shutter_angle)
+        instance._max_radius = ModulatableScalarTrack._create(owner, max_radius)
         instance._samples = _integer_in_range(samples, "samples", 2, 32)
         return instance
 
     @property
-    def intensity(self) -> ScalarTrack: return self._intensity
+    def intensity(self) -> ModulatableScalarTrack: return self._intensity
     @property
-    def shutter_angle(self) -> ScalarTrack: return self._shutter_angle
+    def shutter_angle(self) -> ModulatableScalarTrack: return self._shutter_angle
     @property
-    def max_radius(self) -> ScalarTrack: return self._max_radius
+    def max_radius(self) -> ModulatableScalarTrack: return self._max_radius
     @property
     def samples(self) -> int: return self._samples
     @samples.setter

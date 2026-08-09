@@ -11,6 +11,7 @@ mod effects;
 mod output;
 mod presets;
 mod project;
+mod signals;
 mod transitions;
 mod visual;
 
@@ -27,6 +28,10 @@ pub use effects::{Effect, ZoomBlurDirection};
 pub use output::{DurationMode, FrameRate, Output, Quality};
 pub use presets::Preset;
 pub use project::Project;
+pub use signals::{
+    AudioAnalysisTap, AudioScalarFeature, ScalarModifier, ScalarModifierOperation, ScalarProperty,
+    ScalarSignal, ScalarSignalSource, SignalTransform,
+};
 pub use transitions::{Flash, Transition};
 pub use visual::{BlendMode, Clip, Sizing, Transform, Visual, VisualSource};
 

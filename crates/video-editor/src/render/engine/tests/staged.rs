@@ -78,7 +78,23 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
     plan.encoder.audio_mix = None;
     let signal_id = plan.scalar_signals.iter().next().expect("signal ID").0;
     let layer = &mut plan.layers[0];
-    layer.start_nanos = 5_000_000_000;
+    let layer_start = video_editor_core::plan_time::to_nanos(4.0, "test layer start")
+        .expect("valid layer start");
+    let layer_end = layer_start
+        .checked_add(layer.duration_nanos)
+        .expect("test layer end fits timeline");
+    layer.start_nanos = layer_start;
+    layer.start_frame = video_editor_core::plan_time::first_frame_at_or_after(
+        layer_start,
+        plan.frame_rate,
+    )
+    .expect("valid start frame");
+    layer.end_frame = video_editor_core::plan_time::first_frame_at_or_after(
+        layer_end,
+        plan.frame_rate,
+    )
+    .expect("valid end frame");
+    layer.draw_key.start_nanos = layer_start;
     layer.effects.push(TimedEffect {
         start: 0,
         end: layer.duration_nanos,
@@ -134,8 +150,13 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
         ))
     })
     .expect("audible analysis prepares even when output mux audio is disabled");
-    let project_time = 6_000_000_000;
-    let frame_number = 42;
+    let project_time = video_editor_core::plan_time::to_nanos(5.0, "test project time")
+        .expect("valid project time");
+    let frame_number = video_editor_core::plan_time::first_frame_at_or_after(
+        project_time,
+        plan.frame_rate,
+    )
+    .expect("valid project frame");
     let active = ActiveSchedule::compile(&plan).active_at(&plan, frame_number);
     let frame = evaluate_with_context(
         &plan,
@@ -174,7 +195,7 @@ fn write_stepped_tone_wav(path: &std::path::Path, samples: usize) {
     bytes.extend_from_slice(&data_length.to_le_bytes());
     for index in 0..samples {
         let time = index as f32 / MASTER_AUDIO_SAMPLE_RATE as f32;
-        let amplitude = if time >= 5.9 { 0.25 } else { 0.0 };
+        let amplitude = if time >= 4.9 { 0.25 } else { 0.0 };
         let pcm =
             (amplitude * (2.0 * std::f32::consts::PI * 100.0 * time).sin() * f32::from(i16::MAX))
                 .round() as i16;

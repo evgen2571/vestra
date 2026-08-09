@@ -9,6 +9,7 @@ pub(super) fn validate(
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
     errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
 ) {
     let mut clip_ids = BTreeSet::new();
     for (index, clip) in visual.clips.iter().enumerate() {
@@ -71,6 +72,7 @@ pub(super) fn validate(
                 &path,
                 maximum_keyframes_per_track,
                 errors,
+                has_authored_audio,
             ),
             (_, None) => {}
         }
@@ -90,13 +92,14 @@ pub(super) fn validate(
                 }
             }
         }
-        super::tracks::validate_track(
+        super::tracks::validate_scalar_property(
             &clip.opacity,
             clip.duration,
             &format!("{path}/opacity"),
             maximum_keyframes_per_track,
             errors,
             |value| super::unit(*value),
+            has_authored_audio,
         );
         if let Some(crop) = &clip.crop {
             super::tracks::validate_track(
@@ -141,6 +144,7 @@ pub(super) fn validate(
                 &effect_path,
                 maximum_keyframes_per_track,
                 errors,
+                has_authored_audio,
             );
         }
     }
@@ -152,6 +156,7 @@ fn validate_transform(
     path: &str,
     maximum_keyframes_per_track: usize,
     errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
 ) {
     super::tracks::validate_track(
         &transform.position,
@@ -182,12 +187,26 @@ fn validate_transform(
         errors,
         |value| super::positive(value.x) && super::positive(value.y),
     );
-    super::tracks::validate_track(
+    super::tracks::validate_scalar_property(
         &transform.rotation_degrees,
         duration,
         &format!("{path}/transform/rotation_degrees"),
         maximum_keyframes_per_track,
         errors,
         |value| value.is_finite(),
+        has_authored_audio,
     );
+    for (field, modifiers) in [
+        ("position_x", &transform.component_modifiers.position_x),
+        ("position_y", &transform.component_modifiers.position_y),
+        ("scale_x", &transform.component_modifiers.scale_x),
+        ("scale_y", &transform.component_modifiers.scale_y),
+    ] {
+        super::signals::validate_modifiers(
+            modifiers,
+            &format!("{path}/transform/component_modifiers/{field}"),
+            has_authored_audio,
+            errors,
+        );
+    }
 }

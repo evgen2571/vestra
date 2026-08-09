@@ -13,6 +13,7 @@ mod intervals;
 mod limits;
 mod output;
 mod presets;
+mod signals;
 mod tracks;
 mod transitions;
 mod visual;
@@ -125,11 +126,16 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         ));
     }
     let asset_kinds = validate_assets(&project.assets, &mut errors);
+    let has_authored_audio = project
+        .audio
+        .as_ref()
+        .is_some_and(|audio| audio.tracks.iter().any(|track| !track.clips.is_empty()));
     visual::validate(
         &project.visual,
         &asset_kinds,
         limits_config.maximum_keyframes_per_track,
         &mut errors,
+        has_authored_audio,
     );
     transitions::validate(&project.visual, &mut errors);
     flashes::validate(&project.visual.flashes, &mut errors);
@@ -141,6 +147,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         limits_config.maximum_effects_per_clip,
         limits_config.maximum_keyframes_per_track,
         &mut errors,
+        has_authored_audio,
     );
     let frame_rate = project.output.frame_rate.rational().unwrap_or((1, 1));
     let frame_count = match crate::timeline::frame_count(
@@ -477,6 +484,145 @@ mod tests {
                 .iter()
                 .any(|diagnostic| diagnostic.code == "MVP-CLIP-ID")
         );
+    }
+
+    #[test]
+    fn master_signal_requires_authored_audio_and_reports_the_source_path() {
+        let mut project = example_project();
+        project.visual.clips[0].opacity.modifiers = vec![crate::project::ScalarModifier {
+            operation: crate::project::ScalarModifierOperation::Add,
+            signal: crate::project::ScalarSignal {
+                source: crate::project::ScalarSignalSource::Audio {
+                    tap: crate::project::AudioAnalysisTap::Master,
+                    feature: crate::project::AudioScalarFeature::Rms,
+                },
+                transforms: vec![],
+            },
+        }];
+        let report = validate(&project, ResourceLimits::default());
+        assert!(report.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code == "MVP-SIGNAL-MASTER-AUDIO"
+                && diagnostic.pointer.as_deref()
+                    == Some("/visual/clips/0/opacity/modifiers/0/signal/source")
+        }));
+    }
+
+    #[test]
+    fn signal_validation_points_to_the_invalid_transform_field() {
+        let mut project = example_project();
+        project.visual.clips[0].opacity.modifiers = vec![crate::project::ScalarModifier {
+            operation: crate::project::ScalarModifierOperation::Add,
+            signal: crate::project::ScalarSignal {
+                source: crate::project::ScalarSignalSource::Audio {
+                    tap: crate::project::AudioAnalysisTap::Master,
+                    feature: crate::project::AudioScalarFeature::Rms,
+                },
+                transforms: vec![crate::project::SignalTransform::Envelope {
+                    attack: 0.02,
+                    release: -0.18,
+                }],
+            },
+        }];
+
+        let report = validate(&project, ResourceLimits::default());
+        assert!(report.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code == "MVP-SIGNAL-TRANSFORM"
+                && diagnostic.pointer.as_deref()
+                    == Some("/visual/clips/0/opacity/modifiers/0/signal/transforms/0/release")
+        }));
+    }
+
+    #[test]
+    fn master_signal_accepts_authored_silence_even_when_output_audio_is_disabled() {
+        let mut project = example_project();
+        project.audio = Some(
+            serde_json::from_value(
+                json!({"tracks": [track("music", vec![clip("clip", "audio")])]}),
+            )
+            .expect("audio timeline"),
+        );
+        project.output.audio = false;
+        project.audio.as_mut().expect("audio").tracks[0].mute = true;
+        project.visual.clips[0].opacity.modifiers = vec![crate::project::ScalarModifier {
+            operation: crate::project::ScalarModifierOperation::Add,
+            signal: crate::project::ScalarSignal {
+                source: crate::project::ScalarSignalSource::Audio {
+                    tap: crate::project::AudioAnalysisTap::Master,
+                    feature: crate::project::AudioScalarFeature::Peak,
+                },
+                transforms: vec![],
+            },
+        }];
+
+        assert!(
+            !validate(&project, ResourceLimits::default())
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "MVP-SIGNAL-MASTER-AUDIO")
+        );
+    }
+
+    #[test]
+    fn signal_validation_covers_band_and_transform_contracts_at_field_paths() {
+        let cases = [
+            (
+                crate::project::AudioScalarFeature::BandEnergy {
+                    min_hz: 160.0,
+                    max_hz: 40.0,
+                },
+                vec![],
+                "/source/feature/min_hz",
+            ),
+            (
+                crate::project::AudioScalarFeature::Rms,
+                vec![crate::project::SignalTransform::Remap {
+                    input_min: 1.0,
+                    input_max: 1.0,
+                    output_start: 0.0,
+                    output_end: 1.0,
+                }],
+                "/transforms/0/input_min",
+            ),
+            (
+                crate::project::AudioScalarFeature::Rms,
+                vec![crate::project::SignalTransform::Clamp { min: 1.0, max: 0.0 }],
+                "/transforms/0/min",
+            ),
+            (
+                crate::project::AudioScalarFeature::Rms,
+                vec![crate::project::SignalTransform::ResponseCurve {
+                    x1: 0.8,
+                    y1: 0.0,
+                    x2: 0.2,
+                    y2: 1.0,
+                }],
+                "/transforms/0/x2",
+            ),
+        ];
+        for (feature, transforms, suffix) in cases {
+            let mut project = example_project();
+            project.visual.clips[0].opacity.modifiers = vec![crate::project::ScalarModifier {
+                operation: crate::project::ScalarModifierOperation::Add,
+                signal: crate::project::ScalarSignal {
+                    source: crate::project::ScalarSignalSource::Audio {
+                        tap: crate::project::AudioAnalysisTap::Master,
+                        feature,
+                    },
+                    transforms,
+                },
+            }];
+            let pointer = format!("/visual/clips/0/opacity/modifiers/0/signal{suffix}");
+            assert!(
+                validate(&project, ResourceLimits::default())
+                    .diagnostics()
+                    .iter()
+                    .any(|diagnostic| {
+                        (diagnostic.code == "MVP-SIGNAL-BAND"
+                            || diagnostic.code == "MVP-SIGNAL-TRANSFORM")
+                            && diagnostic.pointer.as_deref() == Some(pointer.as_str())
+                    },)
+            );
+        }
     }
 
     #[test]

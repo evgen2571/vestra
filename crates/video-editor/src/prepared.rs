@@ -295,7 +295,7 @@ pub struct PreparationTimings {
 }
 
 /// An owned execution snapshot. It freezes the compiled plan, decoded visual
-/// assets, resolved metadata, schedule, selected backend, and future prepared
+/// assets, resolved metadata, schedule, selected backend, and prepared
 /// audio-derived scalar buffers. Projects without signal dependencies remain
 /// visual-only and do not run FFmpeg during preparation. FFmpeg reopens source
 /// audio for each encoded video, so changing audio after preparation can later

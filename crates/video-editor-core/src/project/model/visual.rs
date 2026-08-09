@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Crop, Effect, Point, Preset, Track, optional_non_null};
+use super::{
+    Crop, Effect, Point, Preset, ScalarModifier, ScalarProperty, Track, optional_non_null,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -30,7 +32,7 @@ pub struct Clip {
     pub crop: Option<Track<Crop>>,
     #[serde(default, deserialize_with = "optional_non_null")]
     pub transform: Option<Transform>,
-    pub opacity: Track<f64>,
+    pub opacity: ScalarProperty,
     #[serde(default)]
     pub effects: Vec<Effect>,
     #[serde(default)]
@@ -57,11 +59,35 @@ pub struct Transform {
     pub anchor: Track<Point>,
     pub scale: Track<Point>,
     #[serde(default = "zero_track")]
-    pub rotation_degrees: Track<f64>,
+    pub rotation_degrees: ScalarProperty,
+    #[serde(default, skip_serializing_if = "TransformComponentModifiers::is_empty")]
+    pub component_modifiers: TransformComponentModifiers,
 }
 
-fn zero_track() -> Track<f64> {
-    Track::constant(0.0)
+fn zero_track() -> ScalarProperty {
+    ScalarProperty::from_track(Track::constant(0.0))
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransformComponentModifiers {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub position_x: Vec<ScalarModifier>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub position_y: Vec<ScalarModifier>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scale_x: Vec<ScalarModifier>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scale_y: Vec<ScalarModifier>,
+}
+
+impl TransformComponentModifiers {
+    const fn is_empty(&self) -> bool {
+        self.position_x.is_empty()
+            && self.position_y.is_empty()
+            && self.scale_x.is_empty()
+            && self.scale_y.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

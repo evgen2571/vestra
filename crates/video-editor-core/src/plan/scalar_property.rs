@@ -1,9 +1,9 @@
 //! Compiled scalar properties: authored animation plus procedural modifiers.
 
-use crate::animation::Track;
 use std::ops::{Deref, DerefMut};
 
 use super::{EvaluationContext, EvaluationError, ScalarSignalId};
+use crate::animation::Track;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarModifierOperation {
@@ -28,6 +28,91 @@ pub enum ScalarPropertyConstraint {
     NonNegative,
     /// Values at or below the floor are promoted to the floor.
     PositiveFloor { minimum: f64 },
+}
+
+/// The renderer-owned domain of each scalar target that may carry modifiers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ScalarPropertyTarget {
+    BrightnessAmount,
+    ContrastAmount,
+    SaturationAmount,
+    TintAmount,
+    GaussianBlurRadius,
+    DirectionalBlurRadius,
+    DirectionalBlurAngleDegrees,
+    ZoomBlurRadius,
+    GlowThreshold,
+    GlowRadius,
+    GlowIntensity,
+    ChromaticAberrationAmount,
+    ChromaticAberrationAngleDegrees,
+    VignetteAmount,
+    VignetteRadius,
+    SharpenAmount,
+    SharpenRadius,
+    ColorAdjustExposure,
+    ColorAdjustGamma,
+    CameraShakePositionAmount,
+    CameraShakeRotationDegrees,
+    CameraShakeScaleAmount,
+    CameraShakeFrequency,
+    MotionBlurIntensity,
+    MotionBlurShutterAngle,
+    MotionBlurMaxRadius,
+    RotationDegrees,
+}
+
+impl ScalarPropertyTarget {
+    #[must_use]
+    pub(crate) const fn constraint(self) -> ScalarPropertyConstraint {
+        match self {
+            Self::BrightnessAmount
+            | Self::ContrastAmount
+            | Self::SaturationAmount
+            | Self::DirectionalBlurAngleDegrees
+            | Self::ChromaticAberrationAngleDegrees
+            | Self::RotationDegrees => ScalarPropertyConstraint::Finite,
+            Self::TintAmount | Self::GlowThreshold | Self::VignetteAmount => {
+                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 }
+            }
+            Self::GaussianBlurRadius
+            | Self::DirectionalBlurRadius
+            | Self::ZoomBlurRadius
+            | Self::GlowRadius
+            | Self::ChromaticAberrationAmount
+            | Self::MotionBlurMaxRadius => ScalarPropertyConstraint::ClosedRange {
+                min: 0.0,
+                max: 32.0,
+            },
+            Self::GlowIntensity | Self::SharpenAmount => {
+                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 }
+            }
+            Self::VignetteRadius => ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 2.0 },
+            Self::SharpenRadius => ScalarPropertyConstraint::ClosedRange {
+                min: 0.0,
+                max: 16.0,
+            },
+            Self::ColorAdjustExposure => ScalarPropertyConstraint::ClosedRange {
+                min: -8.0,
+                max: 8.0,
+            },
+            Self::ColorAdjustGamma => ScalarPropertyConstraint::ClosedRange {
+                min: MIN_POSITIVE_PROPERTY_VALUE,
+                max: 8.0,
+            },
+            Self::CameraShakePositionAmount
+            | Self::CameraShakeRotationDegrees
+            | Self::CameraShakeScaleAmount
+            | Self::MotionBlurIntensity => ScalarPropertyConstraint::NonNegative,
+            Self::CameraShakeFrequency => ScalarPropertyConstraint::PositiveFloor {
+                minimum: MIN_POSITIVE_PROPERTY_VALUE,
+            },
+            Self::MotionBlurShutterAngle => ScalarPropertyConstraint::ClosedRange {
+                min: 0.0,
+                max: 360.0,
+            },
+        }
+    }
 }
 
 impl ScalarPropertyConstraint {
@@ -77,6 +162,11 @@ impl CompiledScalarProperty {
     #[must_use]
     pub fn has_modifiers(&self) -> bool {
         !self.modifiers.is_empty()
+    }
+
+    #[must_use]
+    pub const fn authored_keyframe_count(&self) -> usize {
+        self.authored_track.keyframes.len()
     }
 
     /// `authored_time` is the owner's local animation coordinate; `project_time` is absolute.

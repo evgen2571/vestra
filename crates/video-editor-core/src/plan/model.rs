@@ -313,9 +313,9 @@ impl CompiledEffect {
             | Self::Saturation { amount }
             | Self::Tint { amount, .. }
             | Self::GaussianBlur { radius: amount }
-            | Self::ZoomBlur { radius: amount, .. } => amount.keyframes.len() as u64,
+            | Self::ZoomBlur { radius: amount, .. } => amount.authored_keyframe_count() as u64,
             Self::Sharpen { amount, radius } => {
-                amount.keyframes.len() as u64 + radius.keyframes.len() as u64
+                amount.authored_keyframe_count() as u64 + radius.authored_keyframe_count() as u64
             }
             Self::DirectionalBlur {
                 radius,
@@ -324,16 +324,19 @@ impl CompiledEffect {
             | Self::ChromaticAberration {
                 amount: radius,
                 angle_degrees,
-            } => radius.keyframes.len() as u64 + angle_degrees.keyframes.len() as u64,
+            } => {
+                radius.authored_keyframe_count() as u64
+                    + angle_degrees.authored_keyframe_count() as u64
+            }
             Self::Glow {
                 threshold,
                 radius,
                 intensity,
                 ..
             } => {
-                threshold.keyframes.len() as u64
-                    + radius.keyframes.len() as u64
-                    + intensity.keyframes.len() as u64
+                threshold.authored_keyframe_count() as u64
+                    + radius.authored_keyframe_count() as u64
+                    + intensity.authored_keyframe_count() as u64
             }
             Self::Vignette {
                 amount,
@@ -341,8 +344,8 @@ impl CompiledEffect {
                 softness,
                 ..
             } => {
-                amount.keyframes.len() as u64
-                    + radius.keyframes.len() as u64
+                amount.authored_keyframe_count() as u64
+                    + radius.authored_keyframe_count() as u64
                     + softness.keyframes.len() as u64
             }
             Self::ColorAdjust {
@@ -351,8 +354,8 @@ impl CompiledEffect {
                 black_point,
                 white_point,
             } => {
-                exposure.keyframes.len() as u64
-                    + gamma.keyframes.len() as u64
+                exposure.authored_keyframe_count() as u64
+                    + gamma.authored_keyframe_count() as u64
                     + black_point.keyframes.len() as u64
                     + white_point.keyframes.len() as u64
             }
@@ -363,10 +366,10 @@ impl CompiledEffect {
                 frequency,
                 ..
             } => {
-                position_amount.keyframes.len() as u64
-                    + rotation_degrees.keyframes.len() as u64
-                    + scale_amount.keyframes.len() as u64
-                    + frequency.keyframes.len() as u64
+                position_amount.authored_keyframe_count() as u64
+                    + rotation_degrees.authored_keyframe_count() as u64
+                    + scale_amount.authored_keyframe_count() as u64
+                    + frequency.authored_keyframe_count() as u64
             }
             Self::MotionBlur {
                 intensity,
@@ -374,9 +377,9 @@ impl CompiledEffect {
                 max_radius,
                 ..
             } => {
-                intensity.keyframes.len() as u64
-                    + shutter_angle.keyframes.len() as u64
-                    + max_radius.keyframes.len() as u64
+                intensity.authored_keyframe_count() as u64
+                    + shutter_angle.authored_keyframe_count() as u64
+                    + max_radius.authored_keyframe_count() as u64
             }
         }
     }

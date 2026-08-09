@@ -36,7 +36,7 @@ mod time {
 /// Transitional facade for compiler submodules while track compilation is
 /// owned by `video-editor-core`.
 mod tracks {
-    pub use crate::plan_tracks::{compile, degrees_to_radians, interpolation};
+    pub use crate::plan_tracks::{compile, interpolation};
 }
 
 use crate::plan_time::{effective_dimensions, first_frame_at_or_after, to_nanos};

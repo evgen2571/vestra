@@ -864,6 +864,7 @@ impl<'a> EvaluationContext<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvaluationError {
     MissingScalarSignal(ScalarSignalId),
+    NonFiniteScalarProperty,
 }
 
 impl fmt::Display for EvaluationError {
@@ -872,6 +873,7 @@ impl fmt::Display for EvaluationError {
             Self::MissingScalarSignal(id) => {
                 write!(formatter, "missing prepared scalar signal {id:?}")
             }
+            Self::NonFiniteScalarProperty => write!(formatter, "non-finite scalar property value"),
         }
     }
 }

@@ -143,24 +143,24 @@ pub fn evaluate(
             amount: amount.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::Contrast { amount } => EvaluatedEffect::Contrast {
-            amount: amount.evaluate(authored_time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::Saturation { amount } => EvaluatedEffect::Saturation {
-            amount: amount.evaluate(authored_time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::Tint { colour, amount } => EvaluatedEffect::Tint {
             colour: *colour,
-            amount: amount.evaluate(authored_time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::GaussianBlur { radius } => EvaluatedEffect::GaussianBlur {
-            radius: radius.evaluate(authored_time),
+            radius: radius.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::DirectionalBlur {
             radius,
             angle_degrees,
         } => EvaluatedEffect::DirectionalBlur {
-            radius: radius.evaluate(authored_time),
-            angle_degrees: angle_degrees.evaluate(authored_time),
+            radius: radius.evaluate(authored_time, project_time, context)?,
+            angle_degrees: angle_degrees.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::ZoomBlur {
             radius,
@@ -168,7 +168,7 @@ pub fn evaluate(
             anchor,
             direction,
         } => EvaluatedEffect::ZoomBlur {
-            radius: radius.evaluate(authored_time),
+            radius: radius.evaluate(authored_time, project_time, context)?,
             samples: *samples,
             anchor: *anchor,
             direction: *direction,
@@ -179,17 +179,17 @@ pub fn evaluate(
             intensity,
             colour,
         } => EvaluatedEffect::Glow {
-            threshold: threshold.evaluate(authored_time),
-            radius: radius.evaluate(authored_time),
-            intensity: intensity.evaluate(authored_time),
+            threshold: threshold.evaluate(authored_time, project_time, context)?,
+            radius: radius.evaluate(authored_time, project_time, context)?,
+            intensity: intensity.evaluate(authored_time, project_time, context)?,
             colour: *colour,
         },
         CompiledEffect::ChromaticAberration {
             amount,
             angle_degrees,
         } => EvaluatedEffect::ChromaticAberration {
-            amount: amount.evaluate(authored_time),
-            angle_degrees: angle_degrees.evaluate(authored_time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            angle_degrees: angle_degrees.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::Vignette {
             amount,
@@ -197,14 +197,14 @@ pub fn evaluate(
             softness,
             colour,
         } => EvaluatedEffect::Vignette {
-            amount: amount.evaluate(authored_time),
-            radius: radius.evaluate(authored_time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            radius: radius.evaluate(authored_time, project_time, context)?,
             softness: softness.evaluate(authored_time),
             colour: *colour,
         },
         CompiledEffect::Sharpen { amount, radius } => EvaluatedEffect::Sharpen {
-            amount: amount.evaluate(authored_time),
-            radius: radius.evaluate(authored_time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            radius: radius.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::ColorAdjust {
             exposure,
@@ -212,8 +212,8 @@ pub fn evaluate(
             black_point,
             white_point,
         } => EvaluatedEffect::ColorAdjust {
-            exposure: exposure.evaluate(authored_time),
-            gamma: gamma.evaluate(authored_time),
+            exposure: exposure.evaluate(authored_time, project_time, context)?,
+            gamma: gamma.evaluate(authored_time, project_time, context)?,
             black_point: black_point.evaluate(authored_time),
             white_point: white_point.evaluate(authored_time),
         },
@@ -227,10 +227,12 @@ pub fn evaluate(
             decay,
         } => EvaluatedEffect::CameraShake {
             local_time: authored_time,
-            position_amount: position_amount.evaluate(authored_time),
-            rotation_radians: rotation_degrees.evaluate(authored_time).to_radians(),
-            scale_amount: scale_amount.evaluate(authored_time),
-            frequency: frequency.evaluate(authored_time),
+            position_amount: position_amount.evaluate(authored_time, project_time, context)?,
+            rotation_radians: rotation_degrees
+                .evaluate(authored_time, project_time, context)?
+                .to_radians(),
+            scale_amount: scale_amount.evaluate(authored_time, project_time, context)?,
+            frequency: frequency.evaluate(authored_time, project_time, context)?,
             seed: *seed,
             attack: *attack,
             decay: *decay,
@@ -243,10 +245,100 @@ pub fn evaluate(
         } => EvaluatedEffect::MotionBlur {
             radius: 0.0,
             angle_degrees: 0.0,
-            intensity: intensity.evaluate(authored_time),
-            shutter_angle: shutter_angle.evaluate(authored_time),
-            max_radius: max_radius.evaluate(authored_time),
+            intensity: intensity.evaluate(authored_time, project_time, context)?,
+            shutter_angle: shutter_angle.evaluate(authored_time, project_time, context)?,
+            max_radius: max_radius.evaluate(authored_time, project_time, context)?,
             samples: *samples,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        animation::{Interpolation, Keyframe, Track},
+        plan::{
+            CompiledScalarModifier, CompiledScalarProperty, PreparedScalarSignal,
+            PreparedScalarSignals, ScalarModifierOperation, ScalarPropertyConstraint,
+            ScalarSignalId,
+        },
+    };
+
+    fn property(
+        track: Track<f64>,
+        operation: ScalarModifierOperation,
+        signal: u32,
+        constraint: ScalarPropertyConstraint,
+    ) -> CompiledScalarProperty {
+        CompiledScalarProperty {
+            authored_track: track,
+            modifiers: vec![CompiledScalarModifier {
+                operation,
+                signal: ScalarSignalId::new(signal),
+            }],
+            constraint,
+        }
+    }
+
+    #[test]
+    fn glow_uses_effect_local_animation_time_and_project_signal_time() {
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(10_000_000_000, 1_000_000_000, vec![0.0, 0.0, 1.0])
+                .expect("signal"),
+        ]);
+        let effect = CompiledEffect::Glow {
+            threshold: CompiledScalarProperty::authored(Track::new(0.5)),
+            radius: CompiledScalarProperty::authored(Track::new(2.0)),
+            intensity: property(
+                Track {
+                    base_value: 1.0,
+                    keyframes: vec![Keyframe {
+                        time: 2_000_000_000,
+                        value: 2.0,
+                        interpolation: Interpolation::Linear,
+                    }],
+                },
+                ScalarModifierOperation::Add,
+                0,
+                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 },
+            ),
+            colour: [255, 255, 255, 255],
+        };
+        let evaluated = evaluate(
+            &effect,
+            2_000_000_000,
+            12_000_000_000,
+            &EvaluationContext::new(&signals),
+        )
+        .expect("effect");
+        assert!(matches!(evaluated, EvaluatedEffect::Glow { intensity, .. } if intensity == 3.0));
+    }
+
+    #[test]
+    fn camera_shake_rotation_modifier_operates_in_degrees_before_conversion() {
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(0, 1_000_000_000, vec![10.0]).expect("signal"),
+        ]);
+        let effect = CompiledEffect::CameraShake {
+            position_amount: CompiledScalarProperty::authored(Track::new(0.0)),
+            rotation_degrees: property(
+                Track::new(30.0),
+                ScalarModifierOperation::Add,
+                0,
+                ScalarPropertyConstraint::NonNegative,
+            ),
+            scale_amount: CompiledScalarProperty::authored(Track::new(0.0)),
+            frequency: CompiledScalarProperty::authored(Track::new(1.0)),
+            seed: 0,
+            attack: 0.0,
+            decay: 0.0,
+        };
+        let evaluated = evaluate(&effect, 0, 0, &EvaluationContext::new(&signals)).expect("effect");
+        assert!(matches!(
+            evaluated,
+            EvaluatedEffect::CameraShake { rotation_radians, .. }
+                if (rotation_radians - 40.0_f64.to_radians()).abs() < 1e-12
+        ));
+    }
 }

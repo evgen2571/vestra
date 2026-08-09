@@ -13,15 +13,19 @@ use crate::{
     animation::Track,
     domain::Point,
     plan::{
-        ActiveSchedule, CompileOptions, CompiledEffect, CompiledSizing, CompiledVisualSource,
-        EvaluatedEffect, EvaluatedFrame, RenderPlan, ScheduleAction, ScheduledItem, TimedEffect,
-        compile,
+        ActiveSchedule, CompileOptions, CompiledEffect, CompiledScalarProperty, CompiledSizing,
+        CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, RenderPlan, ScheduleAction,
+        ScheduledItem, TimedEffect, compile,
     },
     project::{ValidationOptions, load_and_validate},
     render::{CpuBackend, effects::effect_pass_plan},
 };
 use bytemuck::Zeroable;
 use image::RgbaImage;
+
+fn scalar(track: Track<f64>) -> CompiledScalarProperty {
+    CompiledScalarProperty::authored(track)
+}
 
 fn evaluated_effect_pass_count(frame: &EvaluatedFrame) -> usize {
     frame
@@ -108,9 +112,9 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
         start: 0,
         end: u128::MAX,
         effect: CompiledEffect::Glow {
-            threshold: Track::new(0.4),
-            radius: Track::new(2.0),
-            intensity: Track::new(0.8),
+            threshold: scalar(Track::new(0.4)),
+            radius: scalar(Track::new(2.0)),
+            intensity: scalar(Track::new(0.8)),
             colour: [255, 170, 60, 255],
         },
         dependency: crate::plan::TemporalDependency::Static,
@@ -403,8 +407,8 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
         start: 0,
         end: u128::MAX,
         effect: CompiledEffect::Vignette {
-            amount: Track::new(0.25),
-            radius: Track::new(0.55),
+            amount: scalar(Track::new(0.25)),
+            radius: scalar(Track::new(0.55)),
             softness: Track::new(0.2),
             colour: [0, 255, 1, 255],
         },
@@ -667,8 +671,8 @@ fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
                 start: 0,
                 end: u128::MAX,
                 effect: CompiledEffect::Vignette {
-                    amount: Track::new(0.18),
-                    radius: Track::new(0.72),
+                    amount: scalar(Track::new(0.18)),
+                    radius: scalar(Track::new(0.72)),
                     softness: Track::new(0.35),
                     colour: [0, 0, 0, 255],
                 },
@@ -761,21 +765,21 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
         plan.layers[*red].transform.position = Track::new(Point { x: 0.47, y: 0.54 });
         plan.layers[*red].transform.anchor = Track::new(Point { x: 0.31, y: 0.67 });
         plan.layers[*red].transform.scale = Track::new(Point { x: 0.79, y: 1.13 });
-        plan.layers[*red].transform.rotation_radians = Track::new(0.31);
+        plan.layers[*red].transform.rotation_degrees = scalar(Track::new(0.31_f64.to_degrees()));
         plan.layers[*red].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.63));
         plan.layers[*red].effects = vec![
             CompiledEffect::Brightness {
                 amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.08)),
             },
             CompiledEffect::Contrast {
-                amount: Track::new(0.82),
+                amount: scalar(Track::new(0.82)),
             },
             CompiledEffect::Saturation {
-                amount: Track::new(0.68),
+                amount: scalar(Track::new(0.68)),
             },
             CompiledEffect::Tint {
                 colour: [28, 156, 231, 255],
-                amount: Track::new(0.19),
+                amount: scalar(Track::new(0.19)),
             },
         ]
         .into_iter()
@@ -901,9 +905,9 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
         start: 0,
         end: u128::MAX,
         effect: CompiledEffect::Glow {
-            threshold: Track::new(0.4),
-            radius: Track::new(2.0),
-            intensity: Track::new(0.8),
+            threshold: scalar(Track::new(0.4)),
+            radius: scalar(Track::new(2.0)),
+            intensity: scalar(Track::new(0.8)),
             colour: [255, 170, 60, 255],
         },
         dependency: crate::plan::TemporalDependency::Static,

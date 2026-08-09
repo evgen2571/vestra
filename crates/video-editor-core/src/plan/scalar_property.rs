@@ -1,6 +1,7 @@
 //! Compiled scalar properties: authored animation plus procedural modifiers.
 
 use crate::animation::Track;
+use std::ops::{Deref, DerefMut};
 
 use super::{EvaluationContext, EvaluationError, ScalarSignalId};
 
@@ -19,18 +20,32 @@ pub struct CompiledScalarModifier {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ScalarPropertyConstraint {
-    Unconstrained,
-    Clamp { min: f64, max: f64 },
+    /// Accept any finite scalar value.
+    Finite,
+    /// Constrain the final property value to an inclusive interval.
+    ClosedRange { min: f64, max: f64 },
+    /// Zero is a valid value, but negative values are not.
+    NonNegative,
+    /// Values at or below the floor are promoted to the floor.
+    PositiveFloor { minimum: f64 },
 }
 
 impl ScalarPropertyConstraint {
-    const fn apply(self, value: f64) -> f64 {
-        match self {
-            Self::Unconstrained => value,
-            Self::Clamp { min, max } => value.clamp(min, max),
+    pub(crate) fn apply(self, value: f64) -> Result<f64, EvaluationError> {
+        if !value.is_finite() {
+            return Err(EvaluationError::NonFiniteScalarProperty);
         }
+        Ok(match self {
+            Self::Finite => value,
+            Self::ClosedRange { min, max } => value.clamp(min, max),
+            Self::NonNegative => value.max(0.0),
+            Self::PositiveFloor { minimum } => value.max(minimum),
+        })
     }
 }
+
+/// The smallest renderer-meaningful strictly-positive visual scalar.
+pub const MIN_POSITIVE_PROPERTY_VALUE: f64 = 1e-6;
 
 /// A scalar in its authored/public unit, evaluated with separate local and project times.
 #[derive(Clone, Debug)]
@@ -46,7 +61,7 @@ impl CompiledScalarProperty {
         Self {
             authored_track,
             modifiers: Vec::new(),
-            constraint: ScalarPropertyConstraint::Unconstrained,
+            constraint: ScalarPropertyConstraint::Finite,
         }
     }
 
@@ -73,9 +88,19 @@ impl CompiledScalarProperty {
     ) -> Result<f64, EvaluationError> {
         let mut value = self.authored_track.evaluate(authored_time);
         if self.modifiers.is_empty() {
-            return Ok(self.constraint.apply(value));
+            return self.constraint.apply(value);
         }
-        for modifier in &self.modifiers {
+        value = Self::apply_modifiers(value, &self.modifiers, project_time, context)?;
+        self.constraint.apply(value)
+    }
+
+    pub fn apply_modifiers(
+        mut value: f64,
+        modifiers: &[CompiledScalarModifier],
+        project_time: u128,
+        context: &EvaluationContext<'_>,
+    ) -> Result<f64, EvaluationError> {
+        for modifier in modifiers {
             let signal = context.sample_scalar(modifier.signal, project_time)?;
             value = match modifier.operation {
                 ScalarModifierOperation::Replace => signal,
@@ -83,7 +108,21 @@ impl CompiledScalarProperty {
                 ScalarModifierOperation::Multiply => value * signal,
             };
         }
-        Ok(self.constraint.apply(value))
+        Ok(value)
+    }
+}
+
+impl Deref for CompiledScalarProperty {
+    type Target = Track<f64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.authored_track
+    }
+}
+
+impl DerefMut for CompiledScalarProperty {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.authored_track
     }
 }
 
@@ -113,7 +152,7 @@ mod tests {
         CompiledScalarProperty {
             authored_track: Track::new(2.0),
             modifiers,
-            constraint: ScalarPropertyConstraint::Unconstrained,
+            constraint: ScalarPropertyConstraint::Finite,
         }
     }
 
@@ -187,7 +226,7 @@ mod tests {
                 operation: ScalarModifierOperation::Add,
                 signal: ScalarSignalId::new(0),
             }],
-            constraint: ScalarPropertyConstraint::Unconstrained,
+            constraint: ScalarPropertyConstraint::Finite,
         };
         assert_eq!(
             timing.evaluate(1_000_000_000, 2_000_000_000, &context),
@@ -205,7 +244,7 @@ mod tests {
                     signal: ScalarSignalId::new(2),
                 },
             ],
-            constraint: ScalarPropertyConstraint::Clamp { min: 0.0, max: 1.0 },
+            constraint: ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
         };
         assert_eq!(constrained.evaluate(0, 0, &context), Ok(0.9));
     }
@@ -224,7 +263,7 @@ mod tests {
                 operation: ScalarModifierOperation::Replace,
                 signal: ScalarSignalId::new(0),
             }],
-            constraint: ScalarPropertyConstraint::Unconstrained,
+            constraint: ScalarPropertyConstraint::Finite,
         };
         // A clip-local time of one second must not select a different point in
         // the project-time feature series.
@@ -245,6 +284,61 @@ mod tests {
             }])
             .evaluate(0, 0, &context),
             Err(EvaluationError::MissingScalarSignal(ScalarSignalId::new(0)))
+        );
+    }
+
+    #[test]
+    fn applies_closed_nonnegative_and_positive_property_domains_after_modifiers() {
+        let signals = context(vec![vec![-1.0], vec![10.0], vec![0.0], vec![0.000_01]]);
+        let context = EvaluationContext::new(&signals);
+        let constrained = |constraint, signal| CompiledScalarProperty {
+            authored_track: Track::new(0.5),
+            modifiers: vec![CompiledScalarModifier {
+                operation: ScalarModifierOperation::Replace,
+                signal: ScalarSignalId::new(signal),
+            }],
+            constraint,
+        };
+
+        assert_eq!(
+            constrained(
+                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
+                0
+            )
+            .evaluate(0, 0, &context),
+            Ok(0.0)
+        );
+        assert_eq!(
+            constrained(
+                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 },
+                1
+            )
+            .evaluate(0, 0, &context),
+            Ok(4.0)
+        );
+        assert_eq!(
+            constrained(ScalarPropertyConstraint::NonNegative, 0).evaluate(0, 0, &context),
+            Ok(0.0)
+        );
+        assert_eq!(
+            constrained(
+                ScalarPropertyConstraint::PositiveFloor {
+                    minimum: super::MIN_POSITIVE_PROPERTY_VALUE,
+                },
+                2,
+            )
+            .evaluate(0, 0, &context),
+            Ok(super::MIN_POSITIVE_PROPERTY_VALUE)
+        );
+        assert_eq!(
+            constrained(
+                ScalarPropertyConstraint::PositiveFloor {
+                    minimum: super::MIN_POSITIVE_PROPERTY_VALUE,
+                },
+                3,
+            )
+            .evaluate(0, 0, &context),
+            Ok(0.000_01)
         );
     }
 }

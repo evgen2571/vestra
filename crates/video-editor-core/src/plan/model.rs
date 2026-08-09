@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::plan::{AudioAnalysisRequirements, CompiledScalarProperty, CompiledScalarSignals};
+use crate::plan::{
+    AudioAnalysisRequirements, CompiledScalarModifier, CompiledScalarProperty,
+    CompiledScalarSignals,
+};
 use crate::{
     animation::Track,
     domain::{Crop, Point},
@@ -164,9 +167,14 @@ pub enum CompiledVisualSource {
 #[derive(Clone, Debug)]
 pub struct CompiledTransformTracks {
     pub position: Track<Point>,
+    pub position_x_modifiers: Vec<CompiledScalarModifier>,
+    pub position_y_modifiers: Vec<CompiledScalarModifier>,
     pub anchor: Track<Point>,
     pub scale: Track<Point>,
-    pub rotation_radians: Track<f64>,
+    pub scale_x_modifiers: Vec<CompiledScalarModifier>,
+    pub scale_y_modifiers: Vec<CompiledScalarModifier>,
+    /// Author-facing degrees; conversion happens only after scalar modifiers run.
+    pub rotation_degrees: CompiledScalarProperty,
 }
 
 #[derive(Clone, Debug)]
@@ -201,67 +209,67 @@ pub enum CompiledEffect {
         amount: CompiledScalarProperty,
     },
     Contrast {
-        amount: Track<f64>,
+        amount: CompiledScalarProperty,
     },
     Saturation {
-        amount: Track<f64>,
+        amount: CompiledScalarProperty,
     },
     Tint {
         colour: [u8; 4],
-        amount: Track<f64>,
+        amount: CompiledScalarProperty,
     },
     GaussianBlur {
-        radius: Track<f64>,
+        radius: CompiledScalarProperty,
     },
     DirectionalBlur {
-        radius: Track<f64>,
-        angle_degrees: Track<f64>,
+        radius: CompiledScalarProperty,
+        angle_degrees: CompiledScalarProperty,
     },
     ZoomBlur {
-        radius: Track<f64>,
+        radius: CompiledScalarProperty,
         samples: u8,
         anchor: Point,
         direction: crate::project::ZoomBlurDirection,
     },
     Glow {
-        threshold: Track<f64>,
-        radius: Track<f64>,
-        intensity: Track<f64>,
+        threshold: CompiledScalarProperty,
+        radius: CompiledScalarProperty,
+        intensity: CompiledScalarProperty,
         colour: [u8; 4],
     },
     ChromaticAberration {
-        amount: Track<f64>,
-        angle_degrees: Track<f64>,
+        amount: CompiledScalarProperty,
+        angle_degrees: CompiledScalarProperty,
     },
     Vignette {
-        amount: Track<f64>,
-        radius: Track<f64>,
+        amount: CompiledScalarProperty,
+        radius: CompiledScalarProperty,
         softness: Track<f64>,
         colour: [u8; 4],
     },
     Sharpen {
-        amount: Track<f64>,
-        radius: Track<f64>,
+        amount: CompiledScalarProperty,
+        radius: CompiledScalarProperty,
     },
     ColorAdjust {
-        exposure: Track<f64>,
-        gamma: Track<f64>,
+        exposure: CompiledScalarProperty,
+        gamma: CompiledScalarProperty,
         black_point: Track<f64>,
         white_point: Track<f64>,
     },
     CameraShake {
-        position_amount: Track<f64>,
-        rotation_degrees: Track<f64>,
-        scale_amount: Track<f64>,
-        frequency: Track<f64>,
+        position_amount: CompiledScalarProperty,
+        rotation_degrees: CompiledScalarProperty,
+        scale_amount: CompiledScalarProperty,
+        frequency: CompiledScalarProperty,
         seed: u64,
         attack: f64,
         decay: f64,
     },
     MotionBlur {
-        intensity: Track<f64>,
-        shutter_angle: Track<f64>,
-        max_radius: Track<f64>,
+        intensity: CompiledScalarProperty,
+        shutter_angle: CompiledScalarProperty,
+        max_radius: CompiledScalarProperty,
         samples: u8,
     },
 }

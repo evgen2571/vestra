@@ -96,7 +96,7 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
                     operation: ScalarModifierOperation::Add,
                     signal: signal_id,
                 }],
-                constraint: ScalarPropertyConstraint::Unconstrained,
+                constraint: ScalarPropertyConstraint::Finite,
             },
         },
         dependency: TemporalDependency::Dynamic,

@@ -28,7 +28,7 @@ pub(super) fn record(
             + track_keyframe_count(&layer.transform.position)
             + track_keyframe_count(&layer.transform.anchor)
             + track_keyframe_count(&layer.transform.scale)
-            + track_keyframe_count(&layer.transform.rotation_radians)
+            + track_keyframe_count(&layer.transform.rotation_degrees.authored_track)
             + layer
                 .transform_contributions
                 .iter()

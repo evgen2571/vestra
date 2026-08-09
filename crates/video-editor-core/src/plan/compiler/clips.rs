@@ -78,7 +78,15 @@ pub(super) fn compile(
         source,
         transform: compile_transform(clip)?,
         transform_contributions: Vec::new(),
-        opacity: tracks::compile(&clip.opacity, &clip.id)?,
+        // Opacity is constrained only after generated transition/preset
+        // contributions are applied during evaluation. Clamping inside the
+        // scalar property would change the required ordering once modifiers
+        // are present: authored -> modifiers -> generated contributions ->
+        // final target constraint.
+        opacity: crate::plan::CompiledScalarProperty::authored(tracks::compile(
+            &clip.opacity,
+            &clip.id,
+        )?),
         opacity_contributions: Vec::new(),
         effects,
         blend_mode: clip.blend_mode,

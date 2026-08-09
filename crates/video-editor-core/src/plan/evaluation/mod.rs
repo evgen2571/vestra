@@ -4,8 +4,8 @@ use crate::{
     animation::Transform2D,
     domain::Crop,
     plan::{
-        ColourTransform, CompiledSizing, CompiledVisualSource, RenderPlan, ScheduledItem,
-        TemporalDependency,
+        ColourTransform, CompiledSizing, CompiledVisualSource, EvaluationContext, EvaluationError,
+        RenderPlan, ScheduledItem, TemporalDependency,
     },
 };
 
@@ -61,14 +61,37 @@ pub enum EvaluatedSource {
     },
 }
 
-#[must_use]
-pub fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> EvaluatedFrame {
+/// Evaluates a plan with no prepared procedural resources.
+///
+/// Normal rendering uses [`evaluate_with_context`] so a missing runtime signal
+/// remains a diagnosable error instead of an implicit fallback.
+pub fn evaluate(
+    plan: &RenderPlan,
+    active: &[ScheduledItem],
+    project_time: u128,
+) -> Result<EvaluatedFrame, EvaluationError> {
+    let signals = crate::plan::PreparedScalarSignals::empty();
+    evaluate_with_context(
+        plan,
+        active,
+        project_time,
+        &EvaluationContext::new(&signals),
+    )
+}
+
+/// Evaluates a plan using explicitly supplied immutable runtime resources.
+pub fn evaluate_with_context(
+    plan: &RenderPlan,
+    active: &[ScheduledItem],
+    project_time: u128,
+    context: &EvaluationContext<'_>,
+) -> Result<EvaluatedFrame, EvaluationError> {
     let mut layers = Vec::with_capacity(active.len());
     let mut evaluated_track_count = 0;
     for ScheduledItem(index) in active {
         let layer = &plan.layers[*index];
-        let relative = time.saturating_sub(layer.start_nanos);
-        let mut opacity = layer.opacity.evaluate(relative);
+        let relative = project_time.saturating_sub(layer.start_nanos);
+        let mut opacity = layer.opacity.evaluate(relative, project_time, context)?;
         evaluated_track_count += 1;
         for track in &layer.opacity_contributions {
             opacity *= track.evaluate(relative);
@@ -104,9 +127,14 @@ pub fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> Eval
             .filter(|effect| effect.active_at(relative))
             .map(|effect| {
                 evaluated_track_count += 1;
-                effects::evaluate(&effect.effect, relative - effect.start)
+                effects::evaluate(
+                    &effect.effect,
+                    relative - effect.start,
+                    project_time,
+                    context,
+                )
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()?;
         for effect in &mut effects {
             if let EvaluatedEffect::MotionBlur {
                 radius,
@@ -175,8 +203,8 @@ pub fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> Eval
             blend_mode: layer.blend_mode,
         });
     }
-    EvaluatedFrame {
-        time,
+    Ok(EvaluatedFrame {
+        time: project_time,
         background: plan.canvas.background,
         width: plan.canvas.width,
         height: plan.canvas.height,
@@ -184,9 +212,16 @@ pub fn evaluate(plan: &RenderPlan, active: &[ScheduledItem], time: u128) -> Eval
         post_effects: plan
             .post_effects
             .iter()
-            .filter(|effect| effect.active_at(time))
-            .map(|effect| effects::evaluate(&effect.effect, time - effect.start))
-            .collect(),
+            .filter(|effect| effect.active_at(project_time))
+            .map(|effect| {
+                effects::evaluate(
+                    &effect.effect,
+                    project_time - effect.start,
+                    project_time,
+                    context,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         evaluated_track_count,
-    }
+    })
 }

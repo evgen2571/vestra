@@ -9,7 +9,9 @@ pub(super) fn compile(
     Ok(match effect {
         crate::project::Effect::Brightness { amount, .. } => {
             crate::plan::CompiledEffect::Brightness {
-                amount: super::tracks::compile(amount, id)?,
+                amount: crate::plan::CompiledScalarProperty::authored(super::tracks::compile(
+                    amount, id,
+                )?),
             }
         }
         crate::project::Effect::Contrast { amount, .. } => crate::plan::CompiledEffect::Contrast {

@@ -3,7 +3,7 @@
 use crate::{
     Diagnostic,
     animation::{Interpolation, Keyframe, Track},
-    plan::{CompiledLayer, CompiledVisualSource, DrawKey},
+    plan::{CompiledLayer, CompiledScalarProperty, CompiledVisualSource, DrawKey},
     project::{BlendMode, Flash, parse_colour},
 };
 
@@ -83,7 +83,10 @@ pub(super) fn compile(
         source: CompiledVisualSource::SolidColor { colour },
         transform: canvas_transform(),
         transform_contributions: Vec::new(),
-        opacity,
+        // Keep opacity unconstrained here for the same reason as ordinary
+        // clips: evaluation owns the final clamp after every generated
+        // opacity contribution has been applied.
+        opacity: CompiledScalarProperty::authored(opacity),
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
         blend_mode: BlendMode::Normal,

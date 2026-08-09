@@ -5,7 +5,7 @@ use crate::effects::{
 };
 use crate::{
     domain::Point,
-    plan::{ColourTransform, CompiledEffect},
+    plan::{ColourTransform, CompiledEffect, EvaluationContext, EvaluationError},
     project::ZoomBlurDirection,
 };
 
@@ -129,33 +129,38 @@ impl EvaluatedEffect {
     }
 }
 
-pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
-    match effect {
+pub fn evaluate(
+    effect: &CompiledEffect,
+    authored_time: u128,
+    project_time: u128,
+    context: &EvaluationContext<'_>,
+) -> Result<EvaluatedEffect, EvaluationError> {
+    Ok(match effect {
         CompiledEffect::ColourTransform { transform } => EvaluatedEffect::ColourTransform {
             transform: *transform,
         },
         CompiledEffect::Brightness { amount } => EvaluatedEffect::Brightness {
-            amount: amount.evaluate(time),
+            amount: amount.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::Contrast { amount } => EvaluatedEffect::Contrast {
-            amount: amount.evaluate(time),
+            amount: amount.evaluate(authored_time),
         },
         CompiledEffect::Saturation { amount } => EvaluatedEffect::Saturation {
-            amount: amount.evaluate(time),
+            amount: amount.evaluate(authored_time),
         },
         CompiledEffect::Tint { colour, amount } => EvaluatedEffect::Tint {
             colour: *colour,
-            amount: amount.evaluate(time),
+            amount: amount.evaluate(authored_time),
         },
         CompiledEffect::GaussianBlur { radius } => EvaluatedEffect::GaussianBlur {
-            radius: radius.evaluate(time),
+            radius: radius.evaluate(authored_time),
         },
         CompiledEffect::DirectionalBlur {
             radius,
             angle_degrees,
         } => EvaluatedEffect::DirectionalBlur {
-            radius: radius.evaluate(time),
-            angle_degrees: angle_degrees.evaluate(time),
+            radius: radius.evaluate(authored_time),
+            angle_degrees: angle_degrees.evaluate(authored_time),
         },
         CompiledEffect::ZoomBlur {
             radius,
@@ -163,7 +168,7 @@ pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             anchor,
             direction,
         } => EvaluatedEffect::ZoomBlur {
-            radius: radius.evaluate(time),
+            radius: radius.evaluate(authored_time),
             samples: *samples,
             anchor: *anchor,
             direction: *direction,
@@ -174,17 +179,17 @@ pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             intensity,
             colour,
         } => EvaluatedEffect::Glow {
-            threshold: threshold.evaluate(time),
-            radius: radius.evaluate(time),
-            intensity: intensity.evaluate(time),
+            threshold: threshold.evaluate(authored_time),
+            radius: radius.evaluate(authored_time),
+            intensity: intensity.evaluate(authored_time),
             colour: *colour,
         },
         CompiledEffect::ChromaticAberration {
             amount,
             angle_degrees,
         } => EvaluatedEffect::ChromaticAberration {
-            amount: amount.evaluate(time),
-            angle_degrees: angle_degrees.evaluate(time),
+            amount: amount.evaluate(authored_time),
+            angle_degrees: angle_degrees.evaluate(authored_time),
         },
         CompiledEffect::Vignette {
             amount,
@@ -192,14 +197,14 @@ pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             softness,
             colour,
         } => EvaluatedEffect::Vignette {
-            amount: amount.evaluate(time),
-            radius: radius.evaluate(time),
-            softness: softness.evaluate(time),
+            amount: amount.evaluate(authored_time),
+            radius: radius.evaluate(authored_time),
+            softness: softness.evaluate(authored_time),
             colour: *colour,
         },
         CompiledEffect::Sharpen { amount, radius } => EvaluatedEffect::Sharpen {
-            amount: amount.evaluate(time),
-            radius: radius.evaluate(time),
+            amount: amount.evaluate(authored_time),
+            radius: radius.evaluate(authored_time),
         },
         CompiledEffect::ColorAdjust {
             exposure,
@@ -207,10 +212,10 @@ pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             black_point,
             white_point,
         } => EvaluatedEffect::ColorAdjust {
-            exposure: exposure.evaluate(time),
-            gamma: gamma.evaluate(time),
-            black_point: black_point.evaluate(time),
-            white_point: white_point.evaluate(time),
+            exposure: exposure.evaluate(authored_time),
+            gamma: gamma.evaluate(authored_time),
+            black_point: black_point.evaluate(authored_time),
+            white_point: white_point.evaluate(authored_time),
         },
         CompiledEffect::CameraShake {
             position_amount,
@@ -221,11 +226,11 @@ pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
             attack,
             decay,
         } => EvaluatedEffect::CameraShake {
-            local_time: time,
-            position_amount: position_amount.evaluate(time),
-            rotation_radians: rotation_degrees.evaluate(time).to_radians(),
-            scale_amount: scale_amount.evaluate(time),
-            frequency: frequency.evaluate(time),
+            local_time: authored_time,
+            position_amount: position_amount.evaluate(authored_time),
+            rotation_radians: rotation_degrees.evaluate(authored_time).to_radians(),
+            scale_amount: scale_amount.evaluate(authored_time),
+            frequency: frequency.evaluate(authored_time),
             seed: *seed,
             attack: *attack,
             decay: *decay,
@@ -238,10 +243,10 @@ pub fn evaluate(effect: &CompiledEffect, time: u128) -> EvaluatedEffect {
         } => EvaluatedEffect::MotionBlur {
             radius: 0.0,
             angle_degrees: 0.0,
-            intensity: intensity.evaluate(time),
-            shutter_angle: shutter_angle.evaluate(time),
-            max_radius: max_radius.evaluate(time),
+            intensity: intensity.evaluate(authored_time),
+            shutter_angle: shutter_angle.evaluate(authored_time),
+            max_radius: max_radius.evaluate(authored_time),
             samples: *samples,
         },
-    }
+    })
 }

@@ -397,7 +397,7 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     plan.canvas.height = 129;
     let mut upper = plan.layers[0].clone();
     upper.id = "overlapping-rgba-layer".to_owned();
-    upper.opacity = Track::new(1.0);
+    upper.opacity = crate::plan::CompiledScalarProperty::authored(Track::new(1.0));
     upper.transform.position = Track::new(Point { x: 0.56, y: 0.46 });
     upper.effects = vec![TimedEffect {
         start: 0,
@@ -410,7 +410,7 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
         },
         dependency: crate::plan::TemporalDependency::Static,
     }];
-    plan.layers[0].opacity = Track::new(1.0);
+    plan.layers[0].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(1.0));
     plan.layers.push(upper);
     plan.compilation.effect_pass_count = 1;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
@@ -762,10 +762,10 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
         plan.layers[*red].transform.anchor = Track::new(Point { x: 0.31, y: 0.67 });
         plan.layers[*red].transform.scale = Track::new(Point { x: 0.79, y: 1.13 });
         plan.layers[*red].transform.rotation_radians = Track::new(0.31);
-        plan.layers[*red].opacity = Track::new(0.63);
+        plan.layers[*red].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.63));
         plan.layers[*red].effects = vec![
             CompiledEffect::Brightness {
-                amount: Track::new(0.08),
+                amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.08)),
             },
             CompiledEffect::Contrast {
                 amount: Track::new(0.82),
@@ -805,8 +805,8 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
     }
 
     let mut plan = canonical.clone();
-    plan.layers[*red].opacity = Track::new(0.47);
-    plan.layers[*blue].opacity = Track::new(0.58);
+    plan.layers[*red].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.47));
+    plan.layers[*blue].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.58));
     let frame = crate::plan::evaluate(
         &plan,
         &[ScheduledItem(*red), ScheduledItem(*blue)],

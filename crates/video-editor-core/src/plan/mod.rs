@@ -5,24 +5,43 @@ mod effect_passes;
 mod evaluation;
 mod input;
 mod model;
+mod scalar_property;
 mod schedule;
+mod signals;
 
 pub use compiler::{CompileOptions, compile};
 pub use effect_passes::{EffectPass, EffectPassPlan, effect_pass_plan};
-pub use evaluation::evaluate;
 pub use evaluation::{EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource};
+pub use evaluation::{evaluate, evaluate_with_context};
 pub use input::PlanCompileInput;
 pub use model::*;
+pub use scalar_property::{
+    CompiledScalarModifier, CompiledScalarProperty, ScalarModifierOperation,
+    ScalarPropertyConstraint,
+};
 pub use schedule::{
     ActiveSchedule, ScheduleAction, ScheduleCursor, ScheduleEvent, sort_active_items,
+};
+pub use signals::{
+    EvaluationContext, EvaluationError, PreparedScalarSignal, PreparedScalarSignalError,
+    PreparedScalarSignals, ScalarSignalId,
 };
 
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
-    use super::{ActiveSchedule, CompileOptions, PlanCompileInput, compile, evaluate};
+    use super::{
+        ActiveSchedule, CompileOptions, CompiledScalarModifier, CompiledScalarProperty,
+        EvaluationContext, PlanCompileInput, PreparedScalarSignal, PreparedScalarSignals,
+        ScalarModifierOperation, ScalarPropertyConstraint, ScalarSignalId, TimedEffect, compile,
+        evaluate_with_context,
+    };
     use crate::{
+        animation::{
+            Interpolation as CompiledInterpolation, Keyframe as CompiledKeyframe,
+            Track as CompiledTrack,
+        },
         plan::{CompiledEffect, TemporalDependency},
         project::{
             ActiveInterval, Effect, Interpolation, InterpolationName, Keyframe, Project, Track,
@@ -110,8 +129,65 @@ mod tests {
                 (event.action == super::ScheduleAction::Activate).then_some(event.item)
             })
             .collect::<Vec<_>>();
-        let frame = evaluate(&plan, &active, 0);
+        let signals = PreparedScalarSignals::empty();
+        let frame = evaluate_with_context(&plan, &active, 0, &EvaluationContext::new(&signals))
+            .expect("frame");
         assert_eq!(frame.layers.len(), 1);
+    }
+
+    #[test]
+    fn evaluation_applies_scalar_properties_with_project_time_signals() {
+        let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
+        let layer = &mut plan.layers[0];
+        layer.start_nanos = 5_000_000_000;
+        layer.opacity.authored_track = CompiledTrack {
+            base_value: 0.4,
+            keyframes: vec![CompiledKeyframe {
+                time: 1_000_000_000,
+                value: 0.8,
+                interpolation: CompiledInterpolation::Linear,
+            }],
+        };
+        layer.opacity.modifiers = vec![CompiledScalarModifier {
+            operation: ScalarModifierOperation::Add,
+            signal: ScalarSignalId::new(0),
+        }];
+        layer.opacity_contributions = vec![CompiledTrack::new(0.5)];
+        layer.effects.push(TimedEffect {
+            start: 0,
+            end: layer.duration_nanos,
+            effect: CompiledEffect::Brightness {
+                amount: CompiledScalarProperty {
+                    authored_track: CompiledTrack::new(0.1),
+                    modifiers: vec![CompiledScalarModifier {
+                        operation: ScalarModifierOperation::Add,
+                        signal: ScalarSignalId::new(0),
+                    }],
+                    constraint: ScalarPropertyConstraint::Unconstrained,
+                },
+            },
+            dependency: TemporalDependency::Dynamic,
+        });
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(5_000_000_000, 1_000_000_000, vec![0.0, 1.0])
+                .expect("signal"),
+        ]);
+        let frame = evaluate_with_context(
+            &plan,
+            &[super::ScheduledItem(0)],
+            6_000_000_000,
+            &EvaluationContext::new(&signals),
+        )
+        .expect("evaluation");
+        // At project time 6s the authored track uses clip-local time 1s
+        // (0.8), while the signal uses absolute project time 6s (1.0).
+        // Generated opacity then multiplies the modulated value before the
+        // final clamp: (0.8 + 1.0) * 0.5 = 0.9.
+        assert!((frame.layers[0].opacity - 0.9).abs() < 1.0e-12);
+        assert!(matches!(
+            frame.layers[0].effects.last(),
+            Some(super::EvaluatedEffect::Brightness { amount }) if (*amount - 1.1).abs() < 1.0e-12
+        ));
     }
 
     #[test]
@@ -175,7 +251,7 @@ mod tests {
             .iter()
             .find(|layer| layer.id == "blue-in")
             .expect("compiled static clip");
-        assert!(blue.opacity.keyframes.is_empty());
+        assert!(blue.opacity.authored_track.keyframes.is_empty());
         assert_eq!(blue.content_dependency, TemporalDependency::Static);
         assert!(matches!(
             blue.effects.as_slice(),

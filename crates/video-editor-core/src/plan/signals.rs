@@ -157,6 +157,7 @@ pub enum SignalTransformContractError {
     NonFiniteParameter,
     InvalidRemapInputRange,
     InvalidClampRange,
+    InvalidResponseCurveXControls,
 }
 
 impl fmt::Display for SignalTransformContractError {
@@ -165,6 +166,7 @@ impl fmt::Display for SignalTransformContractError {
             Self::NonFiniteParameter => "signal transform parameters must be finite",
             Self::InvalidRemapInputRange => "remap requires input_min < input_max",
             Self::InvalidClampRange => "clamp requires min <= max",
+            Self::InvalidResponseCurveXControls => "response curve requires 0 <= x1 <= x2 <= 1",
         })
     }
 }
@@ -285,6 +287,118 @@ impl EnvelopeTransform {
     }
 }
 
+/// A normalized cubic Bézier response curve with fixed endpoints `(0, 0)` and
+/// `(1, 1)`.
+///
+/// The x controls must be ordered within the unit interval so x inversion is
+/// single-valued. The y controls may be any finite values, permitting explicit
+/// overshoot and undershoot. Inputs at or outside the normalized domain map to
+/// the respective exact endpoint; interior outputs are not clamped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CubicResponseCurve {
+    x1: CanonicalF64,
+    y1: CanonicalF64,
+    x2: CanonicalF64,
+    y2: CanonicalF64,
+}
+
+impl CubicResponseCurve {
+    pub fn new(x1: f64, y1: f64, x2: f64, y2: f64) -> Result<Self, SignalTransformContractError> {
+        let x1 = CanonicalF64::new(x1)?;
+        let x2 = CanonicalF64::new(x2)?;
+        if !(0.0..=1.0).contains(&x1.value())
+            || !(0.0..=1.0).contains(&x2.value())
+            || x1.value() > x2.value()
+        {
+            return Err(SignalTransformContractError::InvalidResponseCurveXControls);
+        }
+        Ok(Self {
+            x1,
+            y1: CanonicalF64::new(y1)?,
+            x2,
+            y2: CanonicalF64::new(y2)?,
+        })
+    }
+
+    #[must_use]
+    pub const fn x1(self) -> f64 {
+        self.x1.value()
+    }
+
+    #[must_use]
+    pub const fn y1(self) -> f64 {
+        self.y1.value()
+    }
+
+    #[must_use]
+    pub const fn x2(self) -> f64 {
+        self.x2.value()
+    }
+
+    #[must_use]
+    pub const fn y2(self) -> f64 {
+        self.y2.value()
+    }
+
+    /// Evaluates the curve by bounded Newton iteration with bisection fallback.
+    #[must_use]
+    pub fn evaluate(self, input: f64) -> f64 {
+        if input <= 0.0 {
+            return 0.0;
+        }
+        if input >= 1.0 {
+            return 1.0;
+        }
+
+        const NEWTON_ITERATIONS: usize = 8;
+        const BISECTION_ITERATIONS: usize = 48;
+        const X_TOLERANCE: f64 = 1e-10;
+
+        let mut parameter = input;
+        for _ in 0..NEWTON_ITERATIONS {
+            let error = cubic_bezier_component(parameter, self.x1(), self.x2()) - input;
+            if error.abs() <= X_TOLERANCE {
+                return cubic_bezier_component(parameter, self.y1(), self.y2());
+            }
+            let slope = cubic_bezier_derivative(parameter, self.x1(), self.x2());
+            if slope.abs() < X_TOLERANCE {
+                break;
+            }
+            let next = parameter - error / slope;
+            if !(0.0..=1.0).contains(&next) {
+                break;
+            }
+            parameter = next;
+        }
+
+        let mut low = 0.0;
+        let mut high = 1.0;
+        for _ in 0..BISECTION_ITERATIONS {
+            parameter = (low + high) * 0.5;
+            if cubic_bezier_component(parameter, self.x1(), self.x2()) < input {
+                low = parameter;
+            } else {
+                high = parameter;
+            }
+        }
+        cubic_bezier_component((low + high) * 0.5, self.y1(), self.y2())
+    }
+}
+
+fn cubic_bezier_component(parameter: f64, control_one: f64, control_two: f64) -> f64 {
+    let inverse = 1.0 - parameter;
+    3.0 * inverse * inverse * parameter * control_one
+        + 3.0 * inverse * parameter * parameter * control_two
+        + parameter * parameter * parameter
+}
+
+fn cubic_bezier_derivative(parameter: f64, control_one: f64, control_two: f64) -> f64 {
+    let inverse = 1.0 - parameter;
+    3.0 * inverse * inverse * control_one
+        + 6.0 * inverse * parameter * (control_two - control_one)
+        + 3.0 * parameter * parameter * (1.0 - control_two)
+}
+
 /// Generic transforms applied in declaration order during signal preparation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompiledSignalTransform {
@@ -292,6 +406,7 @@ pub enum CompiledSignalTransform {
     Remap(RemapTransform),
     Clamp(ClampTransform),
     Envelope(EnvelopeTransform),
+    ResponseCurve(CubicResponseCurve),
 }
 
 impl CompiledSignalTransform {
@@ -306,6 +421,7 @@ impl CompiledSignalTransform {
             }
             Self::Clamp(transform) => input.clamp(transform.min(), transform.max()),
             Self::Envelope(_) => unreachable!("Envelope operates on a complete signal series"),
+            Self::ResponseCurve(curve) => curve.evaluate(input),
         }
     }
 }
@@ -560,11 +676,13 @@ impl PreparedScalarSignal {
     }
 }
 
-/// Applies an ordered transform chain to one immutable raw series.
+/// Applies the finalized ordered transform pipeline to one immutable raw series.
 ///
 /// This deliberately allocates one working output vector. Each transform then
-/// mutates that vector in declaration order, allowing stateful transforms to
-/// run during preparation while the raw input remains shareable.
+/// mutates that vector in declaration order: Gain, Remap, Clamp, and
+/// ResponseCurve are pointwise; Envelope is a sequential one-pole smoother.
+/// Every transform runs during preparation while the raw input remains
+/// shareable, so frame evaluation only samples the completed series.
 pub fn prepare_transformed_scalar_signal(
     raw: &PreparedScalarSignal,
     transforms: &[CompiledSignalTransform],
@@ -713,7 +831,9 @@ impl PreparedScalarSignals {
         self.signals.is_empty()
     }
 
-    fn get(&self, id: ScalarSignalId) -> Option<&PreparedScalarSignal> {
+    /// Returns the prepared series assigned to this dense signal ID.
+    #[must_use]
+    pub fn get(&self, id: ScalarSignalId) -> Option<&PreparedScalarSignal> {
         self.signals.get(id.index())
     }
 }
@@ -763,10 +883,10 @@ mod tests {
     use super::{
         AudioAnalysisTap, AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal,
         AudioSignalContractError, ClampTransform, CompiledScalarSignal, CompiledSignalTransform,
-        EnvelopeTransform, GainTransform, PreparedScalarSignal, PreparedScalarSignalError,
-        RawScalarSignal, RemapTransform, ScalarSignalInterner, SignalPreparationError,
-        SignalTransformContractError, master_audio_nyquist_hz, prepare_scalar_signals,
-        prepare_transformed_scalar_signal,
+        CubicResponseCurve, EnvelopeTransform, GainTransform, PreparedScalarSignal,
+        PreparedScalarSignalError, RawScalarSignal, RemapTransform, ScalarSignalInterner,
+        SignalPreparationError, SignalTransformContractError, master_audio_nyquist_hz,
+        prepare_scalar_signals, prepare_transformed_scalar_signal,
     };
     use crate::plan_audio::{MASTER_AUDIO_SAMPLE_RATE, master_audio_nyquist_hz as plan_nyquist};
 
@@ -1087,6 +1207,150 @@ mod tests {
 
     fn assert_close(actual: f64, expected: f64) {
         assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+    }
+
+    fn response_curve(x1: f64, y1: f64, x2: f64, y2: f64) -> CompiledSignalTransform {
+        CompiledSignalTransform::ResponseCurve(CubicResponseCurve::new(x1, y1, x2, y2).unwrap())
+    }
+
+    #[test]
+    fn response_curve_validates_controls_and_canonicalizes_zero() {
+        assert!(CubicResponseCurve::new(0.0, -0.2, 1.0, 1.2).is_ok());
+        assert_eq!(
+            CubicResponseCurve::new(f64::NAN, 0.0, 1.0, 1.0),
+            Err(SignalTransformContractError::NonFiniteParameter)
+        );
+        assert_eq!(
+            CubicResponseCurve::new(0.0, f64::INFINITY, 1.0, 1.0),
+            Err(SignalTransformContractError::NonFiniteParameter)
+        );
+        assert_eq!(
+            CubicResponseCurve::new(-0.1, 0.0, 1.0, 1.0),
+            Err(SignalTransformContractError::InvalidResponseCurveXControls)
+        );
+        assert_eq!(
+            CubicResponseCurve::new(0.0, 0.0, 1.1, 1.0),
+            Err(SignalTransformContractError::InvalidResponseCurveXControls)
+        );
+        assert_eq!(
+            CubicResponseCurve::new(0.75, 0.0, 0.25, 1.0),
+            Err(SignalTransformContractError::InvalidResponseCurveXControls)
+        );
+        assert_eq!(
+            CubicResponseCurve::new(-0.0, -0.0, 1.0, 0.0),
+            CubicResponseCurve::new(0.0, 0.0, 1.0, -0.0)
+        );
+    }
+
+    #[test]
+    fn response_curve_clamps_its_input_and_preserves_non_linear_output() {
+        let identity = CubicResponseCurve::new(0.0, 0.0, 1.0, 1.0).unwrap();
+        for input in [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0] {
+            assert_close(identity.evaluate(input), input);
+        }
+        assert_eq!(identity.evaluate(-10.0), 0.0);
+        assert_eq!(identity.evaluate(0.0), 0.0);
+        assert_eq!(identity.evaluate(1.0), 1.0);
+        assert_eq!(identity.evaluate(10.0), 1.0);
+
+        let ease_in = CubicResponseCurve::new(0.42, 0.0, 1.0, 1.0).unwrap();
+        let ease_out = CubicResponseCurve::new(0.0, 0.0, 0.58, 1.0).unwrap();
+        assert!(ease_in.evaluate(0.5) < 0.5);
+        assert!(ease_out.evaluate(0.5) > 0.5);
+
+        let overshoot = CubicResponseCurve::new(0.25, -0.5, 0.75, 1.5).unwrap();
+        assert!(overshoot.evaluate(0.1) < 0.0);
+        assert!(overshoot.evaluate(0.9) > 1.0);
+    }
+
+    #[test]
+    fn response_curve_preserves_order_with_pointwise_and_envelope_transforms() {
+        let curve = response_curve(0.42, 0.0, 1.0, 1.0);
+        let raw = signal(0, 10_000_000, &[0.0, 1.0, 1.0, 1.0]);
+        let curve_then_envelope =
+            prepare_transformed_scalar_signal(&raw, &[curve, envelope(20_000_000, 20_000_000)])
+                .unwrap();
+        let envelope_then_curve =
+            prepare_transformed_scalar_signal(&raw, &[envelope(20_000_000, 20_000_000), curve])
+                .unwrap();
+        assert_ne!(curve_then_envelope.samples, envelope_then_curve.samples);
+
+        let input = signal(0, 1, &[0.25]);
+        let remap_then_curve = prepare_transformed_scalar_signal(
+            &input,
+            &[
+                CompiledSignalTransform::Remap(RemapTransform::new(0.0, 1.0, 0.0, 0.5).unwrap()),
+                curve,
+            ],
+        )
+        .unwrap();
+        let curve_then_remap = prepare_transformed_scalar_signal(
+            &input,
+            &[
+                curve,
+                CompiledSignalTransform::Remap(RemapTransform::new(0.0, 1.0, 0.0, 0.5).unwrap()),
+            ],
+        )
+        .unwrap();
+        assert_ne!(remap_then_curve.samples, curve_then_remap.samples);
+
+        let bounded = prepare_transformed_scalar_signal(
+            &signal(0, 1, &[0.1, 0.9]),
+            &[
+                response_curve(0.25, -0.5, 0.75, 1.5),
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).unwrap()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(bounded.samples, [0.0, 1.0]);
+    }
+
+    #[test]
+    fn response_curves_participate_in_complete_signal_identity_and_raw_sharing() {
+        use super::{AudioAnalysisRequirement, CompiledScalarSignals};
+
+        let band = AudioFrequencyBand::new(40.0, 160.0).unwrap();
+        let source = RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::BandEnergy(band),
+        });
+        let curve = response_curve(0.25, 0.1, 0.75, 0.9);
+        let mut interner = ScalarSignalInterner::default();
+        let id = interner.intern(CompiledScalarSignal::new(source, vec![curve]));
+        assert_eq!(
+            id,
+            interner.intern(CompiledScalarSignal::new(source, vec![curve]))
+        );
+        assert_ne!(
+            id,
+            interner.intern(CompiledScalarSignal::new(
+                source,
+                vec![response_curve(0.25, 0.2, 0.75, 0.9)],
+            ))
+        );
+        assert_ne!(
+            id,
+            interner.intern(CompiledScalarSignal::new(
+                source,
+                vec![envelope(20, 180), curve],
+            ))
+        );
+
+        let compiled = CompiledScalarSignals::from_signals(vec![
+            CompiledScalarSignal::new(source, vec![response_curve(0.25, 0.1, 0.75, 0.9)]),
+            CompiledScalarSignal::new(source, vec![response_curve(0.3, 0.1, 0.75, 0.9)]),
+            CompiledScalarSignal::new(source, vec![envelope(20, 180), curve]),
+        ]);
+        assert_eq!(compiled.audio_analysis_requirements().iter().len(), 1);
+        let prepared = prepare_scalar_signals(
+            &compiled,
+            std::collections::BTreeMap::from([(
+                AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band)),
+                signal(0, 10, &[0.0, 0.5, 1.0]),
+            )]),
+        )
+        .unwrap();
+        assert_eq!(prepared.len(), 3);
     }
 
     #[test]

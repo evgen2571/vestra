@@ -11,6 +11,9 @@ use crate::{
     plan::{ActiveSchedule, RenderPlan},
     render::{CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind},
 };
+use video_editor_core::plan::{
+    AudioAnalysisRequirement, AudioScalarFeature, CompiledScalarSignal, PreparedScalarSignals,
+};
 use video_editor_media::{EncoderSettings, FfmpegSink, FrameSink, MediaError, OutputTarget};
 
 use super::{
@@ -29,8 +32,9 @@ use super::{
     clippy::result_large_err,
     reason = "render errors retain cleanup status"
 )]
-/// Owned visual execution snapshot. It deliberately excludes the output target and
-/// encoder: audio and FFmpeg are reopened for every video operation.
+/// Owned prepared execution snapshot. It deliberately excludes the output target
+/// and encoder: audio and FFmpeg are reopened for every video operation, while
+/// required audio-derived scalar series remain available for its lifetime.
 pub(crate) struct PreparedState {
     plan: Arc<RenderPlan>,
     schedule: ActiveSchedule,
@@ -83,6 +87,11 @@ impl PreparedState {
     #[cfg(test)]
     pub(crate) fn backend_stats(&mut self) -> crate::render::PreparationStats {
         self.backend.stats()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn scalar_signals(&self) -> &PreparedScalarSignals {
+        &self.scalar_signals
     }
     pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
         self.requested_backend
@@ -173,50 +182,36 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
     })?;
     let schedule = ActiveSchedule::compile(&plan);
     let analysis_started = Instant::now();
-    if !plan.audio_analysis_requirements.is_empty() {
-        video_editor_media::validate_master_pcm_request(
+    let scalar_signals = if plan.audio_analysis_requirements.is_empty() {
+        PreparedScalarSignals::empty()
+    } else {
+        let features = video_editor_media::analyze_master_audio(
+            &plan.audio_analysis_requirements,
             &plan.audio_mix,
             plan.duration,
             plan.limits.maximum_audio_sources,
         )
-        .map_err(|error| RenderError {
-            diagnostic: Diagnostic::error(
-                "MVP-AUDIO-ANALYSIS",
-                Category::Media,
-                error.to_string(),
-                "",
-            ),
-            warnings: Vec::new(),
-            temporary_removed: true,
-            context: RenderFailureContext::before_render(
-                RenderFailureStage::AssetPreparation,
-                &plan,
-            ),
-            timings: RenderTimings {
-                asset_decode_ms: milliseconds(decoded.timings().decode),
-                ..RenderTimings::default()
-            },
-        })?;
-        return Err(RenderError {
-            diagnostic: Diagnostic::error(
-                "MVP-AUDIO-ANALYSIS-UNIMPLEMENTED",
-                Category::Media,
-                "audio-derived scalar feature preparation is not implemented",
-                "",
-            ),
-            warnings: Vec::new(),
-            temporary_removed: true,
-            context: RenderFailureContext::before_render(
-                RenderFailureStage::AssetPreparation,
-                &plan,
-            ),
-            timings: RenderTimings {
-                asset_decode_ms: milliseconds(decoded.timings().decode),
-                ..RenderTimings::default()
-            },
-        });
-    }
-    let audio_analysis_duration = analysis_started.elapsed();
+        .map_err(|error| analysis_error(&plan, &decoded, error))?;
+        let mut prepared = Vec::with_capacity(plan.scalar_signals.len());
+        for (_, signal) in plan.scalar_signals.iter() {
+            let CompiledScalarSignal::Audio(audio) = signal;
+            let requirement = AudioAnalysisRequirement::Master(audio.feature);
+            let feature = features.get(&requirement).ok_or_else(|| {
+                analysis_error(
+                    &plan,
+                    &decoded,
+                    video_editor_media::MediaError::AudioAnalysis(
+                        video_editor_media::AudioAnalysisError::UnsupportedFeature(audio.feature),
+                    ),
+                )
+            })?;
+            prepared.push(feature.clone());
+        }
+        PreparedScalarSignals::new(prepared)
+    };
+    let audio_analysis_duration = (!plan.audio_analysis_requirements.is_empty())
+        .then(|| analysis_started.elapsed())
+        .unwrap_or(Duration::ZERO);
     let (backend, backend_fallback) =
         build_backend(preference, &plan, &decoded).map_err(|diagnostic| RenderError {
             diagnostic,
@@ -246,9 +241,32 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
         preparation_timings,
         audio_analysis_duration,
         static_visual_template: None,
-        scalar_signals: video_editor_core::plan::PreparedScalarSignals::empty(),
+        scalar_signals,
         lifecycle: PreparedLifecycle::Ready,
     })
+}
+
+fn analysis_error(
+    plan: &RenderPlan,
+    decoded: &Arc<DecodedAssets>,
+    error: MediaError,
+) -> RenderError {
+    let code = match error {
+        MediaError::AudioAnalysis(video_editor_media::AudioAnalysisError::UnsupportedFeature(
+            AudioScalarFeature::BandEnergy(_),
+        )) => "MVP-AUDIO-BAND-ANALYSIS-UNIMPLEMENTED",
+        _ => "MVP-AUDIO-ANALYSIS",
+    };
+    RenderError {
+        diagnostic: Diagnostic::error(code, Category::Media, error.to_string(), ""),
+        warnings: Vec::new(),
+        temporary_removed: true,
+        context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, plan),
+        timings: RenderTimings {
+            asset_decode_ms: milliseconds(decoded.timings().decode),
+            ..RenderTimings::default()
+        },
+    }
 }
 
 #[allow(

@@ -6,6 +6,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use crate::{
@@ -14,6 +15,14 @@ use crate::{
     render::{
         AdapterMetadata, CompletedFrame, PollMode, RenderBackend, RenderBackendKind, StagedMetrics,
     },
+};
+use video_editor_core::{
+    plan::{
+        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioScalarFeature,
+        AudioScalarSignal, CompiledScalarSignal, CompiledScalarSignals,
+    },
+    plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan},
+    project::AudioFadeCurve,
 };
 use video_editor_media::{EncoderSettings, FrameSink, MediaError, SinkResult};
 use video_editor_render::CpuBackend;
@@ -25,6 +34,76 @@ use super::super::{
         render_with_backend_builder_and_sink,
     },
 };
+
+#[test]
+fn preparation_retains_silent_master_rms_when_output_audio_is_disabled() {
+    let mut plan = super::example_plan();
+    let signal = CompiledScalarSignal::Audio(AudioScalarSignal {
+        tap: AudioAnalysisTap::Master,
+        feature: AudioScalarFeature::Rms,
+    });
+    plan.scalar_signals = CompiledScalarSignals::from_signals(vec![signal]);
+    plan.audio_analysis_requirements =
+        AudioAnalysisRequirements::from_requirements([AudioAnalysisRequirement::Master(
+            AudioScalarFeature::Rms,
+        )]);
+    plan.audio_output_enabled = false;
+    plan.encoder.audio_mix = None;
+    plan.audio_mix = AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "silent".to_owned(),
+            mute: true,
+            gain: 1.0,
+            clips: vec![AudioClipPlan {
+                id: "silent-clip".to_owned(),
+                asset: "unused".to_owned(),
+                path: PathBuf::from("not-opened.wav"),
+                start: 0.0,
+                trim_start: 0.0,
+                selected_duration: plan.duration,
+                mute: false,
+                gain: 1.0,
+                gain_automation: None,
+                fade_in: 0.0,
+                fade_out: 0.0,
+                fade_in_curve: AudioFadeCurve::Linear,
+                fade_out_curve: AudioFadeCurve::Linear,
+            }],
+        }],
+    };
+    let prepared = prepare(plan, RenderBackendPreference::Wgpu, |_, _, _| {
+        Ok((
+            Box::new(MockStagedBackend::new(
+                1,
+                vec![],
+                Arc::new(Mutex::new(Vec::new())),
+            )),
+            None,
+        ))
+    })
+    .expect("analysis prepares even when output mux audio is disabled");
+    assert!(!prepared.scalar_signals().is_empty());
+}
+
+#[test]
+fn preparation_without_analysis_records_zero_audio_analysis_time() {
+    let prepared = prepare(
+        super::example_plan(),
+        RenderBackendPreference::Wgpu,
+        |_, _, _| {
+            Ok((
+                Box::new(MockStagedBackend::new(
+                    1,
+                    vec![],
+                    Arc::new(Mutex::new(Vec::new())),
+                )),
+                None,
+            ))
+        },
+    )
+    .expect("ordinary preparation");
+    assert_eq!(prepared.audio_analysis_duration(), Duration::ZERO);
+}
 
 struct RecordingSink {
     probe: SinkProbe,

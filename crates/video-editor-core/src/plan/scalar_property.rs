@@ -211,6 +211,30 @@ mod tests {
     }
 
     #[test]
+    fn fixed_hop_audio_feature_uses_absolute_project_time_for_replace() {
+        // This has the 10 ms timebase used by the Master RMS/Peak preparer.
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(0, 10_000_000, vec![0.0, 0.25, 0.5])
+                .expect("audio-derived feature series"),
+        ]);
+        let context = EvaluationContext::new(&signals);
+        let property = CompiledScalarProperty {
+            authored_track: Track::new(0.0),
+            modifiers: vec![CompiledScalarModifier {
+                operation: ScalarModifierOperation::Replace,
+                signal: ScalarSignalId::new(0),
+            }],
+            constraint: ScalarPropertyConstraint::Unconstrained,
+        };
+        // A clip-local time of one second must not select a different point in
+        // the project-time feature series.
+        assert_eq!(
+            property.evaluate(1_000_000_000, 20_000_000, &context),
+            Ok(0.5)
+        );
+    }
+
+    #[test]
     fn reports_missing_signal() {
         let signals = PreparedScalarSignals::empty();
         let context = EvaluationContext::new(&signals);

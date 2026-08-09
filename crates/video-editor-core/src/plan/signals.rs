@@ -136,6 +136,16 @@ pub struct AudioAnalysisRequirements {
 
 impl AudioAnalysisRequirements {
     #[must_use]
+    pub fn from_requirements(
+        requirements: impl IntoIterator<Item = AudioAnalysisRequirement>,
+    ) -> Self {
+        let mut requirements = requirements.into_iter().collect::<Vec<_>>();
+        requirements.sort_unstable();
+        requirements.dedup();
+        Self { requirements }
+    }
+
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.requirements.is_empty()
     }
@@ -165,6 +175,12 @@ impl CompiledScalarSignals {
         }
     }
 
+    /// Constructs a compiler-order signal table for internal plan producers.
+    #[must_use]
+    pub fn from_signals(signals: Vec<CompiledScalarSignal>) -> Self {
+        Self { signals }
+    }
+
     #[must_use]
     pub const fn len(&self) -> usize {
         self.signals.len()
@@ -178,6 +194,14 @@ impl CompiledScalarSignals {
     #[must_use]
     pub fn get(&self, id: ScalarSignalId) -> Option<&CompiledScalarSignal> {
         self.signals.get(id.index())
+    }
+
+    /// Signals in compiler-assigned dense ID order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (ScalarSignalId, &CompiledScalarSignal)> {
+        self.signals
+            .iter()
+            .enumerate()
+            .map(|(index, signal)| (ScalarSignalId::from_index(index as u32), signal))
     }
 
     #[must_use]
@@ -320,6 +344,16 @@ impl PreparedScalarSignals {
     #[must_use]
     pub fn new(signals: Vec<PreparedScalarSignal>) -> Self {
         Self { signals }
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.signals.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.signals.is_empty()
     }
 
     fn get(&self, id: ScalarSignalId) -> Option<&PreparedScalarSignal> {

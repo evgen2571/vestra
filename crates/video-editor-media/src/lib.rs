@@ -13,9 +13,11 @@ mod output;
 mod probe;
 mod sink;
 
-pub use audio_analysis::{MasterPcmSpec, consume_master_pcm, validate_master_pcm_request};
+pub use audio_analysis::{
+    MasterPcmSpec, analyze_master_audio, consume_master_pcm, validate_master_pcm_request,
+};
 pub use audio_graph::seconds_to_samples;
-pub use error::MediaError;
+pub use error::{AudioAnalysisError, MediaError};
 pub use ffmpeg::FfmpegSink;
 pub use output::{OutputTarget, check_output, effective_parent};
 pub use probe::{

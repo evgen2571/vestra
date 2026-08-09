@@ -4,14 +4,18 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AudioAnalysisError {
-    #[error("audio feature {0:?} is not implemented")]
-    UnsupportedFeature(video_editor_core::plan::AudioScalarFeature),
     #[error("audio analysis produced a non-finite feature value")]
     NonFiniteFeature,
     #[error("audio analysis window state is invalid")]
     InvalidWindowState,
     #[error("audio analysis timing overflows the supported range")]
     TimingOverflow,
+    #[error("audio analysis has no requested primitives")]
+    EmptyRequirements,
+    #[error("audio analysis spectral state is invalid")]
+    InvalidSpectrumState,
+    #[error("audio analysis did not produce a required feature")]
+    MissingPreparedFeature,
 }
 
 #[derive(Debug, Error)]

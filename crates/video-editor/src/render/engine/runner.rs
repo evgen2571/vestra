@@ -12,7 +12,7 @@ use crate::{
     render::{CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind},
 };
 use video_editor_core::plan::{
-    AudioAnalysisRequirement, AudioScalarFeature, CompiledScalarSignal, PreparedScalarSignals,
+    AudioAnalysisRequirement, CompiledScalarSignal, PreparedScalarSignals,
 };
 use video_editor_media::{EncoderSettings, FfmpegSink, FrameSink, MediaError, OutputTarget};
 
@@ -185,7 +185,7 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
     let scalar_signals = if plan.audio_analysis_requirements.is_empty() {
         PreparedScalarSignals::empty()
     } else {
-        let features = video_editor_media::analyze_master_audio(
+        let mut features = video_editor_media::analyze_master_audio(
             &plan.audio_analysis_requirements,
             &plan.audio_mix,
             plan.duration,
@@ -196,22 +196,24 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
         for (_, signal) in plan.scalar_signals.iter() {
             let CompiledScalarSignal::Audio(audio) = signal;
             let requirement = AudioAnalysisRequirement::Master(audio.feature);
-            let feature = features.get(&requirement).ok_or_else(|| {
+            let feature = features.remove(&requirement).ok_or_else(|| {
                 analysis_error(
                     &plan,
                     &decoded,
                     video_editor_media::MediaError::AudioAnalysis(
-                        video_editor_media::AudioAnalysisError::UnsupportedFeature(audio.feature),
+                        video_editor_media::AudioAnalysisError::MissingPreparedFeature,
                     ),
                 )
             })?;
-            prepared.push(feature.clone());
+            prepared.push(feature);
         }
         PreparedScalarSignals::new(prepared)
     };
-    let audio_analysis_duration = (!plan.audio_analysis_requirements.is_empty())
-        .then(|| analysis_started.elapsed())
-        .unwrap_or(Duration::ZERO);
+    let audio_analysis_duration = if plan.audio_analysis_requirements.is_empty() {
+        Duration::ZERO
+    } else {
+        analysis_started.elapsed()
+    };
     let (backend, backend_fallback) =
         build_backend(preference, &plan, &decoded).map_err(|diagnostic| RenderError {
             diagnostic,
@@ -251,12 +253,7 @@ fn analysis_error(
     decoded: &Arc<DecodedAssets>,
     error: MediaError,
 ) -> RenderError {
-    let code = match error {
-        MediaError::AudioAnalysis(video_editor_media::AudioAnalysisError::UnsupportedFeature(
-            AudioScalarFeature::BandEnergy(_),
-        )) => "MVP-AUDIO-BAND-ANALYSIS-UNIMPLEMENTED",
-        _ => "MVP-AUDIO-ANALYSIS",
-    };
+    let code = "MVP-AUDIO-ANALYSIS";
     RenderError {
         diagnostic: Diagnostic::error(code, Category::Media, error.to_string(), ""),
         warnings: Vec::new(),

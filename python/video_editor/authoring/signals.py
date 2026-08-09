@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Mapping
 
 from ._internal import _number
 
 
 def _finite(value: int | float, name: str) -> float:
     return _number(value, name)
+
+
+def _immutable_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(dict(value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,11 +25,19 @@ class ScalarSignal:
     elapsed seconds. Each transform method returns a new reusable signal.
     """
 
-    _feature: dict[str, object]
-    _transforms: tuple[dict[str, object], ...] = ()
+    _feature: Mapping[str, object]
+    _transforms: tuple[Mapping[str, object], ...] = ()
 
-    def _append(self, transform: dict[str, object]) -> "ScalarSignal":
-        return ScalarSignal(self._feature.copy(), self._transforms + (transform,))
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_feature", _immutable_mapping(self._feature))
+        object.__setattr__(
+            self,
+            "_transforms",
+            tuple(_immutable_mapping(transform) for transform in self._transforms),
+        )
+
+    def _append(self, transform: Mapping[str, object]) -> "ScalarSignal":
+        return ScalarSignal(self._feature, self._transforms + (transform,))
 
     def gain(self, value: int | float) -> "ScalarSignal":
         return self._append({"type": "gain", "gain": _finite(value, "gain")})
@@ -54,9 +68,11 @@ class ScalarSignal:
         return self._append({"type": "response_curve", "x1": first, "y1": _finite(y1, "y1"), "x2": second, "y2": _finite(y2, "y2")})
 
     def to_canonical(self) -> dict[str, object]:
-        data: dict[str, object] = {"source": {"type": "audio", "tap": "master", "feature": self._feature.copy()}}
+        data: dict[str, object] = {
+            "source": {"type": "audio", "tap": "master", "feature": dict(self._feature)}
+        }
         if self._transforms:
-            data["transforms"] = [transform.copy() for transform in self._transforms]
+            data["transforms"] = [dict(transform) for transform in self._transforms]
         return data
 
 

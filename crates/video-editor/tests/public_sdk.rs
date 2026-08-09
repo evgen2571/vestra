@@ -313,6 +313,58 @@ fn assert_public_frame_parity(
 }
 
 #[test]
+fn public_cpu_wgpu_parity_covers_audio_reactive_project_when_an_adapter_is_available() {
+    let project = video_editor::Project::from_json(
+        r##"
+        {
+          "schema_version": 2,
+          "output": {"path": "unused.mp4", "width": 32, "height": 32, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
+          "assets": [
+            {"id": "red", "type": "image", "source": "examples/assets/red.png"},
+            {"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}
+          ],
+          "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
+          "visual": {"clips": [{
+            "id": "reactive", "source": {"type": "image", "asset": "red"}, "start": 0, "duration": 1, "layer": 0,
+            "opacity": {"base_value": 1},
+            "effects": [{"id": "reactive-brightness", "type": "brightness", "amount": {
+              "base_value": 0,
+              "modifiers": [{"operation": "add", "signal": {
+                "source": {"type": "audio", "tap": "master", "feature": {"type": "rms"}},
+                "transforms": [
+                  {"type": "gain", "gain": 2},
+                  {"type": "clamp", "min": 0, "max": 1},
+                  {"type": "envelope", "attack": 0.02, "release": 0.18}
+                ]
+              }}]
+            }}]
+          }]}
+        }
+        "##,
+        fixture("."),
+    )
+    .expect("audio-reactive parity project");
+    assert!(Editor::new().validate(&project).is_valid());
+
+    let mut cpu = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("CPU audio-reactive prepare");
+    let mut wgpu = match prepare_wgpu_environment(&project) {
+        WgpuTestEnvironment::Available(prepared) => prepared,
+        WgpuTestEnvironment::Unavailable { .. } => return,
+    };
+    for frame_number in [0, 15, 29] {
+        let cpu_frame = cpu
+            .render_frame_number(frame_number)
+            .expect("CPU audio-reactive frame");
+        let wgpu_frame = wgpu
+            .render_frame_number(frame_number)
+            .expect("WGPU audio-reactive frame");
+        assert_public_frame_parity(&cpu_frame, &wgpu_frame, 2);
+    }
+}
+
+#[test]
 fn public_cpu_wgpu_parity_covers_image_alpha_and_effect_fixtures_when_an_adapter_is_available() {
     // Probe once. Once an adapter has been confirmed, every fixture below is
     // required to prepare and render successfully; none may soft-skip.

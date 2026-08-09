@@ -7,12 +7,12 @@ use crate::{
 
 pub(super) fn validate_modifiers(
     modifiers: &[crate::project::ScalarModifier],
-    path: &str,
+    modifier_array_path: &str,
     has_authored_audio: bool,
     errors: &mut Vec<Diagnostic>,
 ) {
     for (index, modifier) in modifiers.iter().enumerate() {
-        let path = format!("{path}/modifiers/{index}/signal");
+        let path = format!("{modifier_array_path}/{index}/signal");
         match &modifier.signal.source {
             crate::project::ScalarSignalSource::Audio { feature, .. } => {
                 if !has_authored_audio {

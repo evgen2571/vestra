@@ -202,6 +202,11 @@ impl CompiledScalarProperty {
     }
 }
 
+/// Exposes the authored track for compiler normalization and metrics only.
+///
+/// Calling `Track::evaluate` through this dereference bypasses modifiers,
+/// absolute project-time signal sampling, and the target constraint. Runtime
+/// evaluation must always use [`CompiledScalarProperty::evaluate`].
 impl Deref for CompiledScalarProperty {
     type Target = Track<f64>;
 
@@ -210,6 +215,8 @@ impl Deref for CompiledScalarProperty {
     }
 }
 
+/// Mutable authored-track access is retained for compiler normalization only.
+/// Runtime evaluation must use [`CompiledScalarProperty::evaluate`].
 impl DerefMut for CompiledScalarProperty {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.authored_track
@@ -361,6 +368,31 @@ mod tests {
             property.evaluate(1_000_000_000, 20_000_000, &context),
             Ok(0.5)
         );
+    }
+
+    #[test]
+    fn audio_signal_values_are_independent_of_video_frame_rate() {
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(0, 10_000_000, (0..=100).map(f64::from).collect())
+                .expect("audio-derived feature series"),
+        ]);
+        let context = EvaluationContext::new(&signals);
+        let property = CompiledScalarProperty {
+            authored_track: Track::new(0.0),
+            modifiers: vec![CompiledScalarModifier {
+                operation: ScalarModifierOperation::Replace,
+                signal: ScalarSignalId::new(0),
+            }],
+            constraint: ScalarPropertyConstraint::Finite,
+        };
+
+        for (numerator, denominator) in [(24, 1), (30, 1), (60, 1), (120, 1)] {
+            let frame = numerator / denominator;
+            let project_time = crate::timeline::frame_time_nanos(frame, numerator, denominator)
+                .expect("one second is representable");
+            assert_eq!(project_time, 1_000_000_000);
+            assert_eq!(property.evaluate(0, project_time, &context), Ok(100.0));
+        }
     }
 
     #[test]

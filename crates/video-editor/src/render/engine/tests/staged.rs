@@ -21,10 +21,11 @@ use video_editor_core::{
     plan::{
         ActiveSchedule, AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap,
         AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal, ClampTransform, CompiledEffect,
+        EvaluatedEffect, EvaluatedSource,
         CompiledScalarModifier, CompiledScalarProperty, CompiledScalarSignal,
         CompiledScalarSignals, CompiledSignalTransform, CubicResponseCurve, EnvelopeTransform,
         EvaluationContext, GainTransform, RemapTransform, ScalarModifierOperation,
-        ScalarPropertyConstraint, TemporalDependency, TimedEffect, evaluate_with_context,
+        RenderPlan, ScalarPropertyConstraint, TemporalDependency, TimedEffect, evaluate_with_context,
     },
     plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::AudioFadeCurve,
@@ -35,8 +36,9 @@ use video_editor_render::CpuBackend;
 use super::super::{
     BackendFallback, RenderBackendPreference, RenderObserverControl, RenderOptions,
     runner::{
-        prepare, render_prepared_frame, render_prepared_with_sink, render_with_backend_builder,
-        render_with_backend_builder_and_sink,
+        audio_analysis_invocation_count, prepare, render_prepared_frame, render_prepared_with_sink,
+        render_with_backend_builder, render_with_backend_builder_and_sink,
+        reset_audio_analysis_invocation_count,
     },
 };
 
@@ -78,22 +80,20 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
     plan.encoder.audio_mix = None;
     let signal_id = plan.scalar_signals.iter().next().expect("signal ID").0;
     let layer = &mut plan.layers[0];
-    let layer_start = video_editor_core::plan_time::to_nanos(4.0, "test layer start")
-        .expect("valid layer start");
+    layer.duration_nanos = video_editor_core::plan_time::to_nanos(2.0, "test layer duration")
+        .expect("valid layer duration");
+    let layer_start =
+        video_editor_core::plan_time::to_nanos(4.0, "test layer start").expect("valid layer start");
     let layer_end = layer_start
         .checked_add(layer.duration_nanos)
         .expect("test layer end fits timeline");
     layer.start_nanos = layer_start;
-    layer.start_frame = video_editor_core::plan_time::first_frame_at_or_after(
-        layer_start,
-        plan.frame_rate,
-    )
-    .expect("valid start frame");
-    layer.end_frame = video_editor_core::plan_time::first_frame_at_or_after(
-        layer_end,
-        plan.frame_rate,
-    )
-    .expect("valid end frame");
+    layer.start_frame =
+        video_editor_core::plan_time::first_frame_at_or_after(layer_start, plan.frame_rate)
+            .expect("valid start frame");
+    layer.end_frame =
+        video_editor_core::plan_time::first_frame_at_or_after(layer_end, plan.frame_rate)
+            .expect("valid end frame");
     layer.draw_key.start_nanos = layer_start;
     layer.effects.push(TimedEffect {
         start: 0,
@@ -152,11 +152,9 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
     .expect("audible analysis prepares even when output mux audio is disabled");
     let project_time = video_editor_core::plan_time::to_nanos(5.0, "test project time")
         .expect("valid project time");
-    let frame_number = video_editor_core::plan_time::first_frame_at_or_after(
-        project_time,
-        plan.frame_rate,
-    )
-    .expect("valid project frame");
+    let frame_number =
+        video_editor_core::plan_time::first_frame_at_or_after(project_time, plan.frame_rate)
+            .expect("valid project frame");
     let active = ActiveSchedule::compile(&plan).active_at(&plan, frame_number);
     let frame = evaluate_with_context(
         &plan,
@@ -170,7 +168,12 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
         .get(signal_id)
         .expect("prepared signal")
         .sample(project_time);
-    let amount = match frame.layers[0].effects.last() {
+    let layer = frame
+        .layers
+        .iter()
+        .find(|layer| layer.compiled_layer_index == 0)
+        .expect("staged layer is active");
+    let amount = match layer.effects.last() {
         Some(video_editor_core::plan::EvaluatedEffect::Brightness { amount }) => *amount,
         effect => panic!("expected brightness effect, found {effect:?}"),
     };
@@ -204,6 +207,327 @@ fn write_stepped_tone_wav(path: &std::path::Path, samples: usize) {
     fs::write(path, bytes).expect("write fixture WAV");
 }
 
+fn write_stepped_multiband_wav(path: &std::path::Path, samples: usize) {
+    let mut bytes = Vec::new();
+    let data_length = u32::try_from(samples.checked_mul(2).expect("WAV data length"))
+        .expect("WAV fixture fits u32");
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&MASTER_AUDIO_SAMPLE_RATE.to_le_bytes());
+    bytes.extend_from_slice(&(MASTER_AUDIO_SAMPLE_RATE * 2).to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_length.to_le_bytes());
+    for index in 0..samples {
+        let time = index as f32 / MASTER_AUDIO_SAMPLE_RATE as f32;
+        let sample = if time >= 4.9 {
+            0.22 * (2.0 * std::f32::consts::PI * 100.0 * time).sin()
+                + 0.18 * (2.0 * std::f32::consts::PI * 4_000.0 * time).sin()
+        } else {
+            0.0
+        };
+        let pcm = (sample * f32::from(i16::MAX)).round() as i16;
+        bytes.extend_from_slice(&pcm.to_le_bytes());
+    }
+    fs::write(path, bytes).expect("write multiband fixture WAV");
+}
+
+fn attach_test_master_audio(plan: &mut RenderPlan, source: PathBuf) {
+    plan.audio_output_enabled = false;
+    plan.encoder.audio_mix = None;
+    plan.audio_mix = AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "audible".to_owned(),
+            mute: false,
+            gain: 1.0,
+            clips: vec![AudioClipPlan {
+                id: "audible-clip".to_owned(),
+                asset: "audible".to_owned(),
+                path: source,
+                start: 0.0,
+                trim_start: 0.0,
+                selected_duration: plan.duration,
+                mute: false,
+                gain: 1.0,
+                gain_automation: None,
+                fade_in: 0.0,
+                fade_out: 0.0,
+                fade_in_curve: AudioFadeCurve::Linear,
+                fade_out_curve: AudioFadeCurve::Linear,
+            }],
+        }],
+    };
+}
+
+#[test]
+fn preparation_evaluates_bass_scale_rms_glow_and_high_band_chromatic_reference_targets() {
+    let mut plan = super::example_plan();
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let source = directory.path().join("reference-master.wav");
+    let source_frames = usize::try_from(
+        video_editor_media::seconds_to_samples(plan.duration).expect("fixture duration"),
+    )
+    .expect("fixture sample count fits usize");
+    write_stepped_multiband_wav(&source, source_frames);
+
+    let bass_band = AudioFrequencyBand::new(40.0, 160.0).expect("valid bass band");
+    let high_band = AudioFrequencyBand::new(2_000.0, 12_000.0).expect("valid high band");
+    let bass = CompiledScalarSignal::new(
+        video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::BandEnergy(bass_band),
+        }),
+        vec![
+            CompiledSignalTransform::Gain(GainTransform::new(20.0).expect("finite gain")),
+            CompiledSignalTransform::Remap(
+                RemapTransform::new(0.0, 1.0, 0.0, 1.0).expect("valid remap"),
+            ),
+            CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).expect("valid clamp")),
+            CompiledSignalTransform::Envelope(EnvelopeTransform::new(20_000_000, 180_000_000)),
+            CompiledSignalTransform::ResponseCurve(
+                CubicResponseCurve::new(0.42, 0.0, 0.58, 1.0).expect("valid curve"),
+            ),
+            CompiledSignalTransform::Remap(
+                RemapTransform::new(0.0, 1.0, 1.0, 1.08).expect("valid scale remap"),
+            ),
+        ],
+    );
+    let rms = CompiledScalarSignal::new(
+        video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::Rms,
+        }),
+        vec![CompiledSignalTransform::Gain(
+            GainTransform::new(30.0).expect("finite gain"),
+        )],
+    );
+    let high = CompiledScalarSignal::new(
+        video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::BandEnergy(high_band),
+        }),
+        vec![CompiledSignalTransform::Gain(
+            GainTransform::new(100.0).expect("finite gain"),
+        )],
+    );
+    plan.scalar_signals = CompiledScalarSignals::from_signals(vec![bass, rms, high]);
+    plan.audio_analysis_requirements = AudioAnalysisRequirements::from_requirements([
+        AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(bass_band)),
+        AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
+        AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(high_band)),
+    ]);
+    let signal_ids = plan
+        .scalar_signals
+        .iter()
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>();
+    let [bass_id, rms_id, high_id] = signal_ids.as_slice() else {
+        panic!("expected three complete signals");
+    };
+    let (bass_id, rms_id, high_id) = (*bass_id, *rms_id, *high_id);
+
+    let layer = &mut plan.layers[0];
+    let layer_start =
+        video_editor_core::plan_time::to_nanos(4.0, "reference layer start").expect("start");
+    let layer_end =
+        video_editor_core::plan_time::to_nanos(6.0, "reference layer end").expect("end");
+    layer.start_nanos = layer_start;
+    layer.duration_nanos = layer_end - layer_start;
+    layer.start_frame =
+        video_editor_core::plan_time::first_frame_at_or_after(layer_start, plan.frame_rate)
+            .expect("start frame");
+    layer.end_frame =
+        video_editor_core::plan_time::first_frame_at_or_after(layer_end, plan.frame_rate)
+            .expect("end frame");
+    layer.draw_key.start_nanos = layer_start;
+    layer.transform.scale = Track::new(video_editor_core::domain::Point { x: 1.0, y: 1.0 });
+    let uniform_scale = CompiledScalarModifier {
+        operation: ScalarModifierOperation::Multiply,
+        signal: bass_id,
+    };
+    layer.transform.scale_x_modifiers = vec![uniform_scale];
+    layer.transform.scale_y_modifiers = vec![uniform_scale];
+    layer.transform_contributions.clear();
+    layer.effects.clear();
+    layer.effects.extend([
+        TimedEffect {
+            start: 0,
+            end: layer.duration_nanos,
+            effect: CompiledEffect::Glow {
+                threshold: CompiledScalarProperty::constrained(
+                    Track::new(0.25),
+                    ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
+                ),
+                radius: CompiledScalarProperty::constrained(
+                    Track::new(8.0),
+                    ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 32.0 },
+                ),
+                intensity: CompiledScalarProperty {
+                    authored_track: Track::new(0.0),
+                    modifiers: vec![CompiledScalarModifier {
+                        operation: ScalarModifierOperation::Replace,
+                        signal: rms_id,
+                    }],
+                    constraint: ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 },
+                },
+                colour: [255, 255, 255, 255],
+            },
+            dependency: TemporalDependency::Dynamic,
+        },
+        TimedEffect {
+            start: 0,
+            end: layer.duration_nanos,
+            effect: CompiledEffect::ChromaticAberration {
+                amount: CompiledScalarProperty {
+                    authored_track: Track::new(0.0),
+                    modifiers: vec![CompiledScalarModifier {
+                        operation: ScalarModifierOperation::Replace,
+                        signal: high_id,
+                    }],
+                    constraint: ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 32.0 },
+                },
+                angle_degrees: CompiledScalarProperty::authored(Track::new(0.0)),
+            },
+            dependency: TemporalDependency::Dynamic,
+        },
+    ]);
+    layer.content_dependency = TemporalDependency::Dynamic;
+    plan.visual_dependency = TemporalDependency::Dynamic;
+    attach_test_master_audio(&mut plan, source);
+
+    let prepared = prepare(&plan, RenderBackendPreference::Wgpu, |_, _, _| {
+        Ok((
+            Box::new(MockStagedBackend::new(
+                1,
+                vec![],
+                Arc::new(Mutex::new(Vec::new())),
+            )),
+            None,
+        ))
+    })
+    .expect("reference audio analysis prepares");
+    let project_time =
+        video_editor_core::plan_time::to_nanos(5.0, "reference project time").expect("time");
+    let frame_number =
+        video_editor_core::plan_time::first_frame_at_or_after(project_time, plan.frame_rate)
+            .expect("frame");
+    let active = ActiveSchedule::compile(&plan).active_at(&plan, frame_number);
+    let frame = evaluate_with_context(
+        &plan,
+        &active,
+        project_time,
+        &EvaluationContext::new(prepared.scalar_signals()),
+    )
+    .expect("reference frame evaluates");
+    let layer = frame
+        .layers
+        .iter()
+        .find(|layer| layer.compiled_layer_index == 0)
+        .expect("reference layer is active");
+    let transform = match &layer.source {
+        EvaluatedSource::Image { transform, .. } => transform,
+        source => panic!("expected image reference layer, found {source:?}"),
+    };
+    let bass_value = prepared
+        .scalar_signals()
+        .get(bass_id)
+        .expect("bass signal")
+        .sample(project_time);
+    assert!(bass_value > 1.0 && bass_value <= 1.08);
+    assert!((transform.scale.x - bass_value).abs() < 1e-12);
+    assert!((transform.scale.y - bass_value).abs() < 1e-12);
+
+    let rms_value = prepared
+        .scalar_signals()
+        .get(rms_id)
+        .expect("RMS signal")
+        .sample(project_time);
+    let high_value = prepared
+        .scalar_signals()
+        .get(high_id)
+        .expect("high-band signal")
+        .sample(project_time);
+    let glow = layer.effects.iter().find_map(|effect| match effect {
+        EvaluatedEffect::Glow { intensity, .. } => Some(*intensity),
+        _ => None,
+    });
+    let chromatic = layer.effects.iter().find_map(|effect| match effect {
+        EvaluatedEffect::ChromaticAberration { amount, .. } => Some(*amount),
+        _ => None,
+    });
+    assert_eq!(glow, Some(rms_value.clamp(0.0, 4.0)));
+    assert!(glow.expect("Glow reference") > 0.0);
+    assert_eq!(chromatic, Some(high_value.clamp(0.0, 32.0)));
+    assert!(chromatic.expect("chromatic reference") > 0.0);
+}
+
+#[test]
+fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations() {
+    reset_audio_analysis_invocation_count();
+    let mut plan = super::example_plan();
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let source = directory.path().join("prepared-reuse.wav");
+    let source_frames = usize::try_from(
+        video_editor_media::seconds_to_samples(plan.duration).expect("fixture duration"),
+    )
+    .expect("fixture sample count fits usize");
+    write_stepped_tone_wav(&source, source_frames);
+    plan.scalar_signals = CompiledScalarSignals::from_signals(vec![CompiledScalarSignal::new(
+        video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::Rms,
+        }),
+        vec![],
+    )]);
+    plan.audio_analysis_requirements = AudioAnalysisRequirements::from_requirements([
+        AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
+    ]);
+    attach_test_master_audio(&mut plan, source);
+
+    let total_frames = plan.frame_count;
+    let mut prepared = prepare(&plan, RenderBackendPreference::Wgpu, move |_, _, _| {
+        Ok((
+            Box::new(MockStagedBackend::new(
+                3,
+                (0..total_frames).collect(),
+                Arc::new(Mutex::new(Vec::new())),
+            )),
+            None,
+        ))
+    })
+    .expect("analysis preparation succeeds");
+    assert_eq!(audio_analysis_invocation_count(), 1);
+
+    render_prepared_frame(&mut prepared, 0).expect("first random-access frame");
+    render_prepared_frame(&mut prepared, plan.frame_count / 2).expect("later random-access frame");
+    let output = directory.path().join("prepared-reuse.mp4");
+    let options = RenderOptions {
+        output_override: Some(output),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    render_prepared_with_sink(
+        &mut prepared,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                SinkProbe::default(),
+            ))
+        },
+    )
+    .expect("video operation reuses prepared analysis");
+    render_prepared_frame(&mut prepared, 0).expect("frame after video");
+    assert_eq!(audio_analysis_invocation_count(), 1);
+}
+
 #[test]
 fn preparation_without_analysis_records_zero_audio_analysis_time() {
     let prepared = prepare(
@@ -221,6 +545,41 @@ fn preparation_without_analysis_records_zero_audio_analysis_time() {
         },
     )
     .expect("ordinary preparation");
+    assert_eq!(prepared.audio_analysis_duration(), Duration::ZERO);
+}
+
+#[test]
+fn ordinary_output_audio_without_visual_signals_skips_audio_analysis() {
+    reset_audio_analysis_invocation_count();
+    let mut plan = super::example_plan();
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let source = directory.path().join("ordinary-output-audio.wav");
+    let source_frames = usize::try_from(
+        video_editor_media::seconds_to_samples(plan.duration).expect("fixture duration"),
+    )
+    .expect("fixture sample count fits usize");
+    write_stepped_tone_wav(&source, source_frames);
+    attach_test_master_audio(&mut plan, source);
+    plan.audio_output_enabled = true;
+    plan.encoder.audio_mix = Some(plan.audio_mix.clone());
+
+    assert!(plan.scalar_signals.is_empty());
+    assert!(plan.audio_analysis_requirements.is_empty());
+    assert!(plan.encoder.audio_mix.is_some());
+
+    let prepared = prepare(&plan, RenderBackendPreference::Wgpu, |_, _, _| {
+        Ok((
+            Box::new(MockStagedBackend::new(
+                1,
+                vec![],
+                Arc::new(Mutex::new(Vec::new())),
+            )),
+            None,
+        ))
+    })
+    .expect("ordinary output-audio preparation");
+
+    assert_eq!(audio_analysis_invocation_count(), 0);
     assert_eq!(prepared.audio_analysis_duration(), Duration::ZERO);
 }
 

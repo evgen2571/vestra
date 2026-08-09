@@ -14,6 +14,26 @@ use crate::{
 use video_editor_core::plan::{PreparedScalarSignals, prepare_scalar_signals};
 use video_editor_media::{EncoderSettings, FfmpegSink, FrameSink, MediaError, OutputTarget};
 
+#[cfg(test)]
+std::thread_local! {
+    static AUDIO_ANALYSIS_INVOCATION_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_audio_analysis_invocation_count() {
+    AUDIO_ANALYSIS_INVOCATION_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn audio_analysis_invocation_count() -> usize {
+    AUDIO_ANALYSIS_INVOCATION_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn record_audio_analysis_invocation() {
+    AUDIO_ANALYSIS_INVOCATION_COUNT.with(|count| count.set(count.get() + 1));
+}
+
 use super::{
     events,
     failure::cleanup_error,
@@ -183,6 +203,8 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
     let scalar_signals = if plan.audio_analysis_requirements.is_empty() {
         PreparedScalarSignals::empty()
     } else {
+        #[cfg(test)]
+        record_audio_analysis_invocation();
         let raw_features = video_editor_media::analyze_master_audio(
             &plan.audio_analysis_requirements,
             &plan.audio_mix,

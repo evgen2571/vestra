@@ -55,6 +55,16 @@ settings, time conversion, and workload metrics. `plan/evaluation` evaluates
 the plan for one frame. It owns transform contributions, effects, colour
 transforms, camera shake, and motion calculations.
 
+Scalar signals follow the same boundary. Canonical properties describe their
+source and ordered transforms. The compiler interns equivalent complete signals
+and derives raw analysis requirements. Media produces only raw Master RMS,
+peak, and band-energy series, while preparation applies signal transforms once.
+Frame evaluation samples the prepared series at absolute project time before it
+applies property modifiers and target-domain constraints. Render backends receive
+only evaluated numeric values and have no signal or audio-analysis semantics.
+Empty requirements skip analysis entirely, even when ordinary output audio is
+enabled.
+
 The compiler also normalizes its private visual plan. `TemporalDependency::Static`
 means a layer, timed effect, or post-effect chain has the same rendered content
 at every time in its active domain; `Dynamic` means a track or active interval

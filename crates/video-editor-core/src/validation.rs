@@ -533,6 +533,72 @@ mod tests {
     }
 
     #[test]
+    fn component_signal_validation_uses_the_component_modifier_array_pointer() {
+        let fields = ["position_x", "position_y", "scale_x", "scale_y"];
+        for field in fields {
+            let mut project = example_project();
+            let modifiers = match field {
+                "position_x" => {
+                    &mut project.visual.clips[0]
+                        .transform
+                        .as_mut()
+                        .expect("transform")
+                        .component_modifiers
+                        .position_x
+                }
+                "position_y" => {
+                    &mut project.visual.clips[0]
+                        .transform
+                        .as_mut()
+                        .expect("transform")
+                        .component_modifiers
+                        .position_y
+                }
+                "scale_x" => {
+                    &mut project.visual.clips[0]
+                        .transform
+                        .as_mut()
+                        .expect("transform")
+                        .component_modifiers
+                        .scale_x
+                }
+                "scale_y" => {
+                    &mut project.visual.clips[0]
+                        .transform
+                        .as_mut()
+                        .expect("transform")
+                        .component_modifiers
+                        .scale_y
+                }
+                _ => unreachable!("known transform component"),
+            };
+            modifiers.push(crate::project::ScalarModifier {
+                operation: crate::project::ScalarModifierOperation::Add,
+                signal: crate::project::ScalarSignal {
+                    source: crate::project::ScalarSignalSource::Audio {
+                        tap: crate::project::AudioAnalysisTap::Master,
+                        feature: crate::project::AudioScalarFeature::BandEnergy {
+                            min_hz: 160.0,
+                            max_hz: 40.0,
+                        },
+                    },
+                    transforms: vec![],
+                },
+            });
+            let expected = format!(
+                "/visual/clips/0/transform/component_modifiers/{field}/0/signal/source/feature/min_hz"
+            );
+            assert!(
+                validate(&project, ResourceLimits::default())
+                    .diagnostics()
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == "MVP-SIGNAL-BAND"
+                        && diagnostic.pointer.as_deref() == Some(expected.as_str()))
+            );
+        }
+    }
+
+    #[test]
     fn master_signal_accepts_authored_silence_even_when_output_audio_is_disabled() {
         let mut project = example_project();
         project.audio = Some(

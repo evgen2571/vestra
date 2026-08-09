@@ -3,7 +3,21 @@ use std::{io, path::PathBuf, process::ExitStatus};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+pub enum AudioAnalysisError {
+    #[error("audio feature {0:?} is not implemented")]
+    UnsupportedFeature(video_editor_core::plan::AudioScalarFeature),
+    #[error("audio analysis produced a non-finite feature value")]
+    NonFiniteFeature,
+    #[error("audio analysis window state is invalid")]
+    InvalidWindowState,
+    #[error("audio analysis timing overflows the supported range")]
+    TimingOverflow,
+}
+
+#[derive(Debug, Error)]
 pub enum MediaError {
+    #[error(transparent)]
+    AudioAnalysis(#[from] AudioAnalysisError),
     #[error("cannot start {program}: {source}")]
     ProcessStart {
         program: &'static str,
@@ -32,8 +46,11 @@ pub enum MediaError {
     MasterAudioUnavailable,
     #[error("malformed Master PCM: {0}")]
     MalformedMasterPcm(String),
-    #[error("Master PCM consumer failed: {0}")]
-    MasterPcmConsumer(String),
+    #[error("Master PCM consumer failed: {source}")]
+    MasterPcmConsumer {
+        #[source]
+        source: Box<MediaError>,
+    },
     #[error("FFmpeg did not expose a frame input pipe")]
     MissingFrameInput,
     #[error("FFmpeg did not expose an error output pipe")]
@@ -86,4 +103,12 @@ pub enum MediaError {
         #[source]
         source: io::Error,
     },
+}
+
+impl MediaError {
+    pub(crate) fn master_pcm_consumer(source: Self) -> Self {
+        Self::MasterPcmConsumer {
+            source: Box::new(source),
+        }
+    }
 }

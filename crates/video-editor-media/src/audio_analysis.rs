@@ -1,15 +1,23 @@
 //! Standalone execution of the production Master audio graph for analysis.
 
 use std::{
+    collections::{BTreeMap, VecDeque},
     io::Read,
     process::{ChildStderr, Command, Stdio},
     thread,
 };
 
-use video_editor_core::plan_audio::{AudioMixPlan, MASTER_AUDIO_SAMPLE_RATE};
+use video_editor_core::{
+    plan::{
+        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioScalarFeature,
+        PreparedScalarSignal,
+    },
+    plan_audio::{AudioMixPlan, MASTER_AUDIO_SAMPLE_RATE},
+    timeline::NANOS_PER_SECOND,
+};
 
 use crate::{
-    MediaError,
+    AudioAnalysisError, MediaError,
     audio_graph::{self, AudioGraphCompileOptions},
     ffmpeg::{
         FILTERGRAPH_SCRIPT_THRESHOLD_BYTES, TemporaryFiltergraph, enforce_audio_source_limit,
@@ -19,6 +27,178 @@ use crate::{
 const CHANNELS: u16 = 2;
 const PCM_READ_BYTES: usize = 32 * 1024;
 const STDERR_LIMIT_BYTES: usize = 64 * 1024;
+/// V1 feature clock: 10 ms at the fixed Master sample rate.
+pub const AUDIO_FEATURE_HOP_FRAMES: usize = (MASTER_AUDIO_SAMPLE_RATE / 100) as usize;
+const RMS_PEAK_WINDOW_FRAMES: usize = AUDIO_FEATURE_HOP_FRAMES * 2;
+const FEATURE_HOP_NANOS: u128 = NANOS_PER_SECOND / 100;
+
+/// Analyze every currently supported Master requirement from one PCM stream.
+pub fn analyze_master_audio(
+    requirements: &AudioAnalysisRequirements,
+    mix: &AudioMixPlan,
+    project_duration: f64,
+    maximum_audio_sources: usize,
+) -> Result<BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal>, MediaError> {
+    if requirements.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    for requirement in requirements.iter() {
+        let AudioAnalysisRequirement::Master(feature) = requirement;
+        if matches!(feature, AudioScalarFeature::BandEnergy(_)) {
+            return Err(AudioAnalysisError::UnsupportedFeature(*feature).into());
+        }
+    }
+    let project_frames = audio_graph::seconds_to_samples(project_duration)?;
+    let mut coordinator = MasterAnalysisCoordinator::new(requirements, project_frames)?;
+    consume_master_pcm(mix, project_duration, maximum_audio_sources, |samples| {
+        coordinator.push(samples)
+    })?;
+    coordinator.finish()
+}
+
+struct MasterAnalysisCoordinator {
+    rms: bool,
+    peak: bool,
+    project_frames: u64,
+    received_frames: u64,
+    expected_samples: usize,
+    window: VecDeque<[f32; 2]>,
+    rms_samples: Vec<f64>,
+    peak_samples: Vec<f64>,
+}
+
+impl MasterAnalysisCoordinator {
+    fn new(
+        requirements: &AudioAnalysisRequirements,
+        project_frames: u64,
+    ) -> Result<Self, AudioAnalysisError> {
+        let mut rms = false;
+        let mut peak = false;
+        for requirement in requirements.iter() {
+            match requirement {
+                AudioAnalysisRequirement::Master(AudioScalarFeature::Rms) => rms = true,
+                AudioAnalysisRequirement::Master(AudioScalarFeature::Peak) => peak = true,
+                AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(feature)) => {
+                    return Err(AudioAnalysisError::UnsupportedFeature(
+                        AudioScalarFeature::BandEnergy(*feature),
+                    ));
+                }
+            }
+        }
+        let hops = project_frames
+            .checked_add(AUDIO_FEATURE_HOP_FRAMES as u64 - 1)
+            .ok_or(AudioAnalysisError::TimingOverflow)?
+            / AUDIO_FEATURE_HOP_FRAMES as u64;
+        let expected_samples = usize::try_from(
+            hops.checked_add(1)
+                .ok_or(AudioAnalysisError::TimingOverflow)?,
+        )
+        .map_err(|_| AudioAnalysisError::TimingOverflow)?;
+        let mut window = VecDeque::with_capacity(RMS_PEAK_WINDOW_FRAMES);
+        window.extend(std::iter::repeat_n([0.0, 0.0], AUDIO_FEATURE_HOP_FRAMES));
+        let mut rms_samples = Vec::new();
+        let mut peak_samples = Vec::new();
+        if rms {
+            rms_samples
+                .try_reserve_exact(expected_samples)
+                .map_err(|_| AudioAnalysisError::TimingOverflow)?;
+        }
+        if peak {
+            peak_samples
+                .try_reserve_exact(expected_samples)
+                .map_err(|_| AudioAnalysisError::TimingOverflow)?;
+        }
+        Ok(Self {
+            rms,
+            peak,
+            project_frames,
+            received_frames: 0,
+            expected_samples,
+            window,
+            rms_samples,
+            peak_samples,
+        })
+    }
+
+    fn push(&mut self, samples: &[f32]) -> Result<(), MediaError> {
+        if !samples.len().is_multiple_of(CHANNELS as usize) {
+            return Err(AudioAnalysisError::InvalidWindowState.into());
+        }
+        self.received_frames = self
+            .received_frames
+            .checked_add((samples.len() / CHANNELS as usize) as u64)
+            .ok_or(AudioAnalysisError::TimingOverflow)?;
+        for frame in samples.chunks_exact(CHANNELS as usize) {
+            self.window.push_back([frame[0], frame[1]]);
+            self.emit_ready()?;
+        }
+        Ok(())
+    }
+
+    fn emit_ready(&mut self) -> Result<(), AudioAnalysisError> {
+        while self.window.len() >= RMS_PEAK_WINDOW_FRAMES
+            && self.rms_samples.len().max(self.peak_samples.len()) < self.expected_samples
+        {
+            let mut sum_squares = 0.0_f64;
+            let mut peak = 0.0_f64;
+            for frame in &self.window {
+                for sample in frame {
+                    let sample = f64::from(*sample);
+                    if self.rms {
+                        sum_squares += sample * sample;
+                    }
+                    if self.peak {
+                        peak = peak.max(sample.abs());
+                    }
+                }
+            }
+            if self.rms {
+                let value =
+                    (sum_squares / (RMS_PEAK_WINDOW_FRAMES * CHANNELS as usize) as f64).sqrt();
+                if !value.is_finite() {
+                    return Err(AudioAnalysisError::NonFiniteFeature);
+                }
+                self.rms_samples.push(value);
+            }
+            if self.peak {
+                if !peak.is_finite() {
+                    return Err(AudioAnalysisError::NonFiniteFeature);
+                }
+                self.peak_samples.push(peak);
+            }
+            self.window.drain(..AUDIO_FEATURE_HOP_FRAMES);
+        }
+        Ok(())
+    }
+
+    fn finish(
+        mut self,
+    ) -> Result<BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal>, MediaError> {
+        if self.received_frames != self.project_frames {
+            return Err(AudioAnalysisError::InvalidWindowState.into());
+        }
+        while self.rms_samples.len().max(self.peak_samples.len()) < self.expected_samples {
+            self.window.push_back([0.0, 0.0]);
+            self.emit_ready()?;
+        }
+        let mut result = BTreeMap::new();
+        if self.rms {
+            result.insert(
+                AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
+                PreparedScalarSignal::new(0, FEATURE_HOP_NANOS, self.rms_samples)
+                    .map_err(|_| AudioAnalysisError::TimingOverflow)?,
+            );
+        }
+        if self.peak {
+            result.insert(
+                AudioAnalysisRequirement::Master(AudioScalarFeature::Peak),
+                PreparedScalarSignal::new(0, FEATURE_HOP_NANOS, self.peak_samples)
+                    .map_err(|_| AudioAnalysisError::TimingOverflow)?,
+            );
+        }
+        Ok(result)
+    }
+}
 
 /// Fixed format of the timeline Master stream supplied to analysis processors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,12 +274,20 @@ pub fn consume_master_pcm(
     };
 
     let result = consume_pcm_reader(&mut stdout, &mut consume, expected_frames);
-    let consumer_failed = matches!(result, Err(MediaError::MasterPcmConsumer(_)));
+    let consumer_failed = matches!(result, Err(MediaError::MasterPcmConsumer { .. }));
     if consumer_failed {
         let _ = child.kill();
     }
     drop(stdout);
-    let status = child.wait().map_err(MediaError::ProcessWait)?;
+    // Always reap and drain stderr before returning the primary stream error.
+    // In particular, `wait` failures must not skip the stderr thread join.
+    let status = child.wait();
+    if status.is_err() {
+        // A failed wait is unusual, but still make a best-effort second cleanup
+        // attempt before joining the stderr drainer and reporting it.
+        let _ = child.kill();
+        let _ = child.wait();
+    }
     let stderr = stderr_reader
         .join()
         .map_err(|_| MediaError::StderrCollection {
@@ -108,6 +296,7 @@ pub fn consume_master_pcm(
     if consumer_failed {
         return result.map(|()| spec);
     }
+    let status = status.map_err(MediaError::ProcessWait)?;
     if !status.success() {
         return Err(MediaError::ProcessFailed {
             program: "ffmpeg",
@@ -170,7 +359,7 @@ fn consume_silence(
     let zeros = vec![0.0_f32; 4_096 * CHANNELS as usize];
     while remaining_frames > 0 {
         let frames = remaining_frames.min(4_096) as usize;
-        consume(&zeros[..frames * CHANNELS as usize])?;
+        consume(&zeros[..frames * CHANNELS as usize]).map_err(MediaError::master_pcm_consumer)?;
         remaining_frames -= frames as u64;
     }
     Ok(())
@@ -193,7 +382,7 @@ fn consume_pcm_reader(
         }
         decoder.push(&bytes[..read], |samples| {
             emitted_frames += (samples.len() / CHANNELS as usize) as u64;
-            consume(samples).map_err(|error| MediaError::MasterPcmConsumer(error.to_string()))
+            consume(samples).map_err(MediaError::master_pcm_consumer)
         })?;
     }
     decoder.finish()?;
@@ -279,6 +468,237 @@ mod tests {
     };
 
     use super::*;
+
+    fn requirements(features: &[AudioScalarFeature]) -> AudioAnalysisRequirements {
+        AudioAnalysisRequirements::from_requirements(
+            features
+                .iter()
+                .copied()
+                .map(AudioAnalysisRequirement::Master),
+        )
+    }
+
+    fn analyze_chunks(
+        features: &[AudioScalarFeature],
+        project_frames: usize,
+        pcm: &[f32],
+        chunks: &[usize],
+    ) -> BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal> {
+        let mut coordinator =
+            MasterAnalysisCoordinator::new(&requirements(features), project_frames as u64)
+                .expect("coordinator");
+        let mut offset = 0;
+        for &frames in chunks {
+            let end = (offset + frames * CHANNELS as usize).min(pcm.len());
+            if end > offset {
+                coordinator.push(&pcm[offset..end]).expect("PCM");
+            }
+            offset = end;
+        }
+        if offset < pcm.len() {
+            coordinator.push(&pcm[offset..]).expect("trailing PCM");
+        }
+        coordinator.finish().expect("features")
+    }
+
+    #[test]
+    fn rms_and_peak_use_stereo_samples_without_clamping() {
+        let pcm = std::iter::repeat_n([2.0_f32, 2.0], RMS_PEAK_WINDOW_FRAMES)
+            .flatten()
+            .collect::<Vec<_>>();
+        let features = analyze_chunks(
+            &[AudioScalarFeature::Rms, AudioScalarFeature::Peak],
+            RMS_PEAK_WINDOW_FRAMES,
+            &pcm,
+            &[RMS_PEAK_WINDOW_FRAMES],
+        );
+        let rms = features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)]
+            .sample(FEATURE_HOP_NANOS);
+        let peak = features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Peak)]
+            .sample(FEATURE_HOP_NANOS);
+        assert!((rms - 2.0).abs() < 1e-12);
+        assert!((peak - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rms_uses_both_channels_and_start_padding() {
+        let one_channel = std::iter::repeat_n([1.0_f32, 0.0], AUDIO_FEATURE_HOP_FRAMES)
+            .flatten()
+            .collect::<Vec<_>>();
+        let features = analyze_chunks(
+            &[AudioScalarFeature::Rms],
+            AUDIO_FEATURE_HOP_FRAMES,
+            &one_channel,
+            &[1; AUDIO_FEATURE_HOP_FRAMES],
+        );
+        let rms = features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)].sample(0);
+        assert!(
+            (rms - 0.5).abs() < 1e-12,
+            "left boundary has half a silent window"
+        );
+
+        let full = std::iter::repeat_n([1.0_f32, 0.0], RMS_PEAK_WINDOW_FRAMES)
+            .flatten()
+            .collect::<Vec<_>>();
+        let features = analyze_chunks(
+            &[AudioScalarFeature::Rms],
+            RMS_PEAK_WINDOW_FRAMES,
+            &full,
+            &[RMS_PEAK_WINDOW_FRAMES],
+        );
+        let rms = features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)]
+            .sample(FEATURE_HOP_NANOS);
+        assert!((rms - 0.5_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn feature_results_are_independent_of_pcm_chunk_boundaries() {
+        let pcm = (0..(RMS_PEAK_WINDOW_FRAMES * 2))
+            .flat_map(|frame| {
+                [
+                    if frame < RMS_PEAK_WINDOW_FRAMES {
+                        0.0
+                    } else {
+                        -1.3
+                    },
+                    0.7,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let features = [AudioScalarFeature::Rms, AudioScalarFeature::Peak];
+        let whole = analyze_chunks(
+            &features,
+            RMS_PEAK_WINDOW_FRAMES * 2,
+            &pcm,
+            &[RMS_PEAK_WINDOW_FRAMES * 2],
+        );
+        let split = analyze_chunks(
+            &features,
+            RMS_PEAK_WINDOW_FRAMES * 2,
+            &pcm,
+            &[1; RMS_PEAK_WINDOW_FRAMES * 2],
+        );
+        for feature in features {
+            let requirement = AudioAnalysisRequirement::Master(feature);
+            for timestamp in [0, FEATURE_HOP_NANOS, FEATURE_HOP_NANOS * 2] {
+                assert_eq!(
+                    whole[&requirement].sample(timestamp),
+                    split[&requirement].sample(timestamp)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn peak_is_the_largest_absolute_stereo_sample() {
+        let pcm = (0..RMS_PEAK_WINDOW_FRAMES)
+            .flat_map(|frame| {
+                if frame % 2 == 0 {
+                    [0.1_f32, -1.3]
+                } else {
+                    [0.7, -0.5]
+                }
+            })
+            .collect::<Vec<_>>();
+        let features = analyze_chunks(
+            &[AudioScalarFeature::Peak],
+            RMS_PEAK_WINDOW_FRAMES,
+            &pcm,
+            &[RMS_PEAK_WINDOW_FRAMES],
+        );
+        assert!(
+            (features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Peak)]
+                .sample(FEATURE_HOP_NANOS)
+                - 1.3)
+                .abs()
+                < 1e-6
+        );
+    }
+
+    #[test]
+    fn overlapping_windows_capture_a_step_transition() {
+        let pcm = (0..RMS_PEAK_WINDOW_FRAMES * 2)
+            .flat_map(|frame| {
+                let value = if frame < RMS_PEAK_WINDOW_FRAMES {
+                    0.0
+                } else {
+                    1.0
+                };
+                [value, value]
+            })
+            .collect::<Vec<_>>();
+        let features = analyze_chunks(
+            &[AudioScalarFeature::Rms, AudioScalarFeature::Peak],
+            RMS_PEAK_WINDOW_FRAMES * 2,
+            &pcm,
+            &[RMS_PEAK_WINDOW_FRAMES * 2],
+        );
+        let rms = &features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)];
+        let peak = &features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Peak)];
+        assert_eq!(rms.sample(FEATURE_HOP_NANOS), 0.0);
+        assert!((rms.sample(FEATURE_HOP_NANOS * 2) - 0.5_f64.sqrt()).abs() < 1e-12);
+        assert_eq!(rms.sample(FEATURE_HOP_NANOS * 3), 1.0);
+        assert_eq!(peak.sample(FEATURE_HOP_NANOS * 2), 1.0);
+    }
+
+    #[test]
+    fn band_energy_is_rejected_before_master_extraction() {
+        let band =
+            video_editor_core::plan::AudioFrequencyBand::new(40.0, 160.0).expect("valid band");
+        let error = analyze_master_audio(
+            &requirements(&[AudioScalarFeature::BandEnergy(band)]),
+            &AudioMixPlan::default(),
+            0.01,
+            1,
+        )
+        .expect_err("BandEnergy is not implemented in C2");
+        assert!(matches!(
+            error,
+            MediaError::AudioAnalysis(AudioAnalysisError::UnsupportedFeature(
+                AudioScalarFeature::BandEnergy(actual)
+            )) if actual == band
+        ));
+    }
+
+    #[test]
+    fn silent_authored_master_produces_zero_rms_and_peak_without_pcm_process() {
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "muted".to_owned(),
+                mute: true,
+                gain: 1.0,
+                clips: vec![clip(Path::new("not-opened.wav"), 1.0)],
+            }],
+        };
+        let features = analyze_master_audio(
+            &requirements(&[AudioScalarFeature::Rms, AudioScalarFeature::Peak]),
+            &mix,
+            0.01,
+            1,
+        )
+        .expect("silent Master is analyzable");
+        for requirement in [
+            AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
+            AudioAnalysisRequirement::Master(AudioScalarFeature::Peak),
+        ] {
+            assert_eq!(features[&requirement].sample(0), 0.0);
+            assert_eq!(features[&requirement].sample(FEATURE_HOP_NANOS), 0.0);
+        }
+    }
+
+    #[test]
+    fn empty_requirements_skip_master_validation_and_processing() {
+        assert!(
+            analyze_master_audio(
+                &AudioAnalysisRequirements::default(),
+                &AudioMixPlan::default(),
+                0.01,
+                1,
+            )
+            .expect("empty analysis")
+            .is_empty()
+        );
+    }
 
     #[test]
     fn decoder_reconstructs_unaligned_pcm_and_preserves_amplitude() {
@@ -404,8 +824,8 @@ mod tests {
             })
         ));
         assert!(matches!(
-            consume_master_pcm(&mix, 0.01, 2, |_| Err(MediaError::MasterPcmConsumer("stop".to_owned()))),
-            Err(MediaError::MasterPcmConsumer(message)) if message.contains("stop")
+            consume_master_pcm(&mix, 0.01, 2, |_| Err(MediaError::MalformedMasterPcm("stop".to_owned()))),
+            Err(MediaError::MasterPcmConsumer { source }) if matches!(source.as_ref(), MediaError::MalformedMasterPcm(message) if message == "stop")
         ));
     }
 

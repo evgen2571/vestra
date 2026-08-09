@@ -9,11 +9,7 @@ use crate::plan_audio::master_audio_nyquist_hz;
 pub struct ScalarSignalId(u32);
 
 impl ScalarSignalId {
-    /// Compiler-owned dense allocation. IDs are direct indices into plan tables.
-    #[allow(
-        dead_code,
-        reason = "authored signal compilation will allocate IDs through the interner in the next phase"
-    )]
+    /// Deterministic signal interning assigns dense direct indices into plan tables.
     #[must_use]
     pub(crate) const fn from_index(index: u32) -> Self {
         Self(index)
@@ -261,16 +257,45 @@ impl ClampTransform {
     }
 }
 
+/// Asymmetric one-pole smoothing time constants in timeline nanoseconds.
+///
+/// The fixed-hop prepared signal contract lets preparation precompute one
+/// attack and release coefficient per series. The durations remain elapsed
+/// time rather than a count of samples.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EnvelopeTransform {
+    attack: u128,
+    release: u128,
+}
+
+impl EnvelopeTransform {
+    #[must_use]
+    pub const fn new(attack: u128, release: u128) -> Self {
+        Self { attack, release }
+    }
+
+    #[must_use]
+    pub const fn attack(self) -> u128 {
+        self.attack
+    }
+
+    #[must_use]
+    pub const fn release(self) -> u128 {
+        self.release
+    }
+}
+
 /// Generic transforms applied in declaration order during signal preparation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompiledSignalTransform {
     Gain(GainTransform),
     Remap(RemapTransform),
     Clamp(ClampTransform),
+    Envelope(EnvelopeTransform),
 }
 
 impl CompiledSignalTransform {
-    fn apply(self, input: f64) -> f64 {
+    fn apply_stateless(self, input: f64) -> f64 {
         match self {
             Self::Gain(transform) => input * transform.gain(),
             Self::Remap(transform) => {
@@ -280,6 +305,7 @@ impl CompiledSignalTransform {
                     + unit * (transform.output_end() - transform.output_start())
             }
             Self::Clamp(transform) => input.clamp(transform.min(), transform.max()),
+            Self::Envelope(_) => unreachable!("Envelope operates on a complete signal series"),
         }
     }
 }
@@ -400,6 +426,10 @@ impl CompiledScalarSignals {
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "internal compiler hooks remain test-covered until signal authoring syntax is introduced"
+)]
 #[derive(Default)]
 pub(crate) struct ScalarSignalInterner {
     signals: Vec<CompiledScalarSignal>,
@@ -409,7 +439,7 @@ pub(crate) struct ScalarSignalInterner {
 impl ScalarSignalInterner {
     #[allow(
         dead_code,
-        reason = "authored signal compilation will call this once signal syntax exists"
+        reason = "internal compiler hooks remain test-covered until signal authoring syntax is introduced"
     )]
     pub(crate) fn intern(&mut self, signal: CompiledScalarSignal) -> ScalarSignalId {
         if let Some(&id) = self.ids.get(&signal) {
@@ -532,25 +562,67 @@ impl PreparedScalarSignal {
 
 /// Applies an ordered transform chain to one immutable raw series.
 ///
-/// This deliberately allocates only the output values. The raw input remains
-/// borrowed so one analyzed feature can feed many complete scalar signals.
+/// This deliberately allocates one working output vector. Each transform then
+/// mutates that vector in declaration order, allowing stateful transforms to
+/// run during preparation while the raw input remains shareable.
 pub fn prepare_transformed_scalar_signal(
     raw: &PreparedScalarSignal,
     transforms: &[CompiledSignalTransform],
 ) -> Result<PreparedScalarSignal, SignalPreparationError> {
-    let mut values = Vec::with_capacity(raw.samples.len());
-    for &sample in &raw.samples {
-        let value = transforms
-            .iter()
-            .copied()
-            .fold(sample, |value, transform| transform.apply(value));
-        if !value.is_finite() {
-            return Err(SignalPreparationError::NonFiniteTransformedSample);
+    let mut values = raw.samples.clone();
+    for &transform in transforms {
+        match transform {
+            CompiledSignalTransform::Envelope(envelope) => {
+                apply_envelope(&mut values, raw.sample_interval, envelope)?;
+            }
+            transform => {
+                for value in &mut values {
+                    *value = transform.apply_stateless(*value);
+                    if !value.is_finite() {
+                        return Err(SignalPreparationError::NonFiniteTransformedSample);
+                    }
+                }
+            }
         }
-        values.push(value);
     }
     PreparedScalarSignal::new(raw.start_time, raw.sample_interval, values)
         .map_err(|_| SignalPreparationError::NonFiniteTransformedSample)
+}
+
+fn apply_envelope(
+    values: &mut [f64],
+    sample_interval: u128,
+    transform: EnvelopeTransform,
+) -> Result<(), SignalPreparationError> {
+    let Some((first, rest)) = values.split_first_mut() else {
+        return Ok(());
+    };
+    let mut previous = *first;
+    let attack_alpha = envelope_alpha(sample_interval, transform.attack());
+    let release_alpha = envelope_alpha(sample_interval, transform.release());
+    for target in rest {
+        if *target != previous {
+            let alpha = if *target > previous {
+                attack_alpha
+            } else {
+                release_alpha
+            };
+            *target = previous + alpha * (*target - previous);
+        }
+        if !target.is_finite() {
+            return Err(SignalPreparationError::NonFiniteTransformedSample);
+        }
+        previous = *target;
+    }
+    Ok(())
+}
+
+fn envelope_alpha(sample_interval: u128, tau: u128) -> f64 {
+    if tau == 0 {
+        1.0
+    } else {
+        -(-((sample_interval as f64) / (tau as f64))).exp_m1()
+    }
 }
 
 /// Expands raw source features into dense complete scalar signals in ID order.
@@ -691,9 +763,10 @@ mod tests {
     use super::{
         AudioAnalysisTap, AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal,
         AudioSignalContractError, ClampTransform, CompiledScalarSignal, CompiledSignalTransform,
-        GainTransform, PreparedScalarSignal, PreparedScalarSignalError, RawScalarSignal,
-        RemapTransform, ScalarSignalInterner, SignalPreparationError, SignalTransformContractError,
-        master_audio_nyquist_hz, prepare_scalar_signals, prepare_transformed_scalar_signal,
+        EnvelopeTransform, GainTransform, PreparedScalarSignal, PreparedScalarSignalError,
+        RawScalarSignal, RemapTransform, ScalarSignalInterner, SignalPreparationError,
+        SignalTransformContractError, master_audio_nyquist_hz, prepare_scalar_signals,
+        prepare_transformed_scalar_signal,
     };
     use crate::plan_audio::{MASTER_AUDIO_SAMPLE_RATE, master_audio_nyquist_hz as plan_nyquist};
 
@@ -977,7 +1050,6 @@ mod tests {
     #[test]
     fn one_raw_feature_prepares_multiple_complete_signals() {
         use super::{AudioAnalysisRequirement, CompiledScalarSignals};
-        use std::collections::BTreeMap;
         let raw = signal(0, 10, &[0.0, 0.5, 1.0]);
         let source = rms_source();
         let compiled = CompiledScalarSignals::from_signals(vec![
@@ -997,7 +1069,7 @@ mod tests {
         ]);
         let prepared = prepare_scalar_signals(
             &compiled,
-            BTreeMap::from([(
+            std::collections::BTreeMap::from([(
                 AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
                 raw,
             )]),
@@ -1007,5 +1079,180 @@ mod tests {
         assert_eq!(prepared.signals[0].samples, [0.0, 0.5, 1.0]);
         assert_eq!(prepared.signals[1].samples, [0.0, 1.0, 2.0]);
         assert_eq!(prepared.signals[2].samples, [0.0, 2.0, 4.0]);
+    }
+
+    fn envelope(attack: u128, release: u128) -> CompiledSignalTransform {
+        CompiledSignalTransform::Envelope(EnvelopeTransform::new(attack, release))
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn envelope_uses_elapsed_time_and_preserves_its_initial_input() {
+        let attack = prepare_transformed_scalar_signal(
+            &signal(0, 20_000_000, &[0.0, 1.0]),
+            &[envelope(20_000_000, 180_000_000)],
+        )
+        .unwrap();
+        assert_close(attack.samples[1], 1.0 - (-1.0_f64).exp());
+
+        let release = prepare_transformed_scalar_signal(
+            &signal(0, 20_000_000, &[1.0, 0.0]),
+            &[envelope(20_000_000, 20_000_000)],
+        )
+        .unwrap();
+        assert_close(release.samples[1], (-1.0_f64).exp());
+
+        let initial = prepare_transformed_scalar_signal(
+            &signal(0, 10_000_000, &[0.8, 1.0]),
+            &[envelope(100_000_000, 100_000_000)],
+        )
+        .unwrap();
+        assert_eq!(initial.samples[0], 0.8);
+    }
+
+    #[test]
+    fn envelope_zero_durations_snap_in_their_respective_directions() {
+        let zero_attack =
+            prepare_transformed_scalar_signal(&signal(0, 10, &[0.0, 1.0]), &[envelope(0, 100)])
+                .unwrap();
+        assert_eq!(zero_attack.samples, [0.0, 1.0]);
+
+        let zero_release =
+            prepare_transformed_scalar_signal(&signal(0, 10, &[1.0, 0.0]), &[envelope(100, 0)])
+                .unwrap();
+        assert_eq!(zero_release.samples, [1.0, 0.0]);
+    }
+
+    #[test]
+    fn envelope_is_asymmetric_for_negative_and_positive_values() {
+        let transformed = prepare_transformed_scalar_signal(
+            &signal(0, 10_000_000, &[-1.0, 1.0, -1.0]),
+            &[envelope(10_000_000, 100_000_000)],
+        )
+        .unwrap();
+        let rise = -1.0 + (1.0 - (-1.0_f64).exp()) * 2.0;
+        let fall = rise + (1.0 - (-0.1_f64).exp()) * (-1.0 - rise);
+        assert_close(transformed.samples[1], rise);
+        assert_close(transformed.samples[2], fall);
+        assert!(transformed.samples[2] > -1.0);
+    }
+
+    #[test]
+    fn envelope_time_constant_is_independent_of_the_fixed_hop() {
+        let five_ms = prepare_transformed_scalar_signal(
+            &signal(0, 5_000_000, &[0.0, 1.0, 1.0, 1.0, 1.0]),
+            &[envelope(20_000_000, 180_000_000)],
+        )
+        .unwrap();
+        let ten_ms = prepare_transformed_scalar_signal(
+            &signal(0, 10_000_000, &[0.0, 1.0, 1.0]),
+            &[envelope(20_000_000, 180_000_000)],
+        )
+        .unwrap();
+        assert_close(five_ms.samples[4], ten_ms.samples[2]);
+
+        let tiny_tau = prepare_transformed_scalar_signal(
+            &signal(0, 10_000_000, &[0.0, 1.0]),
+            &[envelope(1, 1)],
+        )
+        .unwrap();
+        assert_close(tiny_tau.samples[1], 1.0);
+
+        let large_tau = prepare_transformed_scalar_signal(
+            &signal(0, 10_000_000, &[0.0, 1.0]),
+            &[envelope(1_000_000_000_000, 1_000_000_000_000)],
+        )
+        .unwrap();
+        assert!(large_tau.samples[1] > 0.0 && large_tau.samples[1] < 0.000_02);
+    }
+
+    #[test]
+    fn envelope_runs_at_its_declared_position_in_the_transform_chain() {
+        let raw = signal(0, 10_000_000, &[0.0, 2.0]);
+        let clamp_then_envelope = prepare_transformed_scalar_signal(
+            &raw,
+            &[
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).unwrap()),
+                envelope(10_000_000, 10_000_000),
+            ],
+        )
+        .unwrap();
+        let envelope_then_clamp = prepare_transformed_scalar_signal(
+            &raw,
+            &[
+                envelope(10_000_000, 10_000_000),
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).unwrap()),
+            ],
+        )
+        .unwrap();
+        assert_close(clamp_then_envelope.samples[1], 1.0 - (-1.0_f64).exp());
+        assert_eq!(envelope_then_clamp.samples[1], 1.0);
+    }
+
+    #[test]
+    fn envelope_parameters_and_order_participate_in_signal_identity_and_raw_sharing() {
+        use super::{AudioAnalysisRequirement, CompiledScalarSignals};
+        use std::collections::BTreeMap;
+        let band = AudioFrequencyBand::new(40.0, 160.0).unwrap();
+        let source = RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::BandEnergy(band),
+        });
+        let same = CompiledScalarSignal::new(source, vec![envelope(20, 180)]);
+        let different_attack = CompiledScalarSignal::new(source, vec![envelope(30, 180)]);
+        let different_release = CompiledScalarSignal::new(source, vec![envelope(20, 200)]);
+        let reordered = CompiledScalarSignal::new(
+            source,
+            vec![
+                CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).unwrap()),
+                envelope(20, 180),
+            ],
+        );
+        let mut interner = ScalarSignalInterner::default();
+        assert_eq!(interner.intern(same.clone()), interner.intern(same));
+        assert_ne!(
+            interner.intern(different_attack),
+            interner.intern(different_release)
+        );
+        assert_ne!(
+            interner.intern(reordered),
+            interner.intern(CompiledScalarSignal::new(source, vec![envelope(20, 180)]))
+        );
+        let compiled = CompiledScalarSignals::from_signals(vec![
+            CompiledScalarSignal::new(source, vec![envelope(20, 180)]),
+            CompiledScalarSignal::new(source, vec![envelope(50, 400)]),
+            CompiledScalarSignal::new(
+                source,
+                vec![CompiledSignalTransform::Gain(
+                    GainTransform::new(2.0).unwrap(),
+                )],
+            ),
+        ]);
+        assert_eq!(compiled.audio_analysis_requirements().iter().len(), 1);
+        let prepared = prepare_scalar_signals(
+            &compiled,
+            BTreeMap::from([(
+                AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band)),
+                signal(0, 10, &[0.0, 1.0]),
+            )]),
+        )
+        .unwrap();
+        assert_eq!(prepared.len(), 3);
+    }
+
+    #[test]
+    fn silent_master_runs_remap_and_envelope_instead_of_short_circuiting_to_zero() {
+        let transformed = prepare_transformed_scalar_signal(
+            &signal(0, 10_000_000, &[0.0, 0.0, 0.0]),
+            &[
+                CompiledSignalTransform::Remap(RemapTransform::new(0.0, 1.0, 1.0, 2.0).unwrap()),
+                envelope(20_000_000, 180_000_000),
+            ],
+        )
+        .unwrap();
+        assert_eq!(transformed.samples, [1.0, 1.0, 1.0]);
     }
 }

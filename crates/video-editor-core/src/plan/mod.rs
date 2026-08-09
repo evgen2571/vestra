@@ -26,10 +26,11 @@ pub(crate) use signals::ScalarSignalInterner;
 pub use signals::{
     AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioFrequencyBand,
     AudioScalarFeature, AudioScalarSignal, AudioSignalContractError, ClampTransform,
-    CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, EvaluationContext,
-    EvaluationError, GainTransform, PreparedScalarSignal, PreparedScalarSignalError,
-    PreparedScalarSignals, RawScalarSignal, RemapTransform, ScalarSignalId, SignalPreparationError,
-    SignalTransformContractError, prepare_scalar_signals, prepare_transformed_scalar_signal,
+    CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, EnvelopeTransform,
+    EvaluationContext, EvaluationError, GainTransform, PreparedScalarSignal,
+    PreparedScalarSignalError, PreparedScalarSignals, RawScalarSignal, RemapTransform,
+    ScalarSignalId, SignalPreparationError, SignalTransformContractError, prepare_scalar_signals,
+    prepare_transformed_scalar_signal,
 };
 
 #[cfg(test)]
@@ -38,9 +39,10 @@ mod tests {
 
     use super::{
         ActiveSchedule, CompileOptions, CompiledScalarModifier, CompiledScalarProperty,
+        CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, EnvelopeTransform,
         EvaluationContext, PlanCompileInput, PreparedScalarSignal, PreparedScalarSignals,
-        ScalarModifierOperation, ScalarPropertyConstraint, ScalarSignalId, TimedEffect, compile,
-        evaluate_with_context,
+        RawScalarSignal, ScalarModifierOperation, ScalarPropertyConstraint, ScalarSignalId,
+        TimedEffect, compile, evaluate_with_context, prepare_scalar_signals,
     };
     use crate::{
         animation::{
@@ -195,6 +197,72 @@ mod tests {
             frame.layers[0].effects.last(),
             Some(super::EvaluatedEffect::Brightness { amount }) if (*amount - 1.1).abs() < 1.0e-12
         ));
+    }
+
+    #[test]
+    fn prepared_envelope_signal_replaces_brightness_at_absolute_project_time() {
+        let mut plan = compile(canonical_input(), CompileOptions::default()).expect("plan");
+        let layer = &mut plan.layers[0];
+        layer.start_nanos = 5_000_000_000;
+        layer.effects.push(TimedEffect {
+            start: 0,
+            end: layer.duration_nanos,
+            effect: CompiledEffect::Brightness {
+                amount: CompiledScalarProperty {
+                    authored_track: CompiledTrack {
+                        base_value: 0.0,
+                        keyframes: vec![CompiledKeyframe {
+                            time: 1_000_000_000,
+                            value: 0.25,
+                            interpolation: CompiledInterpolation::Linear,
+                        }],
+                    },
+                    modifiers: vec![CompiledScalarModifier {
+                        operation: ScalarModifierOperation::Replace,
+                        signal: ScalarSignalId::new(0),
+                    }],
+                    constraint: ScalarPropertyConstraint::Unconstrained,
+                },
+            },
+            dependency: TemporalDependency::Dynamic,
+        });
+        let source = RawScalarSignal::Audio(super::AudioScalarSignal {
+            tap: super::AudioAnalysisTap::Master,
+            feature: super::AudioScalarFeature::Rms,
+        });
+        let compiled = CompiledScalarSignals::from_signals(vec![CompiledScalarSignal::new(
+            source,
+            vec![
+                CompiledSignalTransform::Gain(super::GainTransform::new(1.0).unwrap()),
+                CompiledSignalTransform::Envelope(EnvelopeTransform::new(
+                    1_000_000_000,
+                    1_000_000_000,
+                )),
+            ],
+        )]);
+        let signals = prepare_scalar_signals(
+            &compiled,
+            BTreeMap::from([(
+                super::AudioAnalysisRequirement::Master(super::AudioScalarFeature::Rms),
+                PreparedScalarSignal::new(5_000_000_000, 1_000_000_000, vec![0.0, 1.0, 1.0, 1.0])
+                    .unwrap(),
+            )]),
+        )
+        .unwrap();
+        let context = EvaluationContext::new(&signals);
+        for (project_time, expected) in [
+            (8_000_000_000, 1.0 - (-3.0_f64).exp()),
+            (6_000_000_000, 1.0 - (-1.0_f64).exp()),
+            (7_000_000_000, 1.0 - (-2.0_f64).exp()),
+        ] {
+            let frame =
+                evaluate_with_context(&plan, &[super::ScheduledItem(0)], project_time, &context)
+                    .unwrap();
+            assert!(matches!(
+                frame.layers[0].effects.last(),
+                Some(super::EvaluatedEffect::Brightness { amount }) if (*amount - expected).abs() < 1.0e-12
+            ));
+        }
     }
 
     #[test]

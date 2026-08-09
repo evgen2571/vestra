@@ -18,8 +18,12 @@ use crate::{
 };
 use video_editor_core::{
     plan::{
-        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioFrequencyBand,
-        AudioScalarFeature, AudioScalarSignal, CompiledScalarSignal, CompiledScalarSignals,
+        ActiveSchedule, AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap,
+        AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal, ClampTransform, CompiledEffect,
+        CompiledScalarModifier, CompiledScalarProperty, CompiledScalarSignal,
+        CompiledScalarSignals, CompiledSignalTransform, EnvelopeTransform, EvaluationContext,
+        GainTransform, RemapTransform, ScalarModifierOperation, ScalarPropertyConstraint,
+        TemporalDependency, TimedEffect, evaluate_with_context,
     },
     plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::AudioFadeCurve,
@@ -36,7 +40,7 @@ use super::super::{
 };
 
 #[test]
-fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
+fn preparation_routes_audible_master_envelope_to_brightness_when_output_audio_is_disabled() {
     let mut plan = super::example_plan();
     let directory = tempfile::tempdir().expect("temporary audio directory");
     let source = directory.path().join("audible-master.wav");
@@ -44,13 +48,23 @@ fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
         video_editor_media::seconds_to_samples(plan.duration).expect("fixture duration"),
     )
     .expect("fixture sample count fits usize");
-    write_mono_wav(&source, source_frames, 0.25);
+    write_stepped_tone_wav(&source, source_frames);
 
     let band = AudioFrequencyBand::new(40.0, 160.0).expect("valid band");
-    let signal = CompiledScalarSignal::raw_audio(AudioScalarSignal {
-        tap: AudioAnalysisTap::Master,
-        feature: AudioScalarFeature::BandEnergy(band),
-    });
+    let signal = CompiledScalarSignal::new(
+        video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
+            tap: AudioAnalysisTap::Master,
+            feature: AudioScalarFeature::BandEnergy(band),
+        }),
+        vec![
+            CompiledSignalTransform::Gain(GainTransform::new(1.0).expect("finite gain")),
+            CompiledSignalTransform::Remap(
+                RemapTransform::new(0.0, 1.0, 0.0, 1.0).expect("valid remap"),
+            ),
+            CompiledSignalTransform::Envelope(EnvelopeTransform::new(20_000_000, 180_000_000)),
+            CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).expect("valid clamp")),
+        ],
+    );
     plan.scalar_signals = CompiledScalarSignals::from_signals(vec![signal]);
     plan.audio_analysis_requirements =
         AudioAnalysisRequirements::from_requirements([AudioAnalysisRequirement::Master(
@@ -58,6 +72,24 @@ fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
         )]);
     plan.audio_output_enabled = false;
     plan.encoder.audio_mix = None;
+    let signal_id = plan.scalar_signals.iter().next().expect("signal ID").0;
+    let layer = &mut plan.layers[0];
+    layer.start_nanos = 1_000_000_000;
+    layer.effects.push(TimedEffect {
+        start: 0,
+        end: layer.duration_nanos,
+        effect: CompiledEffect::Brightness {
+            amount: CompiledScalarProperty {
+                authored_track: video_editor_core::animation::Track::new(0.25),
+                modifiers: vec![CompiledScalarModifier {
+                    operation: ScalarModifierOperation::Replace,
+                    signal: signal_id,
+                }],
+                constraint: ScalarPropertyConstraint::Unconstrained,
+            },
+        },
+        dependency: TemporalDependency::Dynamic,
+    });
     plan.audio_mix = AudioMixPlan {
         tracks: vec![AudioTrackPlan {
             id: "audible".to_owned(),
@@ -80,7 +112,7 @@ fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
             }],
         }],
     };
-    let prepared = prepare(plan, RenderBackendPreference::Wgpu, |_, _, _| {
+    let prepared = prepare(&plan, RenderBackendPreference::Wgpu, |_, _, _| {
         Ok((
             Box::new(MockStagedBackend::new(
                 1,
@@ -91,10 +123,22 @@ fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
         ))
     })
     .expect("audible analysis prepares even when output mux audio is disabled");
-    assert!(!prepared.scalar_signals().is_empty());
+    let frame_number = 42;
+    let active = ActiveSchedule::compile(&plan).active_at(&plan, frame_number);
+    let frame = evaluate_with_context(
+        &plan,
+        &active,
+        1_750_000_000,
+        &EvaluationContext::new(prepared.scalar_signals()),
+    )
+    .expect("prepared signal evaluates at project time");
+    assert!(matches!(
+        frame.layers[0].effects.last(),
+        Some(video_editor_core::plan::EvaluatedEffect::Brightness { amount }) if *amount > 0.0 && *amount <= 1.0
+    ));
 }
 
-fn write_mono_wav(path: &std::path::Path, samples: usize, amplitude: f32) {
+fn write_stepped_tone_wav(path: &std::path::Path, samples: usize) {
     let mut bytes = Vec::new();
     let data_length = u32::try_from(samples.checked_mul(2).expect("WAV data length"))
         .expect("WAV fixture fits u32");
@@ -110,8 +154,12 @@ fn write_mono_wav(path: &std::path::Path, samples: usize, amplitude: f32) {
     bytes.extend_from_slice(&16_u16.to_le_bytes());
     bytes.extend_from_slice(b"data");
     bytes.extend_from_slice(&data_length.to_le_bytes());
-    let pcm = (amplitude * f32::from(i16::MAX)).round() as i16;
-    for _ in 0..samples {
+    for index in 0..samples {
+        let time = index as f32 / MASTER_AUDIO_SAMPLE_RATE as f32;
+        let amplitude = if time >= 0.5 { 0.25 } else { 0.0 };
+        let pcm =
+            (amplitude * (2.0 * std::f32::consts::PI * 100.0 * time).sin() * f32::from(i16::MAX))
+                .round() as i16;
         bytes.extend_from_slice(&pcm.to_le_bytes());
     }
     fs::write(path, bytes).expect("write fixture WAV");

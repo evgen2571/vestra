@@ -87,7 +87,12 @@ pub(super) fn validate_scalar_property(
         errors,
         valid,
     );
-    super::signals::validate_modifiers(&property.modifiers, path, has_authored_audio, errors);
+    super::signals::validate_modifiers(
+        &property.modifiers,
+        &format!("{path}/modifiers"),
+        has_authored_audio,
+        errors,
+    );
 }
 
 /// Samples a scalar project track using the same interpolation conversion as

@@ -37,6 +37,38 @@ const STFT_SIZE_FRAMES: usize = 4_096;
 const STFT_HOP_FRAMES: usize = AUDIO_FEATURE_HOP_FRAMES;
 const FEATURE_HOP_NANOS: u128 = NANOS_PER_SECOND / 100;
 
+#[cfg(test)]
+std::thread_local! {
+    static MASTER_DECODE_INVOCATION_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static GLOBAL_FFT_CALL_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn reset_analysis_work_counters() {
+    MASTER_DECODE_INVOCATION_COUNT.with(|count| count.set(0));
+    GLOBAL_FFT_CALL_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn master_decode_invocation_count() -> usize {
+    MASTER_DECODE_INVOCATION_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn global_fft_call_count() -> usize {
+    GLOBAL_FFT_CALL_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn record_master_decode_invocation() {
+    MASTER_DECODE_INVOCATION_COUNT.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+fn record_fft_calls(calls: usize) {
+    GLOBAL_FFT_CALL_COUNT.with(|count| count.set(count.get() + calls));
+}
+
 /// Analyze every currently supported Master requirement from one PCM stream.
 pub fn analyze_master_audio(
     requirements: &AudioAnalysisRequirements,
@@ -326,6 +358,7 @@ impl StftAnalyzer {
         #[cfg(test)]
         {
             self.fft_calls += 2;
+            record_fft_calls(2);
         }
         let denominator = STFT_SIZE_FRAMES as f64 * self.window_energy;
         for k in 0..self.power.len() {
@@ -477,6 +510,8 @@ pub fn consume_master_pcm(
         program: "ffmpeg",
         source,
     })?;
+    #[cfg(test)]
+    record_master_decode_invocation();
     let stderr = match child.stderr.take() {
         Some(stderr) => stderr,
         None => return reap_failed_child(child, MediaError::MissingErrorOutput),
@@ -667,9 +702,13 @@ fn collect_bounded_stderr(stderr: ChildStderr) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path, process::Command};
+    use std::{fs, path::Path, process::Command, time::Instant};
 
     use video_editor_core::{
+        plan::{
+            ClampTransform, CompiledSignalTransform, CubicResponseCurve, EnvelopeTransform,
+            GainTransform, RemapTransform, prepare_transformed_scalar_signal,
+        },
         plan_audio::{AudioClipPlan, AudioTrackPlan},
         project::AudioFadeCurve,
     };
@@ -706,6 +745,255 @@ mod tests {
             coordinator.push(&pcm[offset..]).expect("trailing PCM");
         }
         coordinator.finish().expect("features")
+    }
+
+    #[derive(serde::Serialize)]
+    struct AnalysisBenchmarkMeasurement {
+        seconds: u64,
+        bands: usize,
+        requirements: usize,
+        raw_feature_series: usize,
+        fft_calls: usize,
+        elapsed_ms: u128,
+    }
+
+    fn measure_master_analysis(seconds: u64, band_count: usize) -> AnalysisBenchmarkMeasurement {
+        let project_frames = seconds
+            .checked_mul(u64::from(MASTER_AUDIO_SAMPLE_RATE))
+            .expect("benchmark duration fits Master sample clock");
+        let mut features = vec![AudioScalarFeature::Rms, AudioScalarFeature::Peak];
+        for index in 0..band_count {
+            let min_hz = 40.0 + index as f64 * 100.0;
+            features.push(AudioScalarFeature::BandEnergy(
+                AudioFrequencyBand::new(min_hz, min_hz + 80.0).expect("benchmark band"),
+            ));
+        }
+        let mut coordinator =
+            MasterAnalysisCoordinator::new(&requirements(&features), project_frames)
+                .expect("coordinator");
+        let chunk = vec![0.0_f32; AUDIO_FEATURE_HOP_FRAMES * CHANNELS as usize];
+        let started = Instant::now();
+        for _ in 0..project_frames / AUDIO_FEATURE_HOP_FRAMES as u64 {
+            coordinator.push(&chunk).expect("synthetic PCM");
+        }
+        let fft_calls = coordinator.fft_calls();
+        let results = coordinator.finish().expect("features");
+        AnalysisBenchmarkMeasurement {
+            seconds,
+            bands: band_count,
+            requirements: features.len(),
+            raw_feature_series: results.len(),
+            fft_calls,
+            elapsed_ms: started.elapsed().as_millis(),
+        }
+    }
+
+    #[test]
+    #[ignore = "manual streaming analysis benchmark; run with --release for meaningful timing"]
+    fn master_analysis_benchmark() {
+        let seconds = std::env::var("VIDEO_EDITOR_ANALYSIS_BENCH_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(60);
+        let band_count = std::env::var("VIDEO_EDITOR_ANALYSIS_BENCH_BANDS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(1);
+        let measurement = measure_master_analysis(seconds, band_count);
+        eprintln!(
+            "MASTER_ANALYSIS_BENCH seconds={} bands={} requirements={} raw_feature_series={} fft_calls={} elapsed_ms={}",
+            measurement.seconds,
+            measurement.bands,
+            measurement.requirements,
+            measurement.raw_feature_series,
+            measurement.fft_calls,
+            measurement.elapsed_ms,
+        );
+    }
+
+    /// Release-only manual matrix used by the final procedural-signal audit.
+    /// It keeps a fixed 60-second duration for the 1/10/50-band scaling rows,
+    /// then records 10- and 60-minute one-band duration baselines.
+    #[test]
+    #[ignore = "manual release benchmark matrix"]
+    fn master_analysis_benchmark_matrix() {
+        let measurements = [
+            (60, 1),
+            (60, 10),
+            (60, 50),
+            (600, 1),
+            (3_600, 1),
+        ]
+        .map(|(seconds, bands)| measure_master_analysis(seconds, bands));
+        let output = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/audits/procedural-signal-audio-modulation-benchmarks.json");
+        fs::write(
+            output,
+            serde_json::to_vec_pretty(&measurements).expect("serialize benchmark matrix"),
+        )
+        .expect("write benchmark matrix");
+        for measurement in measurements {
+            eprintln!(
+                "MASTER_ANALYSIS_MATRIX seconds={} bands={} requirements={} raw_feature_series={} fft_calls={} elapsed_ms={}",
+                measurement.seconds,
+                measurement.bands,
+                measurement.requirements,
+                measurement.raw_feature_series,
+                measurement.fft_calls,
+                measurement.elapsed_ms,
+            );
+        }
+    }
+
+    #[derive(Clone, Copy, serde::Serialize)]
+    struct TransformedSignalBenchmarkMeasurement {
+        seconds: u64,
+        transformed_signals: usize,
+        master_decode_count: usize,
+        raw_requirements: usize,
+        raw_feature_series: usize,
+        fft_calls: usize,
+        analysis_elapsed_ms: u128,
+        transform_preparation_elapsed_ms: u128,
+    }
+
+    fn benchmark_signal_transforms(index: usize) -> Vec<CompiledSignalTransform> {
+        vec![
+            CompiledSignalTransform::Gain(
+                GainTransform::new(1.0 + index as f64 * 0.001).expect("finite benchmark gain"),
+            ),
+            CompiledSignalTransform::Remap(
+                RemapTransform::new(0.0, 1.0, 0.0, 1.0).expect("benchmark remap"),
+            ),
+            CompiledSignalTransform::Clamp(
+                ClampTransform::new(0.0, 1.0).expect("benchmark clamp"),
+            ),
+            CompiledSignalTransform::Envelope(EnvelopeTransform::new(20_000_000, 180_000_000)),
+            CompiledSignalTransform::ResponseCurve(
+                CubicResponseCurve::new(0.42, 0.0, 1.0, 1.0).expect("benchmark response curve"),
+            ),
+        ]
+    }
+
+    fn measure_transformed_signal_scaling(
+        seconds: u64,
+        transformed_signal_count: usize,
+        mix: &AudioMixPlan,
+    ) -> TransformedSignalBenchmarkMeasurement {
+        let band = AudioFrequencyBand::new(40.0, 160.0).expect("benchmark band");
+        let requirement =
+            AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band));
+        let requirements = AudioAnalysisRequirements::from_requirements([requirement]);
+
+        reset_analysis_work_counters();
+        let analysis_started = Instant::now();
+        let raw_features = analyze_master_audio(
+            &requirements,
+            mix,
+            seconds as f64,
+            1,
+        )
+        .expect("benchmark Master analysis");
+        let analysis_elapsed_ms = analysis_started.elapsed().as_millis();
+        let master_decode_count = master_decode_invocation_count();
+        let fft_calls = global_fft_call_count();
+        let raw_feature_series = raw_features.len();
+        let raw = raw_features
+            .get(&requirement)
+            .expect("benchmark raw BandEnergy series");
+
+        let transform_sets = (0..transformed_signal_count)
+            .map(benchmark_signal_transforms)
+            .collect::<Vec<_>>();
+        let transform_started = Instant::now();
+        for transforms in &transform_sets {
+            let prepared = prepare_transformed_scalar_signal(raw, transforms)
+                .expect("benchmark transformed signal");
+            std::hint::black_box(prepared.sample(FEATURE_HOP_NANOS));
+        }
+        let transform_preparation_elapsed_ms = transform_started.elapsed().as_millis();
+
+        TransformedSignalBenchmarkMeasurement {
+            seconds,
+            transformed_signals: transformed_signal_count,
+            master_decode_count,
+            raw_requirements: requirements.iter().len(),
+            raw_feature_series,
+            fft_calls,
+            analysis_elapsed_ms,
+            transform_preparation_elapsed_ms,
+        }
+    }
+
+    /// Release-only benchmark for the finalized complete-signal sharing contract.
+    /// One raw BandEnergy feature is analyzed once, then reused by 1/10/50
+    /// distinct ordered transform pipelines. Only transform preparation should
+    /// scale with complete-signal count.
+    #[test]
+    #[ignore = "manual release complete-signal scaling benchmark"]
+    fn transformed_signal_scaling_benchmark() {
+        let seconds = std::env::var("VIDEO_EDITOR_ANALYSIS_BENCH_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(60);
+        let directory = tempfile::tempdir().expect("benchmark audio directory");
+        let source = directory.path().join("complete-signal-scaling.wav");
+        let source_samples = usize::try_from(
+            seconds
+                .checked_mul(u64::from(MASTER_AUDIO_SAMPLE_RATE))
+                .expect("benchmark duration fits sample clock"),
+        )
+        .expect("benchmark sample count fits usize");
+        write_mono_wav(&source, source_samples, 0.1);
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "benchmark".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![AudioClipPlan {
+                    id: "benchmark-clip".to_owned(),
+                    asset: "benchmark".to_owned(),
+                    path: source,
+                    start: 0.0,
+                    trim_start: 0.0,
+                    selected_duration: seconds as f64,
+                    mute: false,
+                    gain: 1.0,
+                    gain_automation: None,
+                    fade_in: 0.0,
+                    fade_out: 0.0,
+                    fade_in_curve: AudioFadeCurve::Linear,
+                    fade_out_curve: AudioFadeCurve::Linear,
+                }],
+            }],
+        };
+
+        let measurements = [1, 10, 50]
+            .map(|count| measure_transformed_signal_scaling(seconds, count, &mix));
+        let reference_fft_calls = measurements[0].fft_calls;
+        for measurement in measurements {
+            assert_eq!(
+                measurement.master_decode_count, 1,
+                "complete-signal fan-out must not add Master decodes"
+            );
+            assert_eq!(measurement.raw_requirements, 1);
+            assert_eq!(measurement.raw_feature_series, 1);
+            assert_eq!(
+                measurement.fft_calls, reference_fft_calls,
+                "complete-signal fan-out must not add FFT work"
+            );
+            eprintln!(
+                "TRANSFORMED_SIGNAL_SCALING seconds={} transformed_signals={} master_decode_count={} raw_requirements={} raw_feature_series={} fft_calls={} analysis_elapsed_ms={} transform_preparation_elapsed_ms={}",
+                measurement.seconds,
+                measurement.transformed_signals,
+                measurement.master_decode_count,
+                measurement.raw_requirements,
+                measurement.raw_feature_series,
+                measurement.fft_calls,
+                measurement.analysis_elapsed_ms,
+                measurement.transform_preparation_elapsed_ms,
+            );
+        }
     }
 
     #[test]

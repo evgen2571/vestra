@@ -203,8 +203,61 @@ automation keyframes. A render may open 128 unique audible source paths after
 deduplication. That is an execution limit, not an authored graph limit.
 
 Track gain automation, pan, EQ, compression, reverb, ducking, time stretching,
-pitch shifting, beat detection, FFT, and audio-reactive effects are not
-implemented. The mixer is a timeline mixer, not a mastering chain.
+pitch shifting, beat detection, and BPM analysis are not implemented. The mixer
+is a timeline mixer, not a mastering chain.
+
+### Audio-reactive scalar properties
+
+Visual scalar properties can react to the final mixed Master waveform. Signals
+are immutable values, so one chain can safely drive several properties or be
+reused by another builder. The available Master features are `rms`, `peak`, and
+linear-power `band(min_hz, max_hz)`. Features are raw linear measurements, not
+automatically normalized to `0..1`, so a practical chain commonly uses gain,
+remap, and clamp before it drives a visual property.
+
+```python
+bass = (
+    builder.audio.master.band(40, 160)
+    .gain(1.5)
+    .remap(0.0, 0.2, 0.0, 1.0)
+    .clamp(0.0, 1.0)
+    .envelope(0.02, 0.18)
+    .response_curve(0.42, 0.0, 0.58, 1.0)
+)
+
+clip.transform.scale.react_to(
+    bass.remap(0.0, 1.0, 1.0, 1.08),
+    mode="multiply",
+)
+glow = clip.effects.add_glow(threshold=0.25, radius=8.0, intensity=0.0, colour="#ffffff")
+glow.intensity.modulate(bass.remap(0.0, 1.0, 0.0, 4.0), mode="replace")
+```
+
+`modulate` supports `replace`, `add`, and `multiply`, in declaration order.
+Uniform scale reaction applies the same signal to `scale_x` and `scale_y`.
+Target domains still apply after modulation: opacity stays in `0..1`, blur
+radius stays in its supported range, and scale remains positive. That runtime
+constraint is separate from an explicit signal `clamp`.
+
+Bands use Hz. At 48 kHz, band energy is calculated from a 4096-sample Hann
+STFT with a 10 ms hop and reports normalized linear power, not dB. Envelope
+attack and release are one-pole time constants in seconds, precomputed during
+preparation. Response curves clamp inputs at or below zero to zero and inputs
+at or above one to one; their interior is a cubic Bezier response and may
+overshoot when its y controls do. Put it after a normalized remap and clamp
+when that is the desired shape.
+
+Rotation properties and effect angles use degrees: transform rotation,
+DirectionalBlur, ChromaticAberration, and CameraShake all retain those public
+units. Signal analysis happens during `prepare`; prepared signal samples are
+then reused for random-access frames and video operations. Changing an audio
+file after preparation does not recompute visual reactions automatically.
+
+`output_audio=False` disables muxed output audio only. Authored Master audio
+remains available for visual signal analysis. A runnable deterministic reference
+scene is available at `examples/python/08_audio_reactive.py`; it synthesizes its
+own Master fixture and renders bass-to-scale, RMS-to-Glow, and high-band
+Chromatic Aberration reactions without muxing audio.
 
 Time domains are intentional: `clip.start`, transition starts, flash starts,
 and post-effect keyframes are project-relative. Transform, opacity, crop, and
@@ -490,10 +543,11 @@ python3 -m venv .venv
 Use `import video_editor`. `Project.from_dict()` follows the same native path
 as JSON. It is a lower-level way to construct the same current canonical
 schema-version 2 model, useful for canonical JSON, low-level integrations, and
-generated project dictionaries. It represents ordered multi-track audio
-timelines and renders arbitrary valid static multi-input mixes. Video assets, nested
-compositions, and audio-reactive visual systems remain future work. Package path properties return
-`pathlib.Path` values. The binding audits are recorded in
+generated project dictionaries. It represents ordered multi-track audio timelines, renders arbitrary valid
+static multi-input mixes, and accepts the schema-v2 scalar signal/modifier
+surface used by audio-reactive visuals. Video assets and nested compositions
+remain future work. Package path properties return `pathlib.Path` values. The
+binding audits are recorded in
 `docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and
 `docs/audits/phase7c.md`; together they record Phase 7 finalization.
 

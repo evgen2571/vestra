@@ -363,8 +363,14 @@ mod tests {
             .iter()
             .position(|layer| matches!(layer.source, super::CompiledVisualSource::Image { .. }))
             .expect("image layer");
+        let canvas_width = f64::from(plan.canvas.width);
+        let frame_duration_nanos =
+            (1_000_000_000_u128 * u128::from(plan.frame_rate.1)) / u128::from(plan.frame_rate.0);
+        let expected_radius = canvas_width * frame_duration_nanos as f64 / 1_000_000_000.0;
         let layer = &mut plan.layers[index];
         stage_layer(layer, 5.0, 7.0);
+        layer.transform.position = CompiledTrack::new(crate::domain::Point { x: 0.0, y: 0.0 });
+        layer.transform_contributions.clear();
         layer.transform.position_x_modifiers = vec![CompiledScalarModifier {
             operation: ScalarModifierOperation::Add,
             signal: ScalarSignalId::new(0),
@@ -393,7 +399,9 @@ mod tests {
         .expect("evaluation");
         assert!(matches!(
             frame.layers[0].effects.last(),
-            Some(super::EvaluatedEffect::MotionBlur { radius, .. }) if *radius > 1.0
+            Some(super::EvaluatedEffect::MotionBlur { radius, angle_degrees, .. })
+                if (*radius - expected_radius).abs() < 1.0e-9
+                    && angle_degrees.abs() < 1.0e-12
         ));
     }
 

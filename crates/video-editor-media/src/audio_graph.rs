@@ -3,13 +3,20 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use video_editor_core::{
-    plan_audio::{AudioClipPlan, AudioMixPlan},
+    plan_audio::{AudioClipPlan, AudioMixPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::{AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation},
 };
 
 use crate::MediaError;
 
-pub(crate) const MIX_SAMPLE_RATE: u64 = 48_000;
+const MIX_SAMPLE_RATE: u64 = MASTER_AUDIO_SAMPLE_RATE as u64;
+
+/// The graph owns mixer semantics, while its caller owns FFmpeg input layout.
+/// Encoders place audio after video at index 1; standalone analysis starts at 0.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AudioGraphCompileOptions {
+    pub(crate) first_audio_input_index: usize,
+}
 
 #[derive(Debug)]
 pub(crate) struct FfmpegAudioGraph {
@@ -35,9 +42,24 @@ pub fn seconds_to_samples(seconds: f64) -> Result<u64, MediaError> {
     Ok(rounded as u64)
 }
 
+#[cfg(test)]
 pub(crate) fn compile(
     mix: &AudioMixPlan,
     project_duration: f64,
+) -> Result<FfmpegAudioGraph, MediaError> {
+    compile_with_options(
+        mix,
+        project_duration,
+        AudioGraphCompileOptions {
+            first_audio_input_index: 0,
+        },
+    )
+}
+
+pub(crate) fn compile_with_options(
+    mix: &AudioMixPlan,
+    project_duration: f64,
+    options: AudioGraphCompileOptions,
 ) -> Result<FfmpegAudioGraph, MediaError> {
     let project_samples = seconds_to_samples(project_duration)?;
     if project_samples == 0 {
@@ -45,7 +67,7 @@ pub(crate) fn compile(
             "project duration rounds to zero samples".to_owned(),
         ));
     }
-    let mut graph = GraphBuilder::default();
+    let mut graph = GraphBuilder::new(options.first_audio_input_index);
     // Register sources before emitting filters. This preserves first-use order
     // while allowing each input to fan out to its clip-local branches.
     for track in &mix.tracks {
@@ -98,8 +120,8 @@ pub(crate) fn compile(
     })
 }
 
-#[derive(Default)]
 struct GraphBuilder {
+    first_audio_input_index: usize,
     sources: Vec<Source>,
     source_indexes: HashMap<PathBuf, usize>,
     filters: Vec<String>,
@@ -115,6 +137,17 @@ struct Source {
 }
 
 impl GraphBuilder {
+    fn new(first_audio_input_index: usize) -> Self {
+        Self {
+            first_audio_input_index,
+            sources: Vec::new(),
+            source_indexes: HashMap::new(),
+            filters: Vec::new(),
+            label_number: 0,
+            clip_branch_count: 0,
+        }
+    }
+
     fn label(&mut self, kind: &str) -> String {
         let label = format!("a_{kind}_{:06}", self.label_number);
         self.label_number += 1;
@@ -138,7 +171,7 @@ impl GraphBuilder {
 
     fn emit_source_filters(&mut self) {
         for source_index in 0..self.sources.len() {
-            let input_index = source_index + 1; // raw video stdin is input zero.
+            let input_index = self.first_audio_input_index + source_index;
             let normalized = self.label("source");
             self.filters.push(format!(
                 "[{input_index}:a]aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo[{normalized}]"
@@ -398,7 +431,10 @@ fn number(value: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{automation_expression, compile, seconds_to_samples};
+    use super::{
+        AudioGraphCompileOptions, automation_expression, compile, compile_with_options,
+        seconds_to_samples,
+    };
     use std::{
         fs,
         path::PathBuf,
@@ -573,9 +609,65 @@ mod tests {
             [PathBuf::from("shared.wav"), PathBuf::from("other.wav")]
         );
         assert_eq!(graph.clip_branch_count, 4);
-        assert!(graph.filter_complex.contains("[1:a]aformat"));
+        assert!(graph.filter_complex.contains("[0:a]aformat"));
         assert!(graph.filter_complex.contains("asplit=3"));
         assert!(!graph.filter_complex.contains("[3:a]"));
+    }
+
+    #[test]
+    fn configurable_input_base_shifts_only_source_references() {
+        let clip = |id: &str, path: &str| AudioClipPlan {
+            id: id.to_owned(),
+            asset: id.to_owned(),
+            path: PathBuf::from(path),
+            start: 0.25,
+            trim_start: 0.0,
+            selected_duration: 1.0,
+            mute: false,
+            gain: 0.5,
+            gain_automation: None,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+        };
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 0.75,
+                clips: vec![clip("first", "first.wav"), clip("second", "second.wav")],
+            }],
+        };
+        let encoder = compile_with_options(
+            &mix,
+            2.0,
+            AudioGraphCompileOptions {
+                first_audio_input_index: 1,
+            },
+        )
+        .expect("encoder graph");
+        let analyzer = compile_with_options(
+            &mix,
+            2.0,
+            AudioGraphCompileOptions {
+                first_audio_input_index: 0,
+            },
+        )
+        .expect("analyzer graph");
+        assert_eq!(encoder.input_paths, analyzer.input_paths);
+        assert!(encoder.filter_complex.contains("[1:a]aformat"));
+        assert!(encoder.filter_complex.contains("[2:a]aformat"));
+        assert!(analyzer.filter_complex.contains("[0:a]aformat"));
+        assert!(analyzer.filter_complex.contains("[1:a]aformat"));
+        assert_eq!(
+            encoder
+                .filter_complex
+                .replacen("[1:a]", "[0:a]", 1)
+                .replacen("[2:a]", "[1:a]", 1),
+            analyzer.filter_complex
+        );
+        assert!(analyzer.filter_complex.ends_with("[audio]"));
     }
 
     #[test]
@@ -745,17 +837,7 @@ mod tests {
         };
         let graph = compile(&mix, 1.0).expect("production graph");
         let mut command = Command::new("ffmpeg");
-        command.args([
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "lavfi",
-            "-t",
-            "1",
-            "-i",
-            "anullsrc=r=48000:cl=stereo",
-        ]);
+        command.args(["-hide_banner", "-loglevel", "error", "-t", "1"]);
         for path in &graph.input_paths {
             command.arg("-i").arg(path);
         }
@@ -1395,9 +1477,8 @@ mod tests {
     fn render_pcm(graph: &super::FfmpegAudioGraph, duration: f64) -> Vec<f32> {
         let mut command = Command::new("ffmpeg");
         command
-            .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-t"])
-            .arg(duration.to_string())
-            .args(["-i", "anullsrc=r=48000:cl=stereo"]);
+            .args(["-hide_banner", "-loglevel", "error", "-t"])
+            .arg(duration.to_string());
         for path in &graph.input_paths {
             command.arg("-i").arg(path);
         }

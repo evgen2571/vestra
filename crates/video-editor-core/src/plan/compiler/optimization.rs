@@ -13,6 +13,7 @@ pub(super) fn normalize(
     project_duration: u128,
     compilation: &mut crate::plan::CompilationStats,
 ) -> TemporalDependency {
+    let mut visual_dependency = TemporalDependency::Static;
     for layer in layers {
         compilation.constant_track_normalization_count += normalize_source(layer);
         compilation.constant_track_normalization_count +=
@@ -44,13 +45,16 @@ pub(super) fn normalize(
             .retain_mut(|effect| normalize_timed_effect(effect, layer.duration_nanos, compilation));
         fuse_static_colour_chain(layer);
         layer.content_dependency = layer_dependency(layer);
+        visual_dependency = visual_dependency.combine(layer.content_dependency);
     }
     post_effects.retain_mut(|effect| normalize_timed_effect(effect, project_duration, compilation));
-    post_effects
-        .iter()
-        .fold(TemporalDependency::Static, |dependency, effect| {
-            dependency.combine(effect.dependency)
-        })
+    visual_dependency.combine(
+        post_effects
+            .iter()
+            .fold(TemporalDependency::Static, |dependency, effect| {
+                dependency.combine(effect.dependency)
+            }),
+    )
 }
 
 fn normalize_timed_effect(
@@ -838,9 +842,11 @@ mod tests {
             &layer.effects[1].effect,
             CompiledEffect::Contrast { .. }
         ));
-        assert!(!layer.effects.iter().any(|effect| matches!(
-            &effect.effect,
-            CompiledEffect::ColourTransform { .. }
-        )));
+        assert!(
+            !layer
+                .effects
+                .iter()
+                .any(|effect| matches!(&effect.effect, CompiledEffect::ColourTransform { .. }))
+        );
     }
 }

@@ -7,6 +7,15 @@ use crate::{
     project::{AudioFadeCurve, AudioGainAutomation, AudioTimeline},
 };
 
+/// Authoritative rate for the Master mixer and its future analysis consumers.
+/// Keep media graph conversion and analysis validation on this contract.
+pub const MASTER_AUDIO_SAMPLE_RATE: u32 = 48_000;
+
+#[must_use]
+pub const fn master_audio_nyquist_hz() -> f64 {
+    MASTER_AUDIO_SAMPLE_RATE as f64 / 2.0
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AudioMixPlan {
     pub tracks: Vec<AudioTrackPlan>,
@@ -38,6 +47,13 @@ pub struct AudioClipPlan {
 }
 
 impl AudioMixPlan {
+    /// Whether the authored project contains audio material, even if every
+    /// contributor later resolves to silence through mute or gain settings.
+    #[must_use]
+    pub fn has_authored_material(&self) -> bool {
+        self.clip_count() > 0
+    }
+
     #[must_use]
     pub fn clip_count(&self) -> usize {
         self.tracks.iter().map(|track| track.clips.len()).sum()
@@ -262,5 +278,11 @@ mod tests {
         assert_eq!(keyframes[2].time, 0.91);
         assert_eq!(keyframes[2].gain, 0.2);
         assert_eq!(keyframes[2].interpolation, AudioGainInterpolation::Linear);
+        assert!(plan.has_authored_material());
+    }
+
+    #[test]
+    fn empty_mix_has_no_authored_material() {
+        assert!(!super::AudioMixPlan::default().has_authored_material());
     }
 }

@@ -17,6 +17,36 @@ use crate::{EncoderSettings, FrameSink, MediaError, SinkResult, audio_graph, eff
 /// budgets. This is an execution detail, not a project limit.
 pub(crate) const FILTERGRAPH_SCRIPT_THRESHOLD_BYTES: usize = 64 * 1024;
 
+/// Select an x264 speed preset for the project's existing quality tiers.
+///
+/// CRF remains unchanged: the preset only controls how much encoder search
+/// work libx264 performs. Unknown/custom CRF values deliberately fall back to
+/// x264's historical `medium` behavior rather than silently choosing a faster
+/// preset.
+fn x264_preset_for_crf(quality_crf: u8) -> &'static str {
+    match quality_crf {
+        30 => "ultrafast", // Quality::Preview
+        23 => "veryfast",  // Quality::Balanced
+        18 => "medium",    // Quality::High; preserve the previous default
+        _ => "medium",
+    }
+}
+
+fn add_h264_video_output(command: &mut Command, settings: &EncoderSettings) {
+    command.args([
+        "-frames:v",
+        &settings.frame_count.to_string(),
+        "-c:v",
+        "libx264",
+        "-preset",
+        x264_preset_for_crf(settings.quality_crf),
+        "-crf",
+        &settings.quality_crf.to_string(),
+        "-pix_fmt",
+        "yuv420p",
+    ]);
+}
+
 pub struct FfmpegSink {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
@@ -69,16 +99,7 @@ impl FfmpegSink {
         } else {
             command.args(["-map", "0:v:0"]);
         }
-        command.args([
-            "-frames:v",
-            &settings.frame_count.to_string(),
-            "-c:v",
-            "libx264",
-            "-crf",
-            &settings.quality_crf.to_string(),
-            "-pix_fmt",
-            "yuv420p",
-        ]);
+        add_h264_video_output(&mut command, settings);
         if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
@@ -126,16 +147,7 @@ impl FfmpegSink {
         } else {
             command.args(["-map", "0:v:0"]);
         }
-        command
-            .args([
-                "-frames:v",
-                &settings.frame_count.to_string(),
-                "-c:v",
-                "libx264",
-                "-crf",
-            ])
-            .arg(settings.quality_crf.to_string())
-            .args(["-pix_fmt", "yuv420p"]);
+        add_h264_video_output(&mut command, settings);
         if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
@@ -557,6 +569,42 @@ mod tests {
         output::EncoderSettings,
         plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan},
     };
+
+    #[test]
+    fn quality_tiers_select_explicit_x264_speed_presets() {
+        assert_eq!(x264_preset_for_crf(30), "ultrafast");
+        assert_eq!(x264_preset_for_crf(23), "veryfast");
+        assert_eq!(x264_preset_for_crf(18), "medium");
+        assert_eq!(x264_preset_for_crf(17), "medium");
+    }
+
+    #[test]
+    fn h264_output_arguments_keep_crf_and_add_the_selected_preset() {
+        let mut settings = static_settings(30);
+        settings.quality_crf = 23;
+        let mut command = Command::new("ffmpeg");
+        add_h264_video_output(&mut command, &settings);
+        let arguments = command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            arguments,
+            [
+                "-frames:v",
+                "30",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+            ]
+        );
+    }
 
     fn active_test_sink() -> FfmpegSink {
         test_sink("exec sleep 30")

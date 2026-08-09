@@ -17,13 +17,14 @@ use crate::{
     },
 };
 use video_editor_core::{
+    animation::{Interpolation, Keyframe, Track},
     plan::{
         ActiveSchedule, AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap,
         AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal, ClampTransform, CompiledEffect,
         CompiledScalarModifier, CompiledScalarProperty, CompiledScalarSignal,
-        CompiledScalarSignals, CompiledSignalTransform, EnvelopeTransform, EvaluationContext,
-        GainTransform, RemapTransform, ScalarModifierOperation, ScalarPropertyConstraint,
-        TemporalDependency, TimedEffect, evaluate_with_context,
+        CompiledScalarSignals, CompiledSignalTransform, CubicResponseCurve, EnvelopeTransform,
+        EvaluationContext, GainTransform, RemapTransform, ScalarModifierOperation,
+        ScalarPropertyConstraint, TemporalDependency, TimedEffect, evaluate_with_context,
     },
     plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::AudioFadeCurve,
@@ -40,7 +41,7 @@ use super::super::{
 };
 
 #[test]
-fn preparation_routes_audible_master_envelope_to_brightness_when_output_audio_is_disabled() {
+fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time() {
     let mut plan = super::example_plan();
     let directory = tempfile::tempdir().expect("temporary audio directory");
     let source = directory.path().join("audible-master.wav");
@@ -61,8 +62,11 @@ fn preparation_routes_audible_master_envelope_to_brightness_when_output_audio_is
             CompiledSignalTransform::Remap(
                 RemapTransform::new(0.0, 1.0, 0.0, 1.0).expect("valid remap"),
             ),
-            CompiledSignalTransform::Envelope(EnvelopeTransform::new(20_000_000, 180_000_000)),
             CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).expect("valid clamp")),
+            CompiledSignalTransform::Envelope(EnvelopeTransform::new(180_000_000, 180_000_000)),
+            CompiledSignalTransform::ResponseCurve(
+                CubicResponseCurve::new(0.42, 0.0, 1.0, 1.0).expect("valid response curve"),
+            ),
         ],
     );
     plan.scalar_signals = CompiledScalarSignals::from_signals(vec![signal]);
@@ -74,15 +78,22 @@ fn preparation_routes_audible_master_envelope_to_brightness_when_output_audio_is
     plan.encoder.audio_mix = None;
     let signal_id = plan.scalar_signals.iter().next().expect("signal ID").0;
     let layer = &mut plan.layers[0];
-    layer.start_nanos = 1_000_000_000;
+    layer.start_nanos = 5_000_000_000;
     layer.effects.push(TimedEffect {
         start: 0,
         end: layer.duration_nanos,
         effect: CompiledEffect::Brightness {
             amount: CompiledScalarProperty {
-                authored_track: video_editor_core::animation::Track::new(0.25),
+                authored_track: Track {
+                    base_value: 0.0,
+                    keyframes: vec![Keyframe {
+                        time: 1_000_000_000,
+                        value: 0.25,
+                        interpolation: Interpolation::Linear,
+                    }],
+                },
                 modifiers: vec![CompiledScalarModifier {
-                    operation: ScalarModifierOperation::Replace,
+                    operation: ScalarModifierOperation::Add,
                     signal: signal_id,
                 }],
                 constraint: ScalarPropertyConstraint::Unconstrained,
@@ -123,19 +134,26 @@ fn preparation_routes_audible_master_envelope_to_brightness_when_output_audio_is
         ))
     })
     .expect("audible analysis prepares even when output mux audio is disabled");
+    let project_time = 6_000_000_000;
     let frame_number = 42;
     let active = ActiveSchedule::compile(&plan).active_at(&plan, frame_number);
     let frame = evaluate_with_context(
         &plan,
         &active,
-        1_750_000_000,
+        project_time,
         &EvaluationContext::new(prepared.scalar_signals()),
     )
     .expect("prepared signal evaluates at project time");
-    assert!(matches!(
-        frame.layers[0].effects.last(),
-        Some(video_editor_core::plan::EvaluatedEffect::Brightness { amount }) if *amount > 0.0 && *amount <= 1.0
-    ));
+    let signal_value = prepared
+        .scalar_signals()
+        .get(signal_id)
+        .expect("prepared signal")
+        .sample(project_time);
+    let amount = match frame.layers[0].effects.last() {
+        Some(video_editor_core::plan::EvaluatedEffect::Brightness { amount }) => *amount,
+        effect => panic!("expected brightness effect, found {effect:?}"),
+    };
+    assert!((amount - (0.25 + signal_value)).abs() < 1e-12);
 }
 
 fn write_stepped_tone_wav(path: &std::path::Path, samples: usize) {
@@ -156,7 +174,7 @@ fn write_stepped_tone_wav(path: &std::path::Path, samples: usize) {
     bytes.extend_from_slice(&data_length.to_le_bytes());
     for index in 0..samples {
         let time = index as f32 / MASTER_AUDIO_SAMPLE_RATE as f32;
-        let amplitude = if time >= 0.5 { 0.25 } else { 0.0 };
+        let amplitude = if time >= 5.9 { 0.25 } else { 0.0 };
         let pcm =
             (amplitude * (2.0 * std::f32::consts::PI * 100.0 * time).sin() * f32::from(i16::MAX))
                 .round() as i16;

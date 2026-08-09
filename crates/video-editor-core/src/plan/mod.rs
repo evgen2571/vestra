@@ -26,8 +26,8 @@ pub(crate) use signals::ScalarSignalInterner;
 pub use signals::{
     AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioFrequencyBand,
     AudioScalarFeature, AudioScalarSignal, AudioSignalContractError, ClampTransform,
-    CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, EnvelopeTransform,
-    EvaluationContext, EvaluationError, GainTransform, PreparedScalarSignal,
+    CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, CubicResponseCurve,
+    EnvelopeTransform, EvaluationContext, EvaluationError, GainTransform, PreparedScalarSignal,
     PreparedScalarSignalError, PreparedScalarSignals, RawScalarSignal, RemapTransform,
     ScalarSignalId, SignalPreparationError, SignalTransformContractError, prepare_scalar_signals,
     prepare_transformed_scalar_signal,

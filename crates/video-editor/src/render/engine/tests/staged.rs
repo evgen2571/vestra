@@ -18,10 +18,10 @@ use crate::{
 };
 use video_editor_core::{
     plan::{
-        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioScalarFeature,
-        AudioScalarSignal, CompiledScalarSignal, CompiledScalarSignals,
+        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap, AudioFrequencyBand,
+        AudioScalarFeature, AudioScalarSignal, CompiledScalarSignal, CompiledScalarSignals,
     },
-    plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan},
+    plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::AudioFadeCurve,
 };
 use video_editor_media::{EncoderSettings, FrameSink, MediaError, SinkResult};
@@ -36,28 +36,37 @@ use super::super::{
 };
 
 #[test]
-fn preparation_retains_silent_master_rms_when_output_audio_is_disabled() {
+fn preparation_analyzes_audible_master_when_output_audio_is_disabled() {
     let mut plan = super::example_plan();
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let source = directory.path().join("audible-master.wav");
+    let source_frames = usize::try_from(
+        video_editor_media::seconds_to_samples(plan.duration).expect("fixture duration"),
+    )
+    .expect("fixture sample count fits usize");
+    write_mono_wav(&source, source_frames, 0.25);
+
+    let band = AudioFrequencyBand::new(40.0, 160.0).expect("valid band");
     let signal = CompiledScalarSignal::Audio(AudioScalarSignal {
         tap: AudioAnalysisTap::Master,
-        feature: AudioScalarFeature::Rms,
+        feature: AudioScalarFeature::BandEnergy(band),
     });
     plan.scalar_signals = CompiledScalarSignals::from_signals(vec![signal]);
     plan.audio_analysis_requirements =
         AudioAnalysisRequirements::from_requirements([AudioAnalysisRequirement::Master(
-            AudioScalarFeature::Rms,
+            AudioScalarFeature::BandEnergy(band),
         )]);
     plan.audio_output_enabled = false;
     plan.encoder.audio_mix = None;
     plan.audio_mix = AudioMixPlan {
         tracks: vec![AudioTrackPlan {
-            id: "silent".to_owned(),
-            mute: true,
+            id: "audible".to_owned(),
+            mute: false,
             gain: 1.0,
             clips: vec![AudioClipPlan {
-                id: "silent-clip".to_owned(),
-                asset: "unused".to_owned(),
-                path: PathBuf::from("not-opened.wav"),
+                id: "audible-clip".to_owned(),
+                asset: "audible".to_owned(),
+                path: source,
                 start: 0.0,
                 trim_start: 0.0,
                 selected_duration: plan.duration,
@@ -81,8 +90,31 @@ fn preparation_retains_silent_master_rms_when_output_audio_is_disabled() {
             None,
         ))
     })
-    .expect("analysis prepares even when output mux audio is disabled");
+    .expect("audible analysis prepares even when output mux audio is disabled");
     assert!(!prepared.scalar_signals().is_empty());
+}
+
+fn write_mono_wav(path: &std::path::Path, samples: usize, amplitude: f32) {
+    let mut bytes = Vec::new();
+    let data_length = u32::try_from(samples.checked_mul(2).expect("WAV data length"))
+        .expect("WAV fixture fits u32");
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&MASTER_AUDIO_SAMPLE_RATE.to_le_bytes());
+    bytes.extend_from_slice(&(MASTER_AUDIO_SAMPLE_RATE * 2).to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_length.to_le_bytes());
+    let pcm = (amplitude * f32::from(i16::MAX)).round() as i16;
+    for _ in 0..samples {
+        bytes.extend_from_slice(&pcm.to_le_bytes());
+    }
+    fs::write(path, bytes).expect("write fixture WAV");
 }
 
 #[test]

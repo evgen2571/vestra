@@ -7,10 +7,12 @@ use std::{
     thread,
 };
 
+use rustfft::{FftPlanner, num_complex::Complex};
+
 use video_editor_core::{
     plan::{
-        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioScalarFeature,
-        PreparedScalarSignal,
+        AudioAnalysisRequirement, AudioAnalysisRequirements, AudioFrequencyBand,
+        AudioScalarFeature, PreparedScalarSignal,
     },
     plan_audio::{AudioMixPlan, MASTER_AUDIO_SAMPLE_RATE},
     timeline::NANOS_PER_SECOND,
@@ -30,6 +32,9 @@ const STDERR_LIMIT_BYTES: usize = 64 * 1024;
 /// V1 feature clock: 10 ms at the fixed Master sample rate.
 pub const AUDIO_FEATURE_HOP_FRAMES: usize = (MASTER_AUDIO_SAMPLE_RATE / 100) as usize;
 const RMS_PEAK_WINDOW_FRAMES: usize = AUDIO_FEATURE_HOP_FRAMES * 2;
+/// V1 spectral profile: 4096-frame Hann windows at the shared feature hop.
+const STFT_SIZE_FRAMES: usize = 4_096;
+const STFT_HOP_FRAMES: usize = AUDIO_FEATURE_HOP_FRAMES;
 const FEATURE_HOP_NANOS: u128 = NANOS_PER_SECOND / 100;
 
 /// Analyze every currently supported Master requirement from one PCM stream.
@@ -41,12 +46,6 @@ pub fn analyze_master_audio(
 ) -> Result<BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal>, MediaError> {
     if requirements.is_empty() {
         return Ok(BTreeMap::new());
-    }
-    for requirement in requirements.iter() {
-        let AudioAnalysisRequirement::Master(feature) = requirement;
-        if matches!(feature, AudioScalarFeature::BandEnergy(_)) {
-            return Err(AudioAnalysisError::UnsupportedFeature(*feature).into());
-        }
     }
     let project_frames = audio_graph::seconds_to_samples(project_duration)?;
     let mut coordinator = MasterAnalysisCoordinator::new(requirements, project_frames)?;
@@ -62,9 +61,10 @@ struct MasterAnalysisCoordinator {
     project_frames: u64,
     received_frames: u64,
     expected_samples: usize,
-    window: VecDeque<[f32; 2]>,
+    rms_window: VecDeque<[f32; 2]>,
     rms_samples: Vec<f64>,
     peak_samples: Vec<f64>,
+    stft: Option<StftAnalyzer>,
 }
 
 impl MasterAnalysisCoordinator {
@@ -74,14 +74,13 @@ impl MasterAnalysisCoordinator {
     ) -> Result<Self, AudioAnalysisError> {
         let mut rms = false;
         let mut peak = false;
+        let mut bands = Vec::new();
         for requirement in requirements.iter() {
             match requirement {
                 AudioAnalysisRequirement::Master(AudioScalarFeature::Rms) => rms = true,
                 AudioAnalysisRequirement::Master(AudioScalarFeature::Peak) => peak = true,
-                AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(feature)) => {
-                    return Err(AudioAnalysisError::UnsupportedFeature(
-                        AudioScalarFeature::BandEnergy(*feature),
-                    ));
+                AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band)) => {
+                    bands.push(*band)
                 }
             }
         }
@@ -94,8 +93,13 @@ impl MasterAnalysisCoordinator {
                 .ok_or(AudioAnalysisError::TimingOverflow)?,
         )
         .map_err(|_| AudioAnalysisError::TimingOverflow)?;
-        let mut window = VecDeque::with_capacity(RMS_PEAK_WINDOW_FRAMES);
-        window.extend(std::iter::repeat_n([0.0, 0.0], AUDIO_FEATURE_HOP_FRAMES));
+        if !rms && !peak && bands.is_empty() {
+            return Err(AudioAnalysisError::EmptyRequirements);
+        }
+        let mut rms_window = VecDeque::with_capacity(RMS_PEAK_WINDOW_FRAMES);
+        if rms || peak {
+            rms_window.extend(std::iter::repeat_n([0.0, 0.0], AUDIO_FEATURE_HOP_FRAMES));
+        }
         let mut rms_samples = Vec::new();
         let mut peak_samples = Vec::new();
         if rms {
@@ -114,9 +118,12 @@ impl MasterAnalysisCoordinator {
             project_frames,
             received_frames: 0,
             expected_samples,
-            window,
+            rms_window,
             rms_samples,
             peak_samples,
+            stft: (!bands.is_empty())
+                .then(|| StftAnalyzer::new(bands, expected_samples))
+                .transpose()?,
         })
     }
 
@@ -129,19 +136,29 @@ impl MasterAnalysisCoordinator {
             .checked_add((samples.len() / CHANNELS as usize) as u64)
             .ok_or(AudioAnalysisError::TimingOverflow)?;
         for frame in samples.chunks_exact(CHANNELS as usize) {
-            self.window.push_back([frame[0], frame[1]]);
-            self.emit_ready()?;
+            self.accept_frame([frame[0], frame[1]])?;
         }
         Ok(())
     }
 
-    fn emit_ready(&mut self) -> Result<(), AudioAnalysisError> {
-        while self.window.len() >= RMS_PEAK_WINDOW_FRAMES
+    fn accept_frame(&mut self, frame: [f32; 2]) -> Result<(), AudioAnalysisError> {
+        if self.rms || self.peak {
+            self.rms_window.push_back(frame);
+            self.emit_rms_peak_ready()?;
+        }
+        if let Some(stft) = &mut self.stft {
+            stft.push(frame)?;
+        }
+        Ok(())
+    }
+
+    fn emit_rms_peak_ready(&mut self) -> Result<(), AudioAnalysisError> {
+        while self.rms_window.len() >= RMS_PEAK_WINDOW_FRAMES
             && self.rms_samples.len().max(self.peak_samples.len()) < self.expected_samples
         {
             let mut sum_squares = 0.0_f64;
             let mut peak = 0.0_f64;
-            for frame in &self.window {
+            for frame in &self.rms_window {
                 for sample in frame {
                     let sample = f64::from(*sample);
                     if self.rms {
@@ -166,7 +183,7 @@ impl MasterAnalysisCoordinator {
                 }
                 self.peak_samples.push(peak);
             }
-            self.window.drain(..AUDIO_FEATURE_HOP_FRAMES);
+            self.rms_window.drain(..AUDIO_FEATURE_HOP_FRAMES);
         }
         Ok(())
     }
@@ -177,9 +194,8 @@ impl MasterAnalysisCoordinator {
         if self.received_frames != self.project_frames {
             return Err(AudioAnalysisError::InvalidWindowState.into());
         }
-        while self.rms_samples.len().max(self.peak_samples.len()) < self.expected_samples {
-            self.window.push_back([0.0, 0.0]);
-            self.emit_ready()?;
+        while !self.all_features_complete() {
+            self.accept_frame([0.0, 0.0])?;
         }
         let mut result = BTreeMap::new();
         if self.rms {
@@ -196,7 +212,210 @@ impl MasterAnalysisCoordinator {
                     .map_err(|_| AudioAnalysisError::TimingOverflow)?,
             );
         }
+        if let Some(stft) = self.stft {
+            result.extend(stft.finish()?);
+        }
         Ok(result)
+    }
+
+    fn all_features_complete(&self) -> bool {
+        let rms_peak_complete = (!self.rms || self.rms_samples.len() == self.expected_samples)
+            && (!self.peak || self.peak_samples.len() == self.expected_samples);
+        rms_peak_complete
+            && self
+                .stft
+                .as_ref()
+                .is_none_or(|stft| stft.sample_count() == self.expected_samples)
+    }
+
+    #[cfg(test)]
+    fn fft_calls(&self) -> usize {
+        self.stft.as_ref().map_or(0, StftAnalyzer::fft_calls)
+    }
+}
+
+struct StftAnalyzer {
+    window: Vec<f64>,
+    window_energy: f64,
+    bands: Vec<BandDescriptor>,
+    samples: Vec<Vec<f64>>,
+    rolling: VecDeque<[f32; 2]>,
+    left: Vec<Complex<f64>>,
+    right: Vec<Complex<f64>>,
+    power: Vec<f64>,
+    power_prefix: Vec<f64>,
+    fft: std::sync::Arc<dyn rustfft::Fft<f64>>,
+    expected_samples: usize,
+    #[cfg(test)]
+    fft_calls: usize,
+}
+
+struct BandDescriptor {
+    band: AudioFrequencyBand,
+    bins: std::ops::Range<usize>,
+}
+
+impl StftAnalyzer {
+    fn new(
+        bands: Vec<AudioFrequencyBand>,
+        expected_samples: usize,
+    ) -> Result<Self, AudioAnalysisError> {
+        let window = (0..STFT_SIZE_FRAMES)
+            .map(|n| {
+                0.5 * (1.0
+                    - (2.0 * std::f64::consts::PI * n as f64 / (STFT_SIZE_FRAMES - 1) as f64).cos())
+            })
+            .collect::<Vec<_>>();
+        let window_energy = window.iter().map(|value| value * value).sum::<f64>();
+        if !window_energy.is_finite() || window_energy <= 0.0 {
+            return Err(AudioAnalysisError::InvalidSpectrumState);
+        }
+        let bands = bands
+            .into_iter()
+            .map(BandDescriptor::new)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut samples = Vec::with_capacity(bands.len());
+        for _ in &bands {
+            let mut values = Vec::new();
+            values
+                .try_reserve_exact(expected_samples)
+                .map_err(|_| AudioAnalysisError::TimingOverflow)?;
+            samples.push(values);
+        }
+        let mut rolling = VecDeque::with_capacity(STFT_SIZE_FRAMES);
+        rolling.extend(std::iter::repeat_n([0.0, 0.0], STFT_SIZE_FRAMES / 2));
+        let mut planner = FftPlanner::<f64>::new();
+        let fft = planner.plan_fft_forward(STFT_SIZE_FRAMES);
+        Ok(Self {
+            window,
+            window_energy,
+            bands,
+            samples,
+            rolling,
+            left: vec![Complex::new(0.0, 0.0); STFT_SIZE_FRAMES],
+            right: vec![Complex::new(0.0, 0.0); STFT_SIZE_FRAMES],
+            power: vec![0.0; STFT_SIZE_FRAMES / 2 + 1],
+            power_prefix: vec![0.0; STFT_SIZE_FRAMES / 2 + 2],
+            fft,
+            expected_samples,
+            #[cfg(test)]
+            fft_calls: 0,
+        })
+    }
+
+    fn push(&mut self, frame: [f32; 2]) -> Result<(), AudioAnalysisError> {
+        self.rolling.push_back(frame);
+        while self.rolling.len() >= STFT_SIZE_FRAMES && self.sample_count() < self.expected_samples
+        {
+            self.emit()?;
+            self.rolling.drain(..STFT_HOP_FRAMES);
+        }
+        Ok(())
+    }
+
+    // rustfft's forward transform is unnormalised. Dividing |X|² by N * sum(w²),
+    // then doubling only interior one-sided bins, makes the full spectrum equal
+    // the window-normalized time-domain mean-square power (Parseval).
+    fn emit(&mut self) -> Result<(), AudioAnalysisError> {
+        for (index, frame) in self.rolling.iter().enumerate() {
+            self.left[index] = Complex::new(f64::from(frame[0]) * self.window[index], 0.0);
+            self.right[index] = Complex::new(f64::from(frame[1]) * self.window[index], 0.0);
+        }
+        self.fft.process(&mut self.left);
+        self.fft.process(&mut self.right);
+        #[cfg(test)]
+        {
+            self.fft_calls += 2;
+        }
+        let denominator = STFT_SIZE_FRAMES as f64 * self.window_energy;
+        for k in 0..self.power.len() {
+            let left = self.left[k].norm_sqr();
+            let right = self.right[k].norm_sqr();
+            let one_sided = if k == 0 || k == STFT_SIZE_FRAMES / 2 {
+                1.0
+            } else {
+                2.0
+            };
+            let value = one_sided * (left + right) * 0.5 / denominator;
+            if !value.is_finite() || value < 0.0 {
+                return Err(AudioAnalysisError::NonFiniteFeature);
+            }
+            self.power[k] = value;
+        }
+        self.power_prefix[0] = 0.0;
+        for (index, value) in self.power.iter().copied().enumerate() {
+            let prefix = self.power_prefix[index] + value;
+            if !prefix.is_finite() {
+                return Err(AudioAnalysisError::NonFiniteFeature);
+            }
+            self.power_prefix[index + 1] = prefix;
+        }
+        for (descriptor, output) in self.bands.iter().zip(&mut self.samples) {
+            let value =
+                self.power_prefix[descriptor.bins.end] - self.power_prefix[descriptor.bins.start];
+            if !value.is_finite() || value < 0.0 {
+                return Err(AudioAnalysisError::NonFiniteFeature);
+            }
+            output.push(value);
+        }
+        Ok(())
+    }
+
+    fn sample_count(&self) -> usize {
+        self.samples.first().map_or(0, Vec::len)
+    }
+
+    fn finish(
+        self,
+    ) -> Result<BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal>, AudioAnalysisError> {
+        if self
+            .samples
+            .iter()
+            .any(|values| values.len() != self.expected_samples)
+        {
+            return Err(AudioAnalysisError::InvalidSpectrumState);
+        }
+        self.bands
+            .into_iter()
+            .zip(self.samples)
+            .map(|(descriptor, values)| {
+                Ok((
+                    AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(
+                        descriptor.band,
+                    )),
+                    PreparedScalarSignal::new(0, FEATURE_HOP_NANOS, values)
+                        .map_err(|_| AudioAnalysisError::TimingOverflow)?,
+                ))
+            })
+            .collect()
+    }
+    #[cfg(test)]
+    fn fft_calls(&self) -> usize {
+        self.fft_calls
+    }
+}
+
+impl BandDescriptor {
+    fn new(band: AudioFrequencyBand) -> Result<Self, AudioAnalysisError> {
+        let resolution = f64::from(MASTER_AUDIO_SAMPLE_RATE) / STFT_SIZE_FRAMES as f64;
+        let end_inclusive = STFT_SIZE_FRAMES / 2;
+        let start = (0..=end_inclusive)
+            .find(|&k| k as f64 * resolution >= band.min_hz())
+            .unwrap_or(end_inclusive + 1);
+        let end = if band.max_hz() == f64::from(MASTER_AUDIO_SAMPLE_RATE) / 2.0 {
+            end_inclusive + 1
+        } else {
+            (start..=end_inclusive)
+                .find(|&k| k as f64 * resolution >= band.max_hz())
+                .unwrap_or(end_inclusive + 1)
+        };
+        if start > end || end > end_inclusive + 1 {
+            return Err(AudioAnalysisError::InvalidSpectrumState);
+        }
+        Ok(Self {
+            band,
+            bins: start..end,
+        })
     }
 }
 
@@ -642,22 +861,266 @@ mod tests {
     }
 
     #[test]
-    fn band_energy_is_rejected_before_master_extraction() {
+    fn band_energy_is_prepared_from_silent_master_pcm() {
         let band =
             video_editor_core::plan::AudioFrequencyBand::new(40.0, 160.0).expect("valid band");
-        let error = analyze_master_audio(
-            &requirements(&[AudioScalarFeature::BandEnergy(band)]),
-            &AudioMixPlan::default(),
-            0.01,
-            1,
+        let features = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(band)],
+            480,
+            &[0.0; 960],
+            &[480],
+        );
+        assert_eq!(
+            features[&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band))]
+                .sample(0),
+            0.0
+        );
+    }
+
+    fn bin_sine(bin: usize, amplitude: f32, right_sign: f32, frames: usize) -> Vec<f32> {
+        (0..frames)
+            .flat_map(|n| {
+                let sample = amplitude
+                    * (2.0 * std::f64::consts::PI * bin as f64 * n as f64 / STFT_SIZE_FRAMES as f64)
+                        .sin() as f32;
+                [sample, sample * right_sign]
+            })
+            .collect()
+    }
+
+    fn band(min: f64, max: f64) -> AudioFrequencyBand {
+        AudioFrequencyBand::new(min, max).expect("valid band")
+    }
+
+    #[test]
+    fn band_energy_is_power_normalized_and_stereo_phase_safe() {
+        let in_band = band(40.0, 160.0);
+        let high_band = band(2_000.0, 12_000.0);
+        let frames = STFT_SIZE_FRAMES * 3;
+        let same = analyze_chunks(
+            &[
+                AudioScalarFeature::BandEnergy(in_band),
+                AudioScalarFeature::BandEnergy(high_band),
+            ],
+            frames,
+            &bin_sine(8, 0.5, 1.0, frames),
+            &[frames],
+        );
+        let anti = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(in_band)],
+            frames,
+            &bin_sine(8, 0.5, -1.0, frames),
+            &[frames],
+        );
+        let doubled = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(in_band)],
+            frames,
+            &bin_sine(8, 1.0, 1.0, frames),
+            &[frames],
+        );
+        let timestamp = FEATURE_HOP_NANOS * 5;
+        let same_energy = same
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))]
+            .sample(timestamp);
+        let high_energy = same
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(high_band))]
+            .sample(timestamp);
+        let anti_energy = anti
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))]
+            .sample(timestamp);
+        let doubled_energy = doubled
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))]
+            .sample(timestamp);
+        assert!(same_energy > 0.1 && high_energy < same_energy * 1e-8);
+        assert!((anti_energy / same_energy - 1.0).abs() < 1e-12);
+        assert!((doubled_energy / same_energy - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn band_energy_uses_shared_prefix_sums_for_overlapping_ranges() {
+        let bands = vec![band(40.0, 500.0), band(100.0, 2_000.0), band(500.0, 12_000.0)];
+        let mut analyzer = StftAnalyzer::new(bands, 1).expect("STFT analyzer");
+        let pcm = bin_sine(64, 0.5, 1.0, STFT_SIZE_FRAMES / 2);
+        for frame in pcm.chunks_exact(CHANNELS as usize) {
+            analyzer.push([frame[0], frame[1]]).expect("PCM");
+        }
+        assert_eq!(analyzer.sample_count(), 1);
+        for (descriptor, output) in analyzer.bands.iter().zip(&analyzer.samples) {
+            let direct = analyzer.power[descriptor.bins.clone()].iter().sum::<f64>();
+            let prefix = analyzer.power_prefix[descriptor.bins.end]
+                - analyzer.power_prefix[descriptor.bins.start];
+            assert!((prefix - direct).abs() < 1e-12);
+            assert!((output[0] - direct).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn band_energy_averages_channel_power_without_time_domain_downmixing() {
+        let in_band = band(40.0, 160.0);
+        let frames = STFT_SIZE_FRAMES * 3;
+        let stereo = bin_sine(8, 0.5, 1.0, frames);
+        let left_only = (0..frames)
+            .flat_map(|n| {
+                let sample = 0.5_f32
+                    * (2.0 * std::f64::consts::PI * 8.0 * n as f64
+                        / STFT_SIZE_FRAMES as f64)
+                        .sin() as f32;
+                [sample, 0.0]
+            })
+            .collect::<Vec<_>>();
+        let stereo_features = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(in_band)],
+            frames,
+            &stereo,
+            &[frames],
+        );
+        let left_only_features = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(in_band)],
+            frames,
+            &left_only,
+            &[frames],
+        );
+        let timestamp = FEATURE_HOP_NANOS * 5;
+        let stereo_energy = stereo_features
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))]
+            .sample(timestamp);
+        let left_only_energy = left_only_features
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))]
+            .sample(timestamp);
+        assert!((left_only_energy / stereo_energy - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn spectral_boundary_padding_handles_short_projects_and_reduces_edge_energy() {
+        let in_band = band(40.0, 160.0);
+        let short_frames = AUDIO_FEATURE_HOP_FRAMES;
+        let short = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(in_band)],
+            short_frames,
+            &bin_sine(8, 0.5, 1.0, short_frames),
+            &[short_frames],
+        );
+        let short_signal =
+            &short[&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))];
+        assert!(short_signal.sample(0).is_finite());
+        assert!(short_signal.sample(0) > 0.0);
+        assert!(short_signal.sample(FEATURE_HOP_NANOS) > 0.0);
+
+        let long_frames = STFT_SIZE_FRAMES * 3;
+        let long = analyze_chunks(
+            &[AudioScalarFeature::BandEnergy(in_band)],
+            long_frames,
+            &bin_sine(8, 0.5, 1.0, long_frames),
+            &[long_frames],
+        );
+        let long_signal =
+            &long[&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))];
+        let start = long_signal.sample(0);
+        let interior = long_signal.sample(FEATURE_HOP_NANOS * 5);
+        let end_hop = ((long_frames + AUDIO_FEATURE_HOP_FRAMES - 1)
+            / AUDIO_FEATURE_HOP_FRAMES) as u128;
+        let end = long_signal.sample(FEATURE_HOP_NANOS * end_hop);
+        assert!(start > 0.0 && start < interior);
+        assert!(end >= 0.0 && end < interior);
+    }
+
+    #[test]
+    fn full_band_obeys_window_normalized_parseval_and_nyquist_endpoint() {
+        let full = band(0.0, 24_000.0);
+        let nyquist = band(23_990.0, 24_000.0);
+        let frames = STFT_SIZE_FRAMES * 2;
+        let pcm = (0..frames)
+            .flat_map(|n| {
+                let value = if n % 2 == 0 { 0.5 } else { -0.5 };
+                [value, value]
+            })
+            .collect::<Vec<_>>();
+        let features = analyze_chunks(
+            &[
+                AudioScalarFeature::BandEnergy(full),
+                AudioScalarFeature::BandEnergy(nyquist),
+            ],
+            frames,
+            &pcm,
+            &[frames],
+        );
+        let timestamp = FEATURE_HOP_NANOS * 5;
+        let total = features
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(full))]
+            .sample(timestamp);
+        let edge = features
+            [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(nyquist))]
+            .sample(timestamp);
+        assert!((total - 0.25).abs() < 1e-12);
+        assert!(
+            edge > total * 0.4,
+            "Nyquist endpoint includes the dominant bin"
+        );
+    }
+
+    #[test]
+    fn narrow_band_without_bin_is_zero_and_fft_work_does_not_scale_with_bands() {
+        let one = [AudioScalarFeature::BandEnergy(band(40.0, 41.0))];
+        let many = [
+            AudioScalarFeature::BandEnergy(band(40.0, 41.0)),
+            AudioScalarFeature::BandEnergy(band(160.0, 500.0)),
+            AudioScalarFeature::BandEnergy(band(500.0, 2_000.0)),
+        ];
+        let pcm = bin_sine(8, 0.5, 1.0, STFT_SIZE_FRAMES * 2);
+        let mut first = MasterAnalysisCoordinator::new(&requirements(&one), (pcm.len() / 2) as u64)
+            .expect("coordinator");
+        first.push(&pcm).expect("PCM");
+        let first_calls = first.fft_calls();
+        let zero = first.finish().expect("features");
+        let mut second =
+            MasterAnalysisCoordinator::new(&requirements(&many), (pcm.len() / 2) as u64)
+                .expect("coordinator");
+        second.push(&pcm).expect("PCM");
+        assert_eq!(first_calls, second.fft_calls());
+        assert_eq!(
+            zero[&AudioAnalysisRequirement::Master(one[0])].sample(FEATURE_HOP_NANOS * 5),
+            0.0
+        );
+    }
+
+    #[test]
+    fn all_primitives_share_the_feature_clock_and_rms_peak_only_skip_fft() {
+        let low = band(40.0, 160.0);
+        let high = band(2_000.0, 12_000.0);
+        let frames = STFT_SIZE_FRAMES * 2;
+        let pcm = bin_sine(8, 0.5, 1.0, frames);
+        let features = analyze_chunks(
+            &[
+                AudioScalarFeature::Rms,
+                AudioScalarFeature::Peak,
+                AudioScalarFeature::BandEnergy(low),
+                AudioScalarFeature::BandEnergy(high),
+            ],
+            frames,
+            &pcm,
+            &vec![1; frames],
+        );
+        let expected = features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)]
+            .sample(FEATURE_HOP_NANOS * 5);
+        assert!(expected.is_finite());
+        for feature in [
+            AudioScalarFeature::Peak,
+            AudioScalarFeature::BandEnergy(low),
+            AudioScalarFeature::BandEnergy(high),
+        ] {
+            assert!(
+                features[&AudioAnalysisRequirement::Master(feature)]
+                    .sample(FEATURE_HOP_NANOS * 5)
+                    .is_finite()
+            );
+        }
+        let mut rms_peak = MasterAnalysisCoordinator::new(
+            &requirements(&[AudioScalarFeature::Rms, AudioScalarFeature::Peak]),
+            frames as u64,
         )
-        .expect_err("BandEnergy is not implemented in C2");
-        assert!(matches!(
-            error,
-            MediaError::AudioAnalysis(AudioAnalysisError::UnsupportedFeature(
-                AudioScalarFeature::BandEnergy(actual)
-            )) if actual == band
-        ));
+        .expect("coordinator");
+        rms_peak.push(&pcm).expect("PCM");
+        assert_eq!(rms_peak.fft_calls(), 0);
     }
 
     #[test]
@@ -790,6 +1253,29 @@ mod tests {
             samples
                 .chunks_exact(2)
                 .any(|frame| (frame[0] - frame[1]).abs() < f32::EPSILON)
+        );
+        let full = band(0.0, 24_000.0);
+        let features = analyze_master_audio(
+            &requirements(&[
+                AudioScalarFeature::Rms,
+                AudioScalarFeature::Peak,
+                AudioScalarFeature::BandEnergy(full),
+            ]),
+            &mix,
+            0.01,
+            1,
+        )
+        .expect("analyze production Master graph");
+        assert!(
+            features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)].sample(0) > 0.0
+        );
+        assert!(
+            features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Peak)].sample(0) > 0.0
+        );
+        assert!(
+            features[&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(full))]
+                .sample(0)
+                > 0.0
         );
     }
 

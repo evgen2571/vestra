@@ -40,6 +40,7 @@ pub(crate) struct PreparedState {
     selected_backend: RenderBackendKind,
     backend_fallback: Option<BackendFallback>,
     preparation_timings: crate::render::PreparationTimings,
+    audio_analysis_duration: Duration,
     static_visual_template: Option<Arc<[u8]>>,
     scalar_signals: video_editor_core::plan::PreparedScalarSignals,
     lifecycle: PreparedLifecycle,
@@ -101,6 +102,10 @@ impl PreparedState {
 
     pub(crate) const fn preparation_timings(&self) -> crate::render::PreparationTimings {
         self.preparation_timings
+    }
+
+    pub(crate) const fn audio_analysis_duration(&self) -> Duration {
+        self.audio_analysis_duration
     }
 
     #[expect(
@@ -167,6 +172,51 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
         timings: RenderTimings::default(),
     })?;
     let schedule = ActiveSchedule::compile(&plan);
+    let analysis_started = Instant::now();
+    if !plan.audio_analysis_requirements.is_empty() {
+        video_editor_media::validate_master_pcm_request(
+            &plan.audio_mix,
+            plan.duration,
+            plan.limits.maximum_audio_sources,
+        )
+        .map_err(|error| RenderError {
+            diagnostic: Diagnostic::error(
+                "MVP-AUDIO-ANALYSIS",
+                Category::Media,
+                error.to_string(),
+                "",
+            ),
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::AssetPreparation,
+                &plan,
+            ),
+            timings: RenderTimings {
+                asset_decode_ms: milliseconds(decoded.timings().decode),
+                ..RenderTimings::default()
+            },
+        })?;
+        return Err(RenderError {
+            diagnostic: Diagnostic::error(
+                "MVP-AUDIO-ANALYSIS-UNIMPLEMENTED",
+                Category::Media,
+                "audio-derived scalar feature preparation is not implemented",
+                "",
+            ),
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::AssetPreparation,
+                &plan,
+            ),
+            timings: RenderTimings {
+                asset_decode_ms: milliseconds(decoded.timings().decode),
+                ..RenderTimings::default()
+            },
+        });
+    }
+    let audio_analysis_duration = analysis_started.elapsed();
     let (backend, backend_fallback) =
         build_backend(preference, &plan, &decoded).map_err(|diagnostic| RenderError {
             diagnostic,
@@ -194,6 +244,7 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
         requested_backend: preference,
         backend_fallback,
         preparation_timings,
+        audio_analysis_duration,
         static_visual_template: None,
         scalar_signals: video_editor_core::plan::PreparedScalarSignals::empty(),
         lifecycle: PreparedLifecycle::Ready,

@@ -12,8 +12,7 @@ pub(super) fn normalize(
     post_effects: &mut Vec<TimedEffect>,
     project_duration: u128,
     compilation: &mut crate::plan::CompilationStats,
-) -> TemporalDependency {
-    let mut visual_dependency = TemporalDependency::Static;
+) {
     for layer in layers {
         compilation.constant_track_normalization_count += normalize_source(layer);
         compilation.constant_track_normalization_count +=
@@ -45,16 +44,8 @@ pub(super) fn normalize(
             .retain_mut(|effect| normalize_timed_effect(effect, layer.duration_nanos, compilation));
         fuse_static_colour_chain(layer);
         layer.content_dependency = layer_dependency(layer);
-        visual_dependency = visual_dependency.combine(layer.content_dependency);
     }
     post_effects.retain_mut(|effect| normalize_timed_effect(effect, project_duration, compilation));
-    visual_dependency.combine(
-        post_effects
-            .iter()
-            .fold(TemporalDependency::Static, |dependency, effect| {
-                dependency.combine(effect.dependency)
-            }),
-    )
 }
 
 fn normalize_timed_effect(
@@ -823,14 +814,13 @@ mod tests {
 
         let mut compilation = crate::plan::CompilationStats::default();
         let mut post_effects = Vec::new();
-        let dependency = normalize(
+        normalize(
             std::slice::from_mut(&mut layer),
             &mut post_effects,
             10,
             &mut compilation,
         );
 
-        assert_eq!(dependency, TemporalDependency::Dynamic);
         assert_eq!(layer.content_dependency, TemporalDependency::Dynamic);
         assert_eq!(layer.effects.len(), 2);
         assert_eq!(layer.effects[0].dependency, TemporalDependency::Dynamic);

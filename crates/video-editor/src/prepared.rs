@@ -287,14 +287,19 @@ pub struct PreparationTimings {
     pub preflight_ms: u128,
     pub plan_compile_ms: u128,
     pub asset_decode_ms: u128,
+    /// Time spent deriving resources from the timeline Master audio. This is
+    /// zero until a project contains analysis-dependent scalar signals.
+    pub audio_analysis_ms: u128,
     pub backend_initialization_ms: Option<u128>,
     pub total_ms: u128,
 }
 
-/// An owned visual execution snapshot. It freezes the compiled plan, decoded
-/// visual assets, resolved metadata, schedule, and selected backend. FFmpeg
-/// reopens external media such as audio for each video operation, so those
-/// source files must remain available and unchanged for repeatable output.
+/// An owned execution snapshot. It freezes the compiled plan, decoded visual
+/// assets, resolved metadata, schedule, selected backend, and future prepared
+/// audio-derived scalar buffers. Projects without signal dependencies remain
+/// visual-only and do not run FFmpeg during preparation. FFmpeg reopens source
+/// audio for each encoded video, so changing audio after preparation can later
+/// pair old visual analysis with newly encoded audio.
 ///
 /// `PreparedProject` is `Send` but intentionally not `Sync`: it may be moved
 /// while idle, while rendering requires exclusive `&mut self` access. Video
@@ -340,6 +345,7 @@ impl PreparedProject {
                     preflight_ms: timings.preflight_ms,
                     plan_compile_ms: timings.plan_compile_ms,
                     asset_decode_ms: timings.renderer.decode.as_millis(),
+                    audio_analysis_ms: timings.audio_analysis_ms,
                     backend_initialization_ms: (timings.renderer.gpu_initialization
                         != Duration::ZERO)
                         .then_some(timings.renderer.gpu_initialization.as_millis()),

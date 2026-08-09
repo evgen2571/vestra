@@ -28,10 +28,18 @@ pub enum MediaError {
     InvalidAudioTiming(String),
     #[error("unique executable audio sources ({actual}) exceed the supported limit ({maximum})")]
     AudioSourceLimit { actual: usize, maximum: usize },
+    #[error("Master audio analysis requires authored audio material")]
+    MasterAudioUnavailable,
+    #[error("malformed Master PCM: {0}")]
+    MalformedMasterPcm(String),
+    #[error("Master PCM consumer failed: {0}")]
+    MasterPcmConsumer(String),
     #[error("FFmpeg did not expose a frame input pipe")]
     MissingFrameInput,
     #[error("FFmpeg did not expose an error output pipe")]
     MissingErrorOutput,
+    #[error("FFmpeg did not expose a Master PCM output pipe")]
+    MissingMasterPcmOutput,
     #[error("FFmpeg did not expose a progress output pipe")]
     MissingProgressOutput,
     #[error("cannot stream frame to FFmpeg: {0}")]

@@ -4,21 +4,90 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::{
     Category, Diagnostic,
-    project::{AudioFadeCurve, AudioGainAutomation, AudioTimeline},
+    project::{AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioTimeline},
 };
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AudioEffectOperation {
+    ParametricEq {
+        frequency_hz: f64,
+        gain_db: f64,
+        q: f64,
+    },
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AudioEffectPassPlan {
+    pub operations: Vec<AudioEffectOperation>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CompiledAudioEffect {
+    ParametricEq {
+        frequency_hz: f64,
+        gain_db: f64,
+        q: f64,
+    },
+}
+
+impl CompiledAudioEffect {
+    #[must_use]
+    pub fn lower(self) -> AudioEffectPassPlan {
+        match self {
+            Self::ParametricEq { gain_db: 0.0, .. } => AudioEffectPassPlan::default(),
+            Self::ParametricEq {
+                frequency_hz,
+                gain_db,
+                q,
+            } => AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::ParametricEq {
+                    frequency_hz,
+                    gain_db,
+                    q,
+                }],
+            },
+        }
+    }
+}
+
+fn compile_effect(effect: &AudioEffect) -> CompiledAudioEffect {
+    match effect {
+        AudioEffect::ParametricEq {
+            frequency_hz,
+            gain_db,
+            q,
+            ..
+        } => CompiledAudioEffect::ParametricEq {
+            frequency_hz: *frequency_hz,
+            gain_db: *gain_db,
+            q: *q,
+        },
+    }
+}
+
+fn compile_effects(effects: &[AudioEffect]) -> AudioEffectPassPlan {
+    AudioEffectPassPlan {
+        operations: effects
+            .iter()
+            .flat_map(|effect| compile_effect(effect).lower().operations)
+            .collect(),
+    }
+}
 
 /// Authoritative rate for the Master mixer and its future analysis consumers.
 /// Keep media graph conversion and analysis validation on this contract.
 pub const MASTER_AUDIO_SAMPLE_RATE: u32 = 48_000;
+pub const MASTER_AUDIO_NYQUIST_HZ: f64 = MASTER_AUDIO_SAMPLE_RATE as f64 / 2.0;
 
 #[must_use]
 pub const fn master_audio_nyquist_hz() -> f64 {
-    MASTER_AUDIO_SAMPLE_RATE as f64 / 2.0
+    MASTER_AUDIO_NYQUIST_HZ
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct AudioMixPlan {
     pub tracks: Vec<AudioTrackPlan>,
+    pub effects: AudioEffectPassPlan,
 }
 
 #[derive(Clone, Debug)]
@@ -27,6 +96,7 @@ pub struct AudioTrackPlan {
     pub mute: bool,
     pub gain: f64,
     pub clips: Vec<AudioClipPlan>,
+    pub effects: AudioEffectPassPlan,
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +114,7 @@ pub struct AudioClipPlan {
     pub fade_out: f64,
     pub fade_in_curve: AudioFadeCurve,
     pub fade_out_curve: AudioFadeCurve,
+    pub effects: AudioEffectPassPlan,
 }
 
 impl AudioMixPlan {
@@ -125,6 +196,7 @@ pub fn compile(
                         fade_out: clip.fade_out,
                         fade_in_curve: clip.fade_in_curve,
                         fade_out_curve: clip.fade_out_curve,
+                        effects: compile_effects(&clip.effects),
                     })
                 })
                 .collect::<Result<Vec<_>, Diagnostic>>()?;
@@ -133,20 +205,24 @@ pub fn compile(
                 mute: track.mute,
                 gain: track.gain,
                 clips,
+                effects: compile_effects(&track.effects),
             })
         })
         .collect::<Result<Vec<_>, Diagnostic>>()
-        .map(|tracks| AudioMixPlan { tracks })
+        .map(|tracks| AudioMixPlan {
+            tracks,
+            effects: compile_effects(&timeline.effects),
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
-    use super::compile;
+    use super::{AudioEffectOperation, compile, compile_effects};
     use crate::project::{
-        AudioClip, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation, AudioGainKeyframe,
-        AudioTimeline, AudioTrack,
+        AudioClip, AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation,
+        AudioGainKeyframe, AudioTimeline, AudioTrack,
     };
 
     fn clip(id: &str, asset: &str, start: f64) -> AudioClip {
@@ -181,17 +257,20 @@ mod tests {
             fade_in_curve: AudioFadeCurve::EqualPower,
             fade_out_curve: AudioFadeCurve::EqualPower,
             mute: id == "clip-a",
+            effects: Vec::new(),
         }
     }
 
     #[test]
     fn mix_plan_preserves_declaration_order_overlap_and_logical_fields() {
         let timeline = AudioTimeline {
+            effects: Vec::new(),
             tracks: vec![
                 AudioTrack {
                     id: "music".to_owned(),
                     mute: false,
                     gain: 1.25,
+                    effects: Vec::new(),
                     clips: vec![
                         clip("clip-b", "tone-b", 2.0),
                         clip("clip-a", "tone-a", 0.5),
@@ -202,12 +281,14 @@ mod tests {
                     id: "ambience".to_owned(),
                     mute: true,
                     gain: 0.5,
+                    effects: Vec::new(),
                     clips: vec![clip("clip-d", "tone-d", 0.75)],
                 },
                 AudioTrack {
                     id: "sfx".to_owned(),
                     mute: false,
                     gain: 2.0,
+                    effects: Vec::new(),
                     clips: vec![clip("clip-e", "tone-e", 0.5)],
                 },
             ],
@@ -279,6 +360,45 @@ mod tests {
         assert_eq!(keyframes[2].gain, 0.2);
         assert_eq!(keyframes[2].interpolation, AudioGainInterpolation::Linear);
         assert!(plan.has_authored_material());
+    }
+
+    #[test]
+    fn parametric_eq_lowers_to_ordered_operations_and_zero_gain_is_identity() {
+        let first = AudioEffect::ParametricEq {
+            id: "first".to_owned(),
+            frequency_hz: 120.0,
+            gain_db: 6.0,
+            q: 0.8,
+        };
+        let identity = AudioEffect::ParametricEq {
+            id: "identity".to_owned(),
+            frequency_hz: 800.0,
+            gain_db: 0.0,
+            q: 1.0,
+        };
+        let second = AudioEffect::ParametricEq {
+            id: "second".to_owned(),
+            frequency_hz: 2_000.0,
+            gain_db: -3.0,
+            q: 2.0,
+        };
+        let plan = compile_effects(&[first, identity, second]);
+        assert_eq!(plan.operations.len(), 2);
+        assert_eq!(
+            plan.operations,
+            vec![
+                AudioEffectOperation::ParametricEq {
+                    frequency_hz: 120.0,
+                    gain_db: 6.0,
+                    q: 0.8,
+                },
+                AudioEffectOperation::ParametricEq {
+                    frequency_hz: 2_000.0,
+                    gain_db: -3.0,
+                    q: 2.0,
+                },
+            ]
+        );
     }
 
     #[test]

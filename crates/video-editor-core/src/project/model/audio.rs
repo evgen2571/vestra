@@ -5,6 +5,9 @@ use super::optional_non_null;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AudioTimeline {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<AudioEffect>,
+    #[serde(default)]
     pub tracks: Vec<AudioTrack>,
 }
 
@@ -16,6 +19,8 @@ pub struct AudioTrack {
     pub mute: bool,
     #[serde(default = "unity_gain")]
     pub gain: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<AudioEffect>,
     #[serde(default)]
     pub clips: Vec<AudioClip>,
 }
@@ -43,6 +48,30 @@ pub struct AudioClip {
     pub fade_out_curve: AudioFadeCurve,
     #[serde(default)]
     pub mute: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<AudioEffect>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AudioEffect {
+    ParametricEq {
+        id: String,
+        frequency_hz: f64,
+        gain_db: f64,
+        q: f64,
+    },
+}
+
+impl AudioEffect {
+    #[must_use]
+    pub fn definition(&self) -> crate::audio_effect_definition::AudioEffectDefinition {
+        match self {
+            Self::ParametricEq { .. } => {
+                crate::audio_effect_definition::AudioEffectKind::ParametricEq.definition()
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

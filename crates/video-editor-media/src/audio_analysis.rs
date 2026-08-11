@@ -950,8 +950,13 @@ mod tests {
                     fade_out: 0.0,
                     fade_in_curve: AudioFadeCurve::Linear,
                     fade_out_curve: AudioFadeCurve::Linear,
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
 
         let measurements =
@@ -1395,7 +1400,10 @@ mod tests {
                 mute: true,
                 gain: 1.0,
                 clips: vec![clip(Path::new("not-opened.wav"), 1.0)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let features = analyze_master_audio(
             &requirements(&[AudioScalarFeature::Rms, AudioScalarFeature::Peak]),
@@ -1475,7 +1483,10 @@ mod tests {
                 mute: true,
                 gain: 1.0,
                 clips: vec![clip(Path::new("missing.wav"), 0.0)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mut samples = Vec::new();
         let spec = consume_master_pcm(&mix, 0.01, 1, |chunk| {
@@ -1499,7 +1510,10 @@ mod tests {
                 mute: false,
                 gain: 2.0,
                 clips: vec![clip(&path, 1.0)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mut samples = Vec::new();
         consume_master_pcm(&mix, 0.01, 1, |chunk| {
@@ -1564,7 +1578,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![clip(&first, 1.0), clip(&second, 1.0)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         assert!(matches!(
             consume_master_pcm(&mix, 0.01, 1, |_| Ok(())),
@@ -1593,7 +1610,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![placed],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mut samples = Vec::new();
         consume_master_pcm(&mix, 0.01, 1, |chunk| {
@@ -1631,7 +1651,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![outgoing, incoming],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mut extracted = Vec::new();
         consume_master_pcm(&mix, 0.01, 2, |chunk| {
@@ -1657,7 +1680,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![clip(Path::new("missing-source.wav"), 1.0)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let error = consume_master_pcm(&mix, 0.01, 1, |_| Ok(())).expect_err("FFmpeg fails");
         assert!(matches!(
@@ -1681,6 +1707,7 @@ mod tests {
             fade_out: 0.0,
             fade_in_curve: AudioFadeCurve::Linear,
             fade_out_curve: AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         }
     }
 

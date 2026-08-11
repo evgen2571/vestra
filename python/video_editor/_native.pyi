@@ -5,7 +5,7 @@ from typing import Callable, ClassVar, final
 
 __all__ = [
     "BackendPreference", "BackendKind", "BackendFallback", "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Diagnostic", "Editor", "InspectAssets",
-    "InspectAudio", "InspectAudioClip", "InspectAudioGainKeyframe", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
+    "InspectAudio", "InspectAudioClip", "InspectAudioEffect", "InspectAudioGainKeyframe", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
     "PreflightReport", "Project", "ProjectError", "Severity", "ValidationReport",
     "VideoEditorError", "PreparationError", "FrameRenderError", "RenderError", "CancelledError", "PreparedProjectBusyError", "PrepareOptions", "PreparedProject", "PreparationReport", "PreparationTimings", "FrameRate", "Frame", "PreparedVideoRenderRequest", "RenderRequest", "CancellationToken", "RenderEvent", "RenderResult", "RenderTimingScope", "RenderTimings", "RenderPerformance", "RenderFailureContext", "RenderFailureStage", "native_version",
 ]
@@ -229,6 +229,15 @@ class InspectAudio:
     def end(self) -> float: ...
     @property
     def tracks(self) -> list[InspectAudioTrack]: ...
+    @property
+    def effects(self) -> list[InspectAudioEffect]: ...
+
+@final
+class InspectAudioEffect:
+    @property
+    def id(self) -> str: ...
+    @property
+    def type(self) -> str: ...
 
 @final
 class InspectAudioTrack:
@@ -240,6 +249,8 @@ class InspectAudioTrack:
     def gain(self) -> float: ...
     @property
     def clips(self) -> list[InspectAudioClip]: ...
+    @property
+    def effects(self) -> list[InspectAudioEffect]: ...
 
 @final
 class InspectAudioClip:
@@ -269,6 +280,8 @@ class InspectAudioClip:
     def fade_in_curve(self) -> str: ...
     @property
     def fade_out_curve(self) -> str: ...
+    @property
+    def effects(self) -> list[InspectAudioEffect]: ...
 
 @final
 class InspectAudioGainKeyframe:
@@ -595,3 +608,4 @@ class RenderResult:
 
 def native_version() -> str: ...
 def effect_definitions() -> list[dict[str, object]]: ...
+def audio_effect_definitions() -> list[dict[str, object]]: ...

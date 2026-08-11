@@ -9,6 +9,7 @@
 extern crate self as video_editor_core;
 
 pub mod animation;
+pub mod audio_effect_definition;
 pub mod diagnostic;
 pub mod domain;
 pub mod effect_definition;

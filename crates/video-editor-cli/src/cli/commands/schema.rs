@@ -3,7 +3,10 @@
 use std::{fs, path::PathBuf, process::ExitCode};
 
 use serde_json::{Map, Value, json};
-use video_editor::{EffectParameterKind, visual_effect_descriptors};
+use video_editor::{
+    AudioEffectParameterDescriptor, EffectParameterKind, audio_effect_descriptors,
+    visual_effect_descriptors,
+};
 
 pub(super) fn run(output: PathBuf) -> ExitCode {
     match generate(&output) {
@@ -59,9 +62,89 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         branches.push(json!({"$ref": format!("#/$defs/{name}")}));
     }
     defs.insert("effect".into(), json!({"oneOf": branches}));
+    let mut audio_branches = Vec::new();
+    for descriptor in audio_effect_descriptors() {
+        let name = format!("{}_audio_effect", descriptor.id);
+        let mut properties = Map::from_iter([
+            ("id".into(), json!({"type": "string", "minLength": 1})),
+            ("type".into(), json!({"const": descriptor.id})),
+        ]);
+        let mut required = vec!["id", "type"];
+        for parameter in descriptor.parameters {
+            properties.insert(parameter.name.into(), audio_parameter_schema(parameter));
+            required.push(parameter.name);
+        }
+        defs.insert(name.clone(), json!({"type":"object", "required":required, "additionalProperties":false, "properties":properties}));
+        audio_branches.push(json!({"$ref": format!("#/$defs/{name}")}));
+    }
+    defs.insert("audio_effect".into(), json!({"oneOf": audio_branches}));
+    if let Some(audio) = defs.get_mut("audio") {
+        add_audio_effects(audio);
+    }
     let rendered = serde_json::to_string_pretty(&schema)? + "\n";
     fs::write(output, rendered)?;
     Ok(())
+}
+
+fn audio_parameter_schema(parameter: &AudioEffectParameterDescriptor) -> Value {
+    let mut schema = Map::from_iter([(String::from("type"), json!("number"))]);
+    apply_number_constraint(&mut schema, parameter);
+    Value::Object(schema)
+}
+
+fn apply_number_constraint(
+    schema: &mut Map<String, Value>,
+    parameter: &AudioEffectParameterDescriptor,
+) {
+    if let Some(minimum) = parameter.minimum {
+        schema.insert(
+            if parameter.minimum_exclusive {
+                "exclusiveMinimum"
+            } else {
+                "minimum"
+            }
+            .into(),
+            json!(minimum),
+        );
+    }
+    if let Some(maximum) = parameter.maximum {
+        schema.insert(
+            if parameter.maximum_exclusive {
+                "exclusiveMaximum"
+            } else {
+                "maximum"
+            }
+            .into(),
+            json!(maximum),
+        );
+    }
+}
+
+fn add_audio_effects(audio: &mut Value) {
+    let add = |object: &mut Map<String, Value>| {
+        object.entry("properties").or_insert_with(|| json!({}));
+        object["properties"]["effects"] =
+            json!({"items":{"$ref":"#/$defs/audio_effect"},"type":"array"});
+    };
+    if let Some(object) = audio.as_object_mut() {
+        add(object);
+        if let Some(track) = object
+            .get_mut("properties")
+            .and_then(|p| p.get_mut("tracks"))
+            .and_then(|t| t.get_mut("items"))
+            .and_then(Value::as_object_mut)
+        {
+            add(track);
+            if let Some(clip) = track
+                .get_mut("properties")
+                .and_then(|p| p.get_mut("clips"))
+                .and_then(|c| c.get_mut("items"))
+                .and_then(Value::as_object_mut)
+            {
+                add(clip);
+            }
+        }
+    }
 }
 
 fn parameter_schema(parameter: &video_editor::EffectParameterDescriptor) -> Value {

@@ -46,6 +46,12 @@
     "audio": {
       "additionalProperties": false,
       "properties": {
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/audio_effect"
+          },
+          "type": "array"
+        },
         "tracks": {
           "items": {
             "additionalProperties": false,
@@ -56,6 +62,12 @@
                   "properties": {
                     "asset": {
                       "type": "string"
+                    },
+                    "effects": {
+                      "items": {
+                        "$ref": "#/$defs/audio_effect"
+                      },
+                      "type": "array"
                     },
                     "fade_in": {
                       "minimum": 0,
@@ -147,6 +159,12 @@
                 },
                 "type": "array"
               },
+              "effects": {
+                "items": {
+                  "$ref": "#/$defs/audio_effect"
+                },
+                "type": "array"
+              },
               "gain": {
                 "minimum": 0,
                 "type": "number"
@@ -171,6 +189,13 @@
         "tracks"
       ],
       "type": "object"
+    },
+    "audio_effect": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/parametric_eq_audio_effect"
+        }
+      ]
     },
     "audio_scalar_feature": {
       "oneOf": [
@@ -1426,6 +1451,41 @@
         "quality",
         "audio",
         "duration_mode"
+      ],
+      "type": "object"
+    },
+    "parametric_eq_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "frequency_hz": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 24000.0,
+          "type": "number"
+        },
+        "gain_db": {
+          "maximum": 24.0,
+          "minimum": -24.0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "q": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 100.0,
+          "type": "number"
+        },
+        "type": {
+          "const": "parametric_eq"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "frequency_hz",
+        "gain_db",
+        "q"
       ],
       "type": "object"
     },

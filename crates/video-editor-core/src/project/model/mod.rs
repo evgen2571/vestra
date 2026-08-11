@@ -20,8 +20,8 @@ pub use animation::{
 };
 pub use assets::{Asset, AssetType};
 pub use audio::{
-    AudioClip, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation, AudioGainKeyframe,
-    AudioTimeline, AudioTrack,
+    AudioClip, AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation,
+    AudioGainKeyframe, AudioTimeline, AudioTrack,
 };
 pub use colour::parse_colour;
 pub use effects::{Effect, ZoomBlurDirection};

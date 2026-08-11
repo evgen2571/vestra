@@ -10,7 +10,7 @@ pub(crate) use render::{
     PreparationTimings, PreparedRender, prepare_project, render_prepared_project,
 };
 pub use result::{
-    InspectAssets, InspectAudio, InspectAudioClip, InspectAudioGainKeyframe, InspectAudioTrack,
-    InspectOutput, InspectResult, RenderResult, RenderTimingScope, ValidateResult, VersionResult,
-    inspect_result, render_result, version_result,
+    InspectAssets, InspectAudio, InspectAudioClip, InspectAudioEffect, InspectAudioGainKeyframe,
+    InspectAudioTrack, InspectOutput, InspectResult, RenderResult, RenderTimingScope,
+    ValidateResult, VersionResult, inspect_result, render_result, version_result,
 };

@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 
 use crate::{
     Category, Diagnostic,
-    plan::{CompiledEffect, EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan},
-    render::effects::{EffectPass, effect_pass_plan},
+    plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan},
+    render::effects::{EffectPass, compiled_effect_pass_requirements, effect_pass_plan},
 };
 
 /// Fixed full-frame working texture roles. Effect slots are allocated when the
@@ -52,7 +52,7 @@ pub(super) enum GpuOperation {
         destination: TextureSlot,
         parameters_index: u32,
     },
-    /// Retains the pre-effect value needed by a final glow or sharpen pass.
+    /// Retains an explicitly requested original effect input.
     /// This is a texture-to-texture copy in the frame's single encoder, not a
     /// new working-texture allocation.
     CopyForEffect {
@@ -345,10 +345,7 @@ impl GpuFramePlan {
                     };
                     let destination_is_effect =
                         matches!(destination, TextureSlot::EffectA | TextureSlot::EffectB);
-                    let auxiliary_is_required = matches!(
-                        pass,
-                        EffectPass::GlowComposite { .. } | EffectPass::UnsharpComposite { .. }
-                    );
+                    let auxiliary_is_required = pass.inputs.secondary().is_some();
                     let source_context = match scope {
                         EffectScope::Layer => "layer effect source",
                         EffectScope::Global => "global effect source",
@@ -371,9 +368,13 @@ impl GpuFramePlan {
                             slot == *destination || !states[index(slot)].initialized
                         })
                         || (auxiliary_is_required
-                            && (*auxiliary != Some(TextureSlot::Auxiliary)
-                                || auxiliary_value.is_none()
-                                || states[index(TextureSlot::Auxiliary)].value != *auxiliary_value))
+                            && match *auxiliary {
+                                Some(slot) => {
+                                    auxiliary_value.is_none()
+                                        || states[index(slot)].value != *auxiliary_value
+                                }
+                                None => true,
+                            })
                         || (!auxiliary_is_required
                             && (auxiliary.is_some() || auxiliary_value.is_some()))
                     {
@@ -518,10 +519,7 @@ fn append_effect_chain(
     if passes.is_empty() {
         return;
     }
-    let retains_original = passes
-        .as_slice()
-        .iter()
-        .any(|pass| pass.requires_original());
+    let retains_original = passes.requirements().retains_original();
     let original_value = *current_value;
     if retains_original {
         operations.push(GpuOperation::CopyForEffect {
@@ -530,39 +528,191 @@ fn append_effect_chain(
             value: original_value,
         });
     }
+    let mut bindings = EffectResourceBindings {
+        current: *current,
+        original: retains_original.then_some(TextureSlot::Auxiliary),
+        temporary0: None,
+        temporary1: None,
+    };
+    let mut temporary_values = [None; 2];
     for (pass_index, pass) in passes.as_slice().iter().copied().enumerate() {
-        let destination = alternate_effect_destination(*current);
-        let auxiliary = pass.requires_original().then_some(TextureSlot::Auxiliary);
+        let (primary, primary_value) = resolve_effect_resource(
+            &bindings,
+            pass.inputs.primary(),
+            original_value,
+            *current_value,
+            &temporary_values,
+        );
+        let (source, expected_source_value, auxiliary, auxiliary_value) =
+            if let Some(secondary) = pass.inputs.secondary() {
+                let (overlay, overlay_value) = resolve_effect_resource(
+                    &bindings,
+                    secondary,
+                    original_value,
+                    *current_value,
+                    &temporary_values,
+                );
+                (overlay, overlay_value, Some(primary), Some(primary_value))
+            } else {
+                (primary, primary_value, None, None)
+            };
+        let destination = bindings.assign_destination(
+            passes.as_slice(),
+            pass_index,
+            pass.output,
+            [source, auxiliary.unwrap_or(source)],
+        );
         operations.push(GpuOperation::ApplyEffect {
             scope,
             layer_index,
             effect_index,
             pass_index,
             pass,
-            source: *current,
-            expected_source_value: *current_value,
+            source,
+            expected_source_value,
             destination,
             result_value: *next_value,
             auxiliary,
-            auxiliary_value: pass.requires_original().then_some(original_value),
+            auxiliary_value,
             parameters_index: *parameter_count,
         });
         *parameter_count += 1;
-        *current = destination;
-        *current_value = *next_value;
+        bindings.bind(pass.output, destination);
+        match pass.output {
+            crate::plan::EffectResource::Current => {
+                *current = destination;
+                *current_value = *next_value;
+            }
+            crate::plan::EffectResource::Temporary0 => {
+                temporary_values[0] = Some(*next_value);
+            }
+            crate::plan::EffectResource::Temporary1 => {
+                temporary_values[1] = Some(*next_value);
+            }
+            crate::plan::EffectResource::Original => {
+                unreachable!("effect passes cannot overwrite Original")
+            }
+        }
         *next_value += 1;
     }
 }
 
-fn alternate_effect_destination(source: TextureSlot) -> TextureSlot {
-    match source {
-        TextureSlot::EffectA => TextureSlot::EffectB,
-        TextureSlot::EffectB
-        | TextureSlot::Layer
-        | TextureSlot::CanvasA
-        | TextureSlot::CanvasB
-        | TextureSlot::Auxiliary => TextureSlot::EffectA,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct EffectResourceBindings {
+    current: TextureSlot,
+    original: Option<TextureSlot>,
+    temporary0: Option<TextureSlot>,
+    temporary1: Option<TextureSlot>,
+}
+
+impl EffectResourceBindings {
+    fn slot(self, resource: crate::plan::EffectResource) -> TextureSlot {
+        self.bound_slot(resource)
+            .expect("effect pass references an unbound logical resource")
     }
+
+    fn bound_slot(self, resource: crate::plan::EffectResource) -> Option<TextureSlot> {
+        match resource {
+            crate::plan::EffectResource::Original => self.original,
+            crate::plan::EffectResource::Current => Some(self.current),
+            crate::plan::EffectResource::Temporary0 => self.temporary0,
+            crate::plan::EffectResource::Temporary1 => self.temporary1,
+        }
+    }
+
+    fn release_dead(
+        &mut self,
+        passes: &[EffectPass],
+        pass_index: usize,
+        output: crate::plan::EffectResource,
+    ) {
+        if !resource_is_live_after(passes, pass_index, crate::plan::EffectResource::Original) {
+            self.original = None;
+        }
+        if output != crate::plan::EffectResource::Temporary0
+            && !resource_is_live_after(passes, pass_index, crate::plan::EffectResource::Temporary0)
+        {
+            self.temporary0 = None;
+        }
+        if output != crate::plan::EffectResource::Temporary1
+            && !resource_is_live_after(passes, pass_index, crate::plan::EffectResource::Temporary1)
+        {
+            self.temporary1 = None;
+        }
+    }
+
+    fn assign_destination(
+        &mut self,
+        passes: &[EffectPass],
+        pass_index: usize,
+        output: crate::plan::EffectResource,
+        read_slots: [TextureSlot; 2],
+    ) -> TextureSlot {
+        self.release_dead(passes, pass_index, output);
+        [TextureSlot::EffectA, TextureSlot::EffectB]
+            .into_iter()
+            .find(|candidate| {
+                !read_slots.contains(candidate)
+                    && [
+                        crate::plan::EffectResource::Current,
+                        crate::plan::EffectResource::Original,
+                        crate::plan::EffectResource::Temporary0,
+                        crate::plan::EffectResource::Temporary1,
+                    ]
+                    .into_iter()
+                    .filter(|resource| *resource != output)
+                    .filter(|resource| resource_is_live_after(passes, pass_index, *resource))
+                    .all(|resource| self.bound_slot(resource) != Some(*candidate))
+            })
+            .expect("effect plan requires more physical texture slots than available")
+    }
+
+    fn bind(&mut self, resource: crate::plan::EffectResource, slot: TextureSlot) {
+        match resource {
+            crate::plan::EffectResource::Original => {
+                unreachable!("effect passes cannot overwrite Original")
+            }
+            crate::plan::EffectResource::Current => self.current = slot,
+            crate::plan::EffectResource::Temporary0 => self.temporary0 = Some(slot),
+            crate::plan::EffectResource::Temporary1 => self.temporary1 = Some(slot),
+        }
+    }
+}
+
+fn resolve_effect_resource(
+    bindings: &EffectResourceBindings,
+    resource: crate::plan::EffectResource,
+    original_value: u64,
+    current_value: u64,
+    temporary_values: &[Option<u64>; 2],
+) -> (TextureSlot, u64) {
+    let value = match resource {
+        crate::plan::EffectResource::Original => original_value,
+        crate::plan::EffectResource::Current => current_value,
+        crate::plan::EffectResource::Temporary0 => {
+            temporary_values[0].expect("ordered effect pass references initialized Temporary0")
+        }
+        crate::plan::EffectResource::Temporary1 => {
+            temporary_values[1].expect("ordered effect pass references initialized Temporary1")
+        }
+    };
+    (bindings.slot(resource), value)
+}
+
+fn resource_is_live_after(
+    passes: &[EffectPass],
+    pass_index: usize,
+    resource: crate::plan::EffectResource,
+) -> bool {
+    for pass in &passes[pass_index + 1..] {
+        if pass.inputs.primary() == resource || pass.inputs.secondary() == Some(resource) {
+            return true;
+        }
+        if pass.output == resource {
+            return false;
+        }
+    }
+    false
 }
 
 fn alternate_canvas(current: TextureSlot) -> TextureSlot {
@@ -599,19 +749,16 @@ impl TextureState {
     }
 }
 
-/// Whether any compiled effect can need a retained pre-effect value.  The
+/// Whether any compiled effect can need a retained pre-effect value. The
 /// allocation is backend preparation-time only, so all frames share it.
+/// Resource topology is owned by core effect-pass planning; WGPU deliberately
+/// does not infer it from authored/compiled effect identities.
 pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
     plan.layers
         .iter()
         .flat_map(|layer| layer.effects.iter().map(|timed| &timed.effect))
         .chain(plan.post_effects.iter().map(|timed| &timed.effect))
-        .any(|effect| {
-            matches!(
-                effect,
-                CompiledEffect::Glow { .. } | CompiledEffect::Sharpen { .. }
-            )
-        })
+        .any(|effect| compiled_effect_pass_requirements(effect).retains_original())
 }
 
 fn invalid(operation_index: usize, message: &str) -> Diagnostic {
@@ -639,6 +786,124 @@ fn stale_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plan::{CompositeMode, EffectOperation, EffectResource};
+
+    fn pass(
+        operation: EffectOperation,
+        primary: EffectResource,
+        output: EffectResource,
+    ) -> EffectPass {
+        EffectPass {
+            operation,
+            inputs: crate::plan::EffectPassInputs::Single(primary),
+            output,
+        }
+    }
+
+    fn composite(mode: CompositeMode, amount: f64) -> EffectPass {
+        EffectPass {
+            operation: EffectOperation::Composite { mode, amount },
+            inputs: crate::plan::EffectPassInputs::OriginalAnd(EffectResource::Temporary0),
+            output: EffectResource::Current,
+        }
+    }
+
+    #[test]
+    fn liveness_allocator_keeps_simultaneous_temporaries_in_distinct_slots() {
+        let passes = [
+            pass(
+                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectResource::Current,
+                EffectResource::Temporary0,
+            ),
+            pass(
+                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectResource::Current,
+                EffectResource::Temporary1,
+            ),
+            pass(
+                EffectOperation::ColorAdjust {
+                    exposure: 0.0,
+                    gamma: 1.0,
+                    black_point: 0.0,
+                    white_point: 1.0,
+                },
+                EffectResource::Temporary0,
+                EffectResource::Current,
+            ),
+        ];
+        let mut bindings = EffectResourceBindings {
+            current: TextureSlot::Layer,
+            original: None,
+            temporary0: None,
+            temporary1: None,
+        };
+        let mut destinations = Vec::new();
+        for (pass_index, pass) in passes.iter().enumerate() {
+            let source = bindings.slot(pass.inputs.primary());
+            let destination =
+                bindings.assign_destination(&passes, pass_index, pass.output, [source, source]);
+            bindings.bind(pass.output, destination);
+            destinations.push(destination);
+            if pass_index == 1 {
+                assert_ne!(bindings.temporary0, bindings.temporary1);
+            }
+        }
+        assert_eq!(
+            destinations,
+            [
+                TextureSlot::EffectA,
+                TextureSlot::EffectB,
+                TextureSlot::EffectB
+            ]
+        );
+    }
+
+    #[test]
+    fn liveness_allocator_preserves_original_while_later_pass_reads_it() {
+        let passes = [
+            pass(
+                EffectOperation::HighlightExtract {
+                    threshold: 0.5,
+                    colour: [255, 255, 255, 255],
+                },
+                EffectResource::Original,
+                EffectResource::Temporary0,
+            ),
+            pass(
+                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectResource::Temporary0,
+                EffectResource::Temporary1,
+            ),
+            composite(CompositeMode::Additive, 1.0),
+        ];
+        let mut bindings = EffectResourceBindings {
+            current: TextureSlot::Layer,
+            original: Some(TextureSlot::Auxiliary),
+            temporary0: None,
+            temporary1: None,
+        };
+        for (pass_index, pass) in passes.iter().enumerate() {
+            let primary = bindings.slot(pass.inputs.primary());
+            if pass_index == 2 {
+                assert_eq!(primary, TextureSlot::Auxiliary);
+            }
+            let secondary = pass
+                .inputs
+                .secondary()
+                .map(|resource| bindings.slot(resource));
+            let destination = bindings.assign_destination(
+                &passes,
+                pass_index,
+                pass.output,
+                [primary, secondary.unwrap_or(primary)],
+            );
+            assert_ne!(destination, TextureSlot::Auxiliary);
+            bindings.bind(pass.output, destination);
+        }
+        assert_eq!(bindings.original, None);
+    }
+
     use crate::{
         plan::{CompileOptions, ScheduledItem, compile, evaluate},
         project::{ValidationOptions, load_and_validate},
@@ -1006,8 +1271,16 @@ mod tests {
     #[test]
     fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
         let gaussian = [
-            EffectPass::GaussianHorizontal { radius: 2.0 },
-            EffectPass::GaussianVertical { radius: 2.0 },
+            pass(
+                EffectOperation::GaussianHorizontal { radius: 2.0 },
+                EffectResource::Current,
+                EffectResource::Temporary0,
+            ),
+            pass(
+                EffectOperation::GaussianVertical { radius: 2.0 },
+                EffectResource::Temporary0,
+                EffectResource::Current,
+            ),
         ];
         let plan = GpuFramePlan {
             operations: vec![
@@ -1060,15 +1333,25 @@ mod tests {
         };
         plan.validate(0)
             .expect("self-describing effect plan validates");
-        assert!(matches!(
-            plan.operations[2],
-            GpuOperation::ApplyEffect {
-                pass: EffectPass::GaussianHorizontal { radius: 2.0 },
-                source: TextureSlot::Layer,
-                destination: TextureSlot::EffectA,
-                ..
-            }
-        ));
+        let GpuOperation::ApplyEffect {
+            pass: actual,
+            source,
+            destination,
+            ..
+        } = &plan.operations[2]
+        else {
+            unreachable!("the third operation is an effect")
+        };
+        assert_eq!(
+            *actual,
+            pass(
+                EffectOperation::GaussianHorizontal { radius: 2.0 },
+                EffectResource::Current,
+                EffectResource::Temporary0
+            )
+        );
+        assert_eq!(*source, TextureSlot::Layer);
+        assert_eq!(*destination, TextureSlot::EffectA);
     }
 
     #[test]
@@ -1098,12 +1381,16 @@ mod tests {
                     0,
                     0,
                     0,
-                    EffectPass::Vignette {
-                        amount: 0.4,
-                        radius: 0.6,
-                        softness: 0.2,
-                        colour: [0, 0, 0, 255],
-                    },
+                    pass(
+                        EffectOperation::Vignette {
+                            amount: 0.4,
+                            radius: 0.6,
+                            softness: 0.2,
+                            colour: [0, 0, 0, 255],
+                        },
+                        EffectResource::Current,
+                        EffectResource::Current,
+                    ),
                     TextureSlot::CanvasB,
                     TextureSlot::EffectA,
                     None,
@@ -1124,18 +1411,38 @@ mod tests {
     fn multipass_effects_keep_pass_identity_and_alternate_effect_slots() {
         let cases = [
             vec![
-                EffectPass::HighlightExtract {
-                    threshold: 0.7,
-                    colour: [255, 240, 180, 255],
-                },
-                EffectPass::GaussianHorizontal { radius: 3.0 },
-                EffectPass::GaussianVertical { radius: 3.0 },
-                EffectPass::GlowComposite { intensity: 0.8 },
+                pass(
+                    EffectOperation::HighlightExtract {
+                        threshold: 0.7,
+                        colour: [255, 240, 180, 255],
+                    },
+                    EffectResource::Original,
+                    EffectResource::Temporary0,
+                ),
+                pass(
+                    EffectOperation::GaussianHorizontal { radius: 3.0 },
+                    EffectResource::Temporary0,
+                    EffectResource::Temporary1,
+                ),
+                pass(
+                    EffectOperation::GaussianVertical { radius: 3.0 },
+                    EffectResource::Temporary1,
+                    EffectResource::Temporary0,
+                ),
+                composite(CompositeMode::Additive, 0.8),
             ],
             vec![
-                EffectPass::GaussianHorizontal { radius: 2.0 },
-                EffectPass::GaussianVertical { radius: 2.0 },
-                EffectPass::UnsharpComposite { amount: 0.4 },
+                pass(
+                    EffectOperation::GaussianHorizontal { radius: 2.0 },
+                    EffectResource::Original,
+                    EffectResource::Temporary0,
+                ),
+                pass(
+                    EffectOperation::GaussianVertical { radius: 2.0 },
+                    EffectResource::Temporary0,
+                    EffectResource::Temporary1,
+                ),
+                composite(CompositeMode::Unsharp, 0.4),
             ],
         ];
         for passes in cases {
@@ -1163,8 +1470,14 @@ mod tests {
                         pass,
                         source,
                         destination,
-                        matches!(pass, EffectPass::GlowComposite { .. })
-                            .then_some(TextureSlot::Layer),
+                        matches!(
+                            pass.operation,
+                            EffectOperation::Composite {
+                                mode: CompositeMode::Additive,
+                                ..
+                            }
+                        )
+                        .then_some(TextureSlot::Layer),
                         (pass_index + 2) as u32,
                     )
                 })
@@ -1268,12 +1581,16 @@ mod tests {
                     layer_index: Some(0),
                     effect_index: 0,
                     pass_index: 0,
-                    pass: EffectPass::Vignette {
-                        amount: 0.2,
-                        radius: 0.5,
-                        softness: 0.5,
-                        colour: [0, 0, 0, 255],
-                    },
+                    pass: pass(
+                        EffectOperation::Vignette {
+                            amount: 0.2,
+                            radius: 0.5,
+                            softness: 0.5,
+                            colour: [0, 0, 0, 255],
+                        },
+                        EffectResource::Current,
+                        EffectResource::Current,
+                    ),
                     source: TextureSlot::CanvasA,
                     expected_source_value: 1,
                     destination: TextureSlot::CanvasB,
@@ -1429,7 +1746,8 @@ mod tests {
                         auxiliary,
                         auxiliary_value,
                         ..
-                    } if pass.requires_original() => Some((*auxiliary, *auxiliary_value)),
+                    } if matches!(pass.operation, EffectOperation::Composite { .. }) =>
+                        Some((*auxiliary, *auxiliary_value)),
                     _ => None,
                 })
                 .all(|(slot, value)| slot == Some(TextureSlot::Auxiliary) && value.is_some())
@@ -1493,7 +1811,7 @@ mod tests {
                 pass,
                 auxiliary,
                 ..
-            } if pass.requires_original() => {
+            } if matches!(pass.operation, EffectOperation::Composite { .. }) => {
                 *scope == EffectScope::Global && *auxiliary == Some(TextureSlot::Auxiliary)
             }
             _ => true,

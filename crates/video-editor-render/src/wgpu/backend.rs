@@ -39,7 +39,7 @@ use super::{
 };
 use crate::{
     project::{BlendMode, ZoomBlurDirection},
-    render::effects::EffectPass,
+    render::effects::{CompositeMode, EffectOperation, EffectPass},
 };
 
 /// WGPU owns persistent source and working textures. Each submitted frame owns
@@ -841,8 +841,8 @@ fn effect_parameters(width: u32, height: u32, pass: EffectPass) -> LayerParamete
         header: [width, height, 0, 0],
         ..LayerParameters::zeroed()
     };
-    match pass {
-        EffectPass::ApplyColourTransform { transform } => {
+    match pass.operation {
+        EffectOperation::ApplyColourTransform { transform } => {
             parameters.header[2] = 1;
             parameters.colour_row0[..3]
                 .copy_from_slice(&transform.matrix[0].map(|value| value as f32));
@@ -853,35 +853,41 @@ fn effect_parameters(width: u32, height: u32, pass: EffectPass) -> LayerParamete
             parameters.colour_offset[..3]
                 .copy_from_slice(&transform.offset.map(|value| value as f32));
         }
-        EffectPass::GaussianHorizontal { radius } => {
+        EffectOperation::GaussianHorizontal { radius } => {
             parameters.header[2] = 2;
             parameters.effective[0] = radius as f32;
         }
-        EffectPass::GaussianVertical { radius } => {
+        EffectOperation::GaussianVertical { radius } => {
             parameters.header[2] = 3;
             parameters.effective[0] = radius as f32;
         }
-        EffectPass::HighlightExtract { threshold, colour } => {
+        EffectOperation::HighlightExtract { threshold, colour } => {
             parameters.header[2] = 4;
             parameters.effective[0] = threshold as f32;
             parameters.solid_or_background = colour.map(f32::from);
         }
-        EffectPass::GlowComposite { intensity } => {
+        EffectOperation::Composite {
+            mode: CompositeMode::Additive,
+            amount: intensity,
+        } => {
             parameters.header[2] = 5;
             parameters.effective[0] = intensity as f32;
         }
-        EffectPass::UnsharpComposite { amount } => {
+        EffectOperation::Composite {
+            mode: CompositeMode::Unsharp,
+            amount,
+        } => {
             parameters.header[2] = 6;
             parameters.effective[0] = amount as f32;
         }
-        EffectPass::DirectionalBlur {
+        EffectOperation::DirectionalBlur {
             radius,
             angle_degrees,
         } => {
             parameters.header[2] = 7;
             blur_parameters(&mut parameters, radius, angle_degrees, None);
         }
-        EffectPass::ZoomBlur {
+        EffectOperation::ZoomBlur {
             radius,
             samples,
             anchor,
@@ -900,14 +906,14 @@ fn effect_parameters(width: u32, height: u32, pass: EffectPass) -> LayerParamete
                 ZoomBlurDirection::Outward => 2.0,
             };
         }
-        EffectPass::ChromaticAberration {
+        EffectOperation::ChromaticAberration {
             amount,
             angle_degrees,
         } => {
             parameters.header[2] = 9;
             parameters.effective = [amount as f32, angle_degrees.to_radians() as f32, 0.0, 0.0];
         }
-        EffectPass::Vignette {
+        EffectOperation::Vignette {
             amount,
             radius,
             softness,
@@ -917,7 +923,7 @@ fn effect_parameters(width: u32, height: u32, pass: EffectPass) -> LayerParamete
             parameters.effective = [amount as f32, radius as f32, softness as f32, 0.0];
             parameters.solid_or_background = colour.map(f32::from);
         }
-        EffectPass::ColorAdjust {
+        EffectOperation::ColorAdjust {
             exposure,
             gamma,
             black_point,
@@ -931,7 +937,7 @@ fn effect_parameters(width: u32, height: u32, pass: EffectPass) -> LayerParamete
                 white_point as f32,
             ];
         }
-        EffectPass::MotionBlur {
+        EffectOperation::MotionBlur {
             radius,
             angle_degrees,
             samples,

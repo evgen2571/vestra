@@ -10,7 +10,10 @@ mod schedule;
 mod signals;
 
 pub use compiler::{CompileOptions, compile};
-pub use effect_passes::{EffectPass, EffectPassPlan, effect_pass_plan};
+pub use effect_passes::{
+    CompositeMode, EffectOperation, EffectPass, EffectPassInputs, EffectPassPlan,
+    EffectPassRequirements, EffectResource, compiled_effect_pass_requirements, effect_pass_plan,
+};
 pub use evaluation::{EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource};
 pub use evaluation::{evaluate, evaluate_with_context};
 pub use input::PlanCompileInput;

@@ -817,14 +817,8 @@ mod tests {
     #[test]
     #[ignore = "manual release benchmark matrix"]
     fn master_analysis_benchmark_matrix() {
-        let measurements = [
-            (60, 1),
-            (60, 10),
-            (60, 50),
-            (600, 1),
-            (3_600, 1),
-        ]
-        .map(|(seconds, bands)| measure_master_analysis(seconds, bands));
+        let measurements = [(60, 1), (60, 10), (60, 50), (600, 1), (3_600, 1)]
+            .map(|(seconds, bands)| measure_master_analysis(seconds, bands));
         let output = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../docs/audits/procedural-signal-audio-modulation-benchmarks.json");
         fs::write(
@@ -865,9 +859,7 @@ mod tests {
             CompiledSignalTransform::Remap(
                 RemapTransform::new(0.0, 1.0, 0.0, 1.0).expect("benchmark remap"),
             ),
-            CompiledSignalTransform::Clamp(
-                ClampTransform::new(0.0, 1.0).expect("benchmark clamp"),
-            ),
+            CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).expect("benchmark clamp")),
             CompiledSignalTransform::Envelope(EnvelopeTransform::new(20_000_000, 180_000_000)),
             CompiledSignalTransform::ResponseCurve(
                 CubicResponseCurve::new(0.42, 0.0, 1.0, 1.0).expect("benchmark response curve"),
@@ -881,19 +873,13 @@ mod tests {
         mix: &AudioMixPlan,
     ) -> TransformedSignalBenchmarkMeasurement {
         let band = AudioFrequencyBand::new(40.0, 160.0).expect("benchmark band");
-        let requirement =
-            AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band));
+        let requirement = AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band));
         let requirements = AudioAnalysisRequirements::from_requirements([requirement]);
 
         reset_analysis_work_counters();
         let analysis_started = Instant::now();
-        let raw_features = analyze_master_audio(
-            &requirements,
-            mix,
-            seconds as f64,
-            1,
-        )
-        .expect("benchmark Master analysis");
+        let raw_features = analyze_master_audio(&requirements, mix, seconds as f64, 1)
+            .expect("benchmark Master analysis");
         let analysis_elapsed_ms = analysis_started.elapsed().as_millis();
         let master_decode_count = master_decode_invocation_count();
         let fft_calls = global_fft_call_count();
@@ -968,8 +954,8 @@ mod tests {
             }],
         };
 
-        let measurements = [1, 10, 50]
-            .map(|count| measure_transformed_signal_scaling(seconds, count, &mix));
+        let measurements =
+            [1, 10, 50].map(|count| measure_transformed_signal_scaling(seconds, count, &mix));
         let reference_fft_calls = measurements[0].fft_calls;
         for measurement in measurements {
             assert_eq!(

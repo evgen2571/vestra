@@ -1,13 +1,16 @@
-//! Reusable CPU ping-pong surfaces independent of project effect types.
+//! Reusable CPU effect surfaces with explicit logical resource bindings.
 
 use image::{GenericImage, Rgba, RgbaImage};
 
+use crate::plan::EffectResource;
+
+const SURFACE_COUNT: usize = 3;
+
 pub(crate) struct EffectSurfacePool {
-    first: RgbaImage,
-    second: RgbaImage,
-    original: RgbaImage,
-    first_is_current: bool,
-    original_is_current: bool,
+    surfaces: [RgbaImage; SURFACE_COUNT],
+    current_slot: usize,
+    original_slot: Option<usize>,
+    temporary_slots: [Option<usize>; 2],
     allocations: u64,
     reuses: u64,
     copy_bytes: u64,
@@ -17,36 +20,28 @@ impl EffectSurfacePool {
     #[must_use]
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
-            first: RgbaImage::new(width, height),
-            second: RgbaImage::new(width, height),
-            original: RgbaImage::new(width, height),
-            first_is_current: true,
-            original_is_current: false,
-            allocations: 3,
+            surfaces: std::array::from_fn(|_| RgbaImage::new(width, height)),
+            current_slot: 0,
+            original_slot: None,
+            temporary_slots: [None; 2],
+            allocations: SURFACE_COUNT as u64,
             reuses: 0,
             copy_bytes: 0,
         }
     }
 
     pub(super) fn resize(&mut self, width: u32, height: u32) {
-        if self.first.width() != width || self.first.height() != height {
-            self.first = RgbaImage::new(width, height);
-            self.second = RgbaImage::new(width, height);
-            self.original = RgbaImage::new(width, height);
-            self.first_is_current = true;
-            self.original_is_current = false;
-            self.allocations += 3;
+        if self.surfaces[0].width() != width || self.surfaces[0].height() != height {
+            self.surfaces = std::array::from_fn(|_| RgbaImage::new(width, height));
+            self.current_slot = 0;
+            self.original_slot = None;
+            self.temporary_slots = [None; 2];
+            self.allocations += SURFACE_COUNT as u64;
         }
     }
 
     pub(super) fn current(&mut self) -> &mut RgbaImage {
-        if self.original_is_current {
-            &mut self.original
-        } else if self.first_is_current {
-            &mut self.first
-        } else {
-            &mut self.second
-        }
+        &mut self.surfaces[self.current_slot]
     }
 
     pub(super) fn clear(&mut self) {
@@ -55,76 +50,183 @@ impl EffectSurfacePool {
         }
     }
 
-    pub(super) fn run(&mut self, execute: impl FnOnce(&RgbaImage, &mut RgbaImage, &RgbaImage)) {
-        self.reuses += 1;
-        if self.original_is_current {
-            if self.first_is_current {
-                execute(&self.original, &mut self.first, &self.original);
-            } else {
-                execute(&self.original, &mut self.second, &self.original);
-            }
-            self.original_is_current = false;
-            return;
-        }
-        if self.first_is_current {
-            execute(&self.first, &mut self.second, &self.original);
-        } else {
-            execute(&self.second, &mut self.first, &self.original);
-        }
-        self.first_is_current = !self.first_is_current;
+    /// Starts one effect plan. `Original` aliases the current surface until a
+    /// pass writes a new `Current`, so retaining it never requires a frame copy.
+    pub(super) fn begin_effect(&mut self, retain_original: bool) {
+        self.original_slot = retain_original.then_some(self.current_slot);
+        self.temporary_slots = [None; 2];
     }
 
-    /// Pins the current image in the retained `original` slot without copying pixels.
-    /// The first subsequent pass consumes that pinned image and writes into the
-    /// vacated ping-pong slot; later passes continue ping-ponging while `original`
-    /// remains available to composite operations.
-    pub(super) fn pin_current_as_original(&mut self) {
-        if self.original_is_current {
-            return;
+    /// Executes one pass using the logical resource bindings declared by the IR.
+    /// The physical destination is selected so no live input or aliased logical
+    /// resource is overwritten.
+    pub(super) fn run_pass(
+        &mut self,
+        primary: EffectResource,
+        secondary: Option<EffectResource>,
+        output: EffectResource,
+        execute: impl FnOnce(&RgbaImage, Option<&RgbaImage>, &mut RgbaImage),
+    ) {
+        assert_ne!(
+            output,
+            EffectResource::Original,
+            "effect passes cannot overwrite Original"
+        );
+        let primary_slot = self.resolve_slot(primary);
+        let secondary_slot = secondary.map(|resource| self.resolve_slot(resource));
+        let destination = self.destination_slot(output, primary_slot, secondary_slot);
+
+        self.reuses += 1;
+        with_sources_and_target(
+            &mut self.surfaces,
+            primary_slot,
+            secondary_slot,
+            destination,
+            execute,
+        );
+        self.bind_output(output, destination);
+    }
+
+    /// Releases the physical binding for a dead logical temporary so a later
+    /// pass can reuse that surface. Ordered-plan liveness is computed by the
+    /// caller; `Current` and `Original` remain pinned by their dedicated state.
+    pub(super) fn release_temporary(&mut self, resource: EffectResource) {
+        match resource {
+            EffectResource::Temporary0 => self.temporary_slots[0] = None,
+            EffectResource::Temporary1 => self.temporary_slots[1] = None,
+            EffectResource::Original | EffectResource::Current => {
+                unreachable!("only temporary effect resources can be released")
+            }
         }
-        if self.first_is_current {
-            std::mem::swap(&mut self.first, &mut self.original);
-        } else {
-            std::mem::swap(&mut self.second, &mut self.original);
+    }
+
+    fn resolve_slot(&self, resource: EffectResource) -> usize {
+        match resource {
+            EffectResource::Original => self
+                .original_slot
+                .expect("effect pass references Original without retaining it"),
+            EffectResource::Current => self.current_slot,
+            EffectResource::Temporary0 => self.temporary_slots[0]
+                .expect("ordered effect pass references uninitialized Temporary0"),
+            EffectResource::Temporary1 => self.temporary_slots[1]
+                .expect("ordered effect pass references uninitialized Temporary1"),
         }
-        self.original_is_current = true;
+    }
+
+    fn destination_slot(
+        &self,
+        output: EffectResource,
+        primary_slot: usize,
+        secondary_slot: Option<usize>,
+    ) -> usize {
+        if let Some(existing) = self.bound_slot(output)
+            && existing != primary_slot
+            && secondary_slot != Some(existing)
+            && !self.is_aliased_by_other_resource(output, existing)
+        {
+            return existing;
+        }
+
+        (0..SURFACE_COUNT)
+            .find(|&slot| {
+                slot != primary_slot && secondary_slot != Some(slot) && !self.is_slot_live(slot)
+            })
+            .expect("effect pass plan requires more simultaneously live CPU surfaces")
+    }
+
+    fn bound_slot(&self, resource: EffectResource) -> Option<usize> {
+        match resource {
+            EffectResource::Original => self.original_slot,
+            EffectResource::Current => Some(self.current_slot),
+            EffectResource::Temporary0 => self.temporary_slots[0],
+            EffectResource::Temporary1 => self.temporary_slots[1],
+        }
+    }
+
+    fn is_slot_live(&self, slot: usize) -> bool {
+        self.current_slot == slot
+            || self.original_slot == Some(slot)
+            || self.temporary_slots.contains(&Some(slot))
+    }
+
+    fn is_aliased_by_other_resource(&self, output: EffectResource, slot: usize) -> bool {
+        [
+            EffectResource::Original,
+            EffectResource::Current,
+            EffectResource::Temporary0,
+            EffectResource::Temporary1,
+        ]
+        .into_iter()
+        .any(|resource| resource != output && self.bound_slot(resource) == Some(slot))
+    }
+
+    fn bind_output(&mut self, output: EffectResource, slot: usize) {
+        match output {
+            EffectResource::Original => unreachable!("effect passes cannot overwrite Original"),
+            EffectResource::Current => self.current_slot = slot,
+            EffectResource::Temporary0 => self.temporary_slots[0] = Some(slot),
+            EffectResource::Temporary1 => self.temporary_slots[1] = Some(slot),
+        }
     }
 
     pub(super) fn begin_from(&mut self, source: &RgbaImage) {
-        self.first
+        self.surfaces[0]
             .copy_from(source, 0, 0)
             .expect("matching effect surface dimensions");
         self.copy_bytes += image_bytes(source);
-        self.first_is_current = true;
-        self.original_is_current = false;
+        self.current_slot = 0;
+        self.original_slot = None;
+        self.temporary_slots = [None; 2];
     }
 
     pub(super) fn copy_to(&mut self, destination: &mut RgbaImage) {
         destination
-            .copy_from(self.current(), 0, 0)
+            .copy_from(&self.surfaces[self.current_slot], 0, 0)
             .expect("matching effect surface dimensions");
         self.copy_bytes += image_bytes(destination);
     }
 
     pub(super) fn take_current(&mut self) -> RgbaImage {
-        let replacement = RgbaImage::new(self.current().width(), self.current().height());
+        let replacement = RgbaImage::new(
+            self.surfaces[self.current_slot].width(),
+            self.surfaces[self.current_slot].height(),
+        );
         self.allocations += 1;
-        if self.first_is_current {
-            std::mem::replace(&mut self.first, replacement)
-        } else {
-            std::mem::replace(&mut self.second, replacement)
-        }
+        std::mem::replace(&mut self.surfaces[self.current_slot], replacement)
     }
 
     pub(super) fn stats(&self) -> SurfacePoolStats {
         SurfacePoolStats {
             allocations: self.allocations,
             reuses: self.reuses,
-            retained_buffers: 3,
-            retained_bytes: image_bytes(&self.first) * 3,
+            retained_buffers: SURFACE_COUNT,
+            retained_bytes: image_bytes(&self.surfaces[0]) * SURFACE_COUNT as u64,
             copy_bytes: self.copy_bytes,
         }
     }
+}
+
+fn with_sources_and_target(
+    surfaces: &mut [RgbaImage; SURFACE_COUNT],
+    primary: usize,
+    secondary: Option<usize>,
+    destination: usize,
+    execute: impl FnOnce(&RgbaImage, Option<&RgbaImage>, &mut RgbaImage),
+) {
+    debug_assert_ne!(primary, destination);
+    debug_assert_ne!(secondary, Some(destination));
+    let (before, target_and_after) = surfaces.split_at_mut(destination);
+    let (target, after) = target_and_after
+        .split_first_mut()
+        .expect("destination is a valid retained surface");
+    let resolve = |slot: usize| -> &RgbaImage {
+        if slot < destination {
+            &before[slot]
+        } else {
+            &after[slot - destination - 1]
+        }
+    };
+    execute(resolve(primary), secondary.map(resolve), target);
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -144,29 +246,93 @@ fn image_bytes(image: &RgbaImage) -> u64 {
 mod tests {
     use super::*;
 
+    fn copy_pass(pool: &mut EffectSurfacePool, input: EffectResource, output: EffectResource) {
+        pool.run_pass(input, None, output, |source, _, target| {
+            target.copy_from(source, 0, 0).expect("matching surfaces");
+        });
+    }
+
     #[test]
-    fn pinning_current_as_original_reuses_retained_storage_without_copying_pixels() {
+    fn original_aliases_current_without_copy_and_survives_current_rebinding() {
         let source = RgbaImage::from_pixel(2, 2, Rgba([10, 20, 30, 255]));
         let mut pool = EffectSurfacePool::new(2, 2);
         pool.begin_from(&source);
         let copied_before_pin = pool.stats().copy_bytes;
 
-        pool.pin_current_as_original();
-        assert_eq!(pool.stats().copy_bytes, copied_before_pin);
-        pool.run(|current, target, original| {
-            assert_eq!(current, original);
-            target.copy_from(current, 0, 0).expect("matching surfaces");
-        });
+        pool.begin_effect(true);
+        pool.run_pass(
+            EffectResource::Current,
+            None,
+            EffectResource::Current,
+            |current, _, target| {
+                target.copy_from(current, 0, 0).expect("matching surfaces");
+                target.put_pixel(0, 0, Rgba([99, 20, 30, 255]));
+            },
+        );
+        pool.run_pass(
+            EffectResource::Original,
+            None,
+            EffectResource::Temporary0,
+            |original, _, target| {
+                target.copy_from(original, 0, 0).expect("matching surfaces");
+            },
+        );
 
-        assert_eq!(&*pool.current(), &source);
         assert_eq!(pool.stats().copy_bytes, copied_before_pin);
+        assert_eq!(pool.current().get_pixel(0, 0), &Rgba([99, 20, 30, 255]));
+        let original_slot = pool.resolve_slot(EffectResource::Temporary0);
+        assert_eq!(
+            pool.surfaces[original_slot].get_pixel(0, 0),
+            &Rgba([10, 20, 30, 255])
+        );
     }
 
     #[test]
-    fn reuses_a_fixed_ping_pong_set_and_transfers_cached_output() {
+    fn current_and_temporaries_remain_independent_logical_resources() {
+        let source = RgbaImage::from_pixel(1, 1, Rgba([10, 20, 30, 255]));
+        let mut pool = EffectSurfacePool::new(1, 1);
+        pool.begin_from(&source);
+        pool.begin_effect(false);
+
+        pool.run_pass(
+            EffectResource::Current,
+            None,
+            EffectResource::Temporary0,
+            |source, _, target| {
+                target.copy_from(source, 0, 0).expect("matching surfaces");
+                target.put_pixel(0, 0, Rgba([100, 20, 30, 255]));
+            },
+        );
+        pool.run_pass(
+            EffectResource::Current,
+            None,
+            EffectResource::Temporary1,
+            |source, _, target| {
+                target.copy_from(source, 0, 0).expect("matching surfaces");
+                target.put_pixel(0, 0, Rgba([10, 110, 30, 255]));
+            },
+        );
+
+        assert_eq!(pool.current().get_pixel(0, 0), &Rgba([10, 20, 30, 255]));
+        assert_ne!(
+            pool.resolve_slot(EffectResource::Temporary0),
+            pool.resolve_slot(EffectResource::Temporary1)
+        );
+
+        copy_pass(
+            &mut pool,
+            EffectResource::Temporary0,
+            EffectResource::Current,
+        );
+        assert_eq!(pool.current().get_pixel(0, 0), &Rgba([100, 20, 30, 255]));
+    }
+
+    #[test]
+    fn reuses_a_fixed_resource_set_and_transfers_cached_output() {
         let mut pool = EffectSurfacePool::new(4, 2);
-        pool.run(|source, target, _| target.copy_from(source, 0, 0).expect("matching surfaces"));
-        pool.run(|source, target, _| target.copy_from(source, 0, 0).expect("matching surfaces"));
+        pool.begin_effect(false);
+        copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
+        copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
         assert_eq!(pool.stats().allocations, 3);
         assert_eq!(pool.stats().reuses, 2);
 

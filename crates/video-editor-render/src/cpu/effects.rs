@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::{
-    plan::{ColourTransform, EvaluatedEffect},
+    plan::{ColourTransform, EffectOperation, EffectResource, EvaluatedEffect},
     render::effects::{
         EffectPass, canonical_gaussian_radius, effect_pass_plan, gaussian_radius_is_identity,
         sampling_blur_radius_is_identity,
@@ -24,81 +24,102 @@ fn execute_effect_pass_sequence(surfaces: &mut EffectSurfacePool, passes: &[Effe
     if passes.is_empty() {
         return;
     }
-    if passes.iter().any(|pass| pass.requires_original()) {
-        surfaces.pin_current_as_original();
+    let retains_original = passes.iter().any(|pass| pass.inputs.uses_original());
+    surfaces.begin_effect(retains_original);
+    for (index, pass) in passes.iter().enumerate() {
+        let remaining = &passes[index..];
+        for temporary in [EffectResource::Temporary0, EffectResource::Temporary1] {
+            if !resource_value_is_live(temporary, remaining) {
+                surfaces.release_temporary(temporary);
+            }
+        }
+        surfaces.run_pass(
+            pass.inputs.primary(),
+            pass.inputs.secondary(),
+            pass.output,
+            |source, secondary, target| execute_effect_pass(source, secondary, target, pass),
+        );
     }
-    for pass in passes {
-        surfaces.run(|source, target, original| {
-            execute_effect_pass(source, target, original, pass)
-        });
+}
+
+/// Returns whether the resource value present before `remaining[0]` will be
+/// read before that logical resource is overwritten. This is sufficient for
+/// the ordered effect-pass IR and lets the CPU backend recycle dead temporaries
+/// without introducing a graph allocator.
+fn resource_value_is_live(resource: EffectResource, remaining: &[EffectPass]) -> bool {
+    for pass in remaining {
+        if pass.inputs.primary() == resource || pass.inputs.secondary() == Some(resource) {
+            return true;
+        }
+        if pass.output == resource {
+            return false;
+        }
     }
+    false
 }
 
 fn execute_effect_pass(
     source: &RgbaImage,
+    secondary: Option<&RgbaImage>,
     target: &mut RgbaImage,
-    original: &RgbaImage,
     pass: &EffectPass,
 ) {
-    match pass {
-        EffectPass::ApplyColourTransform { transform } => {
-            apply_colour_transform(source, target, *transform)
+    match pass.operation {
+        EffectOperation::ApplyColourTransform { transform } => {
+            apply_colour_transform(source, target, transform)
         }
-        EffectPass::GaussianHorizontal { radius } => gaussian_pass(source, target, *radius, true),
-        EffectPass::GaussianVertical { radius } => gaussian_pass(source, target, *radius, false),
-        EffectPass::HighlightExtract { threshold, colour } => {
-            highlight_extract(source, target, *threshold, *colour)
+        EffectOperation::GaussianHorizontal { radius } => {
+            gaussian_pass(source, target, radius, true)
         }
-        EffectPass::GlowComposite { intensity } => {
-            glow_composite(original, source, target, *intensity)
+        EffectOperation::GaussianVertical { radius } => {
+            gaussian_pass(source, target, radius, false)
         }
-        EffectPass::UnsharpComposite { amount } => {
-            unsharp_composite(original, source, target, *amount)
+        EffectOperation::HighlightExtract { threshold, colour } => {
+            highlight_extract(source, target, threshold, colour)
         }
-        EffectPass::DirectionalBlur {
+        EffectOperation::Composite { mode, amount } => {
+            let base = source;
+            let overlay = secondary.expect("composite passes declare two inputs");
+            match mode {
+                crate::render::effects::CompositeMode::Additive => {
+                    glow_composite(base, overlay, target, amount)
+                }
+                crate::render::effects::CompositeMode::Unsharp => {
+                    unsharp_composite(base, overlay, target, amount)
+                }
+            }
+        }
+        EffectOperation::DirectionalBlur {
             radius,
             angle_degrees,
-        } => blur(source, target, *radius, Some(*angle_degrees), None),
-        EffectPass::ZoomBlur {
+        } => blur(source, target, radius, Some(angle_degrees), None),
+        EffectOperation::ZoomBlur {
             radius,
             samples,
             anchor,
             direction,
-        } => super::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction),
-        EffectPass::ChromaticAberration {
+        } => super::zoom_blur::apply(source, target, radius, samples, anchor, direction),
+        EffectOperation::ChromaticAberration {
             amount,
             angle_degrees,
-        } => super::chromatic::apply(source, target, *amount, *angle_degrees),
-        EffectPass::Vignette {
+        } => super::chromatic::apply(source, target, amount, angle_degrees),
+        EffectOperation::Vignette {
             amount,
             radius,
             softness,
             colour,
-        } => super::vignette::apply(source, target, *amount, *radius, *softness, *colour),
-        EffectPass::ColorAdjust {
+        } => super::vignette::apply(source, target, amount, radius, softness, colour),
+        EffectOperation::ColorAdjust {
             exposure,
             gamma,
             black_point,
             white_point,
-        } => super::colour_adjust::apply(
-            source,
-            target,
-            *exposure,
-            *gamma,
-            *black_point,
-            *white_point,
-        ),
-        EffectPass::MotionBlur {
+        } => super::colour_adjust::apply(source, target, exposure, gamma, black_point, white_point),
+        EffectOperation::MotionBlur {
             radius,
             angle_degrees,
             samples,
-        } => blur(
-            source,
-            target,
-            *radius,
-            Some(*angle_degrees),
-            Some(*samples),
-        ),
+        } => blur(source, target, radius, Some(angle_degrees), Some(samples)),
     }
 }
 
@@ -502,36 +523,56 @@ mod tests {
     #[test]
     fn arbitrary_five_pass_sequence_executes_each_pass_in_order() {
         let passes = [
-            EffectPass::ApplyColourTransform {
-                transform: ColourTransform {
-                    matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-                    offset: [1.0, 0.0, 0.0],
+            EffectPass::new(
+                EffectOperation::ApplyColourTransform {
+                    transform: ColourTransform {
+                        matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                        offset: [1.0, 0.0, 0.0],
+                    },
                 },
-            },
-            EffectPass::ApplyColourTransform {
-                transform: ColourTransform {
-                    matrix: [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-                    offset: [0.0; 3],
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::ApplyColourTransform {
+                    transform: ColourTransform {
+                        matrix: [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+                        offset: [0.0; 3],
+                    },
                 },
-            },
-            EffectPass::ApplyColourTransform {
-                transform: ColourTransform {
-                    matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 2.0]],
-                    offset: [0.0; 3],
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::ApplyColourTransform {
+                    transform: ColourTransform {
+                        matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 2.0]],
+                        offset: [0.0; 3],
+                    },
                 },
-            },
-            EffectPass::ApplyColourTransform {
-                transform: ColourTransform {
-                    matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-                    offset: [5.0, 6.0, 7.0],
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::ApplyColourTransform {
+                    transform: ColourTransform {
+                        matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                        offset: [5.0, 6.0, 7.0],
+                    },
                 },
-            },
-            EffectPass::ApplyColourTransform {
-                transform: ColourTransform {
-                    matrix: [[1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-                    offset: [0.0; 3],
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::ApplyColourTransform {
+                    transform: ColourTransform {
+                        matrix: [[1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                        offset: [0.0; 3],
+                    },
                 },
-            },
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
         ];
         let source = RgbaImage::from_pixel(1, 1, Rgba([10, 20, 30, 255]));
         let mut surfaces = EffectSurfacePool::new(1, 1);
@@ -563,5 +604,7 @@ mod tests {
 
         assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);
         assert_eq!(surfaces.stats().reuses, 4);
+        assert_eq!(surfaces.stats().allocations, 3);
+        assert_eq!(surfaces.stats().retained_buffers, 3);
     }
 }

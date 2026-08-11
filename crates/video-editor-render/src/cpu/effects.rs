@@ -5,8 +5,8 @@ use image::{GenericImage, Rgba, RgbaImage};
 use crate::{
     plan::{ColourTransform, EvaluatedEffect},
     render::effects::{
-        EffectPass, canonical_gaussian_radius, effect_amount_is_identity, effect_pass_plan,
-        gaussian_radius_is_identity, sampling_blur_radius_is_identity,
+        EffectPass, canonical_gaussian_radius, effect_pass_plan, gaussian_radius_is_identity,
+        sampling_blur_radius_is_identity,
     },
 };
 
@@ -16,140 +16,103 @@ use super::surfaces::EffectSurfacePool;
 pub(super) fn apply_chain(surfaces: &mut EffectSurfacePool, effects: &[EvaluatedEffect]) {
     for effect in effects {
         let plan = effect_pass_plan(effect);
-        if plan.is_empty() {
-            continue;
-        }
-        surfaces.run(|source, target, horizontal| match plan.as_slice() {
-            [
-                EffectPass::GaussianHorizontal { radius },
-                EffectPass::GaussianVertical { .. },
-            ] => gaussian_blur(source, horizontal, target, *radius),
-            [
-                EffectPass::HighlightExtract { threshold, colour },
-                EffectPass::GaussianHorizontal { radius },
-                EffectPass::GaussianVertical { .. },
-                EffectPass::GlowComposite { intensity },
-            ] => glow(
-                source, horizontal, target, *threshold, *radius, *intensity, *colour,
-            ),
-            [
-                EffectPass::GaussianHorizontal { radius },
-                EffectPass::GaussianVertical { .. },
-                EffectPass::UnsharpComposite { amount },
-            ] => sharpen(source, horizontal, target, *amount, *radius),
-            [EffectPass::ApplyColourTransform { transform }] => {
-                apply_colour_transform(source, target, *transform)
-            }
-            [
-                EffectPass::DirectionalBlur {
-                    radius,
-                    angle_degrees,
-                },
-            ] => blur(source, target, *radius, Some(*angle_degrees), None),
-            [
-                EffectPass::ZoomBlur {
-                    radius,
-                    samples,
-                    anchor,
-                    direction,
-                },
-            ] => super::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction),
-            [
-                EffectPass::ChromaticAberration {
-                    amount,
-                    angle_degrees,
-                },
-            ] => super::chromatic::apply(source, target, *amount, *angle_degrees),
-            [
-                EffectPass::Vignette {
-                    amount,
-                    radius,
-                    softness,
-                    colour,
-                },
-            ] => super::vignette::apply(source, target, *amount, *radius, *softness, *colour),
-            [
-                EffectPass::ColorAdjust {
-                    exposure,
-                    gamma,
-                    black_point,
-                    white_point,
-                },
-            ] => super::colour_adjust::apply(
-                source,
-                target,
-                *exposure,
-                *gamma,
-                *black_point,
-                *white_point,
-            ),
-            [
-                EffectPass::MotionBlur {
-                    radius,
-                    angle_degrees,
-                    samples,
-                },
-            ] => blur(
-                source,
-                target,
-                *radius,
-                Some(*angle_degrees),
-                Some(*samples),
-            ),
-            [] => unreachable!("identity effects are skipped before execution"),
-            _ => unreachable!("effect pass plans must be complete"),
+        execute_effect_pass_sequence(surfaces, plan.as_slice());
+    }
+}
+
+fn execute_effect_pass_sequence(surfaces: &mut EffectSurfacePool, passes: &[EffectPass]) {
+    if passes.is_empty() {
+        return;
+    }
+    if passes.iter().any(|pass| pass.requires_original()) {
+        surfaces.pin_current_as_original();
+    }
+    for pass in passes {
+        surfaces.run(|source, target, original| {
+            execute_effect_pass(source, target, original, pass)
         });
     }
 }
 
-pub(super) fn apply_to(
-    surfaces: &mut EffectSurfacePool,
-    destination: &mut RgbaImage,
-    effects: &[EvaluatedEffect],
+fn execute_effect_pass(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    original: &RgbaImage,
+    pass: &EffectPass,
 ) {
-    if effects
-        .iter()
-        .all(|effect| effect_pass_plan(effect).is_empty())
-    {
-        return;
+    match pass {
+        EffectPass::ApplyColourTransform { transform } => {
+            apply_colour_transform(source, target, *transform)
+        }
+        EffectPass::GaussianHorizontal { radius } => gaussian_pass(source, target, *radius, true),
+        EffectPass::GaussianVertical { radius } => gaussian_pass(source, target, *radius, false),
+        EffectPass::HighlightExtract { threshold, colour } => {
+            highlight_extract(source, target, *threshold, *colour)
+        }
+        EffectPass::GlowComposite { intensity } => {
+            glow_composite(original, source, target, *intensity)
+        }
+        EffectPass::UnsharpComposite { amount } => {
+            unsharp_composite(original, source, target, *amount)
+        }
+        EffectPass::DirectionalBlur {
+            radius,
+            angle_degrees,
+        } => blur(source, target, *radius, Some(*angle_degrees), None),
+        EffectPass::ZoomBlur {
+            radius,
+            samples,
+            anchor,
+            direction,
+        } => super::zoom_blur::apply(source, target, *radius, *samples, *anchor, *direction),
+        EffectPass::ChromaticAberration {
+            amount,
+            angle_degrees,
+        } => super::chromatic::apply(source, target, *amount, *angle_degrees),
+        EffectPass::Vignette {
+            amount,
+            radius,
+            softness,
+            colour,
+        } => super::vignette::apply(source, target, *amount, *radius, *softness, *colour),
+        EffectPass::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        } => super::colour_adjust::apply(
+            source,
+            target,
+            *exposure,
+            *gamma,
+            *black_point,
+            *white_point,
+        ),
+        EffectPass::MotionBlur {
+            radius,
+            angle_degrees,
+            samples,
+        } => blur(
+            source,
+            target,
+            *radius,
+            Some(*angle_degrees),
+            Some(*samples),
+        ),
     }
-    surfaces.begin_from(destination);
-    apply_chain(surfaces, effects);
-    surfaces.copy_to(destination);
 }
 
-/// Applies a separable Gaussian blur using premultiplied-alpha accumulation.
-/// Pixels remain stored as straight RGBA, so the last pass safely converts the
-/// accumulated premultiplied colour back to the renderer's storage format.
-pub(crate) fn gaussian_blur(
-    source: &RgbaImage,
-    horizontal: &mut RgbaImage,
-    target: &mut RgbaImage,
-    radius: f64,
-) {
+fn gaussian_pass(source: &RgbaImage, target: &mut RgbaImage, radius: f64, horizontal: bool) {
     if gaussian_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
     with_gaussian_kernel(radius, |kernel| {
-        convolve(source, horizontal, kernel, true);
-        convolve(horizontal, target, kernel, false);
+        convolve(source, target, kernel, horizontal)
     });
 }
 
-pub(crate) fn glow(
-    source: &RgbaImage,
-    horizontal: &mut RgbaImage,
-    target: &mut RgbaImage,
-    threshold: f64,
-    radius: f64,
-    intensity: f64,
-    colour: [u8; 4],
-) {
-    if effect_amount_is_identity(intensity) || gaussian_radius_is_identity(radius) {
-        target.copy_from(source, 0, 0).expect("matching surfaces");
-        return;
-    }
+fn highlight_extract(source: &RgbaImage, target: &mut RgbaImage, threshold: f64, colour: [u8; 4]) {
     let threshold = threshold.clamp(0.0, 1.0);
     for (x, y, pixel) in source.enumerate_pixels() {
         let luminance = (f64::from(pixel[0]) * 0.2126
@@ -170,51 +133,70 @@ pub(crate) fn glow(
             ]),
         );
     }
-    with_gaussian_kernel(radius, |kernel| {
-        convolve(target, horizontal, kernel, true);
-        convolve(horizontal, target, kernel, false);
-    });
-    for (base, bloom) in source.pixels().zip(target.pixels_mut()) {
+}
+
+fn glow_composite(original: &RgbaImage, bloom: &RgbaImage, target: &mut RgbaImage, intensity: f64) {
+    for ((base, glow), output) in original
+        .pixels()
+        .zip(bloom.pixels())
+        .zip(target.pixels_mut())
+    {
         let base_alpha = f64::from(base[3]) / 255.0;
-        let glow_alpha = (f64::from(bloom[3]) / 255.0 * intensity).clamp(0.0, 1.0);
+        let glow_alpha = (f64::from(glow[3]) / 255.0 * intensity).clamp(0.0, 1.0);
         let alpha = base_alpha + glow_alpha * (1.0 - base_alpha);
         let rgb = if alpha <= 0.000_000_1 {
             [0; 3]
         } else {
             std::array::from_fn(|channel| {
                 ((f64::from(base[channel]) / 255.0 * base_alpha
-                    + f64::from(bloom[channel]) / 255.0 * glow_alpha)
+                    + f64::from(glow[channel]) / 255.0 * glow_alpha)
                     / alpha
                     * 255.0)
                     .round()
                     .clamp(0.0, 255.0) as u8
             })
         };
-        *bloom = Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]);
+        *output = Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8]);
     }
 }
 
-pub(crate) fn sharpen(
-    source: &RgbaImage,
-    horizontal: &mut RgbaImage,
+fn unsharp_composite(
+    original: &RgbaImage,
+    blurred: &RgbaImage,
     target: &mut RgbaImage,
     amount: f64,
-    radius: f64,
 ) {
-    if effect_amount_is_identity(amount) || gaussian_radius_is_identity(radius) {
-        target.copy_from(source, 0, 0).expect("matching surfaces");
-        return;
-    }
-    gaussian_blur(source, horizontal, target, radius);
-    for (base, blurred) in source.pixels().zip(target.pixels_mut()) {
+    for ((base, blurred), output) in original
+        .pixels()
+        .zip(blurred.pixels())
+        .zip(target.pixels_mut())
+    {
+        let mut result = *blurred;
         for channel in 0..3 {
-            blurred[channel] = (f64::from(base[channel])
+            result[channel] = (f64::from(base[channel])
                 + (f64::from(base[channel]) - f64::from(blurred[channel])) * amount)
                 .round()
                 .clamp(0.0, 255.0) as u8;
         }
-        blurred[3] = base[3];
+        result[3] = base[3];
+        *output = result;
     }
+}
+
+pub(super) fn apply_to(
+    surfaces: &mut EffectSurfacePool,
+    destination: &mut RgbaImage,
+    effects: &[EvaluatedEffect],
+) {
+    if effects
+        .iter()
+        .all(|effect| effect_pass_plan(effect).is_empty())
+    {
+        return;
+    }
+    surfaces.begin_from(destination);
+    apply_chain(surfaces, effects);
+    surfaces.copy_to(destination);
 }
 
 fn apply_colour_transform(source: &RgbaImage, target: &mut RgbaImage, transform: ColourTransform) {
@@ -398,13 +380,21 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
 mod tests {
     use super::*;
 
+    fn render_effect(source: &RgbaImage, effect: EvaluatedEffect) -> RgbaImage {
+        let mut surfaces = EffectSurfacePool::new(source.width(), source.height());
+        surfaces.begin_from(source);
+        apply_chain(&mut surfaces, &[effect]);
+        let mut output = RgbaImage::new(source.width(), source.height());
+        surfaces.copy_to(&mut output);
+        output
+    }
+
     #[test]
     fn gaussian_spreads_symmetrically_without_transparent_colour_halos() {
         let mut source = RgbaImage::from_pixel(7, 7, Rgba([255, 0, 0, 0]));
         source.put_pixel(3, 3, Rgba([255, 255, 255, 255]));
-        let mut horizontal = RgbaImage::new(7, 7);
-        let mut target = RgbaImage::new(7, 7);
-        gaussian_blur(&source, &mut horizontal, &mut target, 2.0);
+        let target = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
+
         assert_eq!(target.get_pixel(2, 3), target.get_pixel(4, 3));
         assert_eq!(target.get_pixel(3, 2), target.get_pixel(3, 4));
         assert!(target.get_pixel(2, 3)[3] > 0);
@@ -412,20 +402,19 @@ mod tests {
     }
 
     #[test]
-    fn transparent_glow_matches_the_pixel_golden_fixture() {
+    fn transparent_glow_matches_the_pixel_golden_fixture_through_pass_execution() {
         let mut source = RgbaImage::new(3, 3);
         source.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
-        let mut horizontal = RgbaImage::new(3, 3);
-        let mut output = RgbaImage::new(3, 3);
-        glow(
+        let output = render_effect(
             &source,
-            &mut horizontal,
-            &mut output,
-            0.0,
-            1.0,
-            1.0,
-            [255, 64, 0, 255],
+            EvaluatedEffect::Glow {
+                threshold: 0.0,
+                radius: 1.0,
+                intensity: 1.0,
+                colour: [255, 64, 0, 255],
+            },
         );
+
         assert_eq!(
             output.as_raw(),
             &[
@@ -436,14 +425,19 @@ mod tests {
     }
 
     #[test]
-    fn sharpen_matches_the_pixel_golden_fixture() {
+    fn sharpen_matches_the_pixel_golden_fixture_through_pass_execution() {
         let mut source = RgbaImage::new(3, 1);
         source.put_pixel(0, 0, Rgba([20, 80, 160, 255]));
         source.put_pixel(1, 0, Rgba([180, 120, 60, 192]));
         source.put_pixel(2, 0, Rgba([40, 200, 100, 128]));
-        let mut horizontal = RgbaImage::new(3, 1);
-        let mut output = RgbaImage::new(3, 1);
-        sharpen(&source, &mut horizontal, &mut output, 0.8, 1.0);
+        let output = render_effect(
+            &source,
+            EvaluatedEffect::Sharpen {
+                amount: 0.8,
+                radius: 1.0,
+            },
+        );
+
         assert_eq!(
             output.as_raw(),
             &[10, 78, 166, 255, 206, 120, 46, 192, 23, 210, 105, 128]
@@ -454,17 +448,16 @@ mod tests {
     fn glow_spreads_visible_premultiplied_alpha_outside_the_source() {
         let mut source = RgbaImage::new(7, 7);
         source.put_pixel(3, 3, Rgba([255, 255, 255, 255]));
-        let mut horizontal = RgbaImage::new(7, 7);
-        let mut target = RgbaImage::new(7, 7);
-        glow(
+        let target = render_effect(
             &source,
-            &mut horizontal,
-            &mut target,
-            0.5,
-            2.0,
-            1.0,
-            [255, 0, 0, 255],
+            EvaluatedEffect::Glow {
+                threshold: 0.5,
+                radius: 2.0,
+                intensity: 1.0,
+                colour: [255, 0, 0, 255],
+            },
         );
+
         assert_eq!(target.get_pixel(3, 3)[0], 255);
         let horizontal = target.get_pixel(2, 3);
         let vertical = target.get_pixel(3, 2);
@@ -477,16 +470,19 @@ mod tests {
     }
 
     #[test]
-    fn gaussian_kernels_are_reused_and_bounded() {
+    fn gaussian_kernels_are_reused_and_bounded_through_pass_execution() {
         let source = RgbaImage::from_pixel(3, 3, Rgba([255, 255, 255, 255]));
-        let mut horizontal = RgbaImage::new(3, 3);
-        let mut target = RgbaImage::new(3, 3);
-        gaussian_blur(&source, &mut horizontal, &mut target, 2.0);
+        let _ = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
         let after_first = gaussian_kernel_cache_len();
-        gaussian_blur(&source, &mut horizontal, &mut target, 2.0);
+        let _ = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
         assert_eq!(gaussian_kernel_cache_len(), after_first);
         for radius in 1..24 {
-            gaussian_blur(&source, &mut horizontal, &mut target, f64::from(radius));
+            let _ = render_effect(
+                &source,
+                EvaluatedEffect::GaussianBlur {
+                    radius: f64::from(radius),
+                },
+            );
         }
         assert!(gaussian_kernel_cache_len() <= 16);
     }
@@ -501,5 +497,71 @@ mod tests {
         blur(&source, &mut motion, 0.12, Some(0.0), Some(9));
         assert_ne!(directional, source);
         assert_ne!(motion, source);
+    }
+
+    #[test]
+    fn arbitrary_five_pass_sequence_executes_each_pass_in_order() {
+        let passes = [
+            EffectPass::ApplyColourTransform {
+                transform: ColourTransform {
+                    matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                    offset: [1.0, 0.0, 0.0],
+                },
+            },
+            EffectPass::ApplyColourTransform {
+                transform: ColourTransform {
+                    matrix: [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+                    offset: [0.0; 3],
+                },
+            },
+            EffectPass::ApplyColourTransform {
+                transform: ColourTransform {
+                    matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 2.0]],
+                    offset: [0.0; 3],
+                },
+            },
+            EffectPass::ApplyColourTransform {
+                transform: ColourTransform {
+                    matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                    offset: [5.0, 6.0, 7.0],
+                },
+            },
+            EffectPass::ApplyColourTransform {
+                transform: ColourTransform {
+                    matrix: [[1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                    offset: [0.0; 3],
+                },
+            },
+        ];
+        let source = RgbaImage::from_pixel(1, 1, Rgba([10, 20, 30, 255]));
+        let mut surfaces = EffectSurfacePool::new(1, 1);
+        surfaces.begin_from(&source);
+
+        execute_effect_pass_sequence(&mut surfaces, &passes);
+
+        assert_eq!(surfaces.current().get_pixel(0, 0), &Rgba([42, 17, 67, 255]));
+        assert_eq!(surfaces.stats().reuses, 5);
+    }
+
+    #[test]
+    fn original_dependent_passes_pin_retained_storage_without_extra_frame_copy() {
+        let mut source = RgbaImage::new(3, 3);
+        source.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
+        let mut surfaces = EffectSurfacePool::new(3, 3);
+        surfaces.begin_from(&source);
+        let copied_before_effect = surfaces.stats().copy_bytes;
+
+        apply_chain(
+            &mut surfaces,
+            &[EvaluatedEffect::Glow {
+                threshold: 0.0,
+                radius: 1.0,
+                intensity: 1.0,
+                colour: [255, 64, 0, 255],
+            }],
+        );
+
+        assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);
+        assert_eq!(surfaces.stats().reuses, 4);
     }
 }

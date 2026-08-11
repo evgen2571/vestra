@@ -2,21 +2,10 @@
 
 use std::collections::BTreeSet;
 
+use crate::plan::ScalarPropertyTarget;
 use crate::{Category, Diagnostic, project::parse_colour};
 
 use super::tracks;
-
-fn valid_blur_radius(value: &f64) -> bool {
-    value.is_finite() && (0.0..=32.0).contains(value)
-}
-
-fn finite(value: &f64) -> bool {
-    value.is_finite()
-}
-
-fn unit_value(value: &f64) -> bool {
-    unit(*value)
-}
 
 const fn positive(value: f64) -> bool {
     value.is_finite() && value > 0.0
@@ -104,8 +93,8 @@ pub(super) fn validate_global(
             ));
         }
         if matches!(
-            effect,
-            crate::project::Effect::CameraShake { .. } | crate::project::Effect::MotionBlur { .. }
+            effect.definition().scope,
+            crate::effect_definition::EffectScope::ClipOnly
         ) {
             errors.push(Diagnostic::error(
                 "MVP-POST-EFFECT-SCOPE",
@@ -140,7 +129,7 @@ pub(super) fn validate_parameters(
     let active_duration = super::intervals::validate(effect.timing(), duration, path, errors);
     let track = |track: &crate::project::ScalarProperty,
                  field,
-                 valid: fn(&f64) -> bool,
+                 target: ScalarPropertyTarget,
                  errors: &mut Vec<Diagnostic>| {
         tracks::validate_scalar_property(
             track,
@@ -148,16 +137,29 @@ pub(super) fn validate_parameters(
             &format!("{path}/{field}"),
             maximum_keyframes,
             errors,
-            valid,
+            |value| target.authored_validation().accepts(value),
             has_authored_audio,
         );
     };
     match effect {
-        crate::project::Effect::Brightness { amount, .. }
-        | crate::project::Effect::Contrast { amount, .. }
-        | crate::project::Effect::Saturation { amount, .. } => {
-            track(amount, "amount", finite, errors)
-        }
+        crate::project::Effect::Brightness { amount, .. } => track(
+            amount,
+            "amount",
+            ScalarPropertyTarget::BrightnessAmount,
+            errors,
+        ),
+        crate::project::Effect::Contrast { amount, .. } => track(
+            amount,
+            "amount",
+            ScalarPropertyTarget::ContrastAmount,
+            errors,
+        ),
+        crate::project::Effect::Saturation { amount, .. } => track(
+            amount,
+            "amount",
+            ScalarPropertyTarget::SaturationAmount,
+            errors,
+        ),
         crate::project::Effect::Tint { colour, amount, .. } => {
             if parse_colour(colour).is_none() {
                 invalid_effect(
@@ -168,18 +170,31 @@ pub(super) fn validate_parameters(
                     "colour",
                 );
             }
-            track(amount, "amount", unit_value, errors);
+            track(amount, "amount", ScalarPropertyTarget::TintAmount, errors);
         }
-        crate::project::Effect::GaussianBlur { radius, .. } => {
-            track(radius, "radius", valid_blur_radius, errors)
-        }
+        crate::project::Effect::GaussianBlur { radius, .. } => track(
+            radius,
+            "radius",
+            ScalarPropertyTarget::GaussianBlurRadius,
+            errors,
+        ),
         crate::project::Effect::DirectionalBlur {
             radius,
             angle_degrees,
             ..
         } => {
-            track(radius, "radius", valid_blur_radius, errors);
-            track(angle_degrees, "angle_degrees", finite, errors);
+            track(
+                radius,
+                "radius",
+                ScalarPropertyTarget::DirectionalBlurRadius,
+                errors,
+            );
+            track(
+                angle_degrees,
+                "angle_degrees",
+                ScalarPropertyTarget::DirectionalBlurAngleDegrees,
+                errors,
+            );
         }
         crate::project::Effect::ZoomBlur {
             radius,
@@ -187,7 +202,12 @@ pub(super) fn validate_parameters(
             anchor,
             ..
         } => {
-            track(radius, "radius", valid_blur_radius, errors);
+            track(
+                radius,
+                "radius",
+                ScalarPropertyTarget::ZoomBlurRadius,
+                errors,
+            );
             if !(2..=32).contains(samples) {
                 invalid_effect(
                     errors,
@@ -223,12 +243,17 @@ pub(super) fn validate_parameters(
                     "colour",
                 );
             }
-            track(threshold, "threshold", unit_value, errors);
-            track(radius, "radius", valid_blur_radius, errors);
+            track(
+                threshold,
+                "threshold",
+                ScalarPropertyTarget::GlowThreshold,
+                errors,
+            );
+            track(radius, "radius", ScalarPropertyTarget::GlowRadius, errors);
             track(
                 intensity,
                 "intensity",
-                |value| value.is_finite() && (0.0..=4.0).contains(value),
+                ScalarPropertyTarget::GlowIntensity,
                 errors,
             );
         }
@@ -237,8 +262,18 @@ pub(super) fn validate_parameters(
             angle_degrees,
             ..
         } => {
-            track(amount, "amount", valid_blur_radius, errors);
-            track(angle_degrees, "angle_degrees", finite, errors);
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::ChromaticAberrationAmount,
+                errors,
+            );
+            track(
+                angle_degrees,
+                "angle_degrees",
+                ScalarPropertyTarget::ChromaticAberrationAngleDegrees,
+                errors,
+            );
         }
         crate::project::Effect::Vignette {
             amount,
@@ -256,11 +291,16 @@ pub(super) fn validate_parameters(
                     "colour",
                 );
             }
-            track(amount, "amount", unit_value, errors);
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::VignetteAmount,
+                errors,
+            );
             track(
                 radius,
                 "radius",
-                |value| value.is_finite() && (0.0..=2.0).contains(value),
+                ScalarPropertyTarget::VignetteRadius,
                 errors,
             );
             tracks::validate_track(
@@ -276,13 +316,13 @@ pub(super) fn validate_parameters(
             track(
                 amount,
                 "amount",
-                |value| value.is_finite() && (0.0..=4.0).contains(value),
+                ScalarPropertyTarget::SharpenAmount,
                 errors,
             );
             track(
                 radius,
                 "radius",
-                |value| value.is_finite() && (0.0..=16.0).contains(value),
+                ScalarPropertyTarget::SharpenRadius,
                 errors,
             );
         }
@@ -296,13 +336,13 @@ pub(super) fn validate_parameters(
             track(
                 exposure,
                 "exposure",
-                |value| value.is_finite() && (-8.0..=8.0).contains(value),
+                ScalarPropertyTarget::ColorAdjustExposure,
                 errors,
             );
             track(
                 gamma,
                 "gamma",
-                |value| value.is_finite() && *value > 0.0 && *value <= 8.0,
+                ScalarPropertyTarget::ColorAdjustGamma,
                 errors,
             );
             tracks::validate_track(
@@ -335,25 +375,25 @@ pub(super) fn validate_parameters(
             track(
                 position_amount,
                 "position_amount",
-                |value| value.is_finite() && *value >= 0.0,
+                ScalarPropertyTarget::CameraShakePositionAmount,
                 errors,
             );
             track(
                 rotation_degrees,
                 "rotation_degrees",
-                |value| value.is_finite() && *value >= 0.0,
+                ScalarPropertyTarget::CameraShakeRotationDegrees,
                 errors,
             );
             track(
                 scale_amount,
                 "scale_amount",
-                |value| value.is_finite() && *value >= 0.0,
+                ScalarPropertyTarget::CameraShakeScaleAmount,
                 errors,
             );
             track(
                 frequency,
                 "frequency",
-                |value| value.is_finite() && *value > 0.0,
+                ScalarPropertyTarget::CameraShakeFrequency,
                 errors,
             );
             if !nonnegative(*attack) || !positive(*decay) {
@@ -376,16 +416,21 @@ pub(super) fn validate_parameters(
             track(
                 intensity,
                 "intensity",
-                |value| value.is_finite() && *value >= 0.0,
+                ScalarPropertyTarget::MotionBlurIntensity,
                 errors,
             );
             track(
                 shutter_angle,
                 "shutter_angle",
-                |value| value.is_finite() && (0.0..=360.0).contains(value),
+                ScalarPropertyTarget::MotionBlurShutterAngle,
                 errors,
             );
-            track(max_radius, "max_radius", valid_blur_radius, errors);
+            track(
+                max_radius,
+                "max_radius",
+                ScalarPropertyTarget::MotionBlurMaxRadius,
+                errors,
+            );
             if !(2..=32).contains(samples) {
                 invalid_effect(
                     errors,

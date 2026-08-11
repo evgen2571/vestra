@@ -214,23 +214,10 @@ impl EffectPassPlan {
 /// without matching authored effect identities themselves.
 #[must_use]
 pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> EffectPassRequirements {
-    match effect {
-        CompiledEffect::Glow { .. } | CompiledEffect::Sharpen { .. } => {
-            EffectPassRequirements::RETAINS_ORIGINAL
-        }
-        CompiledEffect::ColourTransform { .. }
-        | CompiledEffect::Brightness { .. }
-        | CompiledEffect::Contrast { .. }
-        | CompiledEffect::Saturation { .. }
-        | CompiledEffect::Tint { .. }
-        | CompiledEffect::GaussianBlur { .. }
-        | CompiledEffect::DirectionalBlur { .. }
-        | CompiledEffect::ZoomBlur { .. }
-        | CompiledEffect::ChromaticAberration { .. }
-        | CompiledEffect::Vignette { .. }
-        | CompiledEffect::ColorAdjust { .. }
-        | CompiledEffect::CameraShake { .. }
-        | CompiledEffect::MotionBlur { .. } => EffectPassRequirements::NONE,
+    if effect.definition().retains_original {
+        EffectPassRequirements::RETAINS_ORIGINAL
+    } else {
+        EffectPassRequirements::NONE
     }
 }
 

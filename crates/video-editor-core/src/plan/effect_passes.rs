@@ -251,7 +251,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 current,
             ),
         ]),
-        CompiledEffect::Glow { .. } => EffectPassPlan::new(&[
+        CompiledEffect::Glow { .. } | CompiledEffect::Bloom { .. } => EffectPassPlan::new(&[
             EffectPass::new(
                 EffectOperation::HighlightExtract {
                     threshold: 0.0,
@@ -344,6 +344,40 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
     }
 }
 
+fn highlight_bloom_pass_plan(
+    threshold: f64,
+    radius: f64,
+    intensity: f64,
+    colour: [u8; 4],
+) -> EffectPassPlan {
+    EffectPassPlan::new(&[
+        EffectPass::new(
+            EffectOperation::HighlightExtract { threshold, colour },
+            EffectResource::Original,
+            EffectResource::Temporary0,
+        ),
+        EffectPass::new(
+            EffectOperation::GaussianHorizontal {
+                radius: canonical_gaussian_radius(radius),
+            },
+            EffectResource::Temporary0,
+            EffectResource::Temporary1,
+        ),
+        EffectPass::new(
+            EffectOperation::GaussianVertical {
+                radius: canonical_gaussian_radius(radius),
+            },
+            EffectResource::Temporary1,
+            EffectResource::Temporary0,
+        ),
+        EffectPass::composite(
+            CompositeMode::Additive,
+            intensity,
+            EffectResource::Temporary0,
+        ),
+    ])
+}
+
 /// Expands an evaluated effect into its ordered logical rendering passes.
 /// Identity effects return no passes, allowing backends to skip work.
 #[must_use]
@@ -381,35 +415,12 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             radius,
             intensity,
             colour,
-        } => EffectPassPlan::new(&[
-            EffectPass::new(
-                EffectOperation::HighlightExtract {
-                    threshold: *threshold,
-                    colour: *colour,
-                },
-                EffectResource::Original,
-                EffectResource::Temporary0,
-            ),
-            EffectPass::new(
-                EffectOperation::GaussianHorizontal {
-                    radius: canonical_gaussian_radius(*radius),
-                },
-                EffectResource::Temporary0,
-                EffectResource::Temporary1,
-            ),
-            EffectPass::new(
-                EffectOperation::GaussianVertical {
-                    radius: canonical_gaussian_radius(*radius),
-                },
-                EffectResource::Temporary1,
-                EffectResource::Temporary0,
-            ),
-            EffectPass::composite(
-                CompositeMode::Additive,
-                *intensity,
-                EffectResource::Temporary0,
-            ),
-        ]),
+        } => highlight_bloom_pass_plan(*threshold, *radius, *intensity, *colour),
+        EvaluatedEffect::Bloom {
+            threshold,
+            radius,
+            intensity,
+        } => highlight_bloom_pass_plan(*threshold, *radius, *intensity, [255; 4]),
         EvaluatedEffect::Sharpen { amount, radius } => EffectPassPlan::new(&[
             EffectPass::new(
                 EffectOperation::GaussianHorizontal {
@@ -570,6 +581,41 @@ mod tests {
                 ),
                 EffectPass::composite(CompositeMode::Additive, 0.75, EffectResource::Temporary0),
             ]
+        );
+        let bloom = effect_pass_plan(&EvaluatedEffect::Bloom {
+            threshold: 0.6,
+            radius: 3.0,
+            intensity: 0.75,
+        });
+        assert!(matches!(
+            bloom.as_slice()[0].operation,
+            EffectOperation::HighlightExtract {
+                threshold: 0.6,
+                colour: [255, 255, 255, 255]
+            }
+        ));
+        assert!(matches!(
+            bloom.as_slice()[1].operation,
+            EffectOperation::GaussianHorizontal { radius: 3.0 }
+        ));
+        assert!(matches!(
+            bloom.as_slice()[2].operation,
+            EffectOperation::GaussianVertical { radius: 3.0 }
+        ));
+        assert!(matches!(
+            bloom.as_slice()[3].operation,
+            EffectOperation::Composite {
+                mode: CompositeMode::Additive,
+                amount: 0.75
+            }
+        ));
+        assert!(
+            effect_pass_plan(&EvaluatedEffect::Bloom {
+                threshold: 0.6,
+                radius: 3.0,
+                intensity: 0.0
+            })
+            .is_empty()
         );
         assert_eq!(
             effect_pass_plan(&EvaluatedEffect::GaussianBlur { radius: 2.0 }).as_slice(),

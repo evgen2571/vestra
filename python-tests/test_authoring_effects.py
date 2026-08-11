@@ -12,7 +12,7 @@ import pytest
 import video_editor
 from video_editor import FrameRate
 from video_editor.authoring import (
-    ActiveInterval, BlendMode, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
+    ActiveInterval, BloomEffect, BlendMode, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
     ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect, GaussianBlurEffect, GlowEffect,
     Interpolation, MotionBlurEffect, Point, ProjectBuilder, SaturationEffect, SharpenEffect,
     Sizing, TintEffect, VignetteEffect, ZoomBlurDirection, ZoomBlurEffect, available_effects, effect_definition,
@@ -530,7 +530,7 @@ def test_generic_effect_catalog_is_read_only_and_complete() -> None:
     assert set(ids) == {
         "brightness", "contrast", "saturation", "tint", "gaussian_blur", "directional_blur",
         "zoom_blur", "glow", "chromatic_aberration", "vignette", "sharpen", "color_adjust",
-        "camera_shake", "motion_blur",
+        "camera_shake", "motion_blur", "bloom",
     }
     with pytest.raises(TypeError):
         definitions[0]["id"] = "changed"  # type: ignore[index]
@@ -685,6 +685,21 @@ def test_generic_color_adjust_plain_track_bounds_cover_base_and_keyframes() -> N
     clip.effects.add_effect(
         "color_adjust", exposure=0, gamma=1, black_point=0.999, white_point=1,
     )
+
+
+def test_bloom_typed_and_generic_authoring_share_canonicalization() -> None:
+    _, typed_clip = builder()
+    typed = typed_clip.effects.add_bloom(threshold=0.5, radius=2, intensity=0.75)
+    _, generic_clip = builder()
+    generic = generic_clip.effects.add_effect("bloom", threshold=0.5, radius=2, intensity=0.75)
+    assert isinstance(typed, BloomEffect)
+    typed_data = typed.to_canonical()
+    generic_data = generic.to_canonical()
+    typed_data.pop("id")
+    generic_data.pop("id")
+    assert typed_data == generic_data
+    typed.threshold.keyframe(time=1, value=0.8)
+    assert typed.to_canonical()["threshold"]["keyframes"]
 
 
 def test_schema_effect_catalog_has_rust_catalog_ids_and_parameters() -> None:

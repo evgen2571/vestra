@@ -47,6 +47,15 @@ fn validate_effects(
                         continue;
                     }
                 }
+                AudioEffect::BassBoost {
+                    gain_db,
+                    frequency_hz,
+                    ..
+                } => match parameter.name {
+                    "gain_db" => *gain_db,
+                    "frequency_hz" => *frequency_hz,
+                    _ => continue,
+                },
             };
             if !parameter.accepts_number(value) {
                 errors.push(Diagnostic::error(

@@ -197,6 +197,26 @@ pub(super) fn validate_parameters(
             ScalarPropertyTarget::GaussianBlurRadius,
             errors,
         ),
+        crate::project::Effect::Bloom {
+            threshold,
+            radius,
+            intensity,
+            ..
+        } => {
+            track(
+                threshold,
+                "threshold",
+                ScalarPropertyTarget::BloomThreshold,
+                errors,
+            );
+            track(radius, "radius", ScalarPropertyTarget::BloomRadius, errors);
+            track(
+                intensity,
+                "intensity",
+                ScalarPropertyTarget::BloomIntensity,
+                errors,
+            );
+        }
         crate::project::Effect::DirectionalBlur {
             radius,
             angle_degrees,

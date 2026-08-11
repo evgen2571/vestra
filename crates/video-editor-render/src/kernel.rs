@@ -362,6 +362,18 @@ mod tests {
                 },
             ),
             (
+                crate::plan::CompiledEffect::Bloom {
+                    threshold: scalar(0.5),
+                    radius: scalar(2.0),
+                    intensity: scalar(1.0),
+                },
+                crate::plan::EvaluatedEffect::Bloom {
+                    threshold: 0.5,
+                    radius: 2.0,
+                    intensity: 1.0,
+                },
+            ),
+            (
                 crate::plan::CompiledEffect::ChromaticAberration {
                     amount: scalar(0.25),
                     angle_degrees: scalar(10.0),
@@ -495,6 +507,18 @@ mod tests {
                     radius: 2.0,
                     intensity: 0.0,
                     colour: [255; 4],
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::Bloom {
+                    threshold: scalar(0.5),
+                    radius: scalar(2.0),
+                    intensity: scalar(0.0),
+                },
+                crate::plan::EvaluatedEffect::Bloom {
+                    threshold: 0.5,
+                    radius: 2.0,
+                    intensity: 0.0,
                 },
             ),
             (

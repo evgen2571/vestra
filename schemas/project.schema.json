@@ -196,6 +196,9 @@
           "$ref": "#/$defs/parametric_eq_audio_effect"
         },
         {
+          "$ref": "#/$defs/bass_boost_audio_effect"
+        },
+        {
           "$ref": "#/$defs/playback_speed_audio_effect"
         }
       ]
@@ -204,6 +207,9 @@
       "oneOf": [
         {
           "$ref": "#/$defs/parametric_eq_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/bass_boost_audio_effect"
         }
       ]
     },
@@ -261,8 +267,141 @@
       "oneOf": [
         {
           "$ref": "#/$defs/parametric_eq_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/bass_boost_audio_effect"
         }
       ]
+    },
+    "bass_boost_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "frequency_hz": {
+          "default": 100.0,
+          "maximum": 250.0,
+          "minimum": 20.0,
+          "type": "number"
+        },
+        "gain_db": {
+          "default": 6.0,
+          "maximum": 24.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "bass_boost"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "type": "object"
+    },
+    "bloom_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "intensity": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 4.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 4.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "bloom"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "threshold",
+        "radius",
+        "intensity"
+      ],
+      "type": "object"
     },
     "brightness_effect": {
       "additionalProperties": false,
@@ -965,6 +1104,9 @@
         },
         {
           "$ref": "#/$defs/glow_effect"
+        },
+        {
+          "$ref": "#/$defs/bloom_effect"
         },
         {
           "$ref": "#/$defs/chromatic_aberration_effect"

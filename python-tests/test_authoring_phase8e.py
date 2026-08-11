@@ -19,7 +19,7 @@ from video_editor.authoring import (
 
 
 PUBLIC_NAMES = {
-    "ActiveInterval", "AudioAsset", "AudioClip", "AudioFadeCurve", "AudioGainInterpolation", "AudioGainKeyframe", "AudioTimeline", "AudioTrack", "AuthoringError", "BlendMode", "BrightnessEffect",
+    "ActiveInterval", "AudioAsset", "AudioClip", "AudioFadeCurve", "AudioGainInterpolation", "AudioGainKeyframe", "AudioTimeline", "AudioTrack", "AuthoringError", "BassBoostAudioEffect", "BloomEffect", "BlendMode", "BrightnessEffect",
     "CameraShakeEffect", "ChromaticAberrationEffect", "ClipEffectCollection", "Color", "ColorAdjustEffect",
     "ContrastEffect", "Crop", "CropKeyframe", "CropTrack", "CubicBezier", "DirectionalBlurEffect",
     "DirectionalPushTransition", "DurationMode", "Effect", "Flash", "FlashCollection", "FlashCutTransition",

@@ -46,6 +46,11 @@ pub enum EvaluatedEffect {
         intensity: f64,
         colour: [u8; 4],
     },
+    Bloom {
+        threshold: f64,
+        radius: f64,
+        intensity: f64,
+    },
     ChromaticAberration {
         amount: f64,
         angle_degrees: f64,
@@ -103,6 +108,7 @@ impl EvaluatedEffect {
             Self::Glow {
                 radius, intensity, ..
             } => gaussian_radius_is_identity(*radius) || effect_amount_is_identity(*intensity),
+            Self::Bloom { intensity, .. } => effect_amount_is_identity(*intensity),
             Self::Sharpen { amount, radius } => {
                 effect_amount_is_identity(*amount) || gaussian_radius_is_identity(*radius)
             }
@@ -183,6 +189,15 @@ pub fn evaluate(
             radius: radius.evaluate(authored_time, project_time, context)?,
             intensity: intensity.evaluate(authored_time, project_time, context)?,
             colour: *colour,
+        },
+        CompiledEffect::Bloom {
+            threshold,
+            radius,
+            intensity,
+        } => EvaluatedEffect::Bloom {
+            threshold: threshold.evaluate(authored_time, project_time, context)?,
+            radius: radius.evaluate(authored_time, project_time, context)?,
+            intensity: intensity.evaluate(authored_time, project_time, context)?,
         },
         CompiledEffect::ChromaticAberration {
             amount,

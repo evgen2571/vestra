@@ -6,6 +6,5 @@ pub(crate) use video_editor_core::effects::{
     sampling_blur_radius_is_identity,
 };
 pub(crate) use video_editor_core::plan::{
-    CompositeMode, EffectOperation, EffectPass, compiled_effect_pass_requirements,
-    effect_pass_plan,
+    CompositeMode, EffectOperation, EffectPass, compiled_effect_pass_requirements, effect_pass_plan,
 };

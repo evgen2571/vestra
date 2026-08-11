@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     Category, Diagnostic,
+    kernel::{EffectKernel, kernel_for_operation},
     plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::effects::{EffectPass, compiled_effect_pass_requirements, effect_pass_plan},
 };
@@ -63,6 +64,7 @@ pub(super) enum GpuOperation {
     /// An executable effect pass. The operation owns the logical pass so the
     /// executor never has to rediscover semantics from an evaluated layer.
     ApplyEffect {
+        kernel: EffectKernel,
         scope: EffectScope,
         layer_index: Option<usize>,
         effect_index: usize,
@@ -328,6 +330,7 @@ impl GpuFramePlan {
                     states[index(*destination)] = states[index(*source)];
                 }
                 GpuOperation::ApplyEffect {
+                    kernel,
                     scope,
                     layer_index,
                     pass,
@@ -350,6 +353,12 @@ impl GpuFramePlan {
                         EffectScope::Layer => "layer effect source",
                         EffectScope::Global => "global effect source",
                     };
+                    if *kernel != kernel_for_operation(&pass.operation) {
+                        return Err(invalid(
+                            operation_index,
+                            "stores a kernel that does not match its effect operation",
+                        ));
+                    }
                     if states[index(*source)].value != Some(*expected_source_value) {
                         return Err(stale_value(
                             operation_index,
@@ -563,6 +572,7 @@ fn append_effect_chain(
             [source, auxiliary.unwrap_or(source)],
         );
         operations.push(GpuOperation::ApplyEffect {
+            kernel: kernel_for_operation(&pass.operation),
             scope,
             layer_index,
             effect_index,
@@ -1253,6 +1263,7 @@ mod tests {
         parameters_index: u32,
     ) -> GpuOperation {
         GpuOperation::ApplyEffect {
+            kernel: kernel_for_operation(&pass.operation),
             scope: EffectScope::Layer,
             layer_index: Some(layer_index),
             effect_index,
@@ -1495,6 +1506,10 @@ mod tests {
                 };
                 assert_eq!(*recorded_index, pass_index);
                 assert_eq!(*pass, passes[pass_index]);
+                assert_eq!(
+                    operation_kernel(operation),
+                    kernel_for_operation(&passes[pass_index].operation)
+                );
                 assert_ne!(source, destination);
                 if pass_index > 0 {
                     let GpuOperation::ApplyEffect {
@@ -1508,6 +1523,13 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn operation_kernel(operation: &GpuOperation) -> EffectKernel {
+        let GpuOperation::ApplyEffect { kernel, .. } = operation else {
+            unreachable!("effect chain only constructs effect operations")
+        };
+        *kernel
     }
 
     #[test]
@@ -1577,6 +1599,7 @@ mod tests {
                     parameters_index: 0,
                 },
                 GpuOperation::ApplyEffect {
+                    kernel: EffectKernel::Vignette,
                     scope: EffectScope::Global,
                     layer_index: Some(0),
                     effect_index: 0,
@@ -1817,5 +1840,34 @@ mod tests {
             _ => true,
         }));
         plan.validate(0).expect("global retained values stay live");
+    }
+
+    #[test]
+    fn validation_rejects_kernel_pass_mismatch() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 4,
+            height: 4,
+            layers: vec![],
+            post_effects: vec![EvaluatedEffect::GaussianBlur { radius: 2.0 }],
+            evaluated_track_count: 0,
+        };
+        let mut plan = GpuFramePlan::build(&frame);
+        let operation = plan
+            .operations
+            .iter_mut()
+            .find_map(|operation| match operation {
+                GpuOperation::ApplyEffect { kernel, .. } => Some(kernel),
+                _ => None,
+            })
+            .expect("Gaussian plan has an effect operation");
+        *operation = EffectKernel::Composite;
+        assert_eq!(
+            plan.validate(0)
+                .expect_err("mismatched kernel must be rejected")
+                .code,
+            "WGPU-FRAME-PLAN"
+        );
     }
 }

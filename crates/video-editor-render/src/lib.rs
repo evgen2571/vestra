@@ -12,6 +12,7 @@
 )]
 
 pub use video_editor_core::{Category, Diagnostic, Severity, animation, domain};
+mod kernel;
 pub mod plan {
     #[cfg(not(test))]
     pub use video_editor_core::plan::*;
@@ -286,19 +287,32 @@ pub fn create_backend(
     plan: &plan::RenderPlan,
     decoded: &std::sync::Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
+    #[cfg(feature = "cpu")]
+    if matches!(preference, RenderBackendPreference::Cpu) {
+        kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+    }
+
+    #[cfg(all(feature = "cpu", not(feature = "wgpu")))]
+    if matches!(preference, RenderBackendPreference::Auto) {
+        kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+    }
+
     #[cfg(feature = "wgpu")]
     if let Err(error) = wgpu::support::validate_plan(plan) {
         return match preference {
             RenderBackendPreference::Wgpu => Err(error),
             #[cfg(feature = "cpu")]
-            RenderBackendPreference::Auto => Ok((
-                Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
-                Some(BackendFallback {
-                    code: error.code,
-                    stage: "effect_capability".to_owned(),
-                    message: error.message,
-                }),
-            )),
+            RenderBackendPreference::Auto => {
+                kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+                Ok((
+                    Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
+                    Some(BackendFallback {
+                        code: error.code,
+                        stage: "effect_capability".to_owned(),
+                        message: error.message,
+                    }),
+                ))
+            }
             #[cfg(feature = "cpu")]
             RenderBackendPreference::Cpu => Ok((
                 Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),

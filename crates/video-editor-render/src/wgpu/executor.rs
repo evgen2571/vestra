@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::Diagnostic;
+use crate::{backend::RenderBackendKind, kernel::supports_kernel};
 
 use super::{
     frame_plan::{GpuFramePlan, GpuOperation, TextureSlot},
@@ -439,16 +440,33 @@ pub(super) fn encode_and_submit(
                 metrics.texture_copies += 1;
             }
             GpuOperation::ApplyEffect {
+                kernel,
                 source,
                 destination,
                 auxiliary,
                 parameters_index,
                 ..
             } => {
+                if !supports_kernel(RenderBackendKind::Wgpu, *kernel) {
+                    return Err(Diagnostic::error(
+                        "WGPU-UNSUPPORTED-KERNEL",
+                        crate::Category::Backend,
+                        format!("WGPU backend does not support effect kernel {kernel:?}"),
+                        "",
+                    ));
+                }
                 let group = bind_groups.effect(*source, *destination, *auxiliary)?;
+                let pipeline = pipelines.effect(*kernel).ok_or_else(|| {
+                    Diagnostic::error(
+                        "WGPU-UNSUPPORTED-KERNEL",
+                        crate::Category::Backend,
+                        format!("WGPU pipeline for effect kernel {kernel:?} is unavailable"),
+                        "",
+                    )
+                })?;
                 dispatch(
                     &mut encoder,
-                    &pipelines.effect,
+                    pipeline,
                     group,
                     parameters.offset(*parameters_index)?,
                     width,

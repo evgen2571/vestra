@@ -221,6 +221,129 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
     }
 }
 
+/// Conservatively lowers a compiled effect to its logical operations without
+/// evaluating any tracks. Backends use this for plan-time capability checks;
+/// the placeholder values are irrelevant to kernel selection.
+#[must_use]
+pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
+    let current = EffectResource::Current;
+    match effect {
+        CompiledEffect::ColourTransform { .. }
+        | CompiledEffect::Brightness { .. }
+        | CompiledEffect::Contrast { .. }
+        | CompiledEffect::Saturation { .. }
+        | CompiledEffect::Tint { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ApplyColourTransform {
+                transform: ColourTransform::default(),
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::GaussianBlur { .. } => EffectPassPlan::new(&[
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                current,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectResource::Temporary0,
+                current,
+            ),
+        ]),
+        CompiledEffect::Glow { .. } => EffectPassPlan::new(&[
+            EffectPass::new(
+                EffectOperation::HighlightExtract {
+                    threshold: 0.0,
+                    colour: [0; 4],
+                },
+                EffectResource::Original,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectResource::Temporary0,
+                EffectResource::Temporary1,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectResource::Temporary1,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::composite(CompositeMode::Additive, 1.0, EffectResource::Temporary0),
+        ]),
+        CompiledEffect::Sharpen { .. } => EffectPassPlan::new(&[
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectResource::Original,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectResource::Temporary0,
+                EffectResource::Temporary1,
+            ),
+            EffectPass::composite(CompositeMode::Unsharp, 1.0, EffectResource::Temporary1),
+        ]),
+        CompiledEffect::DirectionalBlur { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::DirectionalBlur {
+                radius: 1.0,
+                angle_degrees: 0.0,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::ZoomBlur { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ZoomBlur {
+                radius: 1.0,
+                samples: 2,
+                anchor: Point { x: 0.5, y: 0.5 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::ChromaticAberration { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ChromaticAberration {
+                amount: 1.0,
+                angle_degrees: 0.0,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::Vignette { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::Vignette {
+                amount: 1.0,
+                radius: 1.0,
+                softness: 1.0,
+                colour: [0; 4],
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::ColorAdjust { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ColorAdjust {
+                exposure: 0.0,
+                gamma: 1.0,
+                black_point: 0.0,
+                white_point: 1.0,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::MotionBlur { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::MotionBlur {
+                radius: 1.0,
+                angle_degrees: 0.0,
+                samples: 2,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::CameraShake { .. } => EffectPassPlan::new(&[]),
+    }
+}
+
 /// Expands an evaluated effect into its ordered logical rendering passes.
 /// Identity effects return no passes, allowing backends to skip work.
 #[must_use]

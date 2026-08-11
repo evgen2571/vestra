@@ -157,12 +157,12 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
     );
     for _ in 0..frame_plan.parameter_count {
         arena
-            .push(LayerParameters::zeroed())
+            .push(&LayerParameters::zeroed())
             .expect("every planned parameter record fits the prepared capacity");
     }
     assert_eq!(
         arena
-            .push(LayerParameters::zeroed())
+            .push(&LayerParameters::zeroed())
             .expect_err("one undeclared pass must exceed the prepared capacity")
             .code,
         "WGPU-PARAMETER-OVERFLOW"

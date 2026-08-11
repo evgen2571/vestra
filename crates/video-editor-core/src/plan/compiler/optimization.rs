@@ -99,6 +99,11 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
             intensity,
             ..
         } => normalize_track(threshold) + normalize_track(radius) + normalize_track(intensity),
+        CompiledEffect::Bloom {
+            threshold,
+            radius,
+            intensity,
+        } => normalize_track(threshold) + normalize_track(radius) + normalize_track(intensity),
         CompiledEffect::Vignette {
             amount,
             radius,
@@ -189,6 +194,9 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
                 && static_track(intensity)
                 && (gaussian_radius_is_identity(radius.base_value)
                     || effect_amount_is_identity(intensity.base_value))
+        }
+        CompiledEffect::Bloom { intensity, .. } => {
+            static_track(intensity) && effect_amount_is_identity(intensity.base_value)
         }
         CompiledEffect::Vignette { amount, .. } => {
             static_track(amount) && effect_amount_is_identity(amount.base_value)

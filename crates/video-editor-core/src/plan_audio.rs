@@ -77,6 +77,10 @@ pub enum CompiledAudioEffect {
         gain_db: f64,
         q: f64,
     },
+    BassBoost {
+        gain_db: f64,
+        frequency_hz: f64,
+    },
     PlaybackSpeed {
         rate: f64,
     },
@@ -86,6 +90,17 @@ impl CompiledAudioEffect {
     #[must_use]
     pub fn lower(self) -> AudioEffectPassPlan {
         match self {
+            Self::BassBoost { gain_db: 0.0, .. } => AudioEffectPassPlan::default(),
+            Self::BassBoost {
+                gain_db,
+                frequency_hz,
+            } => AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::ParametricEq {
+                    frequency_hz,
+                    gain_db,
+                    q: BASS_BOOST_Q,
+                }],
+            },
             Self::ParametricEq { gain_db: 0.0, .. } => AudioEffectPassPlan::default(),
             Self::ParametricEq {
                 frequency_hz,
@@ -118,6 +133,14 @@ fn compile_effect(effect: &AudioEffect) -> CompiledAudioEffect {
             gain_db: *gain_db,
             q: *q,
         },
+        AudioEffect::BassBoost {
+            gain_db,
+            frequency_hz,
+            ..
+        } => CompiledAudioEffect::BassBoost {
+            gain_db: *gain_db,
+            frequency_hz: *frequency_hz,
+        },
         AudioEffect::PlaybackSpeed { rate, .. } => {
             CompiledAudioEffect::PlaybackSpeed { rate: *rate }
         }
@@ -136,6 +159,7 @@ pub fn compile_effects(effects: &[AudioEffect]) -> AudioEffectPassPlan {
 /// Authoritative rate for the Master mixer and its future analysis consumers.
 /// Keep media graph conversion and analysis validation on this contract.
 pub const MASTER_AUDIO_SAMPLE_RATE: u32 = 48_000;
+pub const BASS_BOOST_Q: f64 = 0.8;
 pub const MASTER_AUDIO_NYQUIST_HZ: f64 = MASTER_AUDIO_SAMPLE_RATE as f64 / 2.0;
 
 #[must_use]
@@ -311,7 +335,7 @@ fn seconds_to_samples(seconds: f64) -> Option<u64> {
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
-    use super::{AudioEffectOperation, compile, compile_effects};
+    use super::{AudioEffectOperation, BASS_BOOST_Q, compile, compile_effects};
     use crate::project::{
         AudioClip, AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation,
         AudioGainKeyframe, AudioTimeline, AudioTrack,
@@ -491,6 +515,38 @@ mod tests {
                     q: 2.0,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn bass_boost_reuses_parametric_eq_and_zero_gain_is_identity() {
+        let effect = AudioEffect::BassBoost {
+            id: "bass".into(),
+            gain_db: 9.0,
+            frequency_hz: 90.0,
+        };
+        assert_eq!(
+            compile_effects(&[effect]).operations,
+            vec![AudioEffectOperation::ParametricEq {
+                frequency_hz: 90.0,
+                gain_db: 9.0,
+                q: BASS_BOOST_Q,
+            }]
+        );
+        let identity = AudioEffect::BassBoost {
+            id: "identity".into(),
+            gain_db: 0.0,
+            frequency_hz: 100.0,
+        };
+        assert!(compile_effects(&[identity]).operations.is_empty());
+        assert_eq!(
+            compile_effects(&[AudioEffect::BassBoost {
+                id: "duration".into(),
+                gain_db: 9.0,
+                frequency_hz: 90.0
+            }])
+            .transform_duration_samples(48_000),
+            Ok(48_000)
         );
     }
 

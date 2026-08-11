@@ -61,6 +61,13 @@ pub enum AudioEffect {
         gain_db: f64,
         q: f64,
     },
+    BassBoost {
+        id: String,
+        #[serde(default = "default_bass_boost_gain_db")]
+        gain_db: f64,
+        #[serde(default = "default_bass_boost_frequency_hz")]
+        frequency_hz: f64,
+    },
     PlaybackSpeed {
         id: String,
         rate: f64,
@@ -73,6 +80,9 @@ impl AudioEffect {
         match self {
             Self::ParametricEq { .. } => {
                 crate::audio_effect_definition::AudioEffectKind::ParametricEq.definition()
+            }
+            Self::BassBoost { .. } => {
+                crate::audio_effect_definition::AudioEffectKind::BassBoost.definition()
             }
             Self::PlaybackSpeed { .. } => {
                 crate::audio_effect_definition::AudioEffectKind::PlaybackSpeed.definition()
@@ -114,6 +124,14 @@ pub enum AudioFadeCurve {
 
 const fn unity_gain() -> f64 {
     1.0
+}
+
+const fn default_bass_boost_gain_db() -> f64 {
+    crate::audio_effect_definition::BASS_BOOST_DEFAULT_GAIN_DB
+}
+
+const fn default_bass_boost_frequency_hz() -> f64 {
+    crate::audio_effect_definition::BASS_BOOST_DEFAULT_FREQUENCY_HZ
 }
 
 const fn is_linear_fade_curve(curve: &AudioFadeCurve) -> bool {

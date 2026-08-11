@@ -79,8 +79,17 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         ]);
         let mut required = vec!["id", "type"];
         for parameter in descriptor.parameters {
-            properties.insert(parameter.name.into(), audio_parameter_schema(parameter));
-            required.push(parameter.name);
+            let mut property = audio_parameter_schema(parameter);
+            if let Some(default) = parameter.default {
+                property
+                    .as_object_mut()
+                    .expect("audio parameter schema is an object")
+                    .insert("default".into(), json!(default));
+            }
+            properties.insert(parameter.name.into(), property);
+            if parameter.default.is_none() {
+                required.push(parameter.name);
+            }
         }
         defs.insert(name.clone(), json!({"type":"object", "required":required, "additionalProperties":false, "properties":properties}));
         for scope in descriptor.scopes {
@@ -389,7 +398,12 @@ mod tests {
                     descriptor.id,
                     parameter.name
                 );
-                assert!(required.iter().any(|item| item == parameter.name));
+                if let Some(default) = parameter.default {
+                    assert!(!required.iter().any(|item| item == parameter.name));
+                    assert_eq!(properties[parameter.name]["default"], default);
+                } else {
+                    assert!(required.iter().any(|item| item == parameter.name));
+                }
                 if let Some(minimum) = parameter.minimum {
                     let key = if parameter.minimum_exclusive {
                         "exclusiveMinimum"

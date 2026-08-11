@@ -240,6 +240,11 @@ pub enum CompiledEffect {
         intensity: CompiledScalarProperty,
         colour: [u8; 4],
     },
+    Bloom {
+        threshold: CompiledScalarProperty,
+        radius: CompiledScalarProperty,
+        intensity: CompiledScalarProperty,
+    },
     ChromaticAberration {
         amount: CompiledScalarProperty,
         angle_degrees: CompiledScalarProperty,
@@ -294,6 +299,7 @@ impl CompiledEffect {
             }
             Self::ZoomBlur { .. } => crate::effect_definition::VisualEffectKind::ZoomBlur,
             Self::Glow { .. } => crate::effect_definition::VisualEffectKind::Glow,
+            Self::Bloom { .. } => crate::effect_definition::VisualEffectKind::Bloom,
             Self::ChromaticAberration { .. } => {
                 crate::effect_definition::VisualEffectKind::ChromaticAberration
             }
@@ -355,6 +361,15 @@ impl CompiledEffect {
                 visit(ScalarPropertyTarget::GlowThreshold, threshold);
                 visit(ScalarPropertyTarget::GlowRadius, radius);
                 visit(ScalarPropertyTarget::GlowIntensity, intensity);
+            }
+            Self::Bloom {
+                threshold,
+                radius,
+                intensity,
+            } => {
+                visit(ScalarPropertyTarget::BloomThreshold, threshold);
+                visit(ScalarPropertyTarget::BloomRadius, radius);
+                visit(ScalarPropertyTarget::BloomIntensity, intensity);
             }
             Self::ChromaticAberration {
                 amount,

@@ -54,6 +54,10 @@ class PlaybackSpeedAudioEffect(AudioEffect):
     pass
 
 
+class BassBoostAudioEffect(AudioEffect):
+    pass
+
+
 class AudioEffectCollection:
     __slots__ = ("_owner", "_ids", "_scope", "_scope_kind", "_items")
 
@@ -71,12 +75,17 @@ class AudioEffectCollection:
         if self._scope_kind not in definition["scopes"]:
             raise ValueError(f"audio effect {effect_type!r} is not valid at this scope")
         descriptors = {str(parameter["name"]): parameter for parameter in definition["parameters"]}
-        if set(parameters) != set(descriptors):
-            unknown = set(parameters) - set(descriptors)
-            missing = set(descriptors) - set(parameters)
+        values = dict(parameters)
+        for name, descriptor in descriptors.items():
+            if name not in values and descriptor.get("default") is not None:
+                values[name] = descriptor["default"]
+        if set(values) != set(descriptors):
+            unknown = set(values) - set(descriptors)
+            missing = set(descriptors) - set(values)
             raise TypeError(f"invalid parameters for {effect_type!r}: unknown={unknown}, missing={missing}")
+        raw_values = values
         values: dict[str, float] = {}
-        for name, raw in parameters.items():
+        for name, raw in raw_values.items():
             value = _number(raw, name)  # type: ignore[arg-type]
             descriptor = descriptors[name]
             minimum, maximum = descriptor["minimum"], descriptor["maximum"]
@@ -99,3 +108,6 @@ class AudioEffectCollection:
 
     def add_playback_speed(self, *, rate: int | float, id: str | None = None) -> PlaybackSpeedAudioEffect:
         return self._add("playback_speed", {"rate": rate}, id, PlaybackSpeedAudioEffect)  # type: ignore[return-value]
+
+    def add_bass_boost(self, *, gain_db: int | float = 6.0, frequency_hz: int | float = 100.0, id: str | None = None) -> BassBoostAudioEffect:
+        return self._add("bass_boost", {"gain_db": gain_db, "frequency_hz": frequency_hz}, id, BassBoostAudioEffect)  # type: ignore[return-value]

@@ -402,6 +402,7 @@ fn validate_audio_effects(
     for (index, effect) in effects.iter().enumerate() {
         let id = match effect {
             crate::project::AudioEffect::ParametricEq { id, .. }
+            | crate::project::AudioEffect::BassBoost { id, .. }
             | crate::project::AudioEffect::PlaybackSpeed { id, .. } => id,
         };
         if id.trim().is_empty() {
@@ -451,6 +452,15 @@ fn validate_audio_effects(
                         continue;
                     }
                 }
+                crate::project::AudioEffect::BassBoost {
+                    gain_db,
+                    frequency_hz,
+                    ..
+                } => match parameter.name {
+                    "gain_db" => *gain_db,
+                    "frequency_hz" => *frequency_hz,
+                    _ => continue,
+                },
             };
             if !parameter.accepts_number(value) {
                 errors.push(Diagnostic::error(

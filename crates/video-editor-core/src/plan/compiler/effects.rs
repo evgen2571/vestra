@@ -85,6 +85,16 @@ pub(super) fn compile(
                 )
             })?,
         },
+        crate::project::Effect::Bloom {
+            threshold,
+            radius,
+            intensity,
+            ..
+        } => crate::plan::CompiledEffect::Bloom {
+            threshold: scalar!(threshold, ScalarPropertyTarget::BloomThreshold),
+            radius: scalar!(radius, ScalarPropertyTarget::BloomRadius),
+            intensity: scalar!(intensity, ScalarPropertyTarget::BloomIntensity),
+        },
         crate::project::Effect::ChromaticAberration {
             amount,
             angle_degrees,

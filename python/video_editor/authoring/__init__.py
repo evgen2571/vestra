@@ -3,7 +3,7 @@
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack
-from .audio_effects import AudioEffect, AudioEffectCollection, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
+from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEffect, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
@@ -11,7 +11,7 @@ from .presets import Preset, PresetCollection
 from .timeline import Timeline
 from .errors import AuthoringError
 from .effects import (
-    ActiveInterval, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
+    ActiveInterval, BloomEffect, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
     ClipEffectCollection, ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect,
     Effect, GenericEffect, GaussianBlurEffect, GlowEffect, MotionBlurEffect, PostEffectCollection,
     SaturationEffect, SharpenEffect, TintEffect, VignetteEffect, ZoomBlurDirection,
@@ -48,10 +48,12 @@ __all__ = [
     "AudioTrack",
     "AudioEffect",
     "AudioEffectCollection",
+    "BassBoostAudioEffect",
     "ParametricEqAudioEffect",
     "PlaybackSpeedAudioEffect",
     "BlendMode",
     "BrightnessEffect",
+    "BloomEffect",
     "CameraShakeEffect",
     "ChromaticAberrationEffect",
     "ClipEffectCollection",

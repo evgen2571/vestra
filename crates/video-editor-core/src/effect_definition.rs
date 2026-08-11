@@ -91,6 +91,9 @@ pub enum ScalarPropertyTarget {
     GlowThreshold,
     GlowRadius,
     GlowIntensity,
+    BloomThreshold,
+    BloomRadius,
+    BloomIntensity,
     ChromaticAberrationAmount,
     ChromaticAberrationAngleDegrees,
     VignetteAmount,
@@ -152,10 +155,12 @@ impl ScalarPropertyTarget {
                     },
                 }
             }
+            Self::BloomThreshold => Self::GlowThreshold.definition(),
             Self::GaussianBlurRadius
             | Self::DirectionalBlurRadius
             | Self::ZoomBlurRadius
             | Self::GlowRadius
+            | Self::BloomRadius
             | Self::ChromaticAberrationAmount
             | Self::MotionBlurMaxRadius => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange {
@@ -169,15 +174,17 @@ impl ScalarPropertyTarget {
                     max_exclusive: false,
                 },
             },
-            Self::GlowIntensity | Self::SharpenAmount => ScalarPropertyDefinition {
-                runtime_constraint: RuntimeRange { min: 0.0, max: 4.0 },
-                authored_validation: Range {
-                    min: Some(0.0),
-                    max: Some(4.0),
-                    min_exclusive: false,
-                    max_exclusive: false,
-                },
-            },
+            Self::GlowIntensity | Self::BloomIntensity | Self::SharpenAmount => {
+                ScalarPropertyDefinition {
+                    runtime_constraint: RuntimeRange { min: 0.0, max: 4.0 },
+                    authored_validation: Range {
+                        min: Some(0.0),
+                        max: Some(4.0),
+                        min_exclusive: false,
+                        max_exclusive: false,
+                    },
+                }
+            }
             Self::VignetteRadius => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange { min: 0.0, max: 2.0 },
                 authored_validation: Range {
@@ -428,6 +435,9 @@ impl ScalarPropertyTarget {
             Self::GlowThreshold => "threshold",
             Self::GlowRadius => "radius",
             Self::GlowIntensity => "intensity",
+            Self::BloomThreshold => "threshold",
+            Self::BloomRadius => "radius",
+            Self::BloomIntensity => "intensity",
             Self::ChromaticAberrationAmount => "amount",
             Self::ChromaticAberrationAngleDegrees => "angle_degrees",
             Self::VignetteAmount => "amount",
@@ -614,6 +624,12 @@ visual_effect_catalog! {
         temporal: FromProperties, retains_original: true,
         scalar_properties: [GlowThreshold, GlowRadius, GlowIntensity], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowIntensity), EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour)]
     },
+    Bloom => {
+        id: "bloom",
+        class: Advanced, scope: ClipAndGlobal, passes: 4,
+        temporal: FromProperties, retains_original: true,
+        scalar_properties: [BloomThreshold, BloomRadius, BloomIntensity], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::BloomThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::BloomRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::BloomIntensity)]
+    },
     ChromaticAberration => {
         id: "chromatic_aberration",
         class: Advanced, scope: ClipAndGlobal, passes: 1,
@@ -672,6 +688,7 @@ impl crate::project::Effect {
             Self::DirectionalBlur { .. } => VisualEffectKind::DirectionalBlur,
             Self::ZoomBlur { .. } => VisualEffectKind::ZoomBlur,
             Self::Glow { .. } => VisualEffectKind::Glow,
+            Self::Bloom { .. } => VisualEffectKind::Bloom,
             Self::ChromaticAberration { .. } => VisualEffectKind::ChromaticAberration,
             Self::Vignette { .. } => VisualEffectKind::Vignette,
             Self::Sharpen { .. } => VisualEffectKind::Sharpen,

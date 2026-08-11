@@ -46,6 +46,12 @@ pub enum Effect {
         intensity: ScalarProperty,
         colour: String,
     },
+    Bloom {
+        id: String,
+        threshold: ScalarProperty,
+        radius: ScalarProperty,
+        intensity: ScalarProperty,
+    },
     ChromaticAberration {
         id: String,
         amount: ScalarProperty,
@@ -108,6 +114,7 @@ impl Effect {
             | Self::DirectionalBlur { id, .. }
             | Self::ZoomBlur { id, .. }
             | Self::Glow { id, .. }
+            | Self::Bloom { id, .. }
             | Self::ChromaticAberration { id, .. }
             | Self::Vignette { id, .. }
             | Self::Sharpen { id, .. }

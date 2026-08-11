@@ -147,7 +147,7 @@ def test_playback_speed_typed_and_generic_authoring_are_clip_only() -> None:
 
 def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     definitions = available_audio_effects()
-    assert [definition["id"] for definition in definitions] == ["parametric_eq", "playback_speed"]
+    assert [definition["id"] for definition in definitions] == ["parametric_eq", "bass_boost", "playback_speed"]
     definition = audio_effect_definition("parametric_eq")
     assert set(definition["scopes"]) == {"clip", "track", "master"}
     assert definition["duration_behavior"] == "preserve"
@@ -161,6 +161,25 @@ def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     assert speed["duration_behavior"] == "transform"
     assert speed["parameters"][0]["minimum"] == 0.25
     assert speed["parameters"][0]["maximum"] == 4.0
+    bass = audio_effect_definition("bass_boost")
+    assert bass["scopes"] == ("clip", "track", "master")
+    assert bass["duration_behavior"] == "preserve"
+    assert [parameter["default"] for parameter in bass["parameters"]] == [6.0, 100.0]
+
+
+def test_bass_boost_typed_and_generic_defaults_share_canonicalization() -> None:
+    project_builder = builder()
+    asset = project_builder.add_audio_asset("tone.wav")
+    clip = project_builder.audio.add_track().add_clip(asset=asset, start=0)
+    typed = clip.effects.add_bass_boost()
+    generic = clip.effects.add_effect("bass_boost")
+    typed_data = typed.to_canonical()
+    generic_data = generic.to_canonical()
+    typed_data.pop("id")
+    generic_data.pop("id")
+    assert typed_data == generic_data
+    assert typed.to_canonical()["gain_db"] == 6.0
+    assert typed.to_canonical()["frequency_hz"] == 100.0
 
 
 def test_generic_audio_authoring_smoke_covers_every_registered_effect() -> None:

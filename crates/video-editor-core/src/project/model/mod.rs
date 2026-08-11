@@ -155,4 +155,55 @@ mod tests {
         assert_eq!(legacy.timing().start, 0.0);
         assert_eq!(legacy.timing().duration, None);
     }
+
+    #[test]
+    fn bass_boost_serde_applies_defaults_and_preserves_explicit_values() {
+        let defaults: AudioEffect = serde_json::from_value(serde_json::json!({
+            "id": "bass", "type": "bass_boost"
+        }))
+        .expect("minimal Bass Boost JSON parses");
+        match &defaults {
+            AudioEffect::BassBoost {
+                id,
+                gain_db,
+                frequency_hz,
+            } => {
+                assert_eq!(id, "bass");
+                assert_eq!(
+                    *gain_db,
+                    crate::audio_effect_definition::BASS_BOOST_DEFAULT_GAIN_DB
+                );
+                assert_eq!(
+                    *frequency_hz,
+                    crate::audio_effect_definition::BASS_BOOST_DEFAULT_FREQUENCY_HZ
+                );
+            }
+            _ => panic!("minimal JSON did not deserialize as Bass Boost"),
+        }
+        assert_eq!(
+            serde_json::to_value(&defaults).expect("defaulted effect serializes"),
+            serde_json::json!({
+                "id": "bass",
+                "type": "bass_boost",
+                "gain_db": crate::audio_effect_definition::BASS_BOOST_DEFAULT_GAIN_DB,
+                "frequency_hz": crate::audio_effect_definition::BASS_BOOST_DEFAULT_FREQUENCY_HZ
+            })
+        );
+
+        let explicit: AudioEffect = serde_json::from_value(serde_json::json!({
+            "id": "bass", "type": "bass_boost", "gain_db": 9.0, "frequency_hz": 90.0
+        }))
+        .expect("explicit Bass Boost JSON parses");
+        match explicit {
+            AudioEffect::BassBoost {
+                gain_db,
+                frequency_hz,
+                ..
+            } => {
+                assert_eq!(gain_db, 9.0);
+                assert_eq!(frequency_hz, 90.0);
+            }
+            _ => panic!("explicit JSON did not deserialize as Bass Boost"),
+        }
+    }
 }

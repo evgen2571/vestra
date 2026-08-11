@@ -447,6 +447,29 @@ class GlowEffect(Effect):
         })
 
 
+class BloomEffect(Effect):
+    __slots__ = ("_threshold", "_radius", "_intensity")
+
+    @classmethod
+    def _create(cls, owner: _Owner, scope: object, identifier: str, threshold: int | float, radius: int | float, intensity: int | float) -> Self:
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, "bloom")
+        instance._threshold = ModulatableScalarTrack._create(owner, threshold)
+        instance._radius = ModulatableScalarTrack._create(owner, radius)
+        instance._intensity = ModulatableScalarTrack._create(owner, intensity)
+        return instance
+
+    @property
+    def threshold(self) -> ModulatableScalarTrack: return self._threshold
+    @property
+    def radius(self) -> ModulatableScalarTrack: return self._radius
+    @property
+    def intensity(self) -> ModulatableScalarTrack: return self._intensity
+
+    def to_canonical(self) -> dict[str, object]:
+        return _canonical_typed_effect(self, {"threshold": self.threshold, "radius": self.radius, "intensity": self.intensity})
+
+
 class ChromaticAberrationEffect(Effect):
     __slots__ = ("_amount", "_angle_degrees")
     _amount: ModulatableScalarTrack
@@ -703,6 +726,7 @@ class _EffectCollection:
     def add_directional_blur(self, *, radius: int | float, angle_degrees: int | float, id: str | None = None) -> DirectionalBlurEffect: return self._append(DirectionalBlurEffect._create, id, radius, angle_degrees)
     def add_zoom_blur(self, *, radius: int | float, samples: int, anchor: Point, direction: ZoomBlurDirection = ZoomBlurDirection.CENTERED, id: str | None = None) -> ZoomBlurEffect: return self._append(ZoomBlurEffect._create, id, radius, samples, anchor, direction)
     def add_glow(self, *, threshold: int | float, radius: int | float, intensity: int | float, colour: Color | str, id: str | None = None) -> GlowEffect: return self._append(GlowEffect._create, id, threshold, radius, intensity, colour)
+    def add_bloom(self, *, threshold: int | float, radius: int | float, intensity: int | float, id: str | None = None) -> BloomEffect: return self._append(BloomEffect._create, id, threshold, radius, intensity)
     def add_chromatic_aberration(self, *, amount: int | float, angle_degrees: int | float, id: str | None = None) -> ChromaticAberrationEffect: return self._append(ChromaticAberrationEffect._create, id, amount, angle_degrees)
     def add_vignette(self, *, amount: int | float, radius: int | float, softness: int | float, colour: Color | str, id: str | None = None) -> VignetteEffect: return self._append(VignetteEffect._create, id, amount, radius, softness, colour)
     def add_sharpen(self, *, amount: int | float, radius: int | float, id: str | None = None) -> SharpenEffect: return self._append(SharpenEffect._create, id, amount, radius)

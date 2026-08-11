@@ -125,6 +125,12 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                         kind: "playback_speed".to_owned(),
                     }
                 }
+                video_editor_core::project::AudioEffect::BassBoost { id, .. } => {
+                    InspectAudioEffect {
+                        id: id.clone(),
+                        kind: "bass_boost".to_owned(),
+                    }
+                }
             })
             .collect::<Vec<_>>()
     };

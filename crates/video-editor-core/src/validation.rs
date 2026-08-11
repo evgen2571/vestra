@@ -398,7 +398,27 @@ fn validate_audio_effects(
     path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
+    let mut ids = BTreeSet::new();
     for (index, effect) in effects.iter().enumerate() {
+        let id = match effect {
+            crate::project::AudioEffect::ParametricEq { id, .. }
+            | crate::project::AudioEffect::PlaybackSpeed { id, .. } => id,
+        };
+        if id.trim().is_empty() {
+            errors.push(Diagnostic::error(
+                "MVP-AUDIO-EFFECT-ID",
+                Category::Semantic,
+                "audio effect ID must not be empty",
+                format!("{path}/{index}/id"),
+            ));
+        } else if !ids.insert(id) {
+            errors.push(Diagnostic::error(
+                "MVP-AUDIO-EFFECT-ID",
+                Category::Semantic,
+                "audio effect IDs must be unique within their collection",
+                format!("{path}/{index}/id"),
+            ));
+        }
         let definition = effect.definition();
         if !audio_effect_supports_scope(definition, scope) {
             errors.push(Diagnostic::error(
@@ -424,6 +444,13 @@ fn validate_audio_effects(
                     "q" => *q,
                     _ => continue,
                 },
+                crate::project::AudioEffect::PlaybackSpeed { rate, .. } => {
+                    if parameter.name == "rate" {
+                        *rate
+                    } else {
+                        continue;
+                    }
+                }
             };
             if !parameter.accepts_number(value) {
                 errors.push(Diagnostic::error(
@@ -983,5 +1010,59 @@ mod tests {
             definition,
             AudioEffectScope::Track
         ));
+    }
+
+    #[test]
+    fn audio_effect_ids_are_validated_deterministically_per_collection() {
+        let invalid = project(json!({
+            "effects": [
+                {"id": "", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1},
+                {"id": "eq", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1},
+                {"id": "eq", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}
+            ],
+            "tracks": [{
+                "id": "track", "effects": [{"id": "", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}, {"id": "track-eq", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}, {"id": "track-eq", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}],
+                "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}, {"id": "clip-eq", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}, {"id": "clip-eq", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}]}]
+            }]
+        }));
+        assert_eq!(
+            codes(&invalid)
+                .iter()
+                .filter(|code| *code == "MVP-AUDIO-EFFECT-ID")
+                .count(),
+            6
+        );
+
+        let allowed = project(json!({
+            "tracks": [
+                {"id": "track-a", "clips": [{"id": "clip-a", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "same", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}]}]},
+                {"id": "track-b", "clips": [{"id": "clip-b", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "same", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}]}]}
+            ]
+        }));
+        assert!(!has(&allowed, "MVP-AUDIO-EFFECT-ID"));
+    }
+
+    #[test]
+    fn playback_speed_is_clip_only_and_uses_declared_bounds() {
+        let valid = project(
+            json!({"tracks": [{"id": "track", "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "speed", "type": "playback_speed", "rate": 0.25}]}]}]}),
+        );
+        assert!(!has(&valid, "MVP-AUDIO-EFFECT-SCOPE"));
+        let invalid = project(
+            json!({"effects": [{"id": "speed", "type": "playback_speed", "rate": 2}], "tracks": [{"id": "track", "effects": [{"id": "speed-track", "type": "playback_speed", "rate": 2}], "clips": []}]}),
+        );
+        assert_eq!(
+            codes(&invalid)
+                .iter()
+                .filter(|code| *code == "MVP-AUDIO-EFFECT-SCOPE")
+                .count(),
+            2
+        );
+        for rate in [0.0, 0.249, 4.001] {
+            let out_of_range = project(json!({
+                "tracks": [{"id": "track", "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "speed", "type": "playback_speed", "rate": rate}]}]}]
+            }));
+            assert!(has(&out_of_range, "MVP-AUDIO-EFFECT-PARAMETER"));
+        }
     }
 }

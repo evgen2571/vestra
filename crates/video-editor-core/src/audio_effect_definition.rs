@@ -1,4 +1,4 @@
-//! Compile-time metadata for authored duration-preserving audio effects.
+//! Compile-time metadata for authored audio effects.
 
 use serde::Serialize;
 
@@ -16,6 +16,7 @@ pub enum AudioEffectScope {
 #[serde(rename_all = "snake_case")]
 pub enum AudioEffectDurationBehavior {
     Preserve,
+    Transform,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -66,10 +67,11 @@ pub struct AudioEffectDefinition {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AudioEffectKind {
     ParametricEq,
+    PlaybackSpeed,
 }
 
 impl AudioEffectKind {
-    pub const ALL: &'static [Self] = &[Self::ParametricEq];
+    pub const ALL: &'static [Self] = &[Self::ParametricEq, Self::PlaybackSpeed];
 
     #[must_use]
     pub const fn definition(self) -> AudioEffectDefinition {
@@ -113,6 +115,24 @@ impl AudioEffectKind {
                     parameters: PARAMETERS,
                 }
             }
+            Self::PlaybackSpeed => {
+                static SCOPES: &[AudioEffectScope] = &[AudioEffectScope::Clip];
+                static PARAMETERS: &[AudioEffectParameterDescriptor] =
+                    &[AudioEffectParameterDescriptor {
+                        name: "rate",
+                        kind: AudioEffectParameterKind::Number,
+                        minimum: Some(0.25),
+                        maximum: Some(4.0),
+                        minimum_exclusive: false,
+                        maximum_exclusive: false,
+                    }];
+                AudioEffectDefinition {
+                    id: "playback_speed",
+                    scopes: SCOPES,
+                    duration_behavior: AudioEffectDurationBehavior::Transform,
+                    parameters: PARAMETERS,
+                }
+            }
         }
     }
 
@@ -120,6 +140,7 @@ impl AudioEffectKind {
     pub fn from_id(id: &str) -> Option<Self> {
         match id {
             "parametric_eq" => Some(Self::ParametricEq),
+            "playback_speed" => Some(Self::PlaybackSpeed),
             _ => None,
         }
     }

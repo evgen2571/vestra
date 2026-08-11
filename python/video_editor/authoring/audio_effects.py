@@ -1,4 +1,4 @@
-"""Registered, duration-preserving audio-effect authoring."""
+"""Descriptor-driven audio-effect authoring."""
 
 from __future__ import annotations
 
@@ -50,6 +50,10 @@ class ParametricEqAudioEffect(AudioEffect):
     pass
 
 
+class PlaybackSpeedAudioEffect(AudioEffect):
+    pass
+
+
 class AudioEffectCollection:
     __slots__ = ("_owner", "_ids", "_scope", "_scope_kind", "_items")
 
@@ -62,7 +66,7 @@ class AudioEffectCollection:
     @property
     def items(self) -> tuple[AudioEffect, ...]: return tuple(self._items)
 
-    def _add(self, effect_type: str, parameters: Mapping[str, object], identifier: str | None) -> AudioEffect:
+    def _add(self, effect_type: str, parameters: Mapping[str, object], identifier: str | None, effect_class: type[AudioEffect] = AudioEffect) -> AudioEffect:
         definition = audio_effect_definition(effect_type)
         if self._scope_kind not in definition["scopes"]:
             raise ValueError(f"audio effect {effect_type!r} is not valid at this scope")
@@ -83,7 +87,7 @@ class AudioEffectCollection:
                 raise ValueError(f"{name} is outside its authored range")
             values[name] = value
         effect_id = self._ids.allocate("audio-effect", scope=self._scope) if identifier is None else self._ids.reserve("audio-effect", identifier, scope=self._scope)
-        effect = ParametricEqAudioEffect._create(self._owner, effect_id, effect_type, values)
+        effect = effect_class._create(self._owner, effect_id, effect_type, values)
         self._items.append(effect)
         return effect
 
@@ -91,4 +95,7 @@ class AudioEffectCollection:
         return self._add(effect_type, parameters, id)
 
     def add_parametric_eq(self, *, frequency_hz: int | float, gain_db: int | float, q: int | float, id: str | None = None) -> ParametricEqAudioEffect:
-        return self._add("parametric_eq", {"frequency_hz": frequency_hz, "gain_db": gain_db, "q": q}, id)  # type: ignore[return-value]
+        return self._add("parametric_eq", {"frequency_hz": frequency_hz, "gain_db": gain_db, "q": q}, id, ParametricEqAudioEffect)  # type: ignore[return-value]
+
+    def add_playback_speed(self, *, rate: int | float, id: str | None = None) -> PlaybackSpeedAudioEffect:
+        return self._add("playback_speed", {"rate": rate}, id, PlaybackSpeedAudioEffect)  # type: ignore[return-value]

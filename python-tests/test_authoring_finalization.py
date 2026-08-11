@@ -3,6 +3,7 @@
 from copy import deepcopy
 from pathlib import Path
 import subprocess
+import wave
 
 import pytest
 
@@ -196,6 +197,31 @@ def test_native_inspection_resolves_visual_and_audio_automatic_duration() -> Non
     muted_report = video_editor.Editor().inspect(audio.build())
     assert muted_report.output.duration == 3.0
     assert muted_report.audio is not None
+
+
+@pytest.mark.parametrize(("rate", "expected_end"), [(2.0, 8.0), (0.5, 23.0)])
+def test_native_inspection_reports_processed_playback_speed_end(
+    tmp_path: Path, rate: float, expected_end: float,
+) -> None:
+    authored = builder()
+    source = tmp_path / "ten-seconds.wav"
+    with wave.open(str(source), "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(48_000)
+        output.writeframes(b"\0\0" * (48_000 * 10))
+    asset = authored.add_audio_asset(str(source))
+    clip = authored.audio.add_track(id="music").add_clip(
+        asset=asset, start=3.0, trim_end=10.0,
+    )
+    clip.effects.add_playback_speed(rate=rate)
+
+    report = video_editor.Editor().inspect(authored.build())
+
+    assert report.audio is not None
+    assert report.audio.tracks[0].clips[0].end == pytest.approx(expected_end)
+    assert report.audio.end == pytest.approx(expected_end)
+    assert report.output.duration == pytest.approx(expected_end)
 
 
 def test_muted_audio_serializes_but_cpu_video_has_no_audio_stream(tmp_path: Path) -> None:

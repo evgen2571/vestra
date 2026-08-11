@@ -4,6 +4,8 @@ use std::ops::{Deref, DerefMut};
 
 use super::{EvaluationContext, EvaluationError, ScalarSignalId};
 use crate::animation::Track;
+pub(crate) use crate::effect_definition::ScalarPropertyTarget;
+pub use crate::effect_definition::{ScalarPropertyConstraint, MIN_POSITIVE_PROPERTY_VALUE};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarModifierOperation {
@@ -16,103 +18,6 @@ pub enum ScalarModifierOperation {
 pub struct CompiledScalarModifier {
     pub operation: ScalarModifierOperation,
     pub signal: ScalarSignalId,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ScalarPropertyConstraint {
-    /// Accept any finite scalar value.
-    Finite,
-    /// Constrain the final property value to an inclusive interval.
-    ClosedRange { min: f64, max: f64 },
-    /// Zero is a valid value, but negative values are not.
-    NonNegative,
-    /// Values at or below the floor are promoted to the floor.
-    PositiveFloor { minimum: f64 },
-}
-
-/// The renderer-owned domain of each scalar target that may carry modifiers.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ScalarPropertyTarget {
-    BrightnessAmount,
-    ContrastAmount,
-    SaturationAmount,
-    TintAmount,
-    GaussianBlurRadius,
-    DirectionalBlurRadius,
-    DirectionalBlurAngleDegrees,
-    ZoomBlurRadius,
-    GlowThreshold,
-    GlowRadius,
-    GlowIntensity,
-    ChromaticAberrationAmount,
-    ChromaticAberrationAngleDegrees,
-    VignetteAmount,
-    VignetteRadius,
-    SharpenAmount,
-    SharpenRadius,
-    ColorAdjustExposure,
-    ColorAdjustGamma,
-    CameraShakePositionAmount,
-    CameraShakeRotationDegrees,
-    CameraShakeScaleAmount,
-    CameraShakeFrequency,
-    MotionBlurIntensity,
-    MotionBlurShutterAngle,
-    MotionBlurMaxRadius,
-    RotationDegrees,
-}
-
-impl ScalarPropertyTarget {
-    #[must_use]
-    pub(crate) const fn constraint(self) -> ScalarPropertyConstraint {
-        match self {
-            Self::BrightnessAmount
-            | Self::ContrastAmount
-            | Self::SaturationAmount
-            | Self::DirectionalBlurAngleDegrees
-            | Self::ChromaticAberrationAngleDegrees
-            | Self::RotationDegrees => ScalarPropertyConstraint::Finite,
-            Self::TintAmount | Self::GlowThreshold | Self::VignetteAmount => {
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 }
-            }
-            Self::GaussianBlurRadius
-            | Self::DirectionalBlurRadius
-            | Self::ZoomBlurRadius
-            | Self::GlowRadius
-            | Self::ChromaticAberrationAmount
-            | Self::MotionBlurMaxRadius => ScalarPropertyConstraint::ClosedRange {
-                min: 0.0,
-                max: 32.0,
-            },
-            Self::GlowIntensity | Self::SharpenAmount => {
-                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 4.0 }
-            }
-            Self::VignetteRadius => ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 2.0 },
-            Self::SharpenRadius => ScalarPropertyConstraint::ClosedRange {
-                min: 0.0,
-                max: 16.0,
-            },
-            Self::ColorAdjustExposure => ScalarPropertyConstraint::ClosedRange {
-                min: -8.0,
-                max: 8.0,
-            },
-            Self::ColorAdjustGamma => ScalarPropertyConstraint::ClosedRange {
-                min: MIN_POSITIVE_PROPERTY_VALUE,
-                max: 8.0,
-            },
-            Self::CameraShakePositionAmount
-            | Self::CameraShakeRotationDegrees
-            | Self::CameraShakeScaleAmount
-            | Self::MotionBlurIntensity => ScalarPropertyConstraint::NonNegative,
-            Self::CameraShakeFrequency => ScalarPropertyConstraint::PositiveFloor {
-                minimum: MIN_POSITIVE_PROPERTY_VALUE,
-            },
-            Self::MotionBlurShutterAngle => ScalarPropertyConstraint::ClosedRange {
-                min: 0.0,
-                max: 360.0,
-            },
-        }
-    }
 }
 
 impl ScalarPropertyConstraint {
@@ -128,9 +33,6 @@ impl ScalarPropertyConstraint {
         })
     }
 }
-
-/// The smallest renderer-meaningful strictly-positive visual scalar.
-pub const MIN_POSITIVE_PROPERTY_VALUE: f64 = 1e-6;
 
 /// A scalar in its authored/public unit, evaluated with separate local and project times.
 #[derive(Clone, Debug)]

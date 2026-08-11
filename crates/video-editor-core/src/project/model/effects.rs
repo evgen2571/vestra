@@ -93,6 +93,11 @@ pub enum Effect {
 
 impl Effect {
     #[must_use]
+    pub(crate) const fn definition(&self) -> crate::effect_definition::EffectDefinition {
+        self.kind().definition()
+    }
+
+    #[must_use]
     pub fn id(&self) -> &str {
         match self {
             Self::Brightness { id, .. }

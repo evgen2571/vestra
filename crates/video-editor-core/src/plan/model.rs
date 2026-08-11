@@ -10,6 +10,8 @@ use crate::{
     media::EncoderSettings,
 };
 
+pub use crate::effect_definition::EffectClass;
+
 #[derive(Clone, Debug)]
 pub struct RenderPlan {
     pub configured_output: PathBuf,
@@ -274,49 +276,61 @@ pub enum CompiledEffect {
     },
 }
 
-/// Phase-independent effect classification used by reporting and backend policy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EffectClass {
-    BasicColour,
-    Advanced,
-    Transform,
-}
-
 impl CompiledEffect {
     #[must_use]
-    pub const fn class(&self) -> EffectClass {
+    pub(crate) const fn kind(&self) -> crate::effect_definition::VisualEffectKind {
         match self {
-            Self::ColourTransform { .. }
-            | Self::Brightness { .. }
-            | Self::Contrast { .. }
-            | Self::Saturation { .. }
-            | Self::Tint { .. } => EffectClass::BasicColour,
-            Self::CameraShake { .. } => EffectClass::Transform,
-            Self::GaussianBlur { .. }
-            | Self::DirectionalBlur { .. }
-            | Self::ZoomBlur { .. }
-            | Self::Glow { .. }
-            | Self::ChromaticAberration { .. }
-            | Self::Vignette { .. }
-            | Self::Sharpen { .. }
-            | Self::ColorAdjust { .. }
-            | Self::MotionBlur { .. } => EffectClass::Advanced,
+            Self::ColourTransform { .. } => {
+                crate::effect_definition::VisualEffectKind::ColourTransform
+            }
+            Self::Brightness { .. } => crate::effect_definition::VisualEffectKind::Brightness,
+            Self::Contrast { .. } => crate::effect_definition::VisualEffectKind::Contrast,
+            Self::Saturation { .. } => crate::effect_definition::VisualEffectKind::Saturation,
+            Self::Tint { .. } => crate::effect_definition::VisualEffectKind::Tint,
+            Self::GaussianBlur { .. } => crate::effect_definition::VisualEffectKind::GaussianBlur,
+            Self::DirectionalBlur { .. } => {
+                crate::effect_definition::VisualEffectKind::DirectionalBlur
+            }
+            Self::ZoomBlur { .. } => crate::effect_definition::VisualEffectKind::ZoomBlur,
+            Self::Glow { .. } => crate::effect_definition::VisualEffectKind::Glow,
+            Self::ChromaticAberration { .. } => {
+                crate::effect_definition::VisualEffectKind::ChromaticAberration
+            }
+            Self::Vignette { .. } => crate::effect_definition::VisualEffectKind::Vignette,
+            Self::Sharpen { .. } => crate::effect_definition::VisualEffectKind::Sharpen,
+            Self::ColorAdjust { .. } => crate::effect_definition::VisualEffectKind::ColorAdjust,
+            Self::CameraShake { .. } => crate::effect_definition::VisualEffectKind::CameraShake,
+            Self::MotionBlur { .. } => crate::effect_definition::VisualEffectKind::MotionBlur,
         }
     }
 
     #[must_use]
-    pub fn keyframe_count(&self) -> u64 {
+    pub(crate) const fn definition(&self) -> crate::effect_definition::EffectDefinition {
+        self.kind().definition()
+    }
+
+    #[must_use]
+    pub const fn class(&self) -> EffectClass {
+        self.definition().class
+    }
+
+    pub(crate) fn for_each_scalar_property(
+        &self,
+        mut visitor: impl FnMut(&CompiledScalarProperty),
+    ) {
+        let mut visited = 0;
+        let mut visit = |property: &CompiledScalarProperty| {
+            visited += 1;
+            visitor(property);
+        };
         match self {
-            Self::ColourTransform { .. } => 0,
-            Self::Brightness { amount } => amount.authored_track.keyframes.len() as u64,
-            Self::Contrast { amount }
+            Self::ColourTransform { .. } => {}
+            Self::Brightness { amount }
+            | Self::Contrast { amount }
             | Self::Saturation { amount }
             | Self::Tint { amount, .. }
             | Self::GaussianBlur { radius: amount }
-            | Self::ZoomBlur { radius: amount, .. } => amount.authored_keyframe_count() as u64,
-            Self::Sharpen { amount, radius } => {
-                amount.authored_keyframe_count() as u64 + radius.authored_keyframe_count() as u64
-            }
+            | Self::ZoomBlur { radius: amount, .. } => visit(amount),
             Self::DirectionalBlur {
                 radius,
                 angle_degrees,
@@ -325,8 +339,8 @@ impl CompiledEffect {
                 amount: radius,
                 angle_degrees,
             } => {
-                radius.authored_keyframe_count() as u64
-                    + angle_degrees.authored_keyframe_count() as u64
+                visit(radius);
+                visit(angle_degrees);
             }
             Self::Glow {
                 threshold,
@@ -334,30 +348,23 @@ impl CompiledEffect {
                 intensity,
                 ..
             } => {
-                threshold.authored_keyframe_count() as u64
-                    + radius.authored_keyframe_count() as u64
-                    + intensity.authored_keyframe_count() as u64
+                visit(threshold);
+                visit(radius);
+                visit(intensity);
             }
-            Self::Vignette {
-                amount,
-                radius,
-                softness,
-                ..
-            } => {
-                amount.authored_keyframe_count() as u64
-                    + radius.authored_keyframe_count() as u64
-                    + softness.keyframes.len() as u64
+            Self::Vignette { amount, radius, .. } => {
+                visit(amount);
+                visit(radius);
+            }
+            Self::Sharpen { amount, radius } => {
+                visit(amount);
+                visit(radius);
             }
             Self::ColorAdjust {
-                exposure,
-                gamma,
-                black_point,
-                white_point,
+                exposure, gamma, ..
             } => {
-                exposure.authored_keyframe_count() as u64
-                    + gamma.authored_keyframe_count() as u64
-                    + black_point.keyframes.len() as u64
-                    + white_point.keyframes.len() as u64
+                visit(exposure);
+                visit(gamma);
             }
             Self::CameraShake {
                 position_amount,
@@ -366,10 +373,10 @@ impl CompiledEffect {
                 frequency,
                 ..
             } => {
-                position_amount.authored_keyframe_count() as u64
-                    + rotation_degrees.authored_keyframe_count() as u64
-                    + scale_amount.authored_keyframe_count() as u64
-                    + frequency.authored_keyframe_count() as u64
+                visit(position_amount);
+                visit(rotation_degrees);
+                visit(scale_amount);
+                visit(frequency);
             }
             Self::MotionBlur {
                 intensity,
@@ -377,33 +384,49 @@ impl CompiledEffect {
                 max_radius,
                 ..
             } => {
-                intensity.authored_keyframe_count() as u64
-                    + shutter_angle.authored_keyframe_count() as u64
-                    + max_radius.authored_keyframe_count() as u64
+                visit(intensity);
+                visit(shutter_angle);
+                visit(max_radius);
             }
         }
+        debug_assert_eq!(visited, self.definition().scalar_properties.len());
+    }
+
+    pub(crate) fn for_each_plain_track(&self, mut visitor: impl FnMut(&Track<f64>)) {
+        let mut visited = 0;
+        let mut visit = |track: &Track<f64>| {
+            visited += 1;
+            visitor(track);
+        };
+        match self {
+            Self::Vignette { softness, .. } => visit(softness),
+            Self::ColorAdjust {
+                black_point,
+                white_point,
+                ..
+            } => {
+                visit(black_point);
+                visit(white_point);
+            }
+            _ => {}
+        }
+        debug_assert_eq!(visited, self.definition().plain_track_count);
+    }
+
+    #[must_use]
+    pub fn keyframe_count(&self) -> u64 {
+        let mut count = 0;
+        self.for_each_scalar_property(|property| {
+            count += property.authored_keyframe_count() as u64;
+        });
+        self.for_each_plain_track(|track| count += track.keyframes.len() as u64);
+        count
     }
 
     /// Conservative logical pass count before effect tracks are evaluated.
     #[must_use]
     pub const fn estimated_pass_count(&self) -> usize {
-        match self {
-            Self::GaussianBlur { .. } => 2,
-            Self::Glow { .. } => 4,
-            Self::Sharpen { .. } => 3,
-            Self::CameraShake { .. } => 0,
-            Self::ColourTransform { .. }
-            | Self::Brightness { .. }
-            | Self::Contrast { .. }
-            | Self::Saturation { .. }
-            | Self::Tint { .. }
-            | Self::DirectionalBlur { .. }
-            | Self::ZoomBlur { .. }
-            | Self::ChromaticAberration { .. }
-            | Self::Vignette { .. }
-            | Self::ColorAdjust { .. }
-            | Self::MotionBlur { .. } => 1,
-        }
+        self.definition().estimated_pass_count
     }
 }
 
@@ -463,5 +486,84 @@ mod tests {
         assert!(effect.active_at(10));
         assert!(effect.active_at(19));
         assert!(!effect.active_at(20));
+    }
+
+    #[test]
+    fn keyframe_count_visits_scalar_and_plain_tracks() {
+        let keyframe = |time| crate::animation::Keyframe {
+            time,
+            value: 1.0,
+            interpolation: crate::animation::Interpolation::Linear,
+        };
+        let vignette = CompiledEffect::Vignette {
+            amount: CompiledScalarProperty::authored(Track::new(0.5)),
+            radius: CompiledScalarProperty::authored(Track {
+                base_value: 1.0,
+                keyframes: vec![keyframe(1)],
+            }),
+            softness: Track {
+                base_value: 1.0,
+                keyframes: vec![keyframe(2)],
+            },
+            colour: [0, 0, 0, 255],
+        };
+        assert_eq!(vignette.keyframe_count(), 2);
+
+        let colour_adjust = CompiledEffect::ColorAdjust {
+            exposure: CompiledScalarProperty::authored(Track::new(0.0)),
+            gamma: CompiledScalarProperty::authored(Track::new(1.0)),
+            black_point: Track {
+                base_value: 0.0,
+                keyframes: vec![keyframe(1)],
+            },
+            white_point: Track {
+                base_value: 1.0,
+                keyframes: vec![keyframe(2), keyframe(3)],
+            },
+        };
+        assert_eq!(colour_adjust.keyframe_count(), 3);
+    }
+
+    #[test]
+    fn catalog_keeps_effect_pass_estimates() {
+        let scalar = |value| CompiledScalarProperty::authored(Track::new(value));
+        assert_eq!(
+            CompiledEffect::GaussianBlur {
+                radius: scalar(2.0),
+            }
+            .estimated_pass_count(),
+            2
+        );
+        assert_eq!(
+            CompiledEffect::Glow {
+                threshold: scalar(0.5),
+                radius: scalar(2.0),
+                intensity: scalar(1.0),
+                colour: [0, 0, 0, 255],
+            }
+            .estimated_pass_count(),
+            4
+        );
+        assert_eq!(
+            CompiledEffect::Sharpen {
+                amount: scalar(1.0),
+                radius: scalar(2.0),
+            }
+            .estimated_pass_count(),
+            3
+        );
+        assert_eq!(
+            CompiledEffect::CameraShake {
+                position_amount: scalar(0.0),
+                rotation_degrees: scalar(0.0),
+                scale_amount: scalar(0.0),
+                frequency: scalar(1.0),
+                seed: 0,
+                attack: 0.0,
+                decay: 1.0,
+            }
+            .estimated_pass_count(),
+            0
+        );
     }
 }

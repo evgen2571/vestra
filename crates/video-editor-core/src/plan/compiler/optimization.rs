@@ -270,53 +270,17 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
 }
 
 pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
-    let dynamic = effect_has_modifiers(effect)
-        || match effect {
-            CompiledEffect::ColourTransform { .. } => false,
-            CompiledEffect::Brightness { amount } => {
-                amount.has_modifiers() || !static_track(&amount.authored_track)
-            }
-            CompiledEffect::Contrast { amount }
-            | CompiledEffect::Saturation { amount }
-            | CompiledEffect::Tint { amount, .. }
-            | CompiledEffect::GaussianBlur { radius: amount }
-            | CompiledEffect::ZoomBlur { radius: amount, .. } => !static_track(amount),
-            CompiledEffect::DirectionalBlur {
-                radius,
-                angle_degrees,
-            }
-            | CompiledEffect::ChromaticAberration {
-                amount: radius,
-                angle_degrees,
-            } => !static_track(radius) || !static_track(angle_degrees),
-            CompiledEffect::Glow {
-                threshold,
-                radius,
-                intensity,
-                ..
-            } => !static_track(threshold) || !static_track(radius) || !static_track(intensity),
-            CompiledEffect::Vignette {
-                amount,
-                radius,
-                softness,
-                ..
-            } => !static_track(amount) || !static_track(radius) || !static_track(softness),
-            CompiledEffect::Sharpen { amount, radius } => {
-                !static_track(amount) || !static_track(radius)
-            }
-            CompiledEffect::ColorAdjust {
-                exposure,
-                gamma,
-                black_point,
-                white_point,
-            } => {
-                !static_track(exposure)
-                    || !static_track(gamma)
-                    || !static_track(black_point)
-                    || !static_track(white_point)
-            }
-            CompiledEffect::CameraShake { .. } | CompiledEffect::MotionBlur { .. } => true,
-        };
+    let mut dynamic = effect_has_modifiers(effect);
+    effect.for_each_scalar_property(|property| {
+        dynamic |= !static_track(&property.authored_track);
+    });
+    effect.for_each_plain_track(|track| {
+        dynamic |= !static_track(track);
+    });
+    dynamic |= matches!(
+        effect.definition().temporal_policy,
+        crate::effect_definition::EffectTemporalPolicy::AlwaysDynamic
+    );
     if dynamic {
         TemporalDependency::Dynamic
     } else {
@@ -325,58 +289,9 @@ pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
 }
 
 fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
-    match effect {
-        CompiledEffect::ColourTransform { .. } => false,
-        CompiledEffect::Brightness { amount }
-        | CompiledEffect::Contrast { amount }
-        | CompiledEffect::Saturation { amount }
-        | CompiledEffect::Tint { amount, .. }
-        | CompiledEffect::GaussianBlur { radius: amount }
-        | CompiledEffect::ZoomBlur { radius: amount, .. } => amount.has_modifiers(),
-        CompiledEffect::DirectionalBlur {
-            radius,
-            angle_degrees,
-        }
-        | CompiledEffect::ChromaticAberration {
-            amount: radius,
-            angle_degrees,
-        } => radius.has_modifiers() || angle_degrees.has_modifiers(),
-        CompiledEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            ..
-        } => threshold.has_modifiers() || radius.has_modifiers() || intensity.has_modifiers(),
-        CompiledEffect::Vignette { amount, radius, .. } => {
-            amount.has_modifiers() || radius.has_modifiers()
-        }
-        CompiledEffect::Sharpen { amount, radius } => {
-            amount.has_modifiers() || radius.has_modifiers()
-        }
-        CompiledEffect::ColorAdjust {
-            exposure, gamma, ..
-        } => exposure.has_modifiers() || gamma.has_modifiers(),
-        CompiledEffect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            ..
-        } => {
-            position_amount.has_modifiers()
-                || rotation_degrees.has_modifiers()
-                || scale_amount.has_modifiers()
-                || frequency.has_modifiers()
-        }
-        CompiledEffect::MotionBlur {
-            intensity,
-            shutter_angle,
-            max_radius,
-            ..
-        } => {
-            intensity.has_modifiers() || shutter_angle.has_modifiers() || max_radius.has_modifiers()
-        }
-    }
+    let mut has_modifiers = false;
+    effect.for_each_scalar_property(|property| has_modifiers |= property.has_modifiers());
+    has_modifiers
 }
 
 fn fuse_static_colour_chain(layer: &mut CompiledLayer) {

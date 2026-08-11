@@ -136,8 +136,14 @@ fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time
                 fade_out: 0.0,
                 fade_in_curve: AudioFadeCurve::Linear,
                 fade_out_curve: AudioFadeCurve::Linear,
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         }],
+
+        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
     };
     let prepared = prepare(&plan, RenderBackendPreference::Wgpu, |_, _, _| {
         Ok((
@@ -259,8 +265,14 @@ fn attach_test_master_audio(plan: &mut RenderPlan, source: PathBuf) {
                 fade_out: 0.0,
                 fade_in_curve: AudioFadeCurve::Linear,
                 fade_out_curve: AudioFadeCurve::Linear,
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         }],
+
+        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
     };
 }
 

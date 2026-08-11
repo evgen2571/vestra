@@ -250,8 +250,20 @@ fn validate_audio(
     let mut clip_ids = BTreeSet::new();
     let mut total = 0;
     let mut total_gain_keyframes = 0;
+    validate_audio_effects(
+        &audio.effects,
+        crate::audio_effect_definition::AudioEffectScope::Master,
+        "/audio/effects",
+        errors,
+    );
     for (track_index, track) in audio.tracks.iter().enumerate() {
         let path = format!("/audio/tracks/{track_index}");
+        validate_audio_effects(
+            &track.effects,
+            crate::audio_effect_definition::AudioEffectScope::Track,
+            &format!("{path}/effects"),
+            errors,
+        );
         if track.id.trim().is_empty() || !track_ids.insert(track.id.clone()) {
             errors.push(Diagnostic::error(
                 "MVP-AUDIO-TRACK-ID",
@@ -271,6 +283,12 @@ fn validate_audio(
         total += track.clips.len();
         for (clip_index, clip) in track.clips.iter().enumerate() {
             let clip_path = format!("{path}/clips/{clip_index}");
+            validate_audio_effects(
+                &clip.effects,
+                crate::audio_effect_definition::AudioEffectScope::Clip,
+                &format!("{clip_path}/effects"),
+                errors,
+            );
             if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
                 errors.push(Diagnostic::error(
                     "MVP-AUDIO-CLIP-ID",
@@ -372,6 +390,62 @@ fn validate_audio(
             "/audio/tracks",
         ));
     }
+}
+
+fn validate_audio_effects(
+    effects: &[crate::project::AudioEffect],
+    scope: crate::audio_effect_definition::AudioEffectScope,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    for (index, effect) in effects.iter().enumerate() {
+        let definition = effect.definition();
+        if !audio_effect_supports_scope(definition, scope) {
+            errors.push(Diagnostic::error(
+                "MVP-AUDIO-EFFECT-SCOPE",
+                Category::Semantic,
+                format!(
+                    "audio effect `{}` is not supported at {scope:?} scope",
+                    definition.id
+                ),
+                format!("{path}/{index}/type"),
+            ));
+        }
+        for parameter in definition.parameters {
+            let value = match effect {
+                crate::project::AudioEffect::ParametricEq {
+                    frequency_hz,
+                    gain_db,
+                    q,
+                    ..
+                } => match parameter.name {
+                    "frequency_hz" => *frequency_hz,
+                    "gain_db" => *gain_db,
+                    "q" => *q,
+                    _ => continue,
+                },
+            };
+            if !parameter.accepts_number(value) {
+                errors.push(Diagnostic::error(
+                    "MVP-AUDIO-EFFECT-PARAMETER",
+                    Category::Semantic,
+                    format!(
+                        "audio effect `{}` parameter `{}` is outside its declared range",
+                        definition.id, parameter.name
+                    ),
+                    format!("{path}/{index}/{}", parameter.name),
+                ));
+            }
+        }
+    }
+}
+
+#[must_use]
+fn audio_effect_supports_scope(
+    definition: crate::audio_effect_definition::AudioEffectDefinition,
+    scope: crate::audio_effect_definition::AudioEffectScope,
+) -> bool {
+    definition.scopes.contains(&scope)
 }
 
 fn visual_duration(project: &Project) -> f64 {
@@ -886,6 +960,28 @@ mod tests {
         assert!(has(
             &project(json!({"tracks": [track("music", clips)]})),
             "MVP-LIMIT-AUDIO-CLIPS"
+        ));
+    }
+
+    #[test]
+    fn audio_effect_scope_helper_rejects_a_descriptor_outside_its_declared_scope() {
+        use crate::audio_effect_definition::{
+            AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectScope,
+        };
+        static CLIP_ONLY: &[AudioEffectScope] = &[AudioEffectScope::Clip];
+        let definition = AudioEffectDefinition {
+            id: "test_only",
+            scopes: CLIP_ONLY,
+            duration_behavior: AudioEffectDurationBehavior::Preserve,
+            parameters: &[],
+        };
+        assert!(super::audio_effect_supports_scope(
+            definition,
+            AudioEffectScope::Clip
+        ));
+        assert!(!super::audio_effect_supports_scope(
+            definition,
+            AudioEffectScope::Track
         ));
     }
 }

@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[3]
 schema = json.loads((ROOT / "schemas/project.schema.json").read_text())
+Draft202012Validator.check_schema(schema)
 project = json.loads((ROOT / "examples/projects/animation-effects.json").read_text())
 validator = Draft202012Validator(schema)
 
@@ -158,6 +159,40 @@ audio_timeline = copy.deepcopy(solid_colour)
 audio_timeline["assets"] = [{"id": "audio", "type": "audio", "source": "tone.wav"}]
 audio_timeline["audio"] = {"tracks": [{"id": "music", "gain": 1, "mute": False, "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "gain": 1, "fade_in": 0, "fade_out": 0, "mute": False}]}]}
 assert not errors(audio_timeline), "schema-v2 audio timeline must validate"
+
+audio_effect = {
+    "id": "eq", "type": "parametric_eq", "frequency_hz": 120.0,
+    "gain_db": 6.0, "q": 0.8,
+}
+
+for scope in ("master", "track", "clip"):
+    scoped = copy.deepcopy(audio_timeline)
+    if scope == "master":
+        scoped["audio"]["effects"] = [audio_effect]
+    elif scope == "track":
+        scoped["audio"]["tracks"][0]["effects"] = [audio_effect]
+    else:
+        scoped["audio"]["tracks"][0]["clips"][0]["effects"] = [audio_effect]
+    assert not errors(scoped), f"audio effects must validate at {scope} scope"
+
+def with_master_effect(effect):
+    scoped = copy.deepcopy(audio_timeline)
+    scoped["audio"]["effects"] = [effect]
+    return scoped
+
+for field, invalid, valid in [
+    ("frequency_hz", [0, 24000.1], [24000]),
+    ("gain_db", [-24.1, 24.1], [-24, 24]),
+    ("q", [0, 100.1], [0.8, 100]),
+]:
+    for value in invalid:
+        candidate = {**audio_effect, field: value}
+        assert errors(with_master_effect(candidate)), f"invalid {field} boundary must fail"
+    for value in valid:
+        candidate = {**audio_effect, field: value}
+        assert not errors(with_master_effect(candidate)), f"valid {field} boundary must pass"
+
+assert errors(with_master_effect({**audio_effect, "made_up": 123})), "unknown audio effect fields must fail"
 
 audio_reactive = copy.deepcopy(audio_timeline)
 audio_reactive["visual"]["clips"][0]["opacity"]["modifiers"] = [{

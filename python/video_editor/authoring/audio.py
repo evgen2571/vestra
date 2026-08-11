@@ -7,6 +7,7 @@ from .assets import AudioAsset
 from .errors import AuthoringError
 from .values import _CanonicalStrEnum
 from .signals import MasterAudioSignals
+from .audio_effects import AudioEffectCollection
 
 
 def _nonnegative(value: int | float, name: str) -> float:
@@ -49,7 +50,7 @@ class AudioGainKeyframe:
 
 
 class AudioClip:
-    __slots__ = ("_owner", "_id", "_asset", "_start", "_trim_start", "_trim_end", "_mute", "_gain", "_gain_automation", "_fade_in", "_fade_out", "_fade_in_curve", "_fade_out_curve")
+    __slots__ = ("_owner", "_id", "_asset", "_start", "_trim_start", "_trim_end", "_mute", "_gain", "_gain_automation", "_fade_in", "_fade_out", "_fade_in_curve", "_fade_out_curve", "_effects")
     _owner: _Owner
     _id: str
     _asset: AudioAsset
@@ -67,7 +68,7 @@ class AudioClip:
         raise TypeError("AudioClip objects must be created by AudioTrack")
 
     @classmethod
-    def _create(cls, owner: _Owner, identifier: str, asset: AudioAsset, *, start: int | float, trim_start: int | float, trim_end: int | float | None, mute: bool, gain: int | float, fade_in: int | float, fade_out: int | float, fade_in_curve: AudioFadeCurve, fade_out_curve: AudioFadeCurve) -> "AudioClip":
+    def _create(cls, owner: _Owner, identifier: str, asset: AudioAsset, *, start: int | float, trim_start: int | float, trim_end: int | float | None, mute: bool, gain: int | float, fade_in: int | float, fade_out: int | float, fade_in_curve: AudioFadeCurve, fade_out_curve: AudioFadeCurve, effects: AudioEffectCollection) -> "AudioClip":
         item = object.__new__(cls)
         item._owner, item._id, item._asset = owner, identifier, asset
         item._start, item._trim_start = _nonnegative(start, "start"), _nonnegative(trim_start, "trim_start")
@@ -78,7 +79,7 @@ class AudioClip:
         item._fade_in, item._fade_out = _nonnegative(fade_in, "fade_in"), _nonnegative(fade_out, "fade_out")
         if not isinstance(fade_in_curve, AudioFadeCurve) or not isinstance(fade_out_curve, AudioFadeCurve):
             raise TypeError("fade curves must be AudioFadeCurve")
-        item._fade_in_curve, item._fade_out_curve, item._gain_automation = fade_in_curve, fade_out_curve, None
+        item._fade_in_curve, item._fade_out_curve, item._gain_automation, item._effects = fade_in_curve, fade_out_curve, None, effects
         return item
 
     @property
@@ -137,6 +138,8 @@ class AudioClip:
         self._fade_out_curve = value
     @property
     def gain_automation(self) -> tuple[AudioGainKeyframe, ...]: return self._gain_automation or ()
+    @property
+    def effects(self) -> AudioEffectCollection: return self._effects
 
     def set_gain_automation(self, keyframes: list[AudioGainKeyframe] | tuple[AudioGainKeyframe, ...]) -> None:
         staged = tuple(keyframes)
@@ -153,6 +156,7 @@ class AudioClip:
 
     def to_canonical(self) -> dict[str, object]:
         data: dict[str, object] = {"id": self.id, "asset": self.asset.id, "start": self.start, "trim_start": self.trim_start, "mute": self.mute, "gain": self.gain, "fade_in": self.fade_in, "fade_out": self.fade_out}
+        if self.effects.items: data["effects"] = [effect.to_canonical() for effect in self.effects.items]
         if self.trim_end is not None: data["trim_end"] = self.trim_end
         if self._gain_automation is not None: data["gain_automation"] = {"keyframes": [item.to_canonical() for item in self._gain_automation]}
         if self.fade_in_curve is not AudioFadeCurve.LINEAR: data["fade_in_curve"] = self.fade_in_curve.value
@@ -172,7 +176,7 @@ class AudioClip:
 
 
 class AudioTrack:
-    __slots__ = ("_owner", "_ids", "_id", "_mute", "_gain", "_clips")
+    __slots__ = ("_owner", "_ids", "_id", "_mute", "_gain", "_clips", "_effects")
     _owner: _Owner
     _ids: _IdAllocator
     _id: str
@@ -182,7 +186,7 @@ class AudioTrack:
     def __init__(self, *args: object, **kwargs: object) -> None: raise TypeError("AudioTrack objects must be created by AudioTimeline")
     @classmethod
     def _create(cls, owner: _Owner, ids: _IdAllocator, identifier: str, *, mute: bool, gain: int | float) -> "AudioTrack":
-        item = object.__new__(cls); item._owner, item._ids, item._id = owner, ids, identifier; item._mute, item._gain, item._clips = _boolean(mute, "mute"), _nonnegative(gain, "gain"), []; return item
+        item = object.__new__(cls); item._owner, item._ids, item._id = owner, ids, identifier; item._mute, item._gain, item._clips, item._effects = _boolean(mute, "mute"), _nonnegative(gain, "gain"), [], AudioEffectCollection._create(owner, ids, item, "track"); return item
     @property
     def id(self) -> str: return self._id
     @property
@@ -195,14 +199,20 @@ class AudioTrack:
     def gain(self, value: int | float) -> None: self._gain = _nonnegative(value, "gain")
     @property
     def clips(self) -> tuple[AudioClip, ...]: return tuple(self._clips)
+    @property
+    def effects(self) -> AudioEffectCollection: return self._effects
     def add_clip(self, *, asset: AudioAsset, start: int | float, trim_start: int | float = 0.0, trim_end: int | float | None = None, mute: bool = False, gain: int | float = 1.0, fade_in: int | float = 0.0, fade_out: int | float = 0.0, fade_in_curve: AudioFadeCurve = AudioFadeCurve.LINEAR, fade_out_curve: AudioFadeCurve = AudioFadeCurve.LINEAR, id: str | None = None) -> AudioClip:
         if not isinstance(asset, AudioAsset): raise TypeError("asset must be AudioAsset")
         _require_owner(self._owner, asset._owner)
-        staged = AudioClip._create(self._owner, "", asset, start=start, trim_start=trim_start, trim_end=trim_end, mute=mute, gain=gain, fade_in=fade_in, fade_out=fade_out, fade_in_curve=fade_in_curve, fade_out_curve=fade_out_curve)
+        staged = AudioClip._create(self._owner, "", asset, start=start, trim_start=trim_start, trim_end=trim_end, mute=mute, gain=gain, fade_in=fade_in, fade_out=fade_out, fade_in_curve=fade_in_curve, fade_out_curve=fade_out_curve, effects=AudioEffectCollection._create(self._owner, self._ids, "pending-clip", "clip"))
         if id is not None: self._ids.validate("audio-clip", id)
         staged._id = self._ids.allocate("audio-clip") if id is None else self._ids.reserve("audio-clip", id)
+        staged._effects = AudioEffectCollection._create(self._owner, self._ids, staged, "clip")
         self._clips.append(staged); return staged
-    def to_canonical(self) -> dict[str, object]: return {"id": self.id, "mute": self.mute, "gain": self.gain, "clips": [clip.to_canonical() for clip in self._clips]}
+    def to_canonical(self) -> dict[str, object]:
+        data = {"id": self.id, "mute": self.mute, "gain": self.gain, "clips": [clip.to_canonical() for clip in self._clips]}
+        if self.effects.items: data["effects"] = [effect.to_canonical() for effect in self.effects.items]
+        return data
     def _same_identity(self, other: object) -> bool:
         return (
             type(self) is type(other)
@@ -215,7 +225,7 @@ class AudioTrack:
 
 
 class AudioTimeline:
-    __slots__ = ("_owner", "_ids", "_tracks", "_master")
+    __slots__ = ("_owner", "_ids", "_tracks", "_master", "_effects")
     _owner: _Owner
     _ids: _IdAllocator
     _tracks: list[AudioTrack]
@@ -223,11 +233,13 @@ class AudioTimeline:
     def __init__(self, *args: object, **kwargs: object) -> None: raise TypeError("AudioTimeline objects must be created by ProjectBuilder")
     @classmethod
     def _create(cls, owner: _Owner, ids: _IdAllocator) -> "AudioTimeline":
-        item = object.__new__(cls); item._owner, item._ids, item._tracks, item._master = owner, ids, [], MasterAudioSignals(); return item
+        item = object.__new__(cls); item._owner, item._ids, item._tracks, item._master, item._effects = owner, ids, [], MasterAudioSignals(), AudioEffectCollection._create(owner, ids, "master", "master"); return item
     @property
     def tracks(self) -> tuple[AudioTrack, ...]: return tuple(self._tracks)
     @property
     def master(self) -> MasterAudioSignals: return self._master
+    @property
+    def effects(self) -> AudioEffectCollection: return self._effects
     def add_track(self, *, id: str | None = None, mute: bool = False, gain: int | float = 1.0) -> AudioTrack:
         staged = AudioTrack._create(self._owner, self._ids, "", mute=mute, gain=gain)
         if id is not None: self._ids.validate("audio-track", id)
@@ -254,5 +266,8 @@ class AudioTimeline:
             raise AuthoringError("crossfade would overwrite conflicting fade configuration")
         outgoing._fade_out, outgoing._fade_out_curve = overlap, curve
         incoming._fade_in, incoming._fade_in_curve = overlap, curve
-    def to_canonical(self) -> dict[str, object]: return {"tracks": [track.to_canonical() for track in self._tracks]}
+    def to_canonical(self) -> dict[str, object]:
+        data = {"tracks": [track.to_canonical() for track in self._tracks]}
+        if self.effects.items: data["effects"] = [effect.to_canonical() for effect in self.effects.items]
+        return data
     def __repr__(self) -> str: return f"AudioTimeline(tracks={len(self.tracks)})"

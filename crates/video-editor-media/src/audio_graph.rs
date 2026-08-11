@@ -3,7 +3,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use video_editor_core::{
-    plan_audio::{AudioClipPlan, AudioMixPlan, MASTER_AUDIO_SAMPLE_RATE},
+    plan_audio::{
+        AudioClipPlan, AudioEffectOperation, AudioEffectPassPlan, AudioMixPlan,
+        MASTER_AUDIO_SAMPLE_RATE,
+    },
     project::{AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation},
 };
 
@@ -96,9 +99,10 @@ pub(crate) fn compile_with_options(
         let Some(track_mix) = graph.mix(&clips, "track") else {
             continue;
         };
+        let track_effects = graph.apply_effect_chain(track_mix, &track.effects)?;
         let track_label = graph.label("track");
         graph.filters.push(format!(
-            "[{track_mix}]volume=volume={}[{track_label}]",
+            "[{track_effects}]volume=volume={}[{track_label}]",
             number(track.gain)
         ));
         tracks.push(track_label);
@@ -106,8 +110,9 @@ pub(crate) fn compile_with_options(
     let master = graph.mix(&tracks, "master").ok_or_else(|| {
         MediaError::InvalidAudioTiming("audio graph has no audible contributors".to_owned())
     })?;
+    let master_effects = graph.apply_effect_chain(master, &mix.effects)?;
     graph.filters.push(format!(
-        "[{master}]apad=whole_len={project_samples},atrim=end_sample={project_samples}[audio]"
+        "[{master_effects}]apad=whole_len={project_samples},atrim=end_sample={project_samples}[audio]"
     ));
     Ok(FfmpegAudioGraph {
         input_paths: graph
@@ -237,11 +242,13 @@ impl GraphBuilder {
         let fade_in = seconds_to_samples(clip.fade_in)?.min(selected);
         let requested_fade_out = seconds_to_samples(clip.fade_out)?;
         let fade_out = requested_fade_out.min(selected.saturating_sub(fade_in));
+        let normalized = self.label("clip");
+        self.filters.push(format!(
+            "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS[{normalized}]"
+        ));
+        let effected = self.apply_effect_chain(normalized, &clip.effects)?;
         let label = self.label("clip");
-        let mut filters = vec![format!(
-            "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS,volume=volume={}",
-            number(clip.gain)
-        )];
+        let mut filters = vec![format!("[{effected}]volume=volume={}", number(clip.gain))];
         let envelope = envelope_expression(
             clip.gain_automation.as_ref(),
             fade_in,
@@ -259,6 +266,31 @@ impl GraphBuilder {
         filters.push(format!("adelay={timeline_start}S:all=1[{label}]"));
         self.filters.push(filters.join(","));
         Ok(label)
+    }
+
+    fn apply_effect_chain(
+        &mut self,
+        mut input: String,
+        effects: &AudioEffectPassPlan,
+    ) -> Result<String, MediaError> {
+        for operation in &effects.operations {
+            let output = self.label("effect");
+            let filter = match operation {
+                AudioEffectOperation::ParametricEq {
+                    frequency_hz,
+                    gain_db,
+                    q,
+                } => format!(
+                    "[{input}]equalizer=f={}:width_type=q:width={}:g={}[{output}]",
+                    number(*frequency_hz),
+                    number(*q),
+                    number(*gain_db)
+                ),
+            };
+            self.filters.push(filter);
+            input = output;
+        }
+        Ok(input)
     }
 
     fn mix(&mut self, inputs: &[String], kind: &str) -> Option<String> {
@@ -440,7 +472,9 @@ mod tests {
         path::PathBuf,
         process::{Command, Stdio},
     };
-    use video_editor_core::plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan};
+    use video_editor_core::plan_audio::{
+        AudioClipPlan, AudioEffectOperation, AudioEffectPassPlan, AudioMixPlan, AudioTrackPlan,
+    };
 
     #[test]
     fn rounds_seconds_to_nearest_mixer_sample() {
@@ -508,7 +542,10 @@ mod tests {
                     gain_automation: Some(automation),
                     ..automation_test_clip()
                 }],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 1.4).expect("large automation graph"), 1.4);
         let amplitude = |frame: usize| samples[frame * 2].abs();
@@ -535,6 +572,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -543,14 +581,19 @@ mod tests {
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("a", "a.wav"), clip("b", "b.wav")],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
                 AudioTrackPlan {
                     id: "second".to_owned(),
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("c", "c.wav")],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
             ],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = compile(&mix, 2.0).expect("graph");
         assert_eq!(
@@ -586,6 +629,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -594,14 +638,19 @@ mod tests {
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("clip-b", "shared.wav"), clip("clip-a", "other.wav")],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
                 AudioTrackPlan {
                     id: "second".to_owned(),
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("clip-c", "shared.wav"), clip("clip-d", "shared.wav")],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
             ],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = compile(&mix, 1.0).expect("graph");
         assert_eq!(
@@ -630,6 +679,7 @@ mod tests {
             fade_out: 0.0,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -637,7 +687,22 @@ mod tests {
                 mute: false,
                 gain: 0.75,
                 clips: vec![clip("first", "first.wav"), clip("second", "second.wav")],
+
+                effects: AudioEffectPassPlan {
+                    operations: vec![AudioEffectOperation::ParametricEq {
+                        frequency_hz: 120.0,
+                        gain_db: 6.0,
+                        q: 0.8,
+                    }],
+                },
             }],
+            effects: AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::ParametricEq {
+                    frequency_hz: 240.0,
+                    gain_db: -3.0,
+                    q: 1.2,
+                }],
+            },
         };
         let encoder = compile_with_options(
             &mix,
@@ -668,6 +733,89 @@ mod tests {
             analyzer.filter_complex
         );
         assert!(analyzer.filter_complex.ends_with("[audio]"));
+        assert!(encoder.filter_complex.contains("equalizer=f=120"));
+        assert!(encoder.filter_complex.contains("equalizer=f=240"));
+    }
+
+    #[test]
+    fn track_effects_follow_track_mix_and_precede_track_gain() {
+        let mut first = automation_test_clip();
+        first.id = "first".to_owned();
+        let mut second = first.clone();
+        second.id = "second".to_owned();
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 0.75,
+                clips: vec![first, second],
+                effects: AudioEffectPassPlan {
+                    operations: vec![
+                        AudioEffectOperation::ParametricEq {
+                            frequency_hz: 120.0,
+                            gain_db: 3.0,
+                            q: 0.8,
+                        },
+                        AudioEffectOperation::ParametricEq {
+                            frequency_hz: 240.0,
+                            gain_db: -3.0,
+                            q: 1.0,
+                        },
+                    ],
+                },
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+        let graph = compile(&mix, 1.0).expect("track effect graph");
+        let mix_at = graph.filter_complex.find("amix=").expect("track mix");
+        let first_eq = graph
+            .filter_complex
+            .find("equalizer=f=120")
+            .expect("first eq");
+        let second_eq = graph
+            .filter_complex
+            .find("equalizer=f=240")
+            .expect("second eq");
+        let gain = graph
+            .filter_complex
+            .rfind("volume=volume=0.750")
+            .expect("track gain");
+        assert!(mix_at < first_eq && first_eq < second_eq && second_eq < gain);
+    }
+
+    #[test]
+    fn master_effects_follow_track_mix_and_precede_padding_and_trim() {
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![automation_test_clip()],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::ParametricEq {
+                    frequency_hz: 480.0,
+                    gain_db: 2.0,
+                    q: 1.0,
+                }],
+            },
+        };
+        let graph = compile(&mix, 1.0).expect("master effect graph");
+        let track_gain = graph
+            .filter_complex
+            .rfind("volume=volume=1.000")
+            .expect("track gain");
+        let eq = graph
+            .filter_complex
+            .find("equalizer=f=480")
+            .expect("master eq");
+        let pad = graph.filter_complex.find("apad=").expect("padding");
+        let trim = graph
+            .filter_complex
+            .find("atrim=end_sample=")
+            .expect("trim");
+        assert!(track_gain < eq && eq < pad && pad < trim);
     }
 
     #[test]
@@ -692,11 +840,17 @@ mod tests {
                         gain_automation: None,
                         fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                         fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     })
                     .collect(),
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             })
             .collect();
-        let mix = AudioMixPlan { tracks };
+        let mix = AudioMixPlan {
+            tracks,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
+        };
         let first = compile(&mix, 2.0).expect("first graph");
         let second = compile(&mix, 2.0).expect("second graph");
         assert_eq!(first.input_paths.len(), 4);
@@ -739,8 +893,13 @@ mod tests {
                     gain_automation: None,
                     fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                     fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = compile(&mix, 1.0).expect("quantized fades remain executable");
         assert!(graph.filter_complex.contains("aeval=exprs="));
@@ -789,8 +948,13 @@ mod tests {
                     fade_out: 0.5,
                     fade_in_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
                     fade_out_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = compile(&mix, 1.0).expect("automation graph");
         assert!(graph.filter_complex.contains("aeval=exprs="));
@@ -818,6 +982,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -826,14 +991,19 @@ mod tests {
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("a", 0.12345)],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
                 AudioTrackPlan {
                     id: "two".to_owned(),
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("b", 0.12345)],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
             ],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = compile(&mix, 1.0).expect("production graph");
         let mut command = Command::new("ffmpeg");
@@ -902,6 +1072,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -909,7 +1080,10 @@ mod tests {
                 mute: false,
                 gain: 0.5,
                 clips: vec![clip("a"), clip("b")],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 0.5).expect("production graph"), 0.5);
         // Two mono branches sum to about 0.1414 per channel before the track
@@ -944,8 +1118,13 @@ mod tests {
                     gain_automation: None,
                     fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                     fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 1.0).expect("production graph"), 1.0);
         let onset = seconds_to_samples(0.12345).expect("onset") as usize;
@@ -987,6 +1166,7 @@ mod tests {
             fade_out,
             fade_in_curve,
             fade_out_curve,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let automation = video_editor_core::project::AudioGainAutomation {
             keyframes: vec![
@@ -1013,7 +1193,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![clip],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let automated = render_pcm(
             &compile(
@@ -1136,8 +1319,13 @@ mod tests {
                     fade_out: 0.0,
                     fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                     fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 1.0).expect("composition graph"), 1.0);
         // Mono normalization contributes 1/sqrt(2), then all three gains
@@ -1166,6 +1354,7 @@ mod tests {
             fade_out,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = |clips| AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -1173,7 +1362,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips,
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let reference = render_pcm(
             &compile(
@@ -1237,6 +1429,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -1248,7 +1441,10 @@ mod tests {
                     clip("b", 0.25, 0.0, 0.5, 0.1),
                     clip("c", 0.5, 0.25, 1.0, 0.0),
                 ],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = compile(&mix, 1.0).expect("production graph");
         assert_eq!(graph.input_paths, vec![source]);
@@ -1289,6 +1485,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -1296,7 +1493,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![clip("early", 0.0, 0.1), clip("late", 0.5, 1.0)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 0.75).expect("production graph"), 0.75);
         assert_eq!(
@@ -1334,6 +1534,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![
@@ -1342,14 +1543,19 @@ mod tests {
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("mono", mono)],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
                 AudioTrackPlan {
                     id: "other".to_owned(),
                     mute: false,
                     gain: 1.0,
                     clips: vec![clip("other", stereo_source)],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 },
             ],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 0.5).expect("production graph"), 0.5);
         assert_eq!(samples.len(), 24_000 * 2, "final PCM is 48 kHz stereo");
@@ -1378,6 +1584,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
@@ -1385,7 +1592,10 @@ mod tests {
                 mute: false,
                 gain: 1.0,
                 clips: vec![clip("low", low), clip("high", high)],
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let samples = render_pcm(&compile(&mix, 0.5).expect("production graph"), 0.5);
         assert!(tone_correlation(&samples, 440.0) > 0.01);
@@ -1423,6 +1633,7 @@ mod tests {
             fade_out: 0.0,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         }
     }
 
@@ -1580,6 +1791,78 @@ mod tests {
             .sum::<f64>()
             .abs()
             / frames as f64
+    }
+
+    #[test]
+    fn parametric_eq_is_lowered_after_trim_before_clip_fader() {
+        let mut clip = automation_test_clip();
+        clip.effects
+            .operations
+            .push(AudioEffectOperation::ParametricEq {
+                frequency_hz: 120.0,
+                gain_db: -12.0,
+                q: 0.8,
+            });
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+        let graph = compile(&mix, 1.0).expect("effect graph");
+        let trim = graph.filter_complex.find("atrim=").expect("trim");
+        let eq = graph.filter_complex.find("equalizer=").expect("eq");
+        let fader = graph
+            .filter_complex
+            .find("volume=volume=1.000")
+            .expect("fader");
+        let delay = graph.filter_complex.find("adelay=").expect("delay");
+        assert!(trim < eq && eq < fader && fader < delay);
+    }
+
+    #[test]
+    fn parametric_eq_changes_signal_without_changing_project_frame_count() {
+        let directory = tempfile::tempdir().expect("temporary fixtures");
+        let source = directory.path().join("eq-tone.wav");
+        write_sine_wav(&source, 120.0, 0.5);
+        let mut plain_clip = automation_test_clip();
+        plain_clip.path = source.clone();
+        let mut effected_clip = plain_clip.clone();
+        effected_clip
+            .effects
+            .operations
+            .push(AudioEffectOperation::ParametricEq {
+                frequency_hz: 120.0,
+                gain_db: -24.0,
+                q: 1.0,
+            });
+        let mix = |clip| AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+        let plain = render_pcm(&compile(&mix(plain_clip), 1.0).expect("plain graph"), 1.0);
+        let effected = render_pcm(&compile(&mix(effected_clip), 1.0).expect("eq graph"), 1.0);
+        let rms = |samples: &[f32]| {
+            (samples
+                .iter()
+                .map(|sample| f64::from(*sample).powi(2))
+                .sum::<f64>()
+                / samples.len() as f64)
+                .sqrt()
+        };
+        assert_eq!(plain.len(), 48_000 * 2);
+        assert_eq!(effected.len(), plain.len());
+        assert!(rms(&effected[..24_000 * 2]) < rms(&plain[..24_000 * 2]) * 0.5);
     }
 
     fn tone_window_correlation(

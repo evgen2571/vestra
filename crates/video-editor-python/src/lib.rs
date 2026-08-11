@@ -747,6 +747,21 @@ struct PyInspectAudio {
     end: f64,
     #[pyo3(get)]
     tracks: Vec<PyInspectAudioTrack>,
+    #[pyo3(get)]
+    effects: Vec<PyInspectAudioEffect>,
+}
+#[pyclass(
+    name = "InspectAudioEffect",
+    frozen,
+    skip_from_py_object,
+    module = "video_editor._native"
+)]
+#[derive(Clone)]
+struct PyInspectAudioEffect {
+    #[pyo3(get)]
+    id: String,
+    #[pyo3(get, name = "type")]
+    kind: String,
 }
 #[pyclass(
     name = "InspectAudioTrack",
@@ -764,6 +779,8 @@ struct PyInspectAudioTrack {
     gain: f64,
     #[pyo3(get)]
     clips: Vec<PyInspectAudioClip>,
+    #[pyo3(get)]
+    effects: Vec<PyInspectAudioEffect>,
 }
 #[pyclass(
     name = "InspectAudioClip",
@@ -799,6 +816,8 @@ struct PyInspectAudioClip {
     fade_in_curve: String,
     #[pyo3(get)]
     fade_out_curve: String,
+    #[pyo3(get)]
+    effects: Vec<PyInspectAudioEffect>,
 }
 #[pyclass(
     name = "InspectAudioGainKeyframe",
@@ -866,6 +885,14 @@ impl From<NativeInspection> for PyInspectionReport {
                 track_count: a.track_count,
                 clip_count: a.clip_count,
                 end: a.end,
+                effects: a
+                    .effects
+                    .into_iter()
+                    .map(|effect| PyInspectAudioEffect {
+                        id: effect.id,
+                        kind: effect.kind,
+                    })
+                    .collect(),
                 tracks: a
                     .tracks
                     .into_iter()
@@ -873,6 +900,14 @@ impl From<NativeInspection> for PyInspectionReport {
                         id: track.id,
                         mute: track.mute,
                         gain: track.gain,
+                        effects: track
+                            .effects
+                            .into_iter()
+                            .map(|effect| PyInspectAudioEffect {
+                                id: effect.id,
+                                kind: effect.kind,
+                            })
+                            .collect(),
                         clips: track
                             .clips
                             .into_iter()
@@ -915,6 +950,14 @@ impl From<NativeInspection> for PyInspectionReport {
                                         "equal_power".to_owned()
                                     }
                                 },
+                                effects: clip
+                                    .effects
+                                    .into_iter()
+                                    .map(|effect| PyInspectAudioEffect {
+                                        id: effect.id,
+                                        kind: effect.kind,
+                                    })
+                                    .collect(),
                             })
                             .collect(),
                     })
@@ -940,6 +983,15 @@ fn native_version() -> &'static str {
 #[pyfunction]
 fn effect_definitions(py: Python<'_>) -> PyResult<Py<PyAny>> {
     let value = serde_json::to_value(video_editor::visual_effect_descriptors().collect::<Vec<_>>())
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    pythonize::pythonize(py, &value)
+        .map(|value| value.unbind())
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn audio_effect_definitions(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let value = serde_json::to_value(video_editor::audio_effect_descriptors().collect::<Vec<_>>())
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     pythonize::pythonize(py, &value)
         .map(|value| value.unbind())
@@ -1036,6 +1088,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyInspectOutput>()?;
     module.add_class::<PyInspectAssets>()?;
     module.add_class::<PyInspectAudio>()?;
+    module.add_class::<PyInspectAudioEffect>()?;
     module.add_class::<PyInspectAudioTrack>()?;
     module.add_class::<PyInspectAudioClip>()?;
     module.add_class::<PyInspectAudioGainKeyframe>()?;
@@ -1044,6 +1097,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     render::register(module)?;
     module.add_function(wrap_pyfunction!(native_version, module)?)?;
     module.add_function(wrap_pyfunction!(effect_definitions, module)?)?;
+    module.add_function(wrap_pyfunction!(audio_effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_until_detached_entered, module)?)?;
     module.add_function(wrap_pyfunction!(_test_release_detached_wait, module)?)?;
@@ -1099,6 +1153,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "RenderFailureStage",
                 "native_version",
                 "effect_definitions",
+                "audio_effect_definitions",
             ],
         )?,
     )?;

@@ -64,6 +64,14 @@ pub struct InspectAudio {
     pub clip_count: usize,
     pub end: f64,
     pub tracks: Vec<InspectAudioTrack>,
+    pub effects: Vec<InspectAudioEffect>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InspectAudioEffect {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -72,6 +80,7 @@ pub struct InspectAudioTrack {
     pub mute: bool,
     pub gain: f64,
     pub clips: Vec<InspectAudioClip>,
+    pub effects: Vec<InspectAudioEffect>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -89,6 +98,7 @@ pub struct InspectAudioClip {
     pub fade_out: f64,
     pub fade_in_curve: video_editor_core::project::AudioFadeCurve,
     pub fade_out_curve: video_editor_core::project::AudioFadeCurve,
+    pub effects: Vec<InspectAudioEffect>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -99,6 +109,19 @@ pub struct InspectAudioGainKeyframe {
 }
 
 pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
+    let inspect_effects = |effects: &[video_editor_core::project::AudioEffect]| {
+        effects
+            .iter()
+            .map(|effect| match effect {
+                video_editor_core::project::AudioEffect::ParametricEq { id, .. } => {
+                    InspectAudioEffect {
+                        id: id.clone(),
+                        kind: "parametric_eq".to_owned(),
+                    }
+                }
+            })
+            .collect::<Vec<_>>()
+    };
     let audio = inspection.validated.project.audio.as_ref().map(|timeline| {
         let tracks = timeline
             .tracks
@@ -107,6 +130,7 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                 id: track.id.clone(),
                 mute: track.mute,
                 gain: track.gain,
+                effects: inspect_effects(&track.effects),
                 clips: track
                     .clips
                     .iter()
@@ -144,6 +168,7 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                                     fade_out: clip.fade_out,
                                     fade_in_curve: clip.fade_in_curve,
                                     fade_out_curve: clip.fade_out_curve,
+                                    effects: inspect_effects(&clip.effects),
                                 }
                             })
                     })
@@ -155,6 +180,7 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
             clip_count: tracks.iter().map(|track| track.clips.len()).sum(),
             end: inspection.audio_end.unwrap_or(0.0),
             tracks,
+            effects: inspect_effects(&timeline.effects),
         }
     });
     InspectResult {

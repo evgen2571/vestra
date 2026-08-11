@@ -14,7 +14,12 @@ from video_editor import (
     ProjectError,
     RenderRequest,
 )
-from video_editor.authoring import AuthoringError, ProjectBuilder
+from video_editor.authoring import (
+    AuthoringError,
+    ProjectBuilder,
+    audio_effect_definition,
+    available_audio_effects,
+)
 
 
 def builder(*, output_audio: bool = False) -> ProjectBuilder:
@@ -90,6 +95,65 @@ def test_schema_v1_and_old_global_audio_shape_are_rejected() -> None:
     data["schema_version"] = 1
     with pytest.raises(ProjectError):
         Project.from_dict(data)
+
+
+def test_audio_effects_are_typed_at_clip_track_and_master_scopes() -> None:
+    project_builder = builder()
+    asset = project_builder.add_audio_asset("tone.wav")
+    track = project_builder.audio.add_track(id="music")
+    clip = track.add_clip(asset=asset, start=0, trim_end=0.5)
+    clip.effects.add_parametric_eq(frequency_hz=120, gain_db=6, q=0.8)
+    track.effects.add_parametric_eq(frequency_hz=240, gain_db=-3, q=1)
+    project_builder.audio.effects.add_parametric_eq(frequency_hz=480, gain_db=0, q=2)
+    data = project_builder.to_dict()
+    assert len(data["audio"]["effects"]) == 1  # type: ignore[index]
+    assert len(data["audio"]["tracks"][0]["effects"]) == 1  # type: ignore[index]
+    assert len(data["audio"]["tracks"][0]["clips"][0]["effects"]) == 1  # type: ignore[index]
+
+
+def test_typed_and_generic_audio_effect_authoring_have_same_canonical_shape() -> None:
+    typed = builder()
+    typed_asset = typed.add_audio_asset("tone.wav")
+    typed_clip = typed.audio.add_track(id="music").add_clip(asset=typed_asset, start=0, trim_end=0.5)
+    typed_clip.effects.add_parametric_eq(frequency_hz=120, gain_db=6, q=0.8)
+
+    generic = builder()
+    generic_asset = generic.add_audio_asset("tone.wav")
+    generic_clip = generic.audio.add_track(id="music").add_clip(asset=generic_asset, start=0, trim_end=0.5)
+    generic_clip.effects.add_effect("parametric_eq", frequency_hz=120, gain_db=6, q=0.8)
+    assert typed.to_dict() == generic.to_dict()
+
+
+def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
+    definitions = available_audio_effects()
+    assert [definition["id"] for definition in definitions] == ["parametric_eq"]
+    definition = audio_effect_definition("parametric_eq")
+    assert set(definition["scopes"]) == {"clip", "track", "master"}
+    assert definition["duration_behavior"] == "preserve"
+    with pytest.raises(TypeError):
+        definition["id"] = "changed"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        definition["parameters"][0]["name"] = "changed"  # type: ignore[index]
+    assert audio_effect_definition("parametric_eq")["id"] == "parametric_eq"
+
+
+@pytest.mark.parametrize("parameters", [
+    {"frequency_hz": 0, "gain_db": 0, "q": 1},
+    {"frequency_hz": 120, "gain_db": 25, "q": 1},
+    {"frequency_hz": 120, "gain_db": 0, "q": 0},
+])
+def test_audio_effect_authoring_rejects_unknown_missing_and_invalid_parameters(parameters: dict[str, float]) -> None:
+    project_builder = builder()
+    asset = project_builder.add_audio_asset("tone.wav")
+    clip = project_builder.audio.add_track().add_clip(asset=asset, start=0)
+    with pytest.raises((TypeError, ValueError)):
+        clip.effects.add_effect("parametric_eq", **parameters)
+    with pytest.raises(ValueError):
+        clip.effects.add_effect("does_not_exist", frequency_hz=120, gain_db=0, q=1)
+    with pytest.raises(TypeError):
+        clip.effects.add_effect("parametric_eq", frequency_hz=120, gain_db=0, q=1, nonsense=123)
+    with pytest.raises(TypeError):
+        clip.effects.add_effect("parametric_eq", frequency_hz=120, gain_db=0)
 
 
 def test_multi_clip_audio_renders_and_preserves_legacy_shape_rejection(tmp_path: Path) -> None:

@@ -3,6 +3,7 @@
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack
+from .audio_effects import AudioEffect, AudioEffectCollection, ParametricEqAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
@@ -45,6 +46,9 @@ __all__ = [
     "AudioGainKeyframe",
     "AudioTimeline",
     "AudioTrack",
+    "AudioEffect",
+    "AudioEffectCollection",
+    "ParametricEqAudioEffect",
     "BlendMode",
     "BrightnessEffect",
     "CameraShakeEffect",
@@ -91,6 +95,8 @@ __all__ = [
     "ZoomBlurEffect",
     "available_effects",
     "effect_definition",
+    "available_audio_effects",
+    "audio_effect_definition",
     "CrossfadeTransition",
     "DirectionalPushTransition",
     "Flash",

@@ -702,9 +702,14 @@ mod tests {
                         gain_automation: None,
                         fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                         fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     })
                     .collect(),
+
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }],
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         }
     }
 
@@ -749,6 +754,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let settings = EncoderSettings {
             width: 2,
@@ -765,14 +771,19 @@ mod tests {
                         mute: false,
                         gain: 1.0,
                         clips: vec![clip("a", first, 0.0), clip("b", second, 0.12345)],
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     },
                     AudioTrackPlan {
                         id: "muted".to_owned(),
                         mute: true,
                         gain: 1.0,
                         clips: vec![],
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     },
                 ],
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }),
         };
         let output = directory.path().join("mixed.mp4");
@@ -827,6 +838,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let settings = EncoderSettings {
             width: 2,
@@ -847,6 +859,8 @@ mod tests {
                             fade_out_curve: video_editor_core::project::AudioFadeCurve::EqualPower,
                             ..clip("low", low, 0.0)
                         }],
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     },
                     AudioTrackPlan {
                         id: "incoming".to_owned(),
@@ -871,8 +885,11 @@ mod tests {
                             }),
                             ..clip("high", high, 0.5)
                         }],
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     },
                 ],
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }),
         };
         let output = directory.path().join("mixed.mp4");
@@ -1007,6 +1024,7 @@ mod tests {
                 gain_automation: None,
                 fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                 fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             })
             .collect();
         let graph = audio_graph::compile(
@@ -1016,7 +1034,10 @@ mod tests {
                     mute: false,
                     gain: 1.0,
                     clips,
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             },
             1.0,
         )
@@ -1042,6 +1063,7 @@ mod tests {
             gain_automation: None,
             fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+            effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
         let graph = audio_graph::compile(
             &AudioMixPlan {
@@ -1054,7 +1076,10 @@ mod tests {
                         clip("silent", "silent.wav", false, 0.0),
                         clip("audible", "audible.wav", false, 1.0),
                     ],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             },
             1.0,
         )
@@ -1189,8 +1214,13 @@ mod tests {
                         gain_automation: None,
                         fade_in_curve: video_editor_core::project::AudioFadeCurve::Linear,
                         fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
+
+                        effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                     }],
+
+                    effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
                 }],
+                effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
             }),
         };
         let mut sink = FfmpegSink::start(&settings, &output).expect("process starts");

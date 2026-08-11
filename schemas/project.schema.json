@@ -581,7 +581,31 @@
       "additionalProperties": false,
       "properties": {
         "black_point": {
-          "$ref": "#/$defs/scalar_track"
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_track"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMaximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMaximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         },
         "exposure": {
           "allOf": [
@@ -645,7 +669,31 @@
           "const": "color_adjust"
         },
         "white_point": {
-          "$ref": "#/$defs/scalar_track"
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_track"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMinimum": 0.0,
+                  "maximum": 1.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 1.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -2430,7 +2478,31 @@
           ]
         },
         "softness": {
-          "$ref": "#/$defs/scalar_track"
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_track"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMinimum": 0.0,
+                  "maximum": 2.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 2.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         },
         "type": {
           "const": "vignette"
@@ -2486,6 +2558,7 @@
           "$ref": "#/$defs/unit_point"
         },
         "direction": {
+          "default": "centered",
           "enum": [
             "inward",
             "outward",

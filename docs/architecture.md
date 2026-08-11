@@ -223,15 +223,33 @@ evaluated source and transform
   -> WGPU parameter packing
 ```
 
-## Extending effects
+## Extending visual and audio effects
 
-To add a project effect, update the project model and schema, validation,
-compiler, compiled-effect metadata, evaluation, logical-pass planning in
-`video-editor-core::plan`, CPU execution in `crates/video-editor-render/src/cpu`,
-WGPU execution in `crates/video-editor-render/src/wgpu`, parameter encoding,
-shader and pipeline mapping, prepared bind groups, capability coverage, a parity
-fixture, and a benchmark. Keep the effect-plan and evaluation behavior unchanged
-so neither renderer rediscovers ordering.
+Effect catalogs and descriptors in `video-editor-core` are the source for
+serialized IDs, authored parameter metadata, generated schema, and Python
+generic authoring. After changing an authored effect, update its compiler and
+evaluator lowering and add catalog, descriptor, schema, and typed/generic
+parity tests. Run the registered-effect conformance tests; they check that
+runtime visual kernels remain covered by conservative compiled requirements.
+
+A visual effect that lowers to existing `EffectOperation`/`EffectKernel`
+primitives does not require renderer changes. A new visual primitive requires
+the operation-to-kernel mapping, CPU implementation, WGPU capability and
+pipeline/shader, parameter encoding, and backend conformance/parity tests.
+
+An audio effect that lowers to an existing `AudioEffectOperation` needs no
+`video-editor-media` change: media consumes only the compiled operation plan.
+A new audio primitive requires its duration behavior, core sample-domain
+rounding and plan propagation, FFmpeg lowering, exact output-duration
+enforcement where needed, and timeline/analysis parity tests.
+
+A duration-changing audio primitive must also declare valid scope, define
+backend-neutral duration transformation and rounding semantics, propagate
+selected and processed duration through the plan, and prove encoder/analyzer
+parity. It cannot be implemented as an FFmpeg filter alone. Finish changes by
+running `cargo run -p video-editor-cli -- generate-schema`, the schema
+freshness/self-validation checks, the Rust workspace tests, and the focused
+Python authoring tests.
 # Audio timeline (schema v2)
 
 Audio semantics live in `video-editor-core`: `AudioTimeline` owns ordered

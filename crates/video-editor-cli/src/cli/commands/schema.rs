@@ -46,6 +46,15 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 properties.insert(parameter.name.into(), parameter_schema(parameter));
             }
+            if let Some(default) = parameter.default {
+                let property = properties
+                    .get_mut(parameter.name)
+                    .expect("descriptor default has a serialized property");
+                property
+                    .as_object_mut()
+                    .expect("descriptor default property is an object")
+                    .insert("default".into(), json!(default));
+            }
             if parameter.required {
                 required.push(parameter.name);
             }
@@ -200,7 +209,47 @@ fn parameter_schema(parameter: &video_editor::EffectParameterDescriptor) -> Valu
                 })
             }
         }
-        EffectParameterKind::PlainTrack => json!({"$ref": "#/$defs/scalar_track"}),
+        EffectParameterKind::PlainTrack => {
+            let mut authored = Map::new();
+            if let Some(minimum) = parameter.minimum {
+                authored.insert(
+                    if parameter.minimum_exclusive {
+                        "exclusiveMinimum"
+                    } else {
+                        "minimum"
+                    }
+                    .into(),
+                    json!(minimum),
+                );
+            }
+            if let Some(maximum) = parameter.maximum {
+                authored.insert(
+                    if parameter.maximum_exclusive {
+                        "exclusiveMaximum"
+                    } else {
+                        "maximum"
+                    }
+                    .into(),
+                    json!(maximum),
+                );
+            }
+            if authored.is_empty() {
+                json!({"$ref": "#/$defs/scalar_track"})
+            } else {
+                let value = Value::Object(Map::from_iter(
+                    [(String::from("type"), json!("number"))]
+                        .into_iter()
+                        .chain(authored),
+                ));
+                json!({"allOf": [
+                    {"$ref": "#/$defs/scalar_track"},
+                    {"properties": {
+                        "base_value": value.clone(),
+                        "keyframes": {"items": {"properties": {"value": value}}}
+                    }}
+                ]})
+            }
+        }
         EffectParameterKind::Colour => json!({"$ref": "#/$defs/colour"}),
         EffectParameterKind::Integer => json!({
             "type": "integer", "minimum": parameter.integer_minimum, "maximum": parameter.integer_maximum
@@ -236,5 +285,256 @@ fn parameter_schema(parameter: &video_editor::EffectParameterDescriptor) -> Valu
         EffectParameterKind::ActiveInterval => {
             unreachable!("logical active interval is expanded by the caller")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use serde_json::{Map, Value, json};
+    use video_editor::{EffectParameterKind, audio_effect_descriptors, visual_effect_descriptors};
+
+    fn schema() -> Value {
+        serde_json::from_str(include_str!("../../../../../schemas/project.schema.json"))
+            .expect("checked-in schema is valid JSON")
+    }
+
+    fn branch_ids(schema: &Value, name: &str) -> BTreeSet<String> {
+        schema["$defs"][name]["oneOf"]
+            .as_array()
+            .expect("schema union")
+            .iter()
+            .map(|branch| {
+                branch["$ref"]
+                    .as_str()
+                    .expect("schema branch reference")
+                    .trim_start_matches("#/$defs/")
+                    .trim_end_matches("_effect")
+                    .trim_end_matches("_audio")
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn registered_effects_have_exact_schema_union_coverage() {
+        let schema = schema();
+        assert_eq!(
+            branch_ids(&schema, "effect"),
+            visual_effect_descriptors()
+                .map(|descriptor| descriptor.id.to_owned())
+                .collect()
+        );
+        let audio = audio_effect_descriptors().collect::<Vec<_>>();
+        for (scope, definition_scope) in [
+            ("audio_clip_effect", video_editor::AudioEffectScope::Clip),
+            ("audio_track_effect", video_editor::AudioEffectScope::Track),
+            (
+                "audio_master_effect",
+                video_editor::AudioEffectScope::Master,
+            ),
+        ] {
+            let expected = audio
+                .iter()
+                .filter(|definition| definition.scopes.contains(&definition_scope))
+                .map(|definition| definition.id.to_owned())
+                .collect();
+            assert_eq!(branch_ids(&schema, scope), expected, "{scope}");
+        }
+    }
+
+    #[test]
+    fn schema_effect_properties_match_descriptor_parameters_and_defaults() {
+        let schema = schema();
+        for descriptor in visual_effect_descriptors() {
+            let branch = &schema["$defs"][format!("{}_effect", descriptor.id)];
+            let properties = branch["properties"].as_object().expect("effect properties");
+            let required = branch["required"].as_array().expect("effect required");
+            for parameter in descriptor.parameters {
+                if matches!(parameter.kind, EffectParameterKind::ActiveInterval) {
+                    for name in ["start", "duration"] {
+                        assert!(
+                            properties.contains_key(name),
+                            "{} missing {name}",
+                            descriptor.id
+                        );
+                    }
+                } else {
+                    assert!(
+                        properties.contains_key(parameter.name),
+                        "{} missing {}",
+                        descriptor.id,
+                        parameter.name
+                    );
+                }
+                if parameter.required
+                    && !matches!(parameter.kind, EffectParameterKind::ActiveInterval)
+                {
+                    assert!(required.iter().any(|item| item == parameter.name));
+                }
+                if let Some(default) = parameter.default {
+                    assert_eq!(properties[parameter.name]["default"], default);
+                }
+            }
+        }
+        for descriptor in audio_effect_descriptors() {
+            let branch = &schema["$defs"][format!("{}_audio_effect", descriptor.id)];
+            let properties = branch["properties"].as_object().expect("audio properties");
+            let required = branch["required"].as_array().expect("audio required");
+            for parameter in descriptor.parameters {
+                assert!(
+                    properties.contains_key(parameter.name),
+                    "{} missing {}",
+                    descriptor.id,
+                    parameter.name
+                );
+                assert!(required.iter().any(|item| item == parameter.name));
+                if let Some(minimum) = parameter.minimum {
+                    let key = if parameter.minimum_exclusive {
+                        "exclusiveMinimum"
+                    } else {
+                        "minimum"
+                    };
+                    assert_eq!(properties[parameter.name][key], minimum);
+                }
+                if let Some(maximum) = parameter.maximum {
+                    let key = if parameter.maximum_exclusive {
+                        "exclusiveMaximum"
+                    } else {
+                        "maximum"
+                    };
+                    assert_eq!(properties[parameter.name][key], maximum);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn schema_contains_descriptor_bounds_on_all_authored_track_values() {
+        let schema = schema();
+        for descriptor in visual_effect_descriptors() {
+            for parameter in descriptor.parameters {
+                if !matches!(
+                    parameter.kind,
+                    EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack
+                ) {
+                    continue;
+                }
+                let property = &schema["$defs"][format!("{}_effect", descriptor.id)]["properties"]
+                    [parameter.name];
+                let value = if property.get("allOf").is_some() {
+                    &property["allOf"][1]["properties"]["base_value"]
+                } else {
+                    property
+                };
+                if let Some(minimum) = parameter.minimum {
+                    let key = if parameter.minimum_exclusive {
+                        "exclusiveMinimum"
+                    } else {
+                        "minimum"
+                    };
+                    assert_eq!(value[key], minimum);
+                }
+                if let Some(maximum) = parameter.maximum {
+                    let key = if parameter.maximum_exclusive {
+                        "exclusiveMaximum"
+                    } else {
+                        "maximum"
+                    };
+                    assert_eq!(value[key], maximum);
+                }
+            }
+        }
+    }
+
+    fn bound_semantics(value: &Value) -> Map<String, Value> {
+        ["minimum", "exclusiveMinimum", "maximum", "exclusiveMaximum"]
+            .into_iter()
+            .filter_map(|name| {
+                value
+                    .get(name)
+                    .map(|value| (name.to_owned(), value.clone()))
+            })
+            .collect()
+    }
+
+    fn descriptor_bound_semantics(
+        parameter: &video_editor::EffectParameterDescriptor,
+    ) -> Map<String, Value> {
+        let mut bounds = Map::new();
+        if let Some(minimum) = parameter.minimum {
+            bounds.insert(
+                if parameter.minimum_exclusive {
+                    "exclusiveMinimum"
+                } else {
+                    "minimum"
+                }
+                .to_owned(),
+                json!(minimum),
+            );
+        }
+        if let Some(maximum) = parameter.maximum {
+            bounds.insert(
+                if parameter.maximum_exclusive {
+                    "exclusiveMaximum"
+                } else {
+                    "maximum"
+                }
+                .to_owned(),
+                json!(maximum),
+            );
+        }
+        bounds
+    }
+
+    #[test]
+    fn authored_bounds_match_base_and_keyframe_values_for_all_numeric_tracks() {
+        let schema = schema();
+        for descriptor in visual_effect_descriptors() {
+            let properties = schema["$defs"][format!("{}_effect", descriptor.id)]["properties"]
+                .as_object()
+                .expect("effect properties");
+            for parameter in descriptor.parameters {
+                if !matches!(
+                    parameter.kind,
+                    EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack
+                ) {
+                    continue;
+                }
+                let expected = descriptor_bound_semantics(parameter);
+                let value_properties = &properties[parameter.name]["allOf"][1]["properties"];
+                assert_eq!(
+                    bound_semantics(&value_properties["base_value"]),
+                    expected,
+                    "{} {} base_value bounds",
+                    descriptor.id,
+                    parameter.name
+                );
+                assert_eq!(
+                    bound_semantics(&value_properties["keyframes"]["items"]["properties"]["value"]),
+                    expected,
+                    "{} {} keyframe value bounds",
+                    descriptor.id,
+                    parameter.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn black_point_schema_uses_an_exclusive_upper_bound_at_both_track_locations() {
+        let schema = schema();
+        let values = &schema["$defs"]["color_adjust_effect"]["properties"]["black_point"]["allOf"]
+            [1]["properties"];
+        let expected = Map::from_iter([
+            ("minimum".to_owned(), json!(0.0)),
+            ("exclusiveMaximum".to_owned(), json!(1.0)),
+        ]);
+        assert_eq!(bound_semantics(&values["base_value"]), expected);
+        assert_eq!(
+            bound_semantics(&values["keyframes"]["items"]["properties"]["value"]),
+            expected
+        );
     }
 }

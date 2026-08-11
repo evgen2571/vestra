@@ -227,4 +227,317 @@ mod tests {
             assert!(diagnostic.message.contains(backend.as_str()));
         }
     }
+
+    #[test]
+    fn every_executable_operation_has_one_kernel_mapping() {
+        let operations = [
+            EffectOperation::ApplyColourTransform {
+                transform: Default::default(),
+            },
+            EffectOperation::GaussianHorizontal { radius: 1.0 },
+            EffectOperation::GaussianVertical { radius: 1.0 },
+            EffectOperation::HighlightExtract {
+                threshold: 0.5,
+                colour: [255; 4],
+            },
+            EffectOperation::Composite {
+                mode: CompositeMode::Additive,
+                amount: 1.0,
+            },
+            EffectOperation::DirectionalBlur {
+                radius: 1.0,
+                angle_degrees: 0.0,
+            },
+            EffectOperation::ZoomBlur {
+                radius: 1.0,
+                samples: 2,
+                anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            EffectOperation::ChromaticAberration {
+                amount: 1.0,
+                angle_degrees: 0.0,
+            },
+            EffectOperation::Vignette {
+                amount: 1.0,
+                radius: 1.0,
+                softness: 1.0,
+                colour: [255; 4],
+            },
+            EffectOperation::ColorAdjust {
+                exposure: 0.0,
+                gamma: 1.0,
+                black_point: 0.0,
+                white_point: 1.0,
+            },
+            EffectOperation::MotionBlur {
+                radius: 1.0,
+                angle_degrees: 0.0,
+                samples: 2,
+            },
+        ];
+        assert!(
+            operations
+                .iter()
+                .all(|operation| EffectKernel::ALL.contains(&kernel_for_operation(operation)))
+        );
+    }
+
+    #[test]
+    fn evaluated_runtime_kernels_are_a_subset_of_compiled_requirements() {
+        let scalar = |value| {
+            crate::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
+        };
+        let cases = [
+            (
+                crate::plan::CompiledEffect::Brightness {
+                    amount: scalar(0.25),
+                },
+                crate::plan::EvaluatedEffect::Brightness { amount: 0.25 },
+            ),
+            (
+                crate::plan::CompiledEffect::Contrast {
+                    amount: scalar(1.25),
+                },
+                crate::plan::EvaluatedEffect::Contrast { amount: 1.25 },
+            ),
+            (
+                crate::plan::CompiledEffect::Saturation {
+                    amount: scalar(1.25),
+                },
+                crate::plan::EvaluatedEffect::Saturation { amount: 1.25 },
+            ),
+            (
+                crate::plan::CompiledEffect::Tint {
+                    colour: [255; 4],
+                    amount: scalar(0.25),
+                },
+                crate::plan::EvaluatedEffect::Tint {
+                    colour: [255; 4],
+                    amount: 0.25,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::GaussianBlur {
+                    radius: scalar(2.0),
+                },
+                crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 },
+            ),
+            (
+                crate::plan::CompiledEffect::DirectionalBlur {
+                    radius: scalar(2.0),
+                    angle_degrees: scalar(10.0),
+                },
+                crate::plan::EvaluatedEffect::DirectionalBlur {
+                    radius: 2.0,
+                    angle_degrees: 10.0,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::ZoomBlur {
+                    radius: scalar(2.0),
+                    samples: 2,
+                    anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+                    direction: crate::project::ZoomBlurDirection::Centered,
+                },
+                crate::plan::EvaluatedEffect::ZoomBlur {
+                    radius: 2.0,
+                    samples: 2,
+                    anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+                    direction: crate::project::ZoomBlurDirection::Centered,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::Glow {
+                    threshold: scalar(0.5),
+                    radius: scalar(2.0),
+                    intensity: scalar(1.0),
+                    colour: [255; 4],
+                },
+                crate::plan::EvaluatedEffect::Glow {
+                    threshold: 0.5,
+                    radius: 2.0,
+                    intensity: 1.0,
+                    colour: [255; 4],
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::ChromaticAberration {
+                    amount: scalar(0.25),
+                    angle_degrees: scalar(10.0),
+                },
+                crate::plan::EvaluatedEffect::ChromaticAberration {
+                    amount: 0.25,
+                    angle_degrees: 10.0,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::Vignette {
+                    amount: scalar(0.5),
+                    radius: scalar(1.0),
+                    softness: crate::animation::Track::new(1.0),
+                    colour: [255; 4],
+                },
+                crate::plan::EvaluatedEffect::Vignette {
+                    amount: 0.5,
+                    radius: 1.0,
+                    softness: 1.0,
+                    colour: [255; 4],
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::Sharpen {
+                    amount: scalar(1.0),
+                    radius: scalar(2.0),
+                },
+                crate::plan::EvaluatedEffect::Sharpen {
+                    amount: 1.0,
+                    radius: 2.0,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::ColorAdjust {
+                    exposure: scalar(0.2),
+                    gamma: scalar(1.2),
+                    black_point: crate::animation::Track::new(0.0),
+                    white_point: crate::animation::Track::new(1.0),
+                },
+                crate::plan::EvaluatedEffect::ColorAdjust {
+                    exposure: 0.2,
+                    gamma: 1.2,
+                    black_point: 0.0,
+                    white_point: 1.0,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::CameraShake {
+                    position_amount: scalar(1.0),
+                    rotation_degrees: scalar(1.0),
+                    scale_amount: scalar(1.0),
+                    frequency: scalar(1.0),
+                    seed: 1,
+                    attack: 0.0,
+                    decay: 1.0,
+                },
+                crate::plan::EvaluatedEffect::CameraShake {
+                    local_time: 0,
+                    position_amount: 1.0,
+                    rotation_radians: 1.0_f64.to_radians(),
+                    scale_amount: 1.0,
+                    frequency: 1.0,
+                    seed: 1,
+                    attack: 0.0,
+                    decay: 1.0,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::MotionBlur {
+                    intensity: scalar(1.0),
+                    shutter_angle: scalar(180.0),
+                    max_radius: scalar(2.0),
+                    samples: 2,
+                },
+                crate::plan::EvaluatedEffect::MotionBlur {
+                    radius: 0.0,
+                    angle_degrees: 0.0,
+                    intensity: 1.0,
+                    shutter_angle: 180.0,
+                    max_radius: 2.0,
+                    samples: 2,
+                },
+            ),
+        ];
+        assert_eq!(
+            cases.len(),
+            video_editor_core::effect_definition::visual_effect_descriptors().count(),
+            "every registered visual effect needs a runtime kernel conformance case"
+        );
+        let signals = crate::plan::PreparedScalarSignals::empty();
+        let context = crate::plan::EvaluationContext::new(&signals);
+        for (compiled, representative) in cases {
+            let evaluated = crate::plan::evaluate_effect(&compiled, 0, 0, &context)
+                .expect("representative compiled effect evaluates");
+            assert_eq!(format!("{evaluated:?}"), format!("{representative:?}"));
+            let required = compiled_effect_pass_plan(&compiled)
+                .iter()
+                .map(|pass| kernel_for_operation(&pass.operation))
+                .collect::<Vec<_>>();
+            for pass in crate::render::effects::effect_pass_plan(&evaluated).iter() {
+                assert!(
+                    required.contains(&kernel_for_operation(&pass.operation)),
+                    "runtime kernel was omitted from conservative requirements"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn identity_topology_branches_are_checked_without_requiring_exact_equality() {
+        let scalar = |value| {
+            crate::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
+        };
+        let cases = [
+            (
+                crate::plan::CompiledEffect::GaussianBlur {
+                    radius: scalar(0.0),
+                },
+                crate::plan::EvaluatedEffect::GaussianBlur { radius: 0.0 },
+            ),
+            (
+                crate::plan::CompiledEffect::Glow {
+                    threshold: scalar(0.5),
+                    radius: scalar(2.0),
+                    intensity: scalar(0.0),
+                    colour: [255; 4],
+                },
+                crate::plan::EvaluatedEffect::Glow {
+                    threshold: 0.5,
+                    radius: 2.0,
+                    intensity: 0.0,
+                    colour: [255; 4],
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::MotionBlur {
+                    intensity: scalar(0.0),
+                    shutter_angle: scalar(180.0),
+                    max_radius: scalar(2.0),
+                    samples: 2,
+                },
+                crate::plan::EvaluatedEffect::MotionBlur {
+                    radius: 0.0,
+                    angle_degrees: 0.0,
+                    intensity: 0.0,
+                    shutter_angle: 180.0,
+                    max_radius: 2.0,
+                    samples: 2,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::MotionBlur {
+                    intensity: scalar(1.0),
+                    shutter_angle: scalar(180.0),
+                    max_radius: scalar(2.0),
+                    samples: 2,
+                },
+                crate::plan::EvaluatedEffect::MotionBlur {
+                    radius: 0.2,
+                    angle_degrees: 0.0,
+                    intensity: 1.0,
+                    shutter_angle: 180.0,
+                    max_radius: 2.0,
+                    samples: 2,
+                },
+            ),
+        ];
+        for (compiled, evaluated) in cases {
+            let required = compiled_effect_pass_plan(&compiled);
+            for pass in crate::render::effects::effect_pass_plan(&evaluated).iter() {
+                assert!(required.iter().any(|candidate| {
+                    kernel_for_operation(&candidate.operation)
+                        == kernel_for_operation(&pass.operation)
+                }));
+            }
+        }
+    }
 }

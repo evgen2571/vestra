@@ -563,11 +563,22 @@ fn run_static<S: FrameSink + ?Sized>(
                 rgba: rgba.to_vec(),
             })
             .map_err(|error| {
-                static_error(
+                let cleanup = abort_sink(encoder);
+                cleanup_error(
                     output,
                     plan,
+                    RenderFailureStage::FrameWrite,
                     frame_number,
-                    Diagnostic::error("MVP-RENDER-WRITE", Category::Render, error.to_string(), ""),
+                    Some(frame_number),
+                    with_encoder_cleanup(
+                        Diagnostic::error(
+                            "MVP-RENDER-WRITE",
+                            Category::Render,
+                            error.to_string(),
+                            "",
+                        ),
+                        cleanup,
+                    ),
                 )
             })?;
         write += started.elapsed();

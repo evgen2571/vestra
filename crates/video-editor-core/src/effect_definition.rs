@@ -25,10 +25,12 @@ pub enum ScalarPropertyConstraint {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum ScalarAuthoredValidation {
     Finite,
-    ClosedRange { min: f64, max: f64 },
-    NonNegative,
-    StrictPositive,
-    PositiveRange { max: f64 },
+    Range {
+        min: Option<f64>,
+        max: Option<f64>,
+        min_exclusive: bool,
+        max_exclusive: bool,
+    },
 }
 
 impl ScalarAuthoredValidation {
@@ -37,10 +39,37 @@ impl ScalarAuthoredValidation {
         let value = *value;
         match self {
             Self::Finite => value.is_finite(),
-            Self::ClosedRange { min, max } => value.is_finite() && value >= min && value <= max,
-            Self::NonNegative => value.is_finite() && value >= 0.0,
-            Self::StrictPositive => value.is_finite() && value > 0.0,
-            Self::PositiveRange { max } => value.is_finite() && value > 0.0 && value <= max,
+            Self::Range {
+                min,
+                max,
+                min_exclusive,
+                max_exclusive,
+            } => {
+                value.is_finite()
+                    && match min {
+                        None => true,
+                        Some(min) if min_exclusive => value > min,
+                        Some(min) => value >= min,
+                    }
+                    && match max {
+                        None => true,
+                        Some(max) if max_exclusive => value < max,
+                        Some(max) => value <= max,
+                    }
+            }
+        }
+    }
+
+    #[must_use]
+    const fn bounds(self) -> (Option<f64>, Option<f64>, bool, bool) {
+        match self {
+            Self::Finite => (None, None, false, false),
+            Self::Range {
+                min,
+                max,
+                min_exclusive,
+                max_exclusive,
+            } => (min, max, min_exclusive, max_exclusive),
         }
     }
 }
@@ -97,9 +126,7 @@ pub(crate) struct ScalarPropertyDefinition {
 impl ScalarPropertyTarget {
     #[must_use]
     pub(crate) const fn definition(self) -> ScalarPropertyDefinition {
-        use ScalarAuthoredValidation::{
-            ClosedRange, Finite, NonNegative, PositiveRange, StrictPositive,
-        };
+        use ScalarAuthoredValidation::{Finite, Range};
         use ScalarPropertyConstraint::{
             ClosedRange as RuntimeRange, Finite as RuntimeFinite,
             NonNegative as RuntimeNonNegative, PositiveFloor,
@@ -117,7 +144,12 @@ impl ScalarPropertyTarget {
             Self::TintAmount | Self::GlowThreshold | Self::VignetteAmount => {
                 ScalarPropertyDefinition {
                     runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
-                    authored_validation: ClosedRange { min: 0.0, max: 1.0 },
+                    authored_validation: Range {
+                        min: Some(0.0),
+                        max: Some(1.0),
+                        min_exclusive: false,
+                        max_exclusive: false,
+                    },
                 }
             }
             Self::GaussianBlurRadius
@@ -130,27 +162,41 @@ impl ScalarPropertyTarget {
                     min: 0.0,
                     max: 32.0,
                 },
-                authored_validation: ClosedRange {
-                    min: 0.0,
-                    max: 32.0,
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(32.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
                 },
             },
             Self::GlowIntensity | Self::SharpenAmount => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange { min: 0.0, max: 4.0 },
-                authored_validation: ClosedRange { min: 0.0, max: 4.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(4.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
             },
             Self::VignetteRadius => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange { min: 0.0, max: 2.0 },
-                authored_validation: ClosedRange { min: 0.0, max: 2.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(2.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
             },
             Self::SharpenRadius => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange {
                     min: 0.0,
                     max: 16.0,
                 },
-                authored_validation: ClosedRange {
-                    min: 0.0,
-                    max: 16.0,
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(16.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
                 },
             },
             Self::ColorAdjustExposure => ScalarPropertyDefinition {
@@ -158,9 +204,11 @@ impl ScalarPropertyTarget {
                     min: -8.0,
                     max: 8.0,
                 },
-                authored_validation: ClosedRange {
-                    min: -8.0,
-                    max: 8.0,
+                authored_validation: Range {
+                    min: Some(-8.0),
+                    max: Some(8.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
                 },
             },
             Self::ColorAdjustGamma => ScalarPropertyDefinition {
@@ -168,29 +216,46 @@ impl ScalarPropertyTarget {
                     min: MIN_POSITIVE_PROPERTY_VALUE,
                     max: 8.0,
                 },
-                authored_validation: PositiveRange { max: 8.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(8.0),
+                    min_exclusive: true,
+                    max_exclusive: false,
+                },
             },
             Self::CameraShakePositionAmount
             | Self::CameraShakeRotationDegrees
             | Self::CameraShakeScaleAmount
             | Self::MotionBlurIntensity => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeNonNegative,
-                authored_validation: NonNegative,
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: None,
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
             },
             Self::CameraShakeFrequency => ScalarPropertyDefinition {
                 runtime_constraint: PositiveFloor {
                     minimum: MIN_POSITIVE_PROPERTY_VALUE,
                 },
-                authored_validation: StrictPositive,
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: None,
+                    min_exclusive: true,
+                    max_exclusive: false,
+                },
             },
             Self::MotionBlurShutterAngle => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange {
                     min: 0.0,
                     max: 360.0,
                 },
-                authored_validation: ClosedRange {
-                    min: 0.0,
-                    max: 360.0,
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(360.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
                 },
             },
         }
@@ -253,13 +318,7 @@ pub struct EffectParameterDescriptor {
 impl EffectParameterDescriptor {
     const fn scalar(target: ScalarPropertyTarget) -> Self {
         let validation = target.authored_validation();
-        let (minimum, maximum, minimum_exclusive) = match validation {
-            ScalarAuthoredValidation::Finite => (None, None, false),
-            ScalarAuthoredValidation::ClosedRange { min, max } => (Some(min), Some(max), false),
-            ScalarAuthoredValidation::NonNegative => (Some(0.0), None, false),
-            ScalarAuthoredValidation::StrictPositive => (Some(0.0), None, true),
-            ScalarAuthoredValidation::PositiveRange { max } => (Some(0.0), Some(max), true),
-        };
+        let (minimum, maximum, minimum_exclusive, maximum_exclusive) = validation.bounds();
         Self {
             name: target.name(),
             kind: EffectParameterKind::ScalarProperty,
@@ -271,25 +330,27 @@ impl EffectParameterDescriptor {
             integer_minimum: None,
             integer_maximum: None,
             minimum_exclusive,
-            maximum_exclusive: false,
+            maximum_exclusive,
             default: None,
             enum_values: &[],
         }
     }
 
     const fn plain_track(target: PlainTrackTarget) -> Self {
+        let validation = target.authored_validation();
+        let (minimum, maximum, minimum_exclusive, maximum_exclusive) = validation.bounds();
         Self {
             name: target.name(),
             kind: EffectParameterKind::PlainTrack,
             required: true,
             scalar_target: None,
             plain_track_target: Some(target),
-            minimum: None,
-            maximum: None,
+            minimum,
+            maximum,
             integer_minimum: None,
             integer_maximum: None,
-            minimum_exclusive: false,
-            maximum_exclusive: false,
+            minimum_exclusive,
+            maximum_exclusive,
             default: None,
             enum_values: &[],
         }
@@ -388,6 +449,31 @@ impl ScalarPropertyTarget {
 }
 
 impl PlainTrackTarget {
+    #[must_use]
+    pub(crate) const fn authored_validation(self) -> ScalarAuthoredValidation {
+        use ScalarAuthoredValidation::Range;
+        match self {
+            Self::VignetteSoftness => Range {
+                min: Some(0.0),
+                max: Some(2.0),
+                min_exclusive: true,
+                max_exclusive: false,
+            },
+            Self::ColorAdjustBlackPoint => Range {
+                min: Some(0.0),
+                max: Some(1.0),
+                min_exclusive: false,
+                max_exclusive: true,
+            },
+            Self::ColorAdjustWhitePoint => Range {
+                min: Some(0.0),
+                max: Some(1.0),
+                min_exclusive: true,
+                max_exclusive: false,
+            },
+        }
+    }
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -599,7 +685,8 @@ impl crate::project::Effect {
 #[cfg(test)]
 mod tests {
     use super::{
-        EffectClass, EffectScope, PlainTrackTarget, ScalarPropertyTarget, VisualEffectKind,
+        EffectClass, EffectParameterKind, EffectScope, PlainTrackTarget, ScalarPropertyTarget,
+        VisualEffectKind,
     };
 
     #[test]
@@ -676,5 +763,101 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn descriptor_ids_and_parameters_are_accepted_by_canonical_visual_serde() {
+        let mut serialized_ids = Vec::new();
+        for descriptor in super::visual_effect_descriptors() {
+            let mut value = serde_json::Map::from_iter([
+                ("id".to_owned(), serde_json::json!("test")),
+                ("type".to_owned(), serde_json::json!(descriptor.id)),
+            ]);
+            for parameter in descriptor.parameters {
+                let number = match parameter.name {
+                    "black_point" => 0.25,
+                    "white_point" => 0.75,
+                    _ if parameter.minimum_exclusive => parameter.minimum.unwrap_or(0.0) + 0.5,
+                    _ => parameter.minimum.unwrap_or(0.5),
+                };
+                let parameter_value = match parameter.kind {
+                    EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack => {
+                        serde_json::json!({"base_value": number})
+                    }
+                    EffectParameterKind::Colour => serde_json::json!("#ffffff"),
+                    EffectParameterKind::Integer => {
+                        serde_json::json!(parameter.integer_minimum.unwrap_or(2))
+                    }
+                    EffectParameterKind::Number => serde_json::json!(number),
+                    EffectParameterKind::Point2d => serde_json::json!({"x": 0.5, "y": 0.5}),
+                    EffectParameterKind::Enum => {
+                        serde_json::json!(parameter.default.unwrap_or(parameter.enum_values[0]))
+                    }
+                    EffectParameterKind::ActiveInterval => {
+                        value.insert("start".to_owned(), serde_json::json!(0.0));
+                        continue;
+                    }
+                };
+                value.insert(parameter.name.to_owned(), parameter_value);
+            }
+            let effect: crate::project::Effect =
+                serde_json::from_value(serde_json::Value::Object(value)).unwrap_or_else(|error| {
+                    panic!(
+                        "{} descriptor is not serde-compatible: {error}",
+                        descriptor.id
+                    )
+                });
+            serialized_ids
+                .push(serde_json::to_value(effect).expect("effect serializes")["type"].clone());
+        }
+        assert_eq!(
+            serialized_ids,
+            super::visual_effect_descriptors()
+                .map(|descriptor| serde_json::json!(descriptor.id))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn plain_track_constraints_are_owned_by_their_targets() {
+        let vignette = VisualEffectKind::Vignette.definition();
+        let softness = vignette
+            .parameters
+            .iter()
+            .find(|parameter| parameter.name == "softness")
+            .expect("vignette softness descriptor");
+        assert_eq!(softness.minimum, Some(0.0));
+        assert!(softness.minimum_exclusive);
+        assert_eq!(softness.maximum, Some(2.0));
+
+        let color_adjust = VisualEffectKind::ColorAdjust.definition();
+        let black = color_adjust
+            .parameters
+            .iter()
+            .find(|parameter| parameter.name == "black_point")
+            .expect("black point descriptor");
+        let white = color_adjust
+            .parameters
+            .iter()
+            .find(|parameter| parameter.name == "white_point")
+            .expect("white point descriptor");
+        assert_eq!(
+            (
+                black.minimum,
+                black.maximum,
+                black.minimum_exclusive,
+                black.maximum_exclusive,
+            ),
+            (Some(0.0), Some(1.0), false, true)
+        );
+        assert_eq!(
+            (
+                white.minimum,
+                white.maximum,
+                white.minimum_exclusive,
+                white.maximum_exclusive,
+            ),
+            (Some(0.0), Some(1.0), true, false)
+        );
     }
 }

@@ -11,6 +11,7 @@ use crate::{
 };
 
 pub use crate::effect_definition::EffectClass;
+use crate::effect_definition::{PlainTrackTarget, ScalarPropertyTarget};
 
 #[derive(Clone, Debug)]
 pub struct RenderPlan {
@@ -316,55 +317,68 @@ impl CompiledEffect {
 
     pub(crate) fn for_each_scalar_property(
         &self,
-        mut visitor: impl FnMut(&CompiledScalarProperty),
+        mut visitor: impl FnMut(ScalarPropertyTarget, &CompiledScalarProperty),
     ) {
+        let expected = self.definition().scalar_properties;
         let mut visited = 0;
-        let mut visit = |property: &CompiledScalarProperty| {
+        let mut visit = |target: ScalarPropertyTarget, property: &CompiledScalarProperty| {
+            debug_assert_eq!(expected.get(visited), Some(&target));
             visited += 1;
-            visitor(property);
+            visitor(target, property);
         };
         match self {
             Self::ColourTransform { .. } => {}
-            Self::Brightness { amount }
-            | Self::Contrast { amount }
-            | Self::Saturation { amount }
-            | Self::Tint { amount, .. }
-            | Self::GaussianBlur { radius: amount }
-            | Self::ZoomBlur { radius: amount, .. } => visit(amount),
+            Self::Brightness { amount } => visit(ScalarPropertyTarget::BrightnessAmount, amount),
+            Self::Contrast { amount } => visit(ScalarPropertyTarget::ContrastAmount, amount),
+            Self::Saturation { amount } => visit(ScalarPropertyTarget::SaturationAmount, amount),
+            Self::Tint { amount, .. } => visit(ScalarPropertyTarget::TintAmount, amount),
+            Self::GaussianBlur { radius } => {
+                visit(ScalarPropertyTarget::GaussianBlurRadius, radius)
+            }
             Self::DirectionalBlur {
                 radius,
                 angle_degrees,
-            }
-            | Self::ChromaticAberration {
-                amount: radius,
-                angle_degrees,
             } => {
-                visit(radius);
-                visit(angle_degrees);
+                visit(ScalarPropertyTarget::DirectionalBlurRadius, radius);
+                visit(
+                    ScalarPropertyTarget::DirectionalBlurAngleDegrees,
+                    angle_degrees,
+                );
             }
+            Self::ZoomBlur { radius, .. } => visit(ScalarPropertyTarget::ZoomBlurRadius, radius),
             Self::Glow {
                 threshold,
                 radius,
                 intensity,
                 ..
             } => {
-                visit(threshold);
-                visit(radius);
-                visit(intensity);
+                visit(ScalarPropertyTarget::GlowThreshold, threshold);
+                visit(ScalarPropertyTarget::GlowRadius, radius);
+                visit(ScalarPropertyTarget::GlowIntensity, intensity);
+            }
+            Self::ChromaticAberration {
+                amount,
+                angle_degrees,
+            } => {
+                visit(ScalarPropertyTarget::ChromaticAberrationAmount, amount);
+                visit(
+                    ScalarPropertyTarget::ChromaticAberrationAngleDegrees,
+                    angle_degrees,
+                );
             }
             Self::Vignette { amount, radius, .. } => {
-                visit(amount);
-                visit(radius);
+                visit(ScalarPropertyTarget::VignetteAmount, amount);
+                visit(ScalarPropertyTarget::VignetteRadius, radius);
             }
             Self::Sharpen { amount, radius } => {
-                visit(amount);
-                visit(radius);
+                visit(ScalarPropertyTarget::SharpenAmount, amount);
+                visit(ScalarPropertyTarget::SharpenRadius, radius);
             }
             Self::ColorAdjust {
                 exposure, gamma, ..
             } => {
-                visit(exposure);
-                visit(gamma);
+                visit(ScalarPropertyTarget::ColorAdjustExposure, exposure);
+                visit(ScalarPropertyTarget::ColorAdjustGamma, gamma);
             }
             Self::CameraShake {
                 position_amount,
@@ -373,10 +387,16 @@ impl CompiledEffect {
                 frequency,
                 ..
             } => {
-                visit(position_amount);
-                visit(rotation_degrees);
-                visit(scale_amount);
-                visit(frequency);
+                visit(
+                    ScalarPropertyTarget::CameraShakePositionAmount,
+                    position_amount,
+                );
+                visit(
+                    ScalarPropertyTarget::CameraShakeRotationDegrees,
+                    rotation_degrees,
+                );
+                visit(ScalarPropertyTarget::CameraShakeScaleAmount, scale_amount);
+                visit(ScalarPropertyTarget::CameraShakeFrequency, frequency);
             }
             Self::MotionBlur {
                 intensity,
@@ -384,42 +404,47 @@ impl CompiledEffect {
                 max_radius,
                 ..
             } => {
-                visit(intensity);
-                visit(shutter_angle);
-                visit(max_radius);
+                visit(ScalarPropertyTarget::MotionBlurIntensity, intensity);
+                visit(ScalarPropertyTarget::MotionBlurShutterAngle, shutter_angle);
+                visit(ScalarPropertyTarget::MotionBlurMaxRadius, max_radius);
             }
         }
-        debug_assert_eq!(visited, self.definition().scalar_properties.len());
+        debug_assert_eq!(visited, expected.len());
     }
 
-    pub(crate) fn for_each_plain_track(&self, mut visitor: impl FnMut(&Track<f64>)) {
+    pub(crate) fn for_each_plain_track(
+        &self,
+        mut visitor: impl FnMut(PlainTrackTarget, &Track<f64>),
+    ) {
+        let expected = self.definition().plain_tracks;
         let mut visited = 0;
-        let mut visit = |track: &Track<f64>| {
+        let mut visit = |target: PlainTrackTarget, track: &Track<f64>| {
+            debug_assert_eq!(expected.get(visited), Some(&target));
             visited += 1;
-            visitor(track);
+            visitor(target, track);
         };
         match self {
-            Self::Vignette { softness, .. } => visit(softness),
+            Self::Vignette { softness, .. } => visit(PlainTrackTarget::VignetteSoftness, softness),
             Self::ColorAdjust {
                 black_point,
                 white_point,
                 ..
             } => {
-                visit(black_point);
-                visit(white_point);
+                visit(PlainTrackTarget::ColorAdjustBlackPoint, black_point);
+                visit(PlainTrackTarget::ColorAdjustWhitePoint, white_point);
             }
             _ => {}
         }
-        debug_assert_eq!(visited, self.definition().plain_track_count);
+        debug_assert_eq!(visited, expected.len());
     }
 
     #[must_use]
     pub fn keyframe_count(&self) -> u64 {
         let mut count = 0;
-        self.for_each_scalar_property(|property| {
+        self.for_each_scalar_property(|_, property| {
             count += property.authored_keyframe_count() as u64;
         });
-        self.for_each_plain_track(|track| count += track.keyframes.len() as u64);
+        self.for_each_plain_track(|_, track| count += track.keyframes.len() as u64);
         count
     }
 
@@ -522,6 +547,57 @@ mod tests {
             },
         };
         assert_eq!(colour_adjust.keyframe_count(), 3);
+    }
+
+    #[test]
+    fn scalar_property_visitation_preserves_catalog_identity_order() {
+        let scalar = |value| CompiledScalarProperty::authored(Track::new(value));
+        let glow = CompiledEffect::Glow {
+            threshold: scalar(0.5),
+            radius: scalar(2.0),
+            intensity: scalar(1.0),
+            colour: [0, 0, 0, 255],
+        };
+        let mut targets = Vec::new();
+        glow.for_each_scalar_property(|target, _| targets.push(target));
+        assert_eq!(
+            targets,
+            vec![
+                ScalarPropertyTarget::GlowThreshold,
+                ScalarPropertyTarget::GlowRadius,
+                ScalarPropertyTarget::GlowIntensity,
+            ]
+        );
+    }
+
+    #[test]
+    fn plain_track_visitation_preserves_catalog_identity_order() {
+        let scalar = || CompiledScalarProperty::authored(Track::new(0.0));
+        let vignette = CompiledEffect::Vignette {
+            amount: scalar(),
+            radius: scalar(),
+            softness: Track::new(1.0),
+            colour: [0, 0, 0, 255],
+        };
+        let mut vignette_targets = Vec::new();
+        vignette.for_each_plain_track(|target, _| vignette_targets.push(target));
+        assert_eq!(vignette_targets, vec![PlainTrackTarget::VignetteSoftness]);
+
+        let colour_adjust = CompiledEffect::ColorAdjust {
+            exposure: scalar(),
+            gamma: scalar(),
+            black_point: Track::new(0.0),
+            white_point: Track::new(1.0),
+        };
+        let mut colour_adjust_targets = Vec::new();
+        colour_adjust.for_each_plain_track(|target, _| colour_adjust_targets.push(target));
+        assert_eq!(
+            colour_adjust_targets,
+            vec![
+                PlainTrackTarget::ColorAdjustBlackPoint,
+                PlainTrackTarget::ColorAdjustWhitePoint,
+            ]
+        );
     }
 
     #[test]

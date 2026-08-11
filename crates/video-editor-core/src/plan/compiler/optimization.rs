@@ -271,10 +271,10 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
 
 pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
     let mut dynamic = effect_has_modifiers(effect);
-    effect.for_each_scalar_property(|property| {
+    effect.for_each_scalar_property(|_, property| {
         dynamic |= !static_track(&property.authored_track);
     });
-    effect.for_each_plain_track(|track| {
+    effect.for_each_plain_track(|_, track| {
         dynamic |= !static_track(track);
     });
     dynamic |= matches!(
@@ -290,7 +290,7 @@ pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
 
 fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
     let mut has_modifiers = false;
-    effect.for_each_scalar_property(|property| has_modifiers |= property.has_modifiers());
+    effect.for_each_scalar_property(|_, property| has_modifiers |= property.has_modifiers());
     has_modifiers
 }
 

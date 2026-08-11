@@ -76,6 +76,13 @@ pub(crate) enum ScalarPropertyTarget {
     RotationDegrees,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PlainTrackTarget {
+    VignetteSoftness,
+    ColorAdjustBlackPoint,
+    ColorAdjustWhitePoint,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ScalarPropertyDefinition {
     pub runtime_constraint: ScalarPropertyConstraint,
@@ -215,7 +222,7 @@ pub(crate) struct EffectDefinition {
     pub temporal_policy: EffectTemporalPolicy,
     pub retains_original: bool,
     pub scalar_properties: &'static [ScalarPropertyTarget],
-    pub plain_track_count: usize,
+    pub plain_tracks: &'static [PlainTrackTarget],
 }
 
 macro_rules! visual_effect_catalog {
@@ -226,7 +233,7 @@ macro_rules! visual_effect_catalog {
         temporal: $temporal:ident,
         retains_original: $retains_original:literal,
         scalar_properties: [$($target:ident),* $(,)?],
-        plain_tracks: $plain_tracks:literal
+        plain_tracks: [$($plain_target:ident),* $(,)?]
     }),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         pub(crate) enum VisualEffectKind {
@@ -244,7 +251,7 @@ macro_rules! visual_effect_catalog {
                         temporal_policy: EffectTemporalPolicy::$temporal,
                         retains_original: $retains_original,
                         scalar_properties: &[$(ScalarPropertyTarget::$target),*],
-                        plain_track_count: $plain_tracks,
+                        plain_tracks: &[$(PlainTrackTarget::$plain_target),*],
                     }),+
                 }
             }
@@ -256,77 +263,77 @@ visual_effect_catalog! {
     ColourTransform => {
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [], plain_tracks: 0
+        scalar_properties: [], plain_tracks: []
     },
     Brightness => {
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [BrightnessAmount], plain_tracks: 0
+        scalar_properties: [BrightnessAmount], plain_tracks: []
     },
     Contrast => {
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ContrastAmount], plain_tracks: 0
+        scalar_properties: [ContrastAmount], plain_tracks: []
     },
     Saturation => {
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [SaturationAmount], plain_tracks: 0
+        scalar_properties: [SaturationAmount], plain_tracks: []
     },
     Tint => {
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [TintAmount], plain_tracks: 0
+        scalar_properties: [TintAmount], plain_tracks: []
     },
     GaussianBlur => {
         class: Advanced, scope: ClipAndGlobal, passes: 2,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [GaussianBlurRadius], plain_tracks: 0
+        scalar_properties: [GaussianBlurRadius], plain_tracks: []
     },
     DirectionalBlur => {
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [DirectionalBlurRadius, DirectionalBlurAngleDegrees], plain_tracks: 0
+        scalar_properties: [DirectionalBlurRadius, DirectionalBlurAngleDegrees], plain_tracks: []
     },
     ZoomBlur => {
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ZoomBlurRadius], plain_tracks: 0
+        scalar_properties: [ZoomBlurRadius], plain_tracks: []
     },
     Glow => {
         class: Advanced, scope: ClipAndGlobal, passes: 4,
         temporal: FromProperties, retains_original: true,
-        scalar_properties: [GlowThreshold, GlowRadius, GlowIntensity], plain_tracks: 0
+        scalar_properties: [GlowThreshold, GlowRadius, GlowIntensity], plain_tracks: []
     },
     ChromaticAberration => {
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ChromaticAberrationAmount, ChromaticAberrationAngleDegrees], plain_tracks: 0
+        scalar_properties: [ChromaticAberrationAmount, ChromaticAberrationAngleDegrees], plain_tracks: []
     },
     Vignette => {
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [VignetteAmount, VignetteRadius], plain_tracks: 1
+        scalar_properties: [VignetteAmount, VignetteRadius], plain_tracks: [VignetteSoftness]
     },
     Sharpen => {
         class: Advanced, scope: ClipAndGlobal, passes: 3,
         temporal: FromProperties, retains_original: true,
-        scalar_properties: [SharpenAmount, SharpenRadius], plain_tracks: 0
+        scalar_properties: [SharpenAmount, SharpenRadius], plain_tracks: []
     },
     ColorAdjust => {
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ColorAdjustExposure, ColorAdjustGamma], plain_tracks: 2
+        scalar_properties: [ColorAdjustExposure, ColorAdjustGamma], plain_tracks: [ColorAdjustBlackPoint, ColorAdjustWhitePoint]
     },
     CameraShake => {
         class: Transform, scope: ClipOnly, passes: 0,
         temporal: AlwaysDynamic, retains_original: false,
-        scalar_properties: [CameraShakePositionAmount, CameraShakeRotationDegrees, CameraShakeScaleAmount, CameraShakeFrequency], plain_tracks: 0
+        scalar_properties: [CameraShakePositionAmount, CameraShakeRotationDegrees, CameraShakeScaleAmount, CameraShakeFrequency], plain_tracks: []
     },
     MotionBlur => {
         class: Advanced, scope: ClipOnly, passes: 1,
         temporal: AlwaysDynamic, retains_original: false,
-        scalar_properties: [MotionBlurIntensity, MotionBlurShutterAngle, MotionBlurMaxRadius], plain_tracks: 0
+        scalar_properties: [MotionBlurIntensity, MotionBlurShutterAngle, MotionBlurMaxRadius], plain_tracks: []
     },
 }
 
@@ -354,7 +361,9 @@ impl crate::project::Effect {
 
 #[cfg(test)]
 mod tests {
-    use super::{EffectClass, EffectScope, ScalarPropertyTarget, VisualEffectKind};
+    use super::{
+        EffectClass, EffectScope, PlainTrackTarget, ScalarPropertyTarget, VisualEffectKind,
+    };
 
     #[test]
     fn catalog_keeps_representative_classes() {
@@ -399,11 +408,11 @@ mod tests {
                 ScalarPropertyTarget::GlowIntensity,
             ]
         );
-        assert_eq!(glow.plain_track_count, 0);
+        assert!(glow.plain_tracks.is_empty());
         assert!(glow.retains_original);
 
         let vignette = VisualEffectKind::Vignette.definition();
-        assert_eq!(vignette.plain_track_count, 1);
+        assert_eq!(vignette.plain_tracks, &[PlainTrackTarget::VignetteSoftness]);
         assert!(!vignette.retains_original);
     }
 }

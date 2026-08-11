@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::plan::ScalarPropertyTarget;
-use crate::{Category, Diagnostic, project::parse_colour};
+use crate::{project::parse_colour, Category, Diagnostic};
 
 use super::tracks;
 
@@ -99,7 +99,7 @@ pub(super) fn validate_global(
             errors.push(Diagnostic::error(
                 "MVP-POST-EFFECT-SCOPE",
                 Category::Semantic,
-                "camera shake and transform-aware motion blur are clip-local effects",
+                "this effect is clip-local and cannot be used as a global post-effect",
                 path.clone(),
             ));
         }
@@ -484,6 +484,21 @@ mod tests {
         let mut errors = Vec::new();
         validate_parameters(effect, 2.0, "/effect", 16, &mut errors, true);
         errors
+    }
+
+    #[test]
+    fn global_clip_only_diagnostic_is_effect_name_agnostic() {
+        let mut errors = Vec::new();
+        validate_global(&[camera_shake(0.5)], 2.0, 16, 16, &mut errors, true);
+        let diagnostic = errors
+            .iter()
+            .find(|diagnostic| diagnostic.code == "MVP-POST-EFFECT-SCOPE")
+            .expect("clip-only global effect diagnostic");
+        assert_eq!(
+            diagnostic.message,
+            "this effect is clip-local and cannot be used as a global post-effect"
+        );
+        assert_eq!(diagnostic.pointer.as_deref(), Some("/visual/post_effects/0"));
     }
 
     #[test]

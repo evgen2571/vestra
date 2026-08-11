@@ -440,7 +440,7 @@ mod tests {
         let stats = backend.stats();
         assert_eq!(stats.cpu_full_frame_allocations, 100);
         assert_eq!(stats.cpu_scratch_allocations, 3);
-        assert_eq!(stats.cpu_scratch_reuses, 100);
+        assert_eq!(stats.cpu_scratch_reuses, 200);
         assert_eq!(stats.cpu_scratch_buffers_retained, 3);
         assert_eq!(stats.cpu_scratch_bytes_retained, 192);
     }

@@ -8,8 +8,8 @@ use crate::{
 
 /// One logical rendering operation required by an evaluated effect.
 ///
-/// Backends choose how to execute these passes. The CPU backend currently
-/// groups the established multi-pass algorithms into surface-pool operations.
+/// Backends execute these logical passes in order using their backend-specific
+/// implementations.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EffectPass {
     /// An affine RGB transform in the renderer's existing encoded byte space.
@@ -77,36 +77,39 @@ impl EffectPass {
 }
 
 use crate::effects::canonical_gaussian_radius;
+use smallvec::SmallVec;
 
-/// The largest built-in chain, glow, has four passes. A stack-backed plan
-/// preserves the existing per-frame allocation behaviour and pass ordering.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Ordered logical rendering passes. Four passes remain inline for common
+/// effects, while longer plans grow as needed.
+#[derive(Clone, Debug, PartialEq)]
 pub struct EffectPassPlan {
-    passes: [EffectPass; 4],
-    len: usize,
+    passes: SmallVec<[EffectPass; 4]>,
 }
 
 impl EffectPassPlan {
     fn new(passes: &[EffectPass]) -> Self {
-        debug_assert!(passes.len() <= 4);
-        let mut planned = [EffectPass::ApplyColourTransform {
-            transform: ColourTransform::default(),
-        }; 4];
-        planned[..passes.len()].copy_from_slice(passes);
         Self {
-            passes: planned,
-            len: passes.len(),
+            passes: SmallVec::from_slice(passes),
         }
     }
 
     #[must_use]
-    pub fn is_empty(self) -> bool {
-        self.len == 0
+    pub fn len(&self) -> usize {
+        self.passes.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.passes.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &EffectPass> {
+        self.passes.iter()
     }
 
     #[must_use]
     pub fn as_slice(&self) -> &[EffectPass] {
-        &self.passes[..self.len]
+        self.passes.as_slice()
     }
 }
 
@@ -231,7 +234,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
 
 #[cfg(test)]
 mod tests {
-    use super::{EffectPass, effect_pass_plan};
+    use super::{EffectPass, EffectPassPlan, effect_pass_plan};
     use crate::effects::{
         canonical_gaussian_radius, effect_amount_is_identity, gaussian_radius_is_identity,
         sampling_blur_radius_is_identity,
@@ -281,6 +284,33 @@ mod tests {
                 EffectPass::UnsharpComposite { amount: 0.5 },
             ]
         );
+    }
+
+    #[test]
+    fn effect_pass_plan_grows_beyond_inline_capacity_without_losing_order() {
+        let passes = [
+            EffectPass::GaussianHorizontal { radius: 1.0 },
+            EffectPass::GaussianVertical { radius: 1.0 },
+            EffectPass::DirectionalBlur {
+                radius: 2.0,
+                angle_degrees: 15.0,
+            },
+            EffectPass::ChromaticAberration {
+                amount: 3.0,
+                angle_degrees: 30.0,
+            },
+            EffectPass::ColorAdjust {
+                exposure: 0.1,
+                gamma: 1.0,
+                black_point: 0.0,
+                white_point: 1.0,
+            },
+        ];
+        let plan = EffectPassPlan::new(&passes);
+
+        assert_eq!(plan.len(), 5);
+        assert_eq!(plan.as_slice(), passes.as_slice());
+        assert_eq!(plan.iter().copied().collect::<Vec<_>>(), passes.to_vec());
     }
 
     #[test]

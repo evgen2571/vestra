@@ -5,8 +5,9 @@ use image::{GenericImage, Rgba, RgbaImage};
 pub(crate) struct EffectSurfacePool {
     first: RgbaImage,
     second: RgbaImage,
-    horizontal: RgbaImage,
+    original: RgbaImage,
     first_is_current: bool,
+    original_is_current: bool,
     allocations: u64,
     reuses: u64,
     copy_bytes: u64,
@@ -18,8 +19,9 @@ impl EffectSurfacePool {
         Self {
             first: RgbaImage::new(width, height),
             second: RgbaImage::new(width, height),
-            horizontal: RgbaImage::new(width, height),
+            original: RgbaImage::new(width, height),
             first_is_current: true,
+            original_is_current: false,
             allocations: 3,
             reuses: 0,
             copy_bytes: 0,
@@ -30,14 +32,17 @@ impl EffectSurfacePool {
         if self.first.width() != width || self.first.height() != height {
             self.first = RgbaImage::new(width, height);
             self.second = RgbaImage::new(width, height);
-            self.horizontal = RgbaImage::new(width, height);
+            self.original = RgbaImage::new(width, height);
             self.first_is_current = true;
+            self.original_is_current = false;
             self.allocations += 3;
         }
     }
 
     pub(super) fn current(&mut self) -> &mut RgbaImage {
-        if self.first_is_current {
+        if self.original_is_current {
+            &mut self.original
+        } else if self.first_is_current {
             &mut self.first
         } else {
             &mut self.second
@@ -50,14 +55,39 @@ impl EffectSurfacePool {
         }
     }
 
-    pub(super) fn run(&mut self, execute: impl FnOnce(&RgbaImage, &mut RgbaImage, &mut RgbaImage)) {
+    pub(super) fn run(&mut self, execute: impl FnOnce(&RgbaImage, &mut RgbaImage, &RgbaImage)) {
         self.reuses += 1;
+        if self.original_is_current {
+            if self.first_is_current {
+                execute(&self.original, &mut self.first, &self.original);
+            } else {
+                execute(&self.original, &mut self.second, &self.original);
+            }
+            self.original_is_current = false;
+            return;
+        }
         if self.first_is_current {
-            execute(&self.first, &mut self.second, &mut self.horizontal);
+            execute(&self.first, &mut self.second, &self.original);
         } else {
-            execute(&self.second, &mut self.first, &mut self.horizontal);
+            execute(&self.second, &mut self.first, &self.original);
         }
         self.first_is_current = !self.first_is_current;
+    }
+
+    /// Pins the current image in the retained `original` slot without copying pixels.
+    /// The first subsequent pass consumes that pinned image and writes into the
+    /// vacated ping-pong slot; later passes continue ping-ponging while `original`
+    /// remains available to composite operations.
+    pub(super) fn pin_current_as_original(&mut self) {
+        if self.original_is_current {
+            return;
+        }
+        if self.first_is_current {
+            std::mem::swap(&mut self.first, &mut self.original);
+        } else {
+            std::mem::swap(&mut self.second, &mut self.original);
+        }
+        self.original_is_current = true;
     }
 
     pub(super) fn begin_from(&mut self, source: &RgbaImage) {
@@ -66,6 +96,7 @@ impl EffectSurfacePool {
             .expect("matching effect surface dimensions");
         self.copy_bytes += image_bytes(source);
         self.first_is_current = true;
+        self.original_is_current = false;
     }
 
     pub(super) fn copy_to(&mut self, destination: &mut RgbaImage) {
@@ -112,6 +143,24 @@ fn image_bytes(image: &RgbaImage) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pinning_current_as_original_reuses_retained_storage_without_copying_pixels() {
+        let source = RgbaImage::from_pixel(2, 2, Rgba([10, 20, 30, 255]));
+        let mut pool = EffectSurfacePool::new(2, 2);
+        pool.begin_from(&source);
+        let copied_before_pin = pool.stats().copy_bytes;
+
+        pool.pin_current_as_original();
+        assert_eq!(pool.stats().copy_bytes, copied_before_pin);
+        pool.run(|current, target, original| {
+            assert_eq!(current, original);
+            target.copy_from(current, 0, 0).expect("matching surfaces");
+        });
+
+        assert_eq!(&*pool.current(), &source);
+        assert_eq!(pool.stats().copy_bytes, copied_before_pin);
+    }
 
     #[test]
     fn reuses_a_fixed_ping_pong_set_and_transfers_cached_output() {

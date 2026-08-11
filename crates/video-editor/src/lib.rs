@@ -29,6 +29,9 @@ pub use render::{
     BackendFallback, RenderBackendPreference as BackendPreference, RenderEvent,
     RenderFailureContext, RenderFailureStage, RenderObserverControl, RenderTimings,
 };
+pub use video_editor_core::effect_definition::{
+    EffectParameterDescriptor, EffectParameterKind, ScalarPropertyTarget, visual_effect_descriptors,
+};
 pub use video_editor_core::project::{AudioFadeCurve, AudioGainInterpolation};
 pub use video_editor_core::{Category, Diagnostic, Severity};
 

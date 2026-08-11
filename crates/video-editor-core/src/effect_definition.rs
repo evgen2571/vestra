@@ -1,6 +1,9 @@
 //! Compile-time metadata shared by authored and compiled visual effects.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use serde::Serialize;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EffectClass {
     BasicColour,
     Advanced,
@@ -45,8 +48,9 @@ impl ScalarAuthoredValidation {
 /// The smallest renderer-meaningful strictly-positive visual scalar.
 pub const MIN_POSITIVE_PROPERTY_VALUE: f64 = 1e-6;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ScalarPropertyTarget {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScalarPropertyTarget {
     BrightnessAmount,
     ContrastAmount,
     SaturationAmount,
@@ -76,8 +80,9 @@ pub(crate) enum ScalarPropertyTarget {
     RotationDegrees,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PlainTrackTarget {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlainTrackTarget {
     VignetteSoftness,
     ColorAdjustBlackPoint,
     ColorAdjustWhitePoint,
@@ -202,8 +207,9 @@ impl ScalarPropertyTarget {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum EffectScope {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectScope {
     ClipAndGlobal,
     ClipOnly,
 }
@@ -214,8 +220,187 @@ pub(crate) enum EffectTemporalPolicy {
     AlwaysDynamic,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectParameterKind {
+    ScalarProperty,
+    PlainTrack,
+    Colour,
+    Integer,
+    Number,
+    Point2d,
+    Enum,
+    ActiveInterval,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct EffectParameterDescriptor {
+    pub name: &'static str,
+    pub kind: EffectParameterKind,
+    pub required: bool,
+    pub scalar_target: Option<ScalarPropertyTarget>,
+    pub plain_track_target: Option<PlainTrackTarget>,
+    pub minimum: Option<f64>,
+    pub maximum: Option<f64>,
+    pub integer_minimum: Option<u64>,
+    pub integer_maximum: Option<u64>,
+    pub minimum_exclusive: bool,
+    pub maximum_exclusive: bool,
+    pub default: Option<&'static str>,
+    pub enum_values: &'static [&'static str],
+}
+
+impl EffectParameterDescriptor {
+    const fn scalar(target: ScalarPropertyTarget) -> Self {
+        let validation = target.authored_validation();
+        let (minimum, maximum, minimum_exclusive) = match validation {
+            ScalarAuthoredValidation::Finite => (None, None, false),
+            ScalarAuthoredValidation::ClosedRange { min, max } => (Some(min), Some(max), false),
+            ScalarAuthoredValidation::NonNegative => (Some(0.0), None, false),
+            ScalarAuthoredValidation::StrictPositive => (Some(0.0), None, true),
+            ScalarAuthoredValidation::PositiveRange { max } => (Some(0.0), Some(max), true),
+        };
+        Self {
+            name: target.name(),
+            kind: EffectParameterKind::ScalarProperty,
+            required: true,
+            scalar_target: Some(target),
+            plain_track_target: None,
+            minimum,
+            maximum,
+            integer_minimum: None,
+            integer_maximum: None,
+            minimum_exclusive,
+            maximum_exclusive: false,
+            default: None,
+            enum_values: &[],
+        }
+    }
+
+    const fn plain_track(target: PlainTrackTarget) -> Self {
+        Self {
+            name: target.name(),
+            kind: EffectParameterKind::PlainTrack,
+            required: true,
+            scalar_target: None,
+            plain_track_target: Some(target),
+            minimum: None,
+            maximum: None,
+            integer_minimum: None,
+            integer_maximum: None,
+            minimum_exclusive: false,
+            maximum_exclusive: false,
+            default: None,
+            enum_values: &[],
+        }
+    }
+
+    const fn simple(name: &'static str, kind: EffectParameterKind) -> Self {
+        Self {
+            name,
+            kind,
+            required: true,
+            scalar_target: None,
+            plain_track_target: None,
+            minimum: None,
+            maximum: None,
+            integer_minimum: None,
+            integer_maximum: None,
+            minimum_exclusive: false,
+            maximum_exclusive: false,
+            default: None,
+            enum_values: &[],
+        }
+    }
+
+    const fn integer(name: &'static str, minimum: u64, maximum: u64) -> Self {
+        Self {
+            minimum: Some(minimum as f64),
+            maximum: Some(maximum as f64),
+            integer_minimum: Some(minimum),
+            integer_maximum: Some(maximum),
+            ..Self::simple(name, EffectParameterKind::Integer)
+        }
+    }
+
+    const fn number(name: &'static str, minimum: Option<f64>, minimum_exclusive: bool) -> Self {
+        Self {
+            minimum,
+            minimum_exclusive,
+            ..Self::simple(name, EffectParameterKind::Number)
+        }
+    }
+
+    const fn optional_enum_default(
+        name: &'static str,
+        values: &'static [&'static str],
+        default: &'static str,
+    ) -> Self {
+        Self {
+            required: false,
+            default: Some(default),
+            enum_values: values,
+            ..Self::simple(name, EffectParameterKind::Enum)
+        }
+    }
+
+    const fn optional(name: &'static str, kind: EffectParameterKind) -> Self {
+        Self {
+            required: false,
+            ..Self::simple(name, kind)
+        }
+    }
+}
+
+impl ScalarPropertyTarget {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::BrightnessAmount => "amount",
+            Self::ContrastAmount => "amount",
+            Self::SaturationAmount => "amount",
+            Self::TintAmount => "amount",
+            Self::GaussianBlurRadius => "radius",
+            Self::DirectionalBlurRadius => "radius",
+            Self::DirectionalBlurAngleDegrees => "angle_degrees",
+            Self::ZoomBlurRadius => "radius",
+            Self::GlowThreshold => "threshold",
+            Self::GlowRadius => "radius",
+            Self::GlowIntensity => "intensity",
+            Self::ChromaticAberrationAmount => "amount",
+            Self::ChromaticAberrationAngleDegrees => "angle_degrees",
+            Self::VignetteAmount => "amount",
+            Self::VignetteRadius => "radius",
+            Self::SharpenAmount => "amount",
+            Self::SharpenRadius => "radius",
+            Self::ColorAdjustExposure => "exposure",
+            Self::ColorAdjustGamma => "gamma",
+            Self::CameraShakePositionAmount => "position_amount",
+            Self::CameraShakeRotationDegrees => "rotation_degrees",
+            Self::CameraShakeScaleAmount => "scale_amount",
+            Self::CameraShakeFrequency => "frequency",
+            Self::MotionBlurIntensity => "intensity",
+            Self::MotionBlurShutterAngle => "shutter_angle",
+            Self::MotionBlurMaxRadius => "max_radius",
+            Self::RotationDegrees => "rotation_degrees",
+        }
+    }
+}
+
+impl PlainTrackTarget {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::VignetteSoftness => "softness",
+            Self::ColorAdjustBlackPoint => "black_point",
+            Self::ColorAdjustWhitePoint => "white_point",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct EffectDefinition {
+    pub id: &'static str,
     pub class: EffectClass,
     pub scope: EffectScope,
     pub estimated_pass_count: usize,
@@ -223,10 +408,20 @@ pub(crate) struct EffectDefinition {
     pub retains_original: bool,
     pub scalar_properties: &'static [ScalarPropertyTarget],
     pub plain_tracks: &'static [PlainTrackTarget],
+    pub parameters: &'static [EffectParameterDescriptor],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct VisualEffectDescriptor {
+    pub id: &'static str,
+    pub class: EffectClass,
+    pub scope: EffectScope,
+    pub parameters: &'static [EffectParameterDescriptor],
 }
 
 macro_rules! visual_effect_catalog {
     ($($kind:ident => {
+        id: $id:literal,
         class: $class:ident,
         scope: $scope:ident,
         passes: $passes:literal,
@@ -234,6 +429,7 @@ macro_rules! visual_effect_catalog {
         retains_original: $retains_original:literal,
         scalar_properties: [$($target:ident),* $(,)?],
         plain_tracks: [$($plain_target:ident),* $(,)?]
+        , parameters: [$($parameter:expr),* $(,)?]
     }),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         pub(crate) enum VisualEffectKind {
@@ -244,97 +440,138 @@ macro_rules! visual_effect_catalog {
             #[must_use]
             pub(crate) const fn definition(self) -> EffectDefinition {
                 match self {
-                    $(Self::$kind => EffectDefinition {
-                        class: EffectClass::$class,
-                        scope: EffectScope::$scope,
-                        estimated_pass_count: $passes,
-                        temporal_policy: EffectTemporalPolicy::$temporal,
-                        retains_original: $retains_original,
-                        scalar_properties: &[$(ScalarPropertyTarget::$target),*],
-                        plain_tracks: &[$(PlainTrackTarget::$plain_target),*],
+                    $(Self::$kind => {
+                        static PARAMETERS: &[EffectParameterDescriptor] = &[$($parameter),*];
+                        EffectDefinition {
+                            id: $id,
+                            class: EffectClass::$class,
+                            scope: EffectScope::$scope,
+                            estimated_pass_count: $passes,
+                            temporal_policy: EffectTemporalPolicy::$temporal,
+                            retains_original: $retains_original,
+                            scalar_properties: &[$(ScalarPropertyTarget::$target),*],
+                            plain_tracks: &[$(PlainTrackTarget::$plain_target),*],
+                            parameters: PARAMETERS,
+                        }
                     }),+
                 }
             }
+
+            #[must_use]
+            pub const fn descriptor(self) -> VisualEffectDescriptor {
+                let definition = self.definition();
+                VisualEffectDescriptor {
+                    id: definition.id,
+                    class: definition.class,
+                    scope: definition.scope,
+                    parameters: definition.parameters,
+                }
+            }
+
+            pub const ALL: &'static [Self] = &[$(Self::$kind),+];
         }
     };
 }
 
 visual_effect_catalog! {
     ColourTransform => {
+        id: "colour_transform",
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [], plain_tracks: []
+        scalar_properties: [], plain_tracks: [], parameters: []
     },
     Brightness => {
+        id: "brightness",
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [BrightnessAmount], plain_tracks: []
+        scalar_properties: [BrightnessAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::BrightnessAmount)]
     },
     Contrast => {
+        id: "contrast",
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ContrastAmount], plain_tracks: []
+        scalar_properties: [ContrastAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ContrastAmount)]
     },
     Saturation => {
+        id: "saturation",
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [SaturationAmount], plain_tracks: []
+        scalar_properties: [SaturationAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::SaturationAmount)]
     },
     Tint => {
+        id: "tint",
         class: BasicColour, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [TintAmount], plain_tracks: []
+        scalar_properties: [TintAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour), EffectParameterDescriptor::scalar(ScalarPropertyTarget::TintAmount)]
     },
     GaussianBlur => {
+        id: "gaussian_blur",
         class: Advanced, scope: ClipAndGlobal, passes: 2,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [GaussianBlurRadius], plain_tracks: []
+        scalar_properties: [GaussianBlurRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::GaussianBlurRadius)]
     },
     DirectionalBlur => {
+        id: "directional_blur",
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [DirectionalBlurRadius, DirectionalBlurAngleDegrees], plain_tracks: []
+        scalar_properties: [DirectionalBlurRadius, DirectionalBlurAngleDegrees], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::DirectionalBlurRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::DirectionalBlurAngleDegrees)]
     },
     ZoomBlur => {
+        id: "zoom_blur",
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ZoomBlurRadius], plain_tracks: []
+        scalar_properties: [ZoomBlurRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ZoomBlurRadius), EffectParameterDescriptor::integer("samples", 2, 32), EffectParameterDescriptor::simple("anchor", EffectParameterKind::Point2d), EffectParameterDescriptor::optional_enum_default("direction", &["inward", "outward", "centered"], "centered")]
     },
     Glow => {
+        id: "glow",
         class: Advanced, scope: ClipAndGlobal, passes: 4,
         temporal: FromProperties, retains_original: true,
-        scalar_properties: [GlowThreshold, GlowRadius, GlowIntensity], plain_tracks: []
+        scalar_properties: [GlowThreshold, GlowRadius, GlowIntensity], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowIntensity), EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour)]
     },
     ChromaticAberration => {
+        id: "chromatic_aberration",
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ChromaticAberrationAmount, ChromaticAberrationAngleDegrees], plain_tracks: []
+        scalar_properties: [ChromaticAberrationAmount, ChromaticAberrationAngleDegrees], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ChromaticAberrationAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::ChromaticAberrationAngleDegrees)]
     },
     Vignette => {
+        id: "vignette",
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [VignetteAmount, VignetteRadius], plain_tracks: [VignetteSoftness]
+        scalar_properties: [VignetteAmount, VignetteRadius], plain_tracks: [VignetteSoftness], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::VignetteAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::VignetteRadius), EffectParameterDescriptor::plain_track(PlainTrackTarget::VignetteSoftness), EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour)]
     },
     Sharpen => {
+        id: "sharpen",
         class: Advanced, scope: ClipAndGlobal, passes: 3,
         temporal: FromProperties, retains_original: true,
-        scalar_properties: [SharpenAmount, SharpenRadius], plain_tracks: []
+        scalar_properties: [SharpenAmount, SharpenRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::SharpenAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::SharpenRadius)]
     },
     ColorAdjust => {
+        id: "color_adjust",
         class: Advanced, scope: ClipAndGlobal, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [ColorAdjustExposure, ColorAdjustGamma], plain_tracks: [ColorAdjustBlackPoint, ColorAdjustWhitePoint]
+        scalar_properties: [ColorAdjustExposure, ColorAdjustGamma], plain_tracks: [ColorAdjustBlackPoint, ColorAdjustWhitePoint], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ColorAdjustExposure), EffectParameterDescriptor::scalar(ScalarPropertyTarget::ColorAdjustGamma), EffectParameterDescriptor::plain_track(PlainTrackTarget::ColorAdjustBlackPoint), EffectParameterDescriptor::plain_track(PlainTrackTarget::ColorAdjustWhitePoint)]
     },
     CameraShake => {
+        id: "camera_shake",
         class: Transform, scope: ClipOnly, passes: 0,
         temporal: AlwaysDynamic, retains_original: false,
-        scalar_properties: [CameraShakePositionAmount, CameraShakeRotationDegrees, CameraShakeScaleAmount, CameraShakeFrequency], plain_tracks: []
+        scalar_properties: [CameraShakePositionAmount, CameraShakeRotationDegrees, CameraShakeScaleAmount, CameraShakeFrequency], plain_tracks: [], parameters: [EffectParameterDescriptor::optional("active_interval", EffectParameterKind::ActiveInterval), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakePositionAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakeRotationDegrees), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakeScaleAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakeFrequency), EffectParameterDescriptor::integer("seed", 0, u64::MAX), EffectParameterDescriptor::number("attack", Some(0.0), false), EffectParameterDescriptor::number("decay", Some(0.0), true)]
     },
     MotionBlur => {
+        id: "motion_blur",
         class: Advanced, scope: ClipOnly, passes: 1,
         temporal: AlwaysDynamic, retains_original: false,
-        scalar_properties: [MotionBlurIntensity, MotionBlurShutterAngle, MotionBlurMaxRadius], plain_tracks: []
+        scalar_properties: [MotionBlurIntensity, MotionBlurShutterAngle, MotionBlurMaxRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionBlurIntensity), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionBlurShutterAngle), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionBlurMaxRadius), EffectParameterDescriptor::integer("samples", 2, 32)]
     },
+}
+
+pub fn visual_effect_descriptors() -> impl Iterator<Item = VisualEffectDescriptor> {
+    VisualEffectKind::ALL
+        .iter()
+        .copied()
+        .filter(|kind| !matches!(kind, VisualEffectKind::ColourTransform))
+        .map(|kind| kind.descriptor())
 }
 
 impl crate::project::Effect {
@@ -414,5 +651,30 @@ mod tests {
         let vignette = VisualEffectKind::Vignette.definition();
         assert_eq!(vignette.plain_tracks, &[PlainTrackTarget::VignetteSoftness]);
         assert!(!vignette.retains_original);
+    }
+
+    #[test]
+    fn authored_descriptors_have_unique_ids_and_parameter_names() {
+        let descriptors: Vec<_> = super::visual_effect_descriptors().collect();
+        let ids: std::collections::BTreeSet<_> = descriptors.iter().map(|item| item.id).collect();
+        assert_eq!(ids.len(), descriptors.len());
+        for descriptor in descriptors {
+            let names: std::collections::BTreeSet<_> =
+                descriptor.parameters.iter().map(|item| item.name).collect();
+            assert_eq!(
+                names.len(),
+                descriptor.parameters.len(),
+                "{}",
+                descriptor.id
+            );
+            for parameter in descriptor.parameters {
+                if let Some(target) = parameter.scalar_target {
+                    assert_eq!(parameter.name, target.name());
+                }
+                if let Some(target) = parameter.plain_track_target {
+                    assert_eq!(parameter.name, target.name());
+                }
+            }
+        }
     }
 }

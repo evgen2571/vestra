@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::plan::ScalarPropertyTarget;
-use crate::{project::parse_colour, Category, Diagnostic};
+use crate::{Category, Diagnostic, project::parse_colour};
 
 use super::tracks;
 
@@ -498,7 +498,10 @@ mod tests {
             diagnostic.message,
             "this effect is clip-local and cannot be used as a global post-effect"
         );
-        assert_eq!(diagnostic.pointer.as_deref(), Some("/visual/post_effects/0"));
+        assert_eq!(
+            diagnostic.pointer.as_deref(),
+            Some("/visual/post_effects/0")
+        );
     }
 
     #[test]

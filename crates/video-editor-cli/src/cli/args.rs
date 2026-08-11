@@ -25,6 +25,7 @@ pub(super) enum Command {
     Validate(ValidateArgs),
     Inspect(InspectArgs),
     Render(RenderArgs),
+    GenerateSchema(GenerateSchemaArgs),
     Version,
 }
 
@@ -61,4 +62,10 @@ pub(super) struct RenderArgs {
     pub(super) report: Option<PathBuf>,
     #[arg(long, value_enum, default_value_t = CliRenderBackend::Auto)]
     pub(super) render_backend: CliRenderBackend,
+}
+
+#[derive(Args, Debug)]
+pub(super) struct GenerateSchemaArgs {
+    #[arg(long, default_value = "schemas/project.schema.json")]
+    pub(super) output: PathBuf,
 }

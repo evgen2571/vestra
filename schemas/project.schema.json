@@ -1,810 +1,865 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/video-editor/project.schema.json",
-  "title": "Declarative Video Renderer Project",
-  "type": "object",
-  "required": [
-    "schema_version",
-    "output",
-    "assets",
-    "visual"
-  ],
-  "additionalProperties": false,
-  "properties": {
-    "schema_version": {
-      "const": 2
-    },
-    "name": {
-      "type": "string"
-    },
-    "metadata": {
-      "not": {
-        "type": "null"
-      }
-    },
-    "output": {
-      "$ref": "#/$defs/output"
-    },
-    "assets": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/asset"
-      }
-    },
-    "audio": {
-      "$ref": "#/$defs/audio"
-    },
-    "visual": {
-      "$ref": "#/$defs/visual"
-    }
-  },
   "$defs": {
-    "colour": {
-      "type": "string",
-      "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
-    },
-    "point": {
-      "type": "object",
-      "required": [
-        "x",
-        "y"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number"
-        },
-        "y": {
-          "type": "number"
-        }
-      }
-    },
-    "crop": {
-      "type": "object",
-      "required": [
-        "x",
-        "y",
-        "width",
-        "height"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number"
-        },
-        "y": {
-          "type": "number"
-        },
-        "width": {
-          "type": "number"
-        },
-        "height": {
-          "type": "number"
-        }
-      }
-    },
-    "scalar_track": {
-      "type": "object",
-      "required": [
-        "base_value"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": {
-          "type": "number"
-        },
-        "keyframes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/scalar_keyframe"
-          }
-        }
-      }
-    },
-    "scalar_property": {
-      "type": "object",
-      "required": ["base_value"],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": { "type": "number" },
-        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/scalar_keyframe" } },
-        "modifiers": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
-      }
-    },
-    "opacity_property": {
-      "type": "object",
-      "required": ["base_value"],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": { "type": "number", "minimum": 0, "maximum": 1 },
-        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/unit_scalar_keyframe" } },
-        "modifiers": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
-      }
-    },
-    "unit_scalar_property": {
-      "type": "object",
-      "required": ["base_value"],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": { "type": "number", "minimum": 0, "maximum": 1 },
-        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/unit_scalar_keyframe" } },
-        "modifiers": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
-      }
-    },
-    "scalar_modifier": {
-      "type": "object",
-      "required": ["operation", "signal"],
-      "additionalProperties": false,
-      "properties": {
-        "operation": { "enum": ["replace", "add", "multiply"] },
-        "signal": { "$ref": "#/$defs/scalar_signal" }
-      }
-    },
-    "scalar_signal": {
-      "type": "object",
-      "required": ["source"],
-      "additionalProperties": false,
-      "properties": {
-        "source": { "$ref": "#/$defs/scalar_signal_source" },
-        "transforms": { "type": "array", "items": { "$ref": "#/$defs/signal_transform" } }
-      }
-    },
-    "scalar_signal_source": {
-      "type": "object",
-      "required": ["type", "tap", "feature"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "const": "audio" },
-        "tap": { "const": "master" },
-        "feature": { "$ref": "#/$defs/audio_scalar_feature" }
-      }
-    },
-    "audio_scalar_feature": {
-      "oneOf": [
-        { "type": "object", "required": ["type"], "additionalProperties": false, "properties": { "type": { "const": "rms" } } },
-        { "type": "object", "required": ["type"], "additionalProperties": false, "properties": { "type": { "const": "peak" } } },
-        { "type": "object", "required": ["type", "min_hz", "max_hz"], "additionalProperties": false, "properties": { "type": { "const": "band_energy" }, "min_hz": { "type": "number", "minimum": 0 }, "max_hz": { "type": "number", "maximum": 24000 } } }
-      ]
-    },
-    "signal_transform": {
-      "oneOf": [
-        { "type": "object", "required": ["type", "gain"], "additionalProperties": false, "properties": { "type": { "const": "gain" }, "gain": { "type": "number" } } },
-        { "type": "object", "required": ["type", "input_min", "input_max", "output_start", "output_end"], "additionalProperties": false, "properties": { "type": { "const": "remap" }, "input_min": { "type": "number" }, "input_max": { "type": "number" }, "output_start": { "type": "number" }, "output_end": { "type": "number" } } },
-        { "type": "object", "required": ["type", "min", "max"], "additionalProperties": false, "properties": { "type": { "const": "clamp" }, "min": { "type": "number" }, "max": { "type": "number" } } },
-        { "type": "object", "required": ["type", "attack", "release"], "additionalProperties": false, "properties": { "type": { "const": "envelope" }, "attack": { "type": "number", "minimum": 0 }, "release": { "type": "number", "minimum": 0 } } },
-        { "type": "object", "required": ["type", "x1", "y1", "x2", "y2"], "additionalProperties": false, "properties": { "type": { "const": "response_curve" }, "x1": { "type": "number", "minimum": 0, "maximum": 1 }, "y1": { "type": "number" }, "x2": { "type": "number", "minimum": 0, "maximum": 1 }, "y2": { "type": "number" } } }
-      ]
-    },
-    "point_track": {
-      "type": "object",
-      "required": [
-        "base_value"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": {
-          "$ref": "#/$defs/point"
-        },
-        "keyframes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/point_keyframe"
-          }
-        }
-      }
-    },
-    "opacity_track": {
-      "type": "object",
-      "required": [
-        "base_value"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "keyframes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/unit_scalar_keyframe"
-          }
-        }
-      }
-    },
     "anchor_track": {
-      "type": "object",
-      "required": [
-        "base_value"
-      ],
       "additionalProperties": false,
       "properties": {
         "base_value": {
           "$ref": "#/$defs/unit_point"
         },
         "keyframes": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/unit_point_keyframe"
-          }
+          },
+          "type": "array"
         }
-      }
-    },
-    "scale_track": {
-      "type": "object",
+      },
       "required": [
         "base_value"
       ],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": {
-          "$ref": "#/$defs/positive_point"
-        },
-        "keyframes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/positive_point_keyframe"
-          }
-        }
-      }
-    },
-    "crop_track": {
-      "type": "object",
-      "required": [
-        "base_value"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "base_value": {
-          "$ref": "#/$defs/crop"
-        },
-        "keyframes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/crop_keyframe"
-          }
-        }
-      }
-    },
-    "interpolation": {
-      "oneOf": [
-        {
-          "enum": [
-            "linear",
-            "hold",
-            "ease_in",
-            "ease_out",
-            "ease_in_out"
-          ]
-        },
-        {
-          "type": "object",
-          "required": [
-            "type",
-            "x1",
-            "y1",
-            "x2",
-            "y2"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "cubic_bezier"
-            },
-            "x1": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "y1": {
-              "type": "number"
-            },
-            "x2": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "y2": {
-              "type": "number"
-            }
-          }
-        }
-      ]
-    },
-    "scalar_keyframe": {
-      "type": "object",
-      "required": [
-        "time",
-        "value",
-        "interpolation"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "time": {
-          "type": "number",
-          "minimum": 0
-        },
-        "value": {
-          "type": "number"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
-    },
-    "point_keyframe": {
-      "type": "object",
-      "required": [
-        "time",
-        "value",
-        "interpolation"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "time": {
-          "type": "number",
-          "minimum": 0
-        },
-        "value": {
-          "$ref": "#/$defs/point"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
-    },
-    "unit_scalar_keyframe": {
-      "type": "object",
-      "required": [
-        "time",
-        "value",
-        "interpolation"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "time": {
-          "type": "number",
-          "minimum": 0
-        },
-        "value": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
-    },
-    "unit_point_keyframe": {
-      "type": "object",
-      "required": [
-        "time",
-        "value",
-        "interpolation"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "time": {
-          "type": "number",
-          "minimum": 0
-        },
-        "value": {
-          "$ref": "#/$defs/unit_point"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
-    },
-    "positive_point_keyframe": {
-      "type": "object",
-      "required": [
-        "time",
-        "value",
-        "interpolation"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "time": {
-          "type": "number",
-          "minimum": 0
-        },
-        "value": {
-          "$ref": "#/$defs/positive_point"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
-    },
-    "crop_keyframe": {
-      "type": "object",
-      "required": [
-        "time",
-        "value",
-        "interpolation"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "time": {
-          "type": "number",
-          "minimum": 0
-        },
-        "value": {
-          "$ref": "#/$defs/crop"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
-    },
-    "unit_point": {
-      "type": "object",
-      "required": [
-        "x",
-        "y"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "y": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        }
-      }
-    },
-    "positive_point": {
-      "type": "object",
-      "required": [
-        "x",
-        "y"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "y": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        }
-      }
-    },
-    "output": {
-      "type": "object",
-      "required": [
-        "path",
-        "width",
-        "height",
-        "frame_rate",
-        "background",
-        "quality",
-        "audio",
-        "duration_mode"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "path": {
-          "type": "string"
-        },
-        "width": {
-          "type": "integer",
-          "minimum": 2
-        },
-        "height": {
-          "type": "integer",
-          "minimum": 2
-        },
-        "frame_rate": {
-          "oneOf": [
-            {
-              "type": "number",
-              "exclusiveMinimum": 0
-            },
-            {
-              "type": "string",
-              "pattern": "^[1-9][0-9]*/[1-9][0-9]*$"
-            }
-          ]
-        },
-        "background": {
-          "$ref": "#/$defs/colour"
-        },
-        "quality": {
-          "enum": [
-            "preview",
-            "balanced",
-            "high"
-          ]
-        },
-        "audio": {
-          "type": "boolean"
-        },
-        "duration_mode": {
-          "enum": [
-            "automatic",
-            "explicit"
-          ]
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        }
-      }
+      "type": "object"
     },
     "asset": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "source"
-      ],
       "additionalProperties": false,
       "properties": {
         "id": {
-          "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "type": "string"
         },
         "type": {
           "enum": [
             "image",
             "audio"
           ]
-        },
-        "source": {
-          "type": "string",
-          "minLength": 1
         }
-      }
+      },
+      "required": [
+        "id",
+        "type",
+        "source"
+      ],
+      "type": "object"
     },
     "audio": {
-      "type": "object",
-      "required": [
-        "tracks"
-      ],
       "additionalProperties": false,
       "properties": {
         "tracks": {
-          "type": "array",
           "items": {
-            "type": "object",
-            "required": [
-              "id",
-              "clips"
-            ],
             "additionalProperties": false,
             "properties": {
-              "id": {
-                "type": "string"
-              },
-              "mute": {
-                "type": "boolean"
-              },
-              "gain": {
-                "type": "number",
-                "minimum": 0
-              },
               "clips": {
-                "type": "array",
                 "items": {
-                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "asset": {
+                      "type": "string"
+                    },
+                    "fade_in": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "fade_in_curve": {
+                      "enum": [
+                        "linear",
+                        "equal_power"
+                      ]
+                    },
+                    "fade_out": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "fade_out_curve": {
+                      "enum": [
+                        "linear",
+                        "equal_power"
+                      ]
+                    },
+                    "gain": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "gain_automation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "keyframes": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "gain": {
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "interpolation": {
+                                "enum": [
+                                  "linear",
+                                  "hold"
+                                ]
+                              },
+                              "time": {
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "time",
+                              "gain"
+                            ],
+                            "type": "object"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "keyframes"
+                      ],
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "mute": {
+                      "type": "boolean"
+                    },
+                    "start": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "trim_end": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "trim_start": {
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
                   "required": [
                     "id",
                     "asset",
                     "start",
                     "trim_start"
                   ],
-                  "additionalProperties": false,
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "asset": {
-                      "type": "string"
-                    },
-                    "start": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "trim_start": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "trim_end": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "mute": {
-                      "type": "boolean"
-                    },
-                    "gain": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "gain_automation": {
-                      "type": "object",
-                      "required": ["keyframes"],
-                      "additionalProperties": false,
-                      "properties": {
-                        "keyframes": {
-                          "type": "array",
-                          "minItems": 1,
-                          "items": {
-                            "type": "object",
-                            "required": ["time", "gain"],
-                            "additionalProperties": false,
-                            "properties": {
-                              "time": {"type": "number", "minimum": 0},
-                              "gain": {"type": "number", "minimum": 0},
-                              "interpolation": {"enum": ["linear", "hold"]}
-                            }
-                          }
-                        }
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "gain": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "mute": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "clips"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tracks"
+      ],
+      "type": "object"
+    },
+    "audio_scalar_feature": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "rms"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "peak"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "max_hz": {
+              "maximum": 24000,
+              "type": "number"
+            },
+            "min_hz": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "type": {
+              "const": "band_energy"
+            }
+          },
+          "required": [
+            "type",
+            "min_hz",
+            "max_hz"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "brightness_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "brightness"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount"
+      ],
+      "type": "object"
+    },
+    "camera_shake_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "attack": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "decay": {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "frequency": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMinimum": 0.0,
+                        "type": "number"
                       }
-                    },
-                    "fade_in": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "fade_out": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "fade_in_curve": {
-                      "enum": ["linear", "equal_power"]
-                    },
-                    "fade_out_curve": {
-                      "enum": ["linear", "equal_power"]
                     }
                   }
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "source": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "type",
-            "asset"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "image"
-            },
-            "asset": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
+          ]
         },
-        {
-          "type": "object",
-          "required": [
-            "type",
-            "colour"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "solid_color"
-            },
-            "colour": {
-              "$ref": "#/$defs/colour"
-            }
-          }
-        }
-      ]
-    },
-    "sizing": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "mode"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "mode": {
-              "enum": [
-                "original",
-                "fit",
-                "cover"
-              ]
-            }
-          }
+        "id": {
+          "minLength": 1,
+          "type": "string"
         },
-        {
-          "type": "object",
-          "required": [
-            "mode",
-            "scale"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "mode": {
-              "const": "scale"
+        "position_amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
             },
-            "scale": {
-              "type": "number",
-              "exclusiveMinimum": 0
+            {
+              "properties": {
+                "base_value": {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
             }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "mode",
-            "width",
-            "height"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "mode": {
-              "const": "stretch"
-            },
-            "width": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "height": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        }
-      ]
-    },
-    "transform": {
-      "type": "object",
-      "required": [
-        "position",
-        "anchor",
-        "scale"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "position": {
-          "$ref": "#/$defs/point_track"
-        },
-        "anchor": {
-          "$ref": "#/$defs/anchor_track"
-        },
-        "scale": {
-          "$ref": "#/$defs/scale_track"
+          ]
         },
         "rotation_degrees": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "scale_amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "seed": {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "type": {
+          "const": "camera_shake"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position_amount",
+        "rotation_degrees",
+        "scale_amount",
+        "frequency",
+        "seed",
+        "attack",
+        "decay"
+      ],
+      "type": "object"
+    },
+    "chromatic_aberration_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "angle_degrees": {
           "$ref": "#/$defs/scalar_property"
         },
-        "component_modifiers": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "position_x": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } },
-            "position_y": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } },
-            "scale_x": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } },
-            "scale_y": { "type": "array", "items": { "$ref": "#/$defs/scalar_modifier" } }
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "chromatic_aberration"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount",
+        "angle_degrees"
+      ],
+      "type": "object"
+    },
+    "clip": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "required": [
+                "transform"
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "type": {
+                    "const": "image"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "transform"
+            ]
           }
         }
-      }
+      ],
+      "properties": {
+        "blend_mode": {
+          "enum": [
+            "normal",
+            "add",
+            "screen",
+            "multiply",
+            "overlay"
+          ]
+        },
+        "crop": {
+          "$ref": "#/$defs/crop_track"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/effect"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "layer": {
+          "type": "integer"
+        },
+        "opacity": {
+          "$ref": "#/$defs/opacity_property"
+        },
+        "preset": {
+          "$ref": "#/$defs/preset"
+        },
+        "sizing": {
+          "$ref": "#/$defs/sizing"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "transform": {
+          "$ref": "#/$defs/transform"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "start",
+        "duration",
+        "layer",
+        "opacity"
+      ],
+      "type": "object"
+    },
+    "color_adjust_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "black_point": {
+          "$ref": "#/$defs/scalar_track"
+        },
+        "exposure": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 8.0,
+                  "minimum": -8.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 8.0,
+                        "minimum": -8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "gamma": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMinimum": 0.0,
+                  "maximum": 8.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "color_adjust"
+        },
+        "white_point": {
+          "$ref": "#/$defs/scalar_track"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "exposure",
+        "gamma",
+        "black_point",
+        "white_point"
+      ],
+      "type": "object"
+    },
+    "colour": {
+      "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$",
+      "type": "string"
+    },
+    "contrast_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "contrast"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount"
+      ],
+      "type": "object"
+    },
+    "crop": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "crop_keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "time": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/crop"
+        }
+      },
+      "required": [
+        "time",
+        "value",
+        "interpolation"
+      ],
+      "type": "object"
+    },
+    "crop_track": {
+      "additionalProperties": false,
+      "properties": {
+        "base_value": {
+          "$ref": "#/$defs/crop"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/crop_keyframe"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "crossfade_transition": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "incoming": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "outgoing": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "type": {
+          "const": "crossfade"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "outgoing",
+        "incoming",
+        "start",
+        "duration",
+        "interpolation"
+      ],
+      "type": "object"
+    },
+    "directional_blur_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "angle_degrees": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "directional_blur"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "radius",
+        "angle_degrees"
+      ],
+      "type": "object"
+    },
+    "directional_push_transition": {
+      "additionalProperties": false,
+      "properties": {
+        "angle_degrees": {
+          "type": "number"
+        },
+        "blur_radius": {
+          "maximum": 32,
+          "minimum": 0,
+          "type": "number"
+        },
+        "distance": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "incoming": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "outgoing": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "type": {
+          "const": "directional_push"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "outgoing",
+        "incoming",
+        "start",
+        "duration",
+        "interpolation",
+        "angle_degrees",
+        "distance",
+        "blur_radius"
+      ],
+      "type": "object"
     },
     "effect": {
       "oneOf": [
         {
-          "$ref": "#/$defs/amount_effect"
+          "$ref": "#/$defs/brightness_effect"
+        },
+        {
+          "$ref": "#/$defs/contrast_effect"
+        },
+        {
+          "$ref": "#/$defs/saturation_effect"
         },
         {
           "$ref": "#/$defs/tint_effect"
@@ -841,142 +896,242 @@
         }
       ]
     },
-    "amount_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "amount"
-      ],
+    "flash": {
       "additionalProperties": false,
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "enum": [
-            "brightness",
-            "contrast",
-            "saturation"
-          ]
-        },
-        "amount": {
-          "$ref": "#/$defs/scalar_property"
-        }
-      }
-    },
-    "tint_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "colour",
-        "amount"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "tint"
-        },
         "colour": {
           "$ref": "#/$defs/colour"
         },
-        "amount": {
-          "$ref": "#/$defs/unit_scalar_property"
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "fade_in": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "fade_out": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "layer": {
+          "type": "integer"
+        },
+        "opacity": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
         }
-      }
+      },
+      "required": [
+        "id",
+        "start",
+        "duration",
+        "colour",
+        "opacity",
+        "layer"
+      ],
+      "type": "object"
+    },
+    "flash_cut_transition": {
+      "additionalProperties": false,
+      "properties": {
+        "colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "incoming": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "intensity": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "outgoing": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "type": {
+          "const": "flash_cut"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "outgoing",
+        "incoming",
+        "start",
+        "duration",
+        "interpolation",
+        "colour",
+        "intensity"
+      ],
+      "type": "object"
     },
     "gaussian_blur_effect": {
-      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "gaussian_blur"
+        }
+      },
       "required": [
         "id",
         "type",
         "radius"
       ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "gaussian_blur"
-        },
-        "radius": {
-          "$ref": "#/$defs/scalar_property"
-        }
-      }
-    },
-    "directional_blur_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "radius",
-        "angle_degrees"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "directional_blur"
-        },
-        "radius": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "angle_degrees": {
-          "$ref": "#/$defs/scalar_property"
-        }
-      }
-    },
-    "zoom_blur_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "radius",
-        "samples",
-        "anchor"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "zoom_blur"
-        },
-        "radius": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "samples": {
-          "type": "integer",
-          "minimum": 2,
-          "maximum": 32
-        },
-        "anchor": {
-          "$ref": "#/$defs/unit_point"
-        },
-        "direction": {
-          "enum": [
-            "inward",
-            "outward",
-            "centered"
-          ]
-        }
-      }
+      "type": "object"
     },
     "glow_effect": {
-      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "intensity": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 4.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 4.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "glow"
+        }
+      },
       "required": [
         "id",
         "type",
@@ -985,204 +1140,177 @@
         "intensity",
         "colour"
       ],
+      "type": "object"
+    },
+    "intensity_preset": {
       "additionalProperties": false,
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "glow"
-        },
-        "threshold": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "radius": {
-          "$ref": "#/$defs/scalar_property"
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
         },
         "intensity": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "colour": {
-          "$ref": "#/$defs/colour"
-        }
-      }
-    },
-    "chromatic_aberration_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "amount",
-        "angle_degrees"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "chromatic_aberration"
-        },
-        "amount": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "angle_degrees": {
-          "$ref": "#/$defs/scalar_property"
-        }
-      }
-    },
-    "vignette_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "amount",
-        "radius",
-        "softness",
-        "colour"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "vignette"
-        },
-        "amount": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "radius": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "softness": {
-          "$ref": "#/$defs/scalar_track"
-        },
-        "colour": {
-          "$ref": "#/$defs/colour"
-        }
-      }
-    },
-    "sharpen_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "amount",
-        "radius"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "sharpen"
-        },
-        "amount": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "radius": {
-          "$ref": "#/$defs/scalar_property"
-        }
-      }
-    },
-    "color_adjust_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "exposure",
-        "gamma",
-        "black_point",
-        "white_point"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "color_adjust"
-        },
-        "exposure": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "gamma": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "black_point": {
-          "$ref": "#/$defs/scalar_track"
-        },
-        "white_point": {
-          "$ref": "#/$defs/scalar_track"
-        }
-      }
-    },
-    "camera_shake_effect": {
-      "type": "object",
-      "required": [
-        "id",
-        "type",
-        "position_amount",
-        "rotation_degrees",
-        "scale_amount",
-        "frequency",
-        "seed",
-        "attack",
-        "decay"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
+          "minimum": 0,
+          "type": "number"
         },
         "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
+          "minimum": 0,
+          "type": "number"
         },
         "type": {
-          "const": "camera_shake"
-        },
-        "position_amount": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "rotation_degrees": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "scale_amount": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "frequency": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "seed": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 18446744073709551615
-        },
-        "attack": {
-          "type": "number",
-          "minimum": 0
-        },
-        "decay": {
-          "type": "number",
-          "exclusiveMinimum": 0
+          "enum": [
+            "slow_drift",
+            "zoom_punch",
+            "focus_reveal"
+          ]
         }
-      }
+      },
+      "required": [
+        "type",
+        "intensity"
+      ],
+      "type": "object"
+    },
+    "interpolation": {
+      "oneOf": [
+        {
+          "enum": [
+            "linear",
+            "hold",
+            "ease_in",
+            "ease_out",
+            "ease_in_out"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "cubic_bezier"
+            },
+            "x1": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "x2": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "y1": {
+              "type": "number"
+            },
+            "y2": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x1",
+            "y1",
+            "x2",
+            "y2"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "motion_blur_effect": {
-      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "intensity": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "max_radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "samples": {
+          "maximum": 32,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "shutter_angle": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 360.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 360.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "motion_blur"
+        }
+      },
       "required": [
         "id",
         "type",
@@ -1191,128 +1319,209 @@
         "max_radius",
         "samples"
       ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": "motion_blur"
-        },
-        "intensity": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "shutter_angle": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "max_radius": {
-          "$ref": "#/$defs/scalar_property"
-        },
-        "samples": {
-          "type": "integer",
-          "minimum": 2,
-          "maximum": 32
-        }
-      }
+      "type": "object"
     },
-    "clip": {
-      "type": "object",
-      "required": [
-        "id",
-        "source",
-        "start",
-        "duration",
-        "layer",
-        "opacity"
-      ],
+    "opacity_property": {
       "additionalProperties": false,
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
+        "base_value": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
         },
-        "source": {
-          "$ref": "#/$defs/source"
-        },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "layer": {
-          "type": "integer"
-        },
-        "visible": {
-          "type": "boolean"
-        },
-        "sizing": {
-          "$ref": "#/$defs/sizing"
-        },
-        "crop": {
-          "$ref": "#/$defs/crop_track"
-        },
-        "transform": {
-          "$ref": "#/$defs/transform"
-        },
-        "opacity": {
-          "$ref": "#/$defs/opacity_property"
-        },
-        "effects": {
-          "type": "array",
+        "keyframes": {
           "items": {
-            "$ref": "#/$defs/effect"
-          }
+            "$ref": "#/$defs/unit_scalar_keyframe"
+          },
+          "type": "array"
         },
-        "blend_mode": {
-          "enum": [
-            "normal",
-            "add",
-            "screen",
-            "multiply",
-            "overlay"
-          ]
-        },
-        "preset": {
-          "$ref": "#/$defs/preset"
+        "modifiers": {
+          "items": {
+            "$ref": "#/$defs/scalar_modifier"
+          },
+          "type": "array"
         }
       },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "source": {
-                "properties": {
-                  "type": {
-                    "const": "image"
-                  }
-                },
-                "required": [
-                  "type"
-                ]
-              }
-            },
-            "required": [
-              "source"
-            ]
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "opacity_track": {
+      "additionalProperties": false,
+      "properties": {
+        "base_value": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/unit_scalar_keyframe"
           },
-          "then": {
-            "required": [
-              "transform"
-            ]
-          },
-          "else": {
-            "not": {
-              "required": [
-                "transform"
-              ]
-            }
-          }
+          "type": "array"
         }
-      ]
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "audio": {
+          "type": "boolean"
+        },
+        "background": {
+          "$ref": "#/$defs/colour"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "duration_mode": {
+          "enum": [
+            "automatic",
+            "explicit"
+          ]
+        },
+        "frame_rate": {
+          "oneOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "pattern": "^[1-9][0-9]*/[1-9][0-9]*$",
+              "type": "string"
+            }
+          ]
+        },
+        "height": {
+          "minimum": 2,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "quality": {
+          "enum": [
+            "preview",
+            "balanced",
+            "high"
+          ]
+        },
+        "width": {
+          "minimum": 2,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "width",
+        "height",
+        "frame_rate",
+        "background",
+        "quality",
+        "audio",
+        "duration_mode"
+      ],
+      "type": "object"
+    },
+    "point": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "point_keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "time": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/point"
+        }
+      },
+      "required": [
+        "time",
+        "value",
+        "interpolation"
+      ],
+      "type": "object"
+    },
+    "point_track": {
+      "additionalProperties": false,
+      "properties": {
+        "base_value": {
+          "$ref": "#/$defs/point"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/point_keyframe"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "positive_point": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "y": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "positive_point_keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "time": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/positive_point"
+        }
+      },
+      "required": [
+        "time",
+        "value",
+        "interpolation"
+      ],
+      "type": "object"
     },
     "preset": {
       "oneOf": [
@@ -1324,67 +1533,591 @@
         }
       ]
     },
-    "intensity_preset": {
-      "type": "object",
-      "required": [
-        "type",
-        "intensity"
-      ],
+    "saturation_effect": {
       "additionalProperties": false,
       "properties": {
+        "amount": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
         "type": {
+          "const": "saturation"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount"
+      ],
+      "type": "object"
+    },
+    "scalar_keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "time": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "time",
+        "value",
+        "interpolation"
+      ],
+      "type": "object"
+    },
+    "scalar_modifier": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
           "enum": [
-            "slow_drift",
-            "zoom_punch",
-            "focus_reveal"
+            "replace",
+            "add",
+            "multiply"
           ]
         },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "intensity": {
-          "type": "number",
-          "minimum": 0
+        "signal": {
+          "$ref": "#/$defs/scalar_signal"
         }
-      }
-    },
-    "seeded_preset": {
-      "type": "object",
+      },
       "required": [
-        "type",
-        "intensity",
-        "seed"
+        "operation",
+        "signal"
       ],
+      "type": "object"
+    },
+    "scalar_property": {
       "additionalProperties": false,
       "properties": {
+        "base_value": {
+          "type": "number"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/scalar_keyframe"
+          },
+          "type": "array"
+        },
+        "modifiers": {
+          "items": {
+            "$ref": "#/$defs/scalar_modifier"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "scalar_signal": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/scalar_signal_source"
+        },
+        "transforms": {
+          "items": {
+            "$ref": "#/$defs/signal_transform"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "scalar_signal_source": {
+      "additionalProperties": false,
+      "properties": {
+        "feature": {
+          "$ref": "#/$defs/audio_scalar_feature"
+        },
+        "tap": {
+          "const": "master"
+        },
+        "type": {
+          "const": "audio"
+        }
+      },
+      "required": [
+        "type",
+        "tap",
+        "feature"
+      ],
+      "type": "object"
+    },
+    "scalar_track": {
+      "additionalProperties": false,
+      "properties": {
+        "base_value": {
+          "type": "number"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/scalar_keyframe"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "scale_track": {
+      "additionalProperties": false,
+      "properties": {
+        "base_value": {
+          "$ref": "#/$defs/positive_point"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/positive_point_keyframe"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "seeded_preset": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "intensity": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "seed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
         "type": {
           "enum": [
             "impact",
             "heavy_impact"
           ]
-        },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "intensity": {
-          "type": "number",
-          "minimum": 0
-        },
-        "seed": {
-          "type": "integer",
-          "minimum": 0
         }
-      }
+      },
+      "required": [
+        "type",
+        "intensity",
+        "seed"
+      ],
+      "type": "object"
+    },
+    "sharpen_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 4.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 4.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 16.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 16.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "sharpen"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount",
+        "radius"
+      ],
+      "type": "object"
+    },
+    "signal_transform": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "gain": {
+              "type": "number"
+            },
+            "type": {
+              "const": "gain"
+            }
+          },
+          "required": [
+            "type",
+            "gain"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "input_max": {
+              "type": "number"
+            },
+            "input_min": {
+              "type": "number"
+            },
+            "output_end": {
+              "type": "number"
+            },
+            "output_start": {
+              "type": "number"
+            },
+            "type": {
+              "const": "remap"
+            }
+          },
+          "required": [
+            "type",
+            "input_min",
+            "input_max",
+            "output_start",
+            "output_end"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "max": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            },
+            "type": {
+              "const": "clamp"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attack": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "release": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "type": {
+              "const": "envelope"
+            }
+          },
+          "required": [
+            "type",
+            "attack",
+            "release"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "response_curve"
+            },
+            "x1": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "x2": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "y1": {
+              "type": "number"
+            },
+            "y2": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x1",
+            "y1",
+            "x2",
+            "y2"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "sizing": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "original",
+                "fit",
+                "cover"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "scale"
+            },
+            "scale": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "mode",
+            "scale"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "height": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "mode": {
+              "const": "stretch"
+            },
+            "width": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "mode",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "source": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "asset": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "image"
+            }
+          },
+          "required": [
+            "type",
+            "asset"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "colour": {
+              "$ref": "#/$defs/colour"
+            },
+            "type": {
+              "const": "solid_color"
+            }
+          },
+          "required": [
+            "type",
+            "colour"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "tint_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "tint"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "colour",
+        "amount"
+      ],
+      "type": "object"
+    },
+    "transform": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/anchor_track"
+        },
+        "component_modifiers": {
+          "additionalProperties": false,
+          "properties": {
+            "position_x": {
+              "items": {
+                "$ref": "#/$defs/scalar_modifier"
+              },
+              "type": "array"
+            },
+            "position_y": {
+              "items": {
+                "$ref": "#/$defs/scalar_modifier"
+              },
+              "type": "array"
+            },
+            "scale_x": {
+              "items": {
+                "$ref": "#/$defs/scalar_modifier"
+              },
+              "type": "array"
+            },
+            "scale_y": {
+              "items": {
+                "$ref": "#/$defs/scalar_modifier"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "position": {
+          "$ref": "#/$defs/point_track"
+        },
+        "rotation_degrees": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "scale": {
+          "$ref": "#/$defs/scale_track"
+        }
+      },
+      "required": [
+        "position",
+        "anchor",
+        "scale"
+      ],
+      "type": "object"
     },
     "transition": {
       "oneOf": [
@@ -1406,7 +2139,31 @@
       ]
     },
     "transition_common": {
-      "type": "object",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "incoming": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "outgoing": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
       "required": [
         "type",
         "id",
@@ -1416,233 +2173,317 @@
         "duration",
         "interpolation"
       ],
+      "type": "object"
+    },
+    "unit_point": {
+      "additionalProperties": false,
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
         },
-        "outgoing": {
-          "type": "string",
-          "minLength": 1
-        },
-        "incoming": {
-          "type": "string",
-          "minLength": 1
-        },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "unit_point_keyframe": {
+      "additionalProperties": false,
+      "properties": {
         "interpolation": {
           "$ref": "#/$defs/interpolation"
+        },
+        "time": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/unit_point"
         }
-      }
-    },
-    "crossfade_transition": {
-      "type": "object",
+      },
       "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
+        "time",
+        "value",
         "interpolation"
       ],
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "const": "crossfade"
-        },
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "outgoing": {
-          "type": "string",
-          "minLength": 1
-        },
-        "incoming": {
-          "type": "string",
-          "minLength": 1
-        },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        }
-      }
+      "type": "object"
     },
-    "zoom_crossfade_transition": {
-      "type": "object",
-      "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "outgoing_zoom",
-        "incoming_start_zoom"
-      ],
+    "unit_scalar_keyframe": {
       "additionalProperties": false,
       "properties": {
-        "type": {
-          "const": "zoom_crossfade"
-        },
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "outgoing": {
-          "type": "string",
-          "minLength": 1
-        },
-        "incoming": {
-          "type": "string",
-          "minLength": 1
-        },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
         "interpolation": {
           "$ref": "#/$defs/interpolation"
         },
-        "outgoing_zoom": {
-          "type": "number",
-          "exclusiveMinimum": 0
+        "time": {
+          "minimum": 0,
+          "type": "number"
         },
-        "incoming_start_zoom": {
-          "type": "number",
-          "exclusiveMinimum": 0
+        "value": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
         }
-      }
-    },
-    "flash_cut_transition": {
-      "type": "object",
+      },
       "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "colour",
-        "intensity"
+        "time",
+        "value",
+        "interpolation"
       ],
+      "type": "object"
+    },
+    "unit_scalar_property": {
       "additionalProperties": false,
       "properties": {
-        "type": {
-          "const": "flash_cut"
+        "base_value": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
         },
-        "id": {
-          "type": "string",
-          "minLength": 1
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/unit_scalar_keyframe"
+          },
+          "type": "array"
         },
-        "outgoing": {
-          "type": "string",
-          "minLength": 1
-        },
-        "incoming": {
-          "type": "string",
-          "minLength": 1
-        },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
+        "modifiers": {
+          "items": {
+            "$ref": "#/$defs/scalar_modifier"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
+    "vignette_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         },
         "colour": {
           "$ref": "#/$defs/colour"
         },
-        "intensity": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 2.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 2.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "softness": {
+          "$ref": "#/$defs/scalar_track"
+        },
+        "type": {
+          "const": "vignette"
         }
-      }
-    },
-    "directional_push_transition": {
-      "type": "object",
+      },
       "required": [
-        "type",
         "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "angle_degrees",
-        "distance",
-        "blur_radius"
+        "type",
+        "amount",
+        "radius",
+        "softness",
+        "colour"
       ],
+      "type": "object"
+    },
+    "visual": {
       "additionalProperties": false,
       "properties": {
-        "type": {
-          "const": "directional_push"
+        "clips": {
+          "items": {
+            "$ref": "#/$defs/clip"
+          },
+          "type": "array"
+        },
+        "flashes": {
+          "items": {
+            "$ref": "#/$defs/flash"
+          },
+          "type": "array"
+        },
+        "post_effects": {
+          "items": {
+            "$ref": "#/$defs/effect"
+          },
+          "type": "array"
+        },
+        "transitions": {
+          "items": {
+            "$ref": "#/$defs/transition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "clips"
+      ],
+      "type": "object"
+    },
+    "zoom_blur_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/unit_point"
+        },
+        "direction": {
+          "enum": [
+            "inward",
+            "outward",
+            "centered"
+          ]
         },
         "id": {
-          "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "type": "string"
         },
-        "outgoing": {
-          "type": "string",
-          "minLength": 1
+        "radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         },
-        "incoming": {
-          "type": "string",
-          "minLength": 1
+        "samples": {
+          "maximum": 32,
+          "minimum": 2,
+          "type": "integer"
         },
-        "start": {
-          "type": "number",
-          "minimum": 0
+        "type": {
+          "const": "zoom_blur"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "radius",
+        "samples",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "zoom_blur_transition": {
+      "additionalProperties": false,
+      "properties": {
+        "blur_radius": {
+          "maximum": 32,
+          "minimum": 0,
+          "type": "number"
         },
         "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "incoming": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "incoming_start_zoom": {
+          "exclusiveMinimum": 0,
+          "type": "number"
         },
         "interpolation": {
           "$ref": "#/$defs/interpolation"
         },
-        "angle_degrees": {
+        "outgoing": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "outgoing_zoom": {
+          "exclusiveMinimum": 0,
           "type": "number"
         },
-        "distance": {
-          "type": "number",
-          "minimum": 0
-        },
-        "blur_radius": {
-          "type": "number",
+        "start": {
           "minimum": 0,
-          "maximum": 32
+          "type": "number"
+        },
+        "type": {
+          "const": "zoom_blur"
         }
-      }
-    },
-    "zoom_blur_transition": {
-      "type": "object",
+      },
       "required": [
         "type",
         "id",
@@ -1655,126 +2496,97 @@
         "incoming_start_zoom",
         "blur_radius"
       ],
+      "type": "object"
+    },
+    "zoom_crossfade_transition": {
       "additionalProperties": false,
       "properties": {
-        "type": {
-          "const": "zoom_blur"
+        "duration": {
+          "exclusiveMinimum": 0,
+          "type": "number"
         },
         "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "outgoing": {
-          "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "type": "string"
         },
         "incoming": {
-          "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "type": "string"
         },
-        "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
+        "incoming_start_zoom": {
+          "exclusiveMinimum": 0,
+          "type": "number"
         },
         "interpolation": {
           "$ref": "#/$defs/interpolation"
         },
+        "outgoing": {
+          "minLength": 1,
+          "type": "string"
+        },
         "outgoing_zoom": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "incoming_start_zoom": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "blur_radius": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 32
-        }
-      }
-    },
-    "flash": {
-      "type": "object",
-      "required": [
-        "id",
-        "start",
-        "duration",
-        "colour",
-        "opacity",
-        "layer"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
+          "exclusiveMinimum": 0,
+          "type": "number"
         },
         "start": {
-          "type": "number",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "colour": {
-          "$ref": "#/$defs/colour"
-        },
-        "opacity": {
-          "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "type": "number"
         },
-        "fade_in": {
-          "type": "number",
-          "minimum": 0
-        },
-        "fade_out": {
-          "type": "number",
-          "minimum": 0
-        },
-        "layer": {
-          "type": "integer"
+        "type": {
+          "const": "zoom_crossfade"
         }
+      },
+      "required": [
+        "type",
+        "id",
+        "outgoing",
+        "incoming",
+        "start",
+        "duration",
+        "interpolation",
+        "outgoing_zoom",
+        "incoming_start_zoom"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://example.invalid/video-editor/project.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/asset"
+      },
+      "type": "array"
+    },
+    "audio": {
+      "$ref": "#/$defs/audio"
+    },
+    "metadata": {
+      "not": {
+        "type": "null"
       }
     },
+    "name": {
+      "type": "string"
+    },
+    "output": {
+      "$ref": "#/$defs/output"
+    },
+    "schema_version": {
+      "const": 2
+    },
     "visual": {
-      "type": "object",
-      "required": [
-        "clips"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "clips": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/clip"
-          }
-        },
-        "transitions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/transition"
-          }
-        },
-        "flashes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/flash"
-          }
-        },
-        "post_effects": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/effect"
-          }
-        }
-      }
+      "$ref": "#/$defs/visual"
     }
-  }
+  },
+  "required": [
+    "schema_version",
+    "output",
+    "assets",
+    "visual"
+  ],
+  "title": "Declarative Video Renderer Project",
+  "type": "object"
 }

@@ -449,7 +449,7 @@ pub(super) fn encode_and_submit(
             } => {
                 if !supports_kernel(RenderBackendKind::Wgpu, *kernel) {
                     return Err(Diagnostic::error(
-                        "WGPU-UNSUPPORTED-KERNEL",
+                        "RENDER-UNSUPPORTED-KERNEL",
                         crate::Category::Backend,
                         format!("WGPU backend does not support effect kernel {kernel:?}"),
                         "",
@@ -458,7 +458,7 @@ pub(super) fn encode_and_submit(
                 let group = bind_groups.effect(*source, *destination, *auxiliary)?;
                 let pipeline = pipelines.effect(*kernel).ok_or_else(|| {
                     Diagnostic::error(
-                        "WGPU-UNSUPPORTED-KERNEL",
+                        "RENDER-UNSUPPORTED-KERNEL",
                         crate::Category::Backend,
                         format!("WGPU pipeline for effect kernel {kernel:?} is unavailable"),
                         "",

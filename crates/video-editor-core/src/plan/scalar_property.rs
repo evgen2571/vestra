@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use super::{EvaluationContext, EvaluationError, ScalarSignalId};
 use crate::animation::Track;
 pub(crate) use crate::effect_definition::ScalarPropertyTarget;
-pub use crate::effect_definition::{ScalarPropertyConstraint, MIN_POSITIVE_PROPERTY_VALUE};
+pub use crate::effect_definition::{MIN_POSITIVE_PROPERTY_VALUE, ScalarPropertyConstraint};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarModifierOperation {

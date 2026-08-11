@@ -15,7 +15,7 @@ from video_editor.authoring import (
     ActiveInterval, BlendMode, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
     ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect, GaussianBlurEffect, GlowEffect,
     Interpolation, MotionBlurEffect, Point, ProjectBuilder, SaturationEffect, SharpenEffect,
-    Sizing, TintEffect, VignetteEffect, ZoomBlurEffect,
+    Sizing, TintEffect, VignetteEffect, ZoomBlurDirection, ZoomBlurEffect, available_effects, effect_definition,
 )
 from video_editor.authoring.effects import ClipEffectCollection, PostEffectCollection
 from video_editor.authoring.tracks import ScalarTrack
@@ -480,3 +480,186 @@ def test_cpu_effect_video_exercises_ordered_clip_and_post_effects(tmp_path: Path
     assert result.total_frames == 10 and result.audio_present is False
     assert streams == [{"codec_type": "video", "width": 16, "height": 12, "duration": "1.000000", "nb_frames": "10"}]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_generic_effect_catalog_is_read_only_and_complete() -> None:
+    definitions = available_effects()
+    ids = [str(definition["id"]) for definition in definitions]
+    assert len(ids) == len(set(ids))
+    assert set(ids) == {
+        "brightness", "contrast", "saturation", "tint", "gaussian_blur", "directional_blur",
+        "zoom_blur", "glow", "chromatic_aberration", "vignette", "sharpen", "color_adjust",
+        "camera_shake", "motion_blur",
+    }
+    with pytest.raises(TypeError):
+        definitions[0]["id"] = "changed"  # type: ignore[index]
+    glow = effect_definition("glow")
+    with pytest.raises(TypeError):
+        glow["parameters"] = ()  # type: ignore[index]
+    with pytest.raises(TypeError):
+        glow["parameters"][0]["name"] = "changed"  # type: ignore[index]
+    direction = effect_definition("zoom_blur")["parameters"][-1]
+    with pytest.raises(AttributeError):
+        direction["enum_values"].append("invalid")  # type: ignore[union-attr]
+    assert effect_definition("zoom_blur")["parameters"][-1]["enum_values"] == (
+        "inward", "outward", "centered",
+    )
+    _, clip = builder()
+    with pytest.raises(ValueError, match="one of"):
+        clip.effects.add_effect(
+            "zoom_blur", radius=1, samples=2, anchor=Point(0.5, 0.5), direction="invalid",
+        )
+    assert effect_definition("glow")["scope"] == "clip_and_global"
+
+
+def test_generic_effect_matches_typed_serialization() -> None:
+    typed_builder, typed_clip = builder()
+    typed = typed_clip.effects.add_glow(threshold=0.8, radius=12, intensity=1.1, colour="#ffffff")
+    generic_builder, generic_clip = builder()
+    generic = generic_clip.effects.add_effect(
+        "glow", threshold=0.8, radius=12, intensity=1.1, colour="#ffffff",
+    )
+    assert typed.to_canonical() == generic.to_canonical()
+    animated_typed = typed_clip.effects.add_brightness(amount=0.2)
+    animated_typed.amount.keyframe(time=0.5, value=0.8)
+    animated_generic = generic_clip.effects.add_effect("brightness", amount=animated_typed.amount)
+    assert animated_typed.to_canonical() == animated_generic.to_canonical()
+    assert typed_builder.validate().is_valid and generic_builder.validate().is_valid
+
+
+def test_generic_camera_shake_preserves_explicit_interval_and_matches_typed() -> None:
+    interval = ActiveInterval(start=2.5, duration=4.0)
+    _, typed_clip = builder()
+    typed = typed_clip.effects.add_camera_shake(
+        active_interval=interval, position_amount=0, rotation_degrees=0, scale_amount=0,
+        frequency=1, seed=1, attack=0, decay=1,
+    )
+    _, generic_clip = builder()
+    generic = generic_clip.effects.add_effect(
+        "camera_shake", active_interval=interval, position_amount=0, rotation_degrees=0,
+        scale_amount=0, frequency=1, seed=1, attack=0, decay=1,
+    )
+    assert typed.to_canonical() == generic.to_canonical()
+    assert generic.to_canonical()["start"] == 2.5
+    assert generic.to_canonical()["duration"] == 4.0
+
+
+def test_generic_camera_shake_uses_typed_default_interval() -> None:
+    typed_builder, typed_clip = builder()
+    typed = typed_clip.effects.add_camera_shake(
+        position_amount=0, rotation_degrees=0, scale_amount=0, frequency=1,
+        seed=1, attack=0, decay=1,
+    )
+    generic_builder, generic_clip = builder()
+    generic = generic_clip.effects.add_effect(
+        "camera_shake", position_amount=0, rotation_degrees=0, scale_amount=0,
+        frequency=1, seed=1, attack=0, decay=1,
+    )
+    assert typed.to_canonical() == generic.to_canonical()
+    assert generic.to_canonical()["start"] == 0.0
+    assert "duration" not in generic.to_canonical()
+    assert typed_builder.validate().is_valid and generic_builder.validate().is_valid
+
+
+def test_generic_enum_metadata_and_simple_numeric_constraints() -> None:
+    direction = effect_definition("zoom_blur")["parameters"][-1]
+    assert direction["enum_values"] == ("inward", "outward", "centered")
+    authored, clip = builder()
+    effect = clip.effects.add_effect(
+        "zoom_blur", radius=1, samples=2, anchor=Point(0.5, 0.5), direction=ZoomBlurDirection.CENTERED,
+    )
+    assert effect.to_canonical()["direction"] == "centered"
+    with pytest.raises(ValueError, match="one of"):
+        clip.effects.add_effect(
+            "zoom_blur", radius=1, samples=2, anchor=Point(0.5, 0.5), direction="diagonal",
+        )
+    with pytest.raises(ValueError):
+        clip.effects.add_effect(
+            "camera_shake", position_amount=0, rotation_degrees=0, scale_amount=0,
+            frequency=1, seed=1, attack=-0.1, decay=1,
+        )
+    with pytest.raises(ValueError):
+        clip.effects.add_effect(
+            "camera_shake", position_amount=0, rotation_degrees=0, scale_amount=0,
+            frequency=1, seed=1, attack=0, decay=0,
+        )
+    assert authored.validate().is_valid
+
+
+def test_typed_camera_shake_defers_descriptor_validation_to_project_validation() -> None:
+    authored, clip = builder()
+    shake = clip.effects.add_camera_shake(
+        position_amount=0, rotation_degrees=0, scale_amount=0, frequency=1,
+        seed=1, attack=-0.1, decay=1,
+    )
+    canonical = shake.to_canonical()
+    assert canonical["attack"] == -0.1
+    report = authored.validate()
+    assert not report.is_valid
+
+
+def test_typed_and_generic_camera_shake_valid_serialization_remains_equal() -> None:
+    _, typed_clip = builder()
+    typed = typed_clip.effects.add_camera_shake(
+        position_amount=0, rotation_degrees=0, scale_amount=0, frequency=1,
+        seed=1, attack=0, decay=1,
+    )
+    _, generic_clip = builder()
+    generic = generic_clip.effects.add_effect(
+        "camera_shake", position_amount=0, rotation_degrees=0, scale_amount=0,
+        frequency=1, seed=1, attack=0, decay=1,
+    )
+    assert typed.to_canonical() == generic.to_canonical()
+
+
+def test_generic_effect_rejects_invalid_calls_and_preserves_scope_rules() -> None:
+    authored, clip = builder()
+    with pytest.raises(ValueError, match="unknown visual effect"):
+        clip.effects.add_effect("not_a_real_effect")
+    with pytest.raises(TypeError, match="unknown parameter"):
+        clip.effects.add_effect("glow", threshold=0.8, radius=12, intensity=1, colour="#ffffff", extra=1)
+    with pytest.raises(TypeError, match="missing required parameter"):
+        clip.effects.add_effect("glow", threshold=0.8, radius=12, intensity=1)
+    with pytest.raises(ValueError, match="only valid on clips"):
+        authored.post_effects.add_effect(
+            "camera_shake", position_amount=0, rotation_degrees=0, scale_amount=0,
+            frequency=1, seed=1, attack=0, decay=1,
+        )
+
+
+def test_schema_effect_catalog_has_rust_catalog_ids_and_parameters() -> None:
+    schema = json.loads((Path(__file__).parents[1] / "schemas/project.schema.json").read_text())
+    schema_effects = {}
+    for reference in schema["$defs"]["effect"]["oneOf"]:
+        definition = schema["$defs"][reference["$ref"].rsplit("/", 1)[1]]
+        effect_type = definition["properties"]["type"]
+        ids = effect_type.get("enum", [effect_type.get("const")])
+        for effect_id in ids:
+            schema_effects[effect_id] = definition
+    assert set(schema_effects) == {str(definition["id"]) for definition in available_effects()}
+    for definition in available_effects():
+        properties = schema_effects[definition["id"]]["properties"]
+        for parameter in definition["parameters"]:
+            name = parameter["name"]
+            if parameter["kind"] == "active_interval":
+                assert {"start", "duration"} <= set(properties)
+            else:
+                assert name in properties
+                if parameter["kind"] == "enum":
+                    assert tuple(properties[name]["enum"]) == parameter["enum_values"]
+                if parameter["kind"] == "number":
+                    key = "exclusiveMinimum" if parameter["minimum_exclusive"] else "minimum"
+                    assert properties[name].get(key) == parameter["minimum"]
+                if parameter["kind"] == "scalar_property" and parameter["minimum"] is not None:
+                    authored = properties[name]["allOf"][1]["properties"]["base_value"]
+                    key = "exclusiveMinimum" if parameter["minimum_exclusive"] else "minimum"
+                    assert authored[key] == parameter["minimum"]
+
+
+def test_checked_schema_is_fresh_from_rust_catalog(tmp_path: Path) -> None:
+    generated = tmp_path / "project.schema.json"
+    subprocess.run(
+        ["cargo", "run", "-q", "-p", "video-editor-cli", "--", "generate-schema", "--output", str(generated)],
+        check=True,
+    )
+    assert generated.read_bytes() == (Path(__file__).parents[1] / "schemas/project.schema.json").read_bytes()

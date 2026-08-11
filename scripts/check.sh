@@ -5,3 +5,7 @@ cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 python3 crates/video-editor-cli/tests/schema_validation.py
+schema_tmp_dir=$(mktemp -d)
+trap 'rm -rf "$schema_tmp_dir"' EXIT
+cargo run -q -p video-editor-cli -- generate-schema --output "$schema_tmp_dir/project.schema.json"
+cmp "$schema_tmp_dir/project.schema.json" schemas/project.schema.json

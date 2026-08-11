@@ -84,6 +84,38 @@ invalid_tint["visual"]["clips"][0]["effects"] = [
 ]
 assert errors(invalid_tint), "out-of-range tint amount must not validate"
 
+invalid_glow_keyframe = copy.deepcopy(solid_colour)
+invalid_glow_keyframe["visual"]["clips"][0]["effects"] = [{
+    "id": "glow",
+    "type": "glow",
+    "threshold": {"base_value": 0.5},
+    "radius": {"base_value": 4, "keyframes": [{"time": 1, "value": 100, "interpolation": "linear"}]},
+    "intensity": {"base_value": 1},
+    "colour": "#ffffff",
+}]
+assert errors(invalid_glow_keyframe), "out-of-range glow radius keyframe must not validate"
+
+valid_glow_boundary_keyframe = copy.deepcopy(invalid_glow_keyframe)
+valid_glow_boundary_keyframe["visual"]["clips"][0]["effects"][0]["radius"]["keyframes"][0]["value"] = 32
+assert not errors(valid_glow_boundary_keyframe), "inclusive glow radius boundary must validate"
+
+invalid_gamma_base = copy.deepcopy(solid_colour)
+invalid_gamma_base["visual"]["clips"][0]["effects"] = [{
+    "id": "color-adjust",
+    "type": "color_adjust",
+    "exposure": {"base_value": 0},
+    "gamma": {"base_value": 0},
+    "black_point": {"base_value": 0},
+    "white_point": {"base_value": 1},
+}]
+assert errors(invalid_gamma_base), "exclusive gamma minimum must not validate"
+
+invalid_gamma_keyframe = copy.deepcopy(invalid_gamma_base)
+invalid_gamma_keyframe["visual"]["clips"][0]["effects"][0]["gamma"] = {
+    "base_value": 1, "keyframes": [{"time": 1, "value": 0, "interpolation": "linear"}],
+}
+assert errors(invalid_gamma_keyframe), "exclusive gamma keyframe minimum must not validate"
+
 out_of_range_shake_seed = copy.deepcopy(solid_colour)
 out_of_range_shake_seed["visual"]["clips"][0]["effects"] = [{
     "id": "shake",

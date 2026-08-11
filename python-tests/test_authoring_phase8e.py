@@ -23,11 +23,11 @@ PUBLIC_NAMES = {
     "CameraShakeEffect", "ChromaticAberrationEffect", "ClipEffectCollection", "Color", "ColorAdjustEffect",
     "ContrastEffect", "Crop", "CropKeyframe", "CropTrack", "CubicBezier", "DirectionalBlurEffect",
     "DirectionalPushTransition", "DurationMode", "Effect", "Flash", "FlashCollection", "FlashCutTransition",
-    "GaussianBlurEffect", "GlowEffect", "ImageAsset", "ImageClip", "Interpolation", "JsonValue", "MotionBlurEffect",
+    "GaussianBlurEffect", "GenericEffect", "GlowEffect", "ImageAsset", "ImageClip", "Interpolation", "JsonValue", "MotionBlurEffect",
     "Point", "PointKeyframe", "PointTrack", "PostEffectCollection", "Preset", "PresetCollection", "ProjectBuilder",
     "Quality", "SaturationEffect", "ScalarKeyframe", "ScalarSignal", "ScalarTrack", "SharpenEffect", "Sizing", "SolidColorClip",
     "Timeline", "TintEffect", "Transform", "Transition", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection",
-    "ZoomBlurEffect", "ZoomBlurTransition", "ZoomCrossfadeTransition", "CrossfadeTransition",
+    "ZoomBlurEffect", "ZoomBlurTransition", "ZoomCrossfadeTransition", "CrossfadeTransition", "available_effects", "effect_definition",
 }
 
 

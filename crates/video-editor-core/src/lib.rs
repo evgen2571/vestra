@@ -11,7 +11,7 @@ extern crate self as video_editor_core;
 pub mod animation;
 pub mod diagnostic;
 pub mod domain;
-mod effect_definition;
+pub mod effect_definition;
 pub mod effects;
 pub mod output;
 /// Deterministic output configuration, never media process behavior.

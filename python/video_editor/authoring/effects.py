@@ -110,9 +110,15 @@ def _canonical_parameter(
         track = value if isinstance(value, ScalarTrack) else ModulatableScalarTrack._create(owner, value)  # type: ignore[arg-type]
         if validate_descriptor_values:
             _validate_descriptor_value(parameter, track.base_value)
+            for keyframe in track.keyframes:
+                _validate_descriptor_value(parameter, keyframe.value)
         return track.to_canonical()
     if kind == "plain_track":
         track = value if isinstance(value, ScalarTrack) else ScalarTrack._create(owner, value)  # type: ignore[arg-type]
+        if validate_descriptor_values:
+            _validate_descriptor_value(parameter, track.base_value)
+            for keyframe in track.keyframes:
+                _validate_descriptor_value(parameter, keyframe.value)
         return track.to_canonical()
     if kind == "colour":
         return color_to_canonical(value)  # type: ignore[arg-type]

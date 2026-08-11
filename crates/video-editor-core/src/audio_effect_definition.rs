@@ -152,3 +152,91 @@ pub fn audio_effect_descriptors() -> impl Iterator<Item = AudioEffectDefinition>
         .copied()
         .map(AudioEffectKind::definition)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::AudioEffect;
+
+    #[test]
+    fn catalog_ids_match_canonical_audio_effect_types() {
+        let effects = [
+            AudioEffect::ParametricEq {
+                id: "eq".into(),
+                frequency_hz: 1_000.0,
+                gain_db: 0.0,
+                q: 1.0,
+            },
+            AudioEffect::PlaybackSpeed {
+                id: "speed".into(),
+                rate: 2.0,
+            },
+        ];
+        let ids = effects
+            .iter()
+            .map(|effect| {
+                serde_json::to_value(effect).expect("audio effect serializes")["type"].clone()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            audio_effect_descriptors()
+                .map(|definition| definition.id)
+                .collect::<Vec<_>>(),
+            ids.iter()
+                .map(|id| id.as_str().expect("string id"))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn descriptor_parameters_and_scopes_match_the_authored_audio_model() {
+        let definitions = audio_effect_descriptors().collect::<Vec<_>>();
+        assert_eq!(
+            definitions[0]
+                .parameters
+                .iter()
+                .map(|parameter| parameter.name)
+                .collect::<Vec<_>>(),
+            vec!["frequency_hz", "gain_db", "q"]
+        );
+        assert_eq!(
+            definitions[1]
+                .parameters
+                .iter()
+                .map(|parameter| parameter.name)
+                .collect::<Vec<_>>(),
+            vec!["rate"]
+        );
+        assert_eq!(
+            definitions[0].scopes,
+            &[
+                AudioEffectScope::Clip,
+                AudioEffectScope::Track,
+                AudioEffectScope::Master
+            ]
+        );
+        assert_eq!(definitions[1].scopes, &[AudioEffectScope::Clip]);
+    }
+
+    #[test]
+    fn catalog_duration_behavior_matches_primitive_lowering() {
+        let definitions = audio_effect_descriptors().collect::<Vec<_>>();
+        let eq = crate::plan_audio::CompiledAudioEffect::ParametricEq {
+            frequency_hz: 1_000.0,
+            gain_db: 6.0,
+            q: 1.0,
+        }
+        .lower();
+        let speed = crate::plan_audio::CompiledAudioEffect::PlaybackSpeed { rate: 2.0 }.lower();
+        assert_eq!(
+            definitions[0].duration_behavior,
+            AudioEffectDurationBehavior::Preserve
+        );
+        assert_eq!(
+            definitions[1].duration_behavior,
+            AudioEffectDurationBehavior::Transform
+        );
+        assert!(!eq.has_duration_transform());
+        assert!(speed.has_duration_transform());
+    }
+}

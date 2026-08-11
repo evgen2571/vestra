@@ -19,6 +19,25 @@ const fn unit(value: f64) -> bool {
     value.is_finite() && value >= 0.0 && value <= 1.0
 }
 
+fn plain_track(
+    track: &crate::project::Track<f64>,
+    active_duration: f64,
+    path: &str,
+    maximum_keyframes: usize,
+    target: crate::effect_definition::PlainTrackTarget,
+    errors: &mut Vec<Diagnostic>,
+) {
+    let validation = target.authored_validation();
+    tracks::validate_track(
+        track,
+        active_duration,
+        path,
+        maximum_keyframes,
+        errors,
+        |value| validation.accepts(value),
+    );
+}
+
 fn invalid_effect(
     errors: &mut Vec<Diagnostic>,
     code: &'static str,
@@ -303,13 +322,13 @@ pub(super) fn validate_parameters(
                 ScalarPropertyTarget::VignetteRadius,
                 errors,
             );
-            tracks::validate_track(
+            plain_track(
                 softness,
                 active_duration,
                 &format!("{path}/softness"),
                 maximum_keyframes,
+                crate::effect_definition::PlainTrackTarget::VignetteSoftness,
                 errors,
-                |value| value.is_finite() && *value > 0.0 && *value <= 2.0,
             );
         }
         crate::project::Effect::Sharpen { amount, radius, .. } => {
@@ -345,21 +364,21 @@ pub(super) fn validate_parameters(
                 ScalarPropertyTarget::ColorAdjustGamma,
                 errors,
             );
-            tracks::validate_track(
+            plain_track(
                 black_point,
                 active_duration,
                 &format!("{path}/black_point"),
                 maximum_keyframes,
+                crate::effect_definition::PlainTrackTarget::ColorAdjustBlackPoint,
                 errors,
-                |value| value.is_finite() && (0.0..1.0).contains(value),
             );
-            tracks::validate_track(
+            plain_track(
                 white_point,
                 active_duration,
                 &format!("{path}/white_point"),
                 maximum_keyframes,
+                crate::effect_definition::PlainTrackTarget::ColorAdjustWhitePoint,
                 errors,
-                |value| value.is_finite() && *value > 0.0 && *value <= 1.0,
             );
             validate_colour_points(black_point, white_point, path, errors);
         }
@@ -477,6 +496,26 @@ mod tests {
             shutter_angle: scalar(180.0),
             max_radius: scalar(4.0),
             samples,
+        }
+    }
+
+    fn vignette(softness: f64) -> Effect {
+        Effect::Vignette {
+            id: "vignette".to_owned(),
+            amount: scalar(0.5),
+            radius: scalar(1.0),
+            softness: Track::constant(softness),
+            colour: "#000000".to_owned(),
+        }
+    }
+
+    fn color_adjust(black_point: f64, white_point: f64) -> Effect {
+        Effect::ColorAdjust {
+            id: "color-adjust".to_owned(),
+            exposure: scalar(0.0),
+            gamma: scalar(1.0),
+            black_point: Track::constant(black_point),
+            white_point: Track::constant(white_point),
         }
     }
 
@@ -700,5 +739,63 @@ mod tests {
                 effect.id()
             );
         }
+    }
+
+    #[test]
+    fn plain_track_authored_boundaries_are_exact() {
+        for (value, valid) in [
+            (0.0, false),
+            (f64::EPSILON, true),
+            (2.0, true),
+            (2.001, false),
+        ] {
+            assert_eq!(
+                validation_errors(&vignette(value)).is_empty(),
+                valid,
+                "softness={value}"
+            );
+        }
+        for (value, valid) in [(-0.001, false), (0.0, true), (0.999, true), (1.0, false)] {
+            assert_eq!(
+                validation_errors(&color_adjust(value, 1.0))
+                    .iter()
+                    .all(|error| error.code != "MVP-TRACK-VALUE"),
+                valid,
+                "black_point={value}"
+            );
+        }
+        for (value, valid) in [
+            (0.0, false),
+            (f64::EPSILON, true),
+            (1.0, true),
+            (1.001, false),
+        ] {
+            assert_eq!(
+                validation_errors(&color_adjust(0.0, value))
+                    .iter()
+                    .all(|error| error.code != "MVP-TRACK-VALUE"),
+                valid,
+                "white_point={value}"
+            );
+        }
+    }
+
+    #[test]
+    fn plain_track_authored_validation_applies_to_keyframes() {
+        let mut effect = color_adjust(0.0, 1.0);
+        if let Effect::ColorAdjust { black_point, .. } = &mut effect {
+            black_point.keyframes.push(crate::project::Keyframe {
+                time: 1.0,
+                value: 1.0,
+                interpolation: crate::project::Interpolation::Named(
+                    crate::project::InterpolationName::Linear,
+                ),
+            });
+        }
+        assert!(
+            validation_errors(&effect)
+                .iter()
+                .any(|error| error.code == "MVP-KEYFRAME-VALUE")
+        );
     }
 }

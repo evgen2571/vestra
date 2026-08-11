@@ -267,4 +267,23 @@ mod tests {
         );
         assert!(!EffectKernel::Composite.source().contains("fn line_blur"));
     }
+
+    #[test]
+    fn every_declared_wgpu_kernel_has_one_pipeline_source() {
+        let supported = supported_kernels().collect::<Vec<_>>();
+        assert_eq!(supported.len(), EffectKernel::ALL.len());
+        assert_eq!(
+            supported
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            supported.len()
+        );
+        assert!(
+            supported
+                .into_iter()
+                .all(|kernel| { !kernel.label().is_empty() && !kernel.source().is_empty() })
+        );
+    }
 }

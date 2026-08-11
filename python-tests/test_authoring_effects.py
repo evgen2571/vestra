@@ -26,6 +26,47 @@ def builder() -> tuple[ProjectBuilder, object]:
     return authored, authored.add_solid_color_clip(colour="#808080", start=0, duration=2, layer=0)
 
 
+def _valid_generic_parameters(definition: object) -> dict[str, object]:
+    parameters = definition["parameters"]  # type: ignore[index]
+    values: dict[str, object] = {}
+    for parameter in parameters:
+        kind = parameter["kind"]
+        if not parameter["required"] and parameter["default"] is not None:
+            continue
+        if kind in {"scalar_property", "plain_track", "number"}:
+            if parameter["name"] == "black_point":
+                values[str(parameter["name"])] = 0.25
+                continue
+            if parameter["name"] == "white_point":
+                values[str(parameter["name"])] = 0.75
+                continue
+            minimum, maximum = parameter["minimum"], parameter["maximum"]
+            values[str(parameter["name"])] = (
+                (float(minimum) + float(maximum)) / 2
+                if minimum is not None and maximum is not None
+                else (float(minimum) + 1.0 if minimum is not None else 0.5)
+            )
+        elif kind == "colour":
+            values[str(parameter["name"])] = "#ffffff"
+        elif kind == "integer":
+            values[str(parameter["name"])] = int(parameter["integer_minimum"])
+        elif kind == "point2d":
+            values[str(parameter["name"])] = Point(0.5, 0.5)
+        elif kind == "enum":
+            values[str(parameter["name"])] = str(parameter["enum_values"][0])
+        elif kind == "active_interval":
+            values[str(parameter["name"])] = ActiveInterval()
+    return values
+
+
+def test_generic_authoring_smoke_covers_every_registered_visual_effect() -> None:
+    authored, clip = builder()
+    for definition in available_effects():
+        clip.effects.add_effect(str(definition["id"]), **_valid_generic_parameters(definition))
+    assert len(clip.effects.items) == len(available_effects())
+    assert authored.validate().is_valid
+
+
 def test_every_effect_factory_serializes_in_declaration_order_and_validates() -> None:
     authored, clip = builder()
     effects = clip.effects
@@ -625,6 +666,25 @@ def test_generic_effect_rejects_invalid_calls_and_preserves_scope_rules() -> Non
             "camera_shake", position_amount=0, rotation_degrees=0, scale_amount=0,
             frequency=1, seed=1, attack=0, decay=1,
         )
+
+
+def test_generic_color_adjust_plain_track_bounds_cover_base_and_keyframes() -> None:
+    authored, clip = builder()
+    with pytest.raises(ValueError, match="outside its authored range"):
+        clip.effects.add_effect(
+            "color_adjust", exposure=0, gamma=1, black_point=1, white_point=1,
+        )
+
+    black_point = ScalarTrack._create(clip._owner, 0.999)
+    black_point.keyframe(time=1, value=1)
+    with pytest.raises(ValueError, match="outside its authored range"):
+        clip.effects.add_effect(
+            "color_adjust", exposure=0, gamma=1, black_point=black_point, white_point=1,
+        )
+
+    clip.effects.add_effect(
+        "color_adjust", exposure=0, gamma=1, black_point=0.999, white_point=1,
+    )
 
 
 def test_schema_effect_catalog_has_rust_catalog_ids_and_parameters() -> None:

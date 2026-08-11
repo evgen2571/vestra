@@ -15,7 +15,9 @@ mod motion;
 mod transform;
 
 pub use effects::EvaluatedEffect;
-pub(crate) use effects::evaluate as evaluate_effect;
+/// Workspace-internal raw effect evaluation used by renderer conformance tests.
+/// The stable `video-editor` SDK does not re-export this execution helper.
+pub use effects::evaluate as evaluate_effect;
 
 #[derive(Clone, Debug)]
 pub struct EvaluatedFrame {

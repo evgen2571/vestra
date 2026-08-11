@@ -326,6 +326,11 @@ fn public_cpu_wgpu_parity_covers_audio_reactive_project_when_an_adapter_is_avail
           "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
           "visual": {"clips": [{
             "id": "reactive", "source": {"type": "image", "asset": "red"}, "start": 0, "duration": 1, "layer": 0,
+            "transform": {
+              "position": {"base_value": {"x": 0.5, "y": 0.5}},
+              "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+              "scale": {"base_value": {"x": 1, "y": 1}}
+            },
             "opacity": {"base_value": 1},
             "effects": [{"id": "reactive-brightness", "type": "brightness", "amount": {
               "base_value": 0,

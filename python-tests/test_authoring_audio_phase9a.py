@@ -163,6 +163,23 @@ def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     assert speed["parameters"][0]["maximum"] == 4.0
 
 
+def test_generic_audio_authoring_smoke_covers_every_registered_effect() -> None:
+    project_builder = builder()
+    asset = project_builder.add_audio_asset("tone.wav")
+    clip = project_builder.audio.add_track().add_clip(asset=asset, start=0, trim_end=0.5)
+    for definition in available_audio_effects():
+        parameters = {}
+        for parameter in definition["parameters"]:
+            minimum, maximum = parameter["minimum"], parameter["maximum"]
+            parameters[str(parameter["name"])] = (
+                (float(minimum) + float(maximum)) / 2
+                if minimum is not None and maximum is not None
+                else float(minimum) + 1.0
+            )
+        clip.effects.add_effect(str(definition["id"]), **parameters)
+    assert len(clip.effects.items) == len(available_audio_effects())
+
+
 @pytest.mark.parametrize("parameters", [
     {"frequency_hz": 0, "gain_db": 0, "q": 1},
     {"frequency_hz": 120, "gain_db": 25, "q": 1},

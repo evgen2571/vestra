@@ -16,7 +16,7 @@ pub use effect_passes::{
     compiled_effect_pass_requirements, effect_pass_plan,
 };
 pub use evaluation::{EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource};
-pub use evaluation::{evaluate, evaluate_with_context};
+pub use evaluation::{evaluate, evaluate_effect, evaluate_with_context};
 pub use input::PlanCompileInput;
 pub use model::*;
 pub(crate) use scalar_property::ScalarPropertyTarget;

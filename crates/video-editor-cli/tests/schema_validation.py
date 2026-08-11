@@ -117,6 +117,27 @@ invalid_gamma_keyframe["visual"]["clips"][0]["effects"][0]["gamma"] = {
 }
 assert errors(invalid_gamma_keyframe), "exclusive gamma keyframe minimum must not validate"
 
+valid_black_point_boundary = copy.deepcopy(solid_colour)
+valid_black_point_boundary["visual"]["clips"][0]["effects"] = [{
+    "id": "color-adjust",
+    "type": "color_adjust",
+    "exposure": {"base_value": 0},
+    "gamma": {"base_value": 1},
+    "black_point": {"base_value": 0.999},
+    "white_point": {"base_value": 1},
+}]
+assert not errors(valid_black_point_boundary), "near-exclusive black point boundary must validate"
+
+invalid_black_point_base = copy.deepcopy(valid_black_point_boundary)
+invalid_black_point_base["visual"]["clips"][0]["effects"][0]["black_point"]["base_value"] = 1
+assert errors(invalid_black_point_base), "exclusive black point maximum must not validate"
+
+invalid_black_point_keyframe = copy.deepcopy(valid_black_point_boundary)
+invalid_black_point_keyframe["visual"]["clips"][0]["effects"][0]["black_point"] = {
+    "base_value": 0, "keyframes": [{"time": 1, "value": 1, "interpolation": "linear"}],
+}
+assert errors(invalid_black_point_keyframe), "exclusive black point keyframe maximum must not validate"
+
 out_of_range_shake_seed = copy.deepcopy(solid_colour)
 out_of_range_shake_seed["visual"]["clips"][0]["effects"] = [{
     "id": "shake",

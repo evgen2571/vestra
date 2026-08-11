@@ -52,7 +52,7 @@ fn validate_kernel_capabilities_with(
     for kernel in kernels {
         if !supports(kernel) {
             return Err(Diagnostic::error(
-                "WGPU-UNSUPPORTED-KERNEL",
+                "RENDER-UNSUPPORTED-KERNEL",
                 crate::Category::Backend,
                 format!(
                     "{} backend does not support effect kernel {kernel:?}",
@@ -114,7 +114,7 @@ mod tests {
         );
         assert_eq!(
             result.expect_err("unsupported kernel").code,
-            "WGPU-UNSUPPORTED-KERNEL"
+            "RENDER-UNSUPPORTED-KERNEL"
         );
         assert!(
             validate_kernel_capabilities(RenderBackendKind::Wgpu, [EffectKernel::Composite])

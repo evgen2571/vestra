@@ -57,7 +57,7 @@ impl EffectKernel {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct EffectKernelSet(u16);
+pub(crate) struct EffectKernelSet(u64);
 
 impl EffectKernelSet {
     pub(crate) const fn new() -> Self {
@@ -65,17 +65,20 @@ impl EffectKernelSet {
     }
 
     pub(crate) fn insert(&mut self, kernel: EffectKernel) {
+        debug_assert!(kernel.index() < u64::BITS);
         self.0 |= 1 << kernel.index();
     }
 
     pub(crate) fn iter(self) -> impl Iterator<Item = EffectKernel> {
-        EffectKernel::ALL
-            .into_iter()
-            .filter(move |kernel| self.0 & (1 << kernel.index()) != 0)
+        EffectKernel::ALL.into_iter().filter(move |kernel| {
+            debug_assert!(kernel.index() < u64::BITS);
+            self.0 & (1 << kernel.index()) != 0
+        })
     }
 
     #[cfg(test)]
     pub(crate) fn contains(self, kernel: EffectKernel) -> bool {
+        debug_assert!(kernel.index() < u64::BITS);
         self.0 & (1 << kernel.index()) != 0
     }
 }
@@ -123,10 +126,18 @@ pub(crate) fn validate_required_kernels(
     backend: crate::backend::RenderBackendKind,
     kernels: impl IntoIterator<Item = EffectKernel>,
 ) -> Result<(), crate::Diagnostic> {
+    validate_required_kernels_with(backend, kernels, |kernel| supports_kernel(backend, kernel))
+}
+
+fn validate_required_kernels_with(
+    backend: crate::backend::RenderBackendKind,
+    kernels: impl IntoIterator<Item = EffectKernel>,
+    supports: impl Fn(EffectKernel) -> bool,
+) -> Result<(), crate::Diagnostic> {
     for kernel in kernels {
-        if !supports_kernel(backend, kernel) {
+        if !supports(kernel) {
             return Err(crate::Diagnostic::error(
-                "WGPU-UNSUPPORTED-KERNEL",
+                "RENDER-UNSUPPORTED-KERNEL",
                 crate::Category::Backend,
                 format!(
                     "{} backend does not support effect kernel {kernel:?}",
@@ -201,5 +212,19 @@ mod tests {
             crate::backend::RenderBackendKind::Wgpu,
             EffectKernel::Composite
         ));
+    }
+
+    #[test]
+    fn unsupported_kernels_use_the_backend_neutral_diagnostic_for_both_backends() {
+        for backend in [
+            crate::backend::RenderBackendKind::Cpu,
+            crate::backend::RenderBackendKind::Wgpu,
+        ] {
+            let diagnostic =
+                validate_required_kernels_with(backend, [EffectKernel::Composite], |_| false)
+                    .expect_err("injected unsupported kernel");
+            assert_eq!(diagnostic.code, "RENDER-UNSUPPORTED-KERNEL");
+            assert!(diagnostic.message.contains(backend.as_str()));
+        }
     }
 }

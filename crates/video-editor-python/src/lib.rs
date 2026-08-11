@@ -937,6 +937,15 @@ fn native_version() -> &'static str {
     NativeEditor::new().version().editor_version
 }
 
+#[pyfunction]
+fn effect_definitions(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let value = serde_json::to_value(video_editor::visual_effect_descriptors().collect::<Vec<_>>())
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    pythonize::pythonize(py, &value)
+        .map(|value| value.unbind())
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+}
+
 #[derive(Default)]
 struct DetachBarrier {
     entered: bool,
@@ -1034,6 +1043,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     prepared::register(module)?;
     render::register(module)?;
     module.add_function(wrap_pyfunction!(native_version, module)?)?;
+    module.add_function(wrap_pyfunction!(effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_until_detached_entered, module)?)?;
     module.add_function(wrap_pyfunction!(_test_release_detached_wait, module)?)?;
@@ -1088,6 +1098,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "RenderFailureContext",
                 "RenderFailureStage",
                 "native_version",
+                "effect_definitions",
             ],
         )?,
     )?;

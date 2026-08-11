@@ -12,9 +12,10 @@ from .errors import AuthoringError
 from .effects import (
     ActiveInterval, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
     ClipEffectCollection, ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect,
-    Effect, GaussianBlurEffect, GlowEffect, MotionBlurEffect, PostEffectCollection,
+    Effect, GenericEffect, GaussianBlurEffect, GlowEffect, MotionBlurEffect, PostEffectCollection,
     SaturationEffect, SharpenEffect, TintEffect, VignetteEffect, ZoomBlurDirection,
     ZoomBlurEffect,
+    available_effects, effect_definition,
 )
 from .flashes import Flash, FlashCollection
 from .transitions import (
@@ -59,6 +60,7 @@ __all__ = [
     "DurationMode",
     "DirectionalBlurEffect",
     "Effect",
+    "GenericEffect",
     "GaussianBlurEffect",
     "GlowEffect",
     "Interpolation",
@@ -87,6 +89,8 @@ __all__ = [
     "VignetteEffect",
     "ZoomBlurDirection",
     "ZoomBlurEffect",
+    "available_effects",
+    "effect_definition",
     "CrossfadeTransition",
     "DirectionalPushTransition",
     "Flash",

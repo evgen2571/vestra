@@ -356,14 +356,17 @@ pub fn create_backend(
         RenderBackendPreference::Auto => {
             match WgpuBackend::new(plan, std::sync::Arc::clone(decoded)) {
                 Ok(backend) => Ok((Box::new(backend), None)),
-                Err(error) => Ok((
-                    Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
-                    Some(BackendFallback {
-                        code: error.code,
-                        stage: "wgpu_preparation".to_owned(),
-                        message: error.message,
-                    }),
-                )),
+                Err(error) => {
+                    kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+                    Ok((
+                        Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
+                        Some(BackendFallback {
+                            code: error.code,
+                            stage: "wgpu_preparation".to_owned(),
+                            message: error.message,
+                        }),
+                    ))
+                }
             }
         }
         #[cfg(all(feature = "wgpu", not(feature = "cpu")))]

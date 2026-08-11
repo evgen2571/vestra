@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Self, TypeVar
+from functools import lru_cache
+from types import MappingProxyType
+from typing import Callable, Mapping, Self, TypeVar, cast
 
 from ._internal import _IdAllocator, _Owner, _number
 from .tracks import ModulatableScalarTrack, ScalarTrack
 from .values import Color, Point, color_to_canonical
+from video_editor._native import effect_definitions as _native_effect_definitions
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,12 +45,148 @@ class ZoomBlurDirection(Enum):
     CENTERED = "centered"
 
 
+@lru_cache(maxsize=1)
+def _effect_catalog() -> tuple[Mapping[str, object], ...]:
+    return cast(
+        tuple[Mapping[str, object], ...],
+        tuple(_freeze_metadata(definition) for definition in _native_effect_definitions()),
+    )
+
+
+def _freeze_metadata(value: object) -> object:
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze_metadata(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_metadata(item) for item in value)
+    return value
+
+
+def available_effects() -> tuple[Mapping[str, object], ...]:
+    """Return the registered Rust visual-effect descriptors read-only."""
+    return _effect_catalog()
+
+
+def effect_definition(effect_type: str) -> Mapping[str, object]:
+    """Return one registered visual-effect descriptor."""
+    for definition in _effect_catalog():
+        if definition["id"] == effect_type:
+            return definition
+    raise ValueError(f"unknown visual effect type: {effect_type!r}")
+
+
+def _parameter_descriptor(definition: Mapping[str, object], name: str) -> Mapping[str, object]:
+    for parameter in definition["parameters"]:  # type: ignore[union-attr]
+        if parameter["name"] == name:
+            return parameter
+    names = ", ".join(str(parameter["name"]) for parameter in definition["parameters"])  # type: ignore[union-attr]
+    raise TypeError(f"unknown parameter {name!r} for effect {definition['id']!r}; expected: {names}")
+
+
 def _integer_in_range(value: int, name: str, minimum: int, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
     if not minimum <= value <= maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
     return value
+
+
+def _validate_descriptor_value(parameter: Mapping[str, object], value: float) -> None:
+    minimum = parameter["minimum"]
+    maximum = parameter["maximum"]
+    if minimum is not None and (value <= minimum if parameter["minimum_exclusive"] else value < minimum):
+        raise ValueError(f"{parameter['name']} is outside its authored range")
+    if maximum is not None and (value >= maximum if parameter["maximum_exclusive"] else value > maximum):
+        raise ValueError(f"{parameter['name']} is outside its authored range")
+
+
+def _canonical_parameter(
+    parameter: Mapping[str, object], value: object, owner: _Owner, *, validate_descriptor_values: bool,
+) -> object:
+    kind = parameter["kind"]
+    name = str(parameter["name"])
+    if kind == "scalar_property":
+        # Existing tracks are copied into canonical data. The generic effect
+        # never retains a live reference to another builder's track.
+        track = value if isinstance(value, ScalarTrack) else ModulatableScalarTrack._create(owner, value)  # type: ignore[arg-type]
+        if validate_descriptor_values:
+            _validate_descriptor_value(parameter, track.base_value)
+        return track.to_canonical()
+    if kind == "plain_track":
+        track = value if isinstance(value, ScalarTrack) else ScalarTrack._create(owner, value)  # type: ignore[arg-type]
+        return track.to_canonical()
+    if kind == "colour":
+        return color_to_canonical(value)  # type: ignore[arg-type]
+    if kind == "integer":
+        minimum = parameter["integer_minimum"]
+        maximum = parameter["integer_maximum"]
+        assert minimum is not None and maximum is not None
+        return _integer_in_range(value, name, int(minimum), int(maximum))  # type: ignore[arg-type]
+    if kind == "number":
+        number = _number(value, name)  # type: ignore[arg-type]
+        if validate_descriptor_values:
+            _validate_descriptor_value(parameter, number)
+        return number
+    if kind == "point2d":
+        if not isinstance(value, Point):
+            raise TypeError(f"{name} must be Point")
+        if not 0 <= value.x <= 1 or not 0 <= value.y <= 1:
+            raise ValueError(f"{name} must be within unit space")
+        return value.to_canonical()
+    if kind == "enum":
+        candidate = value.value if isinstance(value, Enum) else value
+        values = tuple(str(item) for item in parameter["enum_values"])
+        if not isinstance(candidate, str):
+            raise TypeError(f"{name} must be a string or enum value")
+        if candidate not in values:
+            raise ValueError(f"{name} must be one of: {', '.join(values)}")
+        return candidate
+    if kind == "active_interval":
+        if not isinstance(value, ActiveInterval):
+            raise TypeError(f"{name} must be ActiveInterval")
+        return value.to_canonical()
+    raise TypeError(f"unsupported authoring parameter kind: {kind!r}")
+
+
+def _build_registered_effect(
+    effect_type: str,
+    owner: _Owner,
+    scope: object,
+    identifier: str,
+    supplied: Mapping[str, object],
+    *,
+    validate_descriptor_values: bool,
+) -> dict[str, object]:
+    """Build one canonical registered effect from the Rust descriptor."""
+    definition = effect_definition(effect_type)
+    descriptors = {str(parameter["name"]): parameter for parameter in definition["parameters"]}  # type: ignore[union-attr]
+    values: dict[str, object] = {}
+    provided_parameters = set(supplied)
+    for name, value in supplied.items():
+        parameter = _parameter_descriptor(definition, name)
+        canonical = _canonical_parameter(
+            parameter, value, owner, validate_descriptor_values=validate_descriptor_values,
+        )
+        if parameter["kind"] == "active_interval":
+            values.update(canonical)  # type: ignore[arg-type]
+        else:
+            values[name] = canonical
+    for name, parameter in descriptors.items():
+        if name in provided_parameters:
+            continue
+        if parameter["required"]:
+            raise TypeError(f"missing required parameter {name!r} for effect {effect_type!r}")
+        if parameter["default"] is not None:
+            values[name] = parameter["default"]
+        elif parameter["kind"] == "active_interval":
+            values.update(ActiveInterval().to_canonical())
+    return {"id": identifier, "type": effect_type, **values}
+
+
+def _canonical_typed_effect(effect: Effect, supplied: Mapping[str, object]) -> dict[str, object]:
+    return _build_registered_effect(
+        effect.kind, effect._owner, effect._scope, effect.id, supplied,
+        validate_descriptor_values=False,
+    )
 
 
 class Effect:
@@ -91,6 +230,24 @@ class Effect:
         raise NotImplementedError
 
 
+class GenericEffect(Effect):
+    """Registered effect handle used by the generic authoring escape hatch."""
+
+    __slots__ = ("_data",)
+
+    @classmethod
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str, definition: Mapping[str, object], values: Mapping[str, object]
+    ) -> "GenericEffect":
+        instance = object.__new__(cls)
+        instance._initialize(owner, scope, identifier, str(definition["id"]))
+        instance._data = {"id": identifier, "type": definition["id"], **values}
+        return instance
+
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._data, "id": self.id}
+
+
 class _AmountEffect(Effect):
     """Private implementation shared only by effects with one amount track."""
 
@@ -115,7 +272,8 @@ class _AmountEffect(Effect):
 
 
 class BrightnessEffect(_AmountEffect):
-    pass
+    def to_canonical(self) -> dict[str, object]:
+        return _canonical_typed_effect(self, {"amount": self.amount})
 
 
 class ContrastEffect(_AmountEffect):
@@ -244,8 +402,9 @@ class ZoomBlurEffect(Effect):
         if not isinstance(value, ZoomBlurDirection): raise TypeError("direction must be ZoomBlurDirection")
         self._direction = value
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "radius": self.radius.to_canonical(), "samples": self.samples,
-                "anchor": self.anchor.to_canonical(), "direction": self.direction.value}
+        return _canonical_typed_effect(self, {
+            "radius": self.radius, "samples": self.samples, "anchor": self.anchor, "direction": self.direction,
+        })
 
 
 class GlowEffect(Effect):
@@ -277,8 +436,9 @@ class GlowEffect(Effect):
     @colour.setter
     def colour(self, value: Color | str) -> None: self._colour = color_to_canonical(value)
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "threshold": self.threshold.to_canonical(), "radius": self.radius.to_canonical(),
-                "intensity": self.intensity.to_canonical(), "colour": self.colour}
+        return _canonical_typed_effect(self, {
+            "threshold": self.threshold, "radius": self.radius, "intensity": self.intensity, "colour": self.colour,
+        })
 
 
 class ChromaticAberrationEffect(Effect):
@@ -444,9 +604,11 @@ class CameraShakeEffect(Effect):
     @decay.setter
     def decay(self, value: int | float) -> None: self._decay = _number(value, "decay")
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), **self.active_interval.to_canonical(), "position_amount": self.position_amount.to_canonical(),
-                "rotation_degrees": self.rotation_degrees.to_canonical(), "scale_amount": self.scale_amount.to_canonical(),
-                "frequency": self.frequency.to_canonical(), "seed": self.seed, "attack": self.attack, "decay": self.decay}
+        return _canonical_typed_effect(self, {
+            "active_interval": self.active_interval, "position_amount": self.position_amount,
+            "rotation_degrees": self.rotation_degrees, "scale_amount": self.scale_amount,
+            "frequency": self.frequency, "seed": self.seed, "attack": self.attack, "decay": self.decay,
+        })
 
 
 class MotionBlurEffect(Effect):
@@ -514,6 +676,19 @@ class _EffectCollection:
         staged._id = self._identifier(identifier)
         self._items.append(staged)
         return staged
+
+    def add_effect(self, effect_type: str, /, *, id: str | None = None, **parameters: object) -> GenericEffect:
+        """Author a registered visual effect through the Rust catalog."""
+        definition = effect_definition(effect_type)
+        if definition["scope"] == "clip_only" and isinstance(self, PostEffectCollection):
+            raise ValueError(f"effect {effect_type!r} is only valid on clips")
+        values = _build_registered_effect(
+            effect_type, self._owner, self._scope, "", parameters,
+            validate_descriptor_values=True,
+        )
+        values.pop("id")
+        values.pop("type")
+        return self._append(GenericEffect._create, id, definition, values)
     def add_brightness(self, *, amount: int | float, id: str | None = None) -> BrightnessEffect: return self._append(BrightnessEffect._create, id, "brightness", amount)
     def add_contrast(self, *, amount: int | float, id: str | None = None) -> ContrastEffect: return self._append(ContrastEffect._create, id, "contrast", amount)
     def add_saturation(self, *, amount: int | float, id: str | None = None) -> SaturationEffect: return self._append(SaturationEffect._create, id, "saturation", amount)

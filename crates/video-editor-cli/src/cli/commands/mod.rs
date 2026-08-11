@@ -2,6 +2,7 @@
 
 mod inspect;
 mod render;
+mod schema;
 mod validate;
 
 use std::process::ExitCode;
@@ -29,6 +30,7 @@ pub fn run() -> ExitCode {
             args.report,
             args.render_backend.into(),
         ),
+        Command::GenerateSchema(args) => schema::run(args.output),
         Command::Version => {
             print_success(
                 "version",

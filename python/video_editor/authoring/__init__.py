@@ -3,7 +3,7 @@
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack
-from .audio_effects import AudioEffect, AudioEffectCollection, ParametricEqAudioEffect, available_audio_effects, audio_effect_definition
+from .audio_effects import AudioEffect, AudioEffectCollection, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip
@@ -49,6 +49,7 @@ __all__ = [
     "AudioEffect",
     "AudioEffectCollection",
     "ParametricEqAudioEffect",
+    "PlaybackSpeedAudioEffect",
     "BlendMode",
     "BrightnessEffect",
     "CameraShakeEffect",

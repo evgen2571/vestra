@@ -235,25 +235,35 @@ impl GraphBuilder {
             ));
         }
         let timeline_start = seconds_to_samples(clip.start)?;
+        let processed = seconds_to_samples(clip.processed_duration)?;
         // Semantic validation works in seconds. Independent edge rounding can
         // make two exactly-fitting fades exceed the selected interval by one
         // sample, so preserve fade-in first and shorten fade-out only enough
         // to fit the selected sample interval.
-        let fade_in = seconds_to_samples(clip.fade_in)?.min(selected);
+        let fade_in = seconds_to_samples(clip.fade_in)?.min(processed);
         let requested_fade_out = seconds_to_samples(clip.fade_out)?;
-        let fade_out = requested_fade_out.min(selected.saturating_sub(fade_in));
+        let fade_out = requested_fade_out.min(processed.saturating_sub(fade_in));
         let normalized = self.label("clip");
         self.filters.push(format!(
             "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS[{normalized}]"
         ));
         let effected = self.apply_effect_chain(normalized, &clip.effects)?;
+        let effected = if clip.effects.has_duration_transform() {
+            let output = self.label("duration");
+            self.filters.push(format!(
+                "[{effected}]apad,atrim=end_sample={processed},asetpts=PTS-STARTPTS[{output}]"
+            ));
+            output
+        } else {
+            effected
+        };
         let label = self.label("clip");
         let mut filters = vec![format!("[{effected}]volume=volume={}", number(clip.gain))];
         let envelope = envelope_expression(
             clip.gain_automation.as_ref(),
             fade_in,
             fade_out,
-            selected,
+            processed,
             clip,
         )?;
         if envelope != "1" {
@@ -286,6 +296,18 @@ impl GraphBuilder {
                     number(*q),
                     number(*gain_db)
                 ),
+                AudioEffectOperation::PlaybackSpeed { rate } => {
+                    let stages = decompose_atempo(*rate)?;
+                    let mut current = input.clone();
+                    for stage in stages {
+                        let staged = self.label("tempo");
+                        self.filters
+                            .push(format!("[{current}]atempo={}[{staged}]", number(stage)));
+                        current = staged;
+                    }
+                    input = current;
+                    continue;
+                }
             };
             self.filters.push(filter);
             input = output;
@@ -311,6 +333,28 @@ impl GraphBuilder {
             }
         }
     }
+}
+
+fn decompose_atempo(rate: f64) -> Result<Vec<f64>, MediaError> {
+    if !rate.is_finite() || rate <= 0.0 {
+        return Err(MediaError::InvalidAudioTiming(
+            "playback speed rate must be finite and positive".to_owned(),
+        ));
+    }
+    let mut remaining = rate;
+    let mut stages = Vec::new();
+    while remaining > 2.0 {
+        stages.push(2.0);
+        remaining /= 2.0;
+    }
+    while remaining < 0.5 {
+        stages.push(0.5);
+        remaining /= 0.5;
+    }
+    if (remaining - 1.0).abs() > f64::EPSILON {
+        stages.push(remaining);
+    }
+    Ok(stages)
 }
 
 fn envelope_expression(
@@ -539,6 +583,7 @@ mod tests {
                 clips: vec![AudioClipPlan {
                     path: source,
                     selected_duration: 1.4,
+                    processed_duration: 1.4,
                     gain_automation: Some(automation),
                     ..automation_test_clip()
                 }],
@@ -565,6 +610,7 @@ mod tests {
             start: 0.12345,
             trim_start: 0.0,
             selected_duration: 1.0,
+            processed_duration: 1.0,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -622,6 +668,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 1.0,
+            processed_duration: 1.0,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -672,6 +719,7 @@ mod tests {
             start: 0.25,
             trim_start: 0.0,
             selected_duration: 1.0,
+            processed_duration: 1.0,
             mute: false,
             gain: 0.5,
             gain_automation: None,
@@ -681,12 +729,15 @@ mod tests {
             fade_out_curve: video_editor_core::project::AudioFadeCurve::Linear,
             effects: video_editor_core::plan_audio::AudioEffectPassPlan::default(),
         };
+        let mut sped = clip("first", "first.wav");
+        sped.processed_duration = 0.5;
+        sped.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate: 2.0 }];
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
                 id: "track".to_owned(),
                 mute: false,
                 gain: 0.75,
-                clips: vec![clip("first", "first.wav"), clip("second", "second.wav")],
+                clips: vec![sped, clip("second", "second.wav")],
 
                 effects: AudioEffectPassPlan {
                     operations: vec![AudioEffectOperation::ParametricEq {
@@ -735,6 +786,26 @@ mod tests {
         assert!(analyzer.filter_complex.ends_with("[audio]"));
         assert!(encoder.filter_complex.contains("equalizer=f=120"));
         assert!(encoder.filter_complex.contains("equalizer=f=240"));
+        assert!(
+            encoder
+                .filter_complex
+                .contains("atempo=2.00000000000000000")
+        );
+        assert!(
+            encoder
+                .filter_complex
+                .contains("apad,atrim=end_sample=24000")
+        );
+        assert!(
+            analyzer
+                .filter_complex
+                .contains("atempo=2.00000000000000000")
+        );
+        assert!(
+            analyzer
+                .filter_complex
+                .contains("apad,atrim=end_sample=24000")
+        );
     }
 
     #[test]
@@ -833,6 +904,7 @@ mod tests {
                         start: clip as f64 / 100.0,
                         trim_start: 0.0,
                         selected_duration: 1.0,
+                        processed_duration: 1.0,
                         mute: false,
                         gain: 1.0,
                         fade_in: 0.0,
@@ -886,6 +958,7 @@ mod tests {
                     start: 0.0,
                     trim_start: 0.0,
                     selected_duration: 1.0 / 48_000.0,
+                    processed_duration: 1.0 / 48_000.0,
                     mute: false,
                     gain: 1.0,
                     fade_in: 0.5 / 48_000.0,
@@ -920,6 +993,7 @@ mod tests {
                     start: 0.0,
                     trim_start: 0.0,
                     selected_duration: 1.0,
+                    processed_duration: 1.0,
                     mute: false,
                     gain: 0.5,
                     gain_automation: Some(video_editor_core::project::AudioGainAutomation {
@@ -975,6 +1049,7 @@ mod tests {
             start,
             trim_start: 0.0,
             selected_duration: 0.5,
+            processed_duration: 0.5,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -1065,6 +1140,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 0.5,
+            processed_duration: 0.5,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -1111,6 +1187,7 @@ mod tests {
                     start: 0.12345,
                     trim_start: 0.25,
                     selected_duration: 0.5,
+                    processed_duration: 0.5,
                     mute: false,
                     gain: 0.5,
                     fade_in: 0.1,
@@ -1159,6 +1236,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 2.0,
+            processed_duration: 2.0,
             mute: false,
             gain: 1.0,
             gain_automation: automation,
@@ -1305,6 +1383,7 @@ mod tests {
                     start: 0.0,
                     trim_start: 0.0,
                     selected_duration: 1.0,
+                    processed_duration: 1.0,
                     mute: false,
                     gain: 0.5,
                     gain_automation: Some(video_editor_core::project::AudioGainAutomation {
@@ -1347,6 +1426,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 0.5,
+            processed_duration: 0.5,
             mute: false,
             gain: 1.0,
             gain_automation: None,
@@ -1422,6 +1502,7 @@ mod tests {
             start,
             trim_start,
             selected_duration: 0.5,
+            processed_duration: 0.5,
             mute: false,
             gain,
             fade_in,
@@ -1478,6 +1559,7 @@ mod tests {
             start,
             trim_start: 0.0,
             selected_duration,
+            processed_duration: selected_duration,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -1514,6 +1596,28 @@ mod tests {
     }
 
     #[test]
+    fn atempo_decomposition_is_conservative_and_deterministic() {
+        assert_eq!(
+            super::decompose_atempo(0.25).expect("stages"),
+            vec![0.5, 0.5]
+        );
+        assert_eq!(super::decompose_atempo(0.5).expect("stages"), vec![0.5]);
+        assert_eq!(
+            super::decompose_atempo(1.0).expect("stages"),
+            Vec::<f64>::new()
+        );
+        assert_eq!(super::decompose_atempo(2.0).expect("stages"), vec![2.0]);
+        assert_eq!(
+            super::decompose_atempo(4.0).expect("stages"),
+            vec![2.0, 2.0]
+        );
+        assert_eq!(
+            super::decompose_atempo(3.0).expect("stages"),
+            vec![2.0, 1.5]
+        );
+    }
+
+    #[test]
     fn pcm_graph_normalizes_44100_mono_to_48000_stereo() {
         let directory = tempfile::tempdir().expect("temporary fixtures");
         let mono = directory.path().join("mono-44100.wav");
@@ -1527,6 +1631,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 0.5,
+            processed_duration: 0.5,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -1577,6 +1682,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 0.5,
+            processed_duration: 0.5,
             mute: false,
             gain: 1.0,
             fade_in: 0.0,
@@ -1626,6 +1732,7 @@ mod tests {
             start: 0.0,
             trim_start: 0.0,
             selected_duration: 1.0,
+            processed_duration: 1.0,
             mute: false,
             gain: 1.0,
             gain_automation: None,
@@ -1822,6 +1929,157 @@ mod tests {
             .expect("fader");
         let delay = graph.filter_complex.find("adelay=").expect("delay");
         assert!(trim < eq && eq < fader && fader < delay);
+    }
+
+    #[test]
+    fn playback_speed_preserves_effect_order_and_normalizes_before_fader() {
+        let mut clip = automation_test_clip();
+        clip.processed_duration = 0.5;
+        clip.effects.operations = vec![
+            AudioEffectOperation::ParametricEq {
+                frequency_hz: 120.0,
+                gain_db: -6.0,
+                q: 0.8,
+            },
+            AudioEffectOperation::PlaybackSpeed { rate: 2.0 },
+            AudioEffectOperation::ParametricEq {
+                frequency_hz: 800.0,
+                gain_db: 3.0,
+                q: 1.0,
+            },
+        ];
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+        let graph = compile(&mix, 1.0).expect("effect graph");
+        let first_eq = graph
+            .filter_complex
+            .find("equalizer=f=120")
+            .expect("first eq");
+        let tempo = graph.filter_complex.find("atempo=2").expect("tempo");
+        let second_eq = graph
+            .filter_complex
+            .find("equalizer=f=800")
+            .expect("second eq");
+        let duration = graph
+            .filter_complex
+            .find("apad,atrim=end_sample=24000")
+            .expect("duration");
+        let fader = graph
+            .filter_complex
+            .find("volume=volume=1.000")
+            .expect("fader");
+        assert!(first_eq < tempo && tempo < second_eq && second_eq < duration && duration < fader);
+    }
+
+    #[test]
+    fn playback_speed_executes_to_the_planned_sample_count() {
+        let directory = tempfile::tempdir().expect("temporary audio directory");
+        let source = directory.path().join("speed.wav");
+        write_mono_wav(&source, 48_000, 96_000, 0.1);
+        for (rate, processed_duration, expected_samples) in
+            [(2.0, 1.0, 48_000), (0.5, 4.0, 192_000)]
+        {
+            let mut clip = automation_test_clip();
+            clip.path = source.clone();
+            clip.selected_duration = 2.0;
+            clip.processed_duration = processed_duration;
+            clip.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate }];
+            let mix = AudioMixPlan {
+                tracks: vec![AudioTrackPlan {
+                    id: "track".to_owned(),
+                    mute: false,
+                    gain: 1.0,
+                    clips: vec![clip],
+                    effects: AudioEffectPassPlan::default(),
+                }],
+                effects: AudioEffectPassPlan::default(),
+            };
+            let samples = render_pcm(
+                &compile(&mix, processed_duration).expect("speed graph"),
+                processed_duration,
+            );
+            assert_eq!(samples.len(), expected_samples * 2);
+        }
+    }
+
+    #[test]
+    fn playback_speed_keeps_fade_and_automation_in_processed_local_time() {
+        let mut clip = automation_test_clip();
+        clip.selected_duration = 10.0;
+        clip.processed_duration = 5.0;
+        clip.fade_out = 1.0;
+        clip.gain_automation = Some(video_editor_core::project::AudioGainAutomation {
+            keyframes: vec![
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 0.0,
+                    gain: 1.0,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Linear,
+                },
+                video_editor_core::project::AudioGainKeyframe {
+                    time: 2.0,
+                    gain: 0.5,
+                    interpolation: video_editor_core::project::AudioGainInterpolation::Hold,
+                },
+            ],
+        });
+        clip.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate: 2.0 }];
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+
+        let graph = compile(&mix, 5.0).expect("processed-time graph");
+        let fade_start = "(t-4.00000000000000000)/1.00000000000000000";
+        assert!(graph.filter_complex.contains(fade_start));
+        assert!(graph.filter_complex.contains("lt(t,2.00000000000000000)"));
+        assert!(!graph.filter_complex.contains("t-9.00000000000000000"));
+        assert!(!graph.filter_complex.contains("t-1.00000000000000000"));
+    }
+
+    #[test]
+    fn reused_source_speed_is_branch_local_and_keeps_one_input() {
+        let mut plain = automation_test_clip();
+        plain.id = "plain".to_owned();
+        plain.path = PathBuf::from("shared.wav");
+        let mut sped = plain.clone();
+        sped.id = "sped".to_owned();
+        sped.processed_duration = 0.5;
+        sped.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate: 2.0 }];
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![plain, sped],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+
+        let graph = compile(&mix, 1.0).expect("reused source graph");
+        let split = graph.filter_complex.find("asplit=2").expect("source split");
+        let tempo = graph
+            .filter_complex
+            .find("atempo=2.00000000000000000")
+            .expect("sped branch");
+        assert_eq!(graph.input_paths, vec![PathBuf::from("shared.wav")]);
+        assert!(split < tempo);
+        assert_eq!(graph.filter_complex.matches("atempo=").count(), 1);
+        assert!(graph.filter_complex.contains("apad,atrim=end_sample=24000"));
     }
 
     #[test]

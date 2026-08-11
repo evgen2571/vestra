@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     plan::{CompileOptions, compile},
     project::{LoadError, Project, ValidatedProject},
@@ -13,6 +15,7 @@ pub struct Inspection {
     pub image_count: usize,
     pub audio_count: usize,
     pub audio_end: Option<f64>,
+    pub processed_audio_durations: BTreeMap<String, f64>,
 }
 
 pub fn inspect(
@@ -22,16 +25,19 @@ pub fn inspect(
 ) -> Result<Inspection, LoadError> {
     let plan = compile(&validated, CompileOptions { preview })
         .map_err(|diagnostic| LoadError::Diagnostics(vec![diagnostic]))?;
-    let audio_end = validated.project.audio.as_ref().map(|timeline| {
-        timeline
+    let processed_audio_durations = plan
+        .audio_mix
+        .tracks
+        .iter()
+        .flat_map(|track| track.clips.iter())
+        .map(|clip| (clip.id.clone(), clip.processed_duration))
+        .collect::<BTreeMap<_, _>>();
+    let audio_end = validated.project.audio.as_ref().map(|_| {
+        plan.audio_mix
             .tracks
             .iter()
             .flat_map(|track| track.clips.iter())
-            .filter_map(|clip| {
-                validated.audio_durations.get(&clip.asset).map(|duration| {
-                    clip.start + clip.trim_end.unwrap_or(*duration) - clip.trim_start
-                })
-            })
+            .map(|clip| clip.start + clip.processed_duration)
             .fold(0.0, f64::max)
     });
     Ok(Inspection {
@@ -47,6 +53,7 @@ pub fn inspect(
             .filter(|asset| matches!(asset.kind, crate::project::AssetType::Audio))
             .count(),
         audio_end,
+        processed_audio_durations,
         validated,
     })
 }

@@ -48,7 +48,7 @@
       "properties": {
         "effects": {
           "items": {
-            "$ref": "#/$defs/audio_effect"
+            "$ref": "#/$defs/audio_master_effect"
           },
           "type": "array"
         },
@@ -65,7 +65,7 @@
                     },
                     "effects": {
                       "items": {
-                        "$ref": "#/$defs/audio_effect"
+                        "$ref": "#/$defs/audio_clip_effect"
                       },
                       "type": "array"
                     },
@@ -161,7 +161,7 @@
               },
               "effects": {
                 "items": {
-                  "$ref": "#/$defs/audio_effect"
+                  "$ref": "#/$defs/audio_track_effect"
                 },
                 "type": "array"
               },
@@ -190,7 +190,17 @@
       ],
       "type": "object"
     },
-    "audio_effect": {
+    "audio_clip_effect": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/parametric_eq_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/playback_speed_audio_effect"
+        }
+      ]
+    },
+    "audio_master_effect": {
       "oneOf": [
         {
           "$ref": "#/$defs/parametric_eq_audio_effect"
@@ -244,6 +254,13 @@
             "max_hz"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "audio_track_effect": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/parametric_eq_audio_effect"
         }
       ]
     },
@@ -1486,6 +1503,29 @@
         "frequency_hz",
         "gain_db",
         "q"
+      ],
+      "type": "object"
+    },
+    "playback_speed_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rate": {
+          "maximum": 4.0,
+          "minimum": 0.25,
+          "type": "number"
+        },
+        "type": {
+          "const": "playback_speed"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "rate"
       ],
       "type": "object"
     },

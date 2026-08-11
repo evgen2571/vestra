@@ -62,7 +62,6 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         branches.push(json!({"$ref": format!("#/$defs/{name}")}));
     }
     defs.insert("effect".into(), json!({"oneOf": branches}));
-    let mut audio_branches = Vec::new();
     for descriptor in audio_effect_descriptors() {
         let name = format!("{}_audio_effect", descriptor.id);
         let mut properties = Map::from_iter([
@@ -75,9 +74,20 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             required.push(parameter.name);
         }
         defs.insert(name.clone(), json!({"type":"object", "required":required, "additionalProperties":false, "properties":properties}));
-        audio_branches.push(json!({"$ref": format!("#/$defs/{name}")}));
+        for scope in descriptor.scopes {
+            let scope_name = format!(
+                "audio_{}_effect",
+                serde_json::to_string(scope)?.trim_matches('"')
+            );
+            defs.entry(scope_name)
+                .or_insert_with(|| json!({"oneOf": []}))
+                .as_object_mut()
+                .and_then(|object| object.get_mut("oneOf"))
+                .and_then(Value::as_array_mut)
+                .ok_or("audio scope definition is not an array")?
+                .push(json!({"$ref": format!("#/$defs/{name}")}));
+        }
     }
-    defs.insert("audio_effect".into(), json!({"oneOf": audio_branches}));
     if let Some(audio) = defs.get_mut("audio") {
         add_audio_effects(audio);
     }
@@ -121,27 +131,27 @@ fn apply_number_constraint(
 }
 
 fn add_audio_effects(audio: &mut Value) {
-    let add = |object: &mut Map<String, Value>| {
+    let add = |object: &mut Map<String, Value>, scope: &str| {
         object.entry("properties").or_insert_with(|| json!({}));
         object["properties"]["effects"] =
-            json!({"items":{"$ref":"#/$defs/audio_effect"},"type":"array"});
+            json!({"items":{"$ref":format!("#/$defs/audio_{scope}_effect")},"type":"array"});
     };
     if let Some(object) = audio.as_object_mut() {
-        add(object);
+        add(object, "master");
         if let Some(track) = object
             .get_mut("properties")
             .and_then(|p| p.get_mut("tracks"))
             .and_then(|t| t.get_mut("items"))
             .and_then(Value::as_object_mut)
         {
-            add(track);
+            add(track, "track");
             if let Some(clip) = track
                 .get_mut("properties")
                 .and_then(|p| p.get_mut("clips"))
                 .and_then(|c| c.get_mut("items"))
                 .and_then(Value::as_object_mut)
             {
-                add(clip);
+                add(clip, "clip");
             }
         }
     }

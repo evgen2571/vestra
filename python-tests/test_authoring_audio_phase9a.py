@@ -124,9 +124,30 @@ def test_typed_and_generic_audio_effect_authoring_have_same_canonical_shape() ->
     assert typed.to_dict() == generic.to_dict()
 
 
+def test_playback_speed_typed_and_generic_authoring_are_clip_only() -> None:
+    typed = builder()
+    typed_asset = typed.add_audio_asset("tone.wav")
+    typed_clip = typed.audio.add_track(id="music").add_clip(asset=typed_asset, start=0, trim_end=0.5)
+    typed_effect = typed_clip.effects.add_playback_speed(rate=2.0)
+
+    generic = builder()
+    generic_asset = generic.add_audio_asset("tone.wav")
+    generic_clip = generic.audio.add_track(id="music").add_clip(asset=generic_asset, start=0, trim_end=0.5)
+    generic_effect = generic_clip.effects.add_effect("playback_speed", rate=2.0)
+    assert typed.to_dict() == generic.to_dict()
+    assert typed_effect.__class__.__name__ == "PlaybackSpeedAudioEffect"
+    assert generic_effect.__class__.__name__ == "AudioEffect"
+
+    track = generic.audio.tracks[0]
+    with pytest.raises(ValueError, match="not valid at this scope"):
+        track.effects.add_playback_speed(rate=2.0)
+    with pytest.raises(ValueError, match="not valid at this scope"):
+        generic.audio.effects.add_effect("playback_speed", rate=2.0)
+
+
 def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     definitions = available_audio_effects()
-    assert [definition["id"] for definition in definitions] == ["parametric_eq"]
+    assert [definition["id"] for definition in definitions] == ["parametric_eq", "playback_speed"]
     definition = audio_effect_definition("parametric_eq")
     assert set(definition["scopes"]) == {"clip", "track", "master"}
     assert definition["duration_behavior"] == "preserve"
@@ -135,6 +156,11 @@ def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     with pytest.raises(TypeError):
         definition["parameters"][0]["name"] = "changed"  # type: ignore[index]
     assert audio_effect_definition("parametric_eq")["id"] == "parametric_eq"
+    speed = audio_effect_definition("playback_speed")
+    assert speed["scopes"] == ("clip",)
+    assert speed["duration_behavior"] == "transform"
+    assert speed["parameters"][0]["minimum"] == 0.25
+    assert speed["parameters"][0]["maximum"] == 4.0
 
 
 @pytest.mark.parametrize("parameters", [

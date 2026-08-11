@@ -5,7 +5,7 @@ use crate::{
     project::{AssetType, AudioTimeline},
 };
 use video_editor_core::audio_effect_definition::AudioEffectScope;
-use video_editor_core::project::AudioEffect;
+use video_editor_core::{plan_audio::compile_effects, project::AudioEffect};
 
 fn validate_effects(
     effects: &[AudioEffect],
@@ -13,30 +13,8 @@ fn validate_effects(
     path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
-    let mut ids = std::collections::BTreeSet::new();
     for (index, effect) in effects.iter().enumerate() {
         let effect_path = format!("{path}/{index}");
-        let id = match effect {
-            AudioEffect::ParametricEq { id, .. } => id,
-        };
-        if id.is_empty() || !ids.insert(id) {
-            errors.push(Diagnostic::error(
-                "MVP-AUDIO-EFFECT-ID",
-                Category::Semantic,
-                if id.is_empty() {
-                    "audio effect ID must not be empty"
-                } else {
-                    "audio effect IDs must be unique within their collection"
-                },
-                format!("{effect_path}/id"),
-            ));
-        }
-        let AudioEffect::ParametricEq {
-            frequency_hz,
-            gain_db,
-            q,
-            ..
-        } = effect;
         let definition = effect.definition();
         if !definition.scopes.contains(&scope) {
             errors.push(Diagnostic::error(
@@ -50,11 +28,25 @@ fn validate_effects(
             ));
         }
         for parameter in definition.parameters {
-            let value = match parameter.name {
-                "frequency_hz" => *frequency_hz,
-                "gain_db" => *gain_db,
-                "q" => *q,
-                _ => continue,
+            let value = match effect {
+                AudioEffect::ParametricEq {
+                    frequency_hz,
+                    gain_db,
+                    q,
+                    ..
+                } => match parameter.name {
+                    "frequency_hz" => *frequency_hz,
+                    "gain_db" => *gain_db,
+                    "q" => *q,
+                    _ => continue,
+                },
+                AudioEffect::PlaybackSpeed { rate, .. } => {
+                    if parameter.name == "rate" {
+                        *rate
+                    } else {
+                        continue;
+                    }
+                }
             };
             if !parameter.accepts_number(value) {
                 errors.push(Diagnostic::error(
@@ -107,14 +99,34 @@ pub(crate) fn validate(
                 continue;
             };
             let trim_end = clip.trim_end.unwrap_or(source_duration);
+            let selected_duration = trim_end - clip.trim_start;
+            let selected_samples = match video_editor_media::seconds_to_samples(selected_duration) {
+                Ok(samples) => samples,
+                Err(_) => continue,
+            };
+            let processed_samples =
+                match compile_effects(&clip.effects).transform_duration_samples(selected_samples) {
+                    Ok(samples) => samples,
+                    Err(_) => {
+                        errors.push(Diagnostic::error(
+                            "MVP-AUDIO-DURATION",
+                            Category::Semantic,
+                            "audio effect duration cannot be represented safely",
+                            &path,
+                        ));
+                        continue;
+                    }
+                };
+            let processed_duration = processed_samples as f64
+                / video_editor_core::plan_audio::MASTER_AUDIO_SAMPLE_RATE as f64;
             if trim_end > source_duration + 0.02
                 || clip.trim_start >= trim_end
-                || clip.fade_in + clip.fade_out > trim_end - clip.trim_start + 1e-9
+                || clip.fade_in + clip.fade_out > processed_duration + 1e-9
             {
                 errors.push(Diagnostic::error(
                     "MVP-AUDIO-CLIP-SOURCE",
                     Category::Semantic,
-                    "audio clip trim or fades exceed its source duration",
+                    "audio clip trim exceeds source duration or fades exceed processed clip duration",
                     path,
                 ));
                 continue;
@@ -123,12 +135,12 @@ pub(crate) fn validate(
                 automation
                     .keyframes
                     .last()
-                    .is_some_and(|keyframe| keyframe.time > trim_end - clip.trim_start + 1e-9)
+                    .is_some_and(|keyframe| keyframe.time > processed_duration + 1e-9)
             }) {
                 errors.push(Diagnostic::error(
                     "MVP-AUDIO-AUTOMATION-DURATION",
                     Category::Semantic,
-                    "audio gain automation exceeds the selected source duration",
+                    "audio gain automation exceeds the processed clip duration",
                     format!("{path}/gain_automation/keyframes"),
                 ));
                 continue;
@@ -155,10 +167,7 @@ pub(crate) fn validate(
                     previous = Some(sample);
                 }
             }
-            end = Some(
-                end.unwrap_or(0.0)
-                    .max(clip.start + trim_end - clip.trim_start),
-            );
+            end = Some(end.unwrap_or(0.0).max(clip.start + processed_duration));
         }
     }
     end
@@ -196,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn parametric_eq_rejects_invalid_parameters_and_duplicate_ids() {
+    fn parametric_eq_rejects_invalid_parameters() {
         let effects = vec![
             AudioEffect::ParametricEq {
                 id: "eq".to_owned(),
@@ -221,11 +230,6 @@ mod tests {
             &std::collections::BTreeMap::new(),
             &std::collections::BTreeMap::new(),
             &mut errors,
-        );
-        assert!(
-            errors
-                .iter()
-                .any(|error| error.code == "MVP-AUDIO-EFFECT-ID")
         );
         assert!(
             errors

@@ -165,6 +165,24 @@ audio_effect = {
     "gain_db": 6.0, "q": 0.8,
 }
 
+playback_speed = {"id": "speed", "type": "playback_speed", "rate": 2.0}
+clip_with_speed = copy.deepcopy(audio_timeline)
+clip_with_speed["audio"]["tracks"][0]["clips"][0]["effects"] = [playback_speed]
+assert not errors(clip_with_speed), "playback speed must validate at clip scope"
+for scope in ("master", "track"):
+    scoped = copy.deepcopy(audio_timeline)
+    target = scoped["audio"] if scope == "master" else scoped["audio"]["tracks"][0]
+    target["effects"] = [playback_speed]
+    assert errors(scoped), f"playback speed must be rejected at {scope} scope"
+for value in (0.25, 4.0):
+    candidate = copy.deepcopy(clip_with_speed)
+    candidate["audio"]["tracks"][0]["clips"][0]["effects"][0]["rate"] = value
+    assert not errors(candidate), "playback speed boundary must validate"
+for value in (0, 0.249, 4.001):
+    candidate = copy.deepcopy(clip_with_speed)
+    candidate["audio"]["tracks"][0]["clips"][0]["effects"][0]["rate"] = value
+    assert errors(candidate), "playback speed out-of-range value must fail"
+
 for scope in ("master", "track", "clip"):
     scoped = copy.deepcopy(audio_timeline)
     if scope == "master":

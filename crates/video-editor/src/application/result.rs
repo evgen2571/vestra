@@ -119,6 +119,12 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                         kind: "parametric_eq".to_owned(),
                     }
                 }
+                video_editor_core::project::AudioEffect::PlaybackSpeed { id, .. } => {
+                    InspectAudioEffect {
+                        id: id.clone(),
+                        kind: "playback_speed".to_owned(),
+                    }
+                }
             })
             .collect::<Vec<_>>()
     };
@@ -135,17 +141,21 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                     .clips
                     .iter()
                     .filter_map(|clip| {
-                        inspection
-                            .validated
-                            .audio_durations
-                            .get(&clip.asset)
-                            .map(|duration| {
-                                let trim_end = clip.trim_end.unwrap_or(*duration);
+                        inspection.processed_audio_durations.get(&clip.id).map(
+                            |processed_duration| {
+                                let trim_end = clip.trim_end.unwrap_or_else(|| {
+                                    inspection
+                                        .validated
+                                        .audio_durations
+                                        .get(&clip.asset)
+                                        .copied()
+                                        .unwrap_or(clip.trim_start)
+                                });
                                 InspectAudioClip {
                                     id: clip.id.clone(),
                                     asset: clip.asset.clone(),
                                     start: clip.start,
-                                    end: clip.start + trim_end - clip.trim_start,
+                                    end: clip.start + processed_duration,
                                     trim_start: clip.trim_start,
                                     trim_end,
                                     mute: clip.mute,
@@ -170,7 +180,8 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                                     fade_out_curve: clip.fade_out_curve,
                                     effects: inspect_effects(&clip.effects),
                                 }
-                            })
+                            },
+                        )
                     })
                     .collect(),
             })

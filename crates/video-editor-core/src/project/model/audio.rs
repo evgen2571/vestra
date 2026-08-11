@@ -61,6 +61,10 @@ pub enum AudioEffect {
         gain_db: f64,
         q: f64,
     },
+    PlaybackSpeed {
+        id: String,
+        rate: f64,
+    },
 }
 
 impl AudioEffect {
@@ -69,6 +73,9 @@ impl AudioEffect {
         match self {
             Self::ParametricEq { .. } => {
                 crate::audio_effect_definition::AudioEffectKind::ParametricEq.definition()
+            }
+            Self::PlaybackSpeed { .. } => {
+                crate::audio_effect_definition::AudioEffectKind::PlaybackSpeed.definition()
             }
         }
     }

@@ -5,14 +5,15 @@ use bytemuck::{Pod, Zeroable};
 use crate::{
     animation::Transform2D,
     domain::Crop,
+    kernel::EffectKernel,
     plan::{ColourTransform, CompiledSizing, EvaluatedFrame},
     render::geometry::{self},
 };
 
 use super::requirements::align_up;
 
-pub(super) const PARAMETER_RECORD_BYTES: u64 = std::mem::size_of::<LayerParameters>() as u64;
-
+/// Every dynamic uniform record reserves the largest parameter layout.  The
+/// bytes written into an effect record are still the size of its typed layout.
 /// CPU-side frame parameter upload. Records are padded to the device's dynamic
 /// uniform offset alignment, then uploaded once before the frame encoder is
 /// submitted. Coordinates remain pixel-space and colours remain straight RGBA.
@@ -38,7 +39,7 @@ impl FrameParameterArena {
         self.offsets.clear();
     }
 
-    pub(super) fn push(&mut self, parameters: LayerParameters) -> Result<u32, crate::Diagnostic> {
+    pub(super) fn push<T: Pod>(&mut self, parameters: &T) -> Result<u32, crate::Diagnostic> {
         let range = parameter_record_range(self.alignment, self.bytes.len() as u64, self.capacity)?;
         let offset = dynamic_uniform_offset(range.start)?;
         let end = usize::try_from(range.end)
@@ -46,7 +47,8 @@ impl FrameParameterArena {
         let start = usize::try_from(range.start)
             .map_err(|_| parameter_overflow("parameter record does not fit this platform"))?;
         self.bytes.resize(end, 0);
-        self.bytes[start..end].copy_from_slice(bytemuck::bytes_of(&parameters));
+        let encoded = bytemuck::bytes_of(parameters);
+        self.bytes[start..start + encoded.len()].copy_from_slice(encoded);
         self.offsets.push(offset);
         Ok(offset)
     }
@@ -112,12 +114,14 @@ mod tests {
     fn frame_parameter_offsets_honor_dynamic_uniform_alignment() {
         let mut arena = FrameParameterArena::new(256, 512);
         assert_eq!(
-            arena.push(LayerParameters::zeroed()).expect("first record"),
+            arena
+                .push(&LayerParameters::zeroed())
+                .expect("first record"),
             0
         );
         assert_eq!(
             arena
-                .push(LayerParameters::zeroed())
+                .push(&LayerParameters::zeroed())
                 .expect("second record"),
             256
         );
@@ -127,9 +131,11 @@ mod tests {
     #[test]
     fn frame_parameter_overflow_is_reported_before_submission() {
         let mut arena = FrameParameterArena::new(256, 176);
-        arena.push(LayerParameters::zeroed()).expect("first record");
+        arena
+            .push(&LayerParameters::zeroed())
+            .expect("first record");
         let error = arena
-            .push(LayerParameters::zeroed())
+            .push(&LayerParameters::zeroed())
             .expect_err("capacity exceeded");
         assert_eq!(error.code, "WGPU-PARAMETER-OVERFLOW");
     }
@@ -158,7 +164,7 @@ mod tests {
             );
             for index in 0..10 {
                 assert_eq!(
-                    arena.push(LayerParameters::zeroed()).expect("record fits"),
+                    arena.push(&LayerParameters::zeroed()).expect("record fits"),
                     index * stride as u32
                 );
             }
@@ -169,9 +175,13 @@ mod tests {
     #[test]
     fn final_record_can_exactly_fill_the_prepared_buffer() {
         let mut arena = FrameParameterArena::new(256, 432);
-        arena.push(LayerParameters::zeroed()).expect("first record");
+        arena
+            .push(&LayerParameters::zeroed())
+            .expect("first record");
         assert_eq!(
-            arena.push(LayerParameters::zeroed()).expect("final record"),
+            arena
+                .push(&LayerParameters::zeroed())
+                .expect("final record"),
             256
         );
         assert_eq!(arena.bytes().len(), 432);
@@ -193,10 +203,10 @@ mod tests {
         let mut second_parameters = LayerParameters::zeroed();
         second_parameters.header[0] = 720;
         first
-            .push(first_parameters)
+            .push(&first_parameters)
             .expect("first frame parameters");
         second
-            .push(second_parameters)
+            .push(&second_parameters)
             .expect("second frame parameters");
         assert_ne!(first.bytes(), second.bytes());
         assert_eq!(first.offset(0).expect("first offset"), 0);
@@ -220,6 +230,219 @@ pub(super) struct LayerParameters {
     pub(super) colour_offset: [f32; 4],
     pub(super) solid_or_background: [f32; 4],
 }
+
+macro_rules! effect_parameters {
+    ($name:ident { $($field:ident : $ty:ty),+ $(,)? }) => {
+        #[repr(C, align(16))]
+        #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
+        pub(super) struct $name {
+            $(pub(super) $field: $ty,)+
+        }
+    };
+}
+
+// WGSL layout: colour_row0 @ 16, colour_offset @ 64, size = 80 bytes.
+effect_parameters!(ColourTransformParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    colour_row0: [f32; 4],
+    colour_row1: [f32; 4],
+    colour_row2: [f32; 4],
+    colour_offset: [f32; 4]
+});
+// WGSL layout: radius @ 16, direction @ 20, size = 32 bytes.
+effect_parameters!(GaussianBlurParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    radius: f32,
+    direction: u32,
+    _padding1: [u32; 2]
+});
+// WGSL layout: threshold @ 16, colour @ 32, size = 48 bytes.
+effect_parameters!(HighlightExtractParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    threshold: f32,
+    _padding1: [f32; 3],
+    colour: [f32; 4]
+});
+// WGSL layout: mode @ 16, amount @ 20, size = 32 bytes.
+effect_parameters!(CompositeParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    mode: u32,
+    amount: f32,
+    _padding1: [u32; 2]
+});
+// WGSL layout: radius @ 16, angle @ 20, samples @ 24, size = 32 bytes.
+effect_parameters!(LineBlurParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    radius: f32,
+    angle: f32,
+    samples: u32,
+    _padding1: u32
+});
+// WGSL layout: anchor_x @ 24, direction @ 32, size = 48 bytes.
+effect_parameters!(ZoomBlurParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    radius: f32,
+    samples: u32,
+    anchor_x: f32,
+    anchor_y: f32,
+    direction: u32,
+    _padding1: [u32; 3]
+});
+// WGSL layout: amount @ 16, angle @ 20, size = 32 bytes.
+effect_parameters!(ChromaticAberrationParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    amount: f32,
+    angle: f32,
+    _padding1: [f32; 2]
+});
+// WGSL layout: amount @ 16, colour @ 32, size = 48 bytes.
+effect_parameters!(VignetteParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    amount: f32,
+    radius: f32,
+    softness: f32,
+    _padding1: f32,
+    colour: [f32; 4]
+});
+// WGSL layout: exposure @ 16, white_point @ 28, size = 32 bytes.
+effect_parameters!(ColorAdjustParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    exposure: f32,
+    gamma: f32,
+    black_point: f32,
+    white_point: f32
+});
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum EffectKernelParameters {
+    ColourTransform(ColourTransformParameters),
+    GaussianBlur(GaussianBlurParameters),
+    HighlightExtract(HighlightExtractParameters),
+    Composite(CompositeParameters),
+    DirectionalBlur(LineBlurParameters),
+    ZoomBlur(ZoomBlurParameters),
+    ChromaticAberration(ChromaticAberrationParameters),
+    Vignette(VignetteParameters),
+    ColorAdjust(ColorAdjustParameters),
+    MotionBlur(LineBlurParameters),
+}
+
+#[cfg(test)]
+mod effect_parameter_layout_tests {
+    use super::*;
+    use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn highlight_extract_matches_wgsl_layout() {
+        assert_eq!(offset_of!(HighlightExtractParameters, threshold), 16);
+        assert_eq!(offset_of!(HighlightExtractParameters, colour), 32);
+        assert_eq!(align_of::<HighlightExtractParameters>(), 16);
+        assert_eq!(size_of::<HighlightExtractParameters>(), 48);
+    }
+
+    #[test]
+    fn zoom_blur_matches_wgsl_layout() {
+        assert_eq!(offset_of!(ZoomBlurParameters, anchor_x), 24);
+        assert_eq!(offset_of!(ZoomBlurParameters, direction), 32);
+        assert_eq!(size_of::<ZoomBlurParameters>(), 48);
+    }
+
+    #[test]
+    fn every_effect_parameter_fits_the_uniform_record() {
+        let sizes = [
+            size_of::<ColourTransformParameters>(),
+            size_of::<GaussianBlurParameters>(),
+            size_of::<HighlightExtractParameters>(),
+            size_of::<CompositeParameters>(),
+            size_of::<LineBlurParameters>(),
+            size_of::<ZoomBlurParameters>(),
+            size_of::<ChromaticAberrationParameters>(),
+            size_of::<VignetteParameters>(),
+            size_of::<ColorAdjustParameters>(),
+        ];
+        let alignments = [
+            align_of::<ColourTransformParameters>(),
+            align_of::<GaussianBlurParameters>(),
+            align_of::<HighlightExtractParameters>(),
+            align_of::<CompositeParameters>(),
+            align_of::<LineBlurParameters>(),
+            align_of::<ZoomBlurParameters>(),
+            align_of::<ChromaticAberrationParameters>(),
+            align_of::<VignetteParameters>(),
+            align_of::<ColorAdjustParameters>(),
+        ];
+        assert!(alignments.into_iter().all(|alignment| alignment == 16));
+        assert!(
+            sizes
+                .into_iter()
+                .all(|size| { size <= PARAMETER_RECORD_BYTES as usize && size % 16 == 0 })
+        );
+    }
+}
+
+impl EffectKernelParameters {
+    pub(super) const fn kernel(self) -> EffectKernel {
+        match self {
+            Self::ColourTransform(_) => EffectKernel::ColourTransform,
+            Self::GaussianBlur(_) => EffectKernel::GaussianBlur,
+            Self::HighlightExtract(_) => EffectKernel::HighlightExtract,
+            Self::Composite(_) => EffectKernel::Composite,
+            Self::DirectionalBlur(_) => EffectKernel::DirectionalBlur,
+            Self::ZoomBlur(_) => EffectKernel::ZoomBlur,
+            Self::ChromaticAberration(_) => EffectKernel::ChromaticAberration,
+            Self::Vignette(_) => EffectKernel::Vignette,
+            Self::ColorAdjust(_) => EffectKernel::ColorAdjust,
+            Self::MotionBlur(_) => EffectKernel::MotionBlur,
+        }
+    }
+}
+
+const fn max_parameter_size(left: usize, right: usize) -> u64 {
+    if left > right {
+        left as u64
+    } else {
+        right as u64
+    }
+}
+
+/// The physical record includes ordinary layer parameters and reserves enough
+/// space for the largest typed effect payload.  Adding a typed payload requires
+/// adding its size here, so buffer capacity and bind-group minimum size cannot
+/// silently drift from the parameter definitions.
+pub(super) const PARAMETER_RECORD_BYTES: u64 = {
+    let mut size = std::mem::size_of::<LayerParameters>();
+    size = max_parameter_size(
+        size as usize,
+        std::mem::size_of::<ColourTransformParameters>(),
+    ) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<GaussianBlurParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<HighlightExtractParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<CompositeParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<LineBlurParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<ZoomBlurParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<ChromaticAberrationParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<VignetteParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<ColorAdjustParameters>()) as usize;
+    size as u64
+};
 
 #[expect(
     clippy::too_many_arguments,

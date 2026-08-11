@@ -296,8 +296,16 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         return;
     };
     let initial = gpu.stats();
-    assert_eq!(initial.shader_module_count, 3);
-    assert_eq!(initial.pipeline_count, 3);
+    assert_eq!(
+        initial.shader_module_count,
+        super::pipeline::GpuPipelines::BASE_SHADER_MODULE_COUNT
+            + super::pipeline::GpuPipelines::declared_supported_kernel_count()
+    );
+    assert_eq!(
+        initial.pipeline_count,
+        super::pipeline::GpuPipelines::BASE_PIPELINE_COUNT
+            + super::pipeline::GpuPipelines::declared_supported_kernel_count()
+    );
     assert_eq!(initial.uploaded_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);

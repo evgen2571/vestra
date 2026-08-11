@@ -2,16 +2,86 @@
 
 use crate::{
     domain::Point,
-    plan::{ColourTransform, EvaluatedEffect},
+    plan::{ColourTransform, CompiledEffect, EvaluatedEffect},
     project::ZoomBlurDirection,
 };
 
-/// One logical rendering operation required by an evaluated effect.
-///
-/// Backends execute these logical passes in order using their backend-specific
-/// implementations.
+/// A logical image resource consumed or produced by an effect pass.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EffectResource {
+    Original,
+    Current,
+    Temporary0,
+    Temporary1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EffectPassInputs {
+    Single(EffectResource),
+    /// Composite the processed resource with the retained pre-effect image.
+    /// This is intentionally explicit: the current WGPU working set does not
+    /// promise arbitrary two-temporary compositing.
+    OriginalAnd(EffectResource),
+}
+
+impl EffectPassInputs {
+    #[must_use]
+    pub fn primary(self) -> EffectResource {
+        match self {
+            Self::Single(resource) => resource,
+            Self::OriginalAnd(_) => EffectResource::Original,
+        }
+    }
+
+    #[must_use]
+    pub fn secondary(self) -> Option<EffectResource> {
+        match self {
+            Self::Single(_) => None,
+            Self::OriginalAnd(processed) => Some(processed),
+        }
+    }
+
+    #[must_use]
+    pub fn uses_original(self) -> bool {
+        matches!(
+            self,
+            Self::Single(EffectResource::Original) | Self::OriginalAnd(_)
+        )
+    }
+}
+
+/// Backend-neutral resource requirements shared by compiled-plan preparation
+/// and evaluated pass execution.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EffectPassRequirements {
+    retains_original: bool,
+}
+
+impl EffectPassRequirements {
+    const NONE: Self = Self {
+        retains_original: false,
+    };
+    const RETAINS_ORIGINAL: Self = Self {
+        retains_original: true,
+    };
+
+    #[must_use]
+    pub const fn retains_original(self) -> bool {
+        self.retains_original
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompositeMode {
+    /// Alpha-aware glow composition: `amount` scales the overlay alpha, the
+    /// output alpha is source-over union, and RGB is combined by alpha-weighted
+    /// color averaging rather than unbounded channel addition.
+    Additive,
+    Unsharp,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum EffectPass {
+pub enum EffectOperation {
     /// An affine RGB transform in the renderer's existing encoded byte space.
     ApplyColourTransform {
         transform: ColourTransform,
@@ -26,10 +96,8 @@ pub enum EffectPass {
         threshold: f64,
         colour: [u8; 4],
     },
-    GlowComposite {
-        intensity: f64,
-    },
-    UnsharpComposite {
+    Composite {
+        mode: CompositeMode,
         amount: f64,
     },
     DirectionalBlur {
@@ -65,14 +133,33 @@ pub enum EffectPass {
     },
 }
 
+/// One ordered rendering operation with explicit logical resource flow.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EffectPass {
+    pub operation: EffectOperation,
+    pub inputs: EffectPassInputs,
+    pub output: EffectResource,
+}
+
 impl EffectPass {
-    /// Final composite passes that must read the exact pre-effect image.
-    #[must_use]
-    pub const fn requires_original(self) -> bool {
-        matches!(
-            self,
-            Self::GlowComposite { .. } | Self::UnsharpComposite { .. }
-        )
+    pub fn new(
+        operation: EffectOperation,
+        primary: EffectResource,
+        output: EffectResource,
+    ) -> Self {
+        Self {
+            operation,
+            inputs: EffectPassInputs::Single(primary),
+            output,
+        }
+    }
+
+    fn composite(mode: CompositeMode, amount: f64, processed: EffectResource) -> Self {
+        Self {
+            operation: EffectOperation::Composite { mode, amount },
+            inputs: EffectPassInputs::OriginalAnd(processed),
+            output: EffectResource::Current,
+        }
     }
 }
 
@@ -111,6 +198,40 @@ impl EffectPassPlan {
     pub fn as_slice(&self) -> &[EffectPass] {
         self.passes.as_slice()
     }
+
+    #[must_use]
+    pub fn requirements(&self) -> EffectPassRequirements {
+        EffectPassRequirements {
+            retains_original: self.passes.iter().any(|pass| pass.inputs.uses_original()),
+        }
+    }
+}
+
+/// Preparation-time resource requirements for a compiled effect.
+///
+/// These describe the maximum logical resources that the effect's pass topology
+/// can require on any frame. Backends use this to prepare physical resources
+/// without matching authored effect identities themselves.
+#[must_use]
+pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> EffectPassRequirements {
+    match effect {
+        CompiledEffect::Glow { .. } | CompiledEffect::Sharpen { .. } => {
+            EffectPassRequirements::RETAINS_ORIGINAL
+        }
+        CompiledEffect::ColourTransform { .. }
+        | CompiledEffect::Brightness { .. }
+        | CompiledEffect::Contrast { .. }
+        | CompiledEffect::Saturation { .. }
+        | CompiledEffect::Tint { .. }
+        | CompiledEffect::GaussianBlur { .. }
+        | CompiledEffect::DirectionalBlur { .. }
+        | CompiledEffect::ZoomBlur { .. }
+        | CompiledEffect::ChromaticAberration { .. }
+        | CompiledEffect::Vignette { .. }
+        | CompiledEffect::ColorAdjust { .. }
+        | CompiledEffect::CameraShake { .. }
+        | CompiledEffect::MotionBlur { .. } => EffectPassRequirements::NONE,
+    }
 }
 
 /// Expands an evaluated effect into its ordered logical rendering passes.
@@ -120,19 +241,30 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
     if effect.is_identity() {
         return EffectPassPlan::new(&[]);
     }
+    let current = EffectResource::Current;
     match effect {
-        EvaluatedEffect::ColourTransform { transform } => {
-            EffectPassPlan::new(&[EffectPass::ApplyColourTransform {
+        EvaluatedEffect::ColourTransform { transform } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ApplyColourTransform {
                 transform: *transform,
-            }])
-        }
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::GaussianBlur { radius } => EffectPassPlan::new(&[
-            EffectPass::GaussianHorizontal {
-                radius: canonical_gaussian_radius(*radius),
-            },
-            EffectPass::GaussianVertical {
-                radius: canonical_gaussian_radius(*radius),
-            },
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal {
+                    radius: canonical_gaussian_radius(*radius),
+                },
+                current,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical {
+                    radius: canonical_gaussian_radius(*radius),
+                },
+                EffectResource::Temporary0,
+                current,
+            ),
         ]),
         EvaluatedEffect::Glow {
             threshold,
@@ -140,108 +272,160 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             intensity,
             colour,
         } => EffectPassPlan::new(&[
-            EffectPass::HighlightExtract {
-                threshold: *threshold,
-                colour: *colour,
-            },
-            EffectPass::GaussianHorizontal {
-                radius: canonical_gaussian_radius(*radius),
-            },
-            EffectPass::GaussianVertical {
-                radius: canonical_gaussian_radius(*radius),
-            },
-            EffectPass::GlowComposite {
-                intensity: *intensity,
-            },
+            EffectPass::new(
+                EffectOperation::HighlightExtract {
+                    threshold: *threshold,
+                    colour: *colour,
+                },
+                EffectResource::Original,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal {
+                    radius: canonical_gaussian_radius(*radius),
+                },
+                EffectResource::Temporary0,
+                EffectResource::Temporary1,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical {
+                    radius: canonical_gaussian_radius(*radius),
+                },
+                EffectResource::Temporary1,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::composite(
+                CompositeMode::Additive,
+                *intensity,
+                EffectResource::Temporary0,
+            ),
         ]),
         EvaluatedEffect::Sharpen { amount, radius } => EffectPassPlan::new(&[
-            EffectPass::GaussianHorizontal {
-                radius: canonical_gaussian_radius(*radius),
-            },
-            EffectPass::GaussianVertical {
-                radius: canonical_gaussian_radius(*radius),
-            },
-            EffectPass::UnsharpComposite { amount: *amount },
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal {
+                    radius: canonical_gaussian_radius(*radius),
+                },
+                EffectResource::Original,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical {
+                    radius: canonical_gaussian_radius(*radius),
+                },
+                EffectResource::Temporary0,
+                EffectResource::Temporary1,
+            ),
+            EffectPass::composite(CompositeMode::Unsharp, *amount, EffectResource::Temporary1),
         ]),
         EvaluatedEffect::Brightness { .. }
         | EvaluatedEffect::Contrast { .. }
         | EvaluatedEffect::Saturation { .. }
-        | EvaluatedEffect::Tint { .. } => {
-            EffectPassPlan::new(&[EffectPass::ApplyColourTransform {
+        | EvaluatedEffect::Tint { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ApplyColourTransform {
                 transform: ColourTransform::from_effects([effect.clone()]),
-            }])
-        }
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::DirectionalBlur {
             radius,
             angle_degrees,
-        } => EffectPassPlan::new(&[EffectPass::DirectionalBlur {
-            radius: *radius,
-            angle_degrees: *angle_degrees,
-        }]),
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::DirectionalBlur {
+                radius: *radius,
+                angle_degrees: *angle_degrees,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::ZoomBlur {
             radius,
             samples,
             anchor,
             direction,
-        } => EffectPassPlan::new(&[EffectPass::ZoomBlur {
-            radius: *radius,
-            samples: *samples,
-            anchor: *anchor,
-            direction: *direction,
-        }]),
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ZoomBlur {
+                radius: *radius,
+                samples: *samples,
+                anchor: *anchor,
+                direction: *direction,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::ChromaticAberration {
             amount,
             angle_degrees,
-        } => EffectPassPlan::new(&[EffectPass::ChromaticAberration {
-            amount: *amount,
-            angle_degrees: *angle_degrees,
-        }]),
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ChromaticAberration {
+                amount: *amount,
+                angle_degrees: *angle_degrees,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::Vignette {
             amount,
             radius,
             softness,
             colour,
-        } => EffectPassPlan::new(&[EffectPass::Vignette {
-            amount: *amount,
-            radius: *radius,
-            softness: *softness,
-            colour: *colour,
-        }]),
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::Vignette {
+                amount: *amount,
+                radius: *radius,
+                softness: *softness,
+                colour: *colour,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::ColorAdjust {
             exposure,
             gamma,
             black_point,
             white_point,
-        } => EffectPassPlan::new(&[EffectPass::ColorAdjust {
-            exposure: *exposure,
-            gamma: *gamma,
-            black_point: *black_point,
-            white_point: *white_point,
-        }]),
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ColorAdjust {
+                exposure: *exposure,
+                gamma: *gamma,
+                black_point: *black_point,
+                white_point: *white_point,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::MotionBlur {
             radius,
             angle_degrees,
             samples,
             ..
-        } => EffectPassPlan::new(&[EffectPass::MotionBlur {
-            radius: *radius,
-            angle_degrees: *angle_degrees,
-            samples: *samples,
-        }]),
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::MotionBlur {
+                radius: *radius,
+                angle_degrees: *angle_degrees,
+                samples: *samples,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::CameraShake { .. } => EffectPassPlan::new(&[]),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{EffectPass, EffectPassPlan, effect_pass_plan};
+    use super::{
+        CompositeMode, EffectOperation, EffectPass, EffectPassPlan, EffectResource,
+        compiled_effect_pass_requirements, effect_pass_plan,
+    };
     use crate::effects::{
         canonical_gaussian_radius, effect_amount_is_identity, gaussian_radius_is_identity,
         sampling_blur_radius_is_identity,
     };
     use crate::{
+        animation::Track,
         domain::Point,
-        plan::{ColourTransform, EvaluatedEffect},
+        plan::{ColourTransform, CompiledEffect, CompiledScalarProperty, EvaluatedEffect},
         project::ZoomBlurDirection,
     };
 
@@ -256,20 +440,40 @@ mod tests {
             })
             .as_slice(),
             &[
-                EffectPass::HighlightExtract {
-                    threshold: 0.6,
-                    colour: [255, 128, 64, 255],
-                },
-                EffectPass::GaussianHorizontal { radius: 3.0 },
-                EffectPass::GaussianVertical { radius: 3.0 },
-                EffectPass::GlowComposite { intensity: 0.75 },
+                EffectPass::new(
+                    EffectOperation::HighlightExtract {
+                        threshold: 0.6,
+                        colour: [255, 128, 64, 255],
+                    },
+                    EffectResource::Original,
+                    EffectResource::Temporary0
+                ),
+                EffectPass::new(
+                    EffectOperation::GaussianHorizontal { radius: 3.0 },
+                    EffectResource::Temporary0,
+                    EffectResource::Temporary1
+                ),
+                EffectPass::new(
+                    EffectOperation::GaussianVertical { radius: 3.0 },
+                    EffectResource::Temporary1,
+                    EffectResource::Temporary0
+                ),
+                EffectPass::composite(CompositeMode::Additive, 0.75, EffectResource::Temporary0),
             ]
         );
         assert_eq!(
             effect_pass_plan(&EvaluatedEffect::GaussianBlur { radius: 2.0 }).as_slice(),
             &[
-                EffectPass::GaussianHorizontal { radius: 2.0 },
-                EffectPass::GaussianVertical { radius: 2.0 },
+                EffectPass::new(
+                    EffectOperation::GaussianHorizontal { radius: 2.0 },
+                    EffectResource::Current,
+                    EffectResource::Temporary0
+                ),
+                EffectPass::new(
+                    EffectOperation::GaussianVertical { radius: 2.0 },
+                    EffectResource::Temporary0,
+                    EffectResource::Current
+                ),
             ]
         );
         assert_eq!(
@@ -279,32 +483,96 @@ mod tests {
             })
             .as_slice(),
             &[
-                EffectPass::GaussianHorizontal { radius: 2.0 },
-                EffectPass::GaussianVertical { radius: 2.0 },
-                EffectPass::UnsharpComposite { amount: 0.5 },
+                EffectPass::new(
+                    EffectOperation::GaussianHorizontal { radius: 2.0 },
+                    EffectResource::Original,
+                    EffectResource::Temporary0
+                ),
+                EffectPass::new(
+                    EffectOperation::GaussianVertical { radius: 2.0 },
+                    EffectResource::Temporary0,
+                    EffectResource::Temporary1
+                ),
+                EffectPass::composite(CompositeMode::Unsharp, 0.5, EffectResource::Temporary1),
             ]
         );
     }
 
     #[test]
+    fn pass_requirements_are_derived_from_explicit_resource_inputs() {
+        let glow = effect_pass_plan(&EvaluatedEffect::Glow {
+            threshold: 0.6,
+            radius: 3.0,
+            intensity: 0.75,
+            colour: [255, 128, 64, 255],
+        });
+        let blur = effect_pass_plan(&EvaluatedEffect::GaussianBlur { radius: 2.0 });
+
+        assert!(glow.requirements().retains_original());
+        assert!(!blur.requirements().retains_original());
+    }
+
+    #[test]
+    fn compiled_pass_requirements_expose_resource_topology_without_backend_effect_matching() {
+        let scalar = |value| CompiledScalarProperty::authored(Track::new(value));
+        let glow = CompiledEffect::Glow {
+            threshold: scalar(0.6),
+            radius: scalar(3.0),
+            intensity: scalar(0.75),
+            colour: [255, 128, 64, 255],
+        };
+        let sharpen = CompiledEffect::Sharpen {
+            amount: scalar(0.5),
+            radius: scalar(2.0),
+        };
+        let blur = CompiledEffect::GaussianBlur {
+            radius: scalar(2.0),
+        };
+
+        assert!(compiled_effect_pass_requirements(&glow).retains_original());
+        assert!(compiled_effect_pass_requirements(&sharpen).retains_original());
+        assert!(!compiled_effect_pass_requirements(&blur).retains_original());
+    }
+
+    #[test]
     fn effect_pass_plan_grows_beyond_inline_capacity_without_losing_order() {
         let passes = [
-            EffectPass::GaussianHorizontal { radius: 1.0 },
-            EffectPass::GaussianVertical { radius: 1.0 },
-            EffectPass::DirectionalBlur {
-                radius: 2.0,
-                angle_degrees: 15.0,
-            },
-            EffectPass::ChromaticAberration {
-                amount: 3.0,
-                angle_degrees: 30.0,
-            },
-            EffectPass::ColorAdjust {
-                exposure: 0.1,
-                gamma: 1.0,
-                black_point: 0.0,
-                white_point: 1.0,
-            },
+            EffectPass::new(
+                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectResource::Current,
+                EffectResource::Temporary0,
+            ),
+            EffectPass::new(
+                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectResource::Temporary0,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::DirectionalBlur {
+                    radius: 2.0,
+                    angle_degrees: 15.0,
+                },
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::ChromaticAberration {
+                    amount: 3.0,
+                    angle_degrees: 30.0,
+                },
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
+            EffectPass::new(
+                EffectOperation::ColorAdjust {
+                    exposure: 0.1,
+                    gamma: 1.0,
+                    black_point: 0.0,
+                    white_point: 1.0,
+                },
+                EffectResource::Current,
+                EffectResource::Current,
+            ),
         ];
         let plan = EffectPassPlan::new(&passes);
 
@@ -318,11 +586,15 @@ mod tests {
         assert!(effect_pass_plan(&EvaluatedEffect::Brightness { amount: 0.0 }).is_empty());
         assert_eq!(
             effect_pass_plan(&EvaluatedEffect::Brightness { amount: 0.25 }).as_slice(),
-            &[EffectPass::ApplyColourTransform {
-                transform: ColourTransform::from_effects([EvaluatedEffect::Brightness {
-                    amount: 0.25,
-                }]),
-            }]
+            &[EffectPass::new(
+                EffectOperation::ApplyColourTransform {
+                    transform: ColourTransform::from_effects([EvaluatedEffect::Brightness {
+                        amount: 0.25,
+                    }]),
+                },
+                EffectResource::Current,
+                EffectResource::Current
+            )]
         );
     }
 

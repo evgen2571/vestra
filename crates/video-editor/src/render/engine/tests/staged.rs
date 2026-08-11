@@ -21,11 +21,11 @@ use video_editor_core::{
     plan::{
         ActiveSchedule, AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap,
         AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal, ClampTransform, CompiledEffect,
-        EvaluatedEffect, EvaluatedSource,
         CompiledScalarModifier, CompiledScalarProperty, CompiledScalarSignal,
         CompiledScalarSignals, CompiledSignalTransform, CubicResponseCurve, EnvelopeTransform,
-        EvaluationContext, GainTransform, RemapTransform, ScalarModifierOperation,
-        RenderPlan, ScalarPropertyConstraint, TemporalDependency, TimedEffect, evaluate_with_context,
+        EvaluatedEffect, EvaluatedSource, EvaluationContext, GainTransform, RemapTransform,
+        RenderPlan, ScalarModifierOperation, ScalarPropertyConstraint, TemporalDependency,
+        TimedEffect, evaluate_with_context,
     },
     plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::AudioFadeCurve,
@@ -365,7 +365,10 @@ fn preparation_evaluates_bass_scale_rms_glow_and_high_band_chromatic_reference_t
                 ),
                 radius: CompiledScalarProperty::constrained(
                     Track::new(8.0),
-                    ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 32.0 },
+                    ScalarPropertyConstraint::ClosedRange {
+                        min: 0.0,
+                        max: 32.0,
+                    },
                 ),
                 intensity: CompiledScalarProperty {
                     authored_track: Track::new(0.0),
@@ -389,7 +392,10 @@ fn preparation_evaluates_bass_scale_rms_glow_and_high_band_chromatic_reference_t
                         operation: ScalarModifierOperation::Replace,
                         signal: high_id,
                     }],
-                    constraint: ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 32.0 },
+                    constraint: ScalarPropertyConstraint::ClosedRange {
+                        min: 0.0,
+                        max: 32.0,
+                    },
                 },
                 angle_degrees: CompiledScalarProperty::authored(Track::new(0.0)),
             },
@@ -484,9 +490,10 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
         }),
         vec![],
     )]);
-    plan.audio_analysis_requirements = AudioAnalysisRequirements::from_requirements([
-        AudioAnalysisRequirement::Master(AudioScalarFeature::Rms),
-    ]);
+    plan.audio_analysis_requirements =
+        AudioAnalysisRequirements::from_requirements([AudioAnalysisRequirement::Master(
+            AudioScalarFeature::Rms,
+        )]);
     attach_test_master_audio(&mut plan, source);
 
     let total_frames = plan.frame_count;

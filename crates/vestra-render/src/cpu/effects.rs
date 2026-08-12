@@ -31,6 +31,7 @@ pub(super) fn apply_chain(
                 effect,
                 EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. }
             ),
+            matches!(effect, EvaluatedEffect::Sharpen { .. }),
         );
         if let Some(started) = started {
             let elapsed = started.elapsed();
@@ -59,6 +60,7 @@ fn execute_effect_pass_sequence(
     passes: &[EffectPass],
     mut timings: Option<&mut CpuHotPathTimings>,
     profile_bloom_passes: bool,
+    profile_sharpen_passes: bool,
 ) {
     if passes.is_empty() {
         return;
@@ -79,23 +81,39 @@ fn execute_effect_pass_sequence(
             pass.output,
             |source, secondary, target| execute_effect_pass(source, secondary, target, pass),
         );
-        if profile_bloom_passes
-            && let Some(started) = started
+        if let Some(started) = started
             && let Some(timings) = timings.as_deref_mut()
+            && (profile_bloom_passes || profile_sharpen_passes)
         {
             let elapsed = started.elapsed();
-            match pass.operation {
-                EffectOperation::HighlightExtract { .. } => {
+            match (profile_bloom_passes, profile_sharpen_passes, pass.operation) {
+                (true, _, EffectOperation::HighlightExtract { .. }) => {
                     timings.bloom_highlight_extract += elapsed;
                 }
-                EffectOperation::GaussianHorizontal { .. }
-                | EffectOperation::GaussianVertical { .. } => {
+                (true, _, EffectOperation::GaussianHorizontal { .. })
+                | (true, _, EffectOperation::GaussianVertical { .. }) => {
                     timings.bloom_gaussian_blur += elapsed;
                 }
-                EffectOperation::Composite {
-                    mode: crate::render::effects::CompositeMode::Additive,
-                    ..
-                } => timings.bloom_composite += elapsed,
+                (
+                    true,
+                    _,
+                    EffectOperation::Composite {
+                        mode: crate::render::effects::CompositeMode::Additive,
+                        ..
+                    },
+                ) => timings.bloom_composite += elapsed,
+                (false, true, EffectOperation::GaussianHorizontal { .. })
+                | (false, true, EffectOperation::GaussianVertical { .. }) => {
+                    timings.sharpen_gaussian += elapsed;
+                }
+                (
+                    false,
+                    true,
+                    EffectOperation::Composite {
+                        mode: crate::render::effects::CompositeMode::Unsharp,
+                        ..
+                    },
+                ) => timings.sharpen_unsharp_composite += elapsed,
                 _ => {}
             }
         }
@@ -730,7 +748,7 @@ mod tests {
         let mut surfaces = EffectSurfacePool::new(1, 1);
         surfaces.begin_from(&source);
 
-        execute_effect_pass_sequence(&mut surfaces, &passes, None, false);
+        execute_effect_pass_sequence(&mut surfaces, &passes, None, false, false);
 
         assert_eq!(surfaces.current().get_pixel(0, 0), &Rgba([42, 17, 67, 255]));
         assert_eq!(surfaces.stats().reuses, 5);

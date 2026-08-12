@@ -344,6 +344,14 @@ fn phase10_release_matrix() {
             None,
         ),
         ("mixed", "effects-ready-v1.json", 1920, 1080, 30, None),
+        (
+            "color-adjust-focused",
+            "color-adjust.json",
+            1280,
+            720,
+            100,
+            None,
+        ),
     ]
     .into_iter()
     .skip(start)
@@ -422,6 +430,7 @@ fn write_fixture(
                 "projects"
             }
             "zoom-blur.json" => "transitions",
+            "color-adjust.json" => "effects",
             "global-post-effects.json" => "compositing",
             "heavy-impact.json" => "presets",
             _ => "effects",

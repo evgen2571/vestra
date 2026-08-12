@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Command, time::Instant};
 
-use super::spectrum::STFT_SIZE_FRAMES;
+use super::spectrum::TEST_STFT_SIZE_FRAMES as STFT_SIZE_FRAMES;
 use crate::test_support::write_mono_wav;
 
 use vestra_core::{

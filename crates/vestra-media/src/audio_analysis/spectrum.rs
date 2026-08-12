@@ -20,7 +20,9 @@ use super::FEATURE_HOP_NANOS;
 #[cfg(test)]
 use super::record_fft_calls;
 
-pub(super) const STFT_SIZE_FRAMES: usize = 4_096;
+const STFT_SIZE_FRAMES: usize = 4_096;
+#[cfg(test)]
+pub(super) const TEST_STFT_SIZE_FRAMES: usize = STFT_SIZE_FRAMES;
 const STFT_HOP_FRAMES: usize = super::AUDIO_FEATURE_HOP_FRAMES;
 
 pub(super) struct StftAnalyzer {
@@ -157,12 +159,15 @@ impl StftAnalyzer {
 
     #[cfg(test)]
     pub(super) fn test_band_power_matches_prefix(&self) -> bool {
-        self.bands.iter().zip(&self.samples).all(|(descriptor, _)| {
-            let direct = self.power[descriptor.bins.clone()].iter().sum::<f64>();
-            let prefix =
-                self.power_prefix[descriptor.bins.end] - self.power_prefix[descriptor.bins.start];
-            (direct - prefix).abs() <= 1e-12
-        })
+        self.bands
+            .iter()
+            .zip(&self.samples)
+            .all(|(descriptor, output)| {
+                let direct = self.power[descriptor.bins.clone()].iter().sum::<f64>();
+                let prefix = self.power_prefix[descriptor.bins.end]
+                    - self.power_prefix[descriptor.bins.start];
+                (direct - prefix).abs() < 1e-12 && (output[0] - direct).abs() < 1e-12
+            })
     }
 
     pub(super) fn finish(

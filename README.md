@@ -1,6 +1,6 @@
-# video-editor
+# Vestra
 
-`video-editor` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image and full-canvas solid-colour layers, and can author an ordered audio timeline of mixer tracks and clips.
+`vestra` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image and full-canvas solid-colour layers, and can author an ordered audio timeline of mixer tracks and clips.
 
 ## Python authoring
 
@@ -15,8 +15,8 @@ single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
 ```python
-from video_editor import Editor, FrameRate, RenderRequest
-from video_editor.authoring import Interpolation, Point, ProjectBuilder, Sizing
+from vestra import Editor, FrameRate, RenderRequest
+from vestra.authoring import Interpolation, Point, ProjectBuilder, Sizing
 
 builder = ProjectBuilder(
     width=160,
@@ -88,7 +88,7 @@ scopes. Obtain collections only through `clip.effects` and
 serialization order.
 
 ```python
-from video_editor.authoring import BlendMode, Interpolation
+from vestra.authoring import BlendMode, Interpolation
 
 clip.blend_mode = BlendMode.SCREEN
 brightness = clip.effects.add_brightness(amount=0.0)
@@ -167,7 +167,7 @@ diagnostics intact. Preflight and rendering remain separate operations and
 require their normal runtime dependencies.
 
 ```python
-from video_editor.authoring import (
+from vestra.authoring import (
     AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe,
 )
 
@@ -269,12 +269,12 @@ operations over the same canonical model as the low-level typed primitives.
 It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs use formats supported by the Rust `image` crate (including PNG, JPEG, GIF, WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV and MP3 are practical baseline formats).
 
 ```bash
-cargo build --release -p video-editor-cli
+cargo build --release -p vestra-cli
 
 # Run these from the repository root.
-./target/release/video-editor validate examples/projects/animation-effects.json
-./target/release/video-editor inspect examples/projects/animation-effects.json --format json
-./target/release/video-editor render examples/projects/animation-effects.json --progress json
+./target/release/ve validate examples/projects/animation-effects.json
+./target/release/ve inspect examples/projects/animation-effects.json --format json
+./target/release/ve render examples/projects/animation-effects.json --progress json
 ```
 
 The reference output is written under `examples/output/` and is protected from accidental replacement. Re-render it only with `--overwrite`.
@@ -282,12 +282,12 @@ The reference output is written under `examples/output/` and is protected from a
 Key commands are non-interactive:
 
 ```text
-video-editor validate <project> [--format human|json]
-video-editor inspect <project> [--preview] [--format human|json]
-video-editor render <project> [--output PATH] [--overwrite] [--preview]
+ve validate <project> [--format human|json]
+ve inspect <project> [--preview] [--format human|json]
+ve render <project> [--output PATH] [--overwrite] [--preview]
                     [--render-backend auto|cpu|wgpu]
                     [--format human|json] [--progress human|json|none] [--report PATH]
-video-editor version
+ve version
 ```
 
 `--format json` writes a result envelope. `render --progress json` writes JSON Lines events, starting at zero and ending with `completed` at 1.0 only after publication. Exit statuses are 0 (success), 1 (internal), 2 (usage), 3 (project), 4 (asset/media), 5 (backend/render), 6 (output), and 130 (interrupt cancellation).
@@ -301,21 +301,23 @@ reports expose `requested_render_backend`, selected `render_backend`, optional
 textures, pipelines, and readback storage persist for a render; each output
 frame is still read back to CPU RGBA for FFmpeg, so it is not zero-copy or
 hardware video encoding.
-Set `VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1` to prefer a fallback adapter, or
-`VIDEO_EDITOR_WGPU_BACKEND=vulkan|gl|metal|dx12` to constrain adapter discovery
-for CI or headless troubleshooting.
+Set `VESTRA_WGPU_FORCE_FALLBACK=1` to prefer a fallback adapter, or
+`VESTRA_WGPU_BACKEND=vulkan|gl|metal|dx12` to constrain adapter discovery
+for CI or headless troubleshooting. The legacy `VIDEO_EDITOR_WGPU_FORCE_FALLBACK`
+and `VIDEO_EDITOR_WGPU_BACKEND` names remain accepted when the canonical names
+are unset.
 
-See [the project format](docs/specs/project-format.md), [the effects-ready example](examples/projects/effects-ready-v1.json), [the effects benchmark recipe](docs/benchmarks/effects-ready-v1.md), [the WGPU renderer guide](docs/wgpu-renderer.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Regenerate the checked-in schema with `cargo run -p video-editor-cli -- generate-schema`. Run the canonical check suite with:
+See [the project format](docs/specs/project-format.md), [the effects-ready example](examples/projects/effects-ready-v1.json), [the effects benchmark recipe](docs/benchmarks/effects-ready-v1.md), [the WGPU renderer guide](docs/wgpu-renderer.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Regenerate the checked-in schema with `cargo run -p vestra-cli -- generate-schema`. Run the canonical check suite with:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
 ./scripts/check.sh
-cargo bench -p video-editor --bench animation_effects
+cargo bench -p vestra --bench animation_effects
 ./scripts/render-effect-examples.sh
 ```
 
 The benchmark uses the canonical animation/effects fixture at 720×1280. Run it
-with `VIDEO_EDITOR_BENCH_BACKEND=cpu` or `VIDEO_EDITOR_BENCH_BACKEND=wgpu` to
+with `VESTRA_BENCH_BACKEND=cpu` or `VESTRA_BENCH_BACKEND=wgpu` to
 select the renderer; it performs five warmups and reports median/range values
 across five measured renders, along with the selected backend and available GPU
 preparation timings. WGPU benchmark results require a compatible adapter.
@@ -329,12 +331,12 @@ Rust dependencies are locked in `Cargo.lock`.
 
 ## Rust SDK
 
-The workspace root is virtual. `video-editor` is the supported Rust SDK and
-`video-editor-cli` supplies the `video-editor` executable. A normal Rust
-consumer needs only `video-editor`:
+The workspace root is virtual. `vestra` is the supported Rust SDK and
+`vestra-cli` supplies the `ve` executable. A normal Rust
+consumer needs only `vestra`:
 
 ```rust
-use video_editor::{BackendPreference, CancellationToken, Editor, RenderRequest};
+use vestra::{BackendPreference, CancellationToken, Editor, RenderRequest};
 
 let editor = Editor::new();
 let project = editor.load_project("project.json")?;
@@ -354,8 +356,8 @@ after the output is published. `RenderObserverControl::Cancel` can stop a
 pre-publication operation. A `Cancel` returned for `completed` is ignored
 because publication has already succeeded. The SDK neither initializes logging
 nor prints or exits. CLI formatting, Ctrl-C installation, and exit-code mapping belong to
-`video-editor-cli`. `video-editor-core`, `video-editor-render`, and
-`video-editor-media` are implementation crates. Their public items support
+`vestra-cli`. `vestra-core`, `vestra-render`, and
+`vestra-media` are implementation crates. Their public items support
 the workspace and are not stable SDK contracts.
 
 ### Project paths and lifecycle
@@ -382,7 +384,7 @@ must remain unchanged for repeatable output.
 
 ```rust
 use std::time::Duration;
-use video_editor::{BackendPreference, Editor, PrepareOptions};
+use vestra::{BackendPreference, Editor, PrepareOptions};
 
 let project = Editor::new().load_project("project.json")?;
 let mut prepared = Editor::new()
@@ -418,7 +420,7 @@ and `Editor` are `Send + Sync`.
 `PreparedProject` is `Send` but intentionally not `Sync`: it can move between
 threads while idle, and every render method requires `&mut self`; video progress
 callbacks run on the calling thread. The supported SDK surface is the API exported
-by `video-editor`; renderer crates and renderer-oriented implementation DTOs are
+by `vestra`; renderer crates and renderer-oriented implementation DTOs are
 workspace internals rather than contracts for future bindings.
 
 ## Python prepared frames
@@ -427,12 +429,12 @@ The Python package wraps the public Rust SDK. Prepare once, then request owned
 RGBA8 frames by frame number or exact integer nanoseconds:
 
 ```python
-import video_editor
+import vestra
 
-project = video_editor.Project.load("project.json")
-prepared = video_editor.Editor().prepare(
+project = vestra.Project.load("project.json")
+prepared = vestra.Editor().prepare(
     project,
-    video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
 )
 frame = prepared.render_frame_number(0)
 assert frame.width == prepared.preparation_report.width
@@ -490,7 +492,7 @@ Create a source package from tracked files only. This omits ignored render
 outputs, reports, temporary files, benchmark output, and Cargo build artifacts.
 
 ```bash
-git archive --format=zip --output=video-editor.zip HEAD
+git archive --format=zip --output=vestra.zip HEAD
 ```
 
 ## Python package development
@@ -507,18 +509,18 @@ is used by verification where applicable. Prepared frame rendering does not
 encode a video. WGPU availability depends on the runtime adapter.
 
 ```python
-import video_editor
+import vestra
 
-editor = video_editor.Editor()
-project = video_editor.Project.load("project.json")
+editor = vestra.Editor()
+project = vestra.Project.load("project.json")
 prepared = editor.prepare(
     project,
-    video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
 )
 result = prepared.render_video(
-    video_editor.PreparedVideoRenderRequest("result.mp4", overwrite=True),
+    vestra.PreparedVideoRenderRequest("result.mp4", overwrite=True),
     progress=lambda event: print(event.kind, event.progress),
-    cancellation=video_editor.CancellationToken(),
+    cancellation=vestra.CancellationToken(),
 )
 print(result.output_path)
 ```
@@ -540,7 +542,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest python-tests
 ```
 
-Use `import video_editor`. `Project.from_dict()` follows the same native path
+Use `import vestra`. `Project.from_dict()` follows the same native path
 as JSON. It is a lower-level way to construct the same current canonical
 schema-version 2 model, useful for canonical JSON, low-level integrations, and
 generated project dictionaries. It represents ordered multi-track audio timelines, renders arbitrary valid

@@ -1,5 +1,5 @@
-from video_editor import FrameRate
-from video_editor.authoring import AudioGainKeyframe, ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import AudioGainKeyframe, ProjectBuilder
 
 builder = ProjectBuilder(width=10, height=10, frame_rate=FrameRate(30, 1), output_path="out.mp4")
 asset = builder.add_audio_asset("tone.wav")

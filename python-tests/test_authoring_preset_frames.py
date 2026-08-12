@@ -7,9 +7,9 @@ import subprocess
 
 import pytest
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
 
 
 def _preset_project(kind: str) -> tuple[ProjectBuilder, object]:
@@ -29,9 +29,9 @@ def _preset_project(kind: str) -> tuple[ProjectBuilder, object]:
     return builder, clip
 
 
-def _frames(builder: ProjectBuilder) -> video_editor.PreparedProject:
-    return video_editor.Editor().prepare(
-        builder.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+def _frames(builder: ProjectBuilder) -> vestra.PreparedProject:
+    return vestra.Editor().prepare(
+        builder.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
 
 
@@ -146,8 +146,8 @@ def test_full_phase8_authoring_project_renders_frames_and_video_with_audio(tmp_p
     assert prepared.render_frame_number(2).to_bytes() != prepared.render_frame_number(36).to_bytes()
     assert prepared.render_frame_number(36).to_bytes() != prepared.render_frame_number(40).to_bytes()
     output = tmp_path / "complete.mp4"
-    result = video_editor.Editor().render(
-        native, video_editor.RenderRequest(output, backend=video_editor.BackendPreference.CPU, overwrite=True),
+    result = vestra.Editor().render(
+        native, vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU, overwrite=True),
     )
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height,nb_frames,duration", "-of", "csv=p=0", str(output)],

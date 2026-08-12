@@ -3,9 +3,9 @@ import subprocess
 
 import pytest
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder, Sizing
 
 
 def test_background_only_builder_renders_on_cpu(tmp_path: Path) -> None:
@@ -19,10 +19,10 @@ def test_background_only_builder_renders_on_cpu(tmp_path: Path) -> None:
         base_directory=tmp_path,
     ).build()
     output = tmp_path / "result.mp4"
-    result = video_editor.Editor().render(
+    result = vestra.Editor().render(
         project,
-        video_editor.RenderRequest(
-            output, backend=video_editor.BackendPreference.CPU, overwrite=True,
+        vestra.RenderRequest(
+            output, backend=vestra.BackendPreference.CPU, overwrite=True,
         ),
     )
     assert result.output_path == output
@@ -60,9 +60,9 @@ def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, prese
         assert [effect.kind for effect in clip.effects.items] == ["glow", "bloom"]
     project = project_builder.build()
     output = tmp_path / "spectrum.mp4"
-    result = video_editor.Editor().render(
-        project, video_editor.RenderRequest(
-            output, backend=video_editor.BackendPreference.CPU, overwrite=True,
+    result = vestra.Editor().render(
+        project, vestra.RenderRequest(
+            output, backend=vestra.BackendPreference.CPU, overwrite=True,
         ),
     )
     assert result.output_path == output
@@ -104,9 +104,9 @@ def test_public_spectrum2d_integration_project_exercises_audio_reactive_backgrou
             expected_effects = ["glow", "bloom"] if preset == "neon_circle" else []
             assert [effect["type"] for effect in spectrum_data["effects"]] == expected_effects
         assert builder.validate().is_valid
-        return video_editor.Editor().prepare(
+        return vestra.Editor().prepare(
             builder.build(),
-            video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+            vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
         )
 
     baseline = prepare_project(with_spectrum=False)

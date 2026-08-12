@@ -1,4 +1,4 @@
-from video_editor.authoring import Sizing
+from vestra.authoring import Sizing
 
 Sizing.scale(True)
 Sizing.stretch(width=True, height=720)

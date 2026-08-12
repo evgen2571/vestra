@@ -3,17 +3,17 @@
 Run the harness with the CPU backend. It defaults to the basic-colour scene:
 
 ```bash
-TMPDIR=target/tmp VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench -p video-editor --bench animation_effects
+TMPDIR=target/tmp VESTRA_BENCH_BACKEND=cpu cargo bench -p vestra --bench animation_effects
 ```
 
-Select an advanced scenario with `VIDEO_EDITOR_BENCH_SCENARIO`. The available
+Select an advanced scenario with `VESTRA_BENCH_SCENARIO`. The available
 scenarios are `baseline`, `basic_colour`, `gaussian_small`, `gaussian_large`,
 `glow`, `sharpen`, `directional_blur`, `motion_blur`, `zoom_blur`,
 `chromatic_aberration`, `vignette`, `color_adjust`, `blend_modes`,
 `global_post`, `impact`, `heavy_impact`, `transitions`, and `combined`.
 
 The strict real-GPU sequence is available as
-`VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 ./scripts/verify-wgpu-phase2.sh`.
+`VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 ./scripts/verify-wgpu-phase2.sh`.
 It runs Gaussian, glow, sharpen, directional/zoom/motion blur, chromatic
 aberration, vignette, color adjustment, blend modes, combined chains, and
 global post-effects at 320x180, 720x1280, and 1920x1080. It prints the selected
@@ -22,22 +22,22 @@ encoding/submission/readback timing. Do not interpret software-adapter timings
 as GPU acceleration.
 
 ```bash
-TMPDIR=target/tmp VIDEO_EDITOR_BENCH_BACKEND=cpu \
-  VIDEO_EDITOR_BENCH_SCENARIO=combined cargo bench -p video-editor --bench animation_effects
+TMPDIR=target/tmp VESTRA_BENCH_BACKEND=cpu \
+  VESTRA_BENCH_SCENARIO=combined cargo bench -p vestra --bench animation_effects
 ```
 
 The harness defaults to 720x1280 with five warmups and five measured renders.
 For a quick, explicitly non-comparable development check, override all four
-parameters, for example `VIDEO_EDITOR_BENCH_WIDTH=320`,
-`VIDEO_EDITOR_BENCH_HEIGHT=180`, `VIDEO_EDITOR_BENCH_WARMUPS=1`, and
-`VIDEO_EDITOR_BENCH_SAMPLES=1`. The harness reports resolution, frame count, selected backend,
+parameters, for example `VESTRA_BENCH_WIDTH=320`,
+`VESTRA_BENCH_HEIGHT=180`, `VESTRA_BENCH_WARMUPS=1`, and
+`VESTRA_BENCH_SAMPLES=1`. The harness reports resolution, frame count, selected backend,
 median wall and render timing, frame composition time, encoding time, and
 cache/decoded-resource peaks. Use the original color-only fixture as the
 baseline. To measure an advanced chain, replace its clip effect array with the
 ordered chain from `examples/projects/effects-ready-v1.json` and record the
 same fields. Both CPU and WGPU support the advanced scenarios. On a compatible
-adapter, run the same matrix with `VIDEO_EDITOR_BENCH_BACKEND=wgpu` and
-`VIDEO_EDITOR_REQUIRE_WGPU=1`; record the selected adapter and the command,
+adapter, run the same matrix with `VESTRA_BENCH_BACKEND=wgpu` and
+`VESTRA_REQUIRE_WGPU=1`; record the selected adapter and the command,
 submission, readback, and row-repack timings printed by the harness. Do not
 compare Lavapipe measurements with a discrete GPU as performance evidence.
 
@@ -52,10 +52,10 @@ per pass.
 Command (run once per scenario):
 
 ```bash
-VIDEO_EDITOR_BENCH_BACKEND=cpu VIDEO_EDITOR_BENCH_SCENARIO=<scenario> \
-VIDEO_EDITOR_BENCH_WIDTH=320 VIDEO_EDITOR_BENCH_HEIGHT=180 \
-VIDEO_EDITOR_BENCH_WARMUPS=0 VIDEO_EDITOR_BENCH_SAMPLES=1 \
-cargo bench -p video-editor --bench animation_effects -- --nocapture
+VESTRA_BENCH_BACKEND=cpu VESTRA_BENCH_SCENARIO=<scenario> \
+VESTRA_BENCH_WIDTH=320 VESTRA_BENCH_HEIGHT=180 \
+VESTRA_BENCH_WARMUPS=0 VESTRA_BENCH_SAMPLES=1 \
+cargo bench -p vestra --bench animation_effects -- --nocapture
 ```
 
 These are single-sample development measurements, not comparative release

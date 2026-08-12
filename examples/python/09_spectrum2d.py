@@ -1,8 +1,8 @@
 """Public Spectrum2D integration example: audio-reactive image, radial bars, and Bloom."""
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder, Sizing
 
 
 project = ProjectBuilder(
@@ -20,9 +20,9 @@ bass = project.audio.master.rms().remap(0, 1, 1, 1.08).envelope(0.02, 0.15)
 background.transform.scale.react_to(bass)
 project.add_spectrum2d_clip(start=0, duration=3, layer=1, preset="neon_circle")
 
-video_editor.Editor().render(
+vestra.Editor().render(
     project.build(),
-    video_editor.RenderRequest(
-        "spectrum2d.mp4", backend=video_editor.BackendPreference.CPU, overwrite=True,
+    vestra.RenderRequest(
+        "spectrum2d.mp4", backend=vestra.BackendPreference.CPU, overwrite=True,
     ),
 )

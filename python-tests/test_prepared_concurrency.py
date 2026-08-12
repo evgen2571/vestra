@@ -3,18 +3,18 @@ import threading
 
 import pytest
 
-import video_editor
+import vestra
 
 
-def prepared() -> video_editor.PreparedProject:
-    return video_editor.Editor().prepare(
-        video_editor.Project.load(Path("tests/fixtures/wgpu-small-rgba.json")),
-        video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+def prepared() -> vestra.PreparedProject:
+    return vestra.Editor().prepare(
+        vestra.Project.load(Path("tests/fixtures/wgpu-small-rgba.json")),
+        vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
 
 
 def test_prepared_frame_operation_releases_gil_and_rejects_same_object_busy() -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
     value = prepared()
     native._test_arm_prepared_operation()
@@ -34,7 +34,7 @@ def test_prepared_frame_operation_releases_gil_and_rejects_same_object_busy() ->
     try:
         native._test_wait_until_prepared_operation_entered()
         assert sum(range(10)) == 45
-        with pytest.raises(video_editor.PreparedProjectBusyError) as raised:
+        with pytest.raises(vestra.PreparedProjectBusyError) as raised:
             value.render_frame_number(0)
         assert raised.value.kind == "busy"
         assert raised.value.diagnostics == ()
@@ -49,18 +49,18 @@ def test_prepared_frame_operation_releases_gil_and_rejects_same_object_busy() ->
 
 
 def test_preparation_releases_gil() -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
-    project = video_editor.Project.load(Path("tests/fixtures/wgpu-small-rgba.json"))
+    project = vestra.Project.load(Path("tests/fixtures/wgpu-small-rgba.json"))
     native._test_arm_prepared_operation()
     completed = threading.Event()
     errors: list[BaseException] = []
 
     def prepare_in_thread() -> None:
         try:
-            video_editor.Editor().prepare(
+            vestra.Editor().prepare(
                 project,
-                video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+                vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
             )
         except BaseException as error:
             errors.append(error)
@@ -81,7 +81,7 @@ def test_preparation_releases_gil() -> None:
 
 
 def test_busy_state_is_local_to_one_prepared_object() -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
     first, second = prepared(), prepared()
     native._test_arm_prepared_operation()
@@ -106,7 +106,7 @@ def test_busy_state_is_local_to_one_prepared_object() -> None:
 
 
 def _assert_busy(call: object) -> None:
-    with pytest.raises(video_editor.PreparedProjectBusyError) as raised:
+    with pytest.raises(vestra.PreparedProjectBusyError) as raised:
         call()  # type: ignore[operator]
     assert raised.value.kind == "busy"
     assert raised.value.diagnostics == ()
@@ -114,7 +114,7 @@ def _assert_busy(call: object) -> None:
 
 
 def test_video_operation_rejects_video_and_frame_calls_while_active(tmp_path: Path) -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
     value = prepared()
     output = tmp_path / "active.mp4"
@@ -124,7 +124,7 @@ def test_video_operation_rejects_video_and_frame_calls_while_active(tmp_path: Pa
 
     def render() -> None:
         try:
-            value.render_video(video_editor.PreparedVideoRenderRequest(output))
+            value.render_video(vestra.PreparedVideoRenderRequest(output))
         except BaseException as error:
             errors.append(error)
         else:
@@ -134,7 +134,7 @@ def test_video_operation_rejects_video_and_frame_calls_while_active(tmp_path: Pa
     worker.start()
     try:
         native._test_wait_until_video_render_entered()
-        _assert_busy(lambda: value.render_video(video_editor.PreparedVideoRenderRequest(tmp_path / "busy.mp4")))
+        _assert_busy(lambda: value.render_video(vestra.PreparedVideoRenderRequest(tmp_path / "busy.mp4")))
         _assert_busy(lambda: value.render_frame_number(0))
     finally:
         native._test_release_video_render()
@@ -147,7 +147,7 @@ def test_video_operation_rejects_video_and_frame_calls_while_active(tmp_path: Pa
 
 
 def test_frame_operation_rejects_video_call_while_active(tmp_path: Path) -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
     value = prepared()
     errors: list[BaseException] = []
@@ -163,7 +163,7 @@ def test_frame_operation_rejects_video_call_while_active(tmp_path: Path) -> None
     worker.start()
     try:
         native._test_wait_until_prepared_operation_entered()
-        _assert_busy(lambda: value.render_video(video_editor.PreparedVideoRenderRequest(tmp_path / "busy.mp4")))
+        _assert_busy(lambda: value.render_video(vestra.PreparedVideoRenderRequest(tmp_path / "busy.mp4")))
     finally:
         native._test_release_prepared_operation()
         worker.join()

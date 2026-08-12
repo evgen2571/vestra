@@ -2202,20 +2202,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "video-editor"
+name = "vestra"
 version = "0.1.0"
 dependencies = [
  "image",
  "serde",
  "serde_json",
  "tempfile",
- "video-editor-core",
- "video-editor-media",
- "video-editor-render",
+ "vestra-core",
+ "vestra-media",
+ "vestra-render",
 ]
 
 [[package]]
-name = "video-editor-cli"
+name = "vestra-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
@@ -2226,11 +2226,11 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
- "video-editor",
+ "vestra",
 ]
 
 [[package]]
-name = "video-editor-core"
+name = "vestra-core"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -2239,7 +2239,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "video-editor-media"
+name = "vestra-media"
 version = "0.1.0"
 dependencies = [
  "rustfft",
@@ -2248,22 +2248,22 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "uuid",
- "video-editor-core",
- "video-editor-render",
+ "vestra-core",
+ "vestra-render",
 ]
 
 [[package]]
-name = "video-editor-python"
+name = "vestra-python"
 version = "0.1.0"
 dependencies = [
  "pyo3",
  "pythonize",
  "serde_json",
- "video-editor",
+ "vestra",
 ]
 
 [[package]]
-name = "video-editor-render"
+name = "vestra-render"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
@@ -2272,7 +2272,7 @@ dependencies = [
  "pollster",
  "serde",
  "serde_json",
- "video-editor-core",
+ "vestra-core",
  "wgpu",
 ]
 

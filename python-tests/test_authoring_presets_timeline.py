@@ -7,8 +7,8 @@ import typing
 
 import pytest
 
-from video_editor import FrameRate
-from video_editor.authoring import AuthoringError, PresetCollection, ProjectBuilder, Sizing, Timeline
+from vestra import FrameRate
+from vestra.authoring import AuthoringError, PresetCollection, ProjectBuilder, Sizing, Timeline
 
 
 def builder() -> tuple[ProjectBuilder, object]:

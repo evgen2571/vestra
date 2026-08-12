@@ -3,7 +3,7 @@ requires = ["maturin>=1.14,<2"]
 build-backend = "maturin"
 
 [project]
-name = "video-editor"
+name = "vestra"
 version = "0.1.0"
 description = "Python SDK with typed project authoring and immutable native rendering APIs"
 readme = "README.md"
@@ -21,9 +21,10 @@ classifiers = [
 test = ["mypy>=1.13", "pytest>=8"]
 
 [tool.maturin]
-manifest-path = "crates/video-editor-python/Cargo.toml"
-module-name = "video_editor._native"
+manifest-path = "crates/vestra-python/Cargo.toml"
+module-name = "vestra._native"
 python-source = "python"
+python-packages = ["vestra", "video_editor"]
 
 [tool.pytest.ini_options]
 testpaths = ["python-tests"]

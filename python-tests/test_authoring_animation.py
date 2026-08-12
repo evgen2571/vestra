@@ -5,12 +5,12 @@ from typing import get_type_hints
 
 import pytest
 
-from video_editor import FrameRate
-from video_editor.authoring import (
+from vestra import FrameRate
+from vestra.authoring import (
     Crop, CropKeyframe, CubicBezier, Interpolation, Point, PointKeyframe,
     ProjectBuilder, ScalarKeyframe,
 )
-from video_editor.authoring.tracks import CropTrack, PointTrack, ScalarTrack
+from vestra.authoring.tracks import CropTrack, PointTrack, ScalarTrack
 
 
 def builder() -> ProjectBuilder:

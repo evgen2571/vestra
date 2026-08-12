@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${VIDEO_EDITOR_WGPU_BACKEND:=vulkan}"
-export VIDEO_EDITOR_WGPU_BACKEND
-export VIDEO_EDITOR_REQUIRE_WGPU=1
+: "${VESTRA_WGPU_BACKEND:=vulkan}"
+export VESTRA_WGPU_BACKEND
+export VESTRA_REQUIRE_WGPU=1
 
-echo "WGPU Phase 2 strict verification (backend: ${VIDEO_EDITOR_WGPU_BACKEND})"
+echo "WGPU Phase 2 strict verification (backend: ${VESTRA_WGPU_BACKEND})"
 echo "The render result below includes the selected adapter metadata."
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
@@ -26,18 +26,18 @@ for project in \
   examples/presets/heavy-impact.json \
   examples/projects/animation-effects.json; do
   stem=$(basename "$project" .json)
-  cargo run -p video-editor-cli -- render "$project" \
+  cargo run -p vestra-cli -- render "$project" \
     --render-backend wgpu --output "$temp_dir/$stem.mp4" --overwrite \
     --format json --progress json
 done
 
-if [[ "${VIDEO_EDITOR_RUN_BENCHMARKS:-0}" == 1 ]]; then
+if [[ "${VESTRA_RUN_BENCHMARKS:-0}" == 1 ]]; then
   for resolution in '320 180' '720 1280' '1920 1080'; do
     read -r width height <<<"$resolution"
     for scenario in gaussian_large glow sharpen directional_blur zoom_blur motion_blur chromatic_aberration vignette color_adjust blend_modes combined global_post; do
-      VIDEO_EDITOR_BENCH_BACKEND=wgpu VIDEO_EDITOR_BENCH_SCENARIO="$scenario" \
-        VIDEO_EDITOR_BENCH_WIDTH="$width" VIDEO_EDITOR_BENCH_HEIGHT="$height" \
-        cargo bench -p video-editor --bench animation_effects -- --nocapture
+      VESTRA_BENCH_BACKEND=wgpu VESTRA_BENCH_SCENARIO="$scenario" \
+        VESTRA_BENCH_WIDTH="$width" VESTRA_BENCH_HEIGHT="$height" \
+        cargo bench -p vestra --bench animation_effects -- --nocapture
     done
   done
 fi

@@ -1,5 +1,5 @@
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder
 
 builder = ProjectBuilder(
     width=160, height=90, frame_rate=FrameRate(30, 1), output_path="out.mp4", duration=1.0,

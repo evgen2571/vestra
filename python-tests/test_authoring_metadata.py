@@ -2,8 +2,8 @@ from math import inf, nan
 
 import pytest
 
-from video_editor.authoring import ProjectBuilder
-from video_editor import FrameRate, Project
+from vestra.authoring import ProjectBuilder
+from vestra import FrameRate, Project
 
 
 def builder(*, metadata: object = None) -> ProjectBuilder:

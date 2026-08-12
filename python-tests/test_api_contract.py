@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 
 import pytest
 
-import video_editor
+import vestra
 
 
 VALID = {
@@ -18,73 +18,73 @@ VALID = {
 
 
 def test_enums_are_immutable_hashable_and_use_sdk_strings() -> None:
-    assert video_editor.BackendPreference.AUTO.value == "auto"
-    assert str(video_editor.Category.PROJECT) == "project"
-    assert hash(video_editor.Severity.FATAL)
-    assert video_editor.AdapterDeviceType.DISCRETE_GPU.value == "discretegpu"
-    assert video_editor.AdapterDeviceType.INTEGRATED_GPU.value == "integratedgpu"
-    assert video_editor.AdapterDeviceType.CPU.value == "cpu"
-    assert video_editor.GraphicsBackend.VULKAN.value == "vulkan"
-    assert video_editor.GraphicsBackend.DX12.value == "dx12"
-    assert video_editor.GraphicsBackend.BROWSER_WEBGPU.value == "browserwebgpu"
-    assert str(video_editor.AdapterDeviceType.DISCRETE_GPU) == "discretegpu"
-    assert hash(video_editor.GraphicsBackend.VULKAN)
-    assert "GraphicsBackend" in repr(video_editor.GraphicsBackend.VULKAN)
+    assert vestra.BackendPreference.AUTO.value == "auto"
+    assert str(vestra.Category.PROJECT) == "project"
+    assert hash(vestra.Severity.FATAL)
+    assert vestra.AdapterDeviceType.DISCRETE_GPU.value == "discretegpu"
+    assert vestra.AdapterDeviceType.INTEGRATED_GPU.value == "integratedgpu"
+    assert vestra.AdapterDeviceType.CPU.value == "cpu"
+    assert vestra.GraphicsBackend.VULKAN.value == "vulkan"
+    assert vestra.GraphicsBackend.DX12.value == "dx12"
+    assert vestra.GraphicsBackend.BROWSER_WEBGPU.value == "browserwebgpu"
+    assert str(vestra.AdapterDeviceType.DISCRETE_GPU) == "discretegpu"
+    assert hash(vestra.GraphicsBackend.VULKAN)
+    assert "GraphicsBackend" in repr(vestra.GraphicsBackend.VULKAN)
     with pytest.raises(TypeError):
-        video_editor.BackendPreference()
+        vestra.BackendPreference()
 
 
 def test_native_runtime_names_are_exact_public_names() -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
     classes = {
-        "Project": video_editor.Project,
-        "Editor": video_editor.Editor,
-        "PreflightOptions": video_editor.PreflightOptions,
-        "Diagnostic": video_editor.Diagnostic,
-        "ValidationReport": video_editor.ValidationReport,
-        "PreflightReport": video_editor.PreflightReport,
-        "InspectionReport": video_editor.InspectionReport,
-        "InspectOutput": video_editor.InspectOutput,
-        "InspectAssets": video_editor.InspectAssets,
-        "InspectAudio": video_editor.InspectAudio,
-        "InspectAudioTrack": video_editor.InspectAudioTrack,
-        "InspectAudioClip": video_editor.InspectAudioClip,
-        "InspectAudioGainKeyframe": video_editor.InspectAudioGainKeyframe,
-        "BackendPreference": video_editor.BackendPreference,
-        "Category": video_editor.Category,
-        "Severity": video_editor.Severity,
-        "VideoEditorError": video_editor.VideoEditorError,
-        "ProjectError": video_editor.ProjectError,
-        "PreparationError": video_editor.PreparationError,
-        "FrameRenderError": video_editor.FrameRenderError,
-        "RenderError": video_editor.RenderError,
-        "CancelledError": video_editor.CancelledError,
-        "PreparedProjectBusyError": video_editor.PreparedProjectBusyError,
-        "PrepareOptions": video_editor.PrepareOptions,
-        "PreparedProject": video_editor.PreparedProject,
-        "PreparationReport": video_editor.PreparationReport,
-        "PreparationTimings": video_editor.PreparationTimings,
-        "FrameRate": video_editor.FrameRate,
-        "Frame": video_editor.Frame,
-        "BackendFallback": video_editor.BackendFallback,
-        "AdapterInfo": video_editor.AdapterInfo,
-        "AdapterDeviceType": video_editor.AdapterDeviceType,
-        "GraphicsBackend": video_editor.GraphicsBackend,
-        "RenderRequest": video_editor.RenderRequest,
-        "PreparedVideoRenderRequest": video_editor.PreparedVideoRenderRequest,
-        "CancellationToken": video_editor.CancellationToken,
-        "RenderEvent": video_editor.RenderEvent,
-        "RenderResult": video_editor.RenderResult,
-        "RenderTimingScope": video_editor.RenderTimingScope,
-        "RenderTimings": video_editor.RenderTimings,
-        "RenderPerformance": video_editor.RenderPerformance,
-        "RenderFailureContext": video_editor.RenderFailureContext,
-        "RenderFailureStage": video_editor.RenderFailureStage,
+        "Project": vestra.Project,
+        "Editor": vestra.Editor,
+        "PreflightOptions": vestra.PreflightOptions,
+        "Diagnostic": vestra.Diagnostic,
+        "ValidationReport": vestra.ValidationReport,
+        "PreflightReport": vestra.PreflightReport,
+        "InspectionReport": vestra.InspectionReport,
+        "InspectOutput": vestra.InspectOutput,
+        "InspectAssets": vestra.InspectAssets,
+        "InspectAudio": vestra.InspectAudio,
+        "InspectAudioTrack": vestra.InspectAudioTrack,
+        "InspectAudioClip": vestra.InspectAudioClip,
+        "InspectAudioGainKeyframe": vestra.InspectAudioGainKeyframe,
+        "BackendPreference": vestra.BackendPreference,
+        "Category": vestra.Category,
+        "Severity": vestra.Severity,
+        "VideoEditorError": vestra.VideoEditorError,
+        "ProjectError": vestra.ProjectError,
+        "PreparationError": vestra.PreparationError,
+        "FrameRenderError": vestra.FrameRenderError,
+        "RenderError": vestra.RenderError,
+        "CancelledError": vestra.CancelledError,
+        "PreparedProjectBusyError": vestra.PreparedProjectBusyError,
+        "PrepareOptions": vestra.PrepareOptions,
+        "PreparedProject": vestra.PreparedProject,
+        "PreparationReport": vestra.PreparationReport,
+        "PreparationTimings": vestra.PreparationTimings,
+        "FrameRate": vestra.FrameRate,
+        "Frame": vestra.Frame,
+        "BackendFallback": vestra.BackendFallback,
+        "AdapterInfo": vestra.AdapterInfo,
+        "AdapterDeviceType": vestra.AdapterDeviceType,
+        "GraphicsBackend": vestra.GraphicsBackend,
+        "RenderRequest": vestra.RenderRequest,
+        "PreparedVideoRenderRequest": vestra.PreparedVideoRenderRequest,
+        "CancellationToken": vestra.CancellationToken,
+        "RenderEvent": vestra.RenderEvent,
+        "RenderResult": vestra.RenderResult,
+        "RenderTimingScope": vestra.RenderTimingScope,
+        "RenderTimings": vestra.RenderTimings,
+        "RenderPerformance": vestra.RenderPerformance,
+        "RenderFailureContext": vestra.RenderFailureContext,
+        "RenderFailureStage": vestra.RenderFailureStage,
     }
     for expected_name, value in classes.items():
         assert value.__name__ == expected_name
-        assert value.__module__ == "video_editor._native"
+        assert value.__module__ == "vestra._native"
     assert not any(name.startswith("Py") for name in dir(native))
     assert not any(name.startswith("_test_") for name in native.__all__)
 
@@ -96,17 +96,17 @@ def test_audio_inspection_dtos_are_top_level_public_symbols() -> None:
         "InspectAudioClip",
         "InspectAudioGainKeyframe",
     }
-    assert names <= set(video_editor.__all__)
-    assert all(hasattr(video_editor, name) for name in names)
+    assert names <= set(vestra.__all__)
+    assert all(hasattr(vestra, name) for name in names)
 
 
 def test_frozen_values_and_diagnostic_ownership() -> None:
-    report = video_editor.Editor().validate(video_editor.Project.from_dict(VALID))
+    report = vestra.Editor().validate(vestra.Project.from_dict(VALID))
     assert isinstance(report.diagnostics, tuple)
     with pytest.raises(AttributeError):
         report.is_valid = False  # type: ignore[misc]
     with pytest.raises(AttributeError):
-        video_editor.PreflightOptions.for_validation().kind = "render"  # type: ignore[misc]
+        vestra.PreflightOptions.for_validation().kind = "render"  # type: ignore[misc]
 
 
 @pytest.mark.parametrize("value", [nan, inf, -inf])
@@ -114,12 +114,12 @@ def test_non_finite_dict_values_are_rejected(value: float) -> None:
     payload = dict(VALID)
     payload["metadata"] = {"value": value}
     with pytest.raises(ValueError):
-        video_editor.Project.from_dict(payload)
+        vestra.Project.from_dict(payload)
 
 
 def test_project_error_has_complete_base_contract(tmp_path: Path) -> None:
-    with pytest.raises(video_editor.ProjectError) as raised:
-        video_editor.Project.load(tmp_path / "missing.json")
+    with pytest.raises(vestra.ProjectError) as raised:
+        vestra.Project.load(tmp_path / "missing.json")
     error = raised.value
     assert error.kind == "project"
     assert isinstance(error.diagnostics, tuple)
@@ -129,31 +129,31 @@ def test_project_error_has_complete_base_contract(tmp_path: Path) -> None:
 
 
 def test_preflight_options_keep_every_exposed_argument(tmp_path: Path) -> None:
-    options = video_editor.PreflightOptions.for_render(
-        video_editor.BackendPreference.CPU, tmp_path / "out.mp4", overwrite=True
+    options = vestra.PreflightOptions.for_render(
+        vestra.BackendPreference.CPU, tmp_path / "out.mp4", overwrite=True
     )
     assert options.kind == "render"
-    assert options.backend == video_editor.BackendPreference.CPU
+    assert options.backend == vestra.BackendPreference.CPU
     assert options.output == tmp_path / "out.mp4"
     assert options.overwrite
 
 
 def test_every_preflight_constructor_preserves_its_exposed_state(tmp_path: Path) -> None:
-    validation = video_editor.PreflightOptions.for_validation()
-    inspection = video_editor.PreflightOptions.for_inspection()
-    preparation = video_editor.PreflightOptions.for_preparation(video_editor.BackendPreference.CPU)
-    rendering = video_editor.PreflightOptions.for_render(
-        video_editor.BackendPreference.CPU, tmp_path / "out.mp4", overwrite=True
+    validation = vestra.PreflightOptions.for_validation()
+    inspection = vestra.PreflightOptions.for_inspection()
+    preparation = vestra.PreflightOptions.for_preparation(vestra.BackendPreference.CPU)
+    rendering = vestra.PreflightOptions.for_render(
+        vestra.BackendPreference.CPU, tmp_path / "out.mp4", overwrite=True
     )
     assert (validation.kind, validation.backend, validation.output, validation.overwrite) == ("validation", None, None, False)
     assert (inspection.kind, inspection.backend, inspection.output, inspection.overwrite) == ("inspection", None, None, False)
-    assert (preparation.kind, preparation.backend, preparation.output, preparation.overwrite) == ("preparation", video_editor.BackendPreference.CPU, None, False)
-    assert (rendering.kind, rendering.backend, rendering.output, rendering.overwrite) == ("render", video_editor.BackendPreference.CPU, tmp_path / "out.mp4", True)
+    assert (preparation.kind, preparation.backend, preparation.output, preparation.overwrite) == ("preparation", vestra.BackendPreference.CPU, None, False)
+    assert (rendering.kind, rendering.backend, rendering.output, rendering.overwrite) == ("render", vestra.BackendPreference.CPU, tmp_path / "out.mp4", True)
 
 
 def test_from_dict_accepts_general_mappings() -> None:
-    assert video_editor.Project.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 2
-    assert video_editor.Project.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 2
+    assert vestra.Project.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 2
+    assert vestra.Project.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 2
 
     class DeterministicMapping(Mapping[str, object]):
         def __init__(self, values: dict[str, object]) -> None:
@@ -169,6 +169,6 @@ def test_from_dict_accepts_general_mappings() -> None:
             return len(self.items_by_key)
 
     source = DeterministicMapping({**VALID, "metadata": DeterministicMapping({"nested": True})})
-    project = video_editor.Project.from_dict(source)
+    project = vestra.Project.from_dict(source)
     del source
     assert project.to_dict()["metadata"] == {"nested": True}

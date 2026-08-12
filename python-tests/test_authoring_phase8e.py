@@ -9,9 +9,9 @@ import typing
 
 import pytest
 
-from video_editor import FrameRate, Project
-from video_editor import authoring as api
-from video_editor.authoring import (
+from vestra import FrameRate, Project
+from vestra import authoring as api
+from vestra.authoring import (
     AudioAsset, AudioClip, AudioTimeline, AudioTrack, Crop, ImageAsset, ImageClip, Point, PresetCollection, ProjectBuilder,
     ScalarTrack, Sizing, SolidColorClip, Timeline, Transform,
 )

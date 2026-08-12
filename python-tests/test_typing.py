@@ -2,9 +2,9 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import TYPE_CHECKING
-import video_editor
-from video_editor import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
-from video_editor.authoring import (
+import vestra
+from vestra import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
+from vestra.authoring import (
     AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
     Preset, ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
 )
@@ -20,16 +20,16 @@ if TYPE_CHECKING:
     diagnostics = error.diagnostics
     warnings = error.warnings
     assert kind and diagnostics == warnings
-    options = PrepareOptions(backend=video_editor.BackendPreference.CPU)
+    options = PrepareOptions(backend=vestra.BackendPreference.CPU)
     prepared = Editor().prepare(project, options)
-    token = video_editor.CancellationToken()
-    request = video_editor.PreparedVideoRenderRequest("out.mp4")
+    token = vestra.CancellationToken()
+    request = vestra.PreparedVideoRenderRequest("out.mp4")
 
-    def on_progress(event: video_editor.RenderEvent) -> object:
+    def on_progress(event: vestra.RenderEvent) -> object:
         print(event.progress)
         return None
 
-    rendered: video_editor.RenderResult = prepared.render_video(
+    rendered: vestra.RenderResult = prepared.render_video(
         request, progress=on_progress, cancellation=token
     )
     preparation_report = prepared.preparation_report
@@ -42,12 +42,12 @@ if TYPE_CHECKING:
     )
     assert pixels or device or rendered.output_path
     builder = ProjectBuilder(
-        width=160, height=90, frame_rate=video_editor.FrameRate(30, 1),
+        width=160, height=90, frame_rate=vestra.FrameRate(30, 1),
         output_path="out.mp4", duration=1.0,
     )
     authored: dict[str, object] = builder.to_dict()
     authored_project: Project = builder.build()
-    authored_report: video_editor.ValidationReport = builder.validate()
+    authored_report: vestra.ValidationReport = builder.validate()
     point = Point(1.0, 1.0)
     sizing_original = Sizing.original()
     sizing_scale = Sizing.scale(1.25)

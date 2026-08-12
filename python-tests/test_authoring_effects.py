@@ -9,16 +9,16 @@ from typing import get_type_hints
 
 import pytest
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import (
+import vestra
+from vestra import FrameRate
+from vestra.authoring import (
     ActiveInterval, BloomEffect, BlendMode, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
     ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect, GaussianBlurEffect, GlowEffect,
     Interpolation, MotionBlurEffect, Point, ProjectBuilder, SaturationEffect, SharpenEffect,
     Sizing, TintEffect, VignetteEffect, ZoomBlurDirection, ZoomBlurEffect, available_effects, effect_definition,
 )
-from video_editor.authoring.effects import ClipEffectCollection, PostEffectCollection
-from video_editor.authoring.tracks import ScalarTrack
+from vestra.authoring.effects import ClipEffectCollection, PostEffectCollection
+from vestra.authoring.tracks import ScalarTrack
 
 
 def builder() -> tuple[ProjectBuilder, object]:
@@ -93,8 +93,8 @@ def test_every_effect_factory_serializes_in_declaration_order_and_validates() ->
     assert [effect.kind for effect in effects.items] == expected
     assert [effect["type"] for effect in authored.to_dict()["visual"]["clips"][0]["effects"]] == expected
     assert authored.validate().is_valid
-    frame = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    frame = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(5)
     assert frame.to_bytes() != bytes(16 * 16 * 4)
 
@@ -128,7 +128,7 @@ def test_effect_tracks_post_effects_and_blend_modes_render() -> None:
     data = authored.to_dict()
     assert data["visual"]["clips"][0]["blend_mode"] == "screen"
     assert [effect["type"] for effect in data["visual"]["post_effects"]] == ["vignette", "contrast"]
-    prepared = video_editor.Editor().prepare(authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    prepared = vestra.Editor().prepare(authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
     assert prepared.render_frame_number(0).to_bytes() != prepared.render_frame_number(10).to_bytes()
 
 
@@ -157,8 +157,8 @@ def test_effect_tracks_use_their_source_backed_time_domains() -> None:
     )
     brightness = clip.effects.add_brightness(amount=0)
     brightness.amount.keyframe(time=0.5, value=-1)
-    clip_prepared = video_editor.Editor().prepare(
-        clip_project.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    clip_prepared = vestra.Editor().prepare(
+        clip_project.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     assert clip_prepared.render_frame_number(4).to_bytes()[0] == 255
     assert clip_prepared.render_frame_number(5).to_bytes()[0] == 0
@@ -174,8 +174,8 @@ def test_effect_tracks_use_their_source_backed_time_domains() -> None:
     post_project.add_solid_color_clip(colour="#ffffff", start=0, duration=2, layer=0)
     post_brightness = post_project.post_effects.add_brightness(amount=0)
     post_brightness.amount.keyframe(time=0.5, value=-1)
-    post_prepared = video_editor.Editor().prepare(
-        post_project.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    post_prepared = vestra.Editor().prepare(
+        post_project.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     assert post_prepared.render_frame_number(0).to_bytes()[0] == 255
     assert post_prepared.render_frame_number(1).to_bytes()[0] == 0
@@ -210,8 +210,8 @@ def test_camera_shake_track_time_starts_at_its_active_interval() -> None:
     )
     shake.position_amount.keyframe(time=0, value=0)
     shake.position_amount.keyframe(time=0.5, value=0.25)
-    prepared = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     before = prepared.render_frame_number(4).to_bytes()
     at_active_start = prepared.render_frame_number(5).to_bytes()
@@ -222,14 +222,14 @@ def test_camera_shake_track_time_starts_at_its_active_interval() -> None:
 
 def test_zero_camera_shake_matches_no_shake() -> None:
     authored, clip = builder()
-    baseline = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    baseline = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(5).to_bytes()
     clip.effects.add_camera_shake(
         position_amount=0, rotation_degrees=0, scale_amount=0, frequency=8, seed=7, attack=0, decay=1,
     )
-    shaken = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    shaken = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(5).to_bytes()
     assert shaken == baseline
 
@@ -395,8 +395,8 @@ def test_every_blend_mode_has_a_stable_cpu_pixel(mode: BlendMode, expected: byte
     authored.add_solid_color_clip(colour="#804020", start=0, duration=1, layer=0)
     top = authored.add_solid_color_clip(colour="#4080c0", start=0, duration=1, layer=1)
     top.blend_mode = mode
-    frame = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    frame = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(0)
     assert frame.to_bytes()[:4] == expected
 
@@ -417,8 +417,8 @@ def test_clip_and_post_effect_declaration_order_changes_cpu_pixels() -> None:
         else:
             collection.add_brightness(amount=0.1)
             collection.add_tint(colour="#0000ff", amount=0.5)
-        return video_editor.Editor().prepare(
-            authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        return vestra.Editor().prepare(
+            authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
         ).render_frame_number(0).to_bytes()[:4]
 
     assert render(post=False, reverse=False) == bytes((45, 13, 140, 255))
@@ -456,8 +456,8 @@ def test_individual_effects_have_stable_cpu_frame_behavior(add_effect: object, c
                                        sizing=Sizing.stretch(width=8, height=6))
         if effect_adder is not None:
             effect_adder(clip.effects)  # type: ignore[operator]
-        return video_editor.Editor().prepare(
-            authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        return vestra.Editor().prepare(
+            authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
         ).render_frame_number(5).to_bytes()
 
     baseline = render(None)
@@ -469,8 +469,8 @@ def test_vignette_and_motion_blur_have_stable_cpu_frame_regions() -> None:
     vignette = ProjectBuilder(width=8, height=8, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1)
     vignette_clip = vignette.add_solid_color_clip(colour="#ffffff", start=0, duration=1, layer=0)
     vignette_clip.effects.add_vignette(amount=1, radius=0.2, softness=0.5, colour="#000000")
-    vignette_frame = video_editor.Editor().prepare(
-        vignette.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    vignette_frame = vestra.Editor().prepare(
+        vignette.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(0).to_bytes()
     assert vignette_frame[:4] == bytes((0, 0, 0, 255))
     assert vignette_frame[(4 * 8 + 4) * 4:(4 * 8 + 5) * 4] == bytes((255, 255, 255, 255))
@@ -485,8 +485,8 @@ def test_vignette_and_motion_blur_have_stable_cpu_frame_regions() -> None:
         clip.transform.position.keyframe(time=1, value=Point(0.75, 0.5))
         if with_effect:
             clip.effects.add_motion_blur(intensity=0.8, shutter_angle=180, max_radius=8, samples=8)
-        return video_editor.Editor().prepare(
-            authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        return vestra.Editor().prepare(
+            authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
         ).render_frame_number(5).to_bytes()
 
     # The moving project is identical in both cases. Only motion blur changes.
@@ -507,11 +507,11 @@ def test_cpu_effect_video_exercises_ordered_clip_and_post_effects(tmp_path: Path
     authored.post_effects.add_vignette(amount=0.1, radius=0.8, softness=0.3, colour="#000000")
     authored.post_effects.add_color_adjust(exposure=0, gamma=1, black_point=0, white_point=1)
     assert authored.validate().is_valid
-    prepared = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     output = tmp_path / "effects.mp4"
-    result = prepared.render_video(video_editor.PreparedVideoRenderRequest(output))
+    result = prepared.render_video(vestra.PreparedVideoRenderRequest(output))
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height,nb_frames,duration", "-of", "json", str(output)],
         check=True, capture_output=True, text=True,
@@ -734,7 +734,7 @@ def test_schema_effect_catalog_has_rust_catalog_ids_and_parameters() -> None:
 def test_checked_schema_is_fresh_from_rust_catalog(tmp_path: Path) -> None:
     generated = tmp_path / "project.schema.json"
     subprocess.run(
-        ["cargo", "run", "-q", "-p", "video-editor-cli", "--", "generate-schema", "--output", str(generated)],
+        ["cargo", "run", "-q", "-p", "vestra-cli", "--", "generate-schema", "--output", str(generated)],
         check=True,
     )
     assert generated.read_bytes() == (Path(__file__).parents[1] / "schemas/project.schema.json").read_bytes()

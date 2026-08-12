@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from video_editor import (
+from vestra import (
     BackendPreference,
     CancellationToken,
     CancelledError,
@@ -14,7 +14,7 @@ from video_editor import (
     ProjectError,
     RenderRequest,
 )
-from video_editor.authoring import (
+from vestra.authoring import (
     AuthoringError,
     ProjectBuilder,
     audio_effect_definition,

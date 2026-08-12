@@ -1,6 +1,6 @@
 # Project format
 
-`video-editor` accepts one JSON project format, described by
+`vestra` accepts one JSON project format, described by
 [`schemas/project.schema.json`](../../schemas/project.schema.json). Project
 objects carry a required `schema_version` field. Version `2` is the only
 accepted version. Version 1 is historical and rejected without migration.

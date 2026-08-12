@@ -3,20 +3,20 @@ import subprocess
 
 import pytest
 
-import video_editor
+import vestra
 
 
 FIXTURE = Path("tests/fixtures/wgpu-small-rgba.json")
 
 
-def cpu_request(output: Path, *, preview: bool = False) -> video_editor.RenderRequest:
-    return video_editor.RenderRequest(
-        output, backend=video_editor.BackendPreference.CPU, preview=preview
+def cpu_request(output: Path, *, preview: bool = False) -> vestra.RenderRequest:
+    return vestra.RenderRequest(
+        output, backend=vestra.BackendPreference.CPU, preview=preview
     )
 
 
-def audio_project() -> video_editor.Project:
-    return video_editor.Project.from_dict(
+def audio_project() -> vestra.Project:
+    return vestra.Project.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -46,7 +46,7 @@ def stream_types(path: Path) -> set[str]:
     return set(probe.stdout.split())
 
 
-def assert_full_result(result: video_editor.RenderResult, output: Path, *, scope: video_editor.RenderTimingScope, preview: bool) -> None:
+def assert_full_result(result: vestra.RenderResult, output: Path, *, scope: vestra.RenderTimingScope, preview: bool) -> None:
     assert isinstance(result.editor_version, str) and result.editor_version
     assert isinstance(result.project_path, Path)
     assert result.output_path == output
@@ -61,9 +61,9 @@ def assert_full_result(result: video_editor.RenderResult, output: Path, *, scope
     assert result.elapsed_ms >= 0
     assert result.elapsed_seconds >= 0
     assert result.timing_scope is scope
-    assert isinstance(result.timings, video_editor.RenderTimings)
-    assert isinstance(result.performance, video_editor.RenderPerformance)
-    assert result.requested_backend is video_editor.BackendPreference.CPU
+    assert isinstance(result.timings, vestra.RenderTimings)
+    assert isinstance(result.performance, vestra.RenderPerformance)
+    assert result.requested_backend is vestra.BackendPreference.CPU
     assert result.selected_backend == "cpu"
     assert result.encoder_backend == "ffmpeg"
     assert result.fallback is None
@@ -76,21 +76,21 @@ def assert_full_result(result: video_editor.RenderResult, output: Path, *, scope
 
 
 def test_prepared_and_one_shot_results_are_complete_immutable_snapshots(tmp_path: Path) -> None:
-    project = video_editor.Project.load(FIXTURE)
-    editor = video_editor.Editor()
-    prepared = editor.prepare(project, video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    project = vestra.Project.load(FIXTURE)
+    editor = vestra.Editor()
+    prepared = editor.prepare(project, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
     prepared_output = tmp_path / "prepared.mp4"
-    prepared_result = prepared.render_video(video_editor.PreparedVideoRenderRequest(prepared_output))
+    prepared_result = prepared.render_video(vestra.PreparedVideoRenderRequest(prepared_output))
     assert_full_result(
         prepared_result, prepared_output,
-        scope=video_editor.RenderTimingScope.PREPARED_OPERATION, preview=False,
+        scope=vestra.RenderTimingScope.PREPARED_OPERATION, preview=False,
     )
 
     one_shot_output = tmp_path / "one-shot.mp4"
     one_shot_result = editor.render(project, cpu_request(one_shot_output))
     assert_full_result(
         one_shot_result, one_shot_output,
-        scope=video_editor.RenderTimingScope.ONE_SHOT, preview=False,
+        scope=vestra.RenderTimingScope.ONE_SHOT, preview=False,
     )
     del editor, project, prepared
     prepared_output.unlink()
@@ -102,11 +102,11 @@ def test_prepared_and_one_shot_results_are_complete_immutable_snapshots(tmp_path
 def test_preview_and_audio_results_match_readable_streams(tmp_path: Path) -> None:
     preview_request = cpu_request(tmp_path / "preview.mp4", preview=True)
     assert preview_request.preview is True
-    preview_result = video_editor.Editor().render(video_editor.Project.load(FIXTURE), preview_request)
+    preview_result = vestra.Editor().render(vestra.Project.load(FIXTURE), preview_request)
     assert preview_result.preview is True
     assert stream_types(preview_result.output_path) == {"video"}
 
     audio_output = tmp_path / "audio.mp4"
-    audio_result = video_editor.Editor().render(audio_project(), cpu_request(audio_output))
+    audio_result = vestra.Editor().render(audio_project(), cpu_request(audio_output))
     assert audio_result.audio_present is True
     assert stream_types(audio_output) == {"audio", "video"}

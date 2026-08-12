@@ -1,5 +1,5 @@
-from video_editor import FrameRate
-from video_editor.authoring import Point, ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import Point, ProjectBuilder
 
 builder = ProjectBuilder(width=2, height=2, frame_rate=FrameRate(1, 1), output_path="out.mp4")
 asset = builder.add_image_asset("image.png")

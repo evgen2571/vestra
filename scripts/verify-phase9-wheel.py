@@ -58,8 +58,8 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, help="directory for the rendered smoke artifact")
     args = parser.parse_args()
 
-    import video_editor
-    from video_editor import (
+    import vestra
+    from vestra import (
         BackendPreference,
         Editor,
         FrameRate,
@@ -70,15 +70,15 @@ def main() -> None:
         PrepareOptions,
         PreparedVideoRenderRequest,
     )
-    from video_editor.authoring import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, ProjectBuilder
+    from vestra.authoring import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, ProjectBuilder
 
-    package_path = Path(video_editor.__file__).resolve()
+    package_path = Path(vestra.__file__).resolve()
     if "site-packages" not in package_path.parts:
-        raise AssertionError(f"video_editor did not import from the installed wheel: {package_path}")
+        raise AssertionError(f"vestra did not import from the installed wheel: {package_path}")
     if not (package_path.parent / "py.typed").is_file():
-        raise AssertionError("the installed wheel is missing video_editor/py.typed")
+        raise AssertionError("the installed wheel is missing vestra/py.typed")
 
-    output_dir = args.output_dir or Path(tempfile.mkdtemp(prefix="video-editor-phase9-wheel-"))
+    output_dir = args.output_dir or Path(tempfile.mkdtemp(prefix="vestra-phase9-wheel-"))
     output_dir.mkdir(parents=True, exist_ok=True)
     tone_440 = output_dir / "tone-440.wav"
     tone_880 = output_dir / "tone-880.wav"

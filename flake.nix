@@ -31,9 +31,9 @@
         # adapter used for strict WGPU verification inside containers.
         VK_DRIVER_FILES = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
         VK_ICD_FILENAMES = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
-        VIDEO_EDITOR_WGPU_BACKEND = "vulkan";
-        VIDEO_EDITOR_WGPU_FORCE_FALLBACK = "1";
-        VIDEO_EDITOR_REQUIRE_WGPU = "1";
+        VESTRA_WGPU_BACKEND = "vulkan";
+        VESTRA_WGPU_FORCE_FALLBACK = "1";
+        VESTRA_REQUIRE_WGPU = "1";
       };
     in
     {

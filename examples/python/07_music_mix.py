@@ -1,8 +1,8 @@
 """Build, inspect, prepare, and render a small schema-v2 music mix."""
 from pathlib import Path
 
-from video_editor import BackendPreference, Editor, FrameRate, PrepareOptions, PreparedVideoRenderRequest
-from video_editor.authoring import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, ProjectBuilder
+from vestra import BackendPreference, Editor, FrameRate, PrepareOptions, PreparedVideoRenderRequest
+from vestra.authoring import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, ProjectBuilder
 
 root = Path(__file__).resolve().parents[2]
 builder = ProjectBuilder(

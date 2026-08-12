@@ -1,5 +1,5 @@
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder
 
 builder = ProjectBuilder(
     width=16,

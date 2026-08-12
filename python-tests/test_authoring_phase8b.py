@@ -4,9 +4,9 @@ from typing import Any, cast
 
 import pytest
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import AuthoringError, Crop, Point, ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import AuthoringError, Crop, Point, ProjectBuilder, Sizing
 
 
 def builder(**changes: object) -> ProjectBuilder:
@@ -89,13 +89,13 @@ def test_cpu_frame_and_video_cover_solid_image_and_audio(tmp_path: Path) -> None
     authored.add_image_clip(source=image, start=0, duration=0.2, layer=1, sizing=Sizing.stretch(width=160, height=90))
     authored.audio.add_track().add_clip(asset=audio, start=0, trim_end=0.2)
     project = authored.build()
-    prepared = video_editor.Editor().prepare(
-        project, video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        project, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     frame = prepared.render_frame_number(0)
     assert frame.width == 160 and frame.height == 90 and len(frame.to_bytes()) == 160 * 90 * 4
     output = tmp_path / "authored.mp4"
-    result = video_editor.Editor().render(project, video_editor.RenderRequest(output, backend=video_editor.BackendPreference.CPU, overwrite=True))
+    result = vestra.Editor().render(project, vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU, overwrite=True))
     assert output.is_file() and output.stat().st_size > 0 and result.audio_present
     probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "default=noprint_wrappers=1", str(output)], check=True, capture_output=True, text=True)
     assert "codec_type=audio" in probe.stdout

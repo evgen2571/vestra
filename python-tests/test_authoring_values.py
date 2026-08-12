@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from video_editor.authoring import (
+from vestra.authoring import (
     BlendMode,
     Color,
     Crop,

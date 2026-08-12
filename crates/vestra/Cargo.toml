@@ -1,0 +1,30 @@
+[package]
+name = "vestra"
+version = "0.1.0"
+edition = "2024"
+description = "Public Rust SDK for the JSON-driven video editor"
+license = "MIT"
+publish = false
+
+[features]
+default = ["cpu", "wgpu"]
+cpu = ["vestra-render/cpu"]
+wgpu = ["vestra-render/wgpu"]
+
+[dependencies]
+vestra-core = { path = "../vestra-core" }
+vestra-render = { path = "../vestra-render", default-features = false }
+vestra-media = { path = "../vestra-media" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = { version = "0.25", default-features = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bench]]
+name = "animation_effects"
+harness = false
+
+[lints]
+workspace = true

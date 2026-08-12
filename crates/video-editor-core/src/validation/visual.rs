@@ -289,6 +289,82 @@ fn validate_spectrum2d(
             format!("{path}/bar_gap_ratio"),
         ));
     }
+    if !spectrum.min_bar_height_ratio.is_finite()
+        || !(0.0..=1.0).contains(&spectrum.min_bar_height_ratio)
+    {
+        errors.push(Diagnostic::error(
+            "MVP-SPECTRUM2D-LAYOUT",
+            Category::Semantic,
+            "Spectrum2D min_bar_height_ratio must be finite and in 0..=1",
+            format!("{path}/min_bar_height_ratio"),
+        ));
+    }
+    match &spectrum.layout {
+        crate::project::Spectrum2DLayout::Linear(layout) => {
+            if matches!(
+                layout.band_mapping,
+                crate::project::Spectrum2DBandMapping::CenterOut
+            ) && spectrum.band_count > crate::project::SPECTRUM2D_MAX_BAND_COUNT
+            {
+                errors.push(Diagnostic::error(
+                    "MVP-SPECTRUM2D-LAYOUT",
+                    Category::Semantic,
+                    "Spectrum2D center_out band count is invalid",
+                    format!("{path}/layout"),
+                ));
+            }
+        }
+        crate::project::Spectrum2DLayout::Radial(layout) => {
+            if !layout.inner_radius_ratio.is_finite()
+                || !(0.0..1.0).contains(&layout.inner_radius_ratio)
+            {
+                errors.push(Diagnostic::error(
+                    "MVP-SPECTRUM2D-LAYOUT",
+                    Category::Semantic,
+                    "Spectrum2D radial inner_radius_ratio must be in 0..1",
+                    format!("{path}/layout/inner_radius_ratio"),
+                ));
+            }
+            if !layout.start_angle_degrees.is_finite()
+                || !layout.sweep_angle_degrees.is_finite()
+                || layout.sweep_angle_degrees <= 0.0
+                || layout.sweep_angle_degrees > 360.0
+            {
+                errors.push(Diagnostic::error(
+                    "MVP-SPECTRUM2D-LAYOUT",
+                    Category::Semantic,
+                    "Spectrum2D radial angles are invalid",
+                    format!("{path}/layout"),
+                ));
+            }
+            if matches!(
+                layout.band_mapping,
+                crate::project::Spectrum2DBandMapping::CenterOut
+            ) {
+                errors.push(Diagnostic::error(
+                    "MVP-SPECTRUM2D-LAYOUT",
+                    Category::Semantic,
+                    "radial Spectrum2D does not support center_out band mapping",
+                    format!("{path}/layout/band_mapping"),
+                ));
+            }
+        }
+    }
+    if let Some(gradient) = &spectrum.gradient {
+        for (field, colour) in [
+            ("start_colour", &gradient.start_colour),
+            ("end_colour", &gradient.end_colour),
+        ] {
+            if crate::project::parse_colour(colour).is_none() {
+                errors.push(Diagnostic::error(
+                    "MVP-SPECTRUM2D-GRADIENT",
+                    Category::Semantic,
+                    "Spectrum2D gradient colours must use #RRGGBB or #RRGGBBAA",
+                    format!("{path}/gradient/{field}"),
+                ));
+            }
+        }
+    }
     if crate::project::parse_colour(&spectrum.colour).is_none() {
         errors.push(Diagnostic::error(
             "MVP-SPECTRUM2D-COLOUR",

@@ -5,6 +5,7 @@ from .assets import ImageAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ModulatableScalarTrack, Transform
 from .presets import PresetCollection
+from .spectrum2d import Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DLayout, Spectrum2DRadialLayout
 from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
 
 
@@ -239,16 +240,15 @@ class SolidColorClip(_Clip):
 
 
 class Spectrum2DClip(_Clip):
-    """A linear bar visualizer driven by the project's authored Master audio.
+    """An audio-reactive 2D spectrum source driven by authored Master audio.
 
-    Frequency bands are logarithmically spaced and smoothed with attack/release
-    envelopes. The region is normalized to the output frame and bars are
-    bottom-aligned. Normal visual effects, opacity, and blend modes apply.
+    It supports linear and radial layouts; the default is linear, bottom,
+    forward. Normal visual effects, opacity, and blend modes apply.
     """
 
     __slots__ = (
         "_band_count", "_min_hz", "_max_hz", "_sensitivity", "_attack_seconds",
-        "_release_seconds", "_x", "_y", "_width", "_height", "_bar_gap_ratio", "_colour",
+        "_release_seconds", "_x", "_y", "_width", "_height", "_bar_gap_ratio", "_colour", "_min_bar_height_ratio", "_layout", "_gradient",
     )
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -261,6 +261,7 @@ class Spectrum2DClip(_Clip):
         sensitivity: int | float, attack_seconds: int | float, release_seconds: int | float,
         x: int | float, y: int | float, width: int | float, height: int | float,
         bar_gap_ratio: int | float, colour: Color | str,
+        min_bar_height_ratio: int | float, layout: object, gradient: object,
     ) -> "Spectrum2DClip":
         instance = object.__new__(cls)
         instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
@@ -277,6 +278,11 @@ class Spectrum2DClip(_Clip):
         instance.height = height
         instance.bar_gap_ratio = bar_gap_ratio
         instance.colour = colour
+        instance.min_bar_height_ratio = min_bar_height_ratio
+        instance.layout = layout
+        if gradient is not None and not isinstance(gradient, Spectrum2DGradient):
+            raise TypeError("gradient must be Spectrum2DGradient or None")
+        instance.gradient = gradient
         return instance
 
     @staticmethod
@@ -393,15 +399,55 @@ class Spectrum2DClip(_Clip):
     def colour(self, value: Color | str) -> None:
         self._colour = color_to_canonical(value)
 
+    @property
+    def min_bar_height_ratio(self) -> float:
+        return self._min_bar_height_ratio
+
+    @min_bar_height_ratio.setter
+    def min_bar_height_ratio(self, value: int | float) -> None:
+        self._min_bar_height_ratio = self._bounded(value, "min_bar_height_ratio")
+
+    @property
+    def layout(self) -> Spectrum2DLayout:
+        return self._layout
+
+    @layout.setter
+    def layout(self, value: object) -> None:
+        if value is None:
+            value = Spectrum2DLinearLayout()
+        if not isinstance(value, (Spectrum2DLinearLayout, Spectrum2DRadialLayout)):
+            raise TypeError("layout must be Spectrum2DLinearLayout, Spectrum2DRadialLayout, or None")
+        self._layout = value
+
+    @property
+    def gradient(self) -> Spectrum2DGradient | None:
+        return self._gradient
+
+    @gradient.setter
+    def gradient(self, value: object) -> None:
+        if value is not None and not isinstance(value, Spectrum2DGradient):
+            raise TypeError("gradient must be Spectrum2DGradient or None")
+        self._gradient = value
+
     def to_canonical(self) -> dict[str, object]:
         data = self._canonical_common()
-        data["source"] = {
+        source: dict[str, object] = {
             "type": "spectrum2d", "band_count": self.band_count, "min_hz": self.min_hz,
             "max_hz": self.max_hz, "sensitivity": self.sensitivity,
             "attack_seconds": self.attack_seconds, "release_seconds": self.release_seconds,
             "x": self.x, "y": self.y, "width": self.width, "height": self.height,
             "bar_gap_ratio": self.bar_gap_ratio, "colour": self.colour,
+            "min_bar_height_ratio": self.min_bar_height_ratio,
         }
+        data["source"] = source
+        if not (
+            isinstance(self.layout, Spectrum2DLinearLayout)
+            and self.layout.anchor == "bottom"
+            and self.layout.band_mapping == "forward"
+        ):
+            source["layout"] = self.layout.to_canonical()
+        if self.gradient is not None:
+            source["gradient"] = self.gradient.to_canonical()
         return data
 
     def __repr__(self) -> str:

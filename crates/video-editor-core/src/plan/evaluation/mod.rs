@@ -68,6 +68,13 @@ pub enum EvaluatedSource {
         width: f64,
         height: f64,
         bar_gap_ratio: f64,
+        min_bar_height_ratio: f64,
+        layout: crate::project::Spectrum2DLayout,
+        gradient: Option<(
+            crate::project::Spectrum2DGradientDirection,
+            [u8; 4],
+            [u8; 4],
+        )>,
         colour: [u8; 4],
     },
 }
@@ -147,6 +154,9 @@ pub fn evaluate_with_context(
                 width,
                 height,
                 bar_gap_ratio,
+                min_bar_height_ratio,
+                layout,
+                gradient,
                 colour,
             } => EvaluatedSource::Spectrum2D {
                 bands: band_signals
@@ -161,6 +171,9 @@ pub fn evaluate_with_context(
                 width: *width,
                 height: *height,
                 bar_gap_ratio: *bar_gap_ratio,
+                min_bar_height_ratio: *min_bar_height_ratio,
+                layout: layout.clone(),
+                gradient: *gradient,
                 colour: *colour,
             },
         };

@@ -808,6 +808,9 @@ fn encode_parameters(
                     width,
                     height,
                     bar_gap_ratio,
+                    min_bar_height_ratio,
+                    layout,
+                    gradient,
                     colour,
                 } = &frame.layers[*layer_index].source
                 else {
@@ -821,6 +824,9 @@ fn encode_parameters(
                     *width,
                     *height,
                     *bar_gap_ratio,
+                    *min_bar_height_ratio,
+                    layout,
+                    *gradient,
                     *colour,
                 )?)?;
             }

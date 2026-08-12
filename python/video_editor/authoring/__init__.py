@@ -7,7 +7,9 @@ from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEff
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import ImageClip, SolidColorClip, Spectrum2DClip
-from .spectrum2d import Spectrum2DPreset
+from .spectrum2d import (
+    Spectrum2DPreset, Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DRadialLayout,
+)
 from .presets import Preset, PresetCollection
 from .timeline import Timeline
 from .errors import AuthoringError
@@ -93,6 +95,7 @@ __all__ = [
     "SolidColorClip",
     "Spectrum2DClip",
     "Spectrum2DPreset",
+    "Spectrum2DGradient", "Spectrum2DLinearLayout", "Spectrum2DRadialLayout",
     "Transform",
     "Timeline",
     "TintEffect",

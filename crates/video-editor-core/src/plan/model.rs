@@ -173,6 +173,13 @@ pub enum CompiledVisualSource {
         width: f64,
         height: f64,
         bar_gap_ratio: f64,
+        min_bar_height_ratio: f64,
+        layout: crate::project::Spectrum2DLayout,
+        gradient: Option<(
+            crate::project::Spectrum2DGradientDirection,
+            [u8; 4],
+            [u8; 4],
+        )>,
         colour: [u8; 4],
     },
 }

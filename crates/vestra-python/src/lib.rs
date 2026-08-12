@@ -3,24 +3,15 @@
     reason = "PyO3 method signatures are clearer without const"
 )]
 
-use std::{
-    path::PathBuf,
-    sync::{Condvar, Mutex, OnceLock},
-};
+use std::sync::{Condvar, Mutex, OnceLock};
 
 use pyo3::{
     create_exception,
     exceptions::{PyRuntimeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyList, PyModule, PyTuple, PyType},
+    types::{PyAny, PyList, PyModule},
 };
-use vestra::{
-    BackendPreference as NativeBackendPreference, Category as NativeCategory,
-    Diagnostic as NativeDiagnostic, Editor as NativeEditor, EditorError,
-    InspectionReport as NativeInspection, LoadError, PreflightOptions as NativePreflightOptions,
-    PreflightReport as NativePreflight, Project as NativeProject, Severity as NativeSeverity,
-    ValidationReport as NativeValidation,
-};
+use vestra::{Editor as NativeEditor, EditorError, LoadError};
 
 mod conversion;
 mod diagnostics;
@@ -313,21 +304,4 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?,
     )?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{PyBackendPreference, PyCategory, PySeverity};
-    use vestra::{BackendPreference, Category, Severity};
-
-    #[test]
-    fn enum_mappings_keep_the_sdk_string_contract() {
-        assert_eq!(PyBackendPreference::Auto.native(), BackendPreference::Auto);
-        assert_eq!(PyBackendPreference::Wgpu.as_value(), "wgpu");
-        assert_eq!(
-            PyCategory::from(Category::Cancellation).value(),
-            "cancellation"
-        );
-        assert_eq!(PySeverity::from(Severity::Warning).value(), "warning");
-    }
 }

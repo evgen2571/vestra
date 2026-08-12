@@ -23,7 +23,7 @@ roadmap or historical structure is still current.
 - Avoid avoidable allocation/I/O in hot frame/render loops.
 
 ## Verification
-- Use `./scripts/verify.sh` when present.
+- Use `./scripts/check.sh` as the canonical repository validation command.
 - Otherwise follow workspace/CI configuration for fmt, check, clippy, and tests.
 - Renderer/FFmpeg changes should get an appropriate integration render.
 - Python-binding changes require Python-side verification.

@@ -1,4 +1,15 @@
-use super::*;
+use std::path::PathBuf;
+
+use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyType};
+use vestra::{
+    BackendPreference as NativeBackendPreference, Editor as NativeEditor,
+    PreflightOptions as NativePreflightOptions,
+};
+
+use crate::{
+    PyInspectionReport, PyPreflightReport, PyProject, PyValidationReport, conversion, editor_error,
+    prepared, render,
+};
 #[pyclass(
     name = "Editor",
     frozen,
@@ -205,12 +216,24 @@ impl PyBackendPreference {
             Self::Wgpu => NativeBackendPreference::Wgpu,
         }
     }
-    pub(super) const fn as_value(self) -> &'static str {
+    const fn as_value(self) -> &'static str {
         match self {
             Self::Auto => "auto",
             Self::Cpu => "cpu",
             Self::Wgpu => "wgpu",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PyBackendPreference;
+    use vestra::BackendPreference;
+
+    #[test]
+    fn backend_preference_values_match_the_python_contract() {
+        assert_eq!(PyBackendPreference::Auto.native(), BackendPreference::Auto);
+        assert_eq!(PyBackendPreference::Wgpu.as_value(), "wgpu");
     }
 }
 #[pymethods]

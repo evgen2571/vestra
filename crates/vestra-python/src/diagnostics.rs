@@ -1,4 +1,9 @@
-use super::*;
+use pyo3::{prelude::*, types::PyTuple};
+use vestra::{
+    Category as NativeCategory, Diagnostic as NativeDiagnostic, PreflightReport as NativePreflight,
+    Severity as NativeSeverity, ValidationReport as NativeValidation,
+};
+
 #[pyclass(
     name = "Category",
     frozen,
@@ -49,7 +54,7 @@ impl From<NativeCategory> for PyCategory {
 #[pymethods]
 impl PyCategory {
     #[getter]
-    pub(super) fn value(&self) -> &'static str {
+    fn value(&self) -> &'static str {
         match self {
             Self::Usage => "usage",
             Self::Project => "project",
@@ -94,7 +99,7 @@ impl From<NativeSeverity> for PySeverity {
 #[pymethods]
 impl PySeverity {
     #[getter]
-    pub(super) fn value(&self) -> &'static str {
+    fn value(&self) -> &'static str {
         match self {
             Self::Fatal => "fatal",
             Self::Warning => "warning",
@@ -102,6 +107,21 @@ impl PySeverity {
     }
     fn __str__(&self) -> &'static str {
         self.value()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PyCategory, PySeverity};
+    use vestra::{Category, Severity};
+
+    #[test]
+    fn diagnostic_enum_values_match_the_python_contract() {
+        assert_eq!(
+            PyCategory::from(Category::Cancellation).value(),
+            "cancellation"
+        );
+        assert_eq!(PySeverity::from(Severity::Warning).value(), "warning");
     }
 }
 

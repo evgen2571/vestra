@@ -42,6 +42,40 @@ selection, staged rendering, progress, and cancellation. The CLI only
 translates arguments, installs Ctrl-C handling, and formats structured SDK
 results.
 
+## Stable module boundaries
+
+```text
+vestra-core    project model, validation, plan compilation/evaluation, signals
+vestra-render  CPU/WGPU visual rendering and backend contracts
+vestra-media   media I/O, audio execution/analysis, FFmpeg, sinks/publication
+vestra         SDK orchestration and public Rust reports/errors
+vestra-python  native Python bindings for the SDK
+vestra-cli     CLI parsing, presentation, and the `ve` executable
+```
+
+The core flow is:
+
+```text
+project model -> validation -> compile -> evaluate -> prepared project
+  -> render engine -> CPU/WGPU renderer -> media/FFmpeg
+```
+
+Audio analysis is coordinated by core requirements and prepared signals:
+`vestra-media` supplies PCM-derived RMS, peak, and band-energy data, which
+preparation transforms and reuses during random-access frame evaluation.
+`VisualSource::Spectrum2D` follows the same renderer-independent path from
+compiled/evaluated source values into concrete CPU or WGPU rendering.
+
+The SDK engine is organized by responsibility: `runner` owns high-level
+orchestration, `preparation` owns prepared render state, `static_render` owns
+the static FFmpeg fast path, `metrics` owns timing aggregation, and
+`frame_loop` owns staged frame execution and ordered sink delivery. Its
+white-box contracts remain in `render/engine/tests/`.
+
+The native binding crate is registration glue in `lib.rs`; focused modules own
+editor/project operations, diagnostics, inspection, rendering, prepared
+projects, and conversions. Native classes continue to use `vestra._native`.
+
 ## Project and plan
 
 `project/model` owns the serde model and project-format types. `project/validation`
@@ -157,11 +191,13 @@ rendering begins aborts the render instead of changing backends mid-stream.
 
 `crates/vestra-render` owns `CompletedFrame`.
 `crates/vestra/src/application/render.rs` owns the SDK-private
-preparation bridge; `crates/vestra/src/render/engine/runner.rs` owns its
-private `PreparedState`. Preparation compiles one immutable shared plan, decodes
-visual assets, compiles the schedule, selects and constructs the backend, and
-uploads GPU resources once. It retains a stable preparation-timing snapshot and
-preparation facts. A video operation separately owns its output check,
+preparation bridge. `crates/vestra/src/render/engine/preparation.rs` owns
+`PreparedState`, prepared render-state construction, and preparation
+orchestration. `crates/vestra/src/render/engine/runner.rs` owns high-level render
+execution and orchestration. Preparation compiles one immutable shared plan,
+decodes visual assets, compiles the schedule, selects and constructs the backend,
+and uploads GPU resources once. It retains a stable preparation-timing snapshot
+and preparation facts. A video operation separately owns its output check,
 `FfmpegSink`, ordering buffer, operation metrics, and publication. Cumulative
 backend counters are sampled at the operation boundary and rendered as deltas.
 Static-cache hits, misses, budget bypasses, and layer renders are per-operation

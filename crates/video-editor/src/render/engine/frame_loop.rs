@@ -180,7 +180,9 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                     plan,
                     RenderFailureStage::FrameComposition,
                     completed_frames,
-                    next_frame_to_submit.checked_sub(1),
+                    backend
+                        .failed_frame_number()
+                        .or_else(|| next_frame_to_submit.checked_sub(1)),
                     diagnostic,
                 ));
             }
@@ -288,13 +290,16 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         }
         match backend.poll_completed_cancellable(PollMode::WaitForOne, &options.cancelled) {
             Ok(Some(_frame)) if options.cancelled.load(Ordering::Relaxed) => {
+                let attempted_frame = backend
+                    .failed_frame_number()
+                    .or_else(|| plan.frame_count.checked_sub(1));
                 return cancellation(
                     backend,
                     encoder,
                     output,
                     plan,
                     completed_frames,
-                    plan.frame_count.checked_sub(1),
+                    attempted_frame,
                 );
             }
             Ok(Some(frame)) => drained.push(frame),
@@ -354,7 +359,9 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                 plan,
                 RenderFailureStage::FrameComposition,
                 completed_frames,
-                plan.frame_count.checked_sub(1),
+                backend
+                    .failed_frame_number()
+                    .or_else(|| plan.frame_count.checked_sub(1)),
                 diagnostic,
             ));
         }

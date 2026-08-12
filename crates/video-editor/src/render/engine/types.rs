@@ -91,6 +91,8 @@ pub struct RenderTimings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub row_repack_ms: Option<u128>,
     pub track_evaluation_ms: u128,
+    /// Aggregate backend frame-render work. Concurrent CPU workers can make
+    /// this exceed wall-clock render time.
     pub frame_render_ms: u128,
     pub encoder_write_ms: u128,
     pub encoder_finalize_ms: u128,

@@ -1,6 +1,14 @@
 //! Fully prepared CPU backend lifecycle.
 
-use std::{collections::VecDeque, sync::Arc};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, SyncSender, TryRecvError},
+    },
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
+};
 
 #[cfg(test)]
 use image::RgbaImage;
@@ -14,26 +22,144 @@ use crate::{
     },
 };
 
-use super::worker::CpuWorkerState;
+use super::worker::{CpuFrameJob, WorkerCommand, WorkerCompletion, WorkerSnapshot, run_worker};
+
+struct WorkerHandle {
+    command_tx: SyncSender<WorkerCommand>,
+    join: Option<JoinHandle<()>>,
+}
 
 /// CPU renderer state, fully prepared before backend selection returns it.
 pub struct CpuBackend {
-    worker: CpuWorkerState,
-    completed: VecDeque<CompletedFrame>,
+    workers: Vec<WorkerHandle>,
+    worker_busy: Vec<bool>,
+    next_worker: usize,
+    completions: Receiver<WorkerCompletion>,
     metrics: StagedMetrics,
+    worker_timings: PreparationTimings,
+    failed: Option<Diagnostic>,
+    failed_frame_number: Option<u64>,
+    aborted: bool,
 }
 
 impl CpuBackend {
     #[must_use]
     pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
+        let available = thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        Self::new_with_worker_count(plan, decoded, if available <= 2 { 1 } else { 2 })
+    }
+
+    pub(crate) fn new_with_worker_count(
+        plan: &RenderPlan,
+        decoded: Arc<DecodedAssets>,
+        worker_count: usize,
+    ) -> Self {
+        Self::build(plan, decoded, worker_count.max(1))
+    }
+
+    fn build(plan: &RenderPlan, decoded: Arc<DecodedAssets>, worker_count: usize) -> Self {
+        let (completion_tx, completions) = mpsc::sync_channel(worker_count);
+        let mut workers = Vec::with_capacity(worker_count);
+        for worker_id in 0..worker_count {
+            let (command_tx, command_rx) = mpsc::sync_channel(1);
+            let worker_plan = plan.clone();
+            let worker_decoded = Arc::clone(&decoded);
+            let worker_completion_tx = completion_tx.clone();
+            let join = thread::Builder::new()
+                .name(format!("cpu-render-worker-{worker_id}"))
+                .spawn(move || {
+                    run_worker(
+                        worker_id,
+                        worker_plan,
+                        worker_decoded,
+                        command_rx,
+                        worker_completion_tx,
+                    )
+                })
+                .expect("CPU worker thread must start");
+            workers.push(WorkerHandle {
+                command_tx,
+                join: Some(join),
+            });
+        }
         Self {
-            worker: CpuWorkerState::new(plan, decoded),
-            completed: VecDeque::new(),
+            workers,
+            worker_busy: vec![false; worker_count],
+            next_worker: 0,
+            completions,
             metrics: StagedMetrics {
-                configured_pipeline_depth: 1,
-                allocated_slot_count: 1,
+                configured_pipeline_depth: worker_count,
+                allocated_slot_count: worker_count,
                 ..StagedMetrics::default()
             },
+            worker_timings: PreparationTimings::default(),
+            failed: None,
+            failed_frame_number: None,
+            aborted: false,
+        }
+    }
+
+    fn diagnostic(code: &'static str, message: impl Into<String>) -> Diagnostic {
+        Diagnostic::error(code, crate::Category::Backend, message.into(), "")
+    }
+
+    fn check_healthy(&self) -> Result<(), Diagnostic> {
+        if self.aborted {
+            return Err(Self::diagnostic(
+                "MVP-BACKEND-NOT-IDLE",
+                "CPU backend was aborted",
+            ));
+        }
+        if let Some(error) = &self.failed {
+            return Err(error.clone());
+        }
+        Ok(())
+    }
+
+    fn consume_completion(
+        &mut self,
+        completion: WorkerCompletion,
+    ) -> Result<CompletedFrame, Diagnostic> {
+        match completion {
+            WorkerCompletion::Frame {
+                worker_id,
+                frame,
+                render_duration,
+            } => {
+                self.worker_busy[worker_id] = false;
+                self.metrics.backend_completed_frames += 1;
+                self.metrics.frame_render_work_duration += render_duration;
+                Ok(frame)
+            }
+            WorkerCompletion::Failed {
+                worker_id,
+                frame_number,
+                message,
+            } => {
+                self.worker_busy[worker_id] = false;
+                self.failed_frame_number = Some(frame_number);
+                let error = Self::diagnostic(
+                    "CPU-WORKER-PANIC",
+                    format!("{message} (frame {frame_number})"),
+                );
+                self.failed = Some(error.clone());
+                Err(error)
+            }
+        }
+    }
+
+    fn try_completion(&mut self) -> Result<Option<CompletedFrame>, Diagnostic> {
+        match self.completions.try_recv() {
+            Ok(completion) => self.consume_completion(completion).map(Some),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => {
+                let error = Self::diagnostic(
+                    "CPU-WORKER-CHANNEL",
+                    "CPU worker completion channel disconnected",
+                );
+                self.failed = Some(error.clone());
+                Err(error)
+            }
         }
     }
 }
@@ -44,11 +170,15 @@ impl RenderBackend for CpuBackend {
     }
 
     fn capacity(&self) -> usize {
-        1
+        self.workers.len()
     }
 
     fn in_flight(&self) -> usize {
-        self.completed.len()
+        self.worker_busy.iter().filter(|busy| **busy).count()
+    }
+
+    fn failed_frame_number(&self) -> Option<u64> {
+        self.failed_frame_number
     }
 
     fn submit_frame(
@@ -56,49 +186,155 @@ impl RenderBackend for CpuBackend {
         frame_number: u64,
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
-        debug_assert!(self.completed.is_empty());
-        self.completed
-            .push_back(self.worker.render_frame(frame_number, frame));
+        self.check_healthy()?;
+        let worker_id = (0..self.workers.len())
+            .map(|offset| (self.next_worker + offset) % self.workers.len())
+            .find(|&id| !self.worker_busy[id])
+            .ok_or_else(|| {
+                Self::diagnostic("CPU-BACKEND-FULL", "CPU backend has no idle worker")
+            })?;
+        self.workers[worker_id]
+            .command_tx
+            .send(WorkerCommand::Render(CpuFrameJob::new(
+                frame_number,
+                frame.clone(),
+            )))
+            .map_err(|_| {
+                let error = Self::diagnostic(
+                    "CPU-WORKER-CHANNEL",
+                    "CPU worker command channel disconnected",
+                );
+                self.failed = Some(error.clone());
+                error
+            })?;
+        self.worker_busy[worker_id] = true;
+        self.next_worker = (worker_id + 1) % self.workers.len();
         self.metrics.submitted_frames += 1;
-        self.metrics.backend_completed_frames += 1;
-        self.metrics.peak_frames_in_flight = self.metrics.peak_frames_in_flight.max(1);
+        self.metrics.peak_frames_in_flight =
+            self.metrics.peak_frames_in_flight.max(self.in_flight());
         Ok(())
     }
 
-    fn poll_completed(&mut self, _mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic> {
-        Ok(self.completed.pop_front())
+    fn poll_completed(&mut self, mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic> {
+        self.check_healthy()?;
+        let started = Instant::now();
+        if mode == PollMode::NonBlocking {
+            self.metrics.nonblocking_polls += 1;
+            let result = self.try_completion();
+            self.metrics.nonblocking_poll_duration += started.elapsed();
+            return result;
+        }
+        if let Some(frame) = self.try_completion()? {
+            return Ok(Some(frame));
+        }
+        if self.in_flight() == 0 {
+            return Ok(None);
+        }
+        match mode {
+            PollMode::WaitForOne => {
+                self.metrics.blocking_polls += 1;
+                self.metrics.slot_wait_count += 1;
+            }
+            PollMode::Drain => self.metrics.drain_polls += 1,
+            PollMode::NonBlocking => unreachable!(),
+        }
+        let completion = self.completions.recv().map_err(|_| {
+            let error = Self::diagnostic(
+                "CPU-WORKER-CHANNEL",
+                "CPU worker completion channel disconnected",
+            );
+            self.failed = Some(error.clone());
+            error
+        })?;
+        self.metrics.poll_wait_duration += started.elapsed();
+        self.consume_completion(completion).map(Some)
+    }
+
+    fn poll_completed_cancellable(
+        &mut self,
+        mode: PollMode,
+        cancelled: &AtomicBool,
+    ) -> Result<Option<CompletedFrame>, Diagnostic> {
+        if mode == PollMode::NonBlocking {
+            return self.poll_completed(mode);
+        }
+        while self.in_flight() > 0 {
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(None);
+            }
+            if let Some(frame) = self.poll_completed(PollMode::NonBlocking)? {
+                return Ok(Some(frame));
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        Ok(None)
     }
 
     fn flush(&mut self) -> Result<Vec<CompletedFrame>, Diagnostic> {
-        let started = std::time::Instant::now();
-        let frames = self.completed.drain(..).collect();
+        self.check_healthy()?;
+        let started = Instant::now();
+        let mut frames = Vec::new();
+        while self.in_flight() > 0 {
+            if let Some(frame) = self.poll_completed(PollMode::Drain)? {
+                frames.push(frame);
+            }
+        }
         self.metrics.flush_duration += started.elapsed();
         Ok(frames)
     }
 
     fn abort(&mut self) {
-        self.completed.clear();
+        if self.aborted {
+            return;
+        }
+        let started = Instant::now();
+        self.aborted = true;
+        for worker in &self.workers {
+            let _ = worker.command_tx.send(WorkerCommand::Shutdown);
+        }
+        for worker in &mut self.workers {
+            if let Some(join) = worker.join.take() {
+                let _ = join.join();
+            }
+        }
+        while self.completions.try_recv().is_ok() {}
+        self.worker_busy.fill(false);
+        self.metrics.abort_drain_duration += started.elapsed();
     }
 
     fn verify_idle(&self) -> Result<(), Diagnostic> {
-        if self.completed.is_empty() {
+        if self.aborted {
+            Err(Self::diagnostic(
+                "MVP-BACKEND-NOT-IDLE",
+                "CPU backend was aborted",
+            ))
+        } else if self.in_flight() == 0 {
             Ok(())
         } else {
-            Err(Diagnostic::error(
+            Err(Self::diagnostic(
                 "MVP-BACKEND-NOT-IDLE",
-                crate::Category::Backend,
-                "CPU backend retained completed frames after flush",
-                "",
+                "CPU backend retained worker work after flush",
             ))
         }
     }
 
     fn stats(&mut self) -> PreparationStats {
-        self.worker.stats()
+        let mut snapshots = Vec::with_capacity(self.workers.len());
+        for worker in &self.workers {
+            let (tx, rx) = mpsc::sync_channel(1);
+            if worker.command_tx.send(WorkerCommand::Snapshot(tx)).is_ok()
+                && let Ok(snapshot) = rx.recv()
+            {
+                snapshots.push(snapshot);
+            }
+        }
+        let stats = aggregate_snapshots(&snapshots);
+        self.worker_timings = aggregate_timings(&snapshots);
+        stats
     }
 
     fn timings(&self) -> PreparationTimings {
-        self.worker.timings()
+        self.worker_timings
     }
 
     fn staged_metrics(&self) -> StagedMetrics {
@@ -107,8 +343,8 @@ impl RenderBackend for CpuBackend {
 
     fn reset_operation_metrics(&mut self) {
         self.metrics = StagedMetrics {
-            configured_pipeline_depth: 1,
-            allocated_slot_count: 1,
+            configured_pipeline_depth: self.capacity(),
+            allocated_slot_count: self.capacity(),
             ..StagedMetrics::default()
         };
     }
@@ -129,8 +365,112 @@ impl RenderBackend for CpuBackend {
     }
 }
 
+impl Drop for CpuBackend {
+    fn drop(&mut self) {
+        if !self.aborted {
+            self.aborted = true;
+            for worker in &self.workers {
+                let _ = worker.command_tx.send(WorkerCommand::Shutdown);
+            }
+            for worker in &mut self.workers {
+                if let Some(join) = worker.join.take() {
+                    let _ = join.join();
+                }
+            }
+        }
+    }
+}
+
+fn aggregate_snapshots(snapshots: &[WorkerSnapshot]) -> PreparationStats {
+    let Some(first) = snapshots.first() else {
+        return PreparationStats::default();
+    };
+    let mut result = first.stats.clone();
+    for snapshot in &snapshots[1..] {
+        let stats = &snapshot.stats;
+        result.bitmap_cache_hits += stats.bitmap_cache_hits;
+        result.bitmap_cache_misses += stats.bitmap_cache_misses;
+        result.bitmap_cache_requests += stats.bitmap_cache_requests;
+        result.bitmap_cache_insertions += stats.bitmap_cache_insertions;
+        result.cache_evictions += stats.cache_evictions;
+        result.cache_oversized_entries_skipped += stats.cache_oversized_entries_skipped;
+        result.static_cache_hits += stats.static_cache_hits;
+        result.static_cache_misses += stats.static_cache_misses;
+        result.static_cache_budget_bypasses += stats.static_cache_budget_bypasses;
+        result.static_cache_population_renders += stats.static_cache_population_renders;
+        result.static_layers_rendered += stats.static_layers_rendered;
+        result.cpu_full_frame_allocations += stats.cpu_full_frame_allocations;
+        result.cpu_scratch_allocations += stats.cpu_scratch_allocations;
+        result.cpu_scratch_reuses += stats.cpu_scratch_reuses;
+        result.cpu_full_frame_copy_bytes += stats.cpu_full_frame_copy_bytes;
+        result.cpu_opaque_copy_fast_path_hits += stats.cpu_opaque_copy_fast_path_hits;
+        result.cpu_opaque_copy_fast_path_bytes += stats.cpu_opaque_copy_fast_path_bytes;
+        result.cpu_generic_blend_surface_calls += stats.cpu_generic_blend_surface_calls;
+        result.cache_current_entries += stats.cache_current_entries;
+        result.cache_budget_bytes += stats.cache_budget_bytes;
+        result.cache_current_bytes += stats.cache_current_bytes;
+        result.static_cache_entries += stats.static_cache_entries;
+        result.static_cached_bytes += stats.static_cached_bytes;
+        result.cpu_scratch_buffers_retained += stats.cpu_scratch_buffers_retained;
+        result.cpu_scratch_bytes_retained += stats.cpu_scratch_bytes_retained;
+        result.peak_cache_entries += stats.peak_cache_entries;
+        result.cache_peak_bytes += stats.cache_peak_bytes;
+    }
+    result.bitmap_cache_hit_rate = (result.bitmap_cache_requests > 0)
+        .then(|| result.bitmap_cache_hits as f64 / result.bitmap_cache_requests as f64);
+    result
+}
+
+fn aggregate_timings(snapshots: &[WorkerSnapshot]) -> PreparationTimings {
+    let Some(first) = snapshots.first() else {
+        return PreparationTimings::default();
+    };
+    let mut result = first.timings;
+    // Decode preparation is shared by Arc<DecodedAssets}; retain it once.
+    for snapshot in &snapshots[1..] {
+        result.gpu_initialization += snapshot.timings.gpu_initialization;
+        result.gpu_adapter_request += snapshot.timings.gpu_adapter_request;
+        result.gpu_device_request += snapshot.timings.gpu_device_request;
+        result.gpu_pipeline_creation += snapshot.timings.gpu_pipeline_creation;
+        result.texture_upload += snapshot.timings.texture_upload;
+        result.gpu_frame_command_encode += snapshot.timings.gpu_frame_command_encode;
+        result.gpu_submission += snapshot.timings.gpu_submission;
+        result.gpu_readback_wait += snapshot.timings.gpu_readback_wait;
+        result.row_repack += snapshot.timings.row_repack;
+    }
+    result
+}
+
 #[cfg(test)]
 impl CpuBackend {
+    fn submit_panicking_frame(
+        &mut self,
+        frame_number: u64,
+        frame: &EvaluatedFrame,
+    ) -> Result<(), Diagnostic> {
+        self.check_healthy()?;
+        let worker_id = (0..self.workers.len())
+            .map(|offset| (self.next_worker + offset) % self.workers.len())
+            .find(|&id| !self.worker_busy[id])
+            .ok_or_else(|| {
+                Self::diagnostic("CPU-BACKEND-FULL", "CPU backend has no idle worker")
+            })?;
+        let mut job = CpuFrameJob::new(frame_number, frame.clone());
+        job.panic_for_test = true;
+        self.workers[worker_id]
+            .command_tx
+            .send(WorkerCommand::Render(job))
+            .map_err(|_| {
+                Self::diagnostic(
+                    "CPU-WORKER-CHANNEL",
+                    "CPU worker command channel disconnected",
+                )
+            })?;
+        self.worker_busy[worker_id] = true;
+        self.metrics.submitted_frames += 1;
+        Ok(())
+    }
+
     #[allow(dead_code)]
     #[expect(
         clippy::result_large_err,
@@ -189,6 +529,112 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_snapshots_sums_independent_cache_gauges_and_keeps_shared_decode_once() {
+        let worker = |budget, current_entries, peak_entries, current_bytes, peak_bytes, hits| {
+            let mut stats = PreparationStats {
+                decoded_image_count: 9,
+                decoded_source_bytes: 900,
+                peak_decoded_bytes: 1_000,
+                cache_budget_bytes: budget,
+                cache_current_entries: current_entries,
+                peak_cache_entries: peak_entries,
+                cache_current_bytes: current_bytes,
+                cache_peak_bytes: peak_bytes,
+                bitmap_cache_hits: hits,
+                bitmap_cache_requests: 10,
+                ..PreparationStats::default()
+            };
+            stats.bitmap_cache_misses = 10 - hits;
+            WorkerSnapshot {
+                stats,
+                timings: PreparationTimings::default(),
+            }
+        };
+
+        let aggregate =
+            aggregate_snapshots(&[worker(100, 2, 3, 40, 60, 3), worker(100, 1, 4, 20, 70, 5)]);
+
+        assert_eq!(aggregate.cache_budget_bytes, 200);
+        assert_eq!(aggregate.cache_current_entries, 3);
+        assert_eq!(aggregate.peak_cache_entries, 7);
+        assert_eq!(aggregate.cache_current_bytes, 60);
+        assert_eq!(aggregate.cache_peak_bytes, 130);
+        assert_eq!(aggregate.decoded_image_count, 9);
+        assert_eq!(aggregate.decoded_source_bytes, 900);
+        assert_eq!(aggregate.peak_decoded_bytes, 1_000);
+        assert_eq!(aggregate.bitmap_cache_hit_rate, Some(0.4));
+    }
+
+    #[test]
+    fn completion_accounting_sums_render_work_and_reset_clears_it() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
+        backend.worker_busy.fill(true);
+        backend
+            .consume_completion(WorkerCompletion::Frame {
+                worker_id: 0,
+                frame: CompletedFrame {
+                    frame_number: 0,
+                    rgba: Vec::new(),
+                },
+                render_duration: Duration::from_millis(7),
+            })
+            .expect("first synthetic completion");
+        backend
+            .consume_completion(WorkerCompletion::Frame {
+                worker_id: 1,
+                frame: CompletedFrame {
+                    frame_number: 1,
+                    rgba: Vec::new(),
+                },
+                render_duration: Duration::from_millis(11),
+            })
+            .expect("second synthetic completion");
+        assert_eq!(
+            backend.staged_metrics().frame_render_work_duration,
+            Duration::from_millis(18)
+        );
+        backend.reset_operation_metrics();
+        assert_eq!(
+            backend.staged_metrics().frame_render_work_duration,
+            Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn worker_panic_preserves_the_failing_frame_number() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
+        backend
+            .submit_panicking_frame(10, &static_frame())
+            .expect("panic job submission");
+        let error = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect_err("worker panic reaches backend");
+        assert_eq!(error.code, "CPU-WORKER-PANIC");
+        assert_eq!(backend.failed_frame_number(), Some(10));
+        backend.abort();
+    }
+
+    #[test]
     fn reuses_complete_static_layer_surfaces_without_mutating_them() {
         let validated = load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
@@ -202,7 +648,7 @@ mod tests {
         plan.canvas.width = 4;
         plan.canvas.height = 4;
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         assert_eq!(backend.capacity(), 1);
         let mut frame = static_frame();
         frame.layers[0].effects = vec![
@@ -248,7 +694,7 @@ mod tests {
         .expect("fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let mut frame = static_frame();
         frame.layers[0].effects = vec![
             EvaluatedEffect::Brightness { amount: 0.1 },
@@ -289,7 +735,7 @@ mod tests {
         .expect("fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let mut inactive = static_frame();
         inactive.layers.clear();
         let active = static_frame();
@@ -335,8 +781,8 @@ mod tests {
         ];
         frame.layers[0].colour_transform =
             ColourTransform::from_effects(frame.layers[0].effects.clone());
-        let mut cached = CpuBackend::new(&plan, Arc::clone(&decoded));
-        let mut reference = CpuBackend::new(&plan, decoded);
+        let mut cached = CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), 1);
+        let mut reference = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let mut reference_frame = frame.clone();
         reference_frame.layers[0].content_dependency = TemporalDependency::Dynamic;
 
@@ -370,7 +816,7 @@ mod tests {
         plan.canvas.width = 4;
         plan.canvas.height = 4;
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let mut frame = static_frame();
         frame.layers[0].content_dependency = TemporalDependency::Dynamic;
         frame.layers[0].effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
@@ -405,7 +851,7 @@ mod tests {
         .expect("fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let mut frame = static_frame();
         frame.layers[0].content_dependency = TemporalDependency::Dynamic;
 
@@ -440,8 +886,8 @@ mod tests {
         plan.canvas.width = 4;
         plan.canvas.height = 4;
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, Arc::clone(&decoded));
-        let mut reference = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), 1);
+        let mut reference = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let frame = static_frame();
         let mut reference_frame = frame.clone();
         reference_frame.layers[0].content_dependency = TemporalDependency::Dynamic;
@@ -489,7 +935,7 @@ mod tests {
         .expect("fixture validates");
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
         let mut base = static_frame();
         let mut second = base.layers[0].clone();
         second.compiled_layer_index = 8;
@@ -547,7 +993,7 @@ mod tests {
         let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
         let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
-        let mut backend = CpuBackend::new(&plan, decoded);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
 
         backend.submit_frame(3, &frame).expect("first submission");
         let first = backend
@@ -565,5 +1011,131 @@ mod tests {
         assert_eq!(first.frame_number, 3);
         assert_eq!(second.frame_number, 4);
         assert_eq!(first.rgba, first_pixels);
+    }
+
+    #[test]
+    fn explicit_workers_accept_multiple_frames_and_reuse_slots() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
+        assert_eq!(backend.capacity(), 2);
+        backend.submit_frame(0, &frame).expect("first submission");
+        backend.submit_frame(1, &frame).expect("second submission");
+        assert_eq!(backend.in_flight(), 2);
+        let first = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("first poll")
+            .expect("completion");
+        let second = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("second poll")
+            .expect("completion");
+        assert_eq!(backend.in_flight(), 0);
+        assert_ne!(first.frame_number, second.frame_number);
+        backend
+            .submit_frame(2, &frame)
+            .expect("reused worker submission");
+        assert_eq!(
+            backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("reuse poll")
+                .expect("reuse completion")
+                .frame_number,
+            2
+        );
+        backend.flush().expect("flush");
+        backend.verify_idle().expect("idle after flush");
+    }
+
+    #[test]
+    fn one_and_two_workers_produce_identical_frame_pixels() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frames: Vec<_> = (0..4)
+            .map(|number| evaluate(&plan, &[ScheduledItem(0)], number))
+            .collect();
+        let mut single = CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), 1);
+        let mut multi = CpuBackend::new_with_worker_count(&plan, decoded, 2);
+        let mut single_pixels = Vec::new();
+        for (number, frame) in frames.iter().enumerate() {
+            single
+                .submit_frame(number as u64, frame)
+                .expect("single submission");
+            single_pixels.push(
+                single
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("single poll")
+                    .expect("single completion"),
+            );
+        }
+        let mut multi_pixels = Vec::new();
+        for (number, frame) in frames.iter().enumerate() {
+            if multi.in_flight() == multi.capacity() {
+                multi_pixels.push(
+                    multi
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("multi poll")
+                        .expect("multi completion"),
+                );
+            }
+            multi
+                .submit_frame(number as u64, frame)
+                .expect("multi submission");
+        }
+        while multi.in_flight() > 0 {
+            multi_pixels.push(
+                multi
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("multi poll")
+                    .expect("multi completion"),
+            );
+        }
+        single_pixels.sort_by_key(|frame| frame.frame_number);
+        multi_pixels.sort_by_key(|frame| frame.frame_number);
+        assert_eq!(single_pixels, multi_pixels);
+    }
+
+    #[test]
+    fn cancellation_does_not_block_on_cpu_completion() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
+        backend.submit_frame(0, &frame).expect("submission");
+        let cancelled = AtomicBool::new(true);
+        assert!(
+            backend
+                .poll_completed_cancellable(PollMode::WaitForOne, &cancelled)
+                .expect("cancelled poll")
+                .is_none()
+        );
+        backend.abort();
+        backend.abort();
+        assert!(backend.verify_idle().is_err());
     }
 }

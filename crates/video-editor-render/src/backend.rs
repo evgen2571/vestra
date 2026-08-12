@@ -140,6 +140,11 @@ pub trait RenderBackend: Send {
     fn submit_frame(&mut self, frame_number: u64, frame: &EvaluatedFrame)
     -> Result<(), Diagnostic>;
     fn poll_completed(&mut self, mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic>;
+    /// Returns the exact frame associated with an asynchronous backend failure,
+    /// when the backend can identify it.
+    fn failed_frame_number(&self) -> Option<u64> {
+        None
+    }
     /// Cancellation-aware backends may avoid an uninterruptible driver wait.
     /// The default preserves the synchronous CPU contract.
     fn poll_completed_cancellable(

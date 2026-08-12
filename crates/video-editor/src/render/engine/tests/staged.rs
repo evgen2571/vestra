@@ -717,6 +717,9 @@ struct MockStagedBackend {
     cancel_after_poll: Option<Arc<std::sync::atomic::AtomicBool>>,
     cancel_on_idle_verify: Option<Arc<std::sync::atomic::AtomicBool>>,
     abort_count: Arc<AtomicUsize>,
+    failed_frame_number: Option<u64>,
+    backend_kind: RenderBackendKind,
+    configured_frame_render_work_duration: Duration,
 }
 
 #[derive(Clone, Copy)]
@@ -750,6 +753,9 @@ impl MockStagedBackend {
             cancel_after_poll: None,
             cancel_on_idle_verify: None,
             abort_count: Arc::new(AtomicUsize::new(0)),
+            failed_frame_number: None,
+            backend_kind: RenderBackendKind::Wgpu,
+            configured_frame_render_work_duration: Duration::ZERO,
         }
     }
 
@@ -777,6 +783,21 @@ impl MockStagedBackend {
         Arc::clone(&self.abort_count)
     }
 
+    fn with_failed_frame_number(mut self, frame_number: u64) -> Self {
+        self.failed_frame_number = Some(frame_number);
+        self
+    }
+
+    fn with_cpu_backend(mut self) -> Self {
+        self.backend_kind = RenderBackendKind::Cpu;
+        self
+    }
+
+    fn with_frame_render_work_duration(mut self, duration: Duration) -> Self {
+        self.configured_frame_render_work_duration = duration;
+        self
+    }
+
     fn next_pending_frame(&mut self) -> Option<u64> {
         while let Some(frame_number) = self.completion_order.pop_front() {
             if self.pending.contains_key(&frame_number) {
@@ -789,7 +810,7 @@ impl MockStagedBackend {
 
 impl RenderBackend for MockStagedBackend {
     fn kind(&self) -> RenderBackendKind {
-        RenderBackendKind::Wgpu
+        self.backend_kind
     }
 
     fn capacity(&self) -> usize {
@@ -798,6 +819,10 @@ impl RenderBackend for MockStagedBackend {
 
     fn in_flight(&self) -> usize {
         self.pending.len()
+    }
+
+    fn failed_frame_number(&self) -> Option<u64> {
+        self.failed_frame_number
     }
 
     fn submit_frame(
@@ -938,6 +963,7 @@ impl RenderBackend for MockStagedBackend {
         self.metrics = StagedMetrics {
             configured_pipeline_depth: self.capacity,
             allocated_slot_count: self.capacity,
+            frame_render_work_duration: self.configured_frame_render_work_duration,
             ..StagedMetrics::default()
         };
     }
@@ -1008,6 +1034,46 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
         *sink_frames.lock().expect("sink lock"),
         (0..plan.frame_count).collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn cpu_frame_render_timing_comes_from_backend_work_duration() {
+    let plan = super::example_plan();
+    let total_frames = plan.frame_count;
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let options = RenderOptions {
+        output_override: Some(output_dir.path().join("timing.mp4")),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Cpu,
+    };
+    let summary = render_with_backend_builder_and_sink(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(
+                        2,
+                        (0..total_frames).collect(),
+                        Arc::new(Mutex::new(Vec::new())),
+                    )
+                    .with_cpu_backend()
+                    .with_frame_render_work_duration(Duration::from_millis(18)),
+                ) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+        move |_settings: &EncoderSettings, temporary_path| {
+            Ok(RecordingSink::new(
+                temporary_path.to_path_buf(),
+                SinkProbe::default(),
+            ))
+        },
+    )
+    .expect("mock CPU render succeeds");
+    assert_eq!(summary.timings.frame_render_ms, 18);
 }
 
 #[test]
@@ -1745,6 +1811,40 @@ fn poll_failure_aborts_the_sink_without_finishing_or_publishing() {
     assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
     assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
     assert!(!output.exists());
+}
+
+#[test]
+fn asynchronous_backend_failure_uses_the_backend_frame_identity() {
+    let plan = super::example_plan();
+    let total_frames = plan.frame_count;
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let options = RenderOptions {
+        output_override: Some(output_dir.path().join("frame-identity.mp4")),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Wgpu,
+    };
+    let error = render_with_backend_builder(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(
+                        3,
+                        (0..total_frames).collect(),
+                        Arc::new(Mutex::new(Vec::new())),
+                    )
+                    .failing(MockMode::PollFailure)
+                    .with_failed_frame_number(0),
+                ) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
+    .expect_err("configured asynchronous failure propagates");
+    assert_eq!(error.context.attempted_frame, Some(0));
 }
 
 #[test]

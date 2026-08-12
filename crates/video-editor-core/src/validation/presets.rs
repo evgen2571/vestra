@@ -14,7 +14,10 @@ pub(super) fn validate(
     path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
-    if matches!(source, VisualSource::SolidColor { .. }) {
+    if matches!(
+        source,
+        VisualSource::SolidColor { .. } | VisualSource::Spectrum2D(_)
+    ) {
         errors.push(Diagnostic::error(
             "MVP-PRESET-SOURCE",
             Category::Semantic,

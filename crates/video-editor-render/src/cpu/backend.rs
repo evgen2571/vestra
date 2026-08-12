@@ -15,7 +15,7 @@ use image::RgbaImage;
 
 use crate::{
     Diagnostic,
-    plan::{EvaluatedFrame, RenderPlan},
+    plan::{EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::{
         AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
         metrics::{PreparationStats, PreparationTimings, StagedMetrics},
@@ -212,6 +212,16 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
         self.check_healthy()?;
+        if frame
+            .layers
+            .iter()
+            .any(|layer| matches!(layer.source, EvaluatedSource::Spectrum2D { .. }))
+        {
+            return Err(Self::diagnostic(
+                "CPU-SOURCE-UNSUPPORTED",
+                "Spectrum2D CPU rendering is not implemented in this renderer phase",
+            ));
+        }
         let worker_id = (0..self.workers.len())
             .map(|offset| (self.next_worker + offset) % self.workers.len())
             .find(|&id| !self.worker_busy[id])

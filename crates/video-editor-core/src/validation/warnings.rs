@@ -11,7 +11,8 @@ pub(super) fn add_unused_assets(project: &Project, warnings: &mut Vec<Diagnostic
         .iter()
         .filter_map(|clip| match &clip.source {
             crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
-            crate::project::VisualSource::SolidColor { .. } => None,
+            crate::project::VisualSource::SolidColor { .. }
+            | crate::project::VisualSource::Spectrum2D(_) => None,
         })
         .chain(
             project

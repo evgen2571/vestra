@@ -57,6 +57,10 @@ pub(crate) fn draw_layer(
                 draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
             }
         }
+        EvaluatedSource::Spectrum2D { .. } => {
+            // Spectrum2D rasterization is intentionally deferred to its renderer phase.
+            unreachable!("Spectrum2D CPU rendering is not implemented in Subphase A")
+        }
     }
 }
 

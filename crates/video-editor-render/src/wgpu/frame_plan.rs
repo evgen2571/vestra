@@ -176,6 +176,10 @@ impl GpuFramePlan {
                         parameters_index: parameter_count,
                     });
                 }
+                EvaluatedSource::Spectrum2D { .. } => {
+                    // Spectrum2D GPU drawing is intentionally deferred to its renderer phase.
+                    unreachable!("Spectrum2D WGPU rendering is not implemented in Subphase A")
+                }
             }
             parameter_count += 1;
             let mut layer_result = TextureSlot::Layer;

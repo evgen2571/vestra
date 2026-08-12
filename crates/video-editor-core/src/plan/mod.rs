@@ -60,7 +60,7 @@ mod tests {
             AudioScalarFeature as ProjectAudioScalarFeature, Effect, Interpolation,
             InterpolationName, Keyframe, Preset, Project, ScalarModifier,
             ScalarModifierOperation as ProjectScalarModifierOperation, ScalarSignal,
-            ScalarSignalSource, SignalTransform, Track,
+            ScalarSignalSource, SignalTransform, Spectrum2D, Track, VisualSource,
         },
         validation::ResourceLimits,
     };
@@ -149,6 +149,133 @@ mod tests {
         );
         assert!(plan.scalar_signals.is_empty());
         assert!(plan.audio_analysis_requirements.is_empty());
+    }
+
+    #[test]
+    fn spectrum2d_compiles_logarithmic_bands_into_interned_audio_signals() {
+        let mut project = canonical_project();
+        let spectrum = Spectrum2D {
+            band_count: 24,
+            min_hz: 40.0,
+            max_hz: 16_000.0,
+            sensitivity: 3.5,
+            attack_seconds: 0.03,
+            release_seconds: 0.2,
+            ..Spectrum2D::default()
+        };
+        project.visual.clips[0].source = VisualSource::Spectrum2D(spectrum.clone());
+        project.visual.clips[0].transform = None;
+        project.visual.clips[1].source = VisualSource::Spectrum2D(Spectrum2D {
+            x: 0.0,
+            ..spectrum.clone()
+        });
+        project.visual.clips[1].transform = None;
+        let plan = compile_project(project);
+
+        assert_eq!(plan.scalar_signals.len(), 24);
+        assert_eq!(plan.audio_analysis_requirements.iter().len(), 24);
+        assert_eq!(plan.compilation.spectrum2d_source_count, 2);
+        assert!(plan.compilation.dynamic_layer_count >= 2);
+        let generated_bands = spectrum.logarithmic_bands();
+        let first_layer = plan
+            .layers
+            .iter()
+            .find_map(|layer| match &layer.source {
+                super::CompiledVisualSource::Spectrum2D { band_signals, .. } => Some(band_signals),
+                _ => None,
+            })
+            .expect("Spectrum2D layer");
+        assert_eq!(first_layer.len(), generated_bands.len());
+        for (signal_id, (expected_min, expected_max)) in first_layer.iter().zip(generated_bands) {
+            let signal = plan
+                .scalar_signals
+                .get(*signal_id)
+                .expect("compiled signal");
+            let RawScalarSignal::Audio(audio) = signal.source;
+            let super::AudioScalarFeature::BandEnergy(band) = audio.feature else {
+                panic!("expected BandEnergy signal");
+            };
+            assert!((band.min_hz() - expected_min).abs() < 1.0e-9);
+            assert!((band.max_hz() - expected_max).abs() < 1.0e-9);
+            assert!(
+                matches!(signal.transforms[0], CompiledSignalTransform::Gain(gain) if (gain.gain() - spectrum.sensitivity).abs() < 1.0e-12)
+            );
+            assert!(
+                matches!(signal.transforms[1], CompiledSignalTransform::Clamp(clamp) if clamp.min() == 0.0 && clamp.max() == 1.0)
+            );
+            assert!(
+                matches!(signal.transforms[2], CompiledSignalTransform::Envelope(envelope) if envelope.attack() == 30_000_000 && envelope.release() == 200_000_000)
+            );
+        }
+        assert!(
+            plan.layers
+                .iter()
+                .filter(|layer| matches!(
+                    layer.source,
+                    super::CompiledVisualSource::Spectrum2D { ref band_signals, .. }
+                        if band_signals.len() == 24
+                ))
+                .all(|layer| layer.content_dependency == TemporalDependency::Dynamic)
+        );
+    }
+
+    #[test]
+    fn spectrum2d_evaluation_samples_absolute_project_time_deterministically() {
+        let mut project = canonical_project();
+        project.visual.clips[0].source = VisualSource::Spectrum2D(Spectrum2D::default());
+        project.visual.clips[0].transform = None;
+        project.visual.clips[0].start = 10.0;
+        project.visual.clips[0].duration = 20.0;
+        let mut plan = compile_project(project);
+        let spectrum_index = plan
+            .layers
+            .iter()
+            .position(|layer| {
+                matches!(layer.source, super::CompiledVisualSource::Spectrum2D { .. })
+            })
+            .expect("spectrum layer");
+        stage_layer(&mut plan.layers[spectrum_index], 10.0, 30.0);
+        plan.layers[spectrum_index].opacity =
+            CompiledScalarProperty::authored(CompiledTrack::new(1.0));
+        plan.layers[spectrum_index].opacity_contributions.clear();
+        assert!(matches!(
+            plan.layers[spectrum_index].source,
+            super::CompiledVisualSource::Spectrum2D { ref band_signals, .. }
+                if band_signals.len() == 24
+        ));
+
+        let mut samples = vec![0.0; 31];
+        samples[5] = 0.2;
+        samples[15] = 0.8;
+        let prepared = PreparedScalarSignals::new(
+            (0..24)
+                .map(|_| {
+                    PreparedScalarSignal::new(0, 1_000_000_000, samples.clone())
+                        .expect("prepared band")
+                })
+                .collect(),
+        );
+        let context = EvaluationContext::new(&prepared);
+        fn bands(frame: &super::EvaluatedFrame) -> Vec<f32> {
+            match &frame.layers[0].source {
+                super::EvaluatedSource::Spectrum2D { bands, .. } => bands.clone(),
+                _ => panic!("expected Spectrum2D source"),
+            }
+        }
+        let mut evaluations = Vec::new();
+        for project_time in [15, 11, 18, 12, 15, 14, 5] {
+            let frame = evaluate_with_context(
+                &plan,
+                &[super::ScheduledItem(spectrum_index)],
+                project_time * 1_000_000_000,
+                &context,
+            )
+            .expect("non-monotonic random-access evaluation");
+            evaluations.push((project_time, bands(&frame)));
+        }
+        assert_eq!(evaluations[0].1, evaluations[4].1);
+        assert_eq!(evaluations[0].1[0], 0.8);
+        assert_eq!(evaluations[6].1[0], 0.2);
     }
 
     #[test]

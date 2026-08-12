@@ -59,6 +59,78 @@ pub(super) fn compile(
                 })?,
             }
         }
+        VisualSource::Spectrum2D(spectrum) => {
+            compilation.parsed_colour_count += 1;
+            let colour = parse_colour(&spectrum.colour).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-PLAN-SPECTRUM2D-COLOUR",
+                    Category::Internal,
+                    "validated Spectrum2D colour is invalid",
+                    "",
+                )
+            })?;
+            let band_signals = spectrum
+                .logarithmic_bands()
+                .into_iter()
+                .map(|(min_hz, max_hz)| {
+                    let band =
+                        crate::plan::AudioFrequencyBand::new(min_hz, max_hz).map_err(|error| {
+                            Diagnostic::error(
+                                "MVP-PLAN-SPECTRUM2D-BAND",
+                                Category::Internal,
+                                error.to_string(),
+                                "",
+                            )
+                        })?;
+                    let signal = crate::plan::CompiledScalarSignal::new(
+                        crate::plan::RawScalarSignal::Audio(crate::plan::AudioScalarSignal {
+                            tap: crate::plan::AudioAnalysisTap::Master,
+                            feature: crate::plan::AudioScalarFeature::BandEnergy(band),
+                        }),
+                        vec![
+                            crate::plan::CompiledSignalTransform::Gain(
+                                crate::plan::GainTransform::new(spectrum.sensitivity).map_err(
+                                    |error| {
+                                        Diagnostic::error(
+                                            "MVP-PLAN-SPECTRUM2D-RESPONSE",
+                                            Category::Internal,
+                                            error.to_string(),
+                                            "",
+                                        )
+                                    },
+                                )?,
+                            ),
+                            crate::plan::CompiledSignalTransform::Clamp(
+                                crate::plan::ClampTransform::new(0.0, 1.0).map_err(|error| {
+                                    Diagnostic::error(
+                                        "MVP-PLAN-SPECTRUM2D-RESPONSE",
+                                        Category::Internal,
+                                        error.to_string(),
+                                        "",
+                                    )
+                                })?,
+                            ),
+                            crate::plan::CompiledSignalTransform::Envelope(
+                                crate::plan::EnvelopeTransform::new(
+                                    time::to_nanos(spectrum.attack_seconds, "Spectrum2D attack")?,
+                                    time::to_nanos(spectrum.release_seconds, "Spectrum2D release")?,
+                                ),
+                            ),
+                        ],
+                    );
+                    Ok(scalar_signal_interner.intern(signal))
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            CompiledVisualSource::Spectrum2D {
+                band_signals,
+                x: spectrum.x,
+                y: spectrum.y,
+                width: spectrum.width,
+                height: spectrum.height,
+                bar_gap_ratio: spectrum.bar_gap_ratio,
+                colour,
+            }
+        }
     };
     let effects = clip
         .effects
@@ -132,7 +204,9 @@ fn compile_transform(
                 scalar_signal_interner,
             )?,
         }),
-        (VisualSource::SolidColor { .. }, None) => Ok(canvas_transform()),
+        (VisualSource::SolidColor { .. } | VisualSource::Spectrum2D(_), None) => {
+            Ok(canvas_transform())
+        }
         (VisualSource::Image { .. }, None) => Err(Diagnostic::error(
             "MVP-PLAN-TRANSFORM",
             Category::Internal,

@@ -50,9 +50,12 @@ pub(super) fn validate(
                 ))
             }
             crate::project::VisualSource::SolidColor { .. } => {}
-            crate::project::VisualSource::Spectrum2D(spectrum) => {
-                validate_spectrum2d(spectrum, &format!("{path}/source"), errors)
-            }
+            crate::project::VisualSource::Spectrum2D(spectrum) => validate_spectrum2d(
+                spectrum,
+                &format!("{path}/source"),
+                errors,
+                has_authored_audio,
+            ),
         }
         match (&clip.source, &clip.transform) {
             (crate::project::VisualSource::Image { .. }, None) => errors.push(Diagnostic::error(
@@ -181,7 +184,16 @@ fn validate_spectrum2d(
     spectrum: &crate::project::Spectrum2D,
     path: &str,
     errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
 ) {
+    if !has_authored_audio {
+        errors.push(Diagnostic::error(
+            "MVP-SPECTRUM2D-MASTER-AUDIO",
+            Category::Semantic,
+            "Spectrum2D requires authored Master audio material",
+            path,
+        ));
+    }
     if !(crate::project::SPECTRUM2D_MIN_BAND_COUNT..=crate::project::SPECTRUM2D_MAX_BAND_COUNT)
         .contains(&spectrum.band_count)
     {
@@ -355,7 +367,7 @@ mod tests {
 
     fn errors(spectrum: Spectrum2D) -> Vec<crate::Diagnostic> {
         let mut errors = Vec::new();
-        validate_spectrum2d(&spectrum, "/visual/clips/0/source", &mut errors);
+        validate_spectrum2d(&spectrum, "/visual/clips/0/source", &mut errors, true);
         errors
     }
 

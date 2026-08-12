@@ -49,6 +49,7 @@ pub struct CompilationStats {
     pub zero_frame_clip_count: usize,
     pub image_source_count: usize,
     pub solid_color_source_count: usize,
+    pub spectrum2d_source_count: usize,
     pub keyframe_count: u64,
     pub brightness_effect_count: usize,
     pub contrast_effect_count: usize,
@@ -163,6 +164,15 @@ pub enum CompiledVisualSource {
         cacheable_crop: bool,
     },
     SolidColor {
+        colour: [u8; 4],
+    },
+    Spectrum2D {
+        band_signals: Vec<crate::plan::ScalarSignalId>,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        bar_gap_ratio: f64,
         colour: [u8; 4],
     },
 }

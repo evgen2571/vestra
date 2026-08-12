@@ -347,6 +347,18 @@ impl RenderBackend for WgpuBackend {
         frame_number: u64,
         evaluated: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
+        if evaluated
+            .layers
+            .iter()
+            .any(|layer| matches!(layer.source, EvaluatedSource::Spectrum2D { .. }))
+        {
+            return Err(Diagnostic::error(
+                "WGPU-SOURCE-UNSUPPORTED",
+                crate::Category::Backend,
+                "Spectrum2D WGPU rendering is not implemented in this renderer phase",
+                "",
+            ));
+        }
         self.context
             .runtime_errors
             .check()

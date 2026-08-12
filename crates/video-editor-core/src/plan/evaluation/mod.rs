@@ -61,6 +61,15 @@ pub enum EvaluatedSource {
     SolidColor {
         colour: [u8; 4],
     },
+    Spectrum2D {
+        bands: Vec<f32>,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        bar_gap_ratio: f64,
+        colour: [u8; 4],
+    },
 }
 
 /// Evaluates a plan with no prepared procedural resources.
@@ -131,6 +140,29 @@ pub fn evaluate_with_context(
             CompiledVisualSource::SolidColor { colour } => {
                 EvaluatedSource::SolidColor { colour: *colour }
             }
+            CompiledVisualSource::Spectrum2D {
+                band_signals,
+                x,
+                y,
+                width,
+                height,
+                bar_gap_ratio,
+                colour,
+            } => EvaluatedSource::Spectrum2D {
+                bands: band_signals
+                    .iter()
+                    .map(|signal| context.sample_scalar(*signal, project_time))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .map(|amplitude| amplitude.clamp(0.0, 1.0) as f32)
+                    .collect(),
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+                bar_gap_ratio: *bar_gap_ratio,
+                colour: *colour,
+            },
         };
         let mut effects = layer
             .effects

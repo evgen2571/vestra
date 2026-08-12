@@ -244,6 +244,10 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
             &layer.source,
             crate::plan::CompiledVisualSource::Image { crop, .. } if !static_track(crop)
         ),
+        matches!(
+            &layer.source,
+            crate::plan::CompiledVisualSource::Spectrum2D { .. }
+        ),
         layer.opacity.has_modifiers() || !static_track(&layer.opacity.authored_track),
         layer
             .opacity_contributions

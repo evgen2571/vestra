@@ -33,7 +33,10 @@ pub use signals::{
     ScalarSignal, ScalarSignalSource, SignalTransform,
 };
 pub use transitions::{Flash, Transition};
-pub use visual::{BlendMode, Clip, Sizing, Transform, Visual, VisualSource};
+pub use visual::{
+    BlendMode, Clip, SPECTRUM2D_DEFAULT_BAND_COUNT, SPECTRUM2D_MAX_BAND_COUNT,
+    SPECTRUM2D_MIN_BAND_COUNT, Sizing, Spectrum2D, Transform, Visual, VisualSource,
+};
 
 pub use crate::domain::{Crop, Point};
 

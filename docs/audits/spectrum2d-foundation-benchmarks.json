@@ -1,0 +1,50 @@
+{
+  "benchmark": "master_analysis_benchmark",
+  "description": "Explicit Spectrum2D-relevant Master audio preparation measurements.",
+  "measured_at": "2026-08-12",
+  "build": "cargo test --release",
+  "audio_sample_rate_hz": 48000,
+  "analysis_hop_frames": 192,
+  "environment": {
+    "os": "Linux",
+    "cpu": "Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz",
+    "logical_cpu_count": 12,
+    "cpu_auto_worker_count": 8,
+    "wgpu": {
+      "status": "unavailable",
+      "reason": "WGPU adapter request returned no compatible adapter",
+      "code": "WGPU-ADAPTER-NOT-FOUND"
+    }
+  },
+  "measurements": [
+    {
+      "duration_seconds": 60,
+      "band_count": 24,
+      "requirements": 26,
+      "raw_feature_series": 26,
+      "fft_calls": 11992,
+      "elapsed_ms": 381,
+      "command": "VIDEO_EDITOR_ANALYSIS_BENCH_SECONDS=60 VIDEO_EDITOR_ANALYSIS_BENCH_BANDS=24 cargo test --release -p video-editor-media audio_analysis::tests::master_analysis_benchmark -- --exact --ignored --nocapture"
+    },
+    {
+      "duration_seconds": 60,
+      "band_count": 48,
+      "requirements": 50,
+      "raw_feature_series": 50,
+      "fft_calls": 11992,
+      "elapsed_ms": 475,
+      "command": "VIDEO_EDITOR_ANALYSIS_BENCH_SECONDS=60 VIDEO_EDITOR_ANALYSIS_BENCH_BANDS=48 cargo test --release -p video-editor-media audio_analysis::tests::master_analysis_benchmark -- --exact --ignored --nocapture"
+    }
+  ],
+  "renderer_only_measurements": {
+    "command": "cargo test --release -p video-editor-render spectrum2d_cpu_benchmark -- --ignored --nocapture",
+    "resolution": "1920x1080",
+    "frames": 24,
+    "measurements": [
+      {"band_count": 24, "workers": 1, "wall_ms": 441.784, "effective_fps": 54.33},
+      {"band_count": 48, "workers": 1, "wall_ms": 454.281, "effective_fps": 52.83},
+      {"band_count": 24, "workers": 8, "wall_ms": 85.961, "effective_fps": 279.20},
+      {"band_count": 48, "workers": 8, "wall_ms": 116.214, "effective_fps": 206.52}
+    ]
+  }
+}

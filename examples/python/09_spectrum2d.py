@@ -1,8 +1,8 @@
-"""Minimal public Spectrum2D authoring example."""
+"""Public Spectrum2D integration example: audio-reactive image, bars, and Bloom."""
 
 import video_editor
 from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
+from video_editor.authoring import ProjectBuilder, Sizing
 
 
 project = ProjectBuilder(
@@ -10,11 +10,15 @@ project = ProjectBuilder(
     duration=3.0, background="#101018", base_directory=".",
 )
 background_asset = project.add_image_asset("examples/assets/green.png")
-project.add_image_clip(source=background_asset, start=0, duration=3, layer=0)
+background = project.add_image_clip(
+    source=background_asset, start=0, duration=3, layer=0, sizing=Sizing.cover(),
+)
 audio_asset = project.add_audio_asset("examples/assets/tone.wav")
 audio_track = project.audio.add_track(id="music")
 audio_track.add_clip(asset=audio_asset, start=0, trim_end=3)
-spectrum = project.add_spectrum2d_clip(start=0, duration=3, layer=1, preset="neon", height=0.30)
+bass = project.audio.master.rms().remap(0, 1, 1, 1.08).envelope(0.02, 0.15)
+background.transform.scale.react_to(bass)
+project.add_spectrum2d_clip(start=0, duration=3, layer=1, preset="neon", height=0.30)
 
 video_editor.Editor().render(
     project.build(),

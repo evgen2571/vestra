@@ -22,10 +22,10 @@ use video_editor_core::{
         ActiveSchedule, AudioAnalysisRequirement, AudioAnalysisRequirements, AudioAnalysisTap,
         AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal, ClampTransform, CompiledEffect,
         CompiledScalarModifier, CompiledScalarProperty, CompiledScalarSignal,
-        CompiledScalarSignals, CompiledSignalTransform, CubicResponseCurve, EnvelopeTransform,
-        EvaluatedEffect, EvaluatedSource, EvaluationContext, GainTransform, RemapTransform,
-        RenderPlan, ScalarModifierOperation, ScalarPropertyConstraint, TemporalDependency,
-        TimedEffect, evaluate_with_context,
+        CompiledScalarSignals, CompiledSignalTransform, CompiledVisualSource, CubicResponseCurve,
+        EnvelopeTransform, EvaluatedEffect, EvaluatedSource, EvaluationContext, GainTransform,
+        RemapTransform, RenderPlan, ScalarModifierOperation, ScalarPropertyConstraint,
+        TemporalDependency, TimedEffect, evaluate_with_context,
     },
     plan_audio::{AudioClipPlan, AudioMixPlan, AudioTrackPlan, MASTER_AUDIO_SAMPLE_RATE},
     project::AudioFadeCurve,
@@ -497,17 +497,42 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
     )
     .expect("fixture sample count fits usize");
     write_stepped_tone_wav(&source, source_frames);
-    plan.scalar_signals = CompiledScalarSignals::from_signals(vec![CompiledScalarSignal::new(
-        video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
-            tap: AudioAnalysisTap::Master,
-            feature: AudioScalarFeature::Rms,
-        }),
-        vec![],
-    )]);
-    plan.audio_analysis_requirements =
-        AudioAnalysisRequirements::from_requirements([AudioAnalysisRequirement::Master(
-            AudioScalarFeature::Rms,
-        )]);
+    let bands = [
+        AudioFrequencyBand::new(40.0, 160.0).expect("low band"),
+        AudioFrequencyBand::new(160.0, 640.0).expect("mid band"),
+        AudioFrequencyBand::new(640.0, 2_560.0).expect("high band"),
+    ];
+    plan.scalar_signals = CompiledScalarSignals::from_signals(
+        bands
+            .iter()
+            .copied()
+            .map(|band| {
+                CompiledScalarSignal::new(
+                    video_editor_core::plan::RawScalarSignal::Audio(AudioScalarSignal {
+                        tap: AudioAnalysisTap::Master,
+                        feature: AudioScalarFeature::BandEnergy(band),
+                    }),
+                    vec![],
+                )
+            })
+            .collect(),
+    );
+    plan.audio_analysis_requirements = AudioAnalysisRequirements::from_requirements(
+        bands
+            .iter()
+            .copied()
+            .map(|band| AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band))),
+    );
+    let band_signal_ids = plan.scalar_signals.iter().map(|(id, _)| id).collect();
+    plan.layers[0].source = CompiledVisualSource::Spectrum2D {
+        band_signals: band_signal_ids,
+        x: 0.1,
+        y: 0.1,
+        width: 0.8,
+        height: 0.8,
+        bar_gap_ratio: 0.2,
+        colour: [0, 255, 128, 255],
+    };
     attach_test_master_audio(&mut plan, source);
 
     let total_frames = plan.frame_count;
@@ -522,6 +547,7 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
         ))
     })
     .expect("analysis preparation succeeds");
+    assert_eq!(prepared.scalar_signals().len(), bands.len());
     assert_eq!(audio_analysis_invocation_count(), 1);
 
     render_prepared_frame(&mut prepared, 0).expect("first random-access frame");

@@ -1,0 +1,42 @@
+[
+  {
+    "seconds": 60,
+    "bands": 1,
+    "requirements": 3,
+    "raw_feature_series": 3,
+    "fft_calls": 11992,
+    "elapsed_ms": 406
+  },
+  {
+    "seconds": 60,
+    "bands": 10,
+    "requirements": 12,
+    "raw_feature_series": 12,
+    "fft_calls": 11992,
+    "elapsed_ms": 379
+  },
+  {
+    "seconds": 60,
+    "bands": 50,
+    "requirements": 52,
+    "raw_feature_series": 52,
+    "fft_calls": 11992,
+    "elapsed_ms": 400
+  },
+  {
+    "seconds": 600,
+    "bands": 1,
+    "requirements": 3,
+    "raw_feature_series": 3,
+    "fft_calls": 119992,
+    "elapsed_ms": 3895
+  },
+  {
+    "seconds": 3600,
+    "bands": 1,
+    "requirements": 3,
+    "raw_feature_series": 3,
+    "fft_calls": 719992,
+    "elapsed_ms": 22900
+  }
+]

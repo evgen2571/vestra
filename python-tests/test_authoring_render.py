@@ -5,7 +5,7 @@ import pytest
 
 import video_editor
 from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
+from video_editor.authoring import ProjectBuilder, Sizing
 
 
 def test_background_only_builder_renders_on_cpu(tmp_path: Path) -> None:
@@ -65,3 +65,57 @@ def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, prese
     assert result.output_path == output
     assert result.width == 64 and result.height == 64 and result.total_frames == 2
     assert output.is_file() and output.stat().st_size > 0
+
+
+def test_public_spectrum2d_integration_project_exercises_audio_reactive_background_and_bloom() -> None:
+    def prepare_project(with_spectrum: bool):
+        builder = ProjectBuilder(
+            width=64, height=54, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
+            duration=3.0, background="#101018", base_directory=Path(__file__).resolve().parents[1],
+        )
+        image = builder.add_image_asset("examples/assets/green.png")
+        background = builder.add_image_clip(
+            source=image, start=0, duration=3, layer=0, sizing=Sizing.cover(),
+        )
+        background.transform.scale.react_to(
+            builder.audio.master.rms().remap(0, 1, 1, 1.08).envelope(0.02, 0.15),
+        )
+        audio = builder.add_audio_asset("examples/assets/tone.wav")
+        track = builder.audio.add_track(id="music")
+        track.add_clip(asset=audio, start=0, trim_end=3)
+        spectrum = None
+        if with_spectrum:
+            spectrum = builder.add_spectrum2d_clip(
+                start=0, duration=3, layer=1, preset="neon", height=0.30,
+            )
+
+            canonical = builder.to_dict()
+            spectrum_data = next(
+                clip for clip in canonical["visual"]["clips"] if clip["id"] == spectrum.id
+            )
+            assert spectrum_data["source"]["type"] == "spectrum2d"
+            assert "preset" not in spectrum_data
+            assert [effect["type"] for effect in spectrum_data["effects"]] == ["glow", "bloom"]
+        assert builder.validate().is_valid
+        return video_editor.Editor().prepare(
+            builder.build(),
+            video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        )
+
+    baseline = prepare_project(with_spectrum=False)
+    spectrum = prepare_project(with_spectrum=True)
+    assert baseline.preparation_report.timings.audio_analysis_ms > 0
+    assert spectrum.preparation_report.timings.audio_analysis_ms > 0
+
+    # Frame 10 is inside the bundled tone, so the configured Spectrum2D region
+    # must differ from the otherwise identical audio-reactive baseline.
+    baseline_frame = baseline.render_frame_number(10).to_bytes()
+    spectrum_frame = spectrum.render_frame_number(10).to_bytes()
+    assert baseline_frame != spectrum_frame
+    region_differs = any(
+        baseline_frame[(y * 64 + x) * 4:(y * 64 + x + 1) * 4]
+        != spectrum_frame[(y * 64 + x) * 4:(y * 64 + x + 1) * 4]
+        for y in range(37, 54)
+        for x in range(6, 58)
+    )
+    assert region_differs

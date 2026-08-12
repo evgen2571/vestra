@@ -15,7 +15,7 @@ use image::RgbaImage;
 
 use crate::{
     Diagnostic,
-    plan::{EvaluatedFrame, EvaluatedSource, RenderPlan},
+    plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
         metrics::{PreparationStats, PreparationTimings, StagedMetrics},
@@ -212,16 +212,6 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
         self.check_healthy()?;
-        if frame
-            .layers
-            .iter()
-            .any(|layer| matches!(layer.source, EvaluatedSource::Spectrum2D { .. }))
-        {
-            return Err(Self::diagnostic(
-                "CPU-SOURCE-UNSUPPORTED",
-                "Spectrum2D CPU rendering is not implemented in this renderer phase",
-            ));
-        }
         let worker_id = (0..self.workers.len())
             .map(|offset| (self.next_worker + offset) % self.workers.len())
             .find(|&id| !self.worker_busy[id])
@@ -1312,6 +1302,149 @@ mod tests {
         let single = collect(1, Arc::clone(&decoded));
         let four = collect(4, decoded);
         assert_eq!(single, four);
+    }
+
+    #[test]
+    fn spectrum2d_uses_normal_opacity_and_bloom_pipeline() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let spectrum = EvaluatedSource::Spectrum2D {
+            bands: vec![1.0],
+            x: 0.0,
+            y: 0.0,
+            width: 0.25,
+            height: 1.0,
+            bar_gap_ratio: 0.0,
+            colour: [255, 255, 255, 255],
+        };
+        let mut frame = EvaluatedFrame {
+            time: 0,
+            background: [0, 0, 0, 255],
+            width: 8,
+            height: 8,
+            layers: vec![EvaluatedLayer {
+                compiled_layer_index: 99,
+                content_dependency: TemporalDependency::Dynamic,
+                source: spectrum,
+                opacity: 0.5,
+                effects: Vec::new(),
+                colour_transform: ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let mut backend = CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), 1);
+        backend
+            .submit_frame(0, &frame)
+            .expect("spectrum submission");
+        let without_bloom = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("spectrum poll")
+            .expect("spectrum completion");
+        assert_eq!(&without_bloom.rgba[0..4], &[128, 128, 128, 255]);
+
+        frame.layers[0].opacity = 1.0;
+        frame.layers[0].effects = vec![EvaluatedEffect::Bloom {
+            threshold: 0.1,
+            radius: 1.0,
+            intensity: 1.0,
+        }];
+        backend.submit_frame(1, &frame).expect("bloom submission");
+        let with_bloom = backend
+            .poll_completed(PollMode::WaitForOne)
+            .expect("bloom poll")
+            .expect("bloom completion");
+        assert_ne!(with_bloom.rgba, without_bloom.rgba);
+        assert!(with_bloom.rgba[2 * 4 + 3] > 0);
+    }
+
+    #[test]
+    #[ignore = "manual release CPU Spectrum2D benchmark"]
+    fn spectrum2d_cpu_benchmark() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.canvas.width = 1_920;
+        plan.canvas.height = 1_080;
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let available = thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+
+        for (band_count, worker_count) in [
+            (24, 1),
+            (48, 1),
+            (24, automatic_worker_count(&plan, available)),
+            (48, automatic_worker_count(&plan, available)),
+        ] {
+            let frames: Vec<_> = (0..24)
+                .map(|frame_number| {
+                    let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number);
+                    if let EvaluatedSource::Image { .. } = frame.layers[0].source {
+                        frame.layers[0].source = EvaluatedSource::Spectrum2D {
+                            bands: (0..band_count)
+                                .map(|band| {
+                                    (((band + frame_number as usize) % band_count) as f32
+                                        / band_count as f32)
+                                        .max(0.05)
+                                })
+                                .collect(),
+                            x: 0.0,
+                            y: 0.1,
+                            width: 1.0,
+                            height: 0.8,
+                            bar_gap_ratio: 0.1,
+                            colour: [255, 255, 255, 255],
+                        };
+                    }
+                    frame
+                })
+                .collect();
+            let mut backend =
+                CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), worker_count);
+            let started = Instant::now();
+            for (frame_number, frame) in frames.iter().enumerate() {
+                if backend.in_flight() == backend.capacity() {
+                    backend
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("benchmark poll")
+                        .expect("benchmark completion");
+                }
+                backend
+                    .submit_frame(frame_number as u64, frame)
+                    .expect("benchmark submission");
+            }
+            while backend.in_flight() > 0 {
+                backend
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("benchmark drain poll")
+                    .expect("benchmark drain completion");
+            }
+            let elapsed = started.elapsed();
+            println!(
+                "spectrum2d_cpu workers={} resolution={}x{} bands={} frames={} wall_ms={:.3} effective_fps={:.2}",
+                worker_count,
+                plan.canvas.width,
+                plan.canvas.height,
+                band_count,
+                frames.len(),
+                elapsed.as_secs_f64() * 1_000.0,
+                frames.len() as f64 / elapsed.as_secs_f64(),
+            );
+        }
     }
 
     #[test]

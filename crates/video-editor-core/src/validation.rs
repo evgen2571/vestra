@@ -619,6 +619,42 @@ mod tests {
     }
 
     #[test]
+    fn spectrum2d_requires_authored_audio_during_project_validation() {
+        let mut project = example_project();
+        project.visual.clips[0].source =
+            crate::project::VisualSource::Spectrum2D(crate::project::Spectrum2D::default());
+
+        let report = validate(&project, ResourceLimits::default());
+
+        assert!(report.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code == "MVP-SPECTRUM2D-MASTER-AUDIO"
+                && diagnostic.pointer.as_deref() == Some("/visual/clips/0/source")
+        }));
+    }
+
+    #[test]
+    fn spectrum2d_accepts_authored_audio_during_project_validation() {
+        let mut project = example_project();
+        project.visual.clips[0].source =
+            crate::project::VisualSource::Spectrum2D(crate::project::Spectrum2D::default());
+        project.audio = Some(
+            serde_json::from_value(json!({
+                "tracks": [track("music", vec![clip("clip", "audio")])]
+            }))
+            .expect("audio timeline"),
+        );
+
+        let report = validate(&project, ResourceLimits::default());
+
+        assert!(
+            !report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "MVP-SPECTRUM2D-MASTER-AUDIO")
+        );
+    }
+
+    #[test]
     fn signal_validation_points_to_the_invalid_transform_field() {
         let mut project = example_project();
         project.visual.clips[0].opacity.modifiers = vec![crate::project::ScalarModifier {

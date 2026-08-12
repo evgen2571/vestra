@@ -342,7 +342,9 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                     plan,
                     RenderFailureStage::FrameComposition,
                     completed_frames,
-                    plan.frame_count.checked_sub(1),
+                    backend
+                        .failed_frame_number()
+                        .or_else(|| plan.frame_count.checked_sub(1)),
                     diagnostic,
                 ));
             }

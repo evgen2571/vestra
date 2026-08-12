@@ -118,7 +118,17 @@ receives self-describing planned passes and never rediscovers effect semantics.
 
 `crates/video-editor-render/src/cpu` contains its prepared backend, composition, rasterization, surface
 reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
-returns.
+returns. For dynamic visuals, `CpuBackend` dispatches complete frames to a
+persistent, automatically bounded set of workers. Each worker exclusively owns
+one `CpuWorkerState` (prepared crop cache, static-layer cache, effect-surface
+pool, and counters), while all workers share immutable decoded assets through
+`Arc<DecodedAssets>`. Worker-local cache budgets are quotient/remainder
+partitions of the configured class budget: all crop caches combined and all
+static-layer caches combined are each bounded by `maximum_cache_bytes`.
+Automatic worker selection reserves one logical CPU when possible, applies a
+checked full-frame working-set estimate, and is capped at eight workers. The
+engine remains responsible for bounded staging, cancellation, and ordered
+`BTreeMap` delivery; CPU completion order is not encoder order.
 
 `crates/video-editor-render/src/wgpu/backend.rs` owns prepared WGPU state and staged frame submission. `context`
 creates the adapter and device. `requirements` validates limits and estimates
@@ -158,8 +168,11 @@ Static-cache hits, misses, budget bypasses, and layer renders are per-operation
 deltas. Static-cache entries and estimated bytes are gauges after that
 operation. WGPU reserves a static-cache entry before allocating its texture;
 retained estimated bytes plus pending reservations never exceed the configured
-static-cache budget. The limit applies independently to each internal cache,
-not to total renderer memory or physical VRAM.
+static-cache budget. For CPU, `maximum_cache_bytes` independently bounds each
+cache class across all worker-local instances: aggregate crop-cache capacity
+and aggregate static-layer-cache capacity each remain at or below that value.
+WGPU semantics are unchanged; its cache limit remains independent of other
+internal caches and is not a total renderer-memory or physical-VRAM cap.
 
 After the staged frame loop succeeds, the runner verifies backend idleness
 before encoder finalization and publication. CPU requires an empty completion

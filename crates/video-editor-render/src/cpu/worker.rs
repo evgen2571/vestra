@@ -59,14 +59,21 @@ pub(super) struct WorkerSnapshot {
     pub(super) timings: PreparationTimings,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct CpuWorkerCacheBudgets {
+    pub(super) crop_cache_budget_bytes: u64,
+    pub(super) static_cache_budget_bytes: u64,
+}
+
 pub(super) fn run_worker(
     worker_id: usize,
     plan: RenderPlan,
     decoded: Arc<DecodedAssets>,
     command_rx: std::sync::mpsc::Receiver<WorkerCommand>,
     completion_tx: SyncSender<WorkerCompletion>,
+    cache_budgets: CpuWorkerCacheBudgets,
 ) {
-    let mut state = CpuWorkerState::new(&plan, decoded);
+    let mut state = CpuWorkerState::new(&plan, decoded, cache_budgets);
     while let Ok(command) = command_rx.recv() {
         match command {
             WorkerCommand::Render(job) => {
@@ -126,11 +133,18 @@ pub(super) struct CpuWorkerState {
 
 impl CpuWorkerState {
     #[must_use]
-    pub(super) fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
+    pub(super) fn new(
+        plan: &RenderPlan,
+        decoded: Arc<DecodedAssets>,
+        cache_budgets: CpuWorkerCacheBudgets,
+    ) -> Self {
         Self {
-            assets: PreparedAssets::from_decoded(plan, decoded),
+            assets: PreparedAssets::from_decoded_with_cache_budget(
+                decoded,
+                cache_budgets.crop_cache_budget_bytes,
+            ),
             effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
-            static_layers: ByteLruCache::new(plan.limits.maximum_cache_bytes),
+            static_layers: ByteLruCache::new(cache_budgets.static_cache_budget_bytes),
             static_layer_renders: 0,
             static_cache_population_renders: 0,
             full_frame_allocations: 0,

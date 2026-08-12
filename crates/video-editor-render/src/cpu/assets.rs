@@ -7,18 +7,15 @@ use std::sync::Arc;
 
 use image::RgbaImage;
 
-use crate::{
-    plan::RenderPlan,
-    render::{
-        ByteLruCache,
-        decoded::DecodedAssets,
-        geometry::{CropBounds, crop_bounds},
-        metrics::{PreparationStats, PreparationTimings},
-    },
+use crate::render::{
+    ByteLruCache,
+    decoded::DecodedAssets,
+    geometry::{CropBounds, crop_bounds},
+    metrics::{PreparationStats, PreparationTimings},
 };
 
 #[cfg(test)]
-use crate::Diagnostic;
+use crate::{Diagnostic, plan::RenderPlan};
 
 pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
@@ -40,13 +37,22 @@ impl PreparedAssets {
         Ok(Self::from_decoded(plan, decoded))
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn from_decoded(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
+        Self::from_decoded_with_cache_budget(decoded, plan.limits.maximum_cache_bytes)
+    }
+
+    #[must_use]
+    pub(super) fn from_decoded_with_cache_budget(
+        decoded: Arc<DecodedAssets>,
+        cache_budget_bytes: u64,
+    ) -> Self {
         Self {
             decoded,
-            crops: ByteLruCache::new(plan.limits.maximum_cache_bytes),
+            crops: ByteLruCache::new(cache_budget_bytes),
             stats: PreparationStats {
-                cache_budget_bytes: plan.limits.maximum_cache_bytes,
+                cache_budget_bytes,
                 ..PreparationStats::default()
             },
             timings: PreparationTimings::default(),

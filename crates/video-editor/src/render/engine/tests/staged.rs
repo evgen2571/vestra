@@ -720,6 +720,8 @@ struct MockStagedBackend {
     failed_frame_number: Option<u64>,
     backend_kind: RenderBackendKind,
     configured_frame_render_work_duration: Duration,
+    final_drain_failure_after_submissions: Option<u64>,
+    final_drain_completion_returned: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -733,6 +735,7 @@ enum MockMode {
     InvalidFrameLayout,
     FlushFailure,
     IdleFailure,
+    FinalDrainFailure,
 }
 
 impl MockStagedBackend {
@@ -756,6 +759,8 @@ impl MockStagedBackend {
             failed_frame_number: None,
             backend_kind: RenderBackendKind::Wgpu,
             configured_frame_render_work_duration: Duration::ZERO,
+            final_drain_failure_after_submissions: None,
+            final_drain_completion_returned: false,
         }
     }
 
@@ -795,6 +800,12 @@ impl MockStagedBackend {
 
     fn with_frame_render_work_duration(mut self, duration: Duration) -> Self {
         self.configured_frame_render_work_duration = duration;
+        self
+    }
+
+    fn fails_in_final_drain(mut self, after_submissions: u64) -> Self {
+        self.mode = MockMode::FinalDrainFailure;
+        self.final_drain_failure_after_submissions = Some(after_submissions);
         self
     }
 
@@ -865,6 +876,19 @@ impl RenderBackend for MockStagedBackend {
     }
 
     fn poll_completed(&mut self, _mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic> {
+        if matches!(self.mode, MockMode::FinalDrainFailure)
+            && self.final_drain_failure_after_submissions == Some(self.metrics.submitted_frames)
+        {
+            if self.final_drain_completion_returned {
+                return Err(Diagnostic::error(
+                    "CPU-WORKER-PANIC",
+                    Category::Backend,
+                    "injected CPU worker failure during final drain",
+                    "",
+                ));
+            }
+            self.final_drain_completion_returned = true;
+        }
         if matches!(self.mode, MockMode::PollFailure) {
             return Err(Diagnostic::error(
                 "MOCK-POLL",
@@ -1741,6 +1765,45 @@ fn run_failure_case(mode: MockMode) -> crate::render::RenderError {
         },
     )
     .expect_err("configured mock failure propagates")
+}
+
+#[test]
+fn final_drain_cpu_failure_reports_the_worker_frame_not_the_last_project_frame() {
+    let plan = super::example_plan();
+    let total_frames = plan.frame_count;
+    let output_dir = tempfile::tempdir().expect("temporary output directory");
+    let options = RenderOptions {
+        output_override: Some(output_dir.path().join("final-drain-failure.mp4")),
+        overwrite: true,
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        backend_preference: RenderBackendPreference::Cpu,
+    };
+    let failed_frame = 7;
+    let error = render_with_backend_builder(
+        &plan,
+        &options,
+        &mut |_| RenderObserverControl::Continue,
+        move |_, _, _| {
+            Ok((
+                Box::new(
+                    MockStagedBackend::new(
+                        3,
+                        (0..total_frames).collect(),
+                        Arc::new(Mutex::new(Vec::new())),
+                    )
+                    .with_cpu_backend()
+                    .with_failed_frame_number(failed_frame)
+                    .fails_in_final_drain(total_frames),
+                ) as Box<dyn RenderBackend>,
+                None,
+            ))
+        },
+    )
+    .expect_err("final-drain worker failure propagates");
+
+    assert_eq!(error.diagnostic.code, "CPU-WORKER-PANIC");
+    assert_eq!(error.context.attempted_frame, Some(failed_frame));
+    assert_ne!(error.context.attempted_frame, Some(total_frames - 1));
 }
 
 fn run_failure_with_recording_sink(

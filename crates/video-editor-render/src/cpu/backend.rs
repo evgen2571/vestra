@@ -22,7 +22,13 @@ use crate::{
     },
 };
 
-use super::worker::{CpuFrameJob, WorkerCommand, WorkerCompletion, WorkerSnapshot, run_worker};
+use super::worker::{
+    CpuFrameJob, CpuWorkerCacheBudgets, WorkerCommand, WorkerCompletion, WorkerSnapshot, run_worker,
+};
+
+pub(crate) const MAX_AUTO_CPU_WORKERS: usize = 8;
+pub(crate) const ESTIMATED_LIVE_RGBA_FRAMES_PER_WORKER: u64 = 6;
+pub(crate) const AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
 struct WorkerHandle {
     command_tx: SyncSender<WorkerCommand>,
@@ -37,6 +43,8 @@ pub struct CpuBackend {
     completions: Receiver<WorkerCompletion>,
     metrics: StagedMetrics,
     worker_timings: PreparationTimings,
+    #[cfg(test)]
+    worker_cache_budgets: Vec<CpuWorkerCacheBudgets>,
     failed: Option<Diagnostic>,
     failed_frame_number: Option<u64>,
     aborted: bool,
@@ -46,7 +54,7 @@ impl CpuBackend {
     #[must_use]
     pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
         let available = thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
-        Self::new_with_worker_count(plan, decoded, if available <= 2 { 1 } else { 2 })
+        Self::new_with_worker_count(plan, decoded, automatic_worker_count(plan, available))
     }
 
     pub(crate) fn new_with_worker_count(
@@ -58,9 +66,23 @@ impl CpuBackend {
     }
 
     fn build(plan: &RenderPlan, decoded: Arc<DecodedAssets>, worker_count: usize) -> Self {
+        let worker_cache_budgets = (0..worker_count)
+            .map(|worker_id| CpuWorkerCacheBudgets {
+                crop_cache_budget_bytes: worker_budget(
+                    plan.limits.maximum_cache_bytes,
+                    worker_count,
+                    worker_id,
+                ),
+                static_cache_budget_bytes: worker_budget(
+                    plan.limits.maximum_cache_bytes,
+                    worker_count,
+                    worker_id,
+                ),
+            })
+            .collect::<Vec<_>>();
         let (completion_tx, completions) = mpsc::sync_channel(worker_count);
         let mut workers = Vec::with_capacity(worker_count);
-        for worker_id in 0..worker_count {
+        for (worker_id, &worker_cache_budget) in worker_cache_budgets.iter().enumerate() {
             let (command_tx, command_rx) = mpsc::sync_channel(1);
             let worker_plan = plan.clone();
             let worker_decoded = Arc::clone(&decoded);
@@ -74,6 +96,7 @@ impl CpuBackend {
                         worker_decoded,
                         command_rx,
                         worker_completion_tx,
+                        worker_cache_budget,
                     )
                 })
                 .expect("CPU worker thread must start");
@@ -93,6 +116,8 @@ impl CpuBackend {
                 ..StagedMetrics::default()
             },
             worker_timings: PreparationTimings::default(),
+            #[cfg(test)]
+            worker_cache_budgets,
             failed: None,
             failed_frame_number: None,
             aborted: false,
@@ -441,6 +466,34 @@ fn aggregate_timings(snapshots: &[WorkerSnapshot]) -> PreparationTimings {
     result
 }
 
+pub(crate) fn worker_budget(total_budget: u64, worker_count: usize, worker_id: usize) -> u64 {
+    if worker_count == 0 || worker_id >= worker_count {
+        return 0;
+    }
+    let base = total_budget / worker_count as u64;
+    let remainder = total_budget % worker_count as u64;
+    base + u64::from((worker_id as u64) < remainder)
+}
+
+fn estimated_frame_bytes(plan: &RenderPlan) -> u64 {
+    u64::from(plan.canvas.width)
+        .checked_mul(u64::from(plan.canvas.height))
+        .and_then(|pixels| pixels.checked_mul(4))
+        .unwrap_or(u64::MAX)
+}
+
+pub(crate) fn automatic_worker_count(plan: &RenderPlan, available_parallelism: usize) -> usize {
+    let available = available_parallelism.max(1);
+    let cpu_limit = if available > 1 { available - 1 } else { 1 };
+    let estimated_worker_bytes =
+        estimated_frame_bytes(plan).saturating_mul(ESTIMATED_LIVE_RGBA_FRAMES_PER_WORKER);
+    let memory_limit = AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES
+        .checked_div(estimated_worker_bytes)
+        .unwrap_or(0)
+        .max(1) as usize;
+    cpu_limit.min(memory_limit).clamp(1, MAX_AUTO_CPU_WORKERS)
+}
+
 #[cfg(test)]
 impl CpuBackend {
     fn submit_panicking_frame(
@@ -563,6 +616,98 @@ mod tests {
         assert_eq!(aggregate.decoded_source_bytes, 900);
         assert_eq!(aggregate.peak_decoded_bytes, 1_000);
         assert_eq!(aggregate.bitmap_cache_hit_rate, Some(0.4));
+    }
+
+    #[test]
+    fn automatic_worker_policy_reserves_cpu_and_applies_frame_memory_limit() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+
+        plan.canvas.width = 1_920;
+        plan.canvas.height = 1_080;
+        assert_eq!(automatic_worker_count(&plan, 1), 1);
+        assert_eq!(automatic_worker_count(&plan, 2), 1);
+        assert_eq!(automatic_worker_count(&plan, 4), 3);
+        assert_eq!(automatic_worker_count(&plan, 64), 8);
+
+        plan.canvas.width = 2_560;
+        plan.canvas.height = 1_440;
+        assert_eq!(automatic_worker_count(&plan, 64), 6);
+        plan.canvas.width = 3_840;
+        plan.canvas.height = 2_160;
+        assert_eq!(automatic_worker_count(&plan, 64), 2);
+    }
+
+    #[test]
+    fn automatic_worker_policy_is_never_zero_and_handles_overflow() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.canvas.width = u32::MAX;
+        plan.canvas.height = u32::MAX;
+        assert_eq!(automatic_worker_count(&plan, 0), 1);
+        assert_eq!(automatic_worker_count(&plan, usize::MAX), 1);
+    }
+
+    #[test]
+    fn worker_budget_partitions_preserve_total_and_differ_by_at_most_one() {
+        for (total, workers) in [(0, 1), (1, 4), (256 * 1024 * 1024, 2), (257, 4), (257, 8)] {
+            let parts = (0..workers)
+                .map(|worker_id| worker_budget(total, workers, worker_id))
+                .collect::<Vec<_>>();
+            assert_eq!(parts.iter().sum::<u64>(), total);
+            let min = parts.iter().min().copied().unwrap_or(0);
+            let max = parts.iter().max().copied().unwrap_or(0);
+            assert!(max - min <= 1);
+        }
+    }
+
+    #[test]
+    fn multiple_workers_partition_both_cache_classes_without_multiplying_capacity() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.limits.maximum_cache_bytes = 257;
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 4);
+
+        assert_eq!(backend.worker_cache_budgets.len(), 4);
+        assert_eq!(
+            backend
+                .worker_cache_budgets
+                .iter()
+                .map(|budget| budget.crop_cache_budget_bytes)
+                .sum::<u64>(),
+            257
+        );
+        assert_eq!(
+            backend
+                .worker_cache_budgets
+                .iter()
+                .map(|budget| budget.static_cache_budget_bytes)
+                .sum::<u64>(),
+            257
+        );
+        assert_eq!(backend.stats().cache_budget_bytes, 257);
     }
 
     #[test]
@@ -1110,6 +1255,139 @@ mod tests {
         single_pixels.sort_by_key(|frame| frame.frame_number);
         multi_pixels.sort_by_key(|frame| frame.frame_number);
         assert_eq!(single_pixels, multi_pixels);
+    }
+
+    #[test]
+    fn one_and_four_workers_produce_identical_frame_pixels() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frames: Vec<_> = (0..8)
+            .map(|number| evaluate(&plan, &[ScheduledItem(0)], number))
+            .collect();
+        let collect = |worker_count, decoded: Arc<DecodedAssets>| {
+            let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, worker_count);
+            let mut completed = Vec::new();
+            for (number, frame) in frames.iter().enumerate() {
+                if backend.in_flight() == backend.capacity() {
+                    completed.push(
+                        backend
+                            .poll_completed(PollMode::WaitForOne)
+                            .expect("poll")
+                            .expect("completion"),
+                    );
+                }
+                backend
+                    .submit_frame(number as u64, frame)
+                    .expect("submission");
+            }
+            while backend.in_flight() > 0 {
+                completed.push(
+                    backend
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("drain poll")
+                        .expect("drain completion"),
+                );
+            }
+            completed.sort_by_key(|frame| frame.frame_number);
+            completed
+        };
+        let single = collect(1, Arc::clone(&decoded));
+        let four = collect(4, decoded);
+        assert_eq!(single, four);
+    }
+
+    #[test]
+    #[ignore = "manual release CPU scaling benchmark"]
+    fn cpu_parallel_scaling_benchmark() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        plan.canvas.width = 1_920;
+        plan.canvas.height = 1_080;
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frame_count = plan.frame_count.min(60);
+        let frames: Vec<_> = (0..frame_count)
+            .map(|number| evaluate(&plan, &[ScheduledItem(0)], u128::from(number)))
+            .collect();
+        let automatic = automatic_worker_count(
+            &plan,
+            thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+        );
+
+        for (label, worker_count) in [("1", 1), ("2", 2), ("4", 4), ("auto", automatic)] {
+            let mut backend = if label == "auto" {
+                CpuBackend::new(&plan, Arc::clone(&decoded))
+            } else {
+                CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), worker_count)
+            };
+            for (number, frame) in frames.iter().enumerate() {
+                if backend.in_flight() == backend.capacity() {
+                    backend
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("warmup poll")
+                        .expect("warmup completion");
+                }
+                backend
+                    .submit_frame(number as u64, frame)
+                    .expect("warmup submission");
+            }
+            while backend.in_flight() > 0 {
+                backend
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("warmup drain poll")
+                    .expect("warmup drain completion");
+            }
+            backend.reset_operation_metrics();
+            let started = Instant::now();
+            for (number, frame) in frames.iter().enumerate() {
+                if backend.in_flight() == backend.capacity() {
+                    backend
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("measured poll")
+                        .expect("measured completion");
+                }
+                backend
+                    .submit_frame(number as u64, frame)
+                    .expect("measured submission");
+            }
+            while backend.in_flight() > 0 {
+                backend
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("measured drain poll")
+                    .expect("measured drain completion");
+            }
+            let elapsed = started.elapsed();
+            let stats = backend.stats();
+            let staged = backend.staged_metrics();
+            let effective_fps = frame_count as f64 / elapsed.as_secs_f64();
+            println!(
+                "cpu_parallel_scaling workers={label} actual_workers={} resolution={}x{} frames={} wall_ms={:.3} effective_fps={effective_fps:.2} aggregate_frame_render_ms={} peak_in_flight={} cache_current_bytes={} cache_peak_bytes={} scratch_retained_bytes={}",
+                backend.capacity(),
+                plan.canvas.width,
+                plan.canvas.height,
+                frame_count,
+                elapsed.as_secs_f64() * 1_000.0,
+                staged.frame_render_work_duration.as_secs_f64() * 1_000.0,
+                staged.peak_frames_in_flight,
+                stats.cache_current_bytes,
+                stats.cache_peak_bytes,
+                stats.cpu_scratch_bytes_retained,
+            );
+        }
     }
 
     #[test]

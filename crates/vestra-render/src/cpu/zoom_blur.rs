@@ -37,6 +37,8 @@ pub(crate) fn apply(
     }
     let width = source.width();
     let height = source.height();
+    let source_data = source.as_raw();
+    let row_stride = width as usize * 4;
     for (x, y, _) in source.enumerate_pixels() {
         let ray_x = f64::from(x) - centre_x;
         let ray_y = f64::from(y) - centre_y;
@@ -45,11 +47,12 @@ pub(crate) fn apply(
         for index in 0..samples {
             let scale = scales[index as usize];
             let pixel = sample_edge_zoom_blur(
-                source,
                 centre_x + ray_x * scale + 0.5,
                 centre_y + ray_y * scale + 0.5,
                 width,
                 height,
+                source_data,
+                row_stride,
             );
             let sample_alpha = f64::from(pixel[3]) / 255.0;
             alpha += sample_alpha;
@@ -76,7 +79,14 @@ pub(crate) fn apply(
 }
 
 #[inline]
-fn sample_edge_zoom_blur(image: &RgbaImage, x: f64, y: f64, width: u32, height: u32) -> Rgba<u8> {
+fn sample_edge_zoom_blur(
+    x: f64,
+    y: f64,
+    width: u32,
+    height: u32,
+    source_data: &[u8],
+    row_stride: usize,
+) -> Rgba<u8> {
     let x = x.clamp(0.5, f64::from(width) - 0.5) - 0.5;
     let y = y.clamp(0.5, f64::from(height) - 0.5) - 0.5;
     let x0 = x.floor() as i64;
@@ -88,7 +98,8 @@ fn sample_edge_zoom_blur(image: &RgbaImage, x: f64, y: f64, width: u32, height: 
     let one_minus_tx = 1.0 - tx;
     let one_minus_ty = 1.0 - ty;
     let mut accumulator = BilinearAccumulator {
-        image,
+        source_data,
+        row_stride,
         width,
         height,
         premultiplied: [0.0; 3],
@@ -117,7 +128,8 @@ fn sample_edge_zoom_blur(image: &RgbaImage, x: f64, y: f64, width: u32, height: 
 }
 
 struct BilinearAccumulator<'a> {
-    image: &'a RgbaImage,
+    source_data: &'a [u8],
+    row_stride: usize,
     width: u32,
     height: u32,
     premultiplied: [f64; 3],
@@ -134,12 +146,12 @@ impl BilinearAccumulator<'_> {
         {
             return;
         }
-        let sample = self.image.get_pixel(sample_x as u32, sample_y as u32);
+        let offset = sample_y as usize * self.row_stride + sample_x as usize * 4;
+        let sample = &self.source_data[offset..offset + 4];
         let sample_alpha = f64::from(sample[3]) / 255.0;
         self.alpha += sample_alpha * weight;
-        for channel in 0..3 {
-            self.premultiplied[channel] +=
-                f64::from(sample[channel]) / 255.0 * sample_alpha * weight;
+        for (premultiplied, &channel) in self.premultiplied.iter_mut().zip(&sample[..3]) {
+            *premultiplied += f64::from(channel) / 255.0 * sample_alpha * weight;
         }
     }
 }

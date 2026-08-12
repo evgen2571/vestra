@@ -13,23 +13,42 @@ pub(crate) fn apply(
     let scale = 1.0 / (white - black).max(0.000_1);
     let exposure_scale = 2f64.powf(exposure);
     let gamma_exponent = 1.0 / gamma.max(0.001);
+    let lut = build_lut(scale, exposure_scale, gamma_exponent, black);
     for (x, y, pixel) in source.enumerate_pixels() {
         let mut output = *pixel;
         for channel in 0..3 {
-            let value = (((f64::from(pixel[channel]) / 255.0) * exposure_scale - black) * scale)
-                .clamp(0.0, 1.0)
-                .powf(gamma_exponent);
-            output[channel] = (value * 255.0).round() as u8;
+            output[channel] = lut[pixel[channel] as usize];
         }
         target.put_pixel(x, y, output);
     }
+}
+
+fn build_lut(scale: f64, exposure_scale: f64, gamma_exponent: f64, black: f64) -> [u8; 256] {
+    let mut lut = [0_u8; 256];
+    for (input, output) in lut.iter_mut().enumerate() {
+        *output = adjust_channel(input as u8, scale, exposure_scale, gamma_exponent, black);
+    }
+    lut
+}
+
+fn adjust_channel(
+    input: u8,
+    scale: f64,
+    exposure_scale: f64,
+    gamma_exponent: f64,
+    black: f64,
+) -> u8 {
+    let value = (((f64::from(input) / 255.0) * exposure_scale - black) * scale)
+        .clamp(0.0, 1.0)
+        .powf(gamma_exponent);
+    (value * 255.0).round() as u8
 }
 
 #[cfg(test)]
 mod tests {
     use image::{Rgba, RgbaImage};
 
-    use super::apply;
+    use super::{adjust_channel, apply, build_lut};
 
     #[test]
     fn levels_and_gamma_match_the_pixel_golden_fixture() {
@@ -77,6 +96,12 @@ mod tests {
 
         for &(exposure, gamma, black, white) in &[
             (0.0, 1.0, 0.0, 1.0),
+            (1.5, 1.0, 0.0, 1.0),
+            (-2.0, 1.0, 0.0, 1.0),
+            (0.0, 0.25, 0.0, 1.0),
+            (0.0, 3.0, 0.0, 1.0),
+            (0.0, 1.0, 0.1, 0.9),
+            (0.0, 1.0, 0.35, 0.65),
             (-2.0, 0.25, 0.1, 0.9),
             (1.5, 3.0, 0.35, 0.65),
         ] {
@@ -88,6 +113,41 @@ mod tests {
                 optimized, reference,
                 "parameters={exposure},{gamma},{black},{white}"
             );
+        }
+    }
+
+    #[test]
+    fn lut_matches_the_reference_formula_for_every_channel_value() {
+        let parameter_sets: &[(f64, f64, f64, f64)] = &[
+            (0.0, 1.0, 0.0, 1.0),
+            (2.0, 0.5, 0.0, 1.0),
+            (-3.0, 2.5, 0.1, 0.9),
+            (4.0, 4.0, 0.2, 0.8),
+            (-1.5, 0.25, 0.35, 0.65),
+        ];
+        for &(exposure, gamma, black, white) in parameter_sets {
+            let scale = 1.0 / (white - black).max(0.000_1);
+            let lut = build_lut(scale, 2f64.powf(exposure), 1.0 / gamma.max(0.001), black);
+            for input in 0..=u8::MAX {
+                let expected = (((f64::from(input) / 255.0) * 2f64.powf(exposure) - black) * scale)
+                    .clamp(0.0, 1.0)
+                    .powf(1.0 / gamma.max(0.001));
+                assert_eq!(
+                    lut[input as usize],
+                    (expected * 255.0).round() as u8,
+                    "input={input}, parameters={exposure},{gamma},{black},{white}"
+                );
+                assert_eq!(
+                    lut[input as usize],
+                    adjust_channel(
+                        input,
+                        scale,
+                        2f64.powf(exposure),
+                        1.0 / gamma.max(0.001),
+                        black,
+                    )
+                );
+            }
         }
     }
 }

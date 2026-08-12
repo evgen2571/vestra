@@ -282,6 +282,8 @@ pub(crate) struct CpuHotPathTimings {
     pub(crate) vignette: Duration,
     pub(crate) color_adjust: Duration,
     pub(crate) sharpen: Duration,
+    pub(crate) sharpen_gaussian: Duration,
+    pub(crate) sharpen_unsharp_composite: Duration,
     pub(crate) other_effects: Duration,
     pub(crate) global_post_effect: Duration,
     pub(crate) surface_copy: Duration,
@@ -303,6 +305,8 @@ impl CpuHotPathTimings {
         self.vignette += other.vignette;
         self.color_adjust += other.color_adjust;
         self.sharpen += other.sharpen;
+        self.sharpen_gaussian += other.sharpen_gaussian;
+        self.sharpen_unsharp_composite += other.sharpen_unsharp_composite;
         self.other_effects += other.other_effects;
         self.global_post_effect += other.global_post_effect;
         self.surface_copy += other.surface_copy;
@@ -310,7 +314,7 @@ impl CpuHotPathTimings {
 
     pub(crate) fn report_line(&self, workers: usize, frames: u64) -> String {
         format!(
-            "vestra_cpu_profile workers={workers} frames={frames} source_rasterization_ns={} transform_sampling_ns={} layer_composition_ns={} effect_execution_ns={} gaussian_blur_ns={} zoom_blur_ns={} bloom_glow_ns={} bloom_highlight_extract_ns={} bloom_gaussian_blur_ns={} bloom_composite_ns={} chromatic_aberration_ns={} vignette_ns={} color_adjust_ns={} sharpen_ns={} other_effects_ns={} global_post_effect_ns={} surface_copy_ns={}",
+            "vestra_cpu_profile workers={workers} frames={frames} source_rasterization_ns={} transform_sampling_ns={} layer_composition_ns={} effect_execution_ns={} gaussian_blur_ns={} zoom_blur_ns={} bloom_glow_ns={} bloom_highlight_extract_ns={} bloom_gaussian_blur_ns={} bloom_composite_ns={} chromatic_aberration_ns={} vignette_ns={} color_adjust_ns={} sharpen_ns={} sharpen_gaussian_ns={} sharpen_unsharp_composite_ns={} other_effects_ns={} global_post_effect_ns={} surface_copy_ns={}",
             self.source_rasterization.as_nanos(),
             self.transform_sampling.as_nanos(),
             self.layer_composition.as_nanos(),
@@ -325,6 +329,8 @@ impl CpuHotPathTimings {
             self.vignette.as_nanos(),
             self.color_adjust.as_nanos(),
             self.sharpen.as_nanos(),
+            self.sharpen_gaussian.as_nanos(),
+            self.sharpen_unsharp_composite.as_nanos(),
             self.other_effects.as_nanos(),
             self.global_post_effect.as_nanos(),
             self.surface_copy.as_nanos(),

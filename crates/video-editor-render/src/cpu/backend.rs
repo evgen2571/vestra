@@ -2,32 +2,24 @@
 
 use std::{collections::VecDeque, sync::Arc};
 
+#[cfg(test)]
 use image::RgbaImage;
 
 use crate::{
     Diagnostic,
     plan::{EvaluatedFrame, RenderPlan},
     render::{
-        AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
-        RenderBackendKind,
+        AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
         metrics::{PreparationStats, PreparationTimings, StagedMetrics},
     },
 };
 
-use super::{assets::PreparedAssets, compositor};
+use super::worker::CpuWorkerState;
 
 /// CPU renderer state, fully prepared before backend selection returns it.
 pub struct CpuBackend {
-    assets: PreparedAssets,
-    effects: compositor::EffectSurfacePool,
+    worker: CpuWorkerState,
     completed: VecDeque<CompletedFrame>,
-    static_layers: ByteLruCache<usize, Arc<compositor::CachedCpuLayerSurface>>,
-    static_layer_renders: u64,
-    static_cache_population_renders: u64,
-    full_frame_allocations: u64,
-    opaque_copy_fast_path_hits: u64,
-    opaque_copy_fast_path_bytes: u64,
-    generic_blend_surface_calls: u64,
     metrics: StagedMetrics,
 }
 
@@ -35,16 +27,8 @@ impl CpuBackend {
     #[must_use]
     pub fn new(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
         Self {
-            assets: PreparedAssets::from_decoded(plan, decoded),
-            effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
+            worker: CpuWorkerState::new(plan, decoded),
             completed: VecDeque::new(),
-            static_layers: ByteLruCache::new(plan.limits.maximum_cache_bytes),
-            static_layer_renders: 0,
-            static_cache_population_renders: 0,
-            full_frame_allocations: 0,
-            opaque_copy_fast_path_hits: 0,
-            opaque_copy_fast_path_bytes: 0,
-            generic_blend_surface_calls: 0,
             metrics: StagedMetrics {
                 configured_pipeline_depth: 1,
                 allocated_slot_count: 1,
@@ -73,26 +57,8 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
         debug_assert!(self.completed.is_empty());
-        let mut destination = RgbaImage::new(frame.width, frame.height);
-        self.full_frame_allocations += 1;
-        let insertions_before = self.static_layers.stats().insertions;
-        let compose = compositor::compose(
-            frame,
-            &mut self.assets,
-            &mut destination,
-            &mut self.effects,
-            &mut self.static_layers,
-        );
-        self.static_layer_renders += compose.static_layer_renders;
-        self.opaque_copy_fast_path_hits += compose.opaque_copy_fast_path_hits;
-        self.opaque_copy_fast_path_bytes += compose.opaque_copy_fast_path_bytes;
-        self.generic_blend_surface_calls += compose.generic_blend_surface_calls;
-        self.static_cache_population_renders +=
-            self.static_layers.stats().insertions - insertions_before;
-        self.completed.push_back(CompletedFrame {
-            frame_number,
-            rgba: destination.into_raw(),
-        });
+        self.completed
+            .push_back(self.worker.render_frame(frame_number, frame));
         self.metrics.submitted_frames += 1;
         self.metrics.backend_completed_frames += 1;
         self.metrics.peak_frames_in_flight = self.metrics.peak_frames_in_flight.max(1);
@@ -128,30 +94,11 @@ impl RenderBackend for CpuBackend {
     }
 
     fn stats(&mut self) -> PreparationStats {
-        let mut stats = self.assets.stats().clone();
-        let cache = self.static_layers.stats();
-        stats.static_cache_hits = cache.hits;
-        stats.static_cache_misses = cache.misses;
-        stats.static_cache_entries = cache.current_entries;
-        stats.static_cached_bytes = cache.current_bytes;
-        stats.static_cache_budget_bypasses = cache.oversized_entries_skipped;
-        stats.static_cache_population_renders = self.static_cache_population_renders;
-        stats.static_layers_rendered = self.static_layer_renders;
-        let scratch = self.effects.stats();
-        stats.cpu_full_frame_allocations = self.full_frame_allocations;
-        stats.cpu_scratch_allocations = scratch.allocations;
-        stats.cpu_scratch_reuses = scratch.reuses;
-        stats.cpu_scratch_buffers_retained = scratch.retained_buffers;
-        stats.cpu_scratch_bytes_retained = scratch.retained_bytes;
-        stats.cpu_full_frame_copy_bytes = scratch.copy_bytes;
-        stats.cpu_opaque_copy_fast_path_hits = self.opaque_copy_fast_path_hits;
-        stats.cpu_opaque_copy_fast_path_bytes = self.opaque_copy_fast_path_bytes;
-        stats.cpu_generic_blend_surface_calls = self.generic_blend_surface_calls;
-        stats
+        self.worker.stats()
     }
 
     fn timings(&self) -> PreparationTimings {
-        self.assets.timings()
+        self.worker.timings()
     }
 
     fn staged_metrics(&self) -> StagedMetrics {
@@ -256,6 +203,7 @@ mod tests {
         plan.canvas.height = 4;
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
         let mut backend = CpuBackend::new(&plan, decoded);
+        assert_eq!(backend.capacity(), 1);
         let mut frame = static_frame();
         frame.layers[0].effects = vec![
             EvaluatedEffect::Brightness { amount: 0.1 },

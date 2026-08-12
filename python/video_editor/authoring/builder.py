@@ -11,7 +11,7 @@ from video_editor import Editor, FrameRate, Project, ValidationReport
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioTimeline
-from .clips import ImageClip, SolidColorClip
+from .clips import ImageClip, SolidColorClip, Spectrum2DClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .flashes import FlashCollection
 from .transitions import TransitionCollection
@@ -109,7 +109,7 @@ class ProjectBuilder:
             self._duration_mode = DurationMode.EXPLICIT
             self._duration = _number(duration, "duration")
         self._assets: list[ImageAsset | AudioAsset] = []
-        self._clips: list[ImageClip | SolidColorClip] = []
+        self._clips: list[ImageClip | SolidColorClip | Spectrum2DClip] = []
         if not isinstance(output_audio, bool):
             raise TypeError("output_audio must be a boolean")
         self._output_audio = output_audio
@@ -242,7 +242,7 @@ class ProjectBuilder:
         return tuple(self._assets)
 
     @property
-    def clips(self) -> tuple[ImageClip | SolidColorClip, ...]:
+    def clips(self) -> tuple[ImageClip | SolidColorClip | Spectrum2DClip, ...]:
         """Visual clips in canonical creation order."""
         return tuple(self._clips)
 
@@ -341,6 +341,29 @@ class ProjectBuilder:
         clip._attach_effects(ClipEffectCollection._create(self._owner, self._ids, clip))
         self._clips.append(clip)
         return clip
+
+    def add_spectrum2d_clip(
+        self, *, start: int | float, duration: int | float, layer: int, visible: bool = True,
+        opacity: int | float = 1.0, id: str | None = None, band_count: int = 24,
+        min_hz: int | float = 40.0, max_hz: int | float = 16_000.0, sensitivity: int | float = 8.0,
+        attack_seconds: int | float = 0.020, release_seconds: int | float = 0.150,
+        x: int | float = 0.10, y: int | float = 0.70, width: int | float = 0.80,
+        height: int | float = 0.25, bar_gap_ratio: int | float = 0.20,
+        colour: Color | str = "#ffffff",
+    ) -> Spectrum2DClip:
+        """Create a Master-audio-driven normalized linear Spectrum2D clip."""
+        staged = Spectrum2DClip._create(
+            self._owner, "", start=start, duration=duration, layer=layer, visible=visible,
+            opacity=opacity, band_count=band_count, min_hz=min_hz, max_hz=max_hz,
+            sensitivity=sensitivity, attack_seconds=attack_seconds, release_seconds=release_seconds,
+            x=x, y=y, width=width, height=height, bar_gap_ratio=bar_gap_ratio, colour=colour,
+        )
+        if id is not None:
+            self._ids.validate("clip", id)
+        staged._id = self._ids.allocate("clip", "spectrum2d") if id is None else self._ids.reserve("clip", id)
+        staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        self._clips.append(staged)
+        return staged
 
     def to_dict(self) -> CanonicalProject:
         output: dict[str, object] = {

@@ -27,7 +27,7 @@ PUBLIC_NAMES = {
     "AudioEffect", "AudioEffectCollection", "ParametricEqAudioEffect", "PlaybackSpeedAudioEffect", "available_audio_effects", "audio_effect_definition",
     "Point", "PointKeyframe", "PointTrack", "PostEffectCollection", "Preset", "PresetCollection", "ProjectBuilder",
     "Quality", "SaturationEffect", "ScalarKeyframe", "ScalarSignal", "ScalarTrack", "SharpenEffect", "Sizing", "SolidColorClip",
-    "Timeline", "TintEffect", "Transform", "Transition", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection",
+    "Timeline", "TintEffect", "Transform", "Transition", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection", "Spectrum2DClip",
     "ZoomBlurEffect", "ZoomBlurTransition", "ZoomCrossfadeTransition", "CrossfadeTransition", "available_effects", "effect_definition",
 }
 

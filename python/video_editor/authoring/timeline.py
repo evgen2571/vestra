@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._internal import _Owner, _number, _require_owner
-from .clips import ImageClip, SolidColorClip
+from .clips import ImageClip, SolidColorClip, Spectrum2DClip
 from .transitions import CrossfadeTransition
 
 if TYPE_CHECKING:
     from .builder import ProjectBuilder
 
-Clip = ImageClip | SolidColorClip
+Clip = ImageClip | SolidColorClip | Spectrum2DClip
 
 
 class Timeline:
@@ -36,8 +36,8 @@ class Timeline:
         return _number(value, "delta")
 
     def _check_clip(self, clip: Clip) -> None:
-        if not isinstance(clip, ImageClip | SolidColorClip):
-            raise TypeError("clip must be ImageClip or SolidColorClip")
+        if not isinstance(clip, ImageClip | SolidColorClip | Spectrum2DClip):
+            raise TypeError("clip must be ImageClip, SolidColorClip, or Spectrum2DClip")
         _require_owner(self._owner, clip._owner)
 
     def shift_clip(self, clip: Clip, *, delta: int | float) -> None:

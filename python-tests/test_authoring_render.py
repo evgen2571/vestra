@@ -39,3 +39,24 @@ def test_background_only_builder_renders_on_cpu(tmp_path: Path) -> None:
     assert "height=90" in probe.stdout
     assert "nb_frames=2" in probe.stdout
     assert "duration=0.200000" in probe.stdout
+
+
+def test_public_spectrum2d_authoring_renders_on_cpu(tmp_path: Path) -> None:
+    project_builder = ProjectBuilder(
+        width=64, height=64, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
+        duration=0.2, base_directory=Path(__file__).resolve().parents[1],
+    )
+    audio = project_builder.add_audio_asset("examples/assets/tone.wav")
+    track = project_builder.audio.add_track(id="music")
+    track.add_clip(asset=audio, start=0, trim_end=0.2)
+    project_builder.add_spectrum2d_clip(start=0, duration=0.2, layer=1)
+    project = project_builder.build()
+    output = tmp_path / "spectrum.mp4"
+    result = video_editor.Editor().render(
+        project, video_editor.RenderRequest(
+            output, backend=video_editor.BackendPreference.CPU, overwrite=True,
+        ),
+    )
+    assert result.output_path == output
+    assert result.width == 64 and result.height == 64 and result.total_frames == 2
+    assert output.is_file() and output.stat().st_size > 0

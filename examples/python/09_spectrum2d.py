@@ -14,8 +14,7 @@ project.add_image_clip(source=background_asset, start=0, duration=3, layer=0)
 audio_asset = project.add_audio_asset("examples/assets/tone.wav")
 audio_track = project.audio.add_track(id="music")
 audio_track.add_clip(asset=audio_asset, start=0, trim_end=3)
-spectrum = project.add_spectrum2d_clip(start=0, duration=3, layer=1)
-spectrum.effects.add_bloom(threshold=0.5, radius=4.0, intensity=0.8)
+spectrum = project.add_spectrum2d_clip(start=0, duration=3, layer=1, preset="neon", height=0.30)
 
 video_editor.Editor().render(
     project.build(),

@@ -1,6 +1,8 @@
 from pathlib import Path
 import subprocess
 
+import pytest
+
 import video_editor
 from video_editor import FrameRate
 from video_editor.authoring import ProjectBuilder
@@ -41,7 +43,8 @@ def test_background_only_builder_renders_on_cpu(tmp_path: Path) -> None:
     assert "duration=0.200000" in probe.stdout
 
 
-def test_public_spectrum2d_authoring_renders_on_cpu(tmp_path: Path) -> None:
+@pytest.mark.parametrize("preset", ["classic", "dense", "neon"])
+def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, preset: str) -> None:
     project_builder = ProjectBuilder(
         width=64, height=64, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
         duration=0.2, base_directory=Path(__file__).resolve().parents[1],
@@ -49,7 +52,9 @@ def test_public_spectrum2d_authoring_renders_on_cpu(tmp_path: Path) -> None:
     audio = project_builder.add_audio_asset("examples/assets/tone.wav")
     track = project_builder.audio.add_track(id="music")
     track.add_clip(asset=audio, start=0, trim_end=0.2)
-    project_builder.add_spectrum2d_clip(start=0, duration=0.2, layer=1)
+    clip = project_builder.add_spectrum2d_clip(start=0, duration=0.2, layer=1, preset=preset)  # type: ignore[arg-type]
+    if preset == "neon":
+        assert [effect.kind for effect in clip.effects.items] == ["glow", "bloom"]
     project = project_builder.build()
     output = tmp_path / "spectrum.mp4"
     result = video_editor.Editor().render(

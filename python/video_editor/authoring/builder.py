@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from math import isfinite
 import os
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, cast, overload
 
 from video_editor import Editor, FrameRate, Project, ValidationReport
 
@@ -14,6 +14,10 @@ from .audio import AudioTimeline
 from .clips import ImageClip, SolidColorClip, Spectrum2DClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .flashes import FlashCollection
+from .spectrum2d import (
+    Spectrum2DEffectPreset, Spectrum2DPreset, Spectrum2DValue, _UNSET, _Unset,
+    _resolve_spectrum2d_source,
+)
 from .transitions import TransitionCollection
 from .timeline import Timeline
 from .values import Color, Crop, DurationMode, Quality, Sizing, color_to_canonical
@@ -342,28 +346,88 @@ class ProjectBuilder:
         self._clips.append(clip)
         return clip
 
+    @overload
     def add_spectrum2d_clip(
         self, *, start: int | float, duration: int | float, layer: int, visible: bool = True,
-        opacity: int | float = 1.0, id: str | None = None, band_count: int = 24,
-        min_hz: int | float = 40.0, max_hz: int | float = 16_000.0, sensitivity: int | float = 8.0,
-        attack_seconds: int | float = 0.020, release_seconds: int | float = 0.150,
-        x: int | float = 0.10, y: int | float = 0.70, width: int | float = 0.80,
-        height: int | float = 0.25, bar_gap_ratio: int | float = 0.20,
-        colour: Color | str = "#ffffff",
+        opacity: int | float = 1.0, id: str | None = None, preset: None = None,
+        band_count: int = 24, min_hz: int | float = 40.0, max_hz: int | float = 16_000.0,
+        sensitivity: int | float = 8.0, attack_seconds: int | float = 0.020,
+        release_seconds: int | float = 0.150, x: int | float = 0.10, y: int | float = 0.70,
+        width: int | float = 0.80, height: int | float = 0.25,
+        bar_gap_ratio: int | float = 0.20, colour: Color | str = "#ffffff",
+    ) -> Spectrum2DClip: ...
+
+    @overload
+    def add_spectrum2d_clip(
+        self, *, start: int | float, duration: int | float, layer: int, visible: bool = True,
+        opacity: int | float = 1.0, id: str | None = None, preset: Spectrum2DPreset,
+        band_count: int = 24, min_hz: int | float = 40.0, max_hz: int | float = 16_000.0,
+        sensitivity: int | float = 8.0, attack_seconds: int | float = 0.020,
+        release_seconds: int | float = 0.150, x: int | float = 0.10, y: int | float = 0.70,
+        width: int | float = 0.80, height: int | float = 0.25,
+        bar_gap_ratio: int | float = 0.20, colour: Color | str = "#ffffff",
+    ) -> Spectrum2DClip: ...
+
+    def add_spectrum2d_clip(
+        self, *, start: int | float, duration: int | float, layer: int, visible: bool = True,
+        opacity: int | float = 1.0, id: str | None = None,
+        preset: Spectrum2DPreset | None = None,
+        band_count: object = _UNSET, min_hz: object = _UNSET, max_hz: object = _UNSET,
+        sensitivity: object = _UNSET, attack_seconds: object = _UNSET,
+        release_seconds: object = _UNSET, x: object = _UNSET, y: object = _UNSET,
+        width: object = _UNSET, height: object = _UNSET, bar_gap_ratio: object = _UNSET,
+        colour: object = _UNSET,
     ) -> Spectrum2DClip:
-        """Create a Master-audio-driven normalized linear Spectrum2D clip."""
+        """Create a Master-audio-driven normalized linear Spectrum2D clip.
+
+        Explicit Spectrum2D arguments override the selected authoring preset.
+        """
+        source, preset_effects = _resolve_spectrum2d_source(
+            preset,
+            cast(Mapping[str, Spectrum2DValue | _Unset], {
+                "band_count": band_count, "min_hz": min_hz, "max_hz": max_hz,
+                "sensitivity": sensitivity, "attack_seconds": attack_seconds,
+                "release_seconds": release_seconds, "x": x, "y": y, "width": width,
+                "height": height, "bar_gap_ratio": bar_gap_ratio, "colour": colour,
+            }),
+        )
         staged = Spectrum2DClip._create(
             self._owner, "", start=start, duration=duration, layer=layer, visible=visible,
-            opacity=opacity, band_count=band_count, min_hz=min_hz, max_hz=max_hz,
-            sensitivity=sensitivity, attack_seconds=attack_seconds, release_seconds=release_seconds,
-            x=x, y=y, width=width, height=height, bar_gap_ratio=bar_gap_ratio, colour=colour,
+            opacity=opacity, band_count=cast(int, source["band_count"]),
+            min_hz=cast(int | float, source["min_hz"]), max_hz=cast(int | float, source["max_hz"]),
+            sensitivity=cast(int | float, source["sensitivity"]),
+            attack_seconds=cast(int | float, source["attack_seconds"]),
+            release_seconds=cast(int | float, source["release_seconds"]),
+            x=cast(int | float, source["x"]), y=cast(int | float, source["y"]),
+            width=cast(int | float, source["width"]), height=cast(int | float, source["height"]),
+            bar_gap_ratio=cast(int | float, source["bar_gap_ratio"]),
+            colour=cast(Color | str, source["colour"]),
         )
         if id is not None:
             self._ids.validate("clip", id)
         staged._id = self._ids.allocate("clip", "spectrum2d") if id is None else self._ids.reserve("clip", id)
         staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        for effect in preset_effects:
+            self._add_spectrum2d_preset_effect(staged, effect)
         self._clips.append(staged)
         return staged
+
+    @staticmethod
+    def _add_spectrum2d_preset_effect(clip: Spectrum2DClip, effect: Spectrum2DEffectPreset) -> None:
+        parameters = dict(effect.parameters)
+        if effect.kind == "glow":
+            clip.effects.add_glow(
+                threshold=cast(int | float, parameters["threshold"]),
+                radius=cast(int | float, parameters["radius"]),
+                intensity=cast(int | float, parameters["intensity"]),
+                colour=cast(Color | str, parameters["colour"]),
+            )
+        else:
+            clip.effects.add_bloom(
+                threshold=cast(int | float, parameters["threshold"]),
+                radius=cast(int | float, parameters["radius"]),
+                intensity=cast(int | float, parameters["intensity"]),
+            )
 
     def to_dict(self) -> CanonicalProject:
         output: dict[str, object] = {

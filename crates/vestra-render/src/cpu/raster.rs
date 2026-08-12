@@ -8,6 +8,7 @@ use crate::{
         blend::source_over,
         cpu::{assets::PreparedAssets, spectrum2d},
         geometry,
+        metrics::CpuHotPathTimings,
     },
 };
 
@@ -22,6 +23,7 @@ pub(crate) fn draw_layer(
     layer: &EvaluatedLayer,
     opacity: f64,
     colour_transform: ColourTransform,
+    timings: &mut CpuHotPathTimings,
 ) {
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
@@ -58,7 +60,9 @@ pub(crate) fn draw_layer(
                 canvas.height(),
             );
             if transform.is_valid() {
+                let started = std::time::Instant::now();
                 draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
+                timings.transform_sampling += started.elapsed();
             }
         }
         EvaluatedSource::Spectrum2D {

@@ -11,7 +11,7 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         ByteLruCache, CompletedFrame, DecodedAssets,
-        metrics::{PreparationStats, PreparationTimings},
+        metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings},
     },
 };
 
@@ -38,6 +38,7 @@ impl CpuFrameJob {
 pub(super) enum WorkerCommand {
     Render(CpuFrameJob),
     Snapshot(SyncSender<WorkerSnapshot>),
+    ResetTimings,
     Shutdown,
 }
 
@@ -57,6 +58,7 @@ pub(super) enum WorkerCompletion {
 pub(super) struct WorkerSnapshot {
     pub(super) stats: PreparationStats,
     pub(super) timings: PreparationTimings,
+    pub(super) hot_path_timings: CpuHotPathTimings,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,8 +113,10 @@ pub(super) fn run_worker(
                 let _ = reply.send(WorkerSnapshot {
                     stats: state.stats(),
                     timings: state.timings(),
+                    hot_path_timings: state.hot_path_timings(),
                 });
             }
+            WorkerCommand::ResetTimings => state.reset_hot_path_timings(),
             WorkerCommand::Shutdown => break,
         }
     }
@@ -129,6 +133,7 @@ pub(super) struct CpuWorkerState {
     opaque_copy_fast_path_hits: u64,
     opaque_copy_fast_path_bytes: u64,
     generic_blend_surface_calls: u64,
+    hot_path_timings: CpuHotPathTimings,
 }
 
 impl CpuWorkerState {
@@ -151,6 +156,7 @@ impl CpuWorkerState {
             opaque_copy_fast_path_hits: 0,
             opaque_copy_fast_path_bytes: 0,
             generic_blend_surface_calls: 0,
+            hot_path_timings: CpuHotPathTimings::default(),
         }
     }
 
@@ -168,6 +174,7 @@ impl CpuWorkerState {
             &mut destination,
             &mut self.effects,
             &mut self.static_layers,
+            &mut self.hot_path_timings,
         );
         self.static_layer_renders += compose.static_layer_renders;
         self.opaque_copy_fast_path_hits += compose.opaque_copy_fast_path_hits;
@@ -207,6 +214,14 @@ impl CpuWorkerState {
 
     pub(super) fn timings(&self) -> PreparationTimings {
         self.assets.timings()
+    }
+
+    pub(super) fn hot_path_timings(&self) -> CpuHotPathTimings {
+        self.hot_path_timings
+    }
+
+    pub(super) fn reset_hot_path_timings(&mut self) {
+        self.hot_path_timings = CpuHotPathTimings::default();
     }
 }
 

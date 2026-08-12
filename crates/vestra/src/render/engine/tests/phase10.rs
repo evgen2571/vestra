@@ -30,6 +30,7 @@ struct Measurement {
     render_seconds: f64,
     fps: f64,
     ms_per_frame: f64,
+    workers: usize,
     static_cache_hits: u64,
     static_cache_misses: u64,
     static_cache_bypasses: u64,
@@ -342,25 +343,25 @@ fn phase10_release_matrix() {
     {
         let project = write_fixture(&directory, workload, fixture, width, height, frames);
         let mut prepared = prepare_fixture(&project, cache_bytes);
-        results.push(measure_null(
-            &mut prepared,
-            directory.path(),
-            workload,
-            "cold",
-        ));
+        let measurement = measure_null(&mut prepared, directory.path(), workload, "cold");
+        println!(
+            "vestra_benchmark {}",
+            serde_json::to_string(&measurement).expect("serialize measurement")
+        );
+        results.push(measurement);
         if cache_bytes.is_none() {
-            results.push(measure_null(
-                &mut prepared,
-                directory.path(),
-                workload,
-                "warm",
-            ));
-            results.push(measure_null(
-                &mut prepared,
-                directory.path(),
-                workload,
-                "warm-2",
-            ));
+            let measurement = measure_null(&mut prepared, directory.path(), workload, "warm");
+            println!(
+                "vestra_benchmark {}",
+                serde_json::to_string(&measurement).expect("serialize measurement")
+            );
+            results.push(measurement);
+            let measurement = measure_null(&mut prepared, directory.path(), workload, "warm-2");
+            println!(
+                "vestra_benchmark {}",
+                serde_json::to_string(&measurement).expect("serialize measurement")
+            );
+            results.push(measurement);
         }
     }
     if start == 0 && limit == usize::MAX {
@@ -373,11 +374,13 @@ fn phase10_release_matrix() {
             30,
         );
         let mut prepared = prepare_fixture(&encoded, None);
-        results.push(measure_encoded(
-            &mut prepared,
-            directory.path(),
-            "pipeline-floor-encoded",
-        ));
+        let measurement =
+            measure_encoded(&mut prepared, directory.path(), "pipeline-floor-encoded");
+        println!(
+            "vestra_benchmark {}",
+            serde_json::to_string(&measurement).expect("serialize measurement")
+        );
+        results.push(measurement);
     }
     let output = std::env::var_os("VESTRA_PHASE10_BENCH_OUTPUT")
         .map(PathBuf::from)
@@ -643,6 +646,7 @@ fn measurement(
         render_seconds: seconds,
         fps: summary.frame_count as f64 / seconds,
         ms_per_frame: seconds * 1_000.0 / summary.frame_count as f64,
+        workers: metrics.pipeline_depth,
         static_cache_hits: metrics.static_cache_hits,
         static_cache_misses: metrics.static_cache_misses,
         static_cache_bypasses: metrics.static_cache_budget_bypasses,

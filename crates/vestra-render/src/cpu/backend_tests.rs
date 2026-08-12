@@ -6,6 +6,7 @@ use crate::{
     },
     project::{ValidationOptions, load_and_validate},
 };
+use std::time::Duration;
 
 fn static_frame() -> EvaluatedFrame {
     EvaluatedFrame {
@@ -49,6 +50,7 @@ fn aggregate_snapshots_sums_independent_cache_gauges_and_keeps_shared_decode_onc
         WorkerSnapshot {
             stats,
             timings: PreparationTimings::default(),
+            hot_path_timings: CpuHotPathTimings::default(),
         }
     };
 
@@ -64,6 +66,39 @@ fn aggregate_snapshots_sums_independent_cache_gauges_and_keeps_shared_decode_onc
     assert_eq!(aggregate.decoded_source_bytes, 900);
     assert_eq!(aggregate.peak_decoded_bytes, 1_000);
     assert_eq!(aggregate.bitmap_cache_hit_rate, Some(0.4));
+}
+
+#[test]
+fn aggregate_hot_path_timings_sums_worker_local_durations() {
+    let first = CpuHotPathTimings {
+        source_rasterization: Duration::from_millis(3),
+        zoom_blur: Duration::from_millis(5),
+        ..CpuHotPathTimings::default()
+    };
+    let second = CpuHotPathTimings {
+        source_rasterization: Duration::from_millis(7),
+        zoom_blur: Duration::from_millis(11),
+        global_post_effect: Duration::from_millis(13),
+        ..CpuHotPathTimings::default()
+    };
+    let snapshots = [
+        WorkerSnapshot {
+            stats: PreparationStats::default(),
+            timings: PreparationTimings::default(),
+            hot_path_timings: first,
+        },
+        WorkerSnapshot {
+            stats: PreparationStats::default(),
+            timings: PreparationTimings::default(),
+            hot_path_timings: second,
+        },
+    ];
+
+    let aggregate = aggregate_hot_path_timings(&snapshots);
+    assert_eq!(aggregate.source_rasterization, Duration::from_millis(10));
+    assert_eq!(aggregate.zoom_blur, Duration::from_millis(16));
+    assert_eq!(aggregate.global_post_effect, Duration::from_millis(13));
+    assert!(aggregate.layer_composition.is_zero());
 }
 
 #[test]

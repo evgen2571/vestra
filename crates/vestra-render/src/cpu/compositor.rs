@@ -55,6 +55,7 @@ pub fn compose(
     surfaces: &mut EffectSurfacePool,
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
     timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
 ) -> ComposeStats {
     let mut stats = ComposeStats::default();
     let _time = frame.time;
@@ -75,9 +76,11 @@ pub fn compose(
             *pixel = Rgba(frame.background);
         }
     }
-    let started = Instant::now();
+    let started = profiling_enabled.then(Instant::now);
     surfaces.resize(frame.width, frame.height);
-    timings.layer_composition += started.elapsed();
+    if let Some(started) = started {
+        timings.layer_composition += started.elapsed();
+    }
     for layer in &frame.layers {
         if layer.content_dependency == TemporalDependency::Static {
             if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
@@ -87,7 +90,7 @@ pub fn compose(
             surfaces.clear();
             stats.static_layer_renders += 1;
             if uses_direct_colour_path(layer) {
-                let started = Instant::now();
+                let started = profiling_enabled.then(Instant::now);
                 draw_layer(
                     surfaces.current(),
                     assets,
@@ -95,10 +98,13 @@ pub fn compose(
                     1.0,
                     layer.colour_transform,
                     timings,
+                    profiling_enabled,
                 );
-                timings.source_rasterization += started.elapsed();
+                if let Some(started) = started {
+                    timings.source_rasterization += started.elapsed();
+                }
             } else {
-                let started = Instant::now();
+                let started = profiling_enabled.then(Instant::now);
                 draw_layer(
                     surfaces.current(),
                     assets,
@@ -106,9 +112,12 @@ pub fn compose(
                     1.0,
                     ColourTransform::default(),
                     timings,
+                    profiling_enabled,
                 );
-                timings.source_rasterization += started.elapsed();
-                effects::apply_chain(surfaces, &layer.effects, timings);
+                if let Some(started) = started {
+                    timings.source_rasterization += started.elapsed();
+                }
+                effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
             }
             let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
             if let Some(cached) =
@@ -118,15 +127,17 @@ pub fn compose(
             {
                 composite_cached_surface(canvas, cached, layer, &mut stats);
             } else {
-                let started = Instant::now();
+                let started = profiling_enabled.then(Instant::now);
                 blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
-                timings.layer_composition += started.elapsed();
+                if let Some(started) = started {
+                    timings.layer_composition += started.elapsed();
+                }
                 stats.generic_blend_surface_calls += 1;
             }
             continue;
         }
         if uses_direct_colour_path(layer) {
-            let started = Instant::now();
+            let started = profiling_enabled.then(Instant::now);
             draw_layer(
                 canvas,
                 assets,
@@ -134,12 +145,15 @@ pub fn compose(
                 layer.opacity,
                 layer.colour_transform,
                 timings,
+                profiling_enabled,
             );
-            timings.source_rasterization += started.elapsed();
+            if let Some(started) = started {
+                timings.source_rasterization += started.elapsed();
+            }
             continue;
         }
         surfaces.clear();
-        let started = Instant::now();
+        let started = profiling_enabled.then(Instant::now);
         draw_layer(
             surfaces.current(),
             assets,
@@ -147,15 +161,26 @@ pub fn compose(
             1.0,
             ColourTransform::default(),
             timings,
+            profiling_enabled,
         );
-        timings.source_rasterization += started.elapsed();
-        effects::apply_chain(surfaces, &layer.effects, timings);
-        let started = Instant::now();
+        if let Some(started) = started {
+            timings.source_rasterization += started.elapsed();
+        }
+        effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
+        let started = profiling_enabled.then(Instant::now);
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
-        timings.layer_composition += started.elapsed();
+        if let Some(started) = started {
+            timings.layer_composition += started.elapsed();
+        }
         stats.generic_blend_surface_calls += 1;
     }
-    effects::apply_to(surfaces, canvas, &frame.post_effects, timings);
+    effects::apply_to(
+        surfaces,
+        canvas,
+        &frame.post_effects,
+        timings,
+        profiling_enabled,
+    );
     stats
 }
 

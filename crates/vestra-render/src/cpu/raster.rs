@@ -24,6 +24,7 @@ pub(crate) fn draw_layer(
     opacity: f64,
     colour_transform: ColourTransform,
     timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
 ) {
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
@@ -60,9 +61,11 @@ pub(crate) fn draw_layer(
                 canvas.height(),
             );
             if transform.is_valid() {
-                let started = std::time::Instant::now();
+                let started = profiling_enabled.then(std::time::Instant::now);
                 draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
-                timings.transform_sampling += started.elapsed();
+                if let Some(started) = started {
+                    timings.transform_sampling += started.elapsed();
+                }
             }
         }
         EvaluatedSource::Spectrum2D {
@@ -178,11 +181,20 @@ fn draw_resolved_image(
                     colour_transform,
                 );
                 let destination = canvas.get_pixel_mut(x, y);
-                *destination = source_over(*destination, sampled, opacity);
+                *destination = composite_sample(*destination, sampled, opacity);
             }
             mapped.x += inverse.m00;
             mapped.y += inverse.m10;
         }
+    }
+}
+
+#[inline]
+fn composite_sample(destination: Rgba<u8>, sampled: Rgba<u8>, opacity: f64) -> Rgba<u8> {
+    if opacity == 1.0 && sampled[3] == u8::MAX {
+        sampled
+    } else {
+        source_over(destination, sampled, opacity)
     }
 }
 
@@ -273,4 +285,33 @@ pub(super) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTrans
             .clamp(0.0, 255.0) as u8;
     }
     pixel
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opaque_sample_fast_path_matches_source_over() {
+        let destination = Rgba([17, 29, 43, 211]);
+        let sampled = Rgba([191, 127, 61, 255]);
+        assert_eq!(
+            composite_sample(destination, sampled, 1.0),
+            source_over(destination, sampled, 1.0)
+        );
+    }
+
+    #[test]
+    fn non_opaque_sample_keeps_source_over_fallback() {
+        let destination = Rgba([17, 29, 43, 211]);
+        let sampled = Rgba([191, 127, 61, 254]);
+        assert_eq!(
+            composite_sample(destination, sampled, 1.0),
+            source_over(destination, sampled, 1.0)
+        );
+        assert_eq!(
+            composite_sample(destination, Rgba([191, 127, 61, 255]), 0.5),
+            source_over(destination, Rgba([191, 127, 61, 255]), 0.5)
+        );
+    }
 }

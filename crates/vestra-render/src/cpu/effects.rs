@@ -18,21 +18,24 @@ pub(super) fn apply_chain(
     surfaces: &mut EffectSurfacePool,
     effects: &[EvaluatedEffect],
     timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
 ) {
     for effect in effects {
         let plan = effect_pass_plan(effect);
-        let started = Instant::now();
+        let started = profiling_enabled.then(Instant::now);
         execute_effect_pass_sequence(surfaces, plan.as_slice());
-        let elapsed = started.elapsed();
-        timings.effect_execution += elapsed;
-        match effect {
-            EvaluatedEffect::GaussianBlur { .. } => timings.gaussian_blur += elapsed,
-            EvaluatedEffect::ZoomBlur { .. } => timings.zoom_blur += elapsed,
-            EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. } => {
-                timings.bloom_glow += elapsed;
+        if let Some(started) = started {
+            let elapsed = started.elapsed();
+            timings.effect_execution += elapsed;
+            match effect {
+                EvaluatedEffect::GaussianBlur { .. } => timings.gaussian_blur += elapsed,
+                EvaluatedEffect::ZoomBlur { .. } => timings.zoom_blur += elapsed,
+                EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. } => {
+                    timings.bloom_glow += elapsed;
+                }
+                EvaluatedEffect::CameraShake { .. } => {}
+                _ => timings.other_effects += elapsed,
             }
-            EvaluatedEffect::CameraShake { .. } => {}
-            _ => timings.other_effects += elapsed,
         }
     }
 }
@@ -226,6 +229,7 @@ pub(super) fn apply_to(
     destination: &mut RgbaImage,
     effects: &[EvaluatedEffect],
     timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
 ) {
     if effects
         .iter()
@@ -233,15 +237,21 @@ pub(super) fn apply_to(
     {
         return;
     }
-    let started = Instant::now();
+    let started = profiling_enabled.then(Instant::now);
     surfaces.begin_from(destination);
-    timings.surface_copy += started.elapsed();
-    let started = Instant::now();
-    apply_chain(surfaces, effects, timings);
-    timings.global_post_effect += started.elapsed();
-    let started = Instant::now();
+    if let Some(started) = started {
+        timings.surface_copy += started.elapsed();
+    }
+    let started = profiling_enabled.then(Instant::now);
+    apply_chain(surfaces, effects, timings, profiling_enabled);
+    if let Some(started) = started {
+        timings.global_post_effect += started.elapsed();
+    }
+    let started = profiling_enabled.then(Instant::now);
     surfaces.copy_to(destination);
-    timings.surface_copy += started.elapsed();
+    if let Some(started) = started {
+        timings.surface_copy += started.elapsed();
+    }
 }
 
 fn apply_colour_transform(source: &RgbaImage, target: &mut RgbaImage, transform: ColourTransform) {
@@ -429,7 +439,7 @@ mod tests {
         let mut surfaces = EffectSurfacePool::new(source.width(), source.height());
         surfaces.begin_from(source);
         let mut timings = CpuHotPathTimings::default();
-        apply_chain(&mut surfaces, &[effect], &mut timings);
+        apply_chain(&mut surfaces, &[effect], &mut timings, true);
         let mut output = RgbaImage::new(source.width(), source.height());
         surfaces.copy_to(&mut output);
         output
@@ -626,6 +636,7 @@ mod tests {
                 colour: [255, 64, 0, 255],
             }],
             &mut CpuHotPathTimings::default(),
+            true,
         );
 
         assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);

@@ -271,6 +271,9 @@ pub struct StagedMetrics {
     pub peak_frames_in_flight: usize,
     pub submitted_frames: u64,
     pub backend_completed_frames: u64,
+    /// Aggregate successful backend frame-render execution time. With
+    /// concurrent CPU workers this may exceed wall-clock render duration.
+    pub frame_render_work_duration: Duration,
     pub written_frames: u64,
     pub nonblocking_polls: u64,
     pub nonblocking_poll_duration: Duration,

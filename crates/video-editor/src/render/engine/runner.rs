@@ -1123,7 +1123,12 @@ where
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
-    timings.frame_render_ms = milliseconds(frame_loop.frame_composition);
+    let frame_render = if prepared.backend.kind() == RenderBackendKind::Cpu {
+        prepared.backend.staged_metrics().frame_render_work_duration
+    } else {
+        frame_loop.frame_composition
+    };
+    timings.frame_render_ms = milliseconds(frame_render);
     timings.track_evaluation_ms = milliseconds(frame_loop.track_evaluation);
     timings.encoder_write_ms = milliseconds(frame_loop.encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());

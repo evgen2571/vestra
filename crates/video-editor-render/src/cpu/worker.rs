@@ -1,6 +1,9 @@
 //! State owned by one CPU render worker.
 
-use std::sync::Arc;
+use std::{
+    panic::AssertUnwindSafe,
+    sync::{Arc, mpsc::SyncSender},
+};
 
 use image::RgbaImage;
 
@@ -13,6 +16,100 @@ use crate::{
 };
 
 use super::{assets::PreparedAssets, compositor};
+
+pub(super) struct CpuFrameJob {
+    pub(super) frame_number: u64,
+    pub(super) frame: EvaluatedFrame,
+    #[cfg(test)]
+    pub(crate) panic_for_test: bool,
+}
+
+impl CpuFrameJob {
+    pub(super) fn new(frame_number: u64, frame: EvaluatedFrame) -> Self {
+        Self {
+            frame_number,
+            frame,
+            #[cfg(test)]
+            panic_for_test: false,
+        }
+    }
+}
+
+pub(super) enum WorkerCommand {
+    Render(CpuFrameJob),
+    Snapshot(SyncSender<WorkerSnapshot>),
+    Shutdown,
+}
+
+pub(super) enum WorkerCompletion {
+    Frame {
+        worker_id: usize,
+        frame: CompletedFrame,
+        render_duration: std::time::Duration,
+    },
+    Failed {
+        worker_id: usize,
+        frame_number: u64,
+        message: String,
+    },
+}
+
+pub(super) struct WorkerSnapshot {
+    pub(super) stats: PreparationStats,
+    pub(super) timings: PreparationTimings,
+}
+
+pub(super) fn run_worker(
+    worker_id: usize,
+    plan: RenderPlan,
+    decoded: Arc<DecodedAssets>,
+    command_rx: std::sync::mpsc::Receiver<WorkerCommand>,
+    completion_tx: SyncSender<WorkerCompletion>,
+) {
+    let mut state = CpuWorkerState::new(&plan, decoded);
+    while let Ok(command) = command_rx.recv() {
+        match command {
+            WorkerCommand::Render(job) => {
+                let frame_number = job.frame_number;
+                let render_started = std::time::Instant::now();
+                let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    #[cfg(test)]
+                    if job.panic_for_test {
+                        panic!("injected CPU worker panic");
+                    }
+                    state.render_frame(job.frame_number, &job.frame)
+                }));
+                let render_duration = render_started.elapsed();
+                let panicked = result.is_err();
+                let completion = match result {
+                    Ok(frame) => WorkerCompletion::Frame {
+                        worker_id,
+                        frame,
+                        render_duration,
+                    },
+                    Err(_) => WorkerCompletion::Failed {
+                        worker_id,
+                        frame_number,
+                        message: "CPU worker panicked while rendering".to_owned(),
+                    },
+                };
+                if completion_tx.send(completion).is_err() {
+                    break;
+                }
+                if panicked {
+                    break;
+                }
+            }
+            WorkerCommand::Snapshot(reply) => {
+                let _ = reply.send(WorkerSnapshot {
+                    stats: state.stats(),
+                    timings: state.timings(),
+                });
+            }
+            WorkerCommand::Shutdown => break,
+        }
+    }
+}
 
 /// Mutable composition state that will be owned by one CPU render worker.
 pub(super) struct CpuWorkerState {

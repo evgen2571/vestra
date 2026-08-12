@@ -3,17 +3,21 @@
 mod events;
 mod failure;
 mod frame_loop;
+mod metrics;
+mod preparation;
 mod runner;
 mod selection;
+mod static_render;
 mod types;
 
 #[cfg(test)]
 pub(crate) use selection::inject_wgpu_preparation_failure;
 pub(crate) use types::backend_fallback_warning;
 
+pub(crate) use preparation::{PreparedState, prepare_for_video, render_prepared_frame};
 #[cfg(test)]
 pub(crate) use runner::render_prepared_with_sink;
-pub(crate) use runner::{PreparedState, prepare_for_video, render_prepared, render_prepared_frame};
+pub(crate) use static_render::render_prepared;
 pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderObserverControl, RenderOptions, RenderSummary, RenderTimings,
@@ -26,12 +30,12 @@ pub use types::{
 )]
 mod tests {
     use super::failure::{completed_frame_state, failure_progress};
-    use super::runner::{milliseconds, render_with_backend_builder};
     use super::selection::create_backend_with;
     use super::{
         BackendFallback, RenderBackendPreference, RenderFailureContext, RenderFailureStage,
         RenderObserverControl, RenderOptions,
     };
+    use super::{metrics::milliseconds, runner::render_with_backend_builder};
     use std::{
         cell::Cell,
         path::Path,

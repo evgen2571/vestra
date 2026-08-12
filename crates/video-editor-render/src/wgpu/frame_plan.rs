@@ -53,6 +53,11 @@ pub(super) enum GpuOperation {
         destination: TextureSlot,
         parameters_index: u32,
     },
+    RenderSpectrum2DLayer {
+        layer_index: usize,
+        destination: TextureSlot,
+        parameters_index: u32,
+    },
     /// Retains an explicitly requested original effect input.
     /// This is a texture-to-texture copy in the frame's single encoder, not a
     /// new working-texture allocation.
@@ -177,8 +182,11 @@ impl GpuFramePlan {
                     });
                 }
                 EvaluatedSource::Spectrum2D { .. } => {
-                    // Spectrum2D GPU drawing is intentionally deferred to its renderer phase.
-                    unreachable!("Spectrum2D WGPU rendering is not implemented in Subphase A")
+                    operations.push(GpuOperation::RenderSpectrum2DLayer {
+                        layer_index,
+                        destination: TextureSlot::Layer,
+                        parameters_index: parameter_count,
+                    });
                 }
             }
             parameter_count += 1;
@@ -263,6 +271,9 @@ impl GpuFramePlan {
                 | GpuOperation::RenderSolidLayer {
                     parameters_index, ..
                 }
+                | GpuOperation::RenderSpectrum2DLayer {
+                    parameters_index, ..
+                }
                 | GpuOperation::ApplyEffect {
                     parameters_index, ..
                 }
@@ -310,6 +321,13 @@ impl GpuFramePlan {
                     next_value += 1;
                 }
                 GpuOperation::RenderSolidLayer { destination, .. } => {
+                    if *destination != TextureSlot::Layer {
+                        return Err(invalid(operation_index, "must render a layer into Layer"));
+                    }
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
+                }
+                GpuOperation::RenderSpectrum2DLayer { destination, .. } => {
                     if *destination != TextureSlot::Layer {
                         return Err(invalid(operation_index, "must render a layer into Layer"));
                     }

@@ -347,18 +347,6 @@ impl RenderBackend for WgpuBackend {
         frame_number: u64,
         evaluated: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
-        if evaluated
-            .layers
-            .iter()
-            .any(|layer| matches!(layer.source, EvaluatedSource::Spectrum2D { .. }))
-        {
-            return Err(Diagnostic::error(
-                "WGPU-SOURCE-UNSUPPORTED",
-                crate::Category::Backend,
-                "Spectrum2D WGPU rendering is not implemented in this renderer phase",
-                "",
-            ));
-        }
         self.context
             .runtime_errors
             .check()
@@ -811,6 +799,30 @@ fn encode_parameters(
                     solid_or_background: colour.map(f64::from).map(|value| value as f32),
                     ..LayerParameters::zeroed()
                 })?;
+            }
+            GpuOperation::RenderSpectrum2DLayer { layer_index, .. } => {
+                let EvaluatedSource::Spectrum2D {
+                    bands,
+                    x,
+                    y,
+                    width,
+                    height,
+                    bar_gap_ratio,
+                    colour,
+                } = &frame.layers[*layer_index].source
+                else {
+                    unreachable!("Spectrum2D frame operation must reference Spectrum2D source")
+                };
+                arena.push(&parameters::spectrum2d(
+                    frame,
+                    bands,
+                    *x,
+                    *y,
+                    *width,
+                    *height,
+                    *bar_gap_ratio,
+                    *colour,
+                )?)?;
             }
             GpuOperation::CompositeLayer { layer_index, .. }
             | GpuOperation::CompositeCachedLayer { layer_index, .. } => {

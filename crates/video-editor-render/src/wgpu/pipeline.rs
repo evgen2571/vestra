@@ -8,25 +8,33 @@ use crate::{
 
 pub(super) struct GpuPipelines {
     pub(super) _layer_shader: wgpu::ShaderModule,
+    pub(super) _spectrum2d_shader: wgpu::ShaderModule,
     pub(super) _composite_shader: wgpu::ShaderModule,
     pub(super) _effect_shaders: Vec<(EffectKernel, wgpu::ShaderModule)>,
     pub(super) layer: wgpu::ComputePipeline,
+    pub(super) spectrum2d: wgpu::ComputePipeline,
     pub(super) composite: wgpu::ComputePipeline,
     pub(super) effects: Vec<(EffectKernel, wgpu::ComputePipeline)>,
     pub(super) layer_bindings: wgpu::BindGroupLayout,
+    pub(super) spectrum2d_bindings: wgpu::BindGroupLayout,
     pub(super) composite_bindings: wgpu::BindGroupLayout,
     pub(super) effect_bindings: wgpu::BindGroupLayout,
 }
 
 impl GpuPipelines {
-    pub(super) const BASE_SHADER_MODULE_COUNT: usize = 2;
-    pub(super) const BASE_PIPELINE_COUNT: usize = 2;
+    pub(super) const BASE_SHADER_MODULE_COUNT: usize = 3;
+    pub(super) const BASE_PIPELINE_COUNT: usize = 3;
 
     pub(super) fn create(device: &wgpu::Device) -> Self {
         let layer_shader = shader(
             device,
             "video-editor layer shader",
             include_str!("../shaders/layer.wgsl"),
+        );
+        let spectrum2d_shader = shader(
+            device,
+            "video-editor Spectrum2D shader",
+            include_str!("../shaders/spectrum2d.wgsl"),
         );
         let composite_shader = shader(
             device,
@@ -47,6 +55,23 @@ impl GpuPipelines {
             label: Some("video-editor layer texture bindings"),
             entries: &[sampled(0), storage_texture(1), uniform],
         });
+        let spectrum2d_bindings =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("video-editor Spectrum2D bindings"),
+                entries: &[
+                    storage_texture(0),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: wgpu::BufferSize::new(PARAMETER_RECORD_BYTES),
+                        },
+                        count: None,
+                    },
+                ],
+            });
         let composite_bindings =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("video-editor composite texture bindings"),
@@ -65,6 +90,12 @@ impl GpuPipelines {
             "video-editor layer pipeline",
             &layer_shader,
             &layer_bindings,
+        );
+        let spectrum2d = pipeline(
+            device,
+            "video-editor Spectrum2D pipeline",
+            &spectrum2d_shader,
+            &spectrum2d_bindings,
         );
         let composite = pipeline(
             device,
@@ -98,12 +129,15 @@ impl GpuPipelines {
             .collect::<Vec<_>>();
         Self {
             _layer_shader: layer_shader,
+            _spectrum2d_shader: spectrum2d_shader,
             _composite_shader: composite_shader,
             _effect_shaders: effect_shaders,
             layer,
+            spectrum2d,
             composite,
             effects,
             layer_bindings,
+            spectrum2d_bindings,
             composite_bindings,
             effect_bindings,
         }

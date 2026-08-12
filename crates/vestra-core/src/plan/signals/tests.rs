@@ -135,15 +135,13 @@ fn interner_assigns_dense_deterministic_ids_and_requirements() {
     assert_eq!(signals.len(), 4);
     assert_eq!(signals.audio_analysis_requirements().iter().len(), 4);
 
-    let duplicate_raw_work = crate::plan::signals::CompiledScalarSignals {
-        signals: vec![
-            rms.clone(),
-            rms,
-            band_signal.clone(),
-            band_signal,
-            other_band_signal,
-        ],
-    };
+    let duplicate_raw_work = crate::plan::signals::CompiledScalarSignals::from_signals(vec![
+        rms.clone(),
+        rms,
+        band_signal.clone(),
+        band_signal,
+        other_band_signal,
+    ]);
     let requirements = duplicate_raw_work.audio_analysis_requirements();
     assert_eq!(requirements.iter().len(), 3);
     assert!(requirements.requires_master_audio());
@@ -315,9 +313,27 @@ fn one_raw_feature_prepares_multiple_complete_signals() {
     )
     .unwrap();
     assert_eq!(prepared.len(), 3);
-    assert_eq!(prepared.signals[0].samples, [0.0, 0.5, 1.0]);
-    assert_eq!(prepared.signals[1].samples, [0.0, 1.0, 2.0]);
-    assert_eq!(prepared.signals[2].samples, [0.0, 2.0, 4.0]);
+    assert_eq!(
+        prepared
+            .get(crate::plan::ScalarSignalId::from_index(0))
+            .unwrap()
+            .samples,
+        [0.0, 0.5, 1.0]
+    );
+    assert_eq!(
+        prepared
+            .get(crate::plan::ScalarSignalId::from_index(1))
+            .unwrap()
+            .samples,
+        [0.0, 1.0, 2.0]
+    );
+    assert_eq!(
+        prepared
+            .get(crate::plan::ScalarSignalId::from_index(2))
+            .unwrap()
+            .samples,
+        [0.0, 2.0, 4.0]
+    );
 }
 
 fn envelope(attack: u128, release: u128) -> CompiledSignalTransform {

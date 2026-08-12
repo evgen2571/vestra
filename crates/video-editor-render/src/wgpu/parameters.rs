@@ -109,10 +109,11 @@ pub(super) fn dynamic_uniform_offset(offset: u64) -> Result<u32, crate::Diagnost
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::mem::{align_of, size_of};
 
     #[test]
     fn frame_parameter_offsets_honor_dynamic_uniform_alignment() {
-        let mut arena = FrameParameterArena::new(256, 512);
+        let mut arena = FrameParameterArena::new(256, 496);
         assert_eq!(
             arena
                 .push(&LayerParameters::zeroed())
@@ -125,12 +126,12 @@ mod tests {
                 .expect("second record"),
             256
         );
-        assert_eq!(arena.bytes().len(), 432);
+        assert_eq!(arena.bytes().len(), 496);
     }
 
     #[test]
     fn frame_parameter_overflow_is_reported_before_submission() {
-        let mut arena = FrameParameterArena::new(256, 176);
+        let mut arena = FrameParameterArena::new(256, 240);
         arena
             .push(&LayerParameters::zeroed())
             .expect("first record");
@@ -142,39 +143,84 @@ mod tests {
 
     #[test]
     fn parameter_record_range_covers_exactly_one_record() {
-        let range = parameter_record_range(256, 176, 512).expect("second record fits");
-        assert_eq!(range, 256..432);
-        assert_eq!(PARAMETER_RECORD_BYTES, 176);
+        let range = parameter_record_range(256, 240, 496).expect("second record fits");
+        assert_eq!(range, 256..496);
+        assert_eq!(PARAMETER_RECORD_BYTES, 240);
     }
 
     #[test]
     fn parameter_record_range_rejects_overflow_and_invalid_alignment() {
-        assert!(parameter_record_range(0, 176, 512).is_err());
+        assert!(parameter_record_range(0, 304, 512).is_err());
         assert!(parameter_record_range(256, u64::MAX - 1, u64::MAX).is_err());
         assert!(parameter_record_range(256, 512, 600).is_err());
     }
 
     #[test]
+    fn spectrum2d_parameters_fit_one_256_byte_aligned_record() {
+        assert_eq!(size_of::<Spectrum2DParameters>(), 240);
+        assert_eq!(align_of::<Spectrum2DParameters>(), 16);
+        assert!(size_of::<Spectrum2DParameters>() <= 256);
+    }
+
+    #[test]
+    fn spectrum2d_packing_zeroes_unused_bands_and_preserves_all_48_values() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 1920,
+            height: 1080,
+            layers: Vec::new(),
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let bands = (0..48).map(|index| index as f32 / 48.0).collect::<Vec<_>>();
+        let parameters = spectrum2d(&frame, &bands, 0.0, 0.0, 1.0, 1.0, 0.0, [20, 30, 40, 128])
+            .expect("48 bands fit");
+        assert_eq!(parameters.header[3], 128);
+        assert_eq!(parameters.bands[11][3], bands[47]);
+        assert_eq!(parameters.bands[0][0], 0.0);
+
+        let shorter = spectrum2d(
+            &frame,
+            &[1.0, 2.0],
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0,
+            [20, 30, 40, 128],
+        )
+        .expect("short band list fits");
+        assert_eq!(shorter.bands[0][2], 0.0);
+    }
+
+    #[test]
     fn arena_pads_many_records_for_different_adapter_alignments() {
         for alignment in [16, 256, 512] {
-            let stride = u64::from(alignment).max(std::mem::size_of::<LayerParameters>() as u64);
-            let mut arena = FrameParameterArena::new(
-                alignment,
-                stride * 9 + std::mem::size_of::<LayerParameters>() as u64,
-            );
+            let stride = u64::from(alignment)
+                * u64::from(
+                    alignment
+                        .max(PARAMETER_RECORD_BYTES as u32)
+                        .div_ceil(alignment),
+                );
+            let mut arena =
+                FrameParameterArena::new(alignment, stride * 9 + PARAMETER_RECORD_BYTES);
             for index in 0..10 {
                 assert_eq!(
                     arena.push(&LayerParameters::zeroed()).expect("record fits"),
                     index * stride as u32
                 );
             }
-            assert_eq!(arena.bytes().len(), (9 * stride + 176) as usize);
+            assert_eq!(
+                arena.bytes().len(),
+                (9 * stride + PARAMETER_RECORD_BYTES) as usize
+            );
         }
     }
 
     #[test]
     fn final_record_can_exactly_fill_the_prepared_buffer() {
-        let mut arena = FrameParameterArena::new(256, 432);
+        let mut arena = FrameParameterArena::new(256, 496);
         arena
             .push(&LayerParameters::zeroed())
             .expect("first record");
@@ -184,7 +230,7 @@ mod tests {
                 .expect("final record"),
             256
         );
-        assert_eq!(arena.bytes().len(), 432);
+        assert_eq!(arena.bytes().len(), 496);
     }
 
     #[test]
@@ -229,6 +275,18 @@ pub(super) struct LayerParameters {
     pub(super) colour_row2: [f32; 4],
     pub(super) colour_offset: [f32; 4],
     pub(super) solid_or_background: [f32; 4],
+}
+
+/// Fixed-size evaluated Spectrum2D source parameters. The bands are packed as
+/// vec4 values because uniform-buffer array elements have a 16-byte stride in
+/// WGSL. Unused entries are zeroed and ignored by `band_count`.
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
+pub(super) struct Spectrum2DParameters {
+    pub(super) header: [u32; 4],
+    pub(super) region: [f32; 4],
+    pub(super) style: [f32; 4],
+    pub(super) bands: [[f32; 4]; 12],
 }
 
 macro_rules! effect_parameters {
@@ -441,8 +499,53 @@ pub(super) const PARAMETER_RECORD_BYTES: u64 = {
     size = max_parameter_size(size, std::mem::size_of::<ChromaticAberrationParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<VignetteParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<ColorAdjustParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<Spectrum2DParameters>()) as usize;
     size as u64
 };
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the evaluated source fields are packed without introducing a backend-specific source type"
+)]
+pub(super) fn spectrum2d(
+    frame: &EvaluatedFrame,
+    bands: &[f32],
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    bar_gap_ratio: f64,
+    colour: [u8; 4],
+) -> Result<Spectrum2DParameters, crate::Diagnostic> {
+    if bands.len() > 48 {
+        return Err(crate::Diagnostic::error(
+            "WGPU-SPECTRUM2D-BANDS",
+            crate::Category::Backend,
+            format!("Spectrum2D contains {} bands, maximum is 48", bands.len()),
+            "",
+        ));
+    }
+    let mut packed = [[0.0; 4]; 12];
+    for (index, value) in bands.iter().copied().enumerate() {
+        packed[index / 4][index % 4] = value;
+    }
+    Ok(Spectrum2DParameters {
+        header: [
+            frame.width,
+            frame.height,
+            bands.len() as u32,
+            u32::from(colour[3]),
+        ],
+        region: [x as f32, y as f32, width as f32, height as f32],
+        style: [
+            bar_gap_ratio as f32,
+            f32::from(colour[0]),
+            f32::from(colour[1]),
+            f32::from(colour[2]),
+        ],
+        bands: packed,
+    })
+}
 
 #[expect(
     clippy::too_many_arguments,

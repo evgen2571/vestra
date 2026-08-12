@@ -42,6 +42,7 @@ pub(super) struct FrameExecutionMetrics {
 pub(super) struct FrameBindGroups {
     clear_canvas_a: wgpu::BindGroup,
     solid_layer: wgpu::BindGroup,
+    spectrum2d_layer: wgpu::BindGroup,
     image_layers: Vec<wgpu::BindGroup>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
@@ -70,6 +71,15 @@ impl FrameBindGroups {
             device,
             &pipelines.layer_bindings,
             &sources.solid_texture.view,
+            &frame
+                .working
+                .get(super::frame_plan::TextureSlot::Layer)
+                .view,
+            parameters,
+        );
+        let spectrum2d_layer = spectrum2d_group(
+            device,
+            &pipelines.spectrum2d_bindings,
             &frame
                 .working
                 .get(super::frame_plan::TextureSlot::Layer)
@@ -163,10 +173,11 @@ impl FrameBindGroups {
                 }
             }
         }
-        let persistent_created = sources.textures.len() + 2 + composites.len() + effects.len();
+        let persistent_created = sources.textures.len() + 3 + composites.len() + effects.len();
         Self {
             clear_canvas_a,
             solid_layer,
+            spectrum2d_layer,
             image_layers,
             composites,
             effects,
@@ -288,6 +299,24 @@ pub(super) fn encode_and_submit(
                     &mut encoder,
                     &pipelines.layer,
                     group,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
+            }
+            GpuOperation::RenderSpectrum2DLayer {
+                destination,
+                parameters_index,
+                ..
+            } => {
+                debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
+                dispatch(
+                    &mut encoder,
+                    &pipelines.spectrum2d,
+                    &bind_groups.spectrum2d_layer,
                     parameters.offset(*parameters_index)?,
                     width,
                     height,
@@ -578,6 +607,28 @@ fn layer_group<'a>(
             },
             wgpu::BindGroupEntry {
                 binding: 2,
+                resource: parameter_binding(parameters),
+            },
+        ],
+    })
+}
+
+fn spectrum2d_group<'a>(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    output: &'a wgpu::TextureView,
+    parameters: &'a wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("video-editor Spectrum2D operation"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(output),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
                 resource: parameter_binding(parameters),
             },
         ],

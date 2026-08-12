@@ -138,8 +138,12 @@ fn raster_bounds(start: f64, end: f64, limit: u32) -> Option<(u32, u32)> {
         return None;
     }
     let limit = f64::from(limit);
-    let start = start.floor().clamp(0.0, limit) as u32;
-    let end = end.ceil().clamp(0.0, limit) as u32;
+    // A pixel is covered when its centre lies in [start, end).  For an
+    // integer pixel coordinate p this is start - 0.5 <= p < end - 0.5.
+    // Converting both edges with ceil keeps adjacent fractional rectangles
+    // half-open and therefore prevents a shared boundary pixel.
+    let start = (start - 0.5).ceil().clamp(0.0, limit) as u32;
+    let end = (end - 0.5).ceil().clamp(0.0, limit) as u32;
     (start < end).then_some((start, end))
 }
 
@@ -424,6 +428,56 @@ mod tests {
         for x in 0..16 {
             assert_eq!(alpha(&image, x, 0), 255);
         }
+    }
+
+    #[test]
+    fn fractional_zero_gap_bars_do_not_blend_shared_boundary_pixels() {
+        let image = render(
+            10,
+            4,
+            &[1.0, 1.0, 1.0],
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0,
+            [20, 30, 40, 128],
+        );
+
+        for pixel in image.pixels() {
+            assert_eq!(pixel.0, [20, 30, 40, 128]);
+        }
+    }
+
+    #[test]
+    fn fractional_nonzero_gap_bars_leave_deterministic_transparent_gaps() {
+        let image = render(
+            10,
+            4,
+            &[1.0, 1.0, 1.0],
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.2,
+            [20, 30, 40, 255],
+        );
+
+        for x in [3, 6] {
+            assert_eq!(alpha(&image, x, 0), 0, "gap pixel {x} is filled");
+        }
+        for x in [1, 2, 4, 5, 7, 8, 9] {
+            assert_eq!(alpha(&image, x, 0), 255, "bar pixel {x} is transparent");
+        }
+    }
+
+    #[test]
+    fn raster_bounds_uses_pixel_centres_for_fractional_edges() {
+        assert_eq!(raster_bounds(0.0, 10.0 / 3.0, 10), Some((0, 3)));
+        assert_eq!(raster_bounds(10.0 / 3.0, 20.0 / 3.0, 10), Some((3, 7)));
+        assert_eq!(raster_bounds(20.0 / 3.0, 10.0, 10), Some((7, 10)));
+        assert_eq!(raster_bounds(-1.0, 0.25, 10), None);
+        assert_eq!(raster_bounds(9.75, 10.5, 10), None);
     }
 
     #[test]

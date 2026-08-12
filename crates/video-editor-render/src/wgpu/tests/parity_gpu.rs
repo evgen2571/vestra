@@ -13,15 +13,43 @@ use crate::{
     animation::Track,
     domain::Point,
     plan::{
-        ActiveSchedule, CompileOptions, CompiledEffect, CompiledScalarProperty, CompiledSizing,
-        CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, RenderPlan, ScheduleAction,
-        ScheduledItem, TimedEffect, compile,
+        ActiveSchedule, ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty,
+        CompiledSizing, CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, EvaluatedSource,
+        RenderPlan, ScheduleAction, ScheduledItem, TimedEffect, compile,
     },
     project::{ValidationOptions, load_and_validate},
-    render::{CpuBackend, effects::effect_pass_plan},
+    render::{CpuBackend, RenderBackend, effects::effect_pass_plan},
 };
 use bytemuck::Zeroable;
 use image::RgbaImage;
+
+fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
+    EvaluatedFrame {
+        time: 0,
+        background: [0, 0, 0, 0],
+        width: 10,
+        height: 4,
+        layers: vec![crate::plan::EvaluatedLayer {
+            compiled_layer_index: 0,
+            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            source: EvaluatedSource::Spectrum2D {
+                bands,
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+                bar_gap_ratio,
+                colour: [20, 30, 40, 128],
+            },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: crate::plan::ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }],
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    }
+}
 
 fn scalar(track: Track<f64>) -> CompiledScalarProperty {
     CompiledScalarProperty::authored(track)
@@ -146,7 +174,7 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
     let requirements = GpuRequirements::from_plan(
         &plan,
         &decoded,
-        std::mem::size_of::<LayerParameters>() as u32,
+        super::parameters::PARAMETER_RECORD_BYTES as u32,
     )
     .expect("requirements calculate");
     let mut arena = FrameParameterArena::new(
@@ -167,6 +195,187 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
             .code,
         "WGPU-PARAMETER-OVERFLOW"
     );
+}
+
+#[test]
+fn gpu_spectrum2d_matches_cpu_for_fractional_zero_gap_bars() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 10;
+    plan.canvas.height = 4;
+    plan.compilation.effect_pass_count = 0;
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let frame = spectrum_frame(vec![1.0, 1.0, 1.0], 0.0);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    let mut cpu_output = RgbaImage::new(10, 4);
+    let mut gpu_output = RgbaImage::new(10, 4);
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU Spectrum2D frame renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("GPU Spectrum2D frame renders");
+    assert_eq!(cpu_output, gpu_output);
+
+    let frame = spectrum_frame(vec![1.0, 1.0, 1.0], 0.2);
+    let mut cpu_output = RgbaImage::new(10, 4);
+    let mut gpu_output = RgbaImage::new(10, 4);
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU gapped Spectrum2D frame renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("GPU gapped Spectrum2D frame renders");
+    assert_eq!(cpu_output, gpu_output);
+}
+
+#[test]
+fn gpu_spectrum2d_brightness_matches_cpu_without_double_application() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 10;
+    plan.canvas.height = 4;
+    plan.compilation.effect_pass_count = 0;
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
+    let brightness = EvaluatedEffect::Brightness { amount: 0.12 };
+    frame.layers[0].effects = vec![brightness.clone()];
+    frame.layers[0].colour_transform = ColourTransform::from_effects([brightness]);
+
+    let _ = gpu_effect_case_matches_cpu(&plan, &decoded, &frame, "Spectrum2D brightness", 2);
+}
+
+#[test]
+fn gpu_spectrum2d_brightness_then_bloom_matches_cpu() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 10;
+    plan.canvas.height = 4;
+    plan.compilation.effect_pass_count = 0;
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
+    let brightness = EvaluatedEffect::Brightness { amount: 0.12 };
+    frame.layers[0].effects = vec![
+        brightness.clone(),
+        EvaluatedEffect::Bloom {
+            threshold: 0.1,
+            radius: 2.0,
+            intensity: 1.0,
+        },
+    ];
+    frame.layers[0].colour_transform = ColourTransform::from_effects([brightness]);
+
+    let _ = gpu_effect_case_matches_cpu(
+        &plan,
+        &decoded,
+        &frame,
+        "Spectrum2D brightness and bloom",
+        2,
+    );
+}
+
+#[test]
+fn gpu_spectrum2d_frames_keep_distinct_in_flight_band_data() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 10;
+    plan.canvas.height = 4;
+    plan.compilation.effect_pass_count = 0;
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let frames = [
+        spectrum_frame(vec![1.0, 0.0, 0.0], 0.0),
+        spectrum_frame(vec![0.0, 1.0, 0.0], 0.0),
+        spectrum_frame(vec![0.0, 0.0, 1.0], 0.0),
+    ];
+    let Some(mut gpu) = super::gpu::wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), 3)
+    else {
+        return;
+    };
+    for (frame_number, frame) in frames.iter().enumerate() {
+        gpu.submit_frame(frame_number as u64, frame)
+            .expect("GPU Spectrum2D frame submits");
+    }
+    let completed = gpu.flush().expect("GPU Spectrum2D frames flush");
+    assert_eq!(completed.len(), frames.len());
+    for result in completed {
+        let expected = &frames[result.frame_number as usize];
+        let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+        let mut cpu_output = RgbaImage::new(10, 4);
+        cpu.render_frame(expected, &mut cpu_output)
+            .expect("CPU Spectrum2D frame renders");
+        assert_eq!(result.rgba, cpu_output.as_raw().as_slice());
+    }
+}
+
+#[test]
+fn gpu_spectrum2d_uses_the_existing_bloom_pipeline() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut base_plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    base_plan.canvas.width = 10;
+    base_plan.canvas.height = 4;
+    base_plan.compilation.effect_pass_count = 0;
+    let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
+    let without_plan = base_plan.clone();
+    let without_decoded = crate::DecodedAssets::build(&without_plan).expect("fixture decodes");
+    let Some(mut without_bloom) = wgpu_backend_or_skip(&without_plan, without_decoded) else {
+        return;
+    };
+    let mut without_output = RgbaImage::new(10, 4);
+    without_bloom
+        .render_frame(&frame, &mut without_output)
+        .expect("GPU Spectrum2D source renders");
+
+    frame.layers[0].effects = vec![EvaluatedEffect::Bloom {
+        threshold: 0.1,
+        radius: 2.0,
+        intensity: 1.0,
+    }];
+    let bloom_plan = plan_for_evaluated_effect_case(&base_plan, &frame);
+    let bloom_decoded = crate::DecodedAssets::build(&bloom_plan).expect("fixture decodes");
+    let Some(mut with_bloom) = wgpu_backend_or_skip(&bloom_plan, bloom_decoded) else {
+        return;
+    };
+    let mut with_output = RgbaImage::new(10, 4);
+    with_bloom
+        .render_frame(&frame, &mut with_output)
+        .expect("GPU Spectrum2D Bloom frame renders");
+    assert_eq!(without_output.get_pixel(4, 0).0, [0, 0, 0, 0]);
+    assert!(with_output.get_pixel(4, 0)[0] > 0);
+    assert!(with_output.get_pixel(4, 0)[3] > 0);
 }
 
 #[test]

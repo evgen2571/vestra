@@ -1305,6 +1305,72 @@ mod tests {
     }
 
     #[test]
+    fn spectrum2d_one_two_and_four_workers_are_byte_identical() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
+        let frames: Vec<_> = (0..6)
+            .map(|frame_number| {
+                let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number);
+                frame.layers[0].source = EvaluatedSource::Spectrum2D {
+                    bands: vec![
+                        (frame_number as f32 * 0.17).sin().abs(),
+                        0.2 + frame_number as f32 * 0.03,
+                        0.7 - frame_number as f32 * 0.04,
+                        1.0,
+                    ],
+                    x: 0.0,
+                    y: 0.1,
+                    width: 1.0,
+                    height: 0.8,
+                    bar_gap_ratio: 0.0,
+                    colour: [40, 90, 180, 160],
+                };
+                frame
+            })
+            .collect();
+        let collect = |worker_count, decoded: Arc<DecodedAssets>| {
+            let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, worker_count);
+            let mut completed = Vec::new();
+            for (number, frame) in frames.iter().enumerate() {
+                if backend.in_flight() == backend.capacity() {
+                    completed.push(
+                        backend
+                            .poll_completed(PollMode::WaitForOne)
+                            .expect("poll")
+                            .expect("completion"),
+                    );
+                }
+                backend
+                    .submit_frame(number as u64, frame)
+                    .expect("submission");
+            }
+            while backend.in_flight() > 0 {
+                completed.push(
+                    backend
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("drain poll")
+                        .expect("drain completion"),
+                );
+            }
+            completed.sort_by_key(|frame| frame.frame_number);
+            completed
+        };
+        let one = collect(1, Arc::clone(&decoded));
+        let two = collect(2, Arc::clone(&decoded));
+        let four = collect(4, decoded);
+        assert_eq!(one, two);
+        assert_eq!(one, four);
+    }
+
+    #[test]
     fn spectrum2d_uses_normal_opacity_and_bloom_pipeline() {
         let validated = load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
@@ -1325,16 +1391,16 @@ mod tests {
             bar_gap_ratio: 0.0,
             colour: [255, 255, 255, 255],
         };
-        let mut frame = EvaluatedFrame {
+        let frame = EvaluatedFrame {
             time: 0,
-            background: [0, 0, 0, 255],
+            background: [0, 0, 0, 0],
             width: 8,
             height: 8,
             layers: vec![EvaluatedLayer {
                 compiled_layer_index: 99,
                 content_dependency: TemporalDependency::Dynamic,
                 source: spectrum,
-                opacity: 0.5,
+                opacity: 1.0,
                 effects: Vec::new(),
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
@@ -1350,21 +1416,23 @@ mod tests {
             .poll_completed(PollMode::WaitForOne)
             .expect("spectrum poll")
             .expect("spectrum completion");
-        assert_eq!(&without_bloom.rgba[0..4], &[128, 128, 128, 255]);
-
-        frame.layers[0].opacity = 1.0;
-        frame.layers[0].effects = vec![EvaluatedEffect::Bloom {
+        let mut bloom_frame = frame.clone();
+        bloom_frame.layers[0].effects = vec![EvaluatedEffect::Bloom {
             threshold: 0.1,
-            radius: 1.0,
+            radius: 2.0,
             intensity: 1.0,
         }];
-        backend.submit_frame(1, &frame).expect("bloom submission");
+        backend
+            .submit_frame(1, &bloom_frame)
+            .expect("bloom submission");
         let with_bloom = backend
             .poll_completed(PollMode::WaitForOne)
             .expect("bloom poll")
             .expect("bloom completion");
-        assert_ne!(with_bloom.rgba, without_bloom.rgba);
+        assert_eq!(&without_bloom.rgba[2 * 4..3 * 4], &[0, 0, 0, 0]);
+        assert!(with_bloom.rgba[2 * 4] > 0);
         assert!(with_bloom.rgba[2 * 4 + 3] > 0);
+        assert!(with_bloom.rgba[0..4].iter().any(|value| *value > 0));
     }
 
     #[test]

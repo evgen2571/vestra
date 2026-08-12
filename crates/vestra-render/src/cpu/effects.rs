@@ -23,7 +23,15 @@ pub(super) fn apply_chain(
     for effect in effects {
         let plan = effect_pass_plan(effect);
         let started = profiling_enabled.then(Instant::now);
-        execute_effect_pass_sequence(surfaces, plan.as_slice());
+        execute_effect_pass_sequence(
+            surfaces,
+            plan.as_slice(),
+            profiling_enabled.then_some(timings),
+            matches!(
+                effect,
+                EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. }
+            ),
+        );
         if let Some(started) = started {
             let elapsed = started.elapsed();
             timings.effect_execution += elapsed;
@@ -33,6 +41,12 @@ pub(super) fn apply_chain(
                 EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. } => {
                     timings.bloom_glow += elapsed;
                 }
+                EvaluatedEffect::ChromaticAberration { .. } => {
+                    timings.chromatic_aberration += elapsed;
+                }
+                EvaluatedEffect::Vignette { .. } => timings.vignette += elapsed,
+                EvaluatedEffect::ColorAdjust { .. } => timings.color_adjust += elapsed,
+                EvaluatedEffect::Sharpen { .. } => timings.sharpen += elapsed,
                 EvaluatedEffect::CameraShake { .. } => {}
                 _ => timings.other_effects += elapsed,
             }
@@ -40,7 +54,12 @@ pub(super) fn apply_chain(
     }
 }
 
-fn execute_effect_pass_sequence(surfaces: &mut EffectSurfacePool, passes: &[EffectPass]) {
+fn execute_effect_pass_sequence(
+    surfaces: &mut EffectSurfacePool,
+    passes: &[EffectPass],
+    mut timings: Option<&mut CpuHotPathTimings>,
+    profile_bloom_passes: bool,
+) {
     if passes.is_empty() {
         return;
     }
@@ -53,12 +72,33 @@ fn execute_effect_pass_sequence(surfaces: &mut EffectSurfacePool, passes: &[Effe
                 surfaces.release_temporary(temporary);
             }
         }
+        let started = timings.as_ref().map(|_| Instant::now());
         surfaces.run_pass(
             pass.inputs.primary(),
             pass.inputs.secondary(),
             pass.output,
             |source, secondary, target| execute_effect_pass(source, secondary, target, pass),
         );
+        if profile_bloom_passes
+            && let Some(started) = started
+            && let Some(timings) = timings.as_deref_mut()
+        {
+            let elapsed = started.elapsed();
+            match pass.operation {
+                EffectOperation::HighlightExtract { .. } => {
+                    timings.bloom_highlight_extract += elapsed;
+                }
+                EffectOperation::GaussianHorizontal { .. }
+                | EffectOperation::GaussianVertical { .. } => {
+                    timings.bloom_gaussian_blur += elapsed;
+                }
+                EffectOperation::Composite {
+                    mode: crate::render::effects::CompositeMode::Additive,
+                    ..
+                } => timings.bloom_composite += elapsed,
+                _ => {}
+            }
+        }
     }
 }
 
@@ -396,6 +436,56 @@ impl GaussianKernel {
 }
 
 fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel, horizontal: bool) {
+    let width = source.width() as usize;
+    let height = source.height() as usize;
+    let row_stride = width * 4;
+    let source_data = source.as_raw();
+    let target_data: &mut [u8] = target.as_mut();
+    for y in 0..height {
+        let source_row = y * row_stride;
+        for x in 0..width {
+            let mut premultiplied = [0.0; 3];
+            let mut alpha = 0.0;
+            for (index, offset) in (-kernel.radius..=kernel.radius).enumerate() {
+                let source_index = if horizontal {
+                    let sample_x = (x as i32 + offset).clamp(0, width as i32 - 1) as usize;
+                    source_row + sample_x * 4
+                } else {
+                    let sample_y = (y as i32 + offset).clamp(0, height as i32 - 1) as usize;
+                    sample_y * row_stride + x * 4
+                };
+                let pixel = &source_data[source_index..source_index + 4];
+                let weight = kernel.weights[index];
+                let sample_alpha = f64::from(pixel[3]) / 255.0;
+                alpha += sample_alpha * weight;
+                for channel in 0..3 {
+                    premultiplied[channel] +=
+                        f64::from(pixel[channel]) / 255.0 * sample_alpha * weight;
+                }
+            }
+            let rgb = if alpha <= 0.000_000_1 {
+                [0; 3]
+            } else {
+                premultiplied.map(|value| (value / alpha * 255.0).round().clamp(0.0, 255.0) as u8)
+            };
+            let target_index = source_row + x * 4;
+            target_data[target_index..target_index + 4].copy_from_slice(&[
+                rgb[0],
+                rgb[1],
+                rgb[2],
+                (alpha * 255.0).round() as u8,
+            ]);
+        }
+    }
+}
+
+#[cfg(test)]
+fn convolve_reference(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    kernel: &GaussianKernel,
+    horizontal: bool,
+) {
     let width = source.width() as i32;
     let height = source.height() as i32;
     for y in 0..height {
@@ -544,6 +634,33 @@ mod tests {
     }
 
     #[test]
+    fn optimized_gaussian_convolution_is_byte_identical_to_reference() {
+        let mut source = RgbaImage::new(9, 7);
+        for (index, pixel) in source.pixels_mut().enumerate() {
+            *pixel = Rgba([
+                (index * 17) as u8,
+                (index * 31) as u8,
+                (index * 47) as u8,
+                (index * 29) as u8,
+            ]);
+        }
+
+        for radius in [1.0, 2.5, 4.0] {
+            let kernel = GaussianKernel::new(radius);
+            for horizontal in [true, false] {
+                let mut optimized = RgbaImage::new(source.width(), source.height());
+                let mut reference = RgbaImage::new(source.width(), source.height());
+                convolve(&source, &mut optimized, &kernel, horizontal);
+                convolve_reference(&source, &mut reference, &kernel, horizontal);
+                assert_eq!(
+                    optimized, reference,
+                    "radius={radius}, horizontal={horizontal}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn small_sampling_radius_remains_a_cpu_effect_for_directional_and_motion_blur() {
         let mut source = RgbaImage::new(3, 1);
         source.put_pixel(1, 0, Rgba([255, 255, 255, 255]));
@@ -613,7 +730,7 @@ mod tests {
         let mut surfaces = EffectSurfacePool::new(1, 1);
         surfaces.begin_from(&source);
 
-        execute_effect_pass_sequence(&mut surfaces, &passes);
+        execute_effect_pass_sequence(&mut surfaces, &passes, None, false);
 
         assert_eq!(surfaces.current().get_pixel(0, 0), &Rgba([42, 17, 67, 255]));
         assert_eq!(surfaces.stats().reuses, 5);

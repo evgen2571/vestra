@@ -294,6 +294,14 @@ fn phase10_release_matrix() {
             None,
         ),
         (
+            "gaussian-focused",
+            "gaussian-blur.json",
+            1280,
+            720,
+            100,
+            Some(0),
+        ),
+        (
             "animated-transform",
             "animation-effects.json",
             1280,

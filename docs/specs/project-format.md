@@ -125,6 +125,21 @@ blend mode, and visual effects apply. A project containing Spectrum2D requires
 authored Master audio and reports `MVP-SPECTRUM2D-MASTER-AUDIO` when it is
 absent.
 
+The typed Python authoring API also provides three authoring-time presets:
+`classic` for balanced general-purpose bars, `dense` for more bands and tighter
+spacing, and `neon` for a more responsive visualizer with ordinary Glow and
+Bloom effects. Presets expand immediately into the normal Spectrum2D source
+fields and effect collection; canonical JSON contains no preset identity. For
+example, explicit arguments override preset values:
+
+```python
+spectrum = builder.add_spectrum2d_clip(
+    start=0, duration=3, layer=1, preset="dense", colour="#ff00ff", height=0.30,
+)
+```
+
+Manual Spectrum2D parameters remain supported and are the canonical JSON form.
+
 Optional fields are omitted when unused; JSON `null` is never a substitute for
 omission. This includes optional metadata, audio, sizing, crop, transform, and
 audio trim fields.

@@ -29,6 +29,7 @@ PUBLIC_NAMES = {
     "Quality", "SaturationEffect", "ScalarKeyframe", "ScalarSignal", "ScalarTrack", "SharpenEffect", "Sizing", "SolidColorClip",
     "Timeline", "TintEffect", "Transform", "Transition", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection", "Spectrum2DClip",
     "ZoomBlurEffect", "ZoomBlurTransition", "ZoomCrossfadeTransition", "CrossfadeTransition", "available_effects", "effect_definition",
+    "Spectrum2DPreset",
 }
 
 

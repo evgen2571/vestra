@@ -85,6 +85,8 @@ def test_spectrum2d_max_hz_accepts_nyquist_and_rejects_above_it() -> None:
     invalid = json.loads(json.dumps(valid))
     invalid["visual"]["clips"][0]["source"]["max_hz"] = 24_000.001
     assert list(VALIDATOR.iter_errors(invalid))
+    with pytest.raises((TypeError, ValueError)):
+        builder().add_spectrum2d_clip(start=0, duration=0.2, layer=1, max_hz=24_000.001)
 
 
 def test_spectrum2d_explicit_configuration_and_normal_effects() -> None:
@@ -107,6 +109,97 @@ def test_spectrum2d_explicit_configuration_and_normal_effects() -> None:
     ]
     assert brightness and bloom
     assert not list(VALIDATOR.iter_errors(data))
+
+
+_PRESET_SOURCES: dict[str, dict[str, object]] = {
+    "classic": {
+        "band_count": 24, "min_hz": 40.0, "max_hz": 16_000.0, "sensitivity": 8.0,
+        "attack_seconds": 0.020, "release_seconds": 0.150, "x": 0.10, "y": 0.70,
+        "width": 0.80, "height": 0.25, "bar_gap_ratio": 0.20, "colour": "#ffffff",
+    },
+    "dense": {
+        "band_count": 48, "min_hz": 40.0, "max_hz": 18_000.0, "sensitivity": 9.0,
+        "attack_seconds": 0.012, "release_seconds": 0.110, "x": 0.08, "y": 0.68,
+        "width": 0.84, "height": 0.27, "bar_gap_ratio": 0.10, "colour": "#ffffff",
+    },
+    "neon": {
+        "band_count": 32, "min_hz": 40.0, "max_hz": 16_000.0, "sensitivity": 10.0,
+        "attack_seconds": 0.015, "release_seconds": 0.180, "x": 0.10, "y": 0.68,
+        "width": 0.80, "height": 0.27, "bar_gap_ratio": 0.14, "colour": "#ffffff",
+    },
+}
+
+
+def _preset_clip(preset: str, **overrides: object) -> dict[str, object]:
+    project = builder()
+    project.add_spectrum2d_clip(
+        start=0, duration=0.2, layer=1, id="spectrum", preset=preset, **overrides,  # type: ignore[arg-type]
+    )
+    assert not list(VALIDATOR.iter_errors(project.to_dict()))
+    return project.to_dict()["visual"]["clips"][0]  # type: ignore[return-value,index]
+
+
+def _explicit_clip(preset: str) -> dict[str, object]:
+    project = builder()
+    clip = project.add_spectrum2d_clip(
+        start=0, duration=0.2, layer=1, id="spectrum", **_PRESET_SOURCES[preset],  # type: ignore[arg-type]
+    )
+    if preset == "neon":
+        clip.effects.add_glow(threshold=0.35, radius=3.0, intensity=0.85, colour="#ffffff")
+        clip.effects.add_bloom(threshold=0.55, radius=4.0, intensity=0.65)
+    return project.to_dict()["visual"]["clips"][0]  # type: ignore[return-value,index]
+
+
+@pytest.mark.parametrize("preset", ["classic", "dense", "neon"])
+def test_spectrum2d_preset_expands_to_explicit_equivalent(preset: str) -> None:
+    assert _preset_clip(preset) == _explicit_clip(preset)
+
+
+def test_spectrum2d_preset_overrides_are_applied_after_preset_values() -> None:
+    clip = _preset_clip("dense", band_count=24, height=0.20, colour="#ff00ff")
+    source = clip["source"]  # type: ignore[index]
+    assert source["band_count"] == 24  # type: ignore[index]
+    assert source["height"] == 0.20  # type: ignore[index]
+    assert source["colour"] == "#ff00ff"  # type: ignore[index]
+    assert source["max_hz"] == 18_000.0  # type: ignore[index]
+    assert source["bar_gap_ratio"] == 0.10  # type: ignore[index]
+
+
+def test_spectrum2d_invalid_preset_fails_before_serialization() -> None:
+    project = builder()
+    with pytest.raises(ValueError, match="unknown Spectrum2D preset"):
+        project.add_spectrum2d_clip(start=0, duration=0.2, layer=1, preset="unknown")  # type: ignore[arg-type]
+    assert "preset" not in json.dumps(project.to_dict())
+
+
+@pytest.mark.parametrize("preset", ["classic", "dense", "neon"])
+def test_spectrum2d_preset_canonical_json_has_no_preset_identity(preset: str) -> None:
+    data = _preset_clip(preset)
+    assert "preset" not in json.dumps(data)
+    assert "style" not in json.dumps(data)
+
+
+def test_spectrum2d_preset_native_round_trip_preserves_expansion() -> None:
+    authored = builder()
+    authored.add_spectrum2d_clip(start=0, duration=0.2, layer=1, id="spectrum", preset="neon")
+    canonical = authored.to_dict()
+    reloaded = video_editor.Project.from_dict(canonical).to_dict()
+    original_clip = canonical["visual"]["clips"][0]  # type: ignore[index]
+    reloaded_clip = reloaded["visual"]["clips"][0]  # type: ignore[index]
+    assert reloaded_clip["source"] == original_clip["source"]  # type: ignore[index]
+
+    def without_empty_keyframes(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: without_empty_keyframes(item)
+                for key, item in value.items()
+                if not (key == "keyframes" and item == [])
+            }
+        if isinstance(value, list):
+            return [without_empty_keyframes(item) for item in value]
+        return value
+
+    assert without_empty_keyframes(reloaded_clip["effects"]) == without_empty_keyframes(original_clip["effects"])  # type: ignore[index]
 
 
 def test_spectrum2d_no_audio_uses_native_diagnostic() -> None:

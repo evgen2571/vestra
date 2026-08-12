@@ -309,6 +309,28 @@ mod tests {
             .expect("checked-in schema is valid JSON")
     }
 
+    #[test]
+    fn spectrum2d_is_registered_with_canonical_bounds_and_defaults() {
+        let schema = schema();
+        let source = &schema["$defs"]["source"]["oneOf"];
+        assert!(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|branch| { branch["$ref"] == "#/$defs/spectrum2d" })
+        );
+        let spectrum = &schema["$defs"]["spectrum2d"];
+        assert_eq!(spectrum["properties"]["band_count"]["minimum"], 1);
+        assert_eq!(spectrum["properties"]["band_count"]["maximum"], 48);
+        assert_eq!(
+            spectrum["properties"]["bar_gap_ratio"]["exclusiveMaximum"],
+            1
+        );
+        assert_eq!(spectrum["properties"]["colour"]["$ref"], "#/$defs/colour");
+        assert_eq!(spectrum["properties"]["band_count"]["default"], 24);
+    }
+
     fn branch_ids(schema: &Value, name: &str) -> BTreeSet<String> {
         schema["$defs"][name]["oneOf"]
             .as_array()

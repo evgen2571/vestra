@@ -6,7 +6,7 @@ from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainK
 from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEffect, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
-from .clips import ImageClip, SolidColorClip
+from .clips import ImageClip, SolidColorClip, Spectrum2DClip
 from .presets import Preset, PresetCollection
 from .timeline import Timeline
 from .errors import AuthoringError
@@ -90,6 +90,7 @@ __all__ = [
     "ScalarKeyframe",
     "Sizing",
     "SolidColorClip",
+    "Spectrum2DClip",
     "Transform",
     "Timeline",
     "TintEffect",

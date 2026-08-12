@@ -236,3 +236,169 @@ class SolidColorClip(_Clip):
 
     def __repr__(self) -> str:
         return f"SolidColorClip(id={self.id!r}, colour={self.colour!r})"
+
+
+class Spectrum2DClip(_Clip):
+    """A linear bar visualizer driven by the project's authored Master audio.
+
+    Frequency bands are logarithmically spaced and smoothed with attack/release
+    envelopes. The region is normalized to the output frame and bars are
+    bottom-aligned. Normal visual effects, opacity, and blend modes apply.
+    """
+
+    __slots__ = (
+        "_band_count", "_min_hz", "_max_hz", "_sensitivity", "_attack_seconds",
+        "_release_seconds", "_x", "_y", "_width", "_height", "_bar_gap_ratio", "_colour",
+    )
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("Spectrum2DClip objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(
+        cls, owner: _Owner, identifier: str, *, start: int | float, duration: int | float, layer: int,
+        visible: bool, opacity: int | float, band_count: int, min_hz: int | float, max_hz: int | float,
+        sensitivity: int | float, attack_seconds: int | float, release_seconds: int | float,
+        x: int | float, y: int | float, width: int | float, height: int | float,
+        bar_gap_ratio: int | float, colour: Color | str,
+    ) -> "Spectrum2DClip":
+        instance = object.__new__(cls)
+        instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
+                             visible=visible, opacity=opacity)
+        instance.band_count = band_count
+        instance.min_hz = min_hz
+        instance.max_hz = max_hz
+        instance.sensitivity = sensitivity
+        instance.attack_seconds = attack_seconds
+        instance.release_seconds = release_seconds
+        instance.x = x
+        instance.y = y
+        instance.width = width
+        instance.height = height
+        instance.bar_gap_ratio = bar_gap_ratio
+        instance.colour = colour
+        return instance
+
+    @staticmethod
+    def _bounded(value: int | float, name: str, *, minimum: float = 0.0, maximum: float = 1.0,
+                 minimum_inclusive: bool = True, maximum_inclusive: bool = True) -> float:
+        number = _number(value, name)
+        lower_ok = number >= minimum if minimum_inclusive else number > minimum
+        upper_ok = number <= maximum if maximum_inclusive else number < maximum
+        if not lower_ok or not upper_ok:
+            raise ValueError(f"{name} is outside its authored range")
+        return number
+
+    @property
+    def band_count(self) -> int:
+        return self._band_count
+
+    @band_count.setter
+    def band_count(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError("band_count must be an integer")
+        if not 1 <= value <= 48:
+            raise ValueError("band_count must be between 1 and 48")
+        self._band_count = value
+
+    @property
+    def min_hz(self) -> float:
+        return self._min_hz
+
+    @min_hz.setter
+    def min_hz(self, value: int | float) -> None:
+        self._min_hz = self._bounded(value, "min_hz", minimum=0.0, maximum=float("inf"), maximum_inclusive=True)
+
+    @property
+    def max_hz(self) -> float:
+        return self._max_hz
+
+    @max_hz.setter
+    def max_hz(self, value: int | float) -> None:
+        self._max_hz = self._bounded(value, "max_hz", minimum=0.0, maximum=float("inf"))
+
+    @property
+    def sensitivity(self) -> float:
+        return self._sensitivity
+
+    @sensitivity.setter
+    def sensitivity(self, value: int | float) -> None:
+        self._sensitivity = self._bounded(value, "sensitivity", minimum=0.0, maximum=float("inf"), maximum_inclusive=True, minimum_inclusive=False)
+
+    @property
+    def attack_seconds(self) -> float:
+        return self._attack_seconds
+
+    @attack_seconds.setter
+    def attack_seconds(self, value: int | float) -> None:
+        self._attack_seconds = self._bounded(value, "attack_seconds", maximum=float("inf"))
+
+    @property
+    def release_seconds(self) -> float:
+        return self._release_seconds
+
+    @release_seconds.setter
+    def release_seconds(self, value: int | float) -> None:
+        self._release_seconds = self._bounded(value, "release_seconds", maximum=float("inf"))
+
+    @property
+    def x(self) -> float:
+        return self._x
+
+    @x.setter
+    def x(self, value: int | float) -> None:
+        self._x = self._bounded(value, "x")
+
+    @property
+    def y(self) -> float:
+        return self._y
+
+    @y.setter
+    def y(self, value: int | float) -> None:
+        self._y = self._bounded(value, "y")
+
+    @property
+    def width(self) -> float:
+        return self._width
+
+    @width.setter
+    def width(self, value: int | float) -> None:
+        self._width = self._bounded(value, "width", minimum=0.0, minimum_inclusive=False)
+
+    @property
+    def height(self) -> float:
+        return self._height
+
+    @height.setter
+    def height(self, value: int | float) -> None:
+        self._height = self._bounded(value, "height", minimum=0.0, minimum_inclusive=False)
+
+    @property
+    def bar_gap_ratio(self) -> float:
+        return self._bar_gap_ratio
+
+    @bar_gap_ratio.setter
+    def bar_gap_ratio(self, value: int | float) -> None:
+        self._bar_gap_ratio = self._bounded(value, "bar_gap_ratio", maximum_inclusive=False)
+
+    @property
+    def colour(self) -> str:
+        return self._colour
+
+    @colour.setter
+    def colour(self, value: Color | str) -> None:
+        self._colour = color_to_canonical(value)
+
+    def to_canonical(self) -> dict[str, object]:
+        data = self._canonical_common()
+        data["source"] = {
+            "type": "spectrum2d", "band_count": self.band_count, "min_hz": self.min_hz,
+            "max_hz": self.max_hz, "sensitivity": self.sensitivity,
+            "attack_seconds": self.attack_seconds, "release_seconds": self.release_seconds,
+            "x": self.x, "y": self.y, "width": self.width, "height": self.height,
+            "bar_gap_ratio": self.bar_gap_ratio, "colour": self.colour,
+        }
+        return data
+
+    def __repr__(self) -> str:
+        return f"Spectrum2DClip(id={self.id!r}, band_count={self.band_count})"

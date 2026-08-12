@@ -63,6 +63,25 @@ solid_with_transform = copy.deepcopy(solid_colour)
 solid_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert errors(solid_with_transform), "solid colours must not accept transforms"
 
+spectrum = copy.deepcopy(solid_colour)
+spectrum["visual"]["clips"][0]["source"] = {"type": "spectrum2d"}
+assert not errors(spectrum), "minimal Spectrum2D source must validate"
+spectrum_explicit = copy.deepcopy(spectrum)
+spectrum_explicit["visual"]["clips"][0]["source"] = {
+    "type": "spectrum2d", "band_count": 32, "min_hz": 60, "max_hz": 12000,
+    "sensitivity": 10, "attack_seconds": 0.04, "release_seconds": 0.3,
+    "x": 0.05, "y": 0.65, "width": 0.9, "height": 0.3,
+    "bar_gap_ratio": 0.4, "colour": "#12ab34cc",
+}
+assert not errors(spectrum_explicit), "explicit Spectrum2D source must validate"
+for field, value in [("band_count", 0), ("band_count", 49), ("bar_gap_ratio", 1), ("width", 0), ("attack_seconds", -1)]:
+    invalid = copy.deepcopy(spectrum_explicit)
+    invalid["visual"]["clips"][0]["source"][field] = value
+    assert errors(invalid), f"invalid Spectrum2D {field} must not validate"
+invalid_colour = copy.deepcopy(spectrum_explicit)
+invalid_colour["visual"]["clips"][0]["source"]["colour"] = "not-a-colour"
+assert errors(invalid_colour), "invalid Spectrum2D colour must not validate"
+
 wrong_position = copy.deepcopy(project)
 wrong_position["visual"]["clips"][0]["transform"]["position"]["base_value"] = 1
 assert errors(wrong_position), "scalar position must not validate"

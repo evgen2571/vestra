@@ -117,6 +117,14 @@ and then reaches zero at `end`.
 Solid-colour clips also reject image-only sizing, crop, and preset fields.
 Coordinated transitions reference visible image clips only.
 
+Spectrum2D clips are normalized linear, bottom-aligned bars driven by authored
+Master audio. Their frequency bands are logarithmically spaced and smoothed by
+attack/release durations. The source exposes band count, frequency range,
+sensitivity, normalized region, gap ratio, and colour; ordinary clip opacity,
+blend mode, and visual effects apply. A project containing Spectrum2D requires
+authored Master audio and reports `MVP-SPECTRUM2D-MASTER-AUDIO` when it is
+absent.
+
 Optional fields are omitted when unused; JSON `null` is never a substitute for
 omission. This includes optional metadata, audio, sizing, crop, transform, and
 audio trim fields.

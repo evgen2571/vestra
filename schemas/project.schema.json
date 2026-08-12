@@ -2304,8 +2304,88 @@
             "colour"
           ],
           "type": "object"
+        },
+        {
+          "$ref": "#/$defs/spectrum2d"
         }
       ]
+    },
+    "spectrum2d": {
+      "additionalProperties": false,
+      "properties": {
+        "attack_seconds": {
+          "default": 0.02,
+          "minimum": 0,
+          "type": "number"
+        },
+        "band_count": {
+          "default": 24,
+          "maximum": 48,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bar_gap_ratio": {
+          "default": 0.2,
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "colour": {
+          "$ref": "#/$defs/colour",
+          "default": "#ffffff"
+        },
+        "height": {
+          "default": 0.25,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "type": "number"
+        },
+        "max_hz": {
+          "default": 16000.0,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "min_hz": {
+          "default": 40.0,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "release_seconds": {
+          "default": 0.15,
+          "minimum": 0,
+          "type": "number"
+        },
+        "sensitivity": {
+          "default": 8.0,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "type": {
+          "const": "spectrum2d"
+        },
+        "width": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "type": "number"
+        },
+        "x": {
+          "default": 0.1,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "y": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
     },
     "tint_effect": {
       "additionalProperties": false,

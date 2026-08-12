@@ -13,6 +13,9 @@ mod output;
 mod probe;
 mod sink;
 
+#[cfg(test)]
+mod test_support;
+
 pub use audio_analysis::{MasterPcmSpec, analyze_master_audio, consume_master_pcm};
 pub use audio_graph::seconds_to_samples;
 pub use error::{AudioAnalysisError, MediaError};

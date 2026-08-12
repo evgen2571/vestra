@@ -9,4 +9,5 @@ pub(super) mod effects;
 pub(super) mod raster;
 pub(super) mod surfaces;
 pub(super) mod vignette;
+pub(super) mod worker;
 pub(super) mod zoom_blur;

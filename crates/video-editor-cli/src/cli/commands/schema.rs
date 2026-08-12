@@ -27,6 +27,7 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let defs = schema["$defs"]
         .as_object_mut()
         .ok_or("project schema has no $defs object")?;
+    set_spectrum2d_nyquist_bound(defs)?;
     defs.retain(|name, _| !name.ends_with("_effect"));
 
     let mut branches = Vec::new();
@@ -111,6 +112,21 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     }
     let rendered = serde_json::to_string_pretty(&schema)? + "\n";
     fs::write(output, rendered)?;
+    Ok(())
+}
+
+fn set_spectrum2d_nyquist_bound(
+    defs: &mut Map<String, Value>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    defs.get_mut("spectrum2d")
+        .and_then(|definition| definition.get_mut("properties"))
+        .and_then(|properties| properties.get_mut("max_hz"))
+        .and_then(Value::as_object_mut)
+        .ok_or("project schema has no Spectrum2D max_hz property")?
+        .insert(
+            "maximum".into(),
+            json!(video_editor::MASTER_AUDIO_NYQUIST_HZ),
+        );
     Ok(())
 }
 
@@ -323,6 +339,11 @@ mod tests {
         let spectrum = &schema["$defs"]["spectrum2d"];
         assert_eq!(spectrum["properties"]["band_count"]["minimum"], 1);
         assert_eq!(spectrum["properties"]["band_count"]["maximum"], 48);
+        assert_eq!(spectrum["properties"]["max_hz"]["exclusiveMinimum"], 0);
+        assert_eq!(
+            spectrum["properties"]["max_hz"]["maximum"],
+            video_editor::MASTER_AUDIO_NYQUIST_HZ
+        );
         assert_eq!(
             spectrum["properties"]["bar_gap_ratio"]["exclusiveMaximum"],
             1

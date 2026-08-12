@@ -37,6 +37,7 @@ pub use video_editor_core::audio_effect_definition::{
 pub use video_editor_core::effect_definition::{
     EffectParameterDescriptor, EffectParameterKind, ScalarPropertyTarget, visual_effect_descriptors,
 };
+pub use video_editor_core::plan_audio::MASTER_AUDIO_NYQUIST_HZ;
 pub use video_editor_core::project::{AudioEffect, AudioFadeCurve, AudioGainInterpolation};
 pub use video_editor_core::{Category, Diagnostic, Severity};
 

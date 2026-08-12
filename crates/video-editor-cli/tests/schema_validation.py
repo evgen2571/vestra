@@ -74,10 +74,16 @@ spectrum_explicit["visual"]["clips"][0]["source"] = {
     "bar_gap_ratio": 0.4, "colour": "#12ab34cc",
 }
 assert not errors(spectrum_explicit), "explicit Spectrum2D source must validate"
-for field, value in [("band_count", 0), ("band_count", 49), ("bar_gap_ratio", 1), ("width", 0), ("attack_seconds", -1)]:
+for field, value in [
+    ("band_count", 0), ("band_count", 49), ("min_hz", 0), ("max_hz", 0),
+    ("max_hz", 24000.001), ("bar_gap_ratio", 1), ("width", 0), ("attack_seconds", -1),
+]:
     invalid = copy.deepcopy(spectrum_explicit)
     invalid["visual"]["clips"][0]["source"][field] = value
     assert errors(invalid), f"invalid Spectrum2D {field} must not validate"
+nyquist = copy.deepcopy(spectrum_explicit)
+nyquist["visual"]["clips"][0]["source"]["max_hz"] = 24000
+assert not errors(nyquist), "Spectrum2D Nyquist boundary must validate"
 invalid_colour = copy.deepcopy(spectrum_explicit)
 invalid_colour["visual"]["clips"][0]["source"]["colour"] = "not-a-colour"
 assert errors(invalid_colour), "invalid Spectrum2D colour must not validate"

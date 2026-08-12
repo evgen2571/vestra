@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 import video_editor
@@ -22,27 +23,68 @@ def builder(**changes: object) -> ProjectBuilder:
     return ProjectBuilder(**arguments)  # type: ignore[arg-type]
 
 
-def test_spectrum2d_defaults_are_typed_and_canonical() -> None:
-    project = builder()
-    clip = project.add_spectrum2d_clip(start=0, duration=0.2, layer=1, id="spectrum")
-    assert isinstance(clip, Spectrum2DClip)
-    source = clip.to_canonical()["source"]
-    assert source == {
-        "type": "spectrum2d", "band_count": 24, "min_hz": 40.0, "max_hz": 16000.0,
-        "sensitivity": 8.0, "attack_seconds": 0.02, "release_seconds": 0.15,
-        "x": 0.1, "y": 0.7, "width": 0.8, "height": 0.25,
-        "bar_gap_ratio": 0.2, "colour": "#ffffff",
-    }
-    assert not list(VALIDATOR.iter_errors(project.to_dict()))
-    native_defaults = video_editor.Project.from_dict({
+def _native_spectrum_defaults() -> dict[str, object]:
+    native = video_editor.Project.from_dict({
         "schema_version": 2,
         "output": {"path": "out.mp4", "width": 64, "height": 64, "frame_rate": "10/1",
                     "background": "#000000", "quality": "balanced", "audio": False,
                     "duration_mode": "explicit", "duration": 0.2},
         "assets": [],
-        "visual": {"clips": [clip.to_canonical()], "transitions": [], "flashes": [], "post_effects": []},
+        "visual": {"clips": [{
+            "id": "spectrum", "source": {"type": "spectrum2d"}, "start": 0,
+            "duration": 0.2, "layer": 1, "opacity": {"base_value": 1},
+        }]},
     })
-    assert native_defaults.to_dict()["visual"]["clips"][0]["source"] == source  # type: ignore[index]
+    return native.to_dict()["visual"]["clips"][0]["source"]  # type: ignore[index,return-value]
+
+
+def _spectrum_schema() -> dict[str, object]:
+    for branch in SCHEMA["$defs"]["source"]["oneOf"]:  # type: ignore[index]
+        if branch.get("$ref") == "#/$defs/spectrum2d":  # type: ignore[union-attr]
+            return SCHEMA["$defs"]["spectrum2d"]  # type: ignore[return-value,index]
+    raise AssertionError("Spectrum2D schema branch is not registered")
+
+
+def test_spectrum2d_defaults_conform_across_native_python_and_schema() -> None:
+    project = builder()
+    clip = project.add_spectrum2d_clip(start=0, duration=0.2, layer=1, id="spectrum")
+    assert isinstance(clip, Spectrum2DClip)
+    python_source = clip.to_canonical()["source"]
+    rust_source = _native_spectrum_defaults()
+    assert python_source == rust_source
+    schema_properties = _spectrum_schema()["properties"]  # type: ignore[index]
+    schema_defaults = {
+        field: property_schema["default"]
+        for field, property_schema in schema_properties.items()  # type: ignore[union-attr]
+        if "default" in property_schema
+    }
+    assert schema_defaults == {field: rust_source[field] for field in schema_defaults}
+    assert not list(VALIDATOR.iter_errors(project.to_dict()))
+
+
+@pytest.mark.parametrize("field", ["min_hz", "max_hz"])
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), -float("inf")])
+def test_spectrum2d_frequency_bounds_reject_non_positive_and_non_finite_values(
+    field: str, value: float,
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        builder().add_spectrum2d_clip(start=0, duration=0.2, layer=1, **{field: value})
+
+
+@pytest.mark.parametrize("field", ["min_hz", "max_hz"])
+def test_spectrum2d_frequency_bounds_accept_positive_values(field: str) -> None:
+    clip = builder().add_spectrum2d_clip(start=0, duration=0.2, layer=1, **{field: 1.0})
+    assert getattr(clip, field) == 1.0
+
+
+def test_spectrum2d_max_hz_accepts_nyquist_and_rejects_above_it() -> None:
+    valid_project = builder()
+    valid_project.add_spectrum2d_clip(start=0, duration=0.2, layer=1, max_hz=24_000)
+    valid = valid_project.to_dict()
+    assert not list(VALIDATOR.iter_errors(valid))
+    invalid = json.loads(json.dumps(valid))
+    invalid["visual"]["clips"][0]["source"]["max_hz"] = 24_000.001
+    assert list(VALIDATOR.iter_errors(invalid))
 
 
 def test_spectrum2d_explicit_configuration_and_normal_effects() -> None:

@@ -307,7 +307,9 @@ class Spectrum2DClip(_Clip):
 
     @min_hz.setter
     def min_hz(self, value: int | float) -> None:
-        self._min_hz = self._bounded(value, "min_hz", minimum=0.0, maximum=float("inf"), maximum_inclusive=True)
+        self._min_hz = self._bounded(
+            value, "min_hz", minimum=0.0, maximum=float("inf"), minimum_inclusive=False,
+        )
 
     @property
     def max_hz(self) -> float:
@@ -315,7 +317,9 @@ class Spectrum2DClip(_Clip):
 
     @max_hz.setter
     def max_hz(self, value: int | float) -> None:
-        self._max_hz = self._bounded(value, "max_hz", minimum=0.0, maximum=float("inf"))
+        self._max_hz = self._bounded(
+            value, "max_hz", minimum=0.0, maximum=24_000.0, minimum_inclusive=False,
+        )
 
     @property
     def sensitivity(self) -> float:

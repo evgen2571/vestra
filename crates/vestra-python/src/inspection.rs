@@ -1,4 +1,10 @@
-use super::*;
+use std::path::PathBuf;
+
+use pyo3::prelude::*;
+use vestra::InspectionReport as NativeInspection;
+
+use crate::{PyDiagnostic, diagnostic_tuple, diagnostics};
+
 #[pyclass(
     name = "InspectOutput",
     frozen,

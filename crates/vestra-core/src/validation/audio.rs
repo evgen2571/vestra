@@ -256,9 +256,36 @@ fn validate_audio_effects(
 }
 
 #[must_use]
-pub(super) fn audio_effect_supports_scope(
+fn audio_effect_supports_scope(
     definition: crate::audio_effect_definition::AudioEffectDefinition,
     scope: crate::audio_effect_definition::AudioEffectScope,
 ) -> bool {
     definition.scopes.contains(&scope)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::audio_effect_supports_scope;
+    use crate::audio_effect_definition::{
+        AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectScope,
+    };
+
+    #[test]
+    fn audio_effect_scope_helper_rejects_a_descriptor_outside_its_declared_scope() {
+        static CLIP_ONLY: &[AudioEffectScope] = &[AudioEffectScope::Clip];
+        let definition = AudioEffectDefinition {
+            id: "test_only",
+            scopes: CLIP_ONLY,
+            duration_behavior: AudioEffectDurationBehavior::Preserve,
+            parameters: &[],
+        };
+        assert!(audio_effect_supports_scope(
+            definition,
+            AudioEffectScope::Clip
+        ));
+        assert!(!audio_effect_supports_scope(
+            definition,
+            AudioEffectScope::Track
+        ));
+    }
 }

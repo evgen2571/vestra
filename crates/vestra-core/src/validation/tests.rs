@@ -519,28 +519,6 @@ fn audio_complexity_limits_are_inclusive_and_deterministic() {
 }
 
 #[test]
-fn audio_effect_scope_helper_rejects_a_descriptor_outside_its_declared_scope() {
-    use crate::audio_effect_definition::{
-        AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectScope,
-    };
-    static CLIP_ONLY: &[AudioEffectScope] = &[AudioEffectScope::Clip];
-    let definition = AudioEffectDefinition {
-        id: "test_only",
-        scopes: CLIP_ONLY,
-        duration_behavior: AudioEffectDurationBehavior::Preserve,
-        parameters: &[],
-    };
-    assert!(super::audio::audio_effect_supports_scope(
-        definition,
-        AudioEffectScope::Clip
-    ));
-    assert!(!super::audio::audio_effect_supports_scope(
-        definition,
-        AudioEffectScope::Track
-    ));
-}
-
-#[test]
 fn audio_effect_ids_are_validated_deterministically_per_collection() {
     let invalid = project(json!({
         "effects": [

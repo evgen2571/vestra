@@ -29,7 +29,7 @@ use super::{
     diagnostics::{environment_value, finish_error_scopes},
     executor::{FrameBindGroups, FrameExecutionMetrics, encode_and_submit},
     frame_plan::{GpuFramePlan, GpuOperation},
-    parameters::{self, EffectKernelParameters, FrameParameterArena, LayerParameters},
+    parameters::{self, FrameParameterArena, LayerParameters},
     pipeline::GpuPipelines,
     polling::{drain, nonblocking, wait_for_one},
     readback::ReadbackRing,
@@ -37,10 +37,7 @@ use super::{
     resources::{FrameResources, SourceResources},
     texture_pool::{StaticLayerTexture, create_static_layer_texture, static_layer_texture_bytes},
 };
-use crate::{
-    project::{BlendMode, ZoomBlurDirection},
-    render::effects::{CompositeMode, EffectOperation, EffectPass},
-};
+use crate::project::BlendMode;
 
 /// WGPU owns persistent source and working textures. Each submitted frame owns
 /// its parameter buffer, bind groups, and readback slot until mapping completes.
@@ -843,7 +840,7 @@ fn encode_parameters(
                 })?;
             }
             GpuOperation::ApplyEffect { kernel, pass, .. } => {
-                let parameters = effect_parameters(frame.width, frame.height, *pass);
+                let parameters = parameters::effect_parameters(frame.width, frame.height, *pass);
                 if parameters.kernel() != *kernel {
                     return Err(Diagnostic::error(
                         "WGPU-EFFECT-KERNEL-MISMATCH",
@@ -852,7 +849,7 @@ fn encode_parameters(
                         "",
                     ));
                 }
-                push_effect_parameters(arena, parameters)?;
+                parameters::push_effect_parameters(arena, parameters)?;
             }
             GpuOperation::CopyForEffect { .. }
             | GpuOperation::StoreStaticLayer { .. }
@@ -874,225 +871,14 @@ const fn blend_mode(mode: BlendMode) -> u32 {
     }
 }
 
-fn push_effect_parameters(
-    arena: &mut FrameParameterArena,
-    parameters: EffectKernelParameters,
-) -> Result<u32, Diagnostic> {
-    match parameters {
-        EffectKernelParameters::ColourTransform(value) => arena.push(&value),
-        EffectKernelParameters::GaussianBlur(value) => arena.push(&value),
-        EffectKernelParameters::HighlightExtract(value) => arena.push(&value),
-        EffectKernelParameters::Composite(value) => arena.push(&value),
-        EffectKernelParameters::DirectionalBlur(value) => arena.push(&value),
-        EffectKernelParameters::ZoomBlur(value) => arena.push(&value),
-        EffectKernelParameters::ChromaticAberration(value) => arena.push(&value),
-        EffectKernelParameters::Vignette(value) => arena.push(&value),
-        EffectKernelParameters::ColorAdjust(value) => arena.push(&value),
-        EffectKernelParameters::MotionBlur(value) => arena.push(&value),
-    }
-}
-
-fn effect_parameters(width: u32, height: u32, pass: EffectPass) -> EffectKernelParameters {
-    match pass.operation {
-        EffectOperation::ApplyColourTransform { transform } => {
-            EffectKernelParameters::ColourTransform(parameters::ColourTransformParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                colour_row0: [
-                    transform.matrix[0][0] as f32,
-                    transform.matrix[0][1] as f32,
-                    transform.matrix[0][2] as f32,
-                    0.0,
-                ],
-                colour_row1: [
-                    transform.matrix[1][0] as f32,
-                    transform.matrix[1][1] as f32,
-                    transform.matrix[1][2] as f32,
-                    0.0,
-                ],
-                colour_row2: [
-                    transform.matrix[2][0] as f32,
-                    transform.matrix[2][1] as f32,
-                    transform.matrix[2][2] as f32,
-                    0.0,
-                ],
-                colour_offset: [
-                    transform.offset[0] as f32,
-                    transform.offset[1] as f32,
-                    transform.offset[2] as f32,
-                    0.0,
-                ],
-            })
-        }
-        EffectOperation::GaussianHorizontal { radius } => {
-            EffectKernelParameters::GaussianBlur(parameters::GaussianBlurParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                radius: radius.clamp(0.0, 32.0) as f32,
-                direction: 0,
-                _padding1: [0; 2],
-            })
-        }
-        EffectOperation::GaussianVertical { radius } => {
-            EffectKernelParameters::GaussianBlur(parameters::GaussianBlurParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                radius: radius.clamp(0.0, 32.0) as f32,
-                direction: 1,
-                _padding1: [0; 2],
-            })
-        }
-        EffectOperation::HighlightExtract { threshold, colour } => {
-            EffectKernelParameters::HighlightExtract(parameters::HighlightExtractParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                threshold: threshold as f32,
-                _padding1: [0.0; 3],
-                colour: colour.map(f32::from),
-            })
-        }
-        EffectOperation::Composite {
-            mode: CompositeMode::Additive,
-            amount: intensity,
-        } => EffectKernelParameters::Composite(parameters::CompositeParameters {
-            canvas_width: width,
-            canvas_height: height,
-            _padding: [0; 2],
-            mode: 0,
-            amount: intensity as f32,
-            _padding1: [0; 2],
-        }),
-        EffectOperation::Composite {
-            mode: CompositeMode::Unsharp,
-            amount,
-        } => EffectKernelParameters::Composite(parameters::CompositeParameters {
-            canvas_width: width,
-            canvas_height: height,
-            _padding: [0; 2],
-            mode: 1,
-            amount: amount as f32,
-            _padding1: [0; 2],
-        }),
-        EffectOperation::DirectionalBlur {
-            radius,
-            angle_degrees,
-        } => EffectKernelParameters::DirectionalBlur(line_parameters(
-            width,
-            height,
-            radius,
-            angle_degrees,
-            None,
-        )),
-        EffectOperation::ZoomBlur {
-            radius,
-            samples,
-            anchor,
-            direction,
-        } => EffectKernelParameters::ZoomBlur(parameters::ZoomBlurParameters {
-            canvas_width: width,
-            canvas_height: height,
-            _padding: [0; 2],
-            radius: radius as f32,
-            samples: u32::from(samples),
-            anchor_x: anchor.x as f32,
-            anchor_y: anchor.y as f32,
-            direction: match direction {
-                ZoomBlurDirection::Centered => 0.0,
-                ZoomBlurDirection::Inward => 1.0,
-                ZoomBlurDirection::Outward => 2.0,
-            } as u32,
-            _padding1: [0; 3],
-        }),
-        EffectOperation::ChromaticAberration {
-            amount,
-            angle_degrees,
-        } => {
-            EffectKernelParameters::ChromaticAberration(parameters::ChromaticAberrationParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                amount: amount as f32,
-                angle: angle_degrees.to_radians() as f32,
-                _padding1: [0.0; 2],
-            })
-        }
-        EffectOperation::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-        } => EffectKernelParameters::Vignette(parameters::VignetteParameters {
-            canvas_width: width,
-            canvas_height: height,
-            _padding: [0; 2],
-            amount: amount as f32,
-            radius: radius as f32,
-            softness: softness as f32,
-            _padding1: 0.0,
-            colour: colour.map(f32::from),
-        }),
-        EffectOperation::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-        } => EffectKernelParameters::ColorAdjust(parameters::ColorAdjustParameters {
-            canvas_width: width,
-            canvas_height: height,
-            _padding: [0; 2],
-            exposure: exposure as f32,
-            gamma: gamma as f32,
-            black_point: black_point as f32,
-            white_point: white_point as f32,
-        }),
-        EffectOperation::MotionBlur {
-            radius,
-            angle_degrees,
-            samples,
-        } => EffectKernelParameters::MotionBlur(line_parameters(
-            width,
-            height,
-            radius,
-            angle_degrees,
-            Some(samples),
-        )),
-    }
-}
-
-fn line_parameters(
-    width: u32,
-    height: u32,
-    radius: f64,
-    angle_degrees: f64,
-    configured_samples: Option<u8>,
-) -> parameters::LineBlurParameters {
-    let radius = radius.clamp(0.0, 32.0);
-    let samples = configured_samples.map_or_else(
-        || (radius.ceil() as i32 * 2 + 1).clamp(3, 33) as u8,
-        |samples| samples.clamp(1, 33),
-    );
-    parameters::LineBlurParameters {
-        canvas_width: width,
-        canvas_height: height,
-        _padding: [0; 2],
-        radius: radius as f32,
-        angle: angle_degrees.to_radians() as f32,
-        samples: u32::from(samples),
-        _padding1: 0,
-    }
-}
-
 #[cfg(test)]
 mod configuration_tests {
     use super::*;
+    use crate::render::effects::{CompositeMode, EffectOperation, EffectPass};
 
     #[test]
     fn effect_parameter_encodings_use_semantic_typed_layouts() {
-        let gaussian = effect_parameters(
+        let gaussian = parameters::effect_parameters(
             320,
             180,
             EffectPass::new(
@@ -1101,14 +887,14 @@ mod configuration_tests {
                 crate::plan::EffectResource::Current,
             ),
         );
-        let EffectKernelParameters::GaussianBlur(gaussian) = gaussian else {
+        let parameters::EffectKernelParameters::GaussianBlur(gaussian) = gaussian else {
             panic!("Gaussian pass must use the Gaussian layout");
         };
         assert_eq!((gaussian.canvas_width, gaussian.canvas_height), (320, 180));
         assert_eq!(gaussian.radius, 4.0);
         assert_eq!(gaussian.direction, 1);
 
-        let composite = effect_parameters(
+        let composite = parameters::effect_parameters(
             320,
             180,
             EffectPass::new(
@@ -1120,13 +906,13 @@ mod configuration_tests {
                 crate::plan::EffectResource::Current,
             ),
         );
-        let EffectKernelParameters::Composite(composite) = composite else {
+        let parameters::EffectKernelParameters::Composite(composite) = composite else {
             panic!("Composite pass must use the Composite layout");
         };
         assert_eq!(composite.mode, 0);
         assert_eq!(composite.amount, 0.75);
 
-        let vignette = effect_parameters(
+        let vignette = parameters::effect_parameters(
             320,
             180,
             EffectPass::new(
@@ -1140,7 +926,7 @@ mod configuration_tests {
                 crate::plan::EffectResource::Current,
             ),
         );
-        let EffectKernelParameters::Vignette(vignette) = vignette else {
+        let parameters::EffectKernelParameters::Vignette(vignette) = vignette else {
             panic!("Vignette pass must use the Vignette layout");
         };
         assert_eq!(

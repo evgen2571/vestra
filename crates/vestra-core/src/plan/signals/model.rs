@@ -489,7 +489,7 @@ impl AudioAnalysisRequirements {
 
 #[derive(Clone, Debug, Default)]
 pub struct CompiledScalarSignals {
-    pub(super) signals: Vec<CompiledScalarSignal>,
+    signals: Vec<CompiledScalarSignal>,
 }
 
 impl CompiledScalarSignals {

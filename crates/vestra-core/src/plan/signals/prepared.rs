@@ -75,7 +75,7 @@ impl PreparedScalarSignal {
 /// Immutable direct-index signal storage shared by a rendering evaluation.
 #[derive(Clone, Debug, Default)]
 pub struct PreparedScalarSignals {
-    pub(super) signals: Vec<PreparedScalarSignal>,
+    signals: Vec<PreparedScalarSignal>,
 }
 
 impl PreparedScalarSignals {

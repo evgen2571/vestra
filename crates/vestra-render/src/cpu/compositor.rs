@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use image::{Rgba, RgbaImage};
 
@@ -8,7 +8,7 @@ use crate::plan::{
 use crate::{
     blend::blend_surface,
     cpu::{assets::PreparedAssets, effects, raster::draw_layer},
-    render::ByteLruCache,
+    render::{ByteLruCache, metrics::CpuHotPathTimings},
 };
 
 pub(crate) use super::surfaces::EffectSurfacePool;
@@ -54,6 +54,7 @@ pub fn compose(
     canvas: &mut RgbaImage,
     surfaces: &mut EffectSurfacePool,
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    timings: &mut CpuHotPathTimings,
 ) -> ComposeStats {
     let mut stats = ComposeStats::default();
     let _time = frame.time;
@@ -74,7 +75,9 @@ pub fn compose(
             *pixel = Rgba(frame.background);
         }
     }
+    let started = Instant::now();
     surfaces.resize(frame.width, frame.height);
+    timings.layer_composition += started.elapsed();
     for layer in &frame.layers {
         if layer.content_dependency == TemporalDependency::Static {
             if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
@@ -84,22 +87,28 @@ pub fn compose(
             surfaces.clear();
             stats.static_layer_renders += 1;
             if uses_direct_colour_path(layer) {
+                let started = Instant::now();
                 draw_layer(
                     surfaces.current(),
                     assets,
                     layer,
                     1.0,
                     layer.colour_transform,
+                    timings,
                 );
+                timings.source_rasterization += started.elapsed();
             } else {
+                let started = Instant::now();
                 draw_layer(
                     surfaces.current(),
                     assets,
                     layer,
                     1.0,
                     ColourTransform::default(),
+                    timings,
                 );
-                effects::apply_chain(surfaces, &layer.effects);
+                timings.source_rasterization += started.elapsed();
+                effects::apply_chain(surfaces, &layer.effects, timings);
             }
             let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
             if let Some(cached) =
@@ -109,28 +118,44 @@ pub fn compose(
             {
                 composite_cached_surface(canvas, cached, layer, &mut stats);
             } else {
+                let started = Instant::now();
                 blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+                timings.layer_composition += started.elapsed();
                 stats.generic_blend_surface_calls += 1;
             }
             continue;
         }
         if uses_direct_colour_path(layer) {
-            draw_layer(canvas, assets, layer, layer.opacity, layer.colour_transform);
+            let started = Instant::now();
+            draw_layer(
+                canvas,
+                assets,
+                layer,
+                layer.opacity,
+                layer.colour_transform,
+                timings,
+            );
+            timings.source_rasterization += started.elapsed();
             continue;
         }
         surfaces.clear();
+        let started = Instant::now();
         draw_layer(
             surfaces.current(),
             assets,
             layer,
             1.0,
             ColourTransform::default(),
+            timings,
         );
-        effects::apply_chain(surfaces, &layer.effects);
+        timings.source_rasterization += started.elapsed();
+        effects::apply_chain(surfaces, &layer.effects, timings);
+        let started = Instant::now();
         blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+        timings.layer_composition += started.elapsed();
         stats.generic_blend_surface_calls += 1;
     }
-    effects::apply_to(surfaces, canvas, &frame.post_effects);
+    effects::apply_to(surfaces, canvas, &frame.post_effects, timings);
     stats
 }
 

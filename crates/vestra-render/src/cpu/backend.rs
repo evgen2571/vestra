@@ -18,7 +18,7 @@ use crate::{
     plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
-        metrics::{PreparationStats, PreparationTimings, StagedMetrics},
+        metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings, StagedMetrics},
     },
 };
 
@@ -43,6 +43,8 @@ pub struct CpuBackend {
     completions: Receiver<WorkerCompletion>,
     metrics: StagedMetrics,
     worker_timings: PreparationTimings,
+    worker_hot_path_timings: CpuHotPathTimings,
+    profile_reported: bool,
     #[cfg(test)]
     worker_cache_budgets: Vec<CpuWorkerCacheBudgets>,
     failed: Option<Diagnostic>,
@@ -116,6 +118,8 @@ impl CpuBackend {
                 ..StagedMetrics::default()
             },
             worker_timings: PreparationTimings::default(),
+            worker_hot_path_timings: CpuHotPathTimings::default(),
+            profile_reported: false,
             #[cfg(test)]
             worker_cache_budgets,
             failed: None,
@@ -355,6 +359,18 @@ impl RenderBackend for CpuBackend {
         }
         let stats = aggregate_snapshots(&snapshots);
         self.worker_timings = aggregate_timings(&snapshots);
+        self.worker_hot_path_timings = aggregate_hot_path_timings(&snapshots);
+        if std::env::var_os("VESTRA_CPU_PROFILE").is_some()
+            && !self.profile_reported
+            && self.metrics.backend_completed_frames > 0
+        {
+            eprintln!(
+                "{}",
+                self.worker_hot_path_timings
+                    .report_line(self.workers.len(), self.metrics.backend_completed_frames)
+            );
+            self.profile_reported = true;
+        }
         stats
     }
 
@@ -372,6 +388,10 @@ impl RenderBackend for CpuBackend {
             allocated_slot_count: self.capacity(),
             ..StagedMetrics::default()
         };
+        self.profile_reported = false;
+        for worker in &self.workers {
+            let _ = worker.command_tx.send(WorkerCommand::ResetTimings);
+        }
     }
 
     fn record_written(&mut self, _frame_number: u64) {
@@ -462,6 +482,14 @@ fn aggregate_timings(snapshots: &[WorkerSnapshot]) -> PreparationTimings {
         result.gpu_submission += snapshot.timings.gpu_submission;
         result.gpu_readback_wait += snapshot.timings.gpu_readback_wait;
         result.row_repack += snapshot.timings.row_repack;
+    }
+    result
+}
+
+fn aggregate_hot_path_timings(snapshots: &[WorkerSnapshot]) -> CpuHotPathTimings {
+    let mut result = CpuHotPathTimings::default();
+    for snapshot in snapshots {
+        result.add_assign(snapshot.hot_path_timings);
     }
     result
 }

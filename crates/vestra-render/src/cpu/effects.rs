@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, time::Instant};
 
 use image::{GenericImage, Rgba, RgbaImage};
 
@@ -8,15 +8,32 @@ use crate::{
         EffectPass, canonical_gaussian_radius, effect_pass_plan, gaussian_radius_is_identity,
         sampling_blur_radius_is_identity,
     },
+    render::metrics::CpuHotPathTimings,
 };
 
 use super::surfaces::EffectSurfacePool;
 
 /// Executes the backend-neutral logical pass plan against CPU surfaces.
-pub(super) fn apply_chain(surfaces: &mut EffectSurfacePool, effects: &[EvaluatedEffect]) {
+pub(super) fn apply_chain(
+    surfaces: &mut EffectSurfacePool,
+    effects: &[EvaluatedEffect],
+    timings: &mut CpuHotPathTimings,
+) {
     for effect in effects {
         let plan = effect_pass_plan(effect);
+        let started = Instant::now();
         execute_effect_pass_sequence(surfaces, plan.as_slice());
+        let elapsed = started.elapsed();
+        timings.effect_execution += elapsed;
+        match effect {
+            EvaluatedEffect::GaussianBlur { .. } => timings.gaussian_blur += elapsed,
+            EvaluatedEffect::ZoomBlur { .. } => timings.zoom_blur += elapsed,
+            EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. } => {
+                timings.bloom_glow += elapsed;
+            }
+            EvaluatedEffect::CameraShake { .. } => {}
+            _ => timings.other_effects += elapsed,
+        }
     }
 }
 
@@ -208,6 +225,7 @@ pub(super) fn apply_to(
     surfaces: &mut EffectSurfacePool,
     destination: &mut RgbaImage,
     effects: &[EvaluatedEffect],
+    timings: &mut CpuHotPathTimings,
 ) {
     if effects
         .iter()
@@ -215,9 +233,15 @@ pub(super) fn apply_to(
     {
         return;
     }
+    let started = Instant::now();
     surfaces.begin_from(destination);
-    apply_chain(surfaces, effects);
+    timings.surface_copy += started.elapsed();
+    let started = Instant::now();
+    apply_chain(surfaces, effects, timings);
+    timings.global_post_effect += started.elapsed();
+    let started = Instant::now();
     surfaces.copy_to(destination);
+    timings.surface_copy += started.elapsed();
 }
 
 fn apply_colour_transform(source: &RgbaImage, target: &mut RgbaImage, transform: ColourTransform) {
@@ -404,7 +428,8 @@ mod tests {
     fn render_effect(source: &RgbaImage, effect: EvaluatedEffect) -> RgbaImage {
         let mut surfaces = EffectSurfacePool::new(source.width(), source.height());
         surfaces.begin_from(source);
-        apply_chain(&mut surfaces, &[effect]);
+        let mut timings = CpuHotPathTimings::default();
+        apply_chain(&mut surfaces, &[effect], &mut timings);
         let mut output = RgbaImage::new(source.width(), source.height());
         surfaces.copy_to(&mut output);
         output
@@ -600,6 +625,7 @@ mod tests {
                 intensity: 1.0,
                 colour: [255, 64, 0, 255],
             }],
+            &mut CpuHotPathTimings::default(),
         );
 
         assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);

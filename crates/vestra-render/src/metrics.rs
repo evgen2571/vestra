@@ -264,6 +264,53 @@ pub struct PreparationTimings {
     pub row_repack: Duration,
 }
 
+/// Coarse CPU execution timings collected by each renderer worker.
+/// This is emitted only by the opt-in benchmark profile path.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CpuHotPathTimings {
+    pub(crate) source_rasterization: Duration,
+    pub(crate) transform_sampling: Duration,
+    pub(crate) layer_composition: Duration,
+    pub(crate) effect_execution: Duration,
+    pub(crate) gaussian_blur: Duration,
+    pub(crate) zoom_blur: Duration,
+    pub(crate) bloom_glow: Duration,
+    pub(crate) other_effects: Duration,
+    pub(crate) global_post_effect: Duration,
+    pub(crate) surface_copy: Duration,
+}
+
+impl CpuHotPathTimings {
+    pub(crate) fn add_assign(&mut self, other: Self) {
+        self.source_rasterization += other.source_rasterization;
+        self.transform_sampling += other.transform_sampling;
+        self.layer_composition += other.layer_composition;
+        self.effect_execution += other.effect_execution;
+        self.gaussian_blur += other.gaussian_blur;
+        self.zoom_blur += other.zoom_blur;
+        self.bloom_glow += other.bloom_glow;
+        self.other_effects += other.other_effects;
+        self.global_post_effect += other.global_post_effect;
+        self.surface_copy += other.surface_copy;
+    }
+
+    pub(crate) fn report_line(&self, workers: usize, frames: u64) -> String {
+        format!(
+            "vestra_cpu_profile workers={workers} frames={frames} source_rasterization_ns={} transform_sampling_ns={} layer_composition_ns={} effect_execution_ns={} gaussian_blur_ns={} zoom_blur_ns={} bloom_glow_ns={} other_effects_ns={} global_post_effect_ns={} surface_copy_ns={}",
+            self.source_rasterization.as_nanos(),
+            self.transform_sampling.as_nanos(),
+            self.layer_composition.as_nanos(),
+            self.effect_execution.as_nanos(),
+            self.gaussian_blur.as_nanos(),
+            self.zoom_blur.as_nanos(),
+            self.bloom_glow.as_nanos(),
+            self.other_effects.as_nanos(),
+            self.global_post_effect.as_nanos(),
+            self.surface_copy.as_nanos(),
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StagedMetrics {
     pub configured_pipeline_depth: usize,

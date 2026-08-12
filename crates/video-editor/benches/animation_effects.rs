@@ -27,12 +27,14 @@ fn main() {
     );
     let width = env_u32("VIDEO_EDITOR_BENCH_WIDTH", 720);
     let height = env_u32("VIDEO_EDITOR_BENCH_HEIGHT", 1280);
-    let fixture = scenario_fixture(&scenario);
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../")
+        .join(scenario_fixture(&scenario));
     let project_path = output
         .path()
         .join(format!("{scenario}-{width}x{height}.json"));
     let mut project: serde_json::Value =
-        serde_json::from_slice(&fs::read(fixture).expect("read benchmark fixture"))
+        serde_json::from_slice(&fs::read(&fixture).expect("read benchmark fixture"))
             .expect("parse benchmark fixture");
     project["output"]["width"] = width.into();
     project["output"]["height"] = height.into();
@@ -207,9 +209,10 @@ fn main() {
         None => {}
     }
     println!(
-        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} pipeline_depth={pipeline_depth} frame_count={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} peak_in_flight={} blocking_polls={} slot_waits={} staging_memory_bytes={} adapter={:?} cache_peak={} bytes cache_peak_entries={} decoded_peak={} bytes",
+        "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} requested_wgpu_pipeline_depth={pipeline_depth} actual_backend_pipeline_depth={} frame_count={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} peak_in_flight={} blocking_polls={} slot_waits={} staging_memory_bytes={} cache_current={} cache_peak={} bytes cache_peak_entries={} scratch_retained_bytes={} decoded_peak={} bytes adapter={:?}",
         selected_backend,
         adapter_class.map_or("none", AdapterDeviceType::as_str),
+        summary.performance.pipeline_depth,
         summary.total_frames,
         wall_samples[median_index],
         wall_samples[0],
@@ -234,10 +237,12 @@ fn main() {
         summary.performance.blocking_polls,
         summary.performance.slot_wait_count,
         summary.performance.estimated_staging_memory_bytes,
-        summary.adapter,
+        summary.performance.cache_current_bytes,
         summary.performance.cache_peak_bytes,
         summary.performance.peak_cache_entries,
+        summary.performance.cpu_scratch_bytes_retained,
         summary.performance.peak_decoded_bytes,
+        summary.adapter,
     );
 }
 

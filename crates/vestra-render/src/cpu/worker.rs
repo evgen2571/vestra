@@ -74,8 +74,9 @@ pub(super) fn run_worker(
     command_rx: std::sync::mpsc::Receiver<WorkerCommand>,
     completion_tx: SyncSender<WorkerCompletion>,
     cache_budgets: CpuWorkerCacheBudgets,
+    profiling_enabled: bool,
 ) {
-    let mut state = CpuWorkerState::new(&plan, decoded, cache_budgets);
+    let mut state = CpuWorkerState::new(&plan, decoded, cache_budgets, profiling_enabled);
     while let Ok(command) = command_rx.recv() {
         match command {
             WorkerCommand::Render(job) => {
@@ -134,6 +135,7 @@ pub(super) struct CpuWorkerState {
     opaque_copy_fast_path_bytes: u64,
     generic_blend_surface_calls: u64,
     hot_path_timings: CpuHotPathTimings,
+    profiling_enabled: bool,
 }
 
 impl CpuWorkerState {
@@ -142,6 +144,7 @@ impl CpuWorkerState {
         plan: &RenderPlan,
         decoded: Arc<DecodedAssets>,
         cache_budgets: CpuWorkerCacheBudgets,
+        profiling_enabled: bool,
     ) -> Self {
         Self {
             assets: PreparedAssets::from_decoded_with_cache_budget(
@@ -157,6 +160,7 @@ impl CpuWorkerState {
             opaque_copy_fast_path_bytes: 0,
             generic_blend_surface_calls: 0,
             hot_path_timings: CpuHotPathTimings::default(),
+            profiling_enabled,
         }
     }
 
@@ -175,6 +179,7 @@ impl CpuWorkerState {
             &mut self.effects,
             &mut self.static_layers,
             &mut self.hot_path_timings,
+            self.profiling_enabled,
         );
         self.static_layer_renders += compose.static_layer_renders;
         self.opaque_copy_fast_path_hits += compose.opaque_copy_fast_path_hits;

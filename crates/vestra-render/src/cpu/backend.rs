@@ -44,6 +44,7 @@ pub struct CpuBackend {
     metrics: StagedMetrics,
     worker_timings: PreparationTimings,
     worker_hot_path_timings: CpuHotPathTimings,
+    profiling_enabled: bool,
     profile_reported: bool,
     #[cfg(test)]
     worker_cache_budgets: Vec<CpuWorkerCacheBudgets>,
@@ -68,6 +69,7 @@ impl CpuBackend {
     }
 
     fn build(plan: &RenderPlan, decoded: Arc<DecodedAssets>, worker_count: usize) -> Self {
+        let profiling_enabled = std::env::var_os("VESTRA_CPU_PROFILE").is_some();
         let worker_cache_budgets = (0..worker_count)
             .map(|worker_id| CpuWorkerCacheBudgets {
                 crop_cache_budget_bytes: worker_budget(
@@ -99,6 +101,7 @@ impl CpuBackend {
                         command_rx,
                         worker_completion_tx,
                         worker_cache_budget,
+                        profiling_enabled,
                     )
                 })
                 .expect("CPU worker thread must start");
@@ -119,6 +122,7 @@ impl CpuBackend {
             },
             worker_timings: PreparationTimings::default(),
             worker_hot_path_timings: CpuHotPathTimings::default(),
+            profiling_enabled,
             profile_reported: false,
             #[cfg(test)]
             worker_cache_budgets,
@@ -360,7 +364,7 @@ impl RenderBackend for CpuBackend {
         let stats = aggregate_snapshots(&snapshots);
         self.worker_timings = aggregate_timings(&snapshots);
         self.worker_hot_path_timings = aggregate_hot_path_timings(&snapshots);
-        if std::env::var_os("VESTRA_CPU_PROFILE").is_some()
+        if self.profiling_enabled
             && !self.profile_reported
             && self.metrics.backend_completed_frames > 0
         {

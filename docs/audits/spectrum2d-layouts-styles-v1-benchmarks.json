@@ -1,0 +1,25 @@
+{
+  "benchmark": "spectrum2d_cpu_benchmark",
+  "measured_at": "2026-08-12",
+  "build": "cargo test --release -p video-editor-render spectrum2d_cpu_benchmark -- --ignored --nocapture",
+  "renderer_only": true,
+  "resolution": "1920x1080",
+  "frames": 24,
+  "environment": {
+    "os": "Linux 7.0.0-27-generic x86_64",
+    "cpu": "Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz",
+    "logical_cpu_count": 12,
+    "auto_worker_count": 8,
+    "wgpu": {"status": "unavailable", "code": "WGPU-ADAPTER-NOT-FOUND"}
+  },
+  "measurements": [
+    {"case": "linear_24", "analysis_bands": 24, "displayed_bars": 24, "workers": 1, "wall_ms": 490.526, "effective_fps": 48.93, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "linear_24_auto", "analysis_bands": 24, "displayed_bars": 24, "workers": 8, "wall_ms": 112.278, "effective_fps": 213.76, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "center_out_24_auto", "analysis_bands": 24, "displayed_bars": 48, "workers": 8, "wall_ms": 109.384, "effective_fps": 219.41, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "radial_24", "analysis_bands": 24, "displayed_bars": 24, "workers": 1, "wall_ms": 786.445, "effective_fps": 30.52, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "radial_24_auto", "analysis_bands": 24, "displayed_bars": 24, "workers": 8, "wall_ms": 154.647, "effective_fps": 155.19, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "radial_48", "analysis_bands": 48, "displayed_bars": 48, "workers": 1, "wall_ms": 808.643, "effective_fps": 29.68, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "radial_48_auto", "analysis_bands": 48, "displayed_bars": 48, "workers": 8, "wall_ms": 150.868, "effective_fps": 159.08, "effect_bundle": "none", "gradient": "solid", "release": true},
+    {"case": "neon_circle_48_auto", "analysis_bands": 48, "displayed_bars": 48, "workers": 8, "wall_ms": 2271.069, "effective_fps": 10.57, "effect_bundle": "glow+bloom", "gradient": "across_bands", "release": true}
+  ]
+}

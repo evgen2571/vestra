@@ -35,7 +35,9 @@ pub use signals::{
 pub use transitions::{Flash, Transition};
 pub use visual::{
     BlendMode, Clip, SPECTRUM2D_DEFAULT_BAND_COUNT, SPECTRUM2D_MAX_BAND_COUNT,
-    SPECTRUM2D_MIN_BAND_COUNT, Sizing, Spectrum2D, Transform, Visual, VisualSource,
+    SPECTRUM2D_MIN_BAND_COUNT, Sizing, Spectrum2D, Spectrum2DBandMapping, Spectrum2DGradient,
+    Spectrum2DGradientDirection, Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout,
+    Spectrum2DRadialDirection, Spectrum2DRadialLayout, Transform, Visual, VisualSource,
 };
 
 pub use crate::domain::{Crop, Point};

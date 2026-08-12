@@ -117,20 +117,27 @@ and then reaches zero at `end`.
 Solid-colour clips also reject image-only sizing, crop, and preset fields.
 Coordinated transitions reference visible image clips only.
 
-Spectrum2D clips are normalized linear, bottom-aligned bars driven by authored
-Master audio. Their frequency bands are logarithmically spaced and smoothed by
-attack/release durations. The source exposes band count, frequency range,
-sensitivity, normalized region, gap ratio, and colour; ordinary clip opacity,
-blend mode, and visual effects apply. A project containing Spectrum2D requires
-authored Master audio and reports `MVP-SPECTRUM2D-MASTER-AUDIO` when it is
-absent.
+Spectrum2D clips are presentation-only bars driven by authored Master audio.
+Linear layouts support bottom, top, and center anchors with forward, reverse, or
+center-out mapping. Center-out duplicates visual placement but not analysis
+bands (24 analysis bands produce 48 displayed bars). Radial layouts use
+`0°=up`, `90°=right`, `180°=down`, `270°=left`, clockwise-positive angles,
+finite start-angle normalization, inner radius, partial or full sweep, and
+outward, inward, or both growth. Solid colour, minimum bar height, fixed
+along-bar gradients, and analysis-index-based across-band gradients are
+supported. Their frequency bands are logarithmically spaced and smoothed by
+attack/release durations; ordinary clip opacity, blend mode, and visual effects
+apply. A project containing Spectrum2D requires authored Master audio and
+reports `MVP-SPECTRUM2D-MASTER-AUDIO` when it is absent.
 
-The typed Python authoring API also provides three authoring-time presets:
-`classic` for balanced general-purpose bars, `dense` for more bands and tighter
-spacing, and `neon` for a more responsive visualizer with ordinary Glow and
-Bloom effects. Presets expand immediately into the normal Spectrum2D source
-fields and effect collection; canonical JSON contains no preset identity. For
-example, explicit arguments override preset values:
+The typed Python authoring API also provides eight authoring-time presets:
+`classic` (balanced bottom bars), `dense` (more bands and tighter spacing),
+`neon` (responsive bars with Glow and Bloom), `mirror` (center-anchored bars),
+`center_out` (mirrored frequency placement), `circle` (radial circle),
+`neon_circle` (radial cyan-to-magenta bars with Glow and Bloom), and `arc`
+(radial upper semicircle). Presets expand immediately into the normal
+Spectrum2D source fields and effect collection; canonical JSON contains no
+preset identity. For example, explicit arguments override preset values:
 
 ```python
 spectrum = builder.add_spectrum2d_clip(

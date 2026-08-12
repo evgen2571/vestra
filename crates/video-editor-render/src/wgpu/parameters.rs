@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn frame_parameter_offsets_honor_dynamic_uniform_alignment() {
-        let mut arena = FrameParameterArena::new(256, 496);
+        let mut arena = FrameParameterArena::new(256, 512);
         assert_eq!(
             arena
                 .push(&LayerParameters::zeroed())
@@ -126,12 +126,12 @@ mod tests {
                 .expect("second record"),
             256
         );
-        assert_eq!(arena.bytes().len(), 496);
+        assert_eq!(arena.bytes().len(), 512);
     }
 
     #[test]
     fn frame_parameter_overflow_is_reported_before_submission() {
-        let mut arena = FrameParameterArena::new(256, 240);
+        let mut arena = FrameParameterArena::new(256, 256);
         arena
             .push(&LayerParameters::zeroed())
             .expect("first record");
@@ -143,9 +143,9 @@ mod tests {
 
     #[test]
     fn parameter_record_range_covers_exactly_one_record() {
-        let range = parameter_record_range(256, 240, 496).expect("second record fits");
-        assert_eq!(range, 256..496);
-        assert_eq!(PARAMETER_RECORD_BYTES, 240);
+        let range = parameter_record_range(256, 256, 512).expect("second record fits");
+        assert_eq!(range, 256..512);
+        assert_eq!(PARAMETER_RECORD_BYTES, 256);
     }
 
     #[test]
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn spectrum2d_parameters_fit_one_256_byte_aligned_record() {
-        assert_eq!(size_of::<Spectrum2DParameters>(), 240);
+        assert_eq!(size_of::<Spectrum2DParameters>(), 256);
         assert_eq!(align_of::<Spectrum2DParameters>(), 16);
         assert!(size_of::<Spectrum2DParameters>() <= 256);
     }
@@ -174,9 +174,21 @@ mod tests {
             evaluated_track_count: 0,
         };
         let bands = (0..48).map(|index| index as f32 / 48.0).collect::<Vec<_>>();
-        let parameters = spectrum2d(&frame, &bands, 0.0, 0.0, 1.0, 1.0, 0.0, [20, 30, 40, 128])
-            .expect("48 bands fit");
-        assert_eq!(parameters.header[3], 128);
+        let parameters = spectrum2d(
+            &frame,
+            &bands,
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0,
+            0.0,
+            &crate::project::Spectrum2DLayout::default(),
+            None,
+            [20, 30, 40, 128],
+        )
+        .expect("48 bands fit");
+        assert_eq!(parameters.header[3], 0);
         assert_eq!(parameters.bands[11][3], bands[47]);
         assert_eq!(parameters.bands[0][0], 0.0);
 
@@ -188,10 +200,166 @@ mod tests {
             1.0,
             1.0,
             0.0,
+            0.0,
+            &crate::project::Spectrum2DLayout::default(),
+            None,
             [20, 30, 40, 128],
         )
         .expect("short band list fits");
         assert_eq!(shorter.bands[0][2], 0.0);
+    }
+
+    #[test]
+    fn spectrum2d_flags_round_trip_without_alpha_or_field_overlap() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 16,
+            height: 16,
+            layers: Vec::new(),
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let pack = |layout: crate::project::Spectrum2DLayout,
+                    gradient: Option<crate::project::Spectrum2DGradientDirection>,
+                    alpha: u8| {
+            spectrum2d(
+                &frame,
+                &[1.0, 0.5, 0.25],
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                &layout,
+                gradient.map(|direction| (direction, [255, 0, 0, 0], [0, 0, 255, alpha])),
+                [10, 20, 30, alpha],
+            )
+            .expect("parameters fit")
+        };
+
+        for anchor in [
+            crate::project::Spectrum2DLinearAnchor::Bottom,
+            crate::project::Spectrum2DLinearAnchor::Top,
+            crate::project::Spectrum2DLinearAnchor::Center,
+        ] {
+            for mapping in [
+                crate::project::Spectrum2DBandMapping::Forward,
+                crate::project::Spectrum2DBandMapping::Reverse,
+                crate::project::Spectrum2DBandMapping::CenterOut,
+            ] {
+                let parameters = pack(
+                    crate::project::Spectrum2DLayout::Linear(
+                        crate::project::Spectrum2DLinearLayout {
+                            anchor,
+                            band_mapping: mapping,
+                        },
+                    ),
+                    None,
+                    255,
+                );
+                assert_eq!(parameters.header[3] & 3, anchor as u32);
+                assert_eq!((parameters.header[3] >> 2) & 3, mapping as u32);
+                assert_eq!(parameters.header[3] & 64, 0);
+            }
+        }
+
+        for direction in [
+            crate::project::Spectrum2DRadialDirection::Outward,
+            crate::project::Spectrum2DRadialDirection::Inward,
+            crate::project::Spectrum2DRadialDirection::Both,
+        ] {
+            for mapping in [
+                crate::project::Spectrum2DBandMapping::Forward,
+                crate::project::Spectrum2DBandMapping::Reverse,
+            ] {
+                let parameters = pack(
+                    crate::project::Spectrum2DLayout::Radial(
+                        crate::project::Spectrum2DRadialLayout {
+                            direction,
+                            band_mapping: mapping,
+                            inner_radius_ratio: 0.55,
+                            start_angle_degrees: 0.0,
+                            sweep_angle_degrees: 360.0,
+                        },
+                    ),
+                    Some(crate::project::Spectrum2DGradientDirection::AcrossBands),
+                    255,
+                );
+                assert_eq!(parameters.header[3] & 3, direction as u32);
+                assert_eq!((parameters.header[3] >> 2) & 3, mapping as u32);
+                assert_ne!(parameters.header[3] & 64, 0);
+                assert_ne!(parameters.header[3] & 16, 0);
+                assert_ne!(parameters.header[3] & 32, 0);
+                let opaque = pack(
+                    crate::project::Spectrum2DLayout::Linear(
+                        crate::project::Spectrum2DLinearLayout::default(),
+                    ),
+                    None,
+                    255,
+                );
+                let transparent = pack(
+                    crate::project::Spectrum2DLayout::Linear(
+                        crate::project::Spectrum2DLinearLayout::default(),
+                    ),
+                    None,
+                    0,
+                );
+                assert_eq!(opaque.header[3], transparent.header[3]);
+            }
+        }
+    }
+
+    #[test]
+    fn spectrum2d_normalizes_large_start_angles_before_f32_conversion() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 16,
+            height: 16,
+            layers: Vec::new(),
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let layout = |start_angle_degrees| {
+            crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+                inner_radius_ratio: 0.4,
+                start_angle_degrees,
+                sweep_angle_degrees: 180.0,
+                direction: crate::project::Spectrum2DRadialDirection::Outward,
+                band_mapping: crate::project::Spectrum2DBandMapping::Forward,
+            })
+        };
+        let reference = spectrum2d(
+            &frame,
+            &[1.0],
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0,
+            0.0,
+            &layout(90.0),
+            None,
+            [255, 255, 255, 255],
+        )
+        .expect("reference parameters fit");
+        let large = spectrum2d(
+            &frame,
+            &[1.0],
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0,
+            0.0,
+            &layout(360.0 * 1_000_000_000_000.0 + 90.0),
+            None,
+            [255, 255, 255, 255],
+        )
+        .expect("large-angle parameters fit");
+        assert_eq!(reference.style[2], large.style[2]);
     }
 
     #[test]
@@ -220,7 +388,7 @@ mod tests {
 
     #[test]
     fn final_record_can_exactly_fill_the_prepared_buffer() {
-        let mut arena = FrameParameterArena::new(256, 496);
+        let mut arena = FrameParameterArena::new(256, 512);
         arena
             .push(&LayerParameters::zeroed())
             .expect("first record");
@@ -230,7 +398,7 @@ mod tests {
                 .expect("final record"),
             256
         );
-        assert_eq!(arena.bytes().len(), 496);
+        assert_eq!(arena.bytes().len(), 512);
     }
 
     #[test]
@@ -286,8 +454,17 @@ pub(super) struct Spectrum2DParameters {
     pub(super) header: [u32; 4],
     pub(super) region: [f32; 4],
     pub(super) style: [f32; 4],
+    pub(super) extra: [u32; 4],
     pub(super) bands: [[f32; 4]; 12],
 }
+
+// Canonical Spectrum2D parameter contract shared with spectrum2d.wgsl.
+// header[3] is geometry/style flags; colour alpha lives in the packed colour
+// words in extra[0..1] and is never interpreted as geometry.
+const SPECTRUM_FLAG_MAPPING_SHIFT: u32 = 2;
+const SPECTRUM_FLAG_GRADIENT: u32 = 1 << 4;
+const SPECTRUM_FLAG_GRADIENT_ACROSS_BANDS: u32 = 1 << 5;
+const SPECTRUM_FLAG_RADIAL: u32 = 1 << 6;
 
 macro_rules! effect_parameters {
     ($name:ident { $($field:ident : $ty:ty),+ $(,)? }) => {
@@ -515,6 +692,13 @@ pub(super) fn spectrum2d(
     width: f64,
     height: f64,
     bar_gap_ratio: f64,
+    min_bar_height_ratio: f64,
+    layout: &crate::project::Spectrum2DLayout,
+    gradient: Option<(
+        crate::project::Spectrum2DGradientDirection,
+        [u8; 4],
+        [u8; 4],
+    )>,
     colour: [u8; 4],
 ) -> Result<Spectrum2DParameters, crate::Diagnostic> {
     if bands.len() > 48 {
@@ -529,20 +713,45 @@ pub(super) fn spectrum2d(
     for (index, value) in bands.iter().copied().enumerate() {
         packed[index / 4][index % 4] = value;
     }
+    let (mut flags, start_angle, sweep, inner) = match layout {
+        crate::project::Spectrum2DLayout::Linear(value) => (
+            (value.anchor as u32) | ((value.band_mapping as u32) << SPECTRUM_FLAG_MAPPING_SHIFT),
+            0.0,
+            0.0,
+            0.0,
+        ),
+        crate::project::Spectrum2DLayout::Radial(value) => (
+            (value.direction as u32)
+                | ((value.band_mapping as u32) << SPECTRUM_FLAG_MAPPING_SHIFT)
+                | SPECTRUM_FLAG_RADIAL,
+            value.start_angle_degrees.rem_euclid(360.0).to_radians() as f32,
+            value.sweep_angle_degrees.to_radians() as f32,
+            value.inner_radius_ratio as f32,
+        ),
+    };
+    let (start, end) = gradient.map_or((colour, colour), |(direction, start, end)| {
+        flags |= SPECTRUM_FLAG_GRADIENT;
+        if direction == crate::project::Spectrum2DGradientDirection::AcrossBands {
+            flags |= SPECTRUM_FLAG_GRADIENT_ACROSS_BANDS;
+        }
+        (start, end)
+    });
+    let pack = |value: [u8; 4]| {
+        u32::from(value[0])
+            | (u32::from(value[1]) << 8)
+            | (u32::from(value[2]) << 16)
+            | (u32::from(value[3]) << 24)
+    };
     Ok(Spectrum2DParameters {
-        header: [
-            frame.width,
-            frame.height,
-            bands.len() as u32,
-            u32::from(colour[3]),
-        ],
+        header: [frame.width, frame.height, bands.len() as u32, flags],
         region: [x as f32, y as f32, width as f32, height as f32],
         style: [
             bar_gap_ratio as f32,
-            f32::from(colour[0]),
-            f32::from(colour[1]),
-            f32::from(colour[2]),
+            min_bar_height_ratio as f32,
+            start_angle,
+            sweep,
         ],
+        extra: [pack(start), pack(end), inner.to_bits(), 0],
         bands: packed,
     })
 }

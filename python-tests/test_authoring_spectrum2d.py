@@ -6,7 +6,14 @@ from jsonschema import Draft202012Validator
 
 import video_editor
 from video_editor import FrameRate
-from video_editor.authoring import BlendMode, ProjectBuilder, Spectrum2DClip
+from video_editor.authoring import (
+    BlendMode,
+    ProjectBuilder,
+    Spectrum2DClip,
+    Spectrum2DGradient,
+    Spectrum2DLinearLayout,
+    Spectrum2DRadialLayout,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +118,35 @@ def test_spectrum2d_explicit_configuration_and_normal_effects() -> None:
     assert not list(VALIDATOR.iter_errors(data))
 
 
+@pytest.mark.parametrize("field, value", [
+    ("layout", "radial"), ("layout", {}), ("layout", 123),
+    ("gradient", "red-blue"), ("gradient", {}), ("gradient", 123),
+])
+def test_spectrum2d_rejects_invalid_runtime_layout_and_gradient_types(
+    field: str, value: object,
+) -> None:
+    with pytest.raises(TypeError):
+        builder().add_spectrum2d_clip(
+            start=0, duration=0.2, layer=1, **{field: value},
+        )
+
+
+def test_spectrum2d_typed_layouts_and_gradients_validate_locally() -> None:
+    assert Spectrum2DLinearLayout("center", "center_out").to_canonical() == {
+        "type": "linear", "anchor": "center", "band_mapping": "center_out",
+    }
+    assert Spectrum2DRadialLayout(0.4, -450.0, 180.0, "both", "reverse").to_canonical()[
+        "start_angle_degrees"
+    ] == -450.0
+    assert Spectrum2DGradient("#ff000000", "#0000ffff", "along_bar").to_canonical() == {
+        "start_colour": "#ff000000", "end_colour": "#0000ffff", "direction": "along_bar",
+    }
+    with pytest.raises(ValueError):
+        Spectrum2DRadialLayout(1.0)
+    with pytest.raises(ValueError):
+        Spectrum2DLinearLayout("invalid", "forward")  # type: ignore[arg-type]
+
+
 _PRESET_SOURCES: dict[str, dict[str, object]] = {
     "classic": {
         "band_count": 24, "min_hz": 40.0, "max_hz": 16_000.0, "sensitivity": 8.0,
@@ -163,6 +199,51 @@ def test_spectrum2d_preset_overrides_are_applied_after_preset_values() -> None:
     assert source["colour"] == "#ff00ff"  # type: ignore[index]
     assert source["max_hz"] == 18_000.0  # type: ignore[index]
     assert source["bar_gap_ratio"] == 0.10  # type: ignore[index]
+
+
+_NEW_PRESET_SOURCES: dict[str, dict[str, object]] = {
+    "mirror": {"band_count": 32, "sensitivity": 9.0, "x": 0.08, "y": 0.58, "width": 0.84, "height": 0.32, "bar_gap_ratio": 0.14, "layout": Spectrum2DLinearLayout("center")},
+    "center_out": {"x": 0.08, "width": 0.84, "bar_gap_ratio": 0.12, "layout": Spectrum2DLinearLayout("bottom", "center_out")},
+    "circle": {"band_count": 32, "sensitivity": 9.0, "attack_seconds": 0.015, "x": 0.22, "y": 0.22, "width": 0.56, "height": 0.56, "bar_gap_ratio": 0.18, "min_bar_height_ratio": 0.02, "layout": Spectrum2DRadialLayout(0.58)},
+    "neon_circle": {"band_count": 48, "max_hz": 18_000.0, "sensitivity": 10.0, "attack_seconds": 0.012, "release_seconds": 0.160, "x": 0.20, "y": 0.20, "width": 0.60, "height": 0.60, "bar_gap_ratio": 0.12, "min_bar_height_ratio": 0.035, "layout": Spectrum2DRadialLayout(0.55), "gradient": Spectrum2DGradient("#00ffff", "#ff00ff", "across_bands")},
+    "arc": {"band_count": 32, "x": 0.15, "y": 0.22, "width": 0.70, "height": 0.70, "bar_gap_ratio": 0.14, "min_bar_height_ratio": 0.02, "layout": Spectrum2DRadialLayout(0.55, 270.0, 180.0)},
+}
+
+
+@pytest.mark.parametrize("preset", list(_NEW_PRESET_SOURCES))
+def test_new_spectrum2d_presets_expand_to_explicit_equivalents(preset: str) -> None:
+    preset_clip = _preset_clip(preset)
+    explicit_project = builder()
+    clip = explicit_project.add_spectrum2d_clip(
+        start=0, duration=0.2, layer=1, id="spectrum", **_NEW_PRESET_SOURCES[preset],  # type: ignore[arg-type]
+    )
+    if preset == "neon_circle":
+        clip.effects.add_glow(threshold=0.35, radius=3.0, intensity=0.85, colour="#ffffff")
+        clip.effects.add_bloom(threshold=0.55, radius=4.0, intensity=0.65)
+    assert preset_clip == explicit_project.to_dict()["visual"]["clips"][0]
+    assert "preset" not in json.dumps(preset_clip)
+
+
+def test_new_preset_layout_gradient_and_minimum_height_are_whole_unit_overrides() -> None:
+    clip = _preset_clip(
+        "neon_circle",
+        layout=Spectrum2DRadialLayout(0.40, 45.0, 180.0, "both", "reverse"),
+        gradient=Spectrum2DGradient("#102030", "#d0c0b0", "along_bar"),
+        min_bar_height_ratio=0.10,
+    )
+    source = clip["source"]  # type: ignore[index]
+    assert source["layout"] == {  # type: ignore[index]
+        "type": "radial", "inner_radius_ratio": 0.40,
+        "start_angle_degrees": 45.0, "sweep_angle_degrees": 180.0,
+        "direction": "both", "band_mapping": "reverse",
+    }
+    assert source["gradient"] == {  # type: ignore[index]
+        "start_colour": "#102030", "end_colour": "#d0c0b0", "direction": "along_bar",
+    }
+    assert source["min_bar_height_ratio"] == 0.10  # type: ignore[index]
+    assert source["band_count"] == 48  # type: ignore[index]
+    assert source["x"] == 0.20  # type: ignore[index]
+    assert [effect["type"] for effect in clip["effects"]] == ["glow", "bloom"]  # type: ignore[index]
 
 
 def test_spectrum2d_invalid_preset_fails_before_serialization() -> None:

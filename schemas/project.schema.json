@@ -2334,16 +2334,28 @@
           "$ref": "#/$defs/colour",
           "default": "#ffffff"
         },
+        "gradient": {
+          "$ref": "#/$defs/spectrum2d_gradient"
+        },
         "height": {
           "default": 0.25,
           "exclusiveMinimum": 0,
           "maximum": 1,
           "type": "number"
         },
+        "layout": {
+          "$ref": "#/$defs/spectrum2d_layout"
+        },
         "max_hz": {
           "default": 16000.0,
           "exclusiveMinimum": 0,
           "maximum": 24000.0,
+          "type": "number"
+        },
+        "min_bar_height_ratio": {
+          "default": 0.0,
+          "maximum": 1,
+          "minimum": 0,
           "type": "number"
         },
         "min_hz": {
@@ -2387,6 +2399,104 @@
         "type"
       ],
       "type": "object"
+    },
+    "spectrum2d_gradient": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "enum": [
+            "along_bar",
+            "across_bands"
+          ]
+        },
+        "end_colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "start_colour": {
+          "$ref": "#/$defs/colour"
+        }
+      },
+      "required": [
+        "start_colour",
+        "end_colour",
+        "direction"
+      ],
+      "type": "object"
+    },
+    "spectrum2d_layout": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "default": "bottom",
+              "enum": [
+                "bottom",
+                "top",
+                "center"
+              ]
+            },
+            "band_mapping": {
+              "default": "forward",
+              "enum": [
+                "forward",
+                "reverse",
+                "center_out"
+              ]
+            },
+            "type": {
+              "const": "linear"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "band_mapping": {
+              "default": "forward",
+              "enum": [
+                "forward",
+                "reverse"
+              ]
+            },
+            "direction": {
+              "default": "outward",
+              "enum": [
+                "outward",
+                "inward",
+                "both"
+              ]
+            },
+            "inner_radius_ratio": {
+              "default": 0.55,
+              "exclusiveMaximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "start_angle_degrees": {
+              "default": 0,
+              "type": "number"
+            },
+            "sweep_angle_degrees": {
+              "default": 360,
+              "exclusiveMinimum": 0,
+              "maximum": 360,
+              "type": "number"
+            },
+            "type": {
+              "const": "radial"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "tint_effect": {
       "additionalProperties": false,

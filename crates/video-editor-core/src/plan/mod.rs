@@ -60,7 +60,8 @@ mod tests {
             AudioScalarFeature as ProjectAudioScalarFeature, Effect, Interpolation,
             InterpolationName, Keyframe, Preset, Project, ScalarModifier,
             ScalarModifierOperation as ProjectScalarModifierOperation, ScalarSignal,
-            ScalarSignalSource, SignalTransform, Spectrum2D, Track, VisualSource,
+            ScalarSignalSource, SignalTransform, Spectrum2D, Spectrum2DBandMapping,
+            Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Track, VisualSource,
         },
         validation::ResourceLimits,
     };
@@ -161,6 +162,10 @@ mod tests {
             sensitivity: 3.5,
             attack_seconds: 0.03,
             release_seconds: 0.2,
+            layout: Spectrum2DLayout::Linear(Spectrum2DLinearLayout {
+                anchor: Spectrum2DLinearAnchor::Bottom,
+                band_mapping: Spectrum2DBandMapping::CenterOut,
+            }),
             ..Spectrum2D::default()
         };
         project.visual.clips[0].source = VisualSource::Spectrum2D(spectrum.clone());

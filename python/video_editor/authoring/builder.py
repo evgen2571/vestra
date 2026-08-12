@@ -15,7 +15,7 @@ from .clips import ImageClip, SolidColorClip, Spectrum2DClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .flashes import FlashCollection
 from .spectrum2d import (
-    Spectrum2DEffectPreset, Spectrum2DPreset, Spectrum2DValue, _UNSET, _Unset,
+    Spectrum2DEffectPreset, Spectrum2DPreset, Spectrum2DValue, Spectrum2DLayout, Spectrum2DGradient, Spectrum2DLinearLayout, _UNSET, _Unset,
     _resolve_spectrum2d_source,
 )
 from .transitions import TransitionCollection
@@ -355,6 +355,7 @@ class ProjectBuilder:
         release_seconds: int | float = 0.150, x: int | float = 0.10, y: int | float = 0.70,
         width: int | float = 0.80, height: int | float = 0.25,
         bar_gap_ratio: int | float = 0.20, colour: Color | str = "#ffffff",
+        min_bar_height_ratio: int | float = 0.0, layout: Spectrum2DLayout = Spectrum2DLinearLayout(), gradient: Spectrum2DGradient | None = None,
     ) -> Spectrum2DClip: ...
 
     @overload
@@ -366,6 +367,7 @@ class ProjectBuilder:
         release_seconds: int | float = 0.150, x: int | float = 0.10, y: int | float = 0.70,
         width: int | float = 0.80, height: int | float = 0.25,
         bar_gap_ratio: int | float = 0.20, colour: Color | str = "#ffffff",
+        min_bar_height_ratio: int | float = 0.0, layout: Spectrum2DLayout = Spectrum2DLinearLayout(), gradient: Spectrum2DGradient | None = None,
     ) -> Spectrum2DClip: ...
 
     def add_spectrum2d_clip(
@@ -376,7 +378,8 @@ class ProjectBuilder:
         sensitivity: object = _UNSET, attack_seconds: object = _UNSET,
         release_seconds: object = _UNSET, x: object = _UNSET, y: object = _UNSET,
         width: object = _UNSET, height: object = _UNSET, bar_gap_ratio: object = _UNSET,
-        colour: object = _UNSET,
+        colour: object = _UNSET, min_bar_height_ratio: object = _UNSET,
+        layout: object = _UNSET, gradient: object = _UNSET,
     ) -> Spectrum2DClip:
         """Create a Master-audio-driven normalized linear Spectrum2D clip.
 
@@ -389,6 +392,7 @@ class ProjectBuilder:
                 "sensitivity": sensitivity, "attack_seconds": attack_seconds,
                 "release_seconds": release_seconds, "x": x, "y": y, "width": width,
                 "height": height, "bar_gap_ratio": bar_gap_ratio, "colour": colour,
+                "min_bar_height_ratio": min_bar_height_ratio, "layout": layout, "gradient": gradient,
             }),
         )
         staged = Spectrum2DClip._create(
@@ -402,6 +406,9 @@ class ProjectBuilder:
             width=cast(int | float, source["width"]), height=cast(int | float, source["height"]),
             bar_gap_ratio=cast(int | float, source["bar_gap_ratio"]),
             colour=cast(Color | str, source["colour"]),
+            min_bar_height_ratio=cast(int | float, source["min_bar_height_ratio"]),
+            layout=cast(Spectrum2DLayout, source["layout"]),
+            gradient=cast(Spectrum2DGradient | None, source.get("gradient")),
         )
         if id is not None:
             self._ids.validate("clip", id)

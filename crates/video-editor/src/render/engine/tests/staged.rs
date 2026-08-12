@@ -531,6 +531,9 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
         width: 0.8,
         height: 0.8,
         bar_gap_ratio: 0.2,
+        min_bar_height_ratio: 0.0,
+        layout: video_editor_core::project::Spectrum2DLayout::default(),
+        gradient: None,
         colour: [0, 255, 128, 255],
     };
     attach_test_master_audio(&mut plan, source);

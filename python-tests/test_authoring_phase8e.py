@@ -9,12 +9,11 @@ import typing
 
 import pytest
 
-import video_editor
 from video_editor import FrameRate, Project
 from video_editor import authoring as api
 from video_editor.authoring import (
     AudioAsset, AudioClip, AudioTimeline, AudioTrack, Crop, ImageAsset, ImageClip, Point, PresetCollection, ProjectBuilder,
-    ScalarSignal, ScalarTrack, Sizing, SolidColorClip, Timeline, Transform,
+    ScalarTrack, Sizing, SolidColorClip, Timeline, Transform,
 )
 
 
@@ -30,6 +29,7 @@ PUBLIC_NAMES = {
     "Timeline", "TintEffect", "Transform", "Transition", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection", "Spectrum2DClip",
     "ZoomBlurEffect", "ZoomBlurTransition", "ZoomCrossfadeTransition", "CrossfadeTransition", "available_effects", "effect_definition",
     "Spectrum2DPreset",
+    "Spectrum2DGradient", "Spectrum2DLinearLayout", "Spectrum2DRadialLayout",
 }
 
 

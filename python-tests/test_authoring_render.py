@@ -43,7 +43,10 @@ def test_background_only_builder_renders_on_cpu(tmp_path: Path) -> None:
     assert "duration=0.200000" in probe.stdout
 
 
-@pytest.mark.parametrize("preset", ["classic", "dense", "neon"])
+@pytest.mark.parametrize(
+    "preset",
+    ["classic", "dense", "neon", "mirror", "center_out", "circle", "neon_circle", "arc"],
+)
 def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, preset: str) -> None:
     project_builder = ProjectBuilder(
         width=64, height=64, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
@@ -53,7 +56,7 @@ def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, prese
     track = project_builder.audio.add_track(id="music")
     track.add_clip(asset=audio, start=0, trim_end=0.2)
     clip = project_builder.add_spectrum2d_clip(start=0, duration=0.2, layer=1, preset=preset)  # type: ignore[arg-type]
-    if preset == "neon":
+    if preset in {"neon", "neon_circle"}:
         assert [effect.kind for effect in clip.effects.items] == ["glow", "bloom"]
     project = project_builder.build()
     output = tmp_path / "spectrum.mp4"
@@ -67,7 +70,10 @@ def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, prese
     assert output.is_file() and output.stat().st_size > 0
 
 
-def test_public_spectrum2d_integration_project_exercises_audio_reactive_background_and_bloom() -> None:
+@pytest.mark.parametrize("preset", ["circle", "neon_circle"])
+def test_public_spectrum2d_integration_project_exercises_audio_reactive_background_and_bloom(
+    preset: str,
+) -> None:
     def prepare_project(with_spectrum: bool):
         builder = ProjectBuilder(
             width=64, height=54, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
@@ -86,7 +92,7 @@ def test_public_spectrum2d_integration_project_exercises_audio_reactive_backgrou
         spectrum = None
         if with_spectrum:
             spectrum = builder.add_spectrum2d_clip(
-                start=0, duration=3, layer=1, preset="neon", height=0.30,
+                start=0, duration=3, layer=1, preset=preset,
             )
 
             canonical = builder.to_dict()
@@ -95,7 +101,8 @@ def test_public_spectrum2d_integration_project_exercises_audio_reactive_backgrou
             )
             assert spectrum_data["source"]["type"] == "spectrum2d"
             assert "preset" not in spectrum_data
-            assert [effect["type"] for effect in spectrum_data["effects"]] == ["glow", "bloom"]
+            expected_effects = ["glow", "bloom"] if preset == "neon_circle" else []
+            assert [effect["type"] for effect in spectrum_data["effects"]] == expected_effects
         assert builder.validate().is_valid
         return video_editor.Editor().prepare(
             builder.build(),
@@ -115,7 +122,7 @@ def test_public_spectrum2d_integration_project_exercises_audio_reactive_backgrou
     region_differs = any(
         baseline_frame[(y * 64 + x) * 4:(y * 64 + x + 1) * 4]
         != spectrum_frame[(y * 64 + x) * 4:(y * 64 + x + 1) * 4]
-        for y in range(37, 54)
-        for x in range(6, 58)
+        for y in range(11, 43)
+        for x in range(12, 52)
     )
     assert region_differs

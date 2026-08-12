@@ -69,6 +69,31 @@ pub(super) fn compile(
                     "",
                 )
             })?;
+            let gradient = spectrum
+                .gradient
+                .as_ref()
+                .map(|value| {
+                    Ok::<_, Diagnostic>((
+                        value.direction,
+                        parse_colour(&value.start_colour).ok_or_else(|| {
+                            Diagnostic::error(
+                                "MVP-PLAN-SPECTRUM2D-GRADIENT",
+                                Category::Internal,
+                                "validated Spectrum2D gradient start colour is invalid",
+                                "",
+                            )
+                        })?,
+                        parse_colour(&value.end_colour).ok_or_else(|| {
+                            Diagnostic::error(
+                                "MVP-PLAN-SPECTRUM2D-GRADIENT",
+                                Category::Internal,
+                                "validated Spectrum2D gradient end colour is invalid",
+                                "",
+                            )
+                        })?,
+                    ))
+                })
+                .transpose()?;
             let band_signals = spectrum
                 .logarithmic_bands()
                 .into_iter()
@@ -128,6 +153,9 @@ pub(super) fn compile(
                 width: spectrum.width,
                 height: spectrum.height,
                 bar_gap_ratio: spectrum.bar_gap_ratio,
+                min_bar_height_ratio: spectrum.min_bar_height_ratio,
+                layout: spectrum.layout.clone(),
+                gradient,
                 colour,
             }
         }

@@ -1330,9 +1330,29 @@ mod tests {
                     y: 0.1,
                     width: 1.0,
                     height: 0.8,
-                    bar_gap_ratio: 0.0,
+                    bar_gap_ratio: 0.08,
+                    min_bar_height_ratio: 0.10,
+                    layout: crate::project::Spectrum2DLayout::Radial(
+                        crate::project::Spectrum2DRadialLayout {
+                            inner_radius_ratio: 0.35,
+                            start_angle_degrees: 450.0,
+                            sweep_angle_degrees: 270.0,
+                            direction: crate::project::Spectrum2DRadialDirection::Outward,
+                            band_mapping: crate::project::Spectrum2DBandMapping::Reverse,
+                        },
+                    ),
+                    gradient: Some((
+                        crate::project::Spectrum2DGradientDirection::AcrossBands,
+                        [20, 90, 180, 80],
+                        [220, 40, 240, 220],
+                    )),
                     colour: [40, 90, 180, 160],
                 };
+                frame.layers[0].effects = vec![EvaluatedEffect::Bloom {
+                    threshold: 0.4,
+                    radius: 2.0,
+                    intensity: 0.5,
+                }];
                 frame
             })
             .collect();
@@ -1389,6 +1409,9 @@ mod tests {
             width: 0.25,
             height: 1.0,
             bar_gap_ratio: 0.0,
+            min_bar_height_ratio: 0.0,
+            layout: crate::project::Spectrum2DLayout::default(),
+            gradient: None,
             colour: [255, 255, 255, 255],
         };
         let frame = EvaluatedFrame {
@@ -1452,12 +1475,112 @@ mod tests {
         let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
         let available = thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
 
-        for (band_count, worker_count) in [
-            (24, 1),
-            (48, 1),
-            (24, automatic_worker_count(&plan, available)),
-            (48, automatic_worker_count(&plan, available)),
-        ] {
+        let automatic = automatic_worker_count(&plan, available);
+        let cases = [
+            (
+                "linear_24",
+                24,
+                1,
+                crate::project::Spectrum2DLayout::default(),
+                None,
+                false,
+            ),
+            (
+                "linear_24_auto",
+                24,
+                automatic,
+                crate::project::Spectrum2DLayout::default(),
+                None,
+                false,
+            ),
+            (
+                "center_out_24_auto",
+                24,
+                automatic,
+                crate::project::Spectrum2DLayout::Linear(crate::project::Spectrum2DLinearLayout {
+                    anchor: crate::project::Spectrum2DLinearAnchor::Bottom,
+                    band_mapping: crate::project::Spectrum2DBandMapping::CenterOut,
+                }),
+                None,
+                false,
+            ),
+            (
+                "radial_24",
+                24,
+                1,
+                crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+                    inner_radius_ratio: 0.55,
+                    start_angle_degrees: 0.0,
+                    sweep_angle_degrees: 360.0,
+                    direction: crate::project::Spectrum2DRadialDirection::Outward,
+                    band_mapping: crate::project::Spectrum2DBandMapping::Forward,
+                }),
+                None,
+                false,
+            ),
+            (
+                "radial_24_auto",
+                24,
+                automatic,
+                crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+                    inner_radius_ratio: 0.55,
+                    start_angle_degrees: 0.0,
+                    sweep_angle_degrees: 360.0,
+                    direction: crate::project::Spectrum2DRadialDirection::Outward,
+                    band_mapping: crate::project::Spectrum2DBandMapping::Forward,
+                }),
+                None,
+                false,
+            ),
+            (
+                "radial_48",
+                48,
+                1,
+                crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+                    inner_radius_ratio: 0.55,
+                    start_angle_degrees: 0.0,
+                    sweep_angle_degrees: 360.0,
+                    direction: crate::project::Spectrum2DRadialDirection::Outward,
+                    band_mapping: crate::project::Spectrum2DBandMapping::Forward,
+                }),
+                None,
+                false,
+            ),
+            (
+                "radial_48_auto",
+                48,
+                automatic,
+                crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+                    inner_radius_ratio: 0.55,
+                    start_angle_degrees: 0.0,
+                    sweep_angle_degrees: 360.0,
+                    direction: crate::project::Spectrum2DRadialDirection::Outward,
+                    band_mapping: crate::project::Spectrum2DBandMapping::Forward,
+                }),
+                None,
+                false,
+            ),
+            (
+                "neon_circle_48_auto",
+                48,
+                automatic,
+                crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+                    inner_radius_ratio: 0.55,
+                    start_angle_degrees: 0.0,
+                    sweep_angle_degrees: 360.0,
+                    direction: crate::project::Spectrum2DRadialDirection::Outward,
+                    band_mapping: crate::project::Spectrum2DBandMapping::Forward,
+                }),
+                Some((
+                    crate::project::Spectrum2DGradientDirection::AcrossBands,
+                    [0, 255, 255, 255],
+                    [255, 0, 255, 255],
+                )),
+                true,
+            ),
+        ];
+
+        for (name, band_count, worker_count, layout, gradient, neon_circle) in cases {
             let frames: Vec<_> = (0..24)
                 .map(|frame_number| {
                     let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number);
@@ -1470,13 +1593,31 @@ mod tests {
                                         .max(0.05)
                                 })
                                 .collect(),
-                            x: 0.0,
-                            y: 0.1,
-                            width: 1.0,
-                            height: 0.8,
-                            bar_gap_ratio: 0.1,
+                            x: if neon_circle { 0.20 } else { 0.0 },
+                            y: if neon_circle { 0.20 } else { 0.1 },
+                            width: if neon_circle { 0.60 } else { 1.0 },
+                            height: if neon_circle { 0.60 } else { 0.8 },
+                            bar_gap_ratio: if neon_circle { 0.12 } else { 0.1 },
+                            min_bar_height_ratio: if neon_circle { 0.035 } else { 0.0 },
+                            layout: layout.clone(),
+                            gradient,
                             colour: [255, 255, 255, 255],
                         };
+                    }
+                    if neon_circle {
+                        frame.layers[0].effects = vec![
+                            EvaluatedEffect::Glow {
+                                threshold: 0.35,
+                                radius: 3.0,
+                                intensity: 0.85,
+                                colour: [255, 255, 255, 255],
+                            },
+                            EvaluatedEffect::Bloom {
+                                threshold: 0.55,
+                                radius: 4.0,
+                                intensity: 0.65,
+                            },
+                        ];
                     }
                     frame
                 })
@@ -1503,14 +1644,27 @@ mod tests {
             }
             let elapsed = started.elapsed();
             println!(
-                "spectrum2d_cpu workers={} resolution={}x{} bands={} frames={} wall_ms={:.3} effective_fps={:.2}",
+                "spectrum2d_cpu case={} workers={} resolution={}x{} analysis_bands={} displayed_bars={} frames={} wall_ms={:.3} effective_fps={:.2} effect_bundle={} gradient={} release=true renderer_only=true",
+                name,
                 worker_count,
                 plan.canvas.width,
                 plan.canvas.height,
                 band_count,
+                if matches!(layout, crate::project::Spectrum2DLayout::Linear(value) if matches!(value.band_mapping, crate::project::Spectrum2DBandMapping::CenterOut))
+                {
+                    band_count * 2
+                } else {
+                    band_count
+                },
                 frames.len(),
                 elapsed.as_secs_f64() * 1_000.0,
                 frames.len() as f64 / elapsed.as_secs_f64(),
+                if neon_circle { "glow+bloom" } else { "none" },
+                if gradient.is_some() {
+                    "enabled"
+                } else {
+                    "solid"
+                },
             );
         }
     }

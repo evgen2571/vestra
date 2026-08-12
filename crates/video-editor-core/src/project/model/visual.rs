@@ -52,6 +52,95 @@ const fn default_spectrum2d_bar_gap_ratio() -> f64 {
     0.20
 }
 
+const fn default_spectrum2d_min_bar_height_ratio() -> f64 {
+    0.0
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DLinearAnchor {
+    #[default]
+    Bottom,
+    Top,
+    Center,
+}
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DBandMapping {
+    #[default]
+    Forward,
+    Reverse,
+    CenterOut,
+}
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DRadialDirection {
+    #[default]
+    Outward,
+    Inward,
+    Both,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DGradientDirection {
+    AlongBar,
+    AcrossBands,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Spectrum2DLinearLayout {
+    #[serde(default)]
+    pub anchor: Spectrum2DLinearAnchor,
+    #[serde(default)]
+    pub band_mapping: Spectrum2DBandMapping,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Spectrum2DRadialLayout {
+    #[serde(default = "default_spectrum2d_inner_radius_ratio")]
+    pub inner_radius_ratio: f64,
+    #[serde(default)]
+    pub start_angle_degrees: f64,
+    #[serde(default = "default_spectrum2d_sweep_angle_degrees")]
+    pub sweep_angle_degrees: f64,
+    #[serde(default)]
+    pub direction: Spectrum2DRadialDirection,
+    #[serde(default)]
+    pub band_mapping: Spectrum2DBandMapping,
+}
+const fn default_spectrum2d_inner_radius_ratio() -> f64 {
+    0.55
+}
+const fn default_spectrum2d_sweep_angle_degrees() -> f64 {
+    360.0
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Spectrum2DLayout {
+    Linear(Spectrum2DLinearLayout),
+    Radial(Spectrum2DRadialLayout),
+}
+impl Default for Spectrum2DLayout {
+    fn default() -> Self {
+        Self::Linear(Default::default())
+    }
+}
+impl Spectrum2DLayout {
+    pub fn is_default(&self) -> bool {
+        matches!(self, Self::Linear(value) if *value == Spectrum2DLinearLayout::default())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Spectrum2DGradient {
+    pub start_colour: String,
+    pub end_colour: String,
+    pub direction: Spectrum2DGradientDirection,
+}
+
 fn default_spectrum2d_colour() -> String {
     "#ffffff".to_owned()
 }
@@ -135,8 +224,14 @@ pub struct Spectrum2D {
     pub height: f64,
     #[serde(default = "default_spectrum2d_bar_gap_ratio")]
     pub bar_gap_ratio: f64,
+    #[serde(default = "default_spectrum2d_min_bar_height_ratio")]
+    pub min_bar_height_ratio: f64,
     #[serde(default = "default_spectrum2d_colour")]
     pub colour: String,
+    #[serde(default, skip_serializing_if = "Spectrum2DLayout::is_default")]
+    pub layout: Spectrum2DLayout,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<Spectrum2DGradient>,
 }
 
 impl Default for Spectrum2D {
@@ -153,7 +248,10 @@ impl Default for Spectrum2D {
             width: default_spectrum2d_width(),
             height: default_spectrum2d_height(),
             bar_gap_ratio: default_spectrum2d_bar_gap_ratio(),
+            min_bar_height_ratio: default_spectrum2d_min_bar_height_ratio(),
             colour: default_spectrum2d_colour(),
+            layout: Default::default(),
+            gradient: None,
         }
     }
 }

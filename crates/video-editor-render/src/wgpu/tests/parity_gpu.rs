@@ -39,6 +39,9 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
                 width: 1.0,
                 height: 1.0,
                 bar_gap_ratio,
+                min_bar_height_ratio: 0.0,
+                layout: crate::project::Spectrum2DLayout::default(),
+                gradient: None,
                 colour: [20, 30, 40, 128],
             },
             opacity: 1.0,
@@ -49,6 +52,30 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
         post_effects: Vec::new(),
         evaluated_track_count: 0,
     }
+}
+
+fn set_spectrum_style(
+    frame: &mut EvaluatedFrame,
+    layout: crate::project::Spectrum2DLayout,
+    min_bar_height_ratio: f64,
+    gradient: Option<(
+        crate::project::Spectrum2DGradientDirection,
+        [u8; 4],
+        [u8; 4],
+    )>,
+) {
+    let EvaluatedSource::Spectrum2D {
+        layout: current_layout,
+        min_bar_height_ratio: current_minimum,
+        gradient: current_gradient,
+        ..
+    } = &mut frame.layers[0].source
+    else {
+        panic!("expected Spectrum2D source");
+    };
+    *current_layout = layout;
+    *current_minimum = min_bar_height_ratio;
+    *current_gradient = gradient;
 }
 
 fn scalar(track: Track<f64>) -> CompiledScalarProperty {
@@ -331,6 +358,178 @@ fn gpu_spectrum2d_frames_keep_distinct_in_flight_band_data() {
         cpu.render_frame(expected, &mut cpu_output)
             .expect("CPU Spectrum2D frame renders");
         assert_eq!(result.rgba, cpu_output.as_raw().as_slice());
+    }
+}
+
+#[test]
+fn gpu_spectrum2d_layout_and_style_cases_match_cpu() {
+    let validated = load_and_validate(
+        std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 32;
+    plan.canvas.height = 32;
+    plan.compilation.effect_pass_count = 0;
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let linear = |anchor, band_mapping| {
+        crate::project::Spectrum2DLayout::Linear(crate::project::Spectrum2DLinearLayout {
+            anchor,
+            band_mapping,
+        })
+    };
+    let radial = |start_angle_degrees, sweep_angle_degrees, direction, band_mapping| {
+        crate::project::Spectrum2DLayout::Radial(crate::project::Spectrum2DRadialLayout {
+            inner_radius_ratio: 0.35,
+            start_angle_degrees,
+            sweep_angle_degrees,
+            direction,
+            band_mapping,
+        })
+    };
+    let cases = [
+        (
+            "linear top forward",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Top,
+                crate::project::Spectrum2DBandMapping::Forward,
+            ),
+            0.0,
+            None,
+        ),
+        (
+            "linear center forward",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Center,
+                crate::project::Spectrum2DBandMapping::Forward,
+            ),
+            0.0,
+            None,
+        ),
+        (
+            "linear top reverse",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Top,
+                crate::project::Spectrum2DBandMapping::Reverse,
+            ),
+            0.0,
+            None,
+        ),
+        (
+            "linear center reverse",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Center,
+                crate::project::Spectrum2DBandMapping::Reverse,
+            ),
+            0.0,
+            None,
+        ),
+        (
+            "linear bottom center out",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Bottom,
+                crate::project::Spectrum2DBandMapping::CenterOut,
+            ),
+            0.10,
+            None,
+        ),
+        (
+            "linear top center out",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Top,
+                crate::project::Spectrum2DBandMapping::CenterOut,
+            ),
+            0.0,
+            Some((
+                crate::project::Spectrum2DGradientDirection::AcrossBands,
+                [255, 0, 0, 0],
+                [0, 0, 255, 255],
+            )),
+        ),
+        (
+            "linear center center out",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Center,
+                crate::project::Spectrum2DBandMapping::CenterOut,
+            ),
+            0.0,
+            Some((
+                crate::project::Spectrum2DGradientDirection::AlongBar,
+                [0, 255, 0, 32],
+                [255, 255, 0, 224],
+            )),
+        ),
+        (
+            "linear center out",
+            linear(
+                crate::project::Spectrum2DLinearAnchor::Center,
+                crate::project::Spectrum2DBandMapping::CenterOut,
+            ),
+            0.25,
+            Some((
+                crate::project::Spectrum2DGradientDirection::AcrossBands,
+                [255, 0, 0, 80],
+                [0, 0, 255, 220],
+            )),
+        ),
+        (
+            "radial outward full circle seam",
+            radial(
+                0.0,
+                360.0,
+                crate::project::Spectrum2DRadialDirection::Outward,
+                crate::project::Spectrum2DBandMapping::Forward,
+            ),
+            0.0,
+            Some((
+                crate::project::Spectrum2DGradientDirection::AcrossBands,
+                [255, 0, 0, 255],
+                [0, 0, 255, 255],
+            )),
+        ),
+        (
+            "radial reverse rotated",
+            radial(
+                450.0,
+                180.0,
+                crate::project::Spectrum2DRadialDirection::Inward,
+                crate::project::Spectrum2DBandMapping::Reverse,
+            ),
+            0.0,
+            Some((
+                crate::project::Spectrum2DGradientDirection::AlongBar,
+                [0, 255, 0, 90],
+                [255, 255, 0, 210],
+            )),
+        ),
+        (
+            "radial both rotated arc minimum",
+            radial(
+                -450.0,
+                180.0,
+                crate::project::Spectrum2DRadialDirection::Both,
+                crate::project::Spectrum2DBandMapping::Forward,
+            ),
+            0.10,
+            Some((
+                crate::project::Spectrum2DGradientDirection::AlongBar,
+                [0, 255, 0, 0],
+                [255, 255, 0, 255],
+            )),
+        ),
+    ];
+    for (name, layout, minimum, gradient) in cases {
+        let mut frame = spectrum_frame(vec![0.1, 0.35, 0.7, 1.0], 0.08);
+        frame.width = 32;
+        frame.height = 32;
+        set_spectrum_style(&mut frame, layout, minimum, gradient);
+        if !gpu_effect_case_matches_cpu(&plan, &decoded, &frame, name, 1) {
+            return;
+        }
     }
 }
 

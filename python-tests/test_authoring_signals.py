@@ -1,8 +1,8 @@
 import pytest
 
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
-from video_editor.authoring.values import Point
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder
+from vestra.authoring.values import Point
 
 
 def test_master_signal_chains_are_immutable_and_serialize_in_order() -> None:

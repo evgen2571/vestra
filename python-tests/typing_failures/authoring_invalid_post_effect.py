@@ -1,5 +1,5 @@
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder
 
 builder = ProjectBuilder(width=4, height=4, frame_rate=FrameRate(1, 1), output_path="out.mp4")
 builder.post_effects.add_camera_shake(

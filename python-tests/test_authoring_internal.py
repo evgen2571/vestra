@@ -1,7 +1,7 @@
 import pytest
 
-from video_editor.authoring._internal import _IdAllocator, _Owner, _require_owner
-from video_editor.authoring.errors import AuthoringError
+from vestra.authoring._internal import _IdAllocator, _Owner, _require_owner
+from vestra.authoring.errors import AuthoringError
 
 
 def test_ids_are_deterministic_local_and_fixed_width() -> None:

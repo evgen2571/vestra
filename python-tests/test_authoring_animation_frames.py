@@ -5,9 +5,9 @@ import subprocess
 
 import pytest
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import Crop, CubicBezier, Interpolation, Point, ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import Crop, CubicBezier, Interpolation, Point, ProjectBuilder, Sizing
 
 
 def animated_opacity(interpolation: Interpolation | CubicBezier, frame_number: int = 5) -> bytes:
@@ -18,8 +18,8 @@ def animated_opacity(interpolation: Interpolation | CubicBezier, frame_number: i
     clip = authored.add_solid_color_clip(colour="#ffffff", start=0, duration=1, layer=0)
     clip.opacity.keyframe(time=0, value=0)
     clip.opacity.keyframe(time=1, value=1, interpolation=interpolation)
-    prepared = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     return prepared.render_frame_number(frame_number).to_bytes()[:4]
 
@@ -46,8 +46,8 @@ def test_cpu_frame_has_complete_track_lifecycle_semantics() -> None:
     clip = authored.add_solid_color_clip(colour="#ffffff", start=0, duration=2, layer=0, opacity=0.2)
     clip.opacity.keyframe(time=0.5, value=0)
     clip.opacity.keyframe(time=1, value=1, interpolation=Interpolation.LINEAR)
-    prepared = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     # Initial base value, before first, at first, midway, and final respectively.
     values = [prepared.render_frame_number(frame).to_bytes()[0] for frame in range(5)]
@@ -59,8 +59,8 @@ def test_cpu_frame_has_complete_track_lifecycle_semantics() -> None:
     )
     single_clip = single.add_solid_color_clip(colour="#ffffff", start=0, duration=2, layer=0, opacity=0.2)
     single_clip.opacity.keyframe(time=0.5, value=0.8)
-    single_prepared = video_editor.Editor().prepare(
-        single.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    single_prepared = vestra.Editor().prepare(
+        single.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     assert [single_prepared.render_frame_number(frame).to_bytes()[0] for frame in (0, 2, 5)] == [51, 204, 204]
 
@@ -76,8 +76,8 @@ def test_cpu_frame_uses_clip_local_keyframes_after_clip_start_mutation() -> None
     clip.start = 3
     assert clip.opacity.keyframes[0].time == 0.5
     assert native_before.to_dict()["visual"]["clips"][0]["start"] == 2.0
-    prepared = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     assert prepared.render_frame_number(5).to_bytes()[0] == 0
     assert prepared.render_frame_number(7).to_bytes()[0] == 255
@@ -95,8 +95,8 @@ def test_cpu_frames_change_for_each_animated_image_track() -> None:
         )
         if mutate is not None:
             mutate(clip)
-        return video_editor.Editor().prepare(
-            authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        return vestra.Editor().prepare(
+            authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
         ).render_frame_number(5).to_bytes()
 
     baseline = render()
@@ -134,7 +134,7 @@ def test_animated_anchor_crop_and_position_have_stable_geometric_regions() -> No
         return authored, authored.add_image_clip(source=asset, start=0, duration=1, layer=0, sizing=Sizing.stretch(width=4, height=3))
 
     def pixel(authored: ProjectBuilder, frame: int, x: int, y: int) -> tuple[int, int, int, int]:
-        rendered = video_editor.Editor().prepare(authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU)).render_frame_number(frame).to_bytes()
+        rendered = vestra.Editor().prepare(authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)).render_frame_number(frame).to_bytes()
         offset = (y * 8 + x) * 4
         return tuple(rendered[offset:offset + 4])  # type: ignore[return-value]
 
@@ -167,7 +167,7 @@ def test_animated_gaussian_blur_and_brightness_have_stable_metrics() -> None:
     effect = clip.effects.add_gaussian_blur(radius=0)
     effect.radius.keyframe(time=0, value=0)
     effect.radius.keyframe(time=1, value=3)
-    prepared = video_editor.Editor().prepare(blurred.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    prepared = vestra.Editor().prepare(blurred.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
     assert prepared.render_frame_number(0).to_bytes()[(2 * 8 + 3) * 4] == 254
     assert prepared.render_frame_number(5).to_bytes()[(2 * 8 + 3) * 4] == 163
     assert prepared.render_frame_number(9).to_bytes()[(2 * 8 + 3) * 4] == 66
@@ -177,7 +177,7 @@ def test_animated_gaussian_blur_and_brightness_have_stable_metrics() -> None:
     brightness = solid.effects.add_brightness(amount=0)
     brightness.amount.keyframe(time=0, value=0)
     brightness.amount.keyframe(time=1, value=0.2)
-    prepared = video_editor.Editor().prepare(coloured.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    prepared = vestra.Editor().prepare(coloured.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
     assert [prepared.render_frame_number(frame).to_bytes()[0] for frame in (0, 5, 9)] == [128, 154, 174]
 
 
@@ -187,8 +187,8 @@ def test_animated_tint_uses_the_native_colour_effect_track() -> None:
     tint = clip.effects.add_tint(colour="#ff0000", amount=0)
     tint.amount.keyframe(time=0, value=0)
     tint.amount.keyframe(time=1, value=1)
-    prepared = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    prepared = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     before, middle, final = [prepared.render_frame_number(frame).to_bytes()[:4] for frame in (0, 5, 9)]
     assert tuple(before) == (128, 128, 128, 255)
@@ -209,8 +209,8 @@ def test_cpu_video_renders_authored_animation_without_audio(tmp_path: Path) -> N
     clip.opacity.keyframe(time=0.5, value=1, interpolation=CubicBezier(0.25, 0.1, 0.25, 1))
     assert authored.validate().is_valid
     output = tmp_path / "animated.mp4"
-    result = video_editor.Editor().render(authored.build(), video_editor.RenderRequest(
-        output, backend=video_editor.BackendPreference.CPU, overwrite=True,
+    result = vestra.Editor().render(authored.build(), vestra.RenderRequest(
+        output, backend=vestra.BackendPreference.CPU, overwrite=True,
     ))
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,nb_frames,duration", "-of", "csv=p=0", str(output)],

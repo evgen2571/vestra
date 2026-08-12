@@ -1,4 +1,4 @@
-from video_editor import AdapterInfo, BackendFallback, CancellationToken, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, Project, RenderEvent, RenderResult
+from vestra import AdapterInfo, BackendFallback, CancellationToken, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, Project, RenderEvent, RenderResult
 
 project = Project.from_dict({
     "schema_version": 2,
@@ -31,5 +31,5 @@ token = CancellationToken()
 token.is_cancelled = False  # E: Property "is_cancelled" defined in "CancellationToken" is read-only
 event: RenderEvent
 event.progress = 1.0  # E: Property "progress" defined in "RenderEvent" is read-only
-from video_editor import PreparedVideoRenderRequest
+from vestra import PreparedVideoRenderRequest
 PreparedVideoRenderRequest("out.mp4").overwrite = True  # E: Property "overwrite" defined in "PreparedVideoRenderRequest" is read-only

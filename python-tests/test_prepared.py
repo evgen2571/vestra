@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import video_editor
+import vestra
 
 
 FIXTURE = Path("tests/fixtures/wgpu-small-rgba.json")
@@ -16,19 +16,19 @@ PIXELS_B = base64.b64decode(
 )
 
 
-def prepared() -> video_editor.PreparedProject:
-    return video_editor.Editor().prepare(
-        video_editor.Project.load(FIXTURE),
-        video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+def prepared() -> vestra.PreparedProject:
+    return vestra.Editor().prepare(
+        vestra.Project.load(FIXTURE),
+        vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
 
 
-def cpu_options() -> video_editor.PrepareOptions:
-    return video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU)
+def cpu_options() -> vestra.PrepareOptions:
+    return vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)
 
 
-def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> video_editor.Project:
-    return video_editor.Project.from_dict(
+def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vestra.Project:
+    return vestra.Project.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -64,8 +64,8 @@ def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vide
     )
 
 
-def multi_frame_project(tmp_path: Path) -> video_editor.Project:
-    return video_editor.Project.from_dict(
+def multi_frame_project(tmp_path: Path) -> vestra.Project:
+    return vestra.Project.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -86,7 +86,7 @@ def multi_frame_project(tmp_path: Path) -> video_editor.Project:
     )
 
 
-def report_values(report: video_editor.PreparationReport) -> tuple[object, ...]:
+def report_values(report: vestra.PreparationReport) -> tuple[object, ...]:
     timings = report.timings
     adapter = report.adapter
     fallback = report.fallback
@@ -118,8 +118,8 @@ def report_values(report: video_editor.PreparationReport) -> tuple[object, ...]:
 def test_prepare_report_and_owned_frame() -> None:
     value = prepared()
     report = value.preparation_report
-    assert report.requested_backend is video_editor.BackendPreference.CPU
-    assert report.selected_backend is video_editor.BackendKind.CPU
+    assert report.requested_backend is vestra.BackendPreference.CPU
+    assert report.selected_backend is vestra.BackendKind.CPU
     assert (report.width, report.height, report.frame_count) == (174, 130, 1)
     assert report.duration_ns == 1_000_000_000
     assert report.frame_rate.numerator == report.frame_rate.denominator == 1
@@ -128,7 +128,7 @@ def test_prepare_report_and_owned_frame() -> None:
     pixels = frame.to_bytes()
     assert bytes(frame) == pixels
     assert len(pixels) == frame.width * frame.height * 4
-    assert frame.pixel_format is video_editor.PixelFormat.RGBA8
+    assert frame.pixel_format is vestra.PixelFormat.RGBA8
     assert frame.timestamp_ns == 0
     assert value.render_frame_ns(0).frame_number == 0
     del value
@@ -143,12 +143,12 @@ def test_frame_numbers_and_timestamps_validate_before_rendering() -> None:
         value.render_frame_number(True)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         value.render_frame_number(2**80)
-    with pytest.raises(video_editor.FrameRenderError) as raised:
+    with pytest.raises(vestra.FrameRenderError) as raised:
         value.render_frame_number(1)
     assert raised.value.diagnostics[0].code == "MVP-FRAME-RANGE"
     assert value.render_frame_number(0).frame_number == 0
 
-    with pytest.raises(video_editor.FrameRenderError) as raised:
+    with pytest.raises(vestra.FrameRenderError) as raised:
         value.render_frame_number(2**64 - 1)
     assert raised.value.diagnostics[0].code == "MVP-FRAME-RANGE"
 
@@ -158,7 +158,7 @@ def test_frame_numbers_and_timestamps_validate_before_rendering() -> None:
         value.render_frame_ns(True)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         value.render_frame_ns(2**130)
-    with pytest.raises(video_editor.FrameRenderError) as raised:
+    with pytest.raises(vestra.FrameRenderError) as raised:
         value.render_frame_ns(value.preparation_report.duration_ns)
     assert raised.value.diagnostics[0].code == "MVP-FRAME-RANGE"
     assert value.render_frame_number(0).frame_number == 0
@@ -175,13 +175,13 @@ def test_seconds_path_uses_truncated_nanoseconds_and_rejects_non_finite() -> Non
 
 
 def test_frame_rate_is_normalized_and_read_only() -> None:
-    rate = video_editor.FrameRate(60_000, 2_002)
+    rate = vestra.FrameRate(60_000, 2_002)
     assert (rate.numerator, rate.denominator) == (30_000, 1_001)
     for numerator, denominator in ((0, 1), (1, 0)):
         with pytest.raises(ValueError):
-            video_editor.FrameRate(numerator, denominator)
+            vestra.FrameRate(numerator, denominator)
     with pytest.raises(TypeError):
-        video_editor.FrameRate(True)
+        vestra.FrameRate(True)
     with pytest.raises(AttributeError):
         rate.numerator = 24  # type: ignore[misc]
 
@@ -194,11 +194,11 @@ def test_prepared_values_are_immutable() -> None:
     with pytest.raises(AttributeError):
         frame.width = 1  # type: ignore[misc]
     with pytest.raises(AttributeError):
-        video_editor.PrepareOptions().backend = video_editor.BackendPreference.CPU  # type: ignore[misc]
+        vestra.PrepareOptions().backend = vestra.BackendPreference.CPU  # type: ignore[misc]
 
 
 def test_fractional_frame_rate_uses_native_canonical_timestamp_boundaries(tmp_path: Path) -> None:
-    project = video_editor.Project.from_dict(
+    project = vestra.Project.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -217,9 +217,9 @@ def test_fractional_frame_rate_uses_native_canonical_timestamp_boundaries(tmp_pa
         },
         base_directory=tmp_path,
     )
-    value = video_editor.Editor().prepare(
+    value = vestra.Editor().prepare(
         project,
-        video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     frame = value.render_frame_number(17)
     assert frame.timestamp_ns == 567_233_334
@@ -229,9 +229,9 @@ def test_fractional_frame_rate_uses_native_canonical_timestamp_boundaries(tmp_pa
 
 def test_preparation_failure_for_missing_asset_keeps_structured_diagnostics(tmp_path: Path) -> None:
     project = image_project(tmp_path, "missing.png")
-    assert video_editor.Editor().validate(project).is_valid
-    with pytest.raises(video_editor.PreparationError) as captured:
-        video_editor.Editor().prepare(project, cpu_options())
+    assert vestra.Editor().validate(project).is_valid
+    with pytest.raises(vestra.PreparationError) as captured:
+        vestra.Editor().prepare(project, cpu_options())
     error = captured.value
     assert isinstance(error.kind, str)
     assert isinstance(error.diagnostics, tuple)
@@ -245,7 +245,7 @@ def test_preparation_failure_for_missing_asset_keeps_structured_diagnostics(tmp_
 
 
 def test_non_monotonic_frame_access_is_reusable_and_keeps_report_stable(tmp_path: Path) -> None:
-    editor = video_editor.Editor()
+    editor = vestra.Editor()
     project = multi_frame_project(tmp_path)
     value = editor.prepare(project, cpu_options())
     report = value.preparation_report
@@ -257,7 +257,7 @@ def test_non_monotonic_frame_access_is_reusable_and_keeps_report_stable(tmp_path
     assert frames[4].to_bytes() == frames[6].to_bytes()
     assert report_values(report) == before
 
-    with pytest.raises(video_editor.FrameRenderError):
+    with pytest.raises(vestra.FrameRenderError):
         value.render_frame_number(report.frame_count)
     assert value.render_frame_number(0).frame_number == 0
     assert report_values(report) == before
@@ -268,16 +268,16 @@ def test_non_monotonic_frame_access_is_reusable_and_keeps_report_stable(tmp_path
 
 
 def test_report_is_unchanged_after_success_and_pre_submission_errors(tmp_path: Path) -> None:
-    value = video_editor.Editor().prepare(multi_frame_project(tmp_path), cpu_options())
+    value = vestra.Editor().prepare(multi_frame_project(tmp_path), cpu_options())
     report = value.preparation_report
     before = report_values(report)
     assert value.render_frame_number(3).frame_number == 3
     assert value.render_frame_ns(3_000_000_000).frame_number == 3
     assert value.render_frame_number(3).frame_number == 3
     assert value.render_frame_number(1).frame_number == 1
-    with pytest.raises(video_editor.FrameRenderError):
+    with pytest.raises(vestra.FrameRenderError):
         value.render_frame_number(report.frame_count)
-    with pytest.raises(video_editor.FrameRenderError):
+    with pytest.raises(vestra.FrameRenderError):
         value.render_frame_ns(report.duration_ns)
     assert value.render_frame_number(0).frame_number == 0
     assert report_values(report) == before
@@ -286,7 +286,7 @@ def test_report_is_unchanged_after_success_and_pre_submission_errors(tmp_path: P
 def test_cpu_frame_bytes_have_known_rgba_layout_and_straight_alpha_composition(tmp_path: Path) -> None:
     image = tmp_path / "pixels.png"
     image.write_bytes(PIXELS_A)
-    frame = video_editor.Editor().prepare(image_project(tmp_path, image.name), cpu_options()).render_frame_number(0)
+    frame = vestra.Editor().prepare(image_project(tmp_path, image.name), cpu_options()).render_frame_number(0)
     pixels = frame.to_bytes()
 
     def pixel_at(x: int, y: int) -> tuple[int, int, int, int]:
@@ -307,7 +307,7 @@ def test_prepared_visual_assets_are_a_snapshot_while_new_preparation_reads_repla
     image = tmp_path / "snapshot.png"
     image.write_bytes(PIXELS_A)
     project = image_project(tmp_path, image.name)
-    editor = video_editor.Editor()
+    editor = vestra.Editor()
     old = editor.prepare(project, cpu_options())
     old_bytes = old.render_frame_number(0).to_bytes()
     image.write_bytes(PIXELS_B)

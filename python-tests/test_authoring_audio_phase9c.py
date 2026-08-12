@@ -1,12 +1,12 @@
 from pathlib import Path
 
 import pytest
-from video_editor import (
+from vestra import (
     BackendPreference, CancellationToken, CancelledError, Editor, FrameRate, PrepareOptions,
     PreparedVideoRenderRequest, Project, RenderRequest, InspectAudioGainKeyframe,
 )
 
-from video_editor.authoring import (
+from vestra.authoring import (
     AudioFadeCurve,
     AudioClip,
     AudioGainInterpolation,

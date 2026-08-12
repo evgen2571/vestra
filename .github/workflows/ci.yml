@@ -11,8 +11,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  VIDEO_EDITOR_WGPU_BACKEND: vulkan
-  VIDEO_EDITOR_WGPU_FORCE_FALLBACK: "1"
+  VESTRA_WGPU_BACKEND: vulkan
+  VESTRA_WGPU_FORCE_FALLBACK: "1"
 
 jobs:
   rust:
@@ -75,5 +75,5 @@ jobs:
 
       - name: Check Python types
         run: |
-          .venv/bin/python -m mypy python/video_editor python-tests/test_typing.py
-          .venv/bin/python -m mypy.stubtest --ignore-unused-allowlist --allowlist python-tests/stubtest-private-hooks.txt video_editor
+          .venv/bin/python -m mypy python/vestra python-tests/test_typing.py
+          .venv/bin/python -m mypy.stubtest --ignore-unused-allowlist --allowlist python-tests/stubtest-private-hooks.txt vestra

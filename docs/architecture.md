@@ -32,8 +32,8 @@ domain / timeline / animation
         -> render geometry and backend-neutral support
         -> CPU or WGPU backend
         -> render engine / media / output
-        -> video-editor SDK
-        -> video-editor-cli
+        -> vestra SDK
+        -> vestra-cli
 ```
 
 Project code never depends on rendering. The plan does not depend on a backend.
@@ -109,14 +109,14 @@ and inverse mapping, converting only final uniform values to `f32`.
 `render/metrics` owns the flat preparation and timing report types. The engine
 uses its merge methods for compiler, schedule, and backend data.
 
-`crates/video-editor-render/src/decoded.rs` eagerly decodes image assets once.
-`crates/video-editor-render/src/cpu/assets.rs` owns the CPU-only static-crop
-cache. `video-editor-core` plans backend-neutral logical effect passes,
+`crates/vestra-render/src/decoded.rs` eagerly decodes image assets once.
+`crates/vestra-render/src/cpu/assets.rs` owns the CPU-only static-crop
+cache. `vestra-core` plans backend-neutral logical effect passes,
 including identity elimination, multipass decomposition, and pass order.
-`video-editor-render` executes those logical passes on CPU and WGPU. The WGPU executor
+`vestra-render` executes those logical passes on CPU and WGPU. The WGPU executor
 receives self-describing planned passes and never rediscovers effect semantics.
 
-`crates/video-editor-render/src/cpu` contains its prepared backend, composition, rasterization, surface
+`crates/vestra-render/src/cpu` contains its prepared backend, composition, rasterization, surface
 reuse, and CPU effect algorithms. The CPU backend is ready when its constructor
 returns. For dynamic visuals, `CpuBackend` dispatches complete frames to a
 persistent, automatically bounded set of workers. Each worker exclusively owns
@@ -130,7 +130,7 @@ checked full-frame working-set estimate, and is capped at eight workers. The
 engine remains responsible for bounded staging, cancellation, and ordered
 `BTreeMap` delivery; CPU completion order is not encoder order.
 
-`crates/video-editor-render/src/wgpu/backend.rs` owns prepared WGPU state and staged frame submission. `context`
+`crates/vestra-render/src/wgpu/backend.rs` owns prepared WGPU state and staged frame submission. `context`
 creates the adapter and device. `requirements` validates limits and estimates
 allocation sizes before resources exist. `frame_plan` creates and validates
 adapter-independent canvas and effect ping-pong operations. `texture_pool` owns
@@ -155,9 +155,9 @@ rendering begins aborts the render instead of changing backends mid-stream.
 
 ## Engine, failures, and output
 
-`crates/video-editor-render` owns `CompletedFrame`.
-`crates/video-editor/src/application/render.rs` owns the SDK-private
-preparation bridge; `crates/video-editor/src/render/engine/runner.rs` owns its
+`crates/vestra-render` owns `CompletedFrame`.
+`crates/vestra/src/application/render.rs` owns the SDK-private
+preparation bridge; `crates/vestra/src/render/engine/runner.rs` owns its
 private `PreparedState`. Preparation compiles one immutable shared plan, decodes
 visual assets, compiles the schedule, selects and constructs the backend, and
 uploads GPU resources once. It retains a stable preparation-timing snapshot and
@@ -197,12 +197,12 @@ frame (a ceiling at fractional boundaries), while the final duration remains
 exclusive. Single-frame operations then follow the same staged submit,
 completion, flush, and idle-verification contract. WGPU frame readback copies
 its padded GPU rows into owned tightly packed RGBA8 storage before a slot can be
-reused. `crates/video-editor/src/render/engine/frame_loop.rs` owns cancellation, active-layer
+reused. `crates/vestra/src/render/engine/frame_loop.rs` owns cancellation, active-layer
 updates, evaluation, backend rendering, completion ordering, delivery to
 `FrameSink`, and progress events. The frame loop depends only on `FrameSink`. It
 never knows about FFmpeg, process arguments, or temporary paths.
 
-`video-editor-media` owns `FrameSink`, `FfmpegSink`, encoding, and output
+`vestra-media` owns `FrameSink`, `FfmpegSink`, encoding, and output
 publication. A sink validates and writes the root's ordered input. `FfmpegSink`
 closes stdin, terminates and reaps its child on abort or active drop, joins stderr
 collection after process resolution, and retains the child handle when cleanup
@@ -238,7 +238,7 @@ evaluated source and transform
 
 ## Extending visual and audio effects
 
-Effect catalogs and descriptors in `video-editor-core` are the source for
+Effect catalogs and descriptors in `vestra-core` are the source for
 serialized IDs, authored parameter metadata, generated schema, and Python
 generic authoring. After changing an authored effect, update its compiler and
 evaluator lowering and add catalog, descriptor, schema, and typed/generic
@@ -251,7 +251,7 @@ the operation-to-kernel mapping, CPU implementation, WGPU capability and
 pipeline/shader, parameter encoding, and backend conformance/parity tests.
 
 An audio effect that lowers to an existing `AudioEffectOperation` needs no
-`video-editor-media` change: media consumes only the compiled operation plan.
+`vestra-media` change: media consumes only the compiled operation plan.
 A new audio primitive requires its duration behavior, core sample-domain
 rounding and plan propagation, FFmpeg lowering, exact output-duration
 enforcement where needed, and timeline/analysis parity tests.
@@ -260,12 +260,12 @@ A duration-changing audio primitive must also declare valid scope, define
 backend-neutral duration transformation and rounding semantics, propagate
 selected and processed duration through the plan, and prove encoder/analyzer
 parity. It cannot be implemented as an FFmpeg filter alone. Finish changes by
-running `cargo run -p video-editor-cli -- generate-schema`, the schema
+running `cargo run -p vestra-cli -- generate-schema`, the schema
 freshness/self-validation checks, the Rust workspace tests, and the focused
 Python authoring tests.
 # Audio timeline (schema v2)
 
-Audio semantics live in `video-editor-core`: `AudioTimeline` owns ordered
+Audio semantics live in `vestra-core`: `AudioTimeline` owns ordered
 `AudioTrack` lanes, and each track owns ordered `AudioClip` placements. Clips
 may overlap within or across tracks. The compiler produces a backend-neutral
 `AudioMixPlan`; FFmpeg syntax stays in the media crate. The media executor

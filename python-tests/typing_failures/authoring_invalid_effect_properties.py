@@ -1,5 +1,5 @@
-from video_editor import FrameRate
-from video_editor.authoring import Point, ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import Point, ProjectBuilder
 
 builder = ProjectBuilder(width=4, height=4, frame_rate=FrameRate(1, 1), output_path="out.mp4")
 clip = builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)

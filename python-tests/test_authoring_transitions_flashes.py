@@ -6,8 +6,8 @@ import pytest
 from inspect import signature
 from typing import get_type_hints
 
-from video_editor import FrameRate
-from video_editor.authoring import (
+from vestra import FrameRate
+from vestra.authoring import (
     AuthoringError, CrossfadeTransition, DirectionalPushTransition,
     FlashCutTransition, ImageClip, ProjectBuilder, ZoomBlurTransition, ZoomCrossfadeTransition,
 )

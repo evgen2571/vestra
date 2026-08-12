@@ -2,7 +2,7 @@ import threading
 
 
 def test_python_executes_while_native_work_is_detached() -> None:
-    import video_editor._native as native
+    import vestra._native as native
 
     native_wait_while_detached = getattr(native, "_test_wait_while_detached")
     native_wait_until_detached_entered = getattr(

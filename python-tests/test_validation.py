@@ -1,4 +1,4 @@
-import video_editor
+import vestra
 
 PROJECT = {
     "schema_version": 2,
@@ -8,6 +8,6 @@ PROJECT = {
 
 
 def test_validation_is_a_report() -> None:
-    report = video_editor.Editor().validate(video_editor.Project.from_dict(PROJECT))
+    report = vestra.Editor().validate(vestra.Project.from_dict(PROJECT))
     assert report.is_valid
     assert report.errors == ()

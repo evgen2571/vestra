@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import BlendMode, ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import BlendMode, ProjectBuilder, Sizing
 
 
 def project() -> tuple[ProjectBuilder, object, object]:
@@ -17,9 +17,9 @@ def project() -> tuple[ProjectBuilder, object, object]:
     return authored, authored.add_image_clip(source=red, start=0, duration=2, layer=0, sizing=Sizing.cover()), authored.add_image_clip(source=blue, start=0, duration=2, layer=0, sizing=Sizing.cover())
 
 
-def frames(authored: ProjectBuilder) -> video_editor.PreparedProject:
+def frames(authored: ProjectBuilder) -> vestra.PreparedProject:
     assert authored.validate().is_valid
-    return video_editor.Editor().prepare(authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+    return vestra.Editor().prepare(authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
 
 
 def test_crossfade_and_flash_have_stable_before_midpoint_and_after_pixels() -> None:
@@ -109,7 +109,7 @@ def test_cpu_video_combines_transition_flash_effect_post_effect_and_blend_mode(t
     authored.transitions.add_crossfade(outgoing=outgoing, incoming=incoming, start=0.5, duration=1)
     authored.flashes.add(start=0.8, duration=0.1, colour="#ffffff", opacity=0.5, layer=2)
     output = tmp_path / "transition-flash.mp4"
-    result = video_editor.Editor().render(authored.build(), video_editor.RenderRequest(output, backend=video_editor.BackendPreference.CPU, overwrite=True))
+    result = vestra.Editor().render(authored.build(), vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU, overwrite=True))
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height,nb_frames", "-of", "csv=p=0", str(output)], check=True, capture_output=True, text=True)
     assert result.total_frames == 20
     assert output.is_file() and output.stat().st_size > 0

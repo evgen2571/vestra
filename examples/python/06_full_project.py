@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
+import vestra
+from vestra import FrameRate
+from vestra.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
 
 
 root = Path(__file__).resolve().parents[2]
@@ -29,6 +29,6 @@ music.add_clip(asset=audio, start=0, trim_start=0, trim_end=0.2)
 
 assert builder.validate().is_valid
 project = builder.build()
-prepared = video_editor.Editor().prepare(project, video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU))
+prepared = vestra.Editor().prepare(project, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
 frame = prepared.render_frame_number(0)
 print(frame.width, frame.height)

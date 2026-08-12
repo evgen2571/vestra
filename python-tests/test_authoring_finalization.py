@@ -7,9 +7,9 @@ import wave
 
 import pytest
 
-import video_editor
-from video_editor import FrameRate
-from video_editor.authoring import (
+import vestra
+from vestra import FrameRate
+from vestra.authoring import (
     AudioAsset, AudioTrack, AuthoringError, Crop, CropTrack, ImageAsset, ImageClip, Point,
     PointTrack, ProjectBuilder, ScalarTrack, Sizing, SolidColorClip, Transform,
 )
@@ -120,7 +120,7 @@ def test_explicit_duration_retains_native_truncation_warning() -> None:
         width=160, height=90, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1,
     )
     authored.add_solid_color_clip(colour="#000000", start=0, duration=2, layer=0)
-    report = video_editor.Editor().inspect(authored.build())
+    report = vestra.Editor().inspect(authored.build())
     assert report.output.duration == 1.0
     assert any(warning.code == "MVP-DURATION-TRUNCATED" for warning in report.warnings)
 
@@ -167,8 +167,8 @@ def test_solid_colour_cpu_pixels_cover_opacity_and_visibility(
     authored.add_solid_color_clip(
         colour="#112233", start=0, duration=1, layer=0, opacity=opacity, visible=visible,
     )
-    frame = video_editor.Editor().prepare(
-        authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    frame = vestra.Editor().prepare(
+        authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(0)
     assert frame.to_bytes()[:4] == expected
 
@@ -176,7 +176,7 @@ def test_solid_colour_cpu_pixels_cover_opacity_and_visibility(
 def test_native_inspection_resolves_visual_and_audio_automatic_duration() -> None:
     visual = builder()
     visual.add_solid_color_clip(colour="#000000", start=1, duration=2.5, layer=0, visible=False)
-    visual_report = video_editor.Editor().inspect(visual.build())
+    visual_report = vestra.Editor().inspect(visual.build())
     assert visual_report.output.duration == 3.5
     assert visual_report.visual_clips == 1
     assert visual_report.assets.images == 0 and visual_report.assets.audio == 0
@@ -186,7 +186,7 @@ def test_native_inspection_resolves_visual_and_audio_automatic_duration() -> Non
     audio.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
     track = audio.audio.add_track(id="music")
     track.add_clip(asset=asset, start=1, trim_end=2)
-    audio_report = video_editor.Editor().inspect(audio.build())
+    audio_report = vestra.Editor().inspect(audio.build())
     assert audio_report.output.duration == 3.0
     assert audio_report.assets.audio == 1
     assert audio_report.audio is not None
@@ -194,7 +194,7 @@ def test_native_inspection_resolves_visual_and_audio_automatic_duration() -> Non
     assert audio_report.audio.end == 3.0
 
     track.mute = True
-    muted_report = video_editor.Editor().inspect(audio.build())
+    muted_report = vestra.Editor().inspect(audio.build())
     assert muted_report.output.duration == 3.0
     assert muted_report.audio is not None
 
@@ -216,7 +216,7 @@ def test_native_inspection_reports_processed_playback_speed_end(
     )
     clip.effects.add_playback_speed(rate=rate)
 
-    report = video_editor.Editor().inspect(authored.build())
+    report = vestra.Editor().inspect(authored.build())
 
     assert report.audio is not None
     assert report.audio.tracks[0].clips[0].end == pytest.approx(expected_end)
@@ -233,9 +233,9 @@ def test_muted_audio_serializes_but_cpu_video_has_no_audio_stream(tmp_path: Path
     track.add_clip(asset=asset, start=0, trim_end=0.2)
     assert authored.to_dict()["audio"] == authored.audio.to_canonical()
     output = tmp_path / "muted.mp4"
-    result = video_editor.Editor().render(
-        authored.build(), video_editor.RenderRequest(
-            output, backend=video_editor.BackendPreference.CPU, overwrite=True,
+    result = vestra.Editor().render(
+        authored.build(), vestra.RenderRequest(
+            output, backend=vestra.BackendPreference.CPU, overwrite=True,
         ),
     )
     probe = subprocess.run(
@@ -252,13 +252,13 @@ def test_image_pixels_visibility_and_native_id_tie_breaking() -> None:
     image_project.add_image_clip(
         source=image, start=0, duration=1, layer=0, sizing=Sizing.stretch(width=160, height=90),
     )
-    image_frame = video_editor.Editor().prepare(
-        image_project.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    image_frame = vestra.Editor().prepare(
+        image_project.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(0)
     assert image_frame.to_bytes()[:4] == bytes((250, 1, 1, 255))
     image_project.clips[0].visible = False
-    hidden_frame = video_editor.Editor().prepare(
-        image_project.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    hidden_frame = vestra.Editor().prepare(
+        image_project.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(0)
     assert hidden_frame.to_bytes()[:4] == bytes((0, 0, 0, 255))
 
@@ -266,8 +266,8 @@ def test_image_pixels_visibility_and_native_id_tie_breaking() -> None:
     first = ordered.add_solid_color_clip(colour="#ff0000", start=0, duration=1, layer=0, id="z-last")
     second = ordered.add_solid_color_clip(colour="#0000ff", start=0, duration=1, layer=0, id="a-first")
     assert [clip.id for clip in ordered.clips] == [first.id, second.id]
-    tied_frame = video_editor.Editor().prepare(
-        ordered.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+    tied_frame = vestra.Editor().prepare(
+        ordered.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     ).render_frame_number(0)
     assert tied_frame.to_bytes()[:4] == bytes((255, 0, 0, 255))
 
@@ -292,8 +292,8 @@ def test_image_sizing_crop_and_transform_change_cpu_interior_pixels() -> None:
             clip.transform.rotation_degrees.base_value = rotation
         if clear_crop:
             clip.clear_crop()
-        return video_editor.Editor().prepare(
-            authored.build(), video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        return vestra.Editor().prepare(
+            authored.build(), vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
         ).render_frame_number(0).to_bytes()
 
     def pixel(frame: bytes, x: int, y: int) -> bytes:

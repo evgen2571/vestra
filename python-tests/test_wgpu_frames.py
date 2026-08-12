@@ -3,19 +3,19 @@ from pathlib import Path
 
 import pytest
 
-import video_editor
+import vestra
 
 
 def test_wgpu_prepared_frame_has_owned_cpu_bytes_when_adapter_is_available() -> None:
-    project = video_editor.Project.load(Path("tests/fixtures/wgpu-small-rgba.json"))
+    project = vestra.Project.load(Path("tests/fixtures/wgpu-small-rgba.json"))
     try:
-        prepared = video_editor.Editor().prepare(
+        prepared = vestra.Editor().prepare(
             project,
-            video_editor.PrepareOptions(backend=video_editor.BackendPreference.WGPU),
+            vestra.PrepareOptions(backend=vestra.BackendPreference.WGPU),
         )
-    except video_editor.PreparationError as error:
+    except vestra.PreparationError as error:
         unavailable = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
-        if os.environ.get("VIDEO_EDITOR_REQUIRE_WGPU") == "1" or any(
+        if os.environ.get("VESTRA_REQUIRE_WGPU") == "1" or any(
             diagnostic.code not in unavailable for diagnostic in error.diagnostics
         ):
             raise
@@ -23,7 +23,7 @@ def test_wgpu_prepared_frame_has_owned_cpu_bytes_when_adapter_is_available() -> 
 
     report = prepared.preparation_report
     frame = prepared.render_frame_number(0)
-    assert report.selected_backend is video_editor.BackendKind.WGPU
+    assert report.selected_backend is vestra.BackendKind.WGPU
     assert report.adapter is not None
     assert len(frame.to_bytes()) == frame.width * frame.height * 4
     retained = frame.to_bytes()
@@ -33,7 +33,7 @@ def test_wgpu_prepared_frame_has_owned_cpu_bytes_when_adapter_is_available() -> 
 
 
 def test_wgpu_random_access_matches_cpu_metadata_when_adapter_is_available(tmp_path: Path) -> None:
-    project = video_editor.Project.from_dict(
+    project = vestra.Project.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -47,24 +47,24 @@ def test_wgpu_random_access_matches_cpu_metadata_when_adapter_is_available(tmp_p
         base_directory=tmp_path,
     )
     try:
-        wgpu = video_editor.Editor().prepare(
+        wgpu = vestra.Editor().prepare(
             project,
-            video_editor.PrepareOptions(backend=video_editor.BackendPreference.WGPU),
+            vestra.PrepareOptions(backend=vestra.BackendPreference.WGPU),
         )
-    except video_editor.PreparationError as error:
+    except vestra.PreparationError as error:
         unavailable = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
-        if os.environ.get("VIDEO_EDITOR_REQUIRE_WGPU") == "1" or any(
+        if os.environ.get("VESTRA_REQUIRE_WGPU") == "1" or any(
             diagnostic.code not in unavailable for diagnostic in error.diagnostics
         ):
             raise
         pytest.skip("no compatible WGPU adapter")
 
-    cpu = video_editor.Editor().prepare(
+    cpu = vestra.Editor().prepare(
         project,
-        video_editor.PrepareOptions(backend=video_editor.BackendPreference.CPU),
+        vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     report = wgpu.preparation_report
-    assert report.selected_backend is video_editor.BackendKind.WGPU
+    assert report.selected_backend is vestra.BackendKind.WGPU
     assert report.adapter is not None
     assert report.adapter.device_type.value in {
         "discretegpu", "integratedgpu", "virtualgpu", "cpu", "other",

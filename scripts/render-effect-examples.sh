@@ -9,7 +9,7 @@ elif [[ $# -ne 0 ]]; then
   exit 2
 fi
 
-cargo build --release -p video-editor-cli --all-features
+cargo build --release -p vestra-cli --all-features
 mkdir -p examples/output
 
 while IFS= read -r config; do
@@ -21,7 +21,7 @@ while IFS= read -r config; do
     continue
   fi
   echo "render $config -> $output"
-  ./target/release/video-editor render "$config" \
+  ./target/release/ve render "$config" \
     --render-backend cpu \
     --output "$output" \
     --progress none \

@@ -1,4 +1,4 @@
-# Video Editor
+# Vestra
 
 Rust video editing/rendering engine with core planning/evaluation, rendering
 backends, FFmpeg I/O, SDK/CLI surfaces, and Python bindings.

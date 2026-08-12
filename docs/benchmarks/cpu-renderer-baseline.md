@@ -4,7 +4,7 @@ This is a machine-specific release-mode baseline, not a performance guarantee.
 
 ## Workload
 
-`cargo bench -p video-editor --bench animation_effects -- --nocapture` renders the canonical
+`cargo bench -p vestra --bench animation_effects -- --nocapture` renders the canonical
 animation/effects example at 720×1280, 24 FPS, for 2.5 seconds (60 frames).
 It includes animated position, scale, rotation, a crossfade, a flash overlay,
 and brightness, contrast, saturation, and tint effects. The output uses the
@@ -38,8 +38,8 @@ On 2026-07-25, after the architecture refactor, the reduced development command
 below ran on the same 720×1280 basic-colour workload:
 
 ```bash
-VIDEO_EDITOR_BENCH_BACKEND=cpu VIDEO_EDITOR_BENCH_WARMUPS=0 \
-VIDEO_EDITOR_BENCH_SAMPLES=1 cargo bench -p video-editor --bench animation_effects -- --nocapture
+VESTRA_BENCH_BACKEND=cpu VESTRA_BENCH_WARMUPS=0 \
+VESTRA_BENCH_SAMPLES=1 cargo bench -p vestra --bench animation_effects -- --nocapture
 ```
 
 | Field | 2026-07-23 baseline | Refactor check | Difference |

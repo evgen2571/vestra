@@ -11,9 +11,9 @@ EvaluatedFrame → CPU compositor → RGBA → FFmpeg
 Backend selection is runtime-only:
 
 ```bash
-video-editor render project.json --render-backend cpu --output cpu.mp4
-video-editor render project.json --render-backend wgpu --output gpu.mp4
-video-editor render project.json --render-backend auto --output auto.mp4
+vestra render project.json --render-backend cpu --output cpu.mp4
+vestra render project.json --render-backend wgpu --output gpu.mp4
+vestra render project.json --render-backend auto --output auto.mp4
 ```
 
 `cpu` never initializes WGPU. `wgpu` requires a compatible headless adapter
@@ -151,7 +151,7 @@ evaluate → submit → in flight → map callback → repack → completed
 ```
 
 The default WGPU depth is three. Tests and benchmarks select one, two, or three
-slots with `VIDEO_EDITOR_WGPU_IN_FLIGHT`. A slot is reusable only after GPU copy,
+slots with `VESTRA_WGPU_IN_FLIGHT`. A slot is reusable only after GPU copy,
 mapping, row repacking, unmapping, completion consumption, and generation advance.
 The callback captures a submission token containing frame number, slot index,
 generation, and queue submission identity. A stale token cannot complete a
@@ -205,13 +205,13 @@ backend category, code, severity, pointer, hint, and related identifier. SDK-onl
 lifecycle failures use distinct `MVP-*` diagnostics. Device loss invalidates the
 prepared backend; there is no automatic recovery or backend re-preparation.
 
-`VIDEO_EDITOR_WGPU_IN_FLIGHT=1 cargo test --workspace --all-features` exercises the
+`VESTRA_WGPU_IN_FLIGHT=1 cargo test --workspace --all-features` exercises the
 synchronous-compatible depth. Strict verification and the optional benchmark matrix
 run with:
 
 ```bash
-VIDEO_EDITOR_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase3.sh
-VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 \
+VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase3.sh
+VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 \
   scripts/verify-wgpu-phase3.sh
 ```
 
@@ -226,9 +226,9 @@ On Linux install a Vulkan implementation, including a software ICD such as
 Mesa Lavapipe for CI. Select discovery behavior with:
 
 ```bash
-VIDEO_EDITOR_WGPU_BACKEND=vulkan
-VIDEO_EDITOR_WGPU_FORCE_FALLBACK=1
-VIDEO_EDITOR_REQUIRE_WGPU=1
+VESTRA_WGPU_BACKEND=vulkan
+VESTRA_WGPU_FORCE_FALLBACK=1
+VESTRA_REQUIRE_WGPU=1
 ```
 
 The backend derives and validates output and source texture dimensions, padded
@@ -243,7 +243,7 @@ trigger the normal encoder-abort and output-cleanup path. In environments withou
 adapter-dependent parity tests print an explicit skip reason; this is not GPU
 verification. They skip only when structured diagnostics report no compatible
 adapter. Device creation and every later backend failure always fail; with
-`VIDEO_EDITOR_REQUIRE_WGPU=1`, adapter absence fails too. The project-local
+`VESTRA_REQUIRE_WGPU=1`, adapter absence fails too. The project-local
 `nix develop .#software-vulkan` shell discovers Lavapipe through Nix's Mesa ICD
 path and enables strict Vulkan verification.
 
@@ -268,9 +268,9 @@ cargo test --all-targets --all-features
 On a compatible adapter, run WGPU parity tests and the release benchmark:
 
 ```bash
-VIDEO_EDITOR_WGPU_BACKEND=vulkan cargo test --all-targets --all-features
-VIDEO_EDITOR_BENCH_BACKEND=cpu cargo bench -p video-editor --bench animation_effects -- --nocapture
-VIDEO_EDITOR_BENCH_BACKEND=wgpu cargo bench -p video-editor --bench animation_effects -- --nocapture
+VESTRA_WGPU_BACKEND=vulkan cargo test --all-targets --all-features
+VESTRA_BENCH_BACKEND=cpu cargo bench -p vestra --bench animation_effects -- --nocapture
+VESTRA_BENCH_BACKEND=wgpu cargo bench -p vestra --bench animation_effects -- --nocapture
 ```
 
 The harness performs five warmups followed by five measured renders and prints
@@ -311,8 +311,8 @@ value appropriate to its pass.
 Run the strict real-GPU verification sequence with:
 
 ```bash
-VIDEO_EDITOR_WGPU_BACKEND=vulkan ./scripts/verify-wgpu-phase2.sh
-VIDEO_EDITOR_WGPU_BACKEND=vulkan VIDEO_EDITOR_RUN_BENCHMARKS=1 \
+VESTRA_WGPU_BACKEND=vulkan ./scripts/verify-wgpu-phase2.sh
+VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 \
   ./scripts/verify-wgpu-phase2.sh
 ```
 

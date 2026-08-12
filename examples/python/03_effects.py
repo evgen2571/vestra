@@ -1,6 +1,6 @@
 """Apply ordered clip and global effects."""
-from video_editor import FrameRate
-from video_editor.authoring import ProjectBuilder
+from vestra import FrameRate
+from vestra.authoring import ProjectBuilder
 
 builder = ProjectBuilder(width=320, height=180, frame_rate=FrameRate(30, 1), output_path="effects.mp4")
 asset = builder.add_image_asset("examples/assets/red.png")

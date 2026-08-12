@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${VIDEO_EDITOR_WGPU_BACKEND:=vulkan}"
-export VIDEO_EDITOR_WGPU_BACKEND
-export VIDEO_EDITOR_REQUIRE_WGPU=1
+: "${VESTRA_WGPU_BACKEND:=vulkan}"
+export VESTRA_WGPU_BACKEND
+export VESTRA_REQUIRE_WGPU=1
 
-echo "WGPU Phase 3 strict verification (backend: ${VIDEO_EDITOR_WGPU_BACKEND})"
+echo "WGPU Phase 3 strict verification (backend: ${VESTRA_WGPU_BACKEND})"
 echo "A software adapter validates correctness only. This script does not claim hardware performance."
 
 cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo check --workspace --benches --all-features
 cargo test --workspace --all-features
-python3 crates/video-editor-cli/tests/schema_validation.py
+python3 crates/vestra-cli/tests/schema_validation.py
 scripts/verify-public-asset.sh
 
 # Adapter-independent lifecycle gates must pass before adapter-dependent work.
@@ -25,7 +25,7 @@ for test_name in \
 done
 
 for depth in 1 2 3; do
-  VIDEO_EDITOR_WGPU_IN_FLIGHT="$depth" cargo test --lib --all-features \
+  VESTRA_WGPU_IN_FLIGHT="$depth" cargo test --lib --all-features \
     gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_available \
     -- --nocapture
 done
@@ -47,24 +47,24 @@ for project in \
   examples/presets/heavy-impact.json \
   examples/projects/animation-effects.json; do
   stem=$(basename "$project" .json)
-  cargo run -p video-editor-cli -- render "$project" \
+  cargo run -p vestra-cli -- render "$project" \
     --render-backend wgpu --output "$temp_dir/$stem.mp4" --overwrite \
     --format json --progress json
 done
 
-if [[ "${VIDEO_EDITOR_RUN_BENCHMARKS:-0}" == 1 ]]; then
+if [[ "${VESTRA_RUN_BENCHMARKS:-0}" == 1 ]]; then
   for depth in 1 2 3; do
     for resolution in '320 180' '720 1280' '1920 1080'; do
       read -r width height <<<"$resolution"
       for scenario in \
         basic_composition gaussian_large glow sharpen directional_blur zoom_blur \
         multiple_layers global_post short_sequence long_sequence; do
-        VIDEO_EDITOR_WGPU_IN_FLIGHT="$depth" \
-        VIDEO_EDITOR_BENCH_BACKEND=wgpu \
-        VIDEO_EDITOR_BENCH_SCENARIO="$scenario" \
-        VIDEO_EDITOR_BENCH_WIDTH="$width" \
-        VIDEO_EDITOR_BENCH_HEIGHT="$height" \
-          cargo bench -p video-editor --bench animation_effects -- --nocapture
+        VESTRA_WGPU_IN_FLIGHT="$depth" \
+        VESTRA_BENCH_BACKEND=wgpu \
+        VESTRA_BENCH_SCENARIO="$scenario" \
+        VESTRA_BENCH_WIDTH="$width" \
+        VESTRA_BENCH_HEIGHT="$height" \
+          cargo bench -p vestra --bench animation_effects -- --nocapture
       done
     done
   done

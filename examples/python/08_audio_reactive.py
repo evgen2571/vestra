@@ -12,8 +12,8 @@ import math
 import struct
 import wave
 
-from video_editor import BackendPreference, Editor, FrameRate, PrepareOptions, PreparedVideoRenderRequest
-from video_editor.authoring import ProjectBuilder
+from vestra import BackendPreference, Editor, FrameRate, PrepareOptions, PreparedVideoRenderRequest
+from vestra.authoring import ProjectBuilder
 
 SAMPLE_RATE = 48_000
 DURATION = 4.0

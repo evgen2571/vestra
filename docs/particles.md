@@ -56,9 +56,13 @@ and absolute project time for audio signal sampling.
 
 Resource limits bound live particles per system and aggregate simultaneous
 live particles. Lifetime ranges are considered conservatively at their
-maximum lifetime. CPU ParticleSystem rendering is functional. WGPU particle
-parity is not implemented yet; this does not describe the WGPU backend as a
-whole.
+maximum lifetime. CPU and WGPU ParticleSystem rendering use the same particle
+state and blend semantics. Normal particles rasterize natively into a
+premultiplied temporary and resolve to Vestra's straight-alpha source format
+before effects. Additive uses the exact CPU source rasterizer as a WGPU
+compatibility path because saturated straight-alpha Additive is not expressible
+by the current portable fixed-function blend state. Effects and outer
+composition remain on WGPU. WGPU performance validation requires real hardware.
 
 The curated helpers `ambient_stars`, `snow`, `embers`, `sparks`, and
 `radial_burst` return ordinary, inspectable `ParticleSystem` objects. They use

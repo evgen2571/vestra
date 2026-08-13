@@ -12,7 +12,9 @@ pub(super) use effects::{
     CompositeParameters, GaussianBlurParameters, HighlightExtractParameters, LineBlurParameters,
     VignetteParameters, ZoomBlurParameters, effect_parameters,
 };
-pub(super) use source::{LayerParameters, Spectrum2DParameters, image, spectrum2d};
+pub(super) use source::{
+    LayerParameters, ParticleParameters, Spectrum2DParameters, image, particles, spectrum2d,
+};
 
 const fn max_parameter_size(left: usize, right: usize) -> u64 {
     if left > right {
@@ -36,5 +38,6 @@ pub(super) const PARAMETER_RECORD_BYTES: u64 = {
     size = max_parameter_size(size, std::mem::size_of::<VignetteParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<ColorAdjustParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<Spectrum2DParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<ParticleParameters>()) as usize;
     size as u64
 };

@@ -22,6 +22,7 @@ pub(super) enum TextureSlot {
     CanvasA,
     CanvasB,
     Layer,
+    ParticleAccumulation,
     EffectA,
     EffectB,
     Auxiliary,
@@ -57,6 +58,18 @@ pub(super) enum GpuOperation {
         layer_index: usize,
         destination: TextureSlot,
         parameters_index: u32,
+    },
+    RenderParticleLayer {
+        layer_index: usize,
+        destination: TextureSlot,
+        parameters_index: u32,
+        instance_offset: u32,
+        instance_count: u32,
+        blend_mode: crate::project::ParticleBlendMode,
+    },
+    ResolveParticleLayer {
+        source: TextureSlot,
+        destination: TextureSlot,
     },
     /// Retains an explicitly requested original effect input.
     /// This is a texture-to-texture copy in the frame's single encoder, not a
@@ -188,8 +201,31 @@ impl GpuFramePlan {
                         parameters_index: parameter_count,
                     });
                 }
-                // Keep WGPU exhaustive without inventing a particle pipeline.
-                EvaluatedSource::ParticleSystem { .. } => continue,
+                EvaluatedSource::ParticleSystem { .. } => {
+                    let blend_mode = match &layer.source {
+                        EvaluatedSource::ParticleSystem { system, .. } => system.blend_mode,
+                        _ => unreachable!(),
+                    };
+                    operations.push(GpuOperation::RenderParticleLayer {
+                        layer_index,
+                        destination: match blend_mode {
+                            crate::project::ParticleBlendMode::Normal => {
+                                TextureSlot::ParticleAccumulation
+                            }
+                            crate::project::ParticleBlendMode::Additive => TextureSlot::Layer,
+                        },
+                        parameters_index: parameter_count,
+                        instance_offset: 0,
+                        instance_count: 0,
+                        blend_mode,
+                    });
+                    if matches!(blend_mode, crate::project::ParticleBlendMode::Normal) {
+                        operations.push(GpuOperation::ResolveParticleLayer {
+                            source: TextureSlot::ParticleAccumulation,
+                            destination: TextureSlot::Layer,
+                        });
+                    }
+                }
             }
             parameter_count += 1;
             let mut layer_result = TextureSlot::Layer;
@@ -258,7 +294,7 @@ impl GpuFramePlan {
     }
 
     pub(super) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
-        let mut states = [TextureState::default(); 6];
+        let mut states = [TextureState::default(); 7];
         let mut next_value = 1_u64;
         let mut expected_canvas = TextureSlot::CanvasA;
         let mut final_canvas = None;
@@ -276,6 +312,9 @@ impl GpuFramePlan {
                 | GpuOperation::RenderSpectrum2DLayer {
                     parameters_index, ..
                 }
+                | GpuOperation::RenderParticleLayer {
+                    parameters_index, ..
+                }
                 | GpuOperation::ApplyEffect {
                     parameters_index, ..
                 }
@@ -285,6 +324,7 @@ impl GpuFramePlan {
                 | GpuOperation::CompositeCachedLayer {
                     parameters_index, ..
                 } => Some(*parameters_index),
+                GpuOperation::ResolveParticleLayer { .. } => None,
                 GpuOperation::CopyForEffect { .. }
                 | GpuOperation::StoreStaticLayer { .. }
                 | GpuOperation::CopyForReadback { .. } => None,
@@ -332,6 +372,35 @@ impl GpuFramePlan {
                 GpuOperation::RenderSpectrum2DLayer { destination, .. } => {
                     if *destination != TextureSlot::Layer {
                         return Err(invalid(operation_index, "must render a layer into Layer"));
+                    }
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
+                }
+                GpuOperation::RenderParticleLayer { destination, .. } => {
+                    if !matches!(
+                        destination,
+                        TextureSlot::Layer | TextureSlot::ParticleAccumulation
+                    ) {
+                        return Err(invalid(
+                            operation_index,
+                            "must render a particle source into a particle texture",
+                        ));
+                    }
+                    states[index(*destination)] = TextureState::written(next_value);
+                    next_value += 1;
+                }
+                GpuOperation::ResolveParticleLayer {
+                    source,
+                    destination,
+                } => {
+                    if *source != TextureSlot::ParticleAccumulation
+                        || *destination != TextureSlot::Layer
+                        || !states[index(*source)].initialized
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "must resolve initialized particle accumulation into Layer",
+                        ));
                     }
                     states[index(*destination)] = TextureState::written(next_value);
                     next_value += 1;
@@ -762,9 +831,10 @@ fn index(slot: TextureSlot) -> usize {
         TextureSlot::CanvasA => 0,
         TextureSlot::CanvasB => 1,
         TextureSlot::Layer => 2,
-        TextureSlot::EffectA => 3,
-        TextureSlot::EffectB => 4,
-        TextureSlot::Auxiliary => 5,
+        TextureSlot::ParticleAccumulation => 3,
+        TextureSlot::EffectA => 4,
+        TextureSlot::EffectB => 5,
+        TextureSlot::Auxiliary => 6,
     }
 }
 

@@ -310,7 +310,7 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
     assert_eq!(initial.source_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);
     assert_eq!(initial.sampler_count, 0);
-    assert_eq!(initial.output_texture_count, 3);
+    assert_eq!(initial.output_texture_count, 4);
     assert_eq!(initial.accumulation_buffer_count, 0);
     assert_eq!(initial.readback_buffer_count, 3);
     let estimates = gpu.resource_estimates();

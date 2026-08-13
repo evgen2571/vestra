@@ -11,19 +11,25 @@ pub(super) struct GpuPipelines {
     pub(super) _spectrum2d_shader: wgpu::ShaderModule,
     pub(super) _composite_shader: wgpu::ShaderModule,
     pub(super) _effect_shaders: Vec<(EffectKernel, wgpu::ShaderModule)>,
+    pub(super) _particle_shader: wgpu::ShaderModule,
+    pub(super) _particle_resolve_shader: wgpu::ShaderModule,
     pub(super) layer: wgpu::ComputePipeline,
     pub(super) spectrum2d: wgpu::ComputePipeline,
     pub(super) composite: wgpu::ComputePipeline,
     pub(super) effects: Vec<(EffectKernel, wgpu::ComputePipeline)>,
+    pub(super) particle_normal: wgpu::RenderPipeline,
+    pub(super) particle_resolve: wgpu::ComputePipeline,
+    pub(super) particle_resolve_bindings: wgpu::BindGroupLayout,
     pub(super) layer_bindings: wgpu::BindGroupLayout,
     pub(super) spectrum2d_bindings: wgpu::BindGroupLayout,
     pub(super) composite_bindings: wgpu::BindGroupLayout,
     pub(super) effect_bindings: wgpu::BindGroupLayout,
+    pub(super) particle_bindings: wgpu::BindGroupLayout,
 }
 
 impl GpuPipelines {
-    pub(super) const BASE_SHADER_MODULE_COUNT: usize = 3;
-    pub(super) const BASE_PIPELINE_COUNT: usize = 3;
+    pub(super) const BASE_SHADER_MODULE_COUNT: usize = 5;
+    pub(super) const BASE_PIPELINE_COUNT: usize = 5;
 
     pub(super) fn create(device: &wgpu::Device) -> Self {
         let layer_shader = shader(
@@ -40,6 +46,16 @@ impl GpuPipelines {
             device,
             "vestra composite shader",
             include_str!("../shaders/composite_normal.wgsl"),
+        );
+        let particle_shader = shader(
+            device,
+            "vestra particle shader",
+            include_str!("../shaders/particles.wgsl"),
+        );
+        let particle_resolve_shader = shader(
+            device,
+            "vestra particle straight-alpha resolve shader",
+            include_str!("../shaders/particle_resolve.wgsl"),
         );
         let uniform = wgpu::BindGroupLayoutEntry {
             binding: 2,
@@ -103,6 +119,36 @@ impl GpuPipelines {
             &composite_shader,
             &composite_bindings,
         );
+        let particle_bindings = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("vestra particle bindings"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(PARAMETER_RECORD_BYTES),
+                },
+                count: None,
+            }],
+        });
+        let particle_normal = particle_pipeline(
+            device,
+            "vestra particle normal pipeline",
+            &particle_shader,
+            &particle_bindings,
+        );
+        let particle_resolve_bindings =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("vestra particle resolve bindings"),
+                entries: &[sampled(0), storage_texture(1)],
+            });
+        let particle_resolve = pipeline(
+            device,
+            "vestra particle straight-alpha resolve pipeline",
+            &particle_resolve_shader,
+            &particle_resolve_bindings,
+        );
         let effect_bindings = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("vestra effect texture bindings"),
             entries: &[
@@ -131,15 +177,21 @@ impl GpuPipelines {
             _layer_shader: layer_shader,
             _spectrum2d_shader: spectrum2d_shader,
             _composite_shader: composite_shader,
+            _particle_shader: particle_shader,
+            _particle_resolve_shader: particle_resolve_shader,
             _effect_shaders: effect_shaders,
             layer,
             spectrum2d,
             composite,
+            particle_normal,
+            particle_resolve,
+            particle_resolve_bindings,
             effects,
             layer_bindings,
             spectrum2d_bindings,
             composite_bindings,
             effect_bindings,
+            particle_bindings,
         }
     }
 
@@ -262,6 +314,74 @@ fn storage_texture(binding: u32) -> wgpu::BindGroupLayoutEntry {
         },
         count: None,
     }
+}
+
+fn particle_pipeline(
+    device: &wgpu::Device,
+    label: &str,
+    shader: &wgpu::ShaderModule,
+    bindings: &wgpu::BindGroupLayout,
+) -> wgpu::RenderPipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some(label),
+        bind_group_layouts: &[bindings],
+        push_constant_ranges: &[],
+    });
+    // Normal particle fragments are straight RGB plus alpha. This pass writes
+    // the premultiplied source-over representation into the dedicated
+    // ParticleAccumulation texture. A resolve pass converts it before effects.
+    let blend = wgpu::BlendState {
+        color: wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::SrcAlpha,
+            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+            operation: wgpu::BlendOperation::Add,
+        },
+        alpha: wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+            operation: wgpu::BlendOperation::Add,
+        },
+    };
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: "vertex",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: 32,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x4,
+                        offset: 0,
+                        shader_location: 2,
+                    },
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x4,
+                        offset: 16,
+                        shader_location: 3,
+                    },
+                ],
+            }],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: "fragment",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: super::texture_pool::WORKING_FORMAT,
+                blend: Some(blend),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    })
 }
 fn pipeline(
     device: &wgpu::Device,

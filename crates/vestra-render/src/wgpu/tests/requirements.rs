@@ -134,6 +134,8 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
         estimates.working_texture_bytes,
         estimates.canvas_texture_bytes
             + estimates.layer_texture_bytes
+            + estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
+                .expect("particle accumulation bytes")
             + estimates.effect_texture_bytes
     );
     assert_eq!(
@@ -183,10 +185,12 @@ fn plans_without_visual_effect_passes_do_not_reserve_effect_textures() {
     let estimates = requirements
         .resource_estimates(256)
         .expect("effect-free estimate calculates");
+    let one_texture = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
+        .expect("particle accumulation estimate");
     assert_eq!(estimates.effect_texture_bytes, 0);
     assert_eq!(
         estimates.working_texture_bytes,
-        estimates.canvas_texture_bytes + estimates.layer_texture_bytes
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture
     );
 }
 
@@ -208,7 +212,7 @@ fn one_pass_plan_reserves_only_effect_a() {
     assert_eq!(estimates.effect_texture_bytes, one_texture);
     assert_eq!(
         estimates.working_texture_bytes,
-        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture + one_texture
     );
 }
 
@@ -244,13 +248,14 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
     assert_eq!(estimates.source_texture_count, plan.images.len() as u64);
     assert_eq!(estimates.effect_texture_count, 2);
     assert_eq!(estimates.auxiliary_texture_count, 1);
-    assert_eq!(estimates.working_texture_count, 6);
+    assert_eq!(estimates.working_texture_count, 7);
     assert_eq!(estimates.effect_texture_bytes, full_frame * 2);
     assert_eq!(estimates.auxiliary_texture_bytes, full_frame);
     assert_eq!(
         estimates.working_texture_bytes,
         estimates.canvas_texture_bytes
             + estimates.layer_texture_bytes
+            + full_frame
             + estimates.effect_texture_bytes
             + estimates.auxiliary_texture_bytes
     );

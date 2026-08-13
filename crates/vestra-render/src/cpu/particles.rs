@@ -14,7 +14,7 @@ use crate::plan::CompiledParticleSystem;
 /// Rasterizes particles into an already-cleared procedural source surface.
 /// Positions and sizes are normalized canvas values; one scalar pixel scale is
 /// used for both axes so discs remain circular on non-square surfaces.
-pub(super) fn rasterize_instances(
+pub(crate) fn rasterize_instances(
     target: &mut RgbaImage,
     particles: impl IntoIterator<Item = crate::plan::EvaluatedParticleInstance>,
     primitive: ParticlePrimitive,

@@ -12,6 +12,7 @@ mod executor;
 mod frame_plan;
 mod parameters;
 mod parity;
+mod particles;
 mod pipeline;
 mod polling;
 mod readback;

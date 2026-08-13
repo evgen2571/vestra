@@ -274,4 +274,82 @@ mod tests {
             assert!(pixel[3] >= source[3] / 2, "{mode:?}");
         }
     }
+
+    fn premultiplied_source_over(destination: [f64; 4], source: [f64; 4]) -> [f64; 4] {
+        let alpha = source[3] + destination[3] * (1.0 - source[3]);
+        if alpha <= 0.0 {
+            return [0.0; 4];
+        }
+        [
+            source[0] * source[3] + destination[0] * (1.0 - source[3]),
+            source[1] * source[3] + destination[1] * (1.0 - source[3]),
+            source[2] * source[3] + destination[2] * (1.0 - source[3]),
+            alpha,
+        ]
+    }
+
+    fn resolve_straight(premultiplied: [f64; 4]) -> [f64; 4] {
+        if premultiplied[3] <= f64::EPSILON {
+            return [0.0; 4];
+        }
+        [
+            premultiplied[0] / premultiplied[3],
+            premultiplied[1] / premultiplied[3],
+            premultiplied[2] / premultiplied[3],
+            premultiplied[3],
+        ]
+    }
+
+    #[test]
+    fn normal_reference_matches_premultiplied_accumulation_and_resolve() {
+        let source = [100.0 / 255.0, 0.0, 0.0, 128.0 / 255.0];
+        let first = premultiplied_source_over([0.0; 4], source);
+        let resolved = resolve_straight(premultiplied_source_over(first, source));
+        assert_eq!((resolved[0] * 255.0).round() as u8, 100);
+        assert_eq!((resolved[3] * 255.0).round() as u8, 192);
+        assert_eq!(
+            source_over(Rgba([100, 0, 0, 128]), Rgba([100, 0, 0, 128]), 1.0),
+            Rgba([100, 0, 0, 192])
+        );
+    }
+
+    #[test]
+    fn normal_resolve_zero_alpha_discards_rgb() {
+        assert_eq!(resolve_straight([0.75, 0.25, 1.0, 0.0]), [0.0; 4]);
+    }
+
+    #[test]
+    fn additive_reference_and_saturation_are_cpu_authoritative() {
+        let unsaturated = Rgba([100, 0, 0, 128]);
+        assert_eq!(
+            blend_pixel(
+                unsaturated,
+                unsaturated,
+                crate::project::BlendMode::Add,
+                1.0
+            ),
+            Rgba([134, 0, 0, 192])
+        );
+
+        let destination = Rgba([220, 10, 180, 180]);
+        let source = Rgba([200, 240, 160, 200]);
+        let expected = blend_pixel(destination, source, crate::project::BlendMode::Add, 1.0);
+        assert_eq!(expected, Rgba([236, 209, 219, 239]));
+        assert!(f64::from(source[0]) / 255.0 + f64::from(destination[0]) / 255.0 > 1.0);
+    }
+
+    #[test]
+    fn additive_covers_alpha_combinations_without_changing_cpu_semantics() {
+        for (destination, source) in [
+            (Rgba([0, 20, 30, 0]), Rgba([40, 50, 60, 128])),
+            (Rgba([40, 50, 60, 255]), Rgba([100, 110, 120, 128])),
+            (Rgba([240, 10, 10, 128]), Rgba([240, 20, 20, 64])),
+        ] {
+            let result = blend_pixel(destination, source, crate::project::BlendMode::Add, 1.0);
+            let expected_alpha = (f64::from(source[3]) / 255.0
+                + f64::from(destination[3]) / 255.0 * (1.0 - f64::from(source[3]) / 255.0))
+                * 255.0;
+            assert_eq!(result[3], expected_alpha.round() as u8);
+        }
+    }
 }

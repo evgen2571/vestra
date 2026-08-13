@@ -21,7 +21,8 @@ pub use evaluation::{evaluate, evaluate_effect, evaluate_with_context};
 pub use input::PlanCompileInput;
 pub use model::*;
 pub use particles::{
-    CompiledParticleBurst, CompiledParticleSystem, ParticleIdentity, ParticleInstance, RATE_SCALE,
+    CompiledParticleBurst, CompiledParticleSystem, EvaluatedParticleInstance, ParticleIdentity,
+    ParticleInstance, RATE_SCALE,
 };
 pub(crate) use scalar_property::ScalarPropertyTarget;
 pub use scalar_property::{

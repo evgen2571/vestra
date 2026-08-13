@@ -77,10 +77,10 @@ pub enum EvaluatedSource {
         )>,
         colour: [u8; 4],
     },
-    /// Compact immutable state. Renderers consume `system.iter_alive(time_nanos)`
+    /// Compact immutable state. Renderers consume `system.evaluated_particles_at`
     /// when particle drawing is implemented.
     ParticleSystem {
-        system: crate::plan::CompiledParticleSystem,
+        system: std::sync::Arc<crate::plan::CompiledParticleSystem>,
         time_nanos: u128,
     },
 }
@@ -183,7 +183,7 @@ pub fn evaluate_with_context(
                 colour: *colour,
             },
             CompiledVisualSource::ParticleSystem(system) => EvaluatedSource::ParticleSystem {
-                system: system.clone(),
+                system: std::sync::Arc::clone(system),
                 time_nanos: relative,
             },
         };

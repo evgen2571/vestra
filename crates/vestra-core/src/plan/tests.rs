@@ -5,7 +5,7 @@ use super::{
     CompiledScalarSignal, CompiledScalarSignals, CompiledSignalTransform, EnvelopeTransform,
     EvaluationContext, PlanCompileInput, PreparedScalarSignal, PreparedScalarSignals,
     RawScalarSignal, ScalarModifierOperation, ScalarPropertyConstraint, ScalarSignalId,
-    TimedEffect, compile, evaluate_with_context, prepare_scalar_signals,
+    TimedEffect, compile, evaluate, evaluate_with_context, prepare_scalar_signals,
 };
 use crate::{
     animation::{
@@ -280,6 +280,34 @@ fn particle_system_compiles_and_evaluates_from_clip_local_time() {
     };
     assert_eq!(source(&direct), source(&repeated));
     assert_eq!(source(&direct).1, 1_500_000_000);
+}
+
+#[test]
+fn particle_evaluation_shares_compiled_system_without_deep_cloning() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.clips[0].source = VisualSource::ParticleSystem(ParticleSystem::default());
+    project.visual.clips[0].transform = None;
+    let plan = compile_project(project);
+    let particle_index = plan
+        .layers
+        .iter()
+        .position(|layer| matches!(layer.source, super::CompiledVisualSource::ParticleSystem(_)))
+        .expect("particle layer");
+    let frame = evaluate(
+        &plan,
+        &[super::ScheduledItem(particle_index)],
+        1_000_000_000,
+    )
+    .expect("particle frame");
+    let super::EvaluatedSource::ParticleSystem { system, .. } = &frame.layers[0].source else {
+        panic!("expected particle source");
+    };
+    let super::CompiledVisualSource::ParticleSystem(compiled) = &plan.layers[particle_index].source
+    else {
+        panic!("expected compiled particle source");
+    };
+    assert!(std::sync::Arc::ptr_eq(system, compiled));
 }
 
 #[test]

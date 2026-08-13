@@ -112,7 +112,7 @@ zero.
 
 | Idea | Correctness | Performance | Decision |
 | --- | --- | --- | --- |
-| Effective source-alpha zero return | Exhaustive alpha/reference test and opacity cases passed byte-for-byte | Included in retained result; useful cases were 3.35% of the focused classified work | Keep |
+| Effective source-alpha zero return | Exhaustive alpha/reference test and opacity cases passed byte-for-byte | Included in retained result; useful cases were 3.48% of the focused classified work (`23,082,077 / 663,552,000`) | Keep |
 | Hoist Normal mode selection out of `blend_surface` | Whole-surface reference comparison passed | Composition-focused median `232.553→230.097 ms/frame`; layer timer `28,244.8→27,493.0 ms` aggregate | Keep |
 | Opaque destination arithmetic specialization | Not implemented; current straight-alpha ordering is preserved | Not measured independently | Reject for this subphase |
 | Transparent destination arithmetic specialization | Not implemented; no occurrences in the primary composition profile | Not measured independently | Reject |

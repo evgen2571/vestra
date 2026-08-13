@@ -58,14 +58,21 @@ pub(crate) fn blend_surface(
     source: &RgbaImage,
     mode: crate::project::BlendMode,
     opacity: f64,
-    mut cases: Option<&mut CompositionCaseCounts>,
+    cases: Option<&mut CompositionCaseCounts>,
 ) {
     if matches!(mode, crate::project::BlendMode::Normal) {
-        for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
-            if let Some(cases) = cases.as_deref_mut() {
-                cases.record(*destination, *source, opacity);
+        match cases {
+            Some(cases) => {
+                for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
+                    cases.record(*destination, *source, opacity);
+                    *destination = source_over(*destination, *source, opacity);
+                }
             }
-            *destination = source_over(*destination, *source, opacity);
+            None => {
+                for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
+                    *destination = source_over(*destination, *source, opacity);
+                }
+            }
         }
     } else {
         for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {

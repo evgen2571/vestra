@@ -56,7 +56,7 @@ cold versus warm structural deltas instead of invented before/after gains.
 | --- | ---: | ---: |
 | Pipeline floor | 1280x720 | 99.24 |
 | Animated transform | 1280x720 | 0.47 |
-| Mixed project | 1920x1080 | 0.33 |
+| Short mixed | 1920x1080 | 0.33 |
 
 These are `Project -> PreparedState` timings. They include current validation,
 planning, decode, and CPU backend setup. They are deliberately separate from
@@ -73,9 +73,9 @@ per-frame renderer throughput.
 | Static expensive Gaussian blur | 1280x720 | 100 | cold / warm | 35.41 / 39.32 | 28.24 / 25.43 |
 | Animated transform | 1280x720 | 100 | cold / warm | 9.49 / 9.50 | 105.36 / 105.31 |
 | Dynamic effects | 1280x720 | 100 | cold / warm | 8.02 / 8.03 | 124.68 / 124.43 |
-| Transition | 1280x720 | 100 | cold / warm | 1.65 / 1.65 | 605.22 / 606.00 |
+| ZoomBlur-focused | 1280x720 | 100 | cold / warm | 1.65 / 1.65 | 605.22 / 606.00 |
 | Global post effect | 1280x720 | 30 | cold / warm | 8.09 / 8.26 | 123.57 / 121.01 |
-| Mixed project | 1920x1080 | 30 | cold / warm | 1.03 / 1.02 | 973.19 / 979.27 |
+| Short mixed | 1920x1080 | 30 | cold / warm | 1.03 / 1.02 | 973.19 / 979.27 |
 
 Resolution cost follows pixel count closely: warm 720p, 1080p, and 4K floor
 times are 25.49, 62.24, and 230.97 ms. The 1080p to 4K ratio is 3.71 for a
@@ -128,7 +128,7 @@ the second warm operation confirms the steady state.
 | 25 | 1,585.72 | 390 / 0 | Cost grows roughly with active layers. |
 | 50 | 3,376.86 | 750 / 0 | Still near-linear, with full-frame dynamic rasterization dominant. |
 
-The 10-to-50 layer ratio is 5.64 in time for five times as many layers. There
+The 10-to-50 mixed static/dynamic layer ratio is 5.64 in time for five times as many layers. There
 is no cache miss or scratch-allocation growth after the first operation.
 
 ## Effect scaling

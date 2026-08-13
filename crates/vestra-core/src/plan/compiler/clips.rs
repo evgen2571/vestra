@@ -159,6 +159,10 @@ pub(super) fn compile(
                 colour,
             }
         }
+        VisualSource::ParticleSystem(system) => {
+            compilation.parsed_colour_count += 1;
+            CompiledVisualSource::ParticleSystem(super::particles::compile(system, parse_colour)?)
+        }
     };
     let effects = clip
         .effects
@@ -232,9 +236,12 @@ fn compile_transform(
                 scalar_signal_interner,
             )?,
         }),
-        (VisualSource::SolidColor { .. } | VisualSource::Spectrum2D(_), None) => {
-            Ok(canvas_transform())
-        }
+        (
+            VisualSource::SolidColor { .. }
+            | VisualSource::Spectrum2D(_)
+            | VisualSource::ParticleSystem(_),
+            None,
+        ) => Ok(canvas_transform()),
         (VisualSource::Image { .. }, None) => Err(Diagnostic::error(
             "MVP-PLAN-TRANSFORM",
             Category::Internal,

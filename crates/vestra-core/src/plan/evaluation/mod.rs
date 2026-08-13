@@ -77,6 +77,12 @@ pub enum EvaluatedSource {
         )>,
         colour: [u8; 4],
     },
+    /// Compact immutable state. Renderers consume `system.iter_alive(time_nanos)`
+    /// when particle drawing is implemented.
+    ParticleSystem {
+        system: crate::plan::CompiledParticleSystem,
+        time_nanos: u128,
+    },
 }
 
 /// Evaluates a plan with no prepared procedural resources.
@@ -175,6 +181,10 @@ pub fn evaluate_with_context(
                 layout: layout.clone(),
                 gradient: *gradient,
                 colour: *colour,
+            },
+            CompiledVisualSource::ParticleSystem(system) => EvaluatedSource::ParticleSystem {
+                system: system.clone(),
+                time_nanos: relative,
             },
         };
         let mut effects = layer

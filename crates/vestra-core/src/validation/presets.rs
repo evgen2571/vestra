@@ -16,7 +16,9 @@ pub(super) fn validate(
 ) {
     if matches!(
         source,
-        VisualSource::SolidColor { .. } | VisualSource::Spectrum2D(_)
+        VisualSource::SolidColor { .. }
+            | VisualSource::Spectrum2D(_)
+            | VisualSource::ParticleSystem(_)
     ) {
         errors.push(Diagnostic::error(
             "MVP-PRESET-SOURCE",

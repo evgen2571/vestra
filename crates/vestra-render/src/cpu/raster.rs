@@ -94,6 +94,9 @@ pub(crate) fn draw_layer(
             opacity,
             colour_transform,
         ),
+        // Particle semantics live in core first. Rasterization is intentionally
+        // deferred to the particle rendering subphase.
+        EvaluatedSource::ParticleSystem { .. } => {}
     }
 }
 

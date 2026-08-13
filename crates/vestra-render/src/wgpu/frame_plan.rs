@@ -188,6 +188,8 @@ impl GpuFramePlan {
                         parameters_index: parameter_count,
                     });
                 }
+                // Keep WGPU exhaustive without inventing a particle pipeline.
+                EvaluatedSource::ParticleSystem { .. } => continue,
             }
             parameter_count += 1;
             let mut layer_result = TextureSlot::Layer;

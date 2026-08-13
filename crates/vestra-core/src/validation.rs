@@ -51,6 +51,10 @@ pub struct ResourceLimits {
     pub maximum_effects_per_clip: usize,
     pub maximum_keyframes_per_track: usize,
     pub maximum_cache_bytes: u64,
+    /// Conservative upper bound for one renderer-independent particle source.
+    pub maximum_live_particles_per_system: u64,
+    /// Aggregate budget reserved for future simultaneous particle sources.
+    pub maximum_total_live_particles: u64,
 }
 
 impl Default for ResourceLimits {
@@ -74,6 +78,8 @@ impl Default for ResourceLimits {
             maximum_effects_per_clip: 32,
             maximum_keyframes_per_track: 1_000,
             maximum_cache_bytes: 256 * 1024 * 1024,
+            maximum_live_particles_per_system: 250_000,
+            maximum_total_live_particles: 1_000_000,
         }
     }
 }
@@ -131,6 +137,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         &project.visual,
         &asset_kinds,
         limits_config.maximum_keyframes_per_track,
+        limits_config,
         &mut errors,
         has_authored_audio,
     );

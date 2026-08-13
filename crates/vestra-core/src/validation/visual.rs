@@ -8,10 +8,12 @@ pub(super) fn validate(
     visual: &crate::project::Visual,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
+    limits: crate::validation::ResourceLimits,
     errors: &mut Vec<Diagnostic>,
     has_authored_audio: bool,
 ) {
     let mut clip_ids = BTreeSet::new();
+    let mut particle_intervals = Vec::new();
     for (index, clip) in visual.clips.iter().enumerate() {
         let path = format!("/visual/clips/{index}");
         if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
@@ -56,6 +58,18 @@ pub(super) fn validate(
                 errors,
                 has_authored_audio,
             ),
+            crate::project::VisualSource::ParticleSystem(system) => {
+                if let Some(count) =
+                    validate_particle_system(system, &format!("{path}/source"), limits, errors)
+                    && let (Some(start), Some(duration)) = (
+                        crate::timeline::seconds_to_nanos(clip.start),
+                        crate::timeline::seconds_to_nanos(clip.duration),
+                    )
+                    && let Some(end) = start.checked_add(duration)
+                {
+                    particle_intervals.push((start, end, count));
+                }
+            }
         }
         match (&clip.source, &clip.transform) {
             (crate::project::VisualSource::Image { .. }, None) => errors.push(Diagnostic::error(
@@ -77,6 +91,14 @@ pub(super) fn validate(
                     "MVP-SPECTRUM2D-TRANSFORM",
                     Category::Semantic,
                     "Spectrum2D clips cannot have transform tracks",
+                    format!("{path}/transform"),
+                ))
+            }
+            (crate::project::VisualSource::ParticleSystem(_), Some(_)) => {
+                errors.push(Diagnostic::error(
+                    "MVP-PARTICLE-SYSTEM-TRANSFORM",
+                    Category::Semantic,
+                    "ParticleSystem clips cannot have transform tracks",
                     format!("{path}/transform"),
                 ))
             }
@@ -117,6 +139,22 @@ pub(super) fn validate(
                         "MVP-SPECTRUM2D-PROPERTIES",
                         Category::Semantic,
                         "Spectrum2D clips cannot use image-specific source properties",
+                        format!("{path}/{field}"),
+                    ));
+                }
+            }
+        }
+        if matches!(clip.source, crate::project::VisualSource::ParticleSystem(_)) {
+            for (field, present) in [
+                ("sizing", clip.sizing.is_some()),
+                ("crop", clip.crop.is_some()),
+                ("preset", clip.preset.is_some()),
+            ] {
+                if present {
+                    errors.push(Diagnostic::error(
+                        "MVP-PARTICLE-SYSTEM-PROPERTIES",
+                        Category::Semantic,
+                        "ParticleSystem clips cannot use image-specific source properties",
                         format!("{path}/{field}"),
                     ));
                 }
@@ -177,6 +215,22 @@ pub(super) fn validate(
                 has_authored_audio,
             );
         }
+    }
+    let maximum_concurrent = maximum_concurrent_particles(&particle_intervals);
+    if maximum_concurrent.is_none() {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-COUNT",
+            Category::Semantic,
+            "aggregate particle live-count calculation overflowed",
+            "/visual/clips",
+        ));
+    } else if maximum_concurrent.is_some_and(|count| count > limits.maximum_total_live_particles) {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-PARTICLES-TOTAL",
+            Category::Semantic,
+            "visual clips exceed the configured aggregate live-particle limit",
+            "/visual/clips",
+        ));
     }
 }
 
@@ -373,6 +427,195 @@ fn validate_spectrum2d(
             format!("{path}/colour"),
         ));
     }
+}
+
+fn validate_particle_system(
+    system: &crate::project::ParticleSystem,
+    path: &str,
+    limits: crate::validation::ResourceLimits,
+    errors: &mut Vec<crate::Diagnostic>,
+) -> Option<u64> {
+    if !system.emission.rate.is_finite() || system.emission.rate < 0.0 {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-RATE",
+            Category::Semantic,
+            "particle emission rate must be finite and non-negative",
+            format!("{path}/emission/rate"),
+        ));
+    }
+    let lifetime = system.particle.lifetime;
+    let lifetime_nanos = crate::timeline::seconds_to_nanos(lifetime);
+    if !lifetime.is_finite() || lifetime <= 0.0 || lifetime_nanos.is_none_or(|nanos| nanos == 0) {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-LIFETIME",
+            Category::Semantic,
+            "particle lifetime must be finite, greater than zero, and representable as a positive timeline duration",
+            format!("{path}/particle/lifetime"),
+        ));
+    }
+    let (emitter_x, emitter_y) = match &system.emitter {
+        crate::project::ParticleEmitter::Point { position } => (position.x, position.y),
+    };
+    for (field, value) in [("x", emitter_x), ("y", emitter_y)] {
+        if !value.is_finite() {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-NUMERIC",
+                Category::Semantic,
+                "particle emitter coordinates must be finite",
+                format!("{path}/emitter/position/{field}"),
+            ));
+        }
+    }
+    for (field, value) in [
+        ("initial_velocity.x", system.particle.initial_velocity.x),
+        ("initial_velocity.y", system.particle.initial_velocity.y),
+        ("acceleration.x", system.particle.acceleration.x),
+        ("acceleration.y", system.particle.acceleration.y),
+        ("rotation_degrees", system.particle.rotation_degrees),
+        (
+            "angular_velocity_degrees",
+            system.particle.angular_velocity_degrees,
+        ),
+    ] {
+        if !value.is_finite() {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-NUMERIC",
+                Category::Semantic,
+                "particle numeric properties must be finite",
+                format!("{path}/particle/{field}"),
+            ));
+        }
+    }
+    if !system.particle.size.is_finite() || system.particle.size < 0.0 {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-SIZE",
+            Category::Semantic,
+            "particle size must be finite and non-negative",
+            format!("{path}/particle/size"),
+        ));
+    }
+    if !super::unit(system.particle.opacity) {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-OPACITY",
+            Category::Semantic,
+            "particle opacity must be finite and in 0..=1",
+            format!("{path}/particle/opacity"),
+        ));
+    }
+    if crate::project::parse_colour(&system.particle.colour).is_none() {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-COLOUR",
+            Category::Semantic,
+            "particle colour must use #RRGGBB or #RRGGBBAA",
+            format!("{path}/particle/colour"),
+        ));
+    }
+    let mut bursts = Vec::with_capacity(system.emission.bursts.len());
+    let mut previous_time = None;
+    for (index, burst) in system.emission.bursts.iter().enumerate() {
+        if !burst.time.is_finite() || burst.time < 0.0 {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-BURST-TIME",
+                Category::Semantic,
+                "particle burst time must be finite and non-negative",
+                format!("{path}/emission/bursts/{index}/time"),
+            ));
+        }
+        if previous_time.is_some_and(|time| burst.time <= time) {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-BURST-ORDER",
+                Category::Semantic,
+                "particle bursts must be strictly ordered by time",
+                format!("{path}/emission/bursts/{index}/time"),
+            ));
+        }
+        previous_time = Some(burst.time);
+        match (
+            crate::timeline::seconds_to_nanos(burst.time),
+            u64::try_from(burst.count),
+        ) {
+            (Some(time_nanos), Ok(count)) => bursts.push((time_nanos, count)),
+            _ => {
+                errors.push(Diagnostic::error(
+                    "MVP-PARTICLE-COUNT",
+                    Category::Semantic,
+                    "particle burst count overflowed",
+                    format!("{path}/emission/bursts/{index}/count"),
+                ));
+            }
+        }
+    }
+    let live_count = if system.emission.rate.is_finite()
+        && system.emission.rate >= 0.0
+        && lifetime.is_finite()
+        && lifetime > 0.0
+    {
+        let rate_units = (system.emission.rate * crate::plan::RATE_SCALE as f64).round();
+        let lifetime_nanos = lifetime_nanos.filter(|nanos| *nanos > 0);
+        rate_units
+            .is_finite()
+            .then_some(rate_units)
+            .filter(|rate| *rate <= u64::MAX as f64)
+            .map(|rate| rate as u128)
+            .zip(lifetime_nanos)
+            .and_then(|(rate, nanos)| rate.checked_mul(nanos))
+            .and_then(|value| {
+                value.checked_add(
+                    crate::timeline::NANOS_PER_SECOND * u128::from(crate::plan::RATE_SCALE) - 1,
+                )
+            })
+            .map(|value| {
+                value / (crate::timeline::NANOS_PER_SECOND * u128::from(crate::plan::RATE_SCALE))
+            })
+            .and_then(|value| u64::try_from(value).ok())
+            .and_then(|continuous| {
+                let mut start = 0;
+                let mut active = 0_u64;
+                let mut maximum = 0_u64;
+                for (index, (time_nanos, count)) in bursts.iter().enumerate() {
+                    while start < index
+                        && bursts[start].0.checked_add(lifetime_nanos?)? <= *time_nanos
+                    {
+                        active = active.checked_sub(bursts[start].1)?;
+                        start += 1;
+                    }
+                    active = active.checked_add(*count)?;
+                    maximum = maximum.max(active);
+                }
+                continuous.checked_add(maximum)
+            })
+    } else {
+        None
+    };
+    if live_count.is_none_or(|count| count > limits.maximum_live_particles_per_system) {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-PARTICLES",
+            Category::Semantic,
+            "particle system exceeds the configured live-particle limit",
+            path,
+        ));
+    }
+    live_count
+}
+
+fn maximum_concurrent_particles(intervals: &[(u128, u128, u64)]) -> Option<u64> {
+    let mut events = Vec::with_capacity(intervals.len() * 2);
+    for &(start, end, count) in intervals {
+        events.push((start, true, count));
+        events.push((end, false, count));
+    }
+    events.sort_by_key(|(time, starts, _)| (*time, *starts));
+    let mut active = 0_u64;
+    let mut maximum = 0_u64;
+    for (_, starts, count) in events {
+        active = if starts {
+            active.checked_add(count)?
+        } else {
+            active.checked_sub(count)?
+        };
+        maximum = maximum.max(active);
+    }
+    Some(maximum)
 }
 
 fn validate_transform(

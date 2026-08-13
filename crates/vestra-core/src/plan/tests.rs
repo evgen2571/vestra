@@ -16,7 +16,7 @@ use crate::{
     project::{
         ActiveInterval, AudioAnalysisTap as ProjectAudioAnalysisTap,
         AudioScalarFeature as ProjectAudioScalarFeature, Effect, Interpolation, InterpolationName,
-        Keyframe, Preset, Project, ScalarModifier,
+        Keyframe, ParticleBurst, ParticleEmission, ParticleSystem, Preset, Project, ScalarModifier,
         ScalarModifierOperation as ProjectScalarModifierOperation, ScalarSignal,
         ScalarSignalSource, SignalTransform, Spectrum2D, Spectrum2DBandMapping, Spectrum2DLayout,
         Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Track, VisualSource,
@@ -234,6 +234,52 @@ fn spectrum2d_evaluation_samples_absolute_project_time_deterministically() {
     assert_eq!(evaluations[0].1, evaluations[4].1);
     assert_eq!(evaluations[0].1[0], 0.8);
     assert_eq!(evaluations[6].1[0], 0.2);
+}
+
+#[test]
+fn particle_system_compiles_and_evaluates_from_clip_local_time() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.clips[0].source = VisualSource::ParticleSystem(ParticleSystem {
+        seed: 99,
+        emission: ParticleEmission {
+            rate: 2.5,
+            bursts: vec![ParticleBurst {
+                time: 0.0,
+                count: 2,
+            }],
+        },
+        ..Default::default()
+    });
+    project.visual.clips[0].transform = None;
+    let plan = compile_project(project);
+    let particle_index = plan
+        .layers
+        .iter()
+        .position(|layer| matches!(layer.source, super::CompiledVisualSource::ParticleSystem(_)))
+        .expect("particle layer");
+    let evaluate = |time| {
+        evaluate_with_context(
+            &plan,
+            &[super::ScheduledItem(particle_index)],
+            time,
+            &EvaluationContext::new(&PreparedScalarSignals::empty()),
+        )
+        .expect("particle frame")
+    };
+    let direct = evaluate(1_500_000_000);
+    let _ = evaluate(500_000_000);
+    let _ = evaluate(2_000_000_000);
+    let repeated = evaluate(1_500_000_000);
+    let source = |frame: &super::EvaluatedFrame| match &frame.layers[0].source {
+        super::EvaluatedSource::ParticleSystem { system, time_nanos } => (
+            system.iter_alive(*time_nanos).collect::<Vec<_>>(),
+            *time_nanos,
+        ),
+        _ => panic!("expected particle source"),
+    };
+    assert_eq!(source(&direct), source(&repeated));
+    assert_eq!(source(&direct).1, 1_500_000_000);
 }
 
 #[test]

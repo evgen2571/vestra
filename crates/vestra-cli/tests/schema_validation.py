@@ -59,6 +59,45 @@ solid_colour["visual"]["clips"] = [
 solid_colour["visual"]["transitions"] = []
 assert not errors(solid_colour), "solid colours do not need transforms"
 
+group = copy.deepcopy(solid_colour)
+group["visual"]["clips"] = [{
+    "id": "group",
+    "source": {"type": "group", "clips": [{
+        "id": "child",
+        "source": {"type": "solid_color", "colour": "#112233"},
+        "start": 2,
+        "duration": 10,
+        "layer": 0,
+        "opacity": {"base_value": 1},
+    }]},
+    "start": 10,
+    "duration": 5,
+    "layer": 0,
+    "opacity": {"base_value": 1},
+}]
+assert not errors(group), "nested Group source must validate"
+group_with_transform = copy.deepcopy(group)
+group_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert not errors(group_with_transform), "Group sources may have a parent transform"
+group["visual"]["clips"][0]["source"]["clips"].append(copy.deepcopy(group["visual"]["clips"][0]["source"]["clips"][0]))
+group["visual"]["clips"][0]["source"]["clips"][1]["id"] = "nested"
+group["visual"]["clips"][0]["source"]["clips"][1]["source"] = {
+    "type": "group",
+    "clips": [{
+        "id": "deep-child",
+        "source": {"type": "solid_color", "colour": "#445566"},
+        "start": 0,
+        "duration": 1,
+        "layer": 0,
+        "opacity": {"base_value": 1},
+    }],
+}
+assert not errors(group), "recursively nested Group source must validate"
+
+image_without_transform = copy.deepcopy(project)
+image_without_transform["visual"]["clips"][0].pop("transform")
+assert errors(image_without_transform), "image clips require transforms"
+
 solid_with_transform = copy.deepcopy(solid_colour)
 solid_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert errors(solid_with_transform), "solid colours must not accept transforms"
@@ -66,6 +105,9 @@ assert errors(solid_with_transform), "solid colours must not accept transforms"
 spectrum = copy.deepcopy(solid_colour)
 spectrum["visual"]["clips"][0]["source"] = {"type": "spectrum2d"}
 assert not errors(spectrum), "minimal Spectrum2D source must validate"
+spectrum_with_transform = copy.deepcopy(spectrum)
+spectrum_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert errors(spectrum_with_transform), "Spectrum2D transforms must remain unsupported"
 spectrum_explicit = copy.deepcopy(spectrum)
 spectrum_explicit["visual"]["clips"][0]["source"] = {
     "type": "spectrum2d", "band_count": 32, "min_hz": 60, "max_hz": 12000,

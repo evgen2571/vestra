@@ -172,22 +172,12 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
     };
     limits::enforce(
         &project.output,
-        project.visual.clips.len(),
+        total_visual_clip_count(&project.visual.clips),
         frame_count,
         visual_duration,
         limits_config,
         &mut errors,
     );
-    for (index, clip) in project.visual.clips.iter().enumerate() {
-        if clip.effects.len() > limits_config.maximum_effects_per_clip {
-            errors.push(Diagnostic::error(
-                "MVP-LIMIT-EFFECTS",
-                Category::Semantic,
-                "clip exceeds the effect limit",
-                format!("/visual/clips/{index}/effects"),
-            ));
-        }
-    }
     warnings::add_unused_assets(project, &mut warnings_list);
     errors.extend(warnings_list);
     ValidationReport::new(errors)
@@ -207,6 +197,16 @@ fn visual_duration(project: &Project) -> f64 {
                 .map(|flash| flash.start + flash.duration),
         )
         .fold(0.0, f64::max)
+}
+
+fn total_visual_clip_count(clips: &[crate::project::Clip]) -> usize {
+    clips.iter().fold(0usize, |total, clip| {
+        let descendants = match &clip.source {
+            crate::project::VisualSource::Group(group) => total_visual_clip_count(&group.clips),
+            _ => 0,
+        };
+        total.saturating_add(1).saturating_add(descendants)
+    })
 }
 
 pub(super) const fn positive(value: f64) -> bool {

@@ -167,6 +167,14 @@ pub(super) fn compile(
                 scalar_signal_interner,
             )?))
         }
+        VisualSource::Group(_) => {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-GROUP-UNSUPPORTED",
+                Category::Internal,
+                "Group compilation and rendering are not implemented yet",
+                format!("clip '{}' source", clip.id),
+            ));
+        }
     };
     let effects = clip
         .effects
@@ -246,6 +254,7 @@ fn compile_transform(
             | VisualSource::ParticleSystem(_),
             None,
         ) => Ok(canvas_transform()),
+        (VisualSource::Group(_), None) => Ok(canvas_transform()),
         (VisualSource::Image { .. }, None) => Err(Diagnostic::error(
             "MVP-PLAN-TRANSFORM",
             Category::Internal,

@@ -4,6 +4,9 @@ use std::collections::BTreeSet;
 
 use crate::{Category, Diagnostic};
 
+/// The maximum Group depth. The root Visual is not counted as a Group.
+pub const MAX_GROUP_NESTING_DEPTH: usize = 32;
+
 pub(super) fn validate(
     visual: &crate::project::Visual,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
@@ -12,8 +15,52 @@ pub(super) fn validate(
     errors: &mut Vec<Diagnostic>,
     has_authored_audio: bool,
 ) {
-    let mut clip_ids = BTreeSet::new();
+    validate_with_depth(
+        visual,
+        assets,
+        maximum_keyframes_per_track,
+        limits,
+        errors,
+        has_authored_audio,
+        0,
+    );
     let mut particle_intervals = Vec::new();
+    collect_particle_intervals(
+        &visual.clips,
+        None,
+        maximum_keyframes_per_track,
+        has_authored_audio,
+        limits,
+        &mut particle_intervals,
+    );
+    let maximum_concurrent = maximum_concurrent_particles(&particle_intervals);
+    if maximum_concurrent.is_none() {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-COUNT",
+            Category::Semantic,
+            "aggregate particle live-count calculation overflowed",
+            "/visual/clips",
+        ));
+    } else if maximum_concurrent.is_some_and(|count| count > limits.maximum_total_live_particles) {
+        errors.push(Diagnostic::error(
+            "MVP-LIMIT-PARTICLES-TOTAL",
+            Category::Semantic,
+            "visual clips exceed the configured aggregate live-particle limit",
+            "/visual/clips",
+        ));
+    }
+}
+
+fn validate_with_depth(
+    visual: &crate::project::Visual,
+    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
+    maximum_keyframes_per_track: usize,
+    limits: crate::validation::ResourceLimits,
+    errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
+    group_depth: usize,
+) {
+    let mut clip_ids = BTreeSet::new();
     for (index, clip) in visual.clips.iter().enumerate() {
         let path = format!("/visual/clips/{index}");
         if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
@@ -59,19 +106,47 @@ pub(super) fn validate(
                 has_authored_audio,
             ),
             crate::project::VisualSource::ParticleSystem(system) => {
-                if let Some(count) = validate_particle_system(
+                validate_particle_system(
                     system,
                     &format!("{path}/source"),
                     maximum_keyframes_per_track,
                     has_authored_audio,
                     limits,
                     errors,
-                ) && let (Some(start), Some(duration)) = (
-                    crate::timeline::seconds_to_nanos(clip.start),
-                    crate::timeline::seconds_to_nanos(clip.duration),
-                ) && let Some(end) = start.checked_add(duration)
-                {
-                    particle_intervals.push((start, end, count));
+                );
+            }
+            crate::project::VisualSource::Group(group) => {
+                let child_depth = group_depth.saturating_add(1);
+                if child_depth > MAX_GROUP_NESTING_DEPTH {
+                    errors.push(Diagnostic::error(
+                        "MVP-GROUP-DEPTH",
+                        Category::Semantic,
+                        "maximum Group nesting depth of 32 exceeded",
+                        format!("{path}/source/clips"),
+                    ));
+                } else {
+                    let mut nested_errors = Vec::new();
+                    let nested_visual = crate::project::Visual {
+                        clips: group.clips.clone(),
+                        transitions: Vec::new(),
+                        flashes: Vec::new(),
+                        post_effects: Vec::new(),
+                    };
+                    validate_with_depth(
+                        &nested_visual,
+                        assets,
+                        maximum_keyframes_per_track,
+                        limits,
+                        &mut nested_errors,
+                        has_authored_audio,
+                        child_depth,
+                    );
+                    for diagnostic in &mut nested_errors {
+                        if let Some(pointer) = diagnostic.pointer.as_mut() {
+                            *pointer = pointer.replacen("/visual", &format!("{path}/source"), 1);
+                        }
+                    }
+                    errors.extend(nested_errors);
                 }
             }
         }
@@ -127,6 +202,22 @@ pub(super) fn validate(
                         "MVP-SOLID-PROPERTIES",
                         Category::Semantic,
                         "solid-color clips cannot use image-only properties",
+                        format!("{path}/{field}"),
+                    ));
+                }
+            }
+        }
+        if matches!(clip.source, crate::project::VisualSource::Group(_)) {
+            for (field, present) in [
+                ("sizing", clip.sizing.is_some()),
+                ("crop", clip.crop.is_some()),
+                ("preset", clip.preset.is_some()),
+            ] {
+                if present {
+                    errors.push(Diagnostic::error(
+                        "MVP-GROUP-PROPERTIES",
+                        Category::Semantic,
+                        "Group clips cannot use image-specific sizing, crop, or preset properties",
                         format!("{path}/{field}"),
                     ));
                 }
@@ -201,6 +292,15 @@ pub(super) fn validate(
         }
         let mut effect_ids = BTreeSet::new();
         for (effect_index, effect) in clip.effects.iter().enumerate() {
+            if clip.effects.len() > limits.maximum_effects_per_clip {
+                errors.push(Diagnostic::error(
+                    "MVP-LIMIT-EFFECTS",
+                    Category::Semantic,
+                    "clip exceeds the effect limit",
+                    format!("{path}/effects"),
+                ));
+                break;
+            }
             if effect.id().trim().is_empty() || !effect_ids.insert(effect.id().to_owned()) {
                 errors.push(Diagnostic::error(
                     "MVP-EFFECT-ID",
@@ -220,21 +320,60 @@ pub(super) fn validate(
             );
         }
     }
-    let maximum_concurrent = maximum_concurrent_particles(&particle_intervals);
-    if maximum_concurrent.is_none() {
-        errors.push(Diagnostic::error(
-            "MVP-PARTICLE-COUNT",
-            Category::Semantic,
-            "aggregate particle live-count calculation overflowed",
-            "/visual/clips",
-        ));
-    } else if maximum_concurrent.is_some_and(|count| count > limits.maximum_total_live_particles) {
-        errors.push(Diagnostic::error(
-            "MVP-LIMIT-PARTICLES-TOTAL",
-            Category::Semantic,
-            "visual clips exceed the configured aggregate live-particle limit",
-            "/visual/clips",
-        ));
+}
+
+fn collect_particle_intervals(
+    clips: &[crate::project::Clip],
+    parent_interval: Option<(u128, u128)>,
+    maximum_keyframes_per_track: usize,
+    has_authored_audio: bool,
+    limits: crate::validation::ResourceLimits,
+    intervals: &mut Vec<(u128, u128, u64)>,
+) {
+    for clip in clips {
+        let interval = clip_interval(clip, parent_interval);
+        match &clip.source {
+            crate::project::VisualSource::ParticleSystem(system) => {
+                let mut ignored_diagnostics = Vec::new();
+                if let Some(count) = validate_particle_system(
+                    system,
+                    "",
+                    maximum_keyframes_per_track,
+                    has_authored_audio,
+                    limits,
+                    &mut ignored_diagnostics,
+                ) && let Some((start, end)) = interval
+                {
+                    intervals.push((start, end, count));
+                }
+            }
+            crate::project::VisualSource::Group(group) => collect_particle_intervals(
+                &group.clips,
+                interval,
+                maximum_keyframes_per_track,
+                has_authored_audio,
+                limits,
+                intervals,
+            ),
+            _ => {}
+        }
+    }
+}
+
+fn clip_interval(
+    clip: &crate::project::Clip,
+    parent_interval: Option<(u128, u128)>,
+) -> Option<(u128, u128)> {
+    let start = crate::timeline::seconds_to_nanos(clip.start)?;
+    let duration = crate::timeline::seconds_to_nanos(clip.duration)?;
+    let end = start.checked_add(duration)?;
+    match parent_interval {
+        Some((parent_start, parent_end)) => {
+            let absolute_start = parent_start.checked_add(start)?.max(parent_start);
+            let absolute_end = parent_start.checked_add(end)?.min(parent_end);
+            (absolute_start < absolute_end).then_some((absolute_start, absolute_end))
+        }
+        None => (start < end).then_some((start, end)),
     }
 }
 

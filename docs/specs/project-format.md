@@ -108,6 +108,14 @@ increment source coordinates directly. Brightness, contrast, saturation, and
 tint remain ordered in project data, but are combined into one affine RGB
 operation for each evaluated layer.
 
+## Groups (V1)
+
+A Group owns a recursive list of child clips. Child clip IDs are local to their
+containing composition, and Group nesting is limited to 32 levels. Group
+rendering is not implemented yet, so compilation deliberately reports the
+explicit Group-unsupported diagnostic. Group transition endpoints are not
+supported; nested transitions, flashes, and post-effects are outside Group V1.
+
 Solid-colour clips and flashes cover the full output canvas. They support
 opacity and colour effects; transforms are intentionally not accepted for
 solid-colour sources. A flash with no fade-out keeps its configured opacity for

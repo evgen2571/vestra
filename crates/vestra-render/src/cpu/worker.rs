@@ -127,6 +127,7 @@ pub(super) fn run_worker(
 pub(super) struct CpuWorkerState {
     assets: PreparedAssets,
     effects: compositor::EffectSurfacePool,
+    compositions: compositor::CompositionSurfacePool,
     static_layers: ByteLruCache<usize, Arc<compositor::CachedCpuLayerSurface>>,
     static_layer_renders: u64,
     static_cache_population_renders: u64,
@@ -152,6 +153,7 @@ impl CpuWorkerState {
                 cache_budgets.crop_cache_budget_bytes,
             ),
             effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
+            compositions: compositor::CompositionSurfacePool::new(),
             static_layers: ByteLruCache::new(cache_budgets.static_cache_budget_bytes),
             static_layer_renders: 0,
             static_cache_population_renders: 0,
@@ -177,6 +179,7 @@ impl CpuWorkerState {
             &mut self.assets,
             &mut destination,
             &mut self.effects,
+            &mut self.compositions,
             &mut self.static_layers,
             &mut self.hot_path_timings,
             self.profiling_enabled,

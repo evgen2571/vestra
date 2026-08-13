@@ -107,9 +107,36 @@ pub(crate) fn draw_layer(
             colour_transform,
         ),
         EvaluatedSource::Group { .. } => {
-            unreachable!("CPU Group rendering is rejected by CpuBackend before rasterization")
+            unreachable!("Group sources are composed by the CPU compositor")
         }
     }
+}
+
+pub(crate) fn draw_surface(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    transform: crate::animation::Transform2D,
+    colour_transform: ColourTransform,
+) {
+    if !transform.is_valid() {
+        return;
+    }
+    let resolved = geometry::resolve_image_geometry(
+        source.width(),
+        source.height(),
+        crate::domain::Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        },
+        false,
+        &crate::plan::CompiledSizing::Original,
+        transform,
+        canvas.width(),
+        canvas.height(),
+    );
+    draw_resolved_image(canvas, source, &resolved, 1.0, colour_transform);
 }
 
 pub(super) fn raster_bounds(start: f64, end: f64, limit: u32) -> Option<(u32, u32)> {

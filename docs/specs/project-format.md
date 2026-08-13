@@ -117,10 +117,14 @@ animation use composition-local time while audio and other project-global
 signals retain root project time. Nested clips use the same preset application
 and compiler normalization path as root clips; active-layer limits apply
 independently to each composition. Motion-blur shutter samples preserve the
-corresponding root-project-time offset for global signals. CPU and WGPU Group
-rendering are not yet implemented and report backend-specific unsupported diagnostics. Group
-transition endpoints are not supported; nested transitions, flashes, and
-post-effects are outside Group V1.
+corresponding root-project-time offset for global signals. CPU Group rendering
+is supported: children compose into a transparent inherited-size intermediate
+surface, the Group transform applies to the completed composition, effects use
+ordinary layer effect semantics, and Group opacity and blend apply once at the
+parent level. Nested Groups are supported on CPU. WGPU Group rendering remains
+unsupported and reports a backend-specific diagnostic. Group transition
+endpoints are not supported; nested transitions, flashes, and post-effects are
+outside Group V1. Python Group authoring is not supported.
 Compilation metrics remain root-layer oriented until recursive metrics traversal
 is added.
 

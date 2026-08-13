@@ -6,7 +6,13 @@ from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainK
 from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEffect, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
-from .clips import ImageClip, SolidColorClip, Spectrum2DClip
+from .clips import ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
+from .particles import (
+    CircleEmitter, ColourLifetimeStop, ParticleAudioReactive, ParticleBlendMode,
+    ParticleBurst, ParticleLifetimeStyle, ParticlePrimitive, ParticleSystem, PointEmitter,
+    RectangleEmitter, ScalarLifetimeStop, ScalarRange,
+)
+from .particle_presets import ambient_stars, embers, radial_burst, snow, sparks
 from .spectrum2d import (
     Spectrum2DPreset, Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DRadialLayout,
 )
@@ -76,6 +82,10 @@ __all__ = [
     "Interpolation",
     "ImageAsset",
     "ImageClip",
+    "ParticleSystemClip", "ParticleSystem", "PointEmitter", "RectangleEmitter", "CircleEmitter",
+    "ParticleBurst", "ScalarRange", "ParticlePrimitive", "ParticleBlendMode",
+    "ParticleLifetimeStyle", "ScalarLifetimeStop", "ColourLifetimeStop", "ParticleAudioReactive",
+    "ambient_stars", "snow", "embers", "sparks", "radial_burst",
     "JsonValue",
     "Point",
     "PointKeyframe",

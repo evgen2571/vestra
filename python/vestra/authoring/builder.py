@@ -11,7 +11,7 @@ from vestra import Editor, FrameRate, Project, ValidationReport
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioTimeline
-from .clips import ImageClip, SolidColorClip, Spectrum2DClip
+from .clips import ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .flashes import FlashCollection
 from .spectrum2d import (
@@ -21,6 +21,8 @@ from .spectrum2d import (
 from .transitions import TransitionCollection
 from .timeline import Timeline
 from .values import Color, Crop, DurationMode, Quality, Sizing, color_to_canonical
+from .particles import ParticleSystem
+from .tracks import ModulatableScalarTrack
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
@@ -113,7 +115,7 @@ class ProjectBuilder:
             self._duration_mode = DurationMode.EXPLICIT
             self._duration = _number(duration, "duration")
         self._assets: list[ImageAsset | AudioAsset] = []
-        self._clips: list[ImageClip | SolidColorClip | Spectrum2DClip] = []
+        self._clips: list[ImageClip | ParticleSystemClip | SolidColorClip | Spectrum2DClip] = []
         if not isinstance(output_audio, bool):
             raise TypeError("output_audio must be a boolean")
         self._output_audio = output_audio
@@ -246,7 +248,7 @@ class ProjectBuilder:
         return tuple(self._assets)
 
     @property
-    def clips(self) -> tuple[ImageClip | SolidColorClip | Spectrum2DClip, ...]:
+    def clips(self) -> tuple[ImageClip | ParticleSystemClip | SolidColorClip | Spectrum2DClip, ...]:
         """Visual clips in canonical creation order."""
         return tuple(self._clips)
 
@@ -345,6 +347,29 @@ class ProjectBuilder:
         clip._attach_effects(ClipEffectCollection._create(self._owner, self._ids, clip))
         self._clips.append(clip)
         return clip
+
+    def scalar_property(self, value: int | float = 0.0) -> ModulatableScalarTrack:
+        """Create a reusable scalar property for audio-reactive authoring."""
+        return ModulatableScalarTrack._create(self._owner, value)
+
+    def add_particle_system_clip(
+        self, *, particle_system: ParticleSystem, start: int | float, duration: int | float,
+        layer: int, visible: bool = True, opacity: int | float = 1.0, id: str | None = None,
+    ) -> ParticleSystemClip:
+        """Create a clip from a canonical ParticleSystem authoring object."""
+        if particle_system.audio_reactive is not None:
+            for name in ("size", "opacity", "intensity"):
+                property_value = getattr(particle_system.audio_reactive, name)
+                if property_value is not None:
+                    _require_owner(self._owner, property_value._owner)
+        staged = ParticleSystemClip._create(self._owner, "", particle_system, start=start, duration=duration,
+                                            layer=layer, visible=visible, opacity=opacity)
+        if id is not None:
+            self._ids.validate("clip", id)
+        staged._id = self._ids.allocate("clip", "particle_system") if id is None else self._ids.reserve("clip", id)
+        staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        self._clips.append(staged)
+        return staged
 
     @overload
     def add_spectrum2d_clip(

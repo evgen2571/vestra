@@ -1,0 +1,7 @@
+{
+  "schema_version": 2,
+  "output": {"path": "audio-particles.mp4", "width": 64, "height": 64, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1.0},
+  "assets": [{"id": "tone", "type": "audio", "source": "../assets/tone.wav"}],
+  "audio": {"tracks": [{"id": "music", "gain": 1.0, "clips": [{"id": "music-clip", "asset": "tone", "start": 0.0, "trim_start": 0.0, "trim_end": 1.0, "gain": 1.0}]}]},
+  "visual": {"clips": [{"id": "particles", "source": {"type": "particle_system", "seed": 19, "emitter": {"type": "circle", "center": {"x": 0.5, "y": 0.5}, "inner_radius": 0.0, "outer_radius": 0.0}, "emission": {"rate": 10.0}, "particle": {"lifetime": 1.0, "size": 0.015, "colour": "#9fe8ff", "audio_reactive": {"size": {"base_value": 1.0, "modifiers": [{"operation": "multiply", "signal": {"source": {"type": "audio", "tap": "master", "feature": {"type": "rms"}}}}]}}}}, "start": 0.0, "duration": 1.0, "layer": 1, "visible": true, "opacity": {"base_value": 1.0}, "effects": []}], "transitions": [], "flashes": [], "post_effects": []}
+}

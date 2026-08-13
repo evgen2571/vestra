@@ -25,10 +25,10 @@ mod metrics;
 mod optimization;
 mod output;
 mod particles {
-    pub(super) use crate::plan::particles::compile;
+    pub(super) use crate::plan::particles::compile_with_signals;
 }
 mod presets;
-mod signals;
+pub(crate) mod signals;
 mod transitions;
 
 /// Transitional facade for compiler submodules while time conversion is owned

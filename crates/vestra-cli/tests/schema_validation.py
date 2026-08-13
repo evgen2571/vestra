@@ -120,6 +120,26 @@ expanded_particle["visual"]["clips"][0]["source"].update({
     },
 })
 assert not errors(expanded_particle), "expanded particle fields must validate"
+styled_particle = copy.deepcopy(particle)
+styled_particle["visual"]["clips"][0]["source"]["particle"].update({
+    "lifetime_style": {
+        "size": [{"t": 0.0, "value": 0.0}, {"t": 1.0, "value": 1.0}],
+        "opacity": [{"t": 0.0, "value": 1.0}, {"t": 1.0, "value": 0.0}],
+        "colour": [{"t": 0.0, "colour": "#ffffff"}, {"t": 1.0, "colour": "#ff0000"}],
+    },
+    "audio_reactive": {
+        "size": {
+            "base_value": 1.0,
+            "modifiers": [{"operation": "multiply", "signal": {
+                "source": {"type": "audio", "tap": "master", "feature": {"type": "rms"}}
+            }}],
+        },
+    },
+})
+assert not errors(styled_particle), "particle lifetime and audio appearance styling must validate"
+invalid_lifetime_stop = copy.deepcopy(styled_particle)
+invalid_lifetime_stop["visual"]["clips"][0]["source"]["particle"]["lifetime_style"]["size"][0]["t"] = 2
+assert errors(invalid_lifetime_stop), "out-of-range particle lifetime stop must not validate"
 rectangle_particle = copy.deepcopy(expanded_particle)
 rectangle_particle["visual"]["clips"][0]["source"]["emitter"] = {
     "type": "rectangle", "center": {"x": 0.5, "y": 0.5},

@@ -14,7 +14,7 @@ use crate::{
 
 use super::{time, tracks};
 
-pub(super) fn compile_property(
+pub(crate) fn compile_property(
     property: &project::ScalarProperty,
     id: &str,
     constraint: ScalarPropertyConstraint,

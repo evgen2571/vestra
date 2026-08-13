@@ -35,7 +35,7 @@ impl ScalarPropertyConstraint {
 }
 
 /// A scalar in its authored/public unit, evaluated with separate local and project times.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CompiledScalarProperty {
     pub authored_track: Track<f64>,
     pub modifiers: Vec<CompiledScalarModifier>,
@@ -78,6 +78,8 @@ impl CompiledScalarProperty {
         project_time: u128,
         context: &EvaluationContext<'_>,
     ) -> Result<f64, EvaluationError> {
+        #[cfg(test)]
+        context.record_property_evaluation();
         let mut value = self.authored_track.evaluate(authored_time);
         if self.modifiers.is_empty() {
             return self.constraint.apply(value);

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::optional_non_null;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[serde(bound(deserialize = "T: Deserialize<'de>", serialize = "T: Serialize"))]
 pub struct Track<T> {
@@ -21,7 +21,7 @@ impl<T> Track<T> {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Keyframe<T> {
     pub time: f64,
@@ -30,7 +30,7 @@ pub struct Keyframe<T> {
 }
 
 /// A half-open local interval for a transient clip feature.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ActiveInterval {
     #[serde(default)]
@@ -48,7 +48,7 @@ impl Default for ActiveInterval {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum Interpolation {
     Named(InterpolationName),
@@ -81,7 +81,7 @@ impl Interpolation {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InterpolationName {
     Linear,
@@ -91,7 +91,7 @@ pub enum InterpolationName {
     EaseInOut,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CubicBezier {
     #[serde(rename = "type")]
@@ -102,7 +102,7 @@ pub struct CubicBezier {
     pub y2: f64,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum CubicBezierKind {
     CubicBezier,

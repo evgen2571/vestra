@@ -59,13 +59,17 @@ pub(super) fn validate(
                 has_authored_audio,
             ),
             crate::project::VisualSource::ParticleSystem(system) => {
-                if let Some(count) =
-                    validate_particle_system(system, &format!("{path}/source"), limits, errors)
-                    && let (Some(start), Some(duration)) = (
-                        crate::timeline::seconds_to_nanos(clip.start),
-                        crate::timeline::seconds_to_nanos(clip.duration),
-                    )
-                    && let Some(end) = start.checked_add(duration)
+                if let Some(count) = validate_particle_system(
+                    system,
+                    &format!("{path}/source"),
+                    maximum_keyframes_per_track,
+                    has_authored_audio,
+                    limits,
+                    errors,
+                ) && let (Some(start), Some(duration)) = (
+                    crate::timeline::seconds_to_nanos(clip.start),
+                    crate::timeline::seconds_to_nanos(clip.duration),
+                ) && let Some(end) = start.checked_add(duration)
                 {
                     particle_intervals.push((start, end, count));
                 }
@@ -432,6 +436,8 @@ fn validate_spectrum2d(
 fn validate_particle_system(
     system: &crate::project::ParticleSystem,
     path: &str,
+    maximum_keyframes_per_track: usize,
+    has_authored_audio: bool,
     limits: crate::validation::ResourceLimits,
     errors: &mut Vec<crate::Diagnostic>,
 ) -> Option<u64> {
@@ -630,6 +636,51 @@ fn validate_particle_system(
             format!("{path}/particle/colour"),
         ));
     }
+    if let Some(style) = &system.particle.lifetime_style {
+        validate_lifetime_scalar_curve(&style.size, "size", path, errors, |value| value >= 0.0);
+        validate_lifetime_scalar_curve(&style.opacity, "opacity", path, errors, |value| {
+            (0.0..=1.0).contains(&value)
+        });
+        let mut previous = -1.0;
+        for (index, stop) in style.colour.iter().enumerate() {
+            if !stop.t.is_finite() || !(0.0..=1.0).contains(&stop.t) || stop.t <= previous {
+                errors.push(Diagnostic::error(
+                    "MVP-PARTICLE-LIFETIME-CURVE",
+                    Category::Semantic,
+                    "colour lifetime stop positions must be finite, ordered, and in 0..=1",
+                    format!("{path}/particle/lifetime_style/colour/{index}/t"),
+                ));
+            }
+            if crate::project::parse_colour(&stop.colour).is_none() {
+                errors.push(Diagnostic::error(
+                    "MVP-PARTICLE-LIFETIME-CURVE",
+                    Category::Semantic,
+                    "colour lifetime stop colour is invalid",
+                    format!("{path}/particle/lifetime_style/colour/{index}/colour"),
+                ));
+            }
+            previous = stop.t;
+        }
+    }
+    if let Some(audio) = &system.particle.audio_reactive {
+        for (field, property) in [
+            ("size", &audio.size),
+            ("opacity", &audio.opacity),
+            ("intensity", &audio.intensity),
+        ] {
+            if let Some(property) = property {
+                super::tracks::validate_scalar_property(
+                    property,
+                    f64::MAX,
+                    &format!("{path}/particle/audio_reactive/{field}"),
+                    maximum_keyframes_per_track,
+                    errors,
+                    |value| value.is_finite() && *value >= 0.0,
+                    has_authored_audio,
+                );
+            }
+        }
+    }
     let mut bursts = Vec::with_capacity(system.emission.bursts.len());
     let mut previous_time = None;
     for (index, burst) in system.emission.bursts.iter().enumerate() {
@@ -716,6 +767,32 @@ fn validate_particle_system(
         ));
     }
     live_count
+}
+
+fn validate_lifetime_scalar_curve(
+    stops: &[crate::project::ScalarLifetimeStop],
+    name: &str,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+    valid_value: impl Fn(f64) -> bool,
+) {
+    let mut previous = -1.0;
+    for (index, stop) in stops.iter().enumerate() {
+        if !stop.t.is_finite()
+            || !(0.0..=1.0).contains(&stop.t)
+            || stop.t <= previous
+            || !stop.value.is_finite()
+            || !valid_value(stop.value)
+        {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-LIFETIME-CURVE",
+                Category::Semantic,
+                "lifetime curve stops must have ordered positions in 0..=1 and valid values",
+                format!("{path}/particle/lifetime_style/{name}/{index}"),
+            ));
+        }
+        previous = stop.t;
+    }
 }
 
 fn valid_range(range: crate::project::ScalarRange) -> bool {

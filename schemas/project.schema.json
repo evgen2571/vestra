@@ -1696,6 +1696,21 @@
       ],
       "type": "object"
     },
+    "particle_audio_reactive": {
+      "additionalProperties": false,
+      "properties": {
+        "intensity": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "opacity": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "size": {
+          "$ref": "#/$defs/scalar_property"
+        }
+      },
+      "type": "object"
+    },
     "particle_burst": {
       "additionalProperties": false,
       "properties": {
@@ -1714,6 +1729,24 @@
       ],
       "type": "object"
     },
+    "particle_colour_lifetime_stop": {
+      "additionalProperties": false,
+      "properties": {
+        "colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "t": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "t",
+        "colour"
+      ],
+      "type": "object"
+    },
     "particle_definition": {
       "additionalProperties": false,
       "properties": {
@@ -1725,6 +1758,9 @@
         },
         "angular_velocity_range": {
           "$ref": "#/$defs/scalar_range"
+        },
+        "audio_reactive": {
+          "$ref": "#/$defs/particle_audio_reactive"
         },
         "blend_mode": {
           "default": "normal",
@@ -1757,6 +1793,9 @@
         },
         "lifetime_range": {
           "$ref": "#/$defs/scalar_range"
+        },
+        "lifetime_style": {
+          "$ref": "#/$defs/particle_lifetime_style"
         },
         "opacity": {
           "default": 1.0,
@@ -1861,6 +1900,48 @@
           "type": "object"
         }
       ]
+    },
+    "particle_lifetime_style": {
+      "additionalProperties": false,
+      "properties": {
+        "colour": {
+          "items": {
+            "$ref": "#/$defs/particle_colour_lifetime_stop"
+          },
+          "type": "array"
+        },
+        "opacity": {
+          "items": {
+            "$ref": "#/$defs/particle_scalar_lifetime_stop"
+          },
+          "type": "array"
+        },
+        "size": {
+          "items": {
+            "$ref": "#/$defs/particle_scalar_lifetime_stop"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "particle_scalar_lifetime_stop": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "t",
+        "value"
+      ],
+      "type": "object"
     },
     "particle_system": {
       "additionalProperties": false,

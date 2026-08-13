@@ -7,7 +7,10 @@
 
 use crate::{
     Category, Diagnostic, deterministic,
-    project::{ParticleEmitter, ParticleSystem, ScalarRange},
+    plan::{CompiledScalarProperty, EvaluationContext, EvaluationError, ScalarSignalInterner},
+    project::{
+        ColourLifetimeStop, ParticleEmitter, ParticleSystem, ScalarLifetimeStop, ScalarRange,
+    },
     timeline::{self, NANOS_PER_SECOND},
 };
 
@@ -84,6 +87,54 @@ pub struct CompiledParticleSystem {
     pub blend_mode: crate::project::ParticleBlendMode,
     pub bursts: Vec<CompiledParticleBurst>,
     pub maximum_live_particles: u64,
+    pub lifetime_size: Option<CompiledScalarLifetimeCurve>,
+    pub lifetime_opacity: Option<CompiledScalarLifetimeCurve>,
+    pub lifetime_colour: Option<CompiledColourLifetimeCurve>,
+    pub audio_size: Option<CompiledScalarProperty>,
+    pub audio_opacity: Option<CompiledScalarProperty>,
+    pub audio_intensity: Option<CompiledScalarProperty>,
+}
+
+/// Immutable linear stops over normalized particle age. Stop positions are
+/// strictly increasing in `[0, 1]`; values before/after the list hold the
+/// first/last stop.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompiledScalarLifetimeCurve {
+    pub stops: Vec<ScalarLifetimeStop>,
+}
+
+/// Immutable RGBA stops. RGB is used as a multiplicative tint and alpha is
+/// preserved from the initialized particle colour.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompiledColourLifetimeCurve {
+    pub stops: Vec<CompiledColourLifetimeStop>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CompiledColourLifetimeStop {
+    pub t: f64,
+    pub colour: [u8; 4],
+}
+
+impl CompiledScalarLifetimeCurve {
+    fn evaluate(&self, t: f64) -> f64 {
+        evaluate_stops(&self.stops, t)
+    }
+}
+
+impl CompiledColourLifetimeCurve {
+    fn evaluate(&self, t: f64) -> [u8; 4] {
+        let (left, right, fraction) = surrounding_stops(&self.stops, t);
+        if left.t == right.t {
+            return left.colour;
+        }
+        std::array::from_fn(|index| {
+            (f64::from(left.colour[index])
+                + (f64::from(right.colour[index]) - f64::from(left.colour[index])) * fraction)
+                .round()
+                .clamp(0.0, 255.0) as u8
+        })
+    }
 }
 
 impl CompiledParticleSystem {
@@ -135,6 +186,67 @@ impl CompiledParticleSystem {
     #[must_use]
     pub fn iter_alive(&self, time_nanos: u128) -> ParticleIterator<'_> {
         self.evaluated_particles_at(time_nanos)
+    }
+
+    /// Resolves frame-global audio appearance once for this system.
+    ///
+    /// `time_nanos` is the system-local authored animation time and
+    /// `project_time_nanos` is the absolute audio-signal time. Lifetime curves
+    /// remain per-particle and are applied by the lazy styled iterator.
+    pub fn evaluate_appearance_at(
+        &self,
+        time_nanos: u128,
+        project_time_nanos: u128,
+        context: &EvaluationContext<'_>,
+    ) -> Result<EvaluatedParticleAppearance, EvaluationError> {
+        let audio_size_multiplier = self.audio_size.as_ref().map_or(Ok(1.0), |property| {
+            property.evaluate(time_nanos, project_time_nanos, context)
+        })?;
+        let audio_opacity_multiplier = self.audio_opacity.as_ref().map_or(Ok(1.0), |property| {
+            property.evaluate(time_nanos, project_time_nanos, context)
+        })?;
+        let audio_intensity_multiplier =
+            self.audio_intensity.as_ref().map_or(Ok(1.0), |property| {
+                property.evaluate(time_nanos, project_time_nanos, context)
+            })?;
+        if !audio_size_multiplier.is_finite()
+            || !audio_opacity_multiplier.is_finite()
+            || !audio_intensity_multiplier.is_finite()
+        {
+            return Err(EvaluationError::NonFiniteScalarProperty);
+        }
+        Ok(EvaluatedParticleAppearance {
+            audio_size_multiplier,
+            audio_opacity_multiplier,
+            audio_intensity_multiplier,
+        })
+    }
+
+    /// Lazily applies lifetime curves and already-resolved frame appearance.
+    #[must_use]
+    pub fn evaluated_particles_at_with_appearance(
+        &self,
+        time_nanos: u128,
+        appearance: EvaluatedParticleAppearance,
+    ) -> StyledParticleIterator<'_> {
+        StyledParticleIterator {
+            particles: self.evaluated_particles_at(time_nanos),
+            appearance,
+        }
+    }
+
+    /// Materializes styled particles for explicit callers that need ownership.
+    /// Frame evaluation and CPU rendering use the lazy iterator above.
+    pub fn evaluate_particles_at(
+        &self,
+        time_nanos: u128,
+        project_time_nanos: u128,
+        context: &EvaluationContext<'_>,
+    ) -> Result<Vec<EvaluatedParticleInstance>, EvaluationError> {
+        let appearance = self.evaluate_appearance_at(time_nanos, project_time_nanos, context)?;
+        Ok(self
+            .evaluated_particles_at_with_appearance(time_nanos, appearance)
+            .collect())
     }
 
     fn burst_range(&self, time_nanos: u128) -> std::ops::Range<usize> {
@@ -270,6 +382,23 @@ pub struct EvaluatedParticleInstance {
     pub rotation_degrees: f64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EvaluatedParticleAppearance {
+    pub audio_size_multiplier: f64,
+    pub audio_opacity_multiplier: f64,
+    pub audio_intensity_multiplier: f64,
+}
+
+impl Default for EvaluatedParticleAppearance {
+    fn default() -> Self {
+        Self {
+            audio_size_multiplier: 1.0,
+            audio_opacity_multiplier: 1.0,
+            audio_intensity_multiplier: 1.0,
+        }
+    }
+}
+
 /// Compatibility alias for the renderer-independent evaluated state.
 pub type ParticleInstance = EvaluatedParticleInstance;
 
@@ -280,6 +409,47 @@ pub struct ParticleIterator<'a> {
     burst_index: usize,
     burst_end: usize,
     burst_particle: u64,
+}
+
+pub struct StyledParticleIterator<'a> {
+    particles: ParticleIterator<'a>,
+    appearance: EvaluatedParticleAppearance,
+}
+
+impl Iterator for StyledParticleIterator<'_> {
+    type Item = EvaluatedParticleInstance;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let mut particle = self.particles.next()?;
+            let size_multiplier = self
+                .particles
+                .system
+                .lifetime_size
+                .as_ref()
+                .map_or(1.0, |curve| curve.evaluate(particle.normalized_lifetime));
+            let opacity_multiplier = self
+                .particles
+                .system
+                .lifetime_opacity
+                .as_ref()
+                .map_or(1.0, |curve| curve.evaluate(particle.normalized_lifetime));
+            particle.size *= size_multiplier * self.appearance.audio_size_multiplier;
+            particle.opacity *= opacity_multiplier * self.appearance.audio_opacity_multiplier;
+            if let Some(curve) = &self.particles.system.lifetime_colour {
+                particle.colour = tint_colour(
+                    particle.colour,
+                    curve.evaluate(particle.normalized_lifetime),
+                );
+            }
+            particle.colour =
+                tint_colour_intensity(particle.colour, self.appearance.audio_intensity_multiplier);
+            if particle.size.is_finite() && particle.opacity.is_finite() {
+                particle.opacity = particle.opacity.clamp(0.0, 1.0);
+                return Some(particle);
+            }
+        }
+    }
 }
 
 impl Iterator for ParticleIterator<'_> {
@@ -324,9 +494,18 @@ impl Iterator for ParticleIterator<'_> {
     }
 }
 
+#[cfg(test)]
 pub(super) fn compile(
     system: &ParticleSystem,
-    parse_colour: impl FnOnce(&str) -> Option<[u8; 4]>,
+    parse_colour: impl Fn(&str) -> Option<[u8; 4]>,
+) -> Result<CompiledParticleSystem, Diagnostic> {
+    compile_with_signals(system, parse_colour, &mut ScalarSignalInterner::default())
+}
+
+pub(super) fn compile_with_signals(
+    system: &ParticleSystem,
+    parse_colour: impl Fn(&str) -> Option<[u8; 4]>,
+    scalar_signal_interner: &mut ScalarSignalInterner,
 ) -> Result<CompiledParticleSystem, Diagnostic> {
     let rate_units = normalize_rate(system.emission.rate)?;
     let lifetime_range = system.particle.lifetime_range.unwrap_or(ScalarRange {
@@ -431,7 +610,208 @@ pub(super) fn compile(
         blend_mode: system.particle.blend_mode,
         bursts,
         maximum_live_particles,
+        lifetime_size: compile_scalar_curve(
+            system
+                .particle
+                .lifetime_style
+                .as_ref()
+                .map(|style| &style.size),
+            "size",
+            |stop| (stop.t, stop.value),
+        )?,
+        lifetime_opacity: compile_scalar_curve(
+            system
+                .particle
+                .lifetime_style
+                .as_ref()
+                .map(|style| &style.opacity),
+            "opacity",
+            |stop| (stop.t, stop.value),
+        )?,
+        lifetime_colour: compile_colour_curve(
+            system
+                .particle
+                .lifetime_style
+                .as_ref()
+                .map(|style| &style.colour),
+            parse_colour,
+        )?,
+        audio_size: compile_audio_property(
+            system
+                .particle
+                .audio_reactive
+                .as_ref()
+                .and_then(|audio| audio.size.as_ref()),
+            scalar_signal_interner,
+            "size",
+        )?,
+        audio_opacity: compile_audio_property(
+            system
+                .particle
+                .audio_reactive
+                .as_ref()
+                .and_then(|audio| audio.opacity.as_ref()),
+            scalar_signal_interner,
+            "opacity",
+        )?,
+        audio_intensity: compile_audio_property(
+            system
+                .particle
+                .audio_reactive
+                .as_ref()
+                .and_then(|audio| audio.intensity.as_ref()),
+            scalar_signal_interner,
+            "intensity",
+        )?,
     })
+}
+
+fn compile_scalar_curve<T, F>(
+    stops: Option<&Vec<T>>,
+    name: &str,
+    get: F,
+) -> Result<Option<CompiledScalarLifetimeCurve>, Diagnostic>
+where
+    F: Fn(&T) -> (f64, f64),
+{
+    let Some(stops) = stops.filter(|stops| !stops.is_empty()) else {
+        return Ok(None);
+    };
+    let mut compiled = Vec::with_capacity(stops.len());
+    let mut previous = -1.0;
+    for stop in stops {
+        let (t, value) = get(stop);
+        if !t.is_finite() || !(0.0..=1.0).contains(&t) || t <= previous || !value.is_finite() {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                Category::Internal,
+                format!("invalid {name} lifetime curve stop"),
+                "",
+            ));
+        }
+        if name == "size" && value < 0.0 {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                Category::Internal,
+                "size lifetime multipliers must be non-negative",
+                "",
+            ));
+        }
+        if name == "opacity" && !(0.0..=1.0).contains(&value) {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                Category::Internal,
+                "opacity lifetime multipliers must be in 0..=1",
+                "",
+            ));
+        }
+        compiled.push(ScalarLifetimeStop { t, value });
+        previous = t;
+    }
+    Ok(Some(CompiledScalarLifetimeCurve { stops: compiled }))
+}
+
+fn compile_colour_curve(
+    stops: Option<&Vec<ColourLifetimeStop>>,
+    parse_colour: impl Fn(&str) -> Option<[u8; 4]>,
+) -> Result<Option<CompiledColourLifetimeCurve>, Diagnostic> {
+    let Some(stops) = stops.filter(|stops| !stops.is_empty()) else {
+        return Ok(None);
+    };
+    let mut previous = -1.0;
+    let mut compiled = Vec::with_capacity(stops.len());
+    for stop in stops {
+        if !stop.t.is_finite() || !(0.0..=1.0).contains(&stop.t) || stop.t <= previous {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                Category::Internal,
+                "invalid colour lifetime curve stop",
+                "",
+            ));
+        }
+        let colour = parse_colour(&stop.colour).ok_or_else(|| {
+            Diagnostic::error(
+                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                Category::Internal,
+                "invalid colour lifetime curve colour",
+                "",
+            )
+        })?;
+        compiled.push(CompiledColourLifetimeStop { t: stop.t, colour });
+        previous = stop.t;
+    }
+    Ok(Some(CompiledColourLifetimeCurve { stops: compiled }))
+}
+
+fn compile_audio_property(
+    property: Option<&crate::project::ScalarProperty>,
+    interner: &mut ScalarSignalInterner,
+    name: &str,
+) -> Result<Option<CompiledScalarProperty>, Diagnostic> {
+    property
+        .map(|property| {
+            super::compiler::signals::compile_property(
+                property,
+                &format!("particle audio {name}"),
+                crate::plan::ScalarPropertyConstraint::NonNegative,
+                interner,
+            )
+        })
+        .transpose()
+}
+
+fn surrounding_stops<T>(stops: &[T], t: f64) -> (&T, &T, f64)
+where
+    T: LifetimeStop,
+{
+    if t <= stops[0].t() {
+        return (&stops[0], &stops[0], 0.0);
+    }
+    let last = stops.len() - 1;
+    if t >= stops[last].t() {
+        return (&stops[last], &stops[last], 0.0);
+    }
+    let right = stops.partition_point(|stop| stop.t() < t);
+    let left = right - 1;
+    let fraction = (t - stops[left].t()) / (stops[right].t() - stops[left].t());
+    (&stops[left], &stops[right], fraction)
+}
+
+trait LifetimeStop {
+    fn t(&self) -> f64;
+}
+impl LifetimeStop for ScalarLifetimeStop {
+    fn t(&self) -> f64 {
+        self.t
+    }
+}
+impl LifetimeStop for CompiledColourLifetimeStop {
+    fn t(&self) -> f64 {
+        self.t
+    }
+}
+
+fn evaluate_stops(stops: &[ScalarLifetimeStop], t: f64) -> f64 {
+    let (left, right, fraction) = surrounding_stops(stops, t);
+    left.value + (right.value - left.value) * fraction
+}
+
+fn tint_colour(base: [u8; 4], tint: [u8; 4]) -> [u8; 4] {
+    [
+        ((u16::from(base[0]) * u16::from(tint[0]) + 127) / 255) as u8,
+        ((u16::from(base[1]) * u16::from(tint[1]) + 127) / 255) as u8,
+        ((u16::from(base[2]) * u16::from(tint[2]) + 127) / 255) as u8,
+        base[3],
+    ]
+}
+
+fn tint_colour_intensity(base: [u8; 4], intensity: f64) -> [u8; 4] {
+    [
+        (f64::from(base[0]) * intensity).round().clamp(0.0, 255.0) as u8,
+        (f64::from(base[1]) * intensity).round().clamp(0.0, 255.0) as u8,
+        (f64::from(base[2]) * intensity).round().clamp(0.0, 255.0) as u8,
+        base[3],
+    ]
 }
 
 fn maximum_overlapping_burst_count(
@@ -480,7 +860,13 @@ mod tests {
     use super::*;
     use crate::{
         domain::Point,
-        project::{ParticleBurst, ParticleDefinition, ParticleEmission, ParticleSystem},
+        plan::{PreparedScalarSignal, PreparedScalarSignals},
+        project::{
+            AudioAnalysisTap, AudioScalarFeature, ColourLifetimeStop, Interpolation,
+            InterpolationName, Keyframe, ParticleBurst, ParticleDefinition, ParticleEmission,
+            ParticleLifetimeStyle, ParticleSystem, ScalarLifetimeStop, ScalarModifier,
+            ScalarModifierOperation, ScalarProperty, ScalarSignal, ScalarSignalSource, Track,
+        },
     };
 
     fn system(rate: f64, lifetime: f64) -> CompiledParticleSystem {
@@ -499,6 +885,113 @@ mod tests {
             crate::project::parse_colour,
         )
         .expect("particle system")
+    }
+
+    #[test]
+    fn audio_appearance_uses_system_local_authored_time() {
+        let particles = compile(
+            &ParticleSystem {
+                emission: ParticleEmission {
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 1,
+                    }],
+                    ..Default::default()
+                },
+                particle: ParticleDefinition {
+                    audio_reactive: Some(Box::new(crate::project::ParticleAudioReactive {
+                        size: Some(ScalarProperty {
+                            track: Track {
+                                base_value: 1.0,
+                                keyframes: vec![
+                                    Keyframe {
+                                        time: 0.0,
+                                        value: 1.0,
+                                        interpolation: Interpolation::Named(
+                                            InterpolationName::Linear,
+                                        ),
+                                    },
+                                    Keyframe {
+                                        time: 2.0,
+                                        value: 3.0,
+                                        interpolation: Interpolation::Named(
+                                            InterpolationName::Linear,
+                                        ),
+                                    },
+                                ],
+                            },
+                            modifiers: vec![],
+                        }),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let signals = PreparedScalarSignals::empty();
+        let context = EvaluationContext::new(&signals);
+        assert_eq!(
+            particles
+                .evaluate_appearance_at(0, 9_000_000_000, &context)
+                .unwrap()
+                .audio_size_multiplier,
+            1.0
+        );
+        assert_eq!(
+            particles
+                .evaluate_appearance_at(1_000_000_000, 9_000_000_000, &context)
+                .unwrap()
+                .audio_size_multiplier,
+            2.0
+        );
+        assert_eq!(
+            particles
+                .evaluate_appearance_at(2_000_000_000, 9_000_000_000, &context)
+                .unwrap()
+                .audio_size_multiplier,
+            3.0
+        );
+    }
+
+    #[test]
+    fn audio_appearance_is_evaluated_once_before_streaming_particles() {
+        let particles = compile(
+            &ParticleSystem {
+                emission: ParticleEmission {
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 5_000,
+                    }],
+                    ..Default::default()
+                },
+                particle: ParticleDefinition {
+                    audio_reactive: Some(Box::new(crate::project::ParticleAudioReactive {
+                        size: Some(ScalarProperty {
+                            track: Track::constant(2.0),
+                            modifiers: vec![],
+                        }),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let signals = PreparedScalarSignals::empty();
+        let context = EvaluationContext::new(&signals);
+        let appearance = particles
+            .evaluate_appearance_at(0, 0, &context)
+            .expect("appearance");
+        let streamed: Vec<_> = particles
+            .evaluated_particles_at_with_appearance(0, appearance)
+            .collect();
+        assert_eq!(streamed.len(), 5_000);
+        assert_eq!(context.property_evaluation_count(), 1);
     }
 
     #[test]
@@ -1367,5 +1860,183 @@ mod tests {
                 .evaluated_particles_at(2_000_000_000)
                 .all(|particle| (0.1..=0.3).contains(&particle.size))
         );
+    }
+
+    #[test]
+    fn lifetime_scalar_curve_interpolates_and_holds_endpoints() {
+        let particles = compile(
+            &ParticleSystem {
+                particle: ParticleDefinition {
+                    size: 2.0,
+                    lifetime_style: Some(Box::new(ParticleLifetimeStyle {
+                        size: vec![
+                            ScalarLifetimeStop { t: 0.0, value: 0.5 },
+                            ScalarLifetimeStop { t: 0.5, value: 1.0 },
+                            ScalarLifetimeStop { t: 1.0, value: 0.0 },
+                        ],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                emission: ParticleEmission {
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 1,
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let values: Vec<_> = [0, 250_000_000, 500_000_000, 999_999_999]
+            .into_iter()
+            .map(|time| {
+                particles
+                    .evaluate_particles_at(
+                        time,
+                        time,
+                        &EvaluationContext::new(&PreparedScalarSignals::empty()),
+                    )
+                    .unwrap()[0]
+                    .size
+            })
+            .collect();
+        assert_eq!(&values[..3], &[1.0, 1.5, 2.0]);
+        assert!(values[3] > 0.0 && values[3] < 0.00000001);
+    }
+
+    #[test]
+    fn lifetime_colour_curve_tints_base_colour_in_rgba_space() {
+        let particles = compile(
+            &ParticleSystem {
+                particle: ParticleDefinition {
+                    colour: "#ff0000".to_owned(),
+                    lifetime_style: Some(Box::new(ParticleLifetimeStyle {
+                        colour: vec![
+                            ColourLifetimeStop {
+                                t: 0.0,
+                                colour: "#ff0000".to_owned(),
+                            },
+                            ColourLifetimeStop {
+                                t: 1.0,
+                                colour: "#0000ff".to_owned(),
+                            },
+                        ],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                emission: ParticleEmission {
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 1,
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let particle = particles
+            .evaluate_particles_at(
+                500_000_000,
+                500_000_000,
+                &EvaluationContext::new(&PreparedScalarSignals::empty()),
+            )
+            .unwrap()
+            .remove(0);
+        assert_eq!(particle.colour, [128, 0, 0, 255]);
+    }
+
+    #[test]
+    fn invalid_lifetime_curve_order_is_rejected_at_compile() {
+        let result = compile(
+            &ParticleSystem {
+                particle: ParticleDefinition {
+                    lifetime_style: Some(Box::new(ParticleLifetimeStyle {
+                        size: vec![
+                            ScalarLifetimeStop { t: 0.5, value: 1.0 },
+                            ScalarLifetimeStop { t: 0.5, value: 0.0 },
+                        ],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        );
+        assert_eq!(result.unwrap_err().code, "MVP-PLAN-PARTICLE-LIFETIME-CURVE");
+    }
+
+    #[test]
+    fn audio_appearance_changes_only_resolved_size_and_opacity() {
+        let signal = ScalarSignal {
+            source: ScalarSignalSource::Audio {
+                tap: AudioAnalysisTap::Master,
+                feature: AudioScalarFeature::Rms,
+            },
+            transforms: Vec::new(),
+        };
+        let property = |base_value| ScalarProperty {
+            track: Track::constant(base_value),
+            modifiers: vec![ScalarModifier {
+                operation: ScalarModifierOperation::Multiply,
+                signal: signal.clone(),
+            }],
+        };
+        let mut interner = ScalarSignalInterner::default();
+        let particles = compile_with_signals(
+            &ParticleSystem {
+                particle: ParticleDefinition {
+                    size: 2.0,
+                    opacity: 0.8,
+                    audio_reactive: Some(Box::new(crate::project::ParticleAudioReactive {
+                        size: Some(property(1.0)),
+                        opacity: Some(property(1.0)),
+                        intensity: None,
+                    })),
+                    ..Default::default()
+                },
+                emission: ParticleEmission {
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 1,
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+            &mut interner,
+        )
+        .expect("particle system");
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(0, 1_000_000_000, vec![2.0]).unwrap(),
+        ]);
+        let context = EvaluationContext::new(&signals);
+        let resolved = particles.evaluate_particles_at(0, 0, &context).unwrap();
+        assert_eq!(resolved[0].size, 4.0);
+        assert_eq!(resolved[0].opacity, 1.0);
+        assert_eq!(
+            resolved[0].identity,
+            ParticleIdentity::Burst {
+                burst_index: 0,
+                particle_index: 0
+            }
+        );
+        let quiet_signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(0, 1_000_000_000, vec![0.5]).unwrap(),
+        ]);
+        let quiet = particles
+            .evaluate_particles_at(0, 0, &EvaluationContext::new(&quiet_signals))
+            .unwrap();
+        assert_eq!(quiet[0].identity, resolved[0].identity);
+        assert_eq!(quiet[0].spawn_time_nanos, resolved[0].spawn_time_nanos);
+        assert_eq!(quiet[0].lifetime_nanos, resolved[0].lifetime_nanos);
+        assert_eq!(quiet[0].position, resolved[0].position);
     }
 }

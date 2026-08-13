@@ -161,9 +161,10 @@ pub(super) fn compile(
         }
         VisualSource::ParticleSystem(system) => {
             compilation.parsed_colour_count += 1;
-            CompiledVisualSource::ParticleSystem(Arc::new(super::particles::compile(
+            CompiledVisualSource::ParticleSystem(Arc::new(super::particles::compile_with_signals(
                 system,
                 parse_colour,
+                scalar_signal_interner,
             )?))
         }
     };

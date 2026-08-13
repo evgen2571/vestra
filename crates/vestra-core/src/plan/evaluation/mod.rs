@@ -77,11 +77,12 @@ pub enum EvaluatedSource {
         )>,
         colour: [u8; 4],
     },
-    /// Compact immutable state. Renderers consume `system.evaluated_particles_at`
-    /// when particle drawing is implemented.
+    /// Compact renderer-independent particle state. Particle reconstruction
+    /// and lifetime styling remain lazy in the shared core iterator.
     ParticleSystem {
         system: std::sync::Arc<crate::plan::CompiledParticleSystem>,
         time_nanos: u128,
+        appearance: crate::plan::EvaluatedParticleAppearance,
     },
 }
 
@@ -182,10 +183,14 @@ pub fn evaluate_with_context(
                 gradient: *gradient,
                 colour: *colour,
             },
-            CompiledVisualSource::ParticleSystem(system) => EvaluatedSource::ParticleSystem {
-                system: std::sync::Arc::clone(system),
-                time_nanos: relative,
-            },
+            CompiledVisualSource::ParticleSystem(system) => {
+                let appearance = system.evaluate_appearance_at(relative, project_time, context)?;
+                EvaluatedSource::ParticleSystem {
+                    system: system.clone(),
+                    time_nanos: relative,
+                    appearance,
+                }
+            }
         };
         let mut effects = layer
             .effects

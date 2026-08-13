@@ -95,9 +95,17 @@ pub(crate) fn draw_layer(
             opacity,
             colour_transform,
         ),
-        EvaluatedSource::ParticleSystem { system, time_nanos } => {
-            particles::rasterize(canvas, system, *time_nanos, colour_transform)
-        }
+        EvaluatedSource::ParticleSystem {
+            system,
+            time_nanos,
+            appearance,
+        } => particles::rasterize_instances(
+            canvas,
+            system.evaluated_particles_at_with_appearance(*time_nanos, *appearance),
+            system.primitive,
+            system.blend_mode,
+            colour_transform,
+        ),
     }
 }
 

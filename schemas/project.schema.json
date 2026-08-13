@@ -1723,6 +1723,13 @@
         "angular_velocity_degrees": {
           "type": "number"
         },
+        "blend_mode": {
+          "default": "normal",
+          "enum": [
+            "normal",
+            "additive"
+          ]
+        },
         "colour": {
           "$ref": "#/$defs/colour",
           "default": "#ffffff"
@@ -1740,6 +1747,13 @@
           "maximum": 1,
           "minimum": 0,
           "type": "number"
+        },
+        "primitive": {
+          "default": "disc",
+          "enum": [
+            "disc",
+            "square"
+          ]
         },
         "rotation_degrees": {
           "type": "number"

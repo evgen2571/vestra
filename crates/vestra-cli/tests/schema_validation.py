@@ -99,6 +99,16 @@ particle["visual"]["clips"][0]["source"] = {
                   "colour": "#ffffff"},
 }
 assert not errors(particle), "ParticleSystem source must validate"
+particle_explicit = copy.deepcopy(particle)
+particle_explicit["visual"]["clips"][0]["source"]["particle"].update({
+    "primitive": "square",
+    "blend_mode": "additive",
+})
+assert not errors(particle_explicit), "explicit particle primitive and blend mode must validate"
+for field, invalid in [("primitive", "triangle"), ("blend_mode", "screen")]:
+    invalid_particle = copy.deepcopy(particle_explicit)
+    invalid_particle["visual"]["clips"][0]["source"]["particle"][field] = invalid
+    assert errors(invalid_particle), f"invalid particle {field} must not validate"
 particle_with_transform = copy.deepcopy(particle)
 particle_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert errors(particle_with_transform), "ParticleSystem transforms must remain unsupported"

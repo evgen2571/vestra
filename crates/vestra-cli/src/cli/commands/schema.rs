@@ -366,6 +366,17 @@ mod tests {
             particle["properties"]["particle"]["$ref"],
             "#/$defs/particle_definition"
         );
+        let definition = &schema["$defs"]["particle_definition"];
+        assert_eq!(definition["properties"]["primitive"]["default"], "disc");
+        assert_eq!(
+            definition["properties"]["primitive"]["enum"],
+            serde_json::json!(["disc", "square"])
+        );
+        assert_eq!(definition["properties"]["blend_mode"]["default"], "normal");
+        assert_eq!(
+            definition["properties"]["blend_mode"]["enum"],
+            serde_json::json!(["normal", "additive"])
+        );
     }
 
     fn branch_ids(schema: &Value, name: &str) -> BTreeSet<String> {

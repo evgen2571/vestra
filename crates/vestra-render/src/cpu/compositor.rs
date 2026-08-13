@@ -3,7 +3,8 @@ use std::{sync::Arc, time::Instant};
 use image::{Rgba, RgbaImage};
 
 use crate::plan::{
-    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, TemporalDependency,
+    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
+    TemporalDependency,
 };
 use crate::{
     blend::blend_surface,
@@ -45,7 +46,7 @@ use crate::cpu::effects::blur;
 #[cfg(test)]
 use crate::cpu::raster::{apply_colour_transform, draw_image, sample_bilinear, visible_bounds};
 #[cfg(test)]
-use crate::{animation::Transform2D, domain::Crop, plan::EvaluatedSource, render::geometry};
+use crate::{animation::Transform2D, domain::Crop, render::geometry};
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
 pub fn compose(
@@ -246,6 +247,7 @@ fn composite_cached_surface(
 
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
     matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+        && !matches!(layer.source, EvaluatedSource::ParticleSystem { .. })
         && layer
             .effects
             .iter()
@@ -482,6 +484,74 @@ mod tests {
         advanced.effects.clear();
         advanced.blend_mode = crate::project::BlendMode::Screen;
         assert!(!uses_direct_colour_path(&advanced));
+    }
+
+    #[test]
+    fn particle_sources_enter_the_effect_capable_compositor_path() {
+        let mut particle_layer = layer(1.0, crate::project::BlendMode::Normal);
+        particle_layer.content_dependency = TemporalDependency::Dynamic;
+        particle_layer.source = EvaluatedSource::ParticleSystem {
+            system: std::sync::Arc::new(crate::plan::CompiledParticleSystem {
+                seed: 0,
+                emitter: crate::project::ParticleEmitter::default(),
+                rate_units_per_second: 0,
+                lifetime_nanos: 1,
+                initial_velocity: crate::domain::Point { x: 0.0, y: 0.0 },
+                acceleration: crate::domain::Point { x: 0.0, y: 0.0 },
+                size: 0.1,
+                opacity: 1.0,
+                colour: [255, 0, 0, 255],
+                rotation_degrees: 0.0,
+                angular_velocity_degrees: 0.0,
+                primitive: crate::project::ParticlePrimitive::Disc,
+                blend_mode: crate::project::ParticleBlendMode::Normal,
+                bursts: Vec::new(),
+                maximum_live_particles: 0,
+            }),
+            time_nanos: 0,
+        };
+        particle_layer.effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
+        assert!(!uses_direct_colour_path(&particle_layer));
+    }
+
+    #[test]
+    fn particle_pixels_pass_through_the_cpu_effect_chain() {
+        let system = crate::plan::CompiledParticleSystem {
+            seed: 0,
+            emitter: crate::project::ParticleEmitter::default(),
+            rate_units_per_second: 0,
+            lifetime_nanos: 1_000_000_000,
+            initial_velocity: crate::domain::Point { x: 0.0, y: 0.0 },
+            acceleration: crate::domain::Point { x: 0.0, y: 0.0 },
+            size: 0.5,
+            opacity: 1.0,
+            colour: [100, 0, 0, 255],
+            rotation_degrees: 0.0,
+            angular_velocity_degrees: 0.0,
+            primitive: crate::project::ParticlePrimitive::Square,
+            blend_mode: crate::project::ParticleBlendMode::Normal,
+            bursts: vec![crate::plan::CompiledParticleBurst {
+                time_nanos: 0,
+                count: 1,
+            }],
+            maximum_live_particles: 1,
+        };
+        let mut surfaces = EffectSurfacePool::new(4, 4);
+        surfaces.clear();
+        crate::cpu::particles::rasterize(
+            surfaces.current(),
+            &system,
+            0,
+            ColourTransform::default(),
+        );
+        let before = surfaces.current().clone();
+        effects::apply_chain(
+            &mut surfaces,
+            &[EvaluatedEffect::Brightness { amount: 0.2 }],
+            &mut crate::render::metrics::CpuHotPathTimings::default(),
+            false,
+        );
+        assert_ne!(surfaces.current().get_pixel(2, 2), before.get_pixel(2, 2));
     }
 
     #[test]

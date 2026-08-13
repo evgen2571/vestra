@@ -134,6 +134,31 @@ pub struct ParticleDefinition {
     pub rotation_degrees: f64,
     #[serde(default)]
     pub angular_velocity_degrees: f64,
+    #[serde(default)]
+    pub primitive: ParticlePrimitive,
+    #[serde(default)]
+    pub blend_mode: ParticleBlendMode,
+}
+
+/// The geometric primitive used to rasterize each particle. `size` is the
+/// diameter for discs and the side length for squares, in normalized canvas
+/// units.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticlePrimitive {
+    #[default]
+    Disc,
+    Square,
+}
+
+/// How particles overlap inside their transparent source surface. This is
+/// independent of a clip's outer [`BlendMode`].
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticleBlendMode {
+    #[default]
+    Normal,
+    Additive,
 }
 
 impl Default for ParticleDefinition {
@@ -147,6 +172,8 @@ impl Default for ParticleDefinition {
             colour: default_spectrum2d_colour(),
             rotation_degrees: 0.0,
             angular_velocity_degrees: 0.0,
+            primitive: ParticlePrimitive::Disc,
+            blend_mode: ParticleBlendMode::Normal,
         }
     }
 }
@@ -447,6 +474,24 @@ mod particle_tests {
         assert_eq!(json["type"], "particle_system");
         let decoded = serde_json::from_value::<VisualSource>(json.clone()).expect("source JSON");
         assert_eq!(serde_json::to_value(decoded).expect("source JSON"), json);
+    }
+
+    #[test]
+    fn particle_appearance_fields_round_trip_and_default() {
+        let mut source = ParticleSystem::default();
+        source.particle.primitive = ParticlePrimitive::Square;
+        source.particle.blend_mode = ParticleBlendMode::Additive;
+        let json = serde_json::to_value(&source).expect("particle JSON");
+        assert_eq!(json["particle"]["primitive"], "square");
+        assert_eq!(json["particle"]["blend_mode"], "additive");
+        let decoded = serde_json::from_value::<ParticleSystem>(json).expect("particle JSON");
+        assert_eq!(decoded.particle.primitive, ParticlePrimitive::Square);
+        assert_eq!(decoded.particle.blend_mode, ParticleBlendMode::Additive);
+
+        let defaults = serde_json::from_value::<ParticleSystem>(serde_json::json!({}))
+            .expect("default particle JSON");
+        assert_eq!(defaults.particle.primitive, ParticlePrimitive::Disc);
+        assert_eq!(defaults.particle.blend_mode, ParticleBlendMode::Normal);
     }
 }
 

@@ -31,6 +31,12 @@ mod presets;
 pub(crate) mod signals;
 mod transitions;
 
+#[derive(Clone, Copy)]
+pub(super) struct ActiveLayerWindow {
+    pub(super) start_frame: u64,
+    pub(super) end_frame: u64,
+}
+
 /// Transitional facade for compiler submodules while time conversion is owned
 /// by `vestra-core`.
 mod time {
@@ -72,6 +78,7 @@ pub fn compile(
     let mut layers = Vec::new();
     let mut next_compiled_identity = 0;
     let mut scalar_signal_interner = ScalarSignalInterner::default();
+    let project_duration_nanos = to_nanos(validated.duration, "project")?;
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
         declared_clip_count: project.visual.clips.len(),
@@ -91,6 +98,7 @@ pub fn compile(
             &mut compilation,
             &mut scalar_signal_interner,
             &mut next_compiled_identity,
+            (0, project_duration_nanos),
         )?);
     }
     compilation.rendered_clip_count = layers
@@ -136,11 +144,8 @@ pub fn compile(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let mut post_effects = post_effects;
-    compilation.effect_count_before_normalization = layers
-        .iter()
-        .map(|layer| layer.effects.len())
-        .sum::<usize>()
-        + post_effects.len();
+    compilation.effect_count_before_normalization =
+        count_local_effects(&layers) + post_effects.len();
     finalize_composition_layers(
         &mut layers,
         &mut post_effects,
@@ -148,6 +153,10 @@ pub fn compile(
         validated.frame_count,
         &mut compilation,
         validated.limits.maximum_active_layers,
+        ActiveLayerWindow {
+            start_frame: 0,
+            end_frame: validated.frame_count,
+        },
     )?;
     let post_effect_dependency = post_effects
         .iter()
@@ -165,11 +174,8 @@ pub fn compile(
                 },
             )
         });
-    compilation.effect_count_after_normalization = layers
-        .iter()
-        .map(|layer| layer.effects.len())
-        .sum::<usize>()
-        + post_effects.len();
+    compilation.effect_count_after_normalization =
+        count_local_effects(&layers) + post_effects.len();
     metrics::record(&mut compilation, &layers, &post_effects);
     let audio_mix = audio::compile(&validated)?;
     let scalar_signals = scalar_signal_interner.finish();
@@ -215,6 +221,21 @@ pub fn compile(
     })
 }
 
+fn count_local_effects(layers: &[crate::plan::CompiledLayer]) -> usize {
+    layers
+        .iter()
+        .map(|layer| {
+            layer.effects.len()
+                + match &layer.source {
+                    crate::plan::CompiledVisualSource::Group(composition) => {
+                        count_local_effects(&composition.layers)
+                    }
+                    _ => 0,
+                }
+        })
+        .sum()
+}
+
 /// Applies compiler-owned semantics shared by the root and every nested
 /// composition. Root transitions are lowered before this is called; Group
 /// children have no containing-composition transitions yet.
@@ -226,7 +247,14 @@ pub(super) fn finalize_composition_layers(
     composition_end_frame: u64,
     compilation: &mut CompilationStats,
     maximum_active_layers: usize,
+    effective_window: ActiveLayerWindow,
 ) -> Result<(), Diagnostic> {
     optimization::normalize(layers, post_effects, composition_duration, compilation);
-    limits::enforce_active_layer_limit(layers, composition_end_frame, maximum_active_layers)
+    limits::enforce_active_layer_limit(
+        layers,
+        composition_end_frame,
+        maximum_active_layers,
+        effective_window.start_frame,
+        effective_window.end_frame,
+    )
 }

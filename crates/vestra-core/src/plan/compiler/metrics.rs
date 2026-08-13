@@ -12,6 +12,25 @@ pub(super) fn record(
     layers: &[CompiledLayer],
     post_effects: &[crate::plan::TimedEffect],
 ) {
+    record_layers(compilation, layers);
+    compilation.global_effect_count = post_effects.len();
+    compilation.keyframe_count += post_effects
+        .iter()
+        .map(|effect| effect.effect.keyframe_count())
+        .sum::<u64>();
+    compilation.advanced_effect_count += post_effects
+        .iter()
+        .filter(|effect| effect.effect.class() != EffectClass::BasicColour)
+        .count();
+    compilation.effect_pass_count += post_effects
+        .iter()
+        .map(|effect| effect.effect.estimated_pass_count())
+        .sum::<usize>();
+}
+
+/// Records totals for every compiled layer, including isolated Group
+/// compositions. `declared_clip_count` remains root-authored by design.
+fn record_layers(compilation: &mut CompilationStats, layers: &[CompiledLayer]) {
     for layer in layers {
         match layer.content_dependency {
             crate::plan::TemporalDependency::Static => compilation.static_layer_count += 1,
@@ -42,7 +61,9 @@ pub(super) fn record(
             CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
             CompiledVisualSource::Spectrum2D { .. } => compilation.spectrum2d_source_count += 1,
             CompiledVisualSource::ParticleSystem(_) => {}
-            CompiledVisualSource::Group(_) => {}
+            CompiledVisualSource::Group(composition) => {
+                record_layers(compilation, &composition.layers);
+            }
         }
         for effect in &layer.effects {
             compilation.keyframe_count += effect.effect.keyframe_count();
@@ -65,19 +86,6 @@ pub(super) fn record(
             }
         }
     }
-    compilation.global_effect_count = post_effects.len();
-    compilation.keyframe_count += post_effects
-        .iter()
-        .map(|effect| effect.effect.keyframe_count())
-        .sum::<u64>();
-    compilation.advanced_effect_count += post_effects
-        .iter()
-        .filter(|effect| effect.effect.class() != EffectClass::BasicColour)
-        .count();
-    compilation.effect_pass_count += post_effects
-        .iter()
-        .map(|effect| effect.effect.estimated_pass_count())
-        .sum::<usize>();
 }
 
 fn transform_contribution_keyframe_count(contribution: &TransformContribution) -> u64 {

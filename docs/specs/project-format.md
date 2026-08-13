@@ -121,12 +121,24 @@ corresponding root-project-time offset for global signals. CPU Group rendering
 is supported: children compose into a transparent inherited-size intermediate
 surface, the Group transform applies to the completed composition, effects use
 ordinary layer effect semantics, and Group opacity and blend apply once at the
-parent level. Nested Groups are supported on CPU. WGPU Group rendering remains
-unsupported and reports a backend-specific diagnostic. Group transition
-endpoints are not supported; nested transitions, flashes, and post-effects are
-outside Group V1. Python Group authoring is not supported.
-Compilation metrics remain root-layer oriented until recursive metrics traversal
-is added.
+parent level. Nested Groups are supported on CPU. A Group is classified static
+only when active descendants, their content, and the Group's own presentation
+are invariant throughout its effective visible interval; otherwise it is
+dynamic. Static Groups may use the CPU whole-layer cache at the same stage as
+other cached layers (after Group transform/effects and before parent opacity or
+blend). Cache keys are compiler-owned identities and cache lifetime is bounded
+by the renderer worker budget; active transitions bypass this static proof.
+Resource accounting clips nested activity to inherited ancestor/root visibility
+windows without rewriting authored timing. Compilation source, layer, effect,
+and keyframe totals include nested Groups; root-authored clip counts remain
+root-only.
+
+Existing root transitions accept Image and Group endpoints in any combination.
+Transition lookup remains root-only: a nested child ID cannot be used as a root
+endpoint. Internal Group transitions, flashes, and post-effects remain outside
+Group V1. WGPU Group rendering remains unsupported and reports a backend-specific
+diagnostic, including for Group transition projects. Python Group authoring is
+not supported.
 
 Solid-colour clips and flashes cover the full output canvas. They support
 opacity and colour effects; transforms are intentionally not accepted for

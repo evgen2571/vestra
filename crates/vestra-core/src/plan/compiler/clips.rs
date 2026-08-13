@@ -16,6 +16,13 @@ use crate::{
 
 use super::{assets, effects, output, time, tracks};
 
+#[derive(Clone, Copy)]
+struct GroupTiming {
+    duration: f64,
+    start_nanos: u128,
+    parent_visible_window: (u128, u128),
+}
+
 pub(super) fn compile(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
@@ -23,6 +30,7 @@ pub(super) fn compile(
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
+    effective_visible_window: (u128, u128),
 ) -> Result<CompiledLayer, Diagnostic> {
     let compiled_identity = *next_compiled_identity;
     *next_compiled_identity = (*next_compiled_identity).saturating_add(1);
@@ -172,7 +180,11 @@ pub(super) fn compile(
         }
         VisualSource::Group(group) => CompiledVisualSource::Group(Arc::new(compile_group(
             group,
-            clip.duration,
+            GroupTiming {
+                duration: clip.duration,
+                start_nanos,
+                parent_visible_window: effective_visible_window,
+            },
             validated,
             image_indices,
             compilation,
@@ -228,6 +240,7 @@ pub(super) fn compile_with_preset(
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
+    effective_visible_window: (u128, u128),
 ) -> Result<CompiledLayer, Diagnostic> {
     let mut layer = compile(
         clip,
@@ -236,6 +249,7 @@ pub(super) fn compile_with_preset(
         compilation,
         scalar_signal_interner,
         next_compiled_identity,
+        effective_visible_window,
     )?;
     if let Some(preset) = &clip.preset {
         super::presets::apply(&mut layer, preset, clip.duration, compilation)?;
@@ -245,13 +259,25 @@ pub(super) fn compile_with_preset(
 
 fn compile_group(
     group: &crate::project::Group,
-    duration: f64,
+    timing: GroupTiming,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
 ) -> Result<CompiledComposition, Diagnostic> {
+    let duration_nanos = time::to_nanos(timing.duration, "Group")?;
+    let visible_start = timing
+        .parent_visible_window
+        .0
+        .saturating_sub(timing.start_nanos)
+        .min(duration_nanos);
+    let visible_end = timing
+        .parent_visible_window
+        .1
+        .saturating_sub(timing.start_nanos)
+        .min(duration_nanos);
+    let effective_visible_window = (visible_start, visible_end.max(visible_start));
     let mut layers = Vec::new();
     for child in group.clips.iter().filter(|clip| clip.visible) {
         layers.push(compile_with_preset(
@@ -261,11 +287,15 @@ fn compile_group(
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
+            effective_visible_window,
         )?);
     }
-    let duration_nanos = time::to_nanos(duration, "Group")?;
     let composition_end_frame =
         time::first_frame_at_or_after(duration_nanos, validated.frame_rate)?;
+    let visible_start_frame =
+        time::first_frame_at_or_after(effective_visible_window.0, validated.frame_rate)?;
+    let visible_end_frame =
+        time::first_frame_at_or_after(effective_visible_window.1, validated.frame_rate)?;
     let mut post_effects = Vec::new();
     super::finalize_composition_layers(
         &mut layers,
@@ -274,17 +304,27 @@ fn compile_group(
         composition_end_frame,
         compilation,
         validated.limits.maximum_active_layers,
+        super::ActiveLayerWindow {
+            start_frame: visible_start_frame,
+            end_frame: visible_end_frame.min(composition_end_frame),
+        },
     )?;
-    // A non-empty Group remains conservatively dynamic until composition-level
-    // static caching is implemented. Child content dependencies are still
-    // normalized above and therefore remain accurate.
     let dependency = layers.iter().fold(
         crate::plan::TemporalDependency::Static,
         |dependency, layer| {
-            let activity_changes = layer.start_nanos != 0
-                || layer.start_nanos.saturating_add(layer.duration_nanos) < duration_nanos;
+            let child_start = layer.start_nanos;
+            let child_end = child_start.saturating_add(layer.duration_nanos);
+            let effective_start = child_start.max(effective_visible_window.0);
+            let effective_end = child_end.min(effective_visible_window.1);
+            let activity_changes = effective_start < effective_end
+                && (effective_start > effective_visible_window.0
+                    || effective_end < effective_visible_window.1);
             dependency
-                .combine(layer.content_dependency)
+                .combine(if effective_start < effective_end {
+                    layer.content_dependency
+                } else {
+                    crate::plan::TemporalDependency::Static
+                })
                 .combine(if activity_changes {
                     crate::plan::TemporalDependency::Dynamic
                 } else {
@@ -292,11 +332,6 @@ fn compile_group(
                 })
         },
     );
-    let dependency = if layers.is_empty() {
-        dependency
-    } else {
-        crate::plan::TemporalDependency::Dynamic
-    };
     let schedule = crate::plan::ActiveSchedule::compile_layers(&layers);
     Ok(CompiledComposition {
         layers,

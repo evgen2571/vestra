@@ -106,6 +106,9 @@ pub(crate) fn draw_layer(
             system.blend_mode,
             colour_transform,
         ),
+        EvaluatedSource::Group { .. } => {
+            unreachable!("CPU Group rendering is rejected by CpuBackend before rasterization")
+        }
     }
 }
 

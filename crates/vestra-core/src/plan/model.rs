@@ -95,6 +95,8 @@ pub struct ImageAsset {
 /// become tracks and normal sources by the time this type exists.
 #[derive(Clone, Debug)]
 pub struct CompiledLayer {
+    /// Compiler-owned identity, unique and deterministic within one plan.
+    pub compiled_identity: usize,
     pub id: String,
     pub start_nanos: u128,
     pub duration_nanos: u128,
@@ -115,6 +117,16 @@ pub struct CompiledLayer {
     /// Whether this layer's rendered content can vary while it is active.
     /// Timeline activity itself is deliberately not part of this classification.
     pub content_dependency: TemporalDependency,
+}
+
+/// Backend-independent compiled children of a Group. The schedule and
+/// dependency belong to the composition so descendants never enter the
+/// containing composition's root layer list.
+#[derive(Clone, Debug)]
+pub struct CompiledComposition {
+    pub layers: Vec<CompiledLayer>,
+    pub schedule: crate::plan::ActiveSchedule,
+    pub dependency: TemporalDependency,
 }
 
 /// Backend-neutral time dependency of compiled visual work.
@@ -183,6 +195,7 @@ pub enum CompiledVisualSource {
         colour: [u8; 4],
     },
     ParticleSystem(Arc<crate::plan::CompiledParticleSystem>),
+    Group(Arc<CompiledComposition>),
 }
 
 #[derive(Clone, Debug)]

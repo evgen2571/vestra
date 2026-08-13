@@ -376,6 +376,18 @@ impl RenderBackend for WgpuBackend {
                 "",
             ));
         }
+        if evaluated
+            .layers
+            .iter()
+            .any(|layer| matches!(&layer.source, crate::plan::EvaluatedSource::Group { .. }))
+        {
+            return Err(Diagnostic::error(
+                "WGPU-GROUP-UNSUPPORTED",
+                crate::Category::Backend,
+                "WGPU Group rendering is not implemented",
+                "",
+            ));
+        }
         let token = self.readback.acquire(frame_number)?;
         let slot = &mut self.slots[token.slot_index];
         if slot.uses > 0 {

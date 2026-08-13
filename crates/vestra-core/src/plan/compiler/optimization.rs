@@ -249,6 +249,8 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
             crate::plan::CompiledVisualSource::Spectrum2D { .. }
                 | crate::plan::CompiledVisualSource::ParticleSystem(_)
         ),
+        matches!(&layer.source, crate::plan::CompiledVisualSource::Group(composition)
+            if composition.dependency == TemporalDependency::Dynamic),
         layer.opacity.has_modifiers() || !static_track(&layer.opacity.authored_track),
         layer
             .opacity_contributions
@@ -572,6 +574,7 @@ mod tests {
     #[test]
     fn layer_dependency_includes_transform_and_effect_work() {
         let mut layer = CompiledLayer {
+            compiled_identity: 0,
             id: "test".into(),
             start_nanos: 0,
             duration_nanos: 10,
@@ -605,6 +608,7 @@ mod tests {
     #[test]
     fn transform_contribution_dependency_includes_half_open_activity_interval() {
         let mut layer = CompiledLayer {
+            compiled_identity: 0,
             id: "test".into(),
             start_nanos: 0,
             duration_nanos: 10,
@@ -693,6 +697,7 @@ mod tests {
     #[test]
     fn static_normal_blend_colour_chain_fuses_once_and_keeps_boundaries() {
         let mut layer = CompiledLayer {
+            compiled_identity: 0,
             id: "test".into(),
             start_nanos: 0,
             duration_nanos: 10,
@@ -755,6 +760,7 @@ mod tests {
     #[test]
     fn modulated_brightness_prevents_static_colour_fusion() {
         let mut layer = CompiledLayer {
+            compiled_identity: 0,
             id: "test".into(),
             start_nanos: 0,
             duration_nanos: 10,

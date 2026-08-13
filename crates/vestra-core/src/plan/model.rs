@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::plan::{
     AudioAnalysisRequirements, CompiledScalarModifier, CompiledScalarProperty,
@@ -182,7 +182,7 @@ pub enum CompiledVisualSource {
         )>,
         colour: [u8; 4],
     },
-    ParticleSystem(crate::plan::CompiledParticleSystem),
+    ParticleSystem(Arc<crate::plan::CompiledParticleSystem>),
 }
 
 #[derive(Clone, Debug)]

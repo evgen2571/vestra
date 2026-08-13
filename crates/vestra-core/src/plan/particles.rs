@@ -92,8 +92,11 @@ impl CompiledParticleSystem {
     }
 
     /// Reconstructs only the continuous and burst emissions in `[T-L, T]`.
+    ///
+    /// The iterator emits continuous particles by ordinal, followed by bursts
+    /// in compiled order and each burst's particle index order.
     #[must_use]
-    pub fn iter_alive(&self, time_nanos: u128) -> ParticleIterator<'_> {
+    pub fn evaluated_particles_at(&self, time_nanos: u128) -> ParticleIterator<'_> {
         let burst_range = self.burst_range(time_nanos);
         let lower = time_nanos.saturating_sub(self.lifetime_nanos);
         ParticleIterator {
@@ -104,6 +107,12 @@ impl CompiledParticleSystem {
             burst_end: burst_range.end,
             burst_particle: 0,
         }
+    }
+
+    /// Compatibility name for the canonical renderer-independent evaluator.
+    #[must_use]
+    pub fn iter_alive(&self, time_nanos: u128) -> ParticleIterator<'_> {
+        self.evaluated_particles_at(time_nanos)
     }
 
     fn burst_range(&self, time_nanos: u128) -> std::ops::Range<usize> {
@@ -134,6 +143,8 @@ impl CompiledParticleSystem {
             return None;
         }
         let age = age_nanos as f64 / NANOS_PER_SECOND as f64;
+        let normalized_lifetime =
+            (age_nanos as f64 / self.lifetime_nanos as f64).min(1.0 - f64::EPSILON);
         let position = match self.emitter {
             ParticleEmitter::Point { position } => crate::domain::Point {
                 x: position.x
@@ -148,6 +159,7 @@ impl CompiledParticleSystem {
             identity,
             spawn_time_nanos,
             age_nanos,
+            normalized_lifetime,
             position,
             velocity: crate::domain::Point {
                 x: self.initial_velocity.x + self.acceleration.x * age,
@@ -163,10 +175,11 @@ impl CompiledParticleSystem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ParticleInstance {
+pub struct EvaluatedParticleInstance {
     pub identity: ParticleIdentity,
     pub spawn_time_nanos: u128,
     pub age_nanos: u128,
+    pub normalized_lifetime: f64,
     pub position: crate::domain::Point,
     pub velocity: crate::domain::Point,
     pub lifetime_nanos: u128,
@@ -175,6 +188,9 @@ pub struct ParticleInstance {
     pub colour: [u8; 4],
     pub rotation_degrees: f64,
 }
+
+/// Compatibility alias for the renderer-independent evaluated state.
+pub type ParticleInstance = EvaluatedParticleInstance;
 
 pub struct ParticleIterator<'a> {
     system: &'a CompiledParticleSystem,
@@ -186,7 +202,7 @@ pub struct ParticleIterator<'a> {
 }
 
 impl Iterator for ParticleIterator<'_> {
-    type Item = ParticleInstance;
+    type Item = EvaluatedParticleInstance;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -357,7 +373,10 @@ fn normalize_rate(rate: f64) -> Result<u64, Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::{ParticleBurst, ParticleDefinition, ParticleEmission, ParticleSystem};
+    use crate::{
+        domain::Point,
+        project::{ParticleBurst, ParticleDefinition, ParticleEmission, ParticleSystem},
+    };
 
     fn system(rate: f64, lifetime: f64) -> CompiledParticleSystem {
         compile(
@@ -470,6 +489,161 @@ mod tests {
             !particles
                 .iter_alive(2_000_000_000)
                 .any(|particle| particle.identity == ParticleIdentity::Continuous { ordinal: 0 })
+        );
+    }
+
+    #[test]
+    fn evaluated_particle_at_spawn_has_zero_age_and_initial_state() {
+        let particles = compile(
+            &ParticleSystem {
+                emission: ParticleEmission {
+                    rate: 0.0,
+                    bursts: vec![ParticleBurst {
+                        time: 1.0,
+                        count: 1,
+                    }],
+                },
+                particle: ParticleDefinition {
+                    lifetime: 4.0,
+                    rotation_degrees: 17.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let particle = particles
+            .evaluated_particles_at(1_000_000_000)
+            .next()
+            .expect("particle at spawn");
+        assert_eq!(particle.age_nanos, 0);
+        assert_eq!(particle.normalized_lifetime, 0.0);
+        assert_eq!(particle.position, Point { x: 0.5, y: 0.5 });
+        assert_eq!(particle.rotation_degrees, 17.0);
+    }
+
+    #[test]
+    fn evaluated_particle_uses_analytic_motion_and_rotation() {
+        let particles = compile(
+            &ParticleSystem {
+                emission: ParticleEmission {
+                    rate: 0.0,
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 1,
+                    }],
+                },
+                particle: ParticleDefinition {
+                    lifetime: 4.0,
+                    initial_velocity: Point { x: 2.0, y: -1.0 },
+                    acceleration: Point { x: 4.0, y: 2.0 },
+                    rotation_degrees: 10.0,
+                    angular_velocity_degrees: 15.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let particle = particles
+            .evaluated_particles_at(2_000_000_000)
+            .next()
+            .expect("alive particle");
+        assert_eq!(particle.position, Point { x: 12.5, y: 2.5 });
+        assert_eq!(particle.velocity, Point { x: 10.0, y: 3.0 });
+        assert_eq!(particle.rotation_degrees, 40.0);
+    }
+
+    #[test]
+    fn normalized_lifetime_is_based_on_exact_timeline_duration() {
+        let particles = compile(
+            &ParticleSystem {
+                emission: ParticleEmission {
+                    rate: 0.0,
+                    bursts: vec![ParticleBurst {
+                        time: 0.0,
+                        count: 1,
+                    }],
+                },
+                particle: ParticleDefinition {
+                    lifetime: 4.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let normalized: Vec<_> = [0, 1, 2, 3]
+            .into_iter()
+            .map(|seconds| {
+                particles
+                    .evaluated_particles_at(seconds * 1_000_000_000)
+                    .next()
+                    .expect("alive particle")
+                    .normalized_lifetime
+            })
+            .collect();
+        assert_eq!(normalized, vec![0.0, 0.25, 0.5, 0.75]);
+        assert!(
+            particles
+                .evaluated_particles_at(4_000_000_000)
+                .next()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn evaluated_particle_order_is_continuous_then_canonical_bursts() {
+        let particles = compile(
+            &ParticleSystem {
+                emission: ParticleEmission {
+                    rate: 2.0,
+                    bursts: vec![
+                        ParticleBurst {
+                            time: 0.75,
+                            count: 2,
+                        },
+                        ParticleBurst {
+                            time: 1.25,
+                            count: 1,
+                        },
+                    ],
+                },
+                particle: ParticleDefinition {
+                    lifetime: 2.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            crate::project::parse_colour,
+        )
+        .expect("particle system");
+        let identities: Vec<_> = particles
+            .evaluated_particles_at(1_500_000_000)
+            .map(|particle| particle.identity)
+            .collect();
+        assert_eq!(
+            identities,
+            vec![
+                ParticleIdentity::Continuous { ordinal: 0 },
+                ParticleIdentity::Continuous { ordinal: 1 },
+                ParticleIdentity::Continuous { ordinal: 2 },
+                ParticleIdentity::Burst {
+                    burst_index: 0,
+                    particle_index: 0,
+                },
+                ParticleIdentity::Burst {
+                    burst_index: 0,
+                    particle_index: 1,
+                },
+                ParticleIdentity::Burst {
+                    burst_index: 1,
+                    particle_index: 0,
+                },
+            ]
         );
     }
 

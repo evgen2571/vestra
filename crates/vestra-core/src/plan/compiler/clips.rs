@@ -1,6 +1,6 @@
 //! Compilation of visible project clips into renderable layers.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     Category, Diagnostic,
@@ -161,7 +161,10 @@ pub(super) fn compile(
         }
         VisualSource::ParticleSystem(system) => {
             compilation.parsed_colour_count += 1;
-            CompiledVisualSource::ParticleSystem(super::particles::compile(system, parse_colour)?)
+            CompiledVisualSource::ParticleSystem(Arc::new(super::particles::compile(
+                system,
+                parse_colour,
+            )?))
         }
     };
     let effects = clip

@@ -12,7 +12,7 @@ use crate::{
     render::{ByteLruCache, metrics::CpuHotPathTimings},
 };
 
-pub(crate) use super::surfaces::EffectSurfacePool;
+pub(crate) use super::surfaces::{CompositionSurfacePool, EffectSurfacePool};
 
 /// Immutable complete layer output retained by the CPU static-layer cache.
 pub(crate) struct CachedCpuLayerSurface {
@@ -49,17 +49,18 @@ use crate::cpu::raster::{apply_colour_transform, draw_image, sample_bilinear, vi
 use crate::{animation::Transform2D, domain::Crop, render::geometry};
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
+#[allow(clippy::too_many_arguments)]
 pub fn compose(
     frame: &EvaluatedFrame,
     assets: &mut PreparedAssets,
     canvas: &mut RgbaImage,
     surfaces: &mut EffectSurfacePool,
+    compositions: &mut CompositionSurfacePool,
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
 ) -> ComposeStats {
     let mut stats = ComposeStats::default();
-    let _time = frame.time;
     let first_is_opaque_cached = frame.layers.first().and_then(|layer| {
         static_layers
             .peek(&layer.compiled_layer_index)
@@ -82,14 +83,77 @@ pub fn compose(
     if let Some(started) = started {
         timings.layer_composition += started.elapsed();
     }
-    for layer in &frame.layers {
+    compose_layers(
+        &frame.layers,
+        frame.width,
+        frame.height,
+        canvas,
+        assets,
+        surfaces,
+        compositions,
+        static_layers,
+        timings,
+        profiling_enabled,
+        0,
+        &mut stats,
+    );
+    effects::apply_to(
+        surfaces,
+        canvas,
+        &frame.post_effects,
+        timings,
+        profiling_enabled,
+    );
+    stats
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compose_layers(
+    layers: &[EvaluatedLayer],
+    width: u32,
+    height: u32,
+    canvas: &mut RgbaImage,
+    assets: &mut PreparedAssets,
+    surfaces: &mut EffectSurfacePool,
+    compositions: &mut CompositionSurfacePool,
+    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
+    depth: usize,
+    stats: &mut ComposeStats,
+) {
+    for layer in layers {
+        if let EvaluatedSource::Group {
+            composition,
+            transform,
+        } = &layer.source
+        {
+            render_group(
+                layer,
+                composition,
+                *transform,
+                width,
+                height,
+                canvas,
+                assets,
+                surfaces,
+                compositions,
+                static_layers,
+                timings,
+                profiling_enabled,
+                depth,
+                stats,
+            );
+            continue;
+        }
+
         if layer.content_dependency == TemporalDependency::Static {
             if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
                 composite_cached_surface(
                     canvas,
                     &cached,
                     layer,
-                    &mut stats,
+                    stats,
                     profiling_enabled.then_some(&mut timings.composition_cases),
                 );
                 continue;
@@ -126,7 +190,7 @@ pub fn compose(
                 }
                 effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
             }
-            let bytes = u64::from(frame.width) * u64::from(frame.height) * 4;
+            let bytes = u64::from(width) * u64::from(height) * 4;
             if let Some(cached) =
                 static_layers.insert_with(layer.compiled_layer_index, bytes, || {
                     Arc::new(CachedCpuLayerSurface::from_image(surfaces.take_current()))
@@ -136,7 +200,7 @@ pub fn compose(
                     canvas,
                     cached,
                     layer,
-                    &mut stats,
+                    stats,
                     profiling_enabled.then_some(&mut timings.composition_cases),
                 );
             } else {
@@ -199,14 +263,76 @@ pub fn compose(
         }
         stats.generic_blend_surface_calls += 1;
     }
-    effects::apply_to(
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_group(
+    layer: &EvaluatedLayer,
+    composition: &crate::plan::EvaluatedComposition,
+    transform: crate::animation::Transform2D,
+    width: u32,
+    height: u32,
+    parent: &mut RgbaImage,
+    assets: &mut PreparedAssets,
+    surfaces: &mut EffectSurfacePool,
+    compositions: &mut CompositionSurfacePool,
+    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
+    depth: usize,
+    stats: &mut ComposeStats,
+) {
+    let mut group_surface = compositions.acquire(depth, width, height);
+    compose_layers(
+        &composition.layers,
+        width,
+        height,
+        &mut group_surface,
+        assets,
         surfaces,
-        canvas,
-        &frame.post_effects,
+        compositions,
+        static_layers,
         timings,
         profiling_enabled,
+        depth + 1,
+        stats,
     );
-    stats
+
+    // A Group becomes image-like only after all children have been composed.
+    // The effect pool is separate so the live composition surface remains
+    // available while nested composition is unwound.
+    surfaces.clear();
+    let direct_colour_path = uses_direct_colour_path(layer);
+    let started = profiling_enabled.then(Instant::now);
+    crate::cpu::raster::draw_surface(
+        surfaces.current(),
+        &group_surface,
+        transform,
+        if direct_colour_path {
+            layer.colour_transform
+        } else {
+            ColourTransform::default()
+        },
+    );
+    if let Some(started) = started {
+        timings.transform_sampling += started.elapsed();
+    }
+    if !direct_colour_path {
+        effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
+    }
+    let started = profiling_enabled.then(Instant::now);
+    blend_surface(
+        parent,
+        surfaces.current(),
+        layer.blend_mode,
+        layer.opacity,
+        profiling_enabled.then_some(&mut timings.composition_cases),
+    );
+    if let Some(started) = started {
+        timings.layer_composition += started.elapsed();
+    }
+    stats.generic_blend_surface_calls += 1;
+    compositions.release(depth, group_surface);
 }
 
 fn is_opaque_copy(
@@ -271,6 +397,7 @@ mod tests {
     use super::*;
     use crate::blend::{blend_pixel, source_over};
     use crate::effects::effect_pass_plan;
+    use crate::plan::EvaluatedComposition;
     use crate::plan::EvaluatedEffect;
 
     fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
@@ -313,6 +440,124 @@ mod tests {
             effects: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode,
+        }
+    }
+
+    fn identity_transform() -> Transform2D {
+        Transform2D::identity(
+            crate::domain::Point { x: 0.5, y: 0.5 },
+            crate::domain::Point { x: 0.5, y: 0.5 },
+        )
+    }
+
+    fn render_test_frame(frame: EvaluatedFrame) -> RgbaImage {
+        let validated = crate::project::load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &crate::project::ValidationOptions {
+                check_backend: false,
+                ..crate::project::ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
+            .expect("fixture compiles");
+        render_frame_with_plan(frame, &plan)
+    }
+
+    fn render_frame_with_plan(frame: EvaluatedFrame, plan: &crate::plan::RenderPlan) -> RgbaImage {
+        let mut assets = crate::cpu::assets::PreparedAssets::build(plan).expect("assets decode");
+        let mut canvas = RgbaImage::new(frame.width, frame.height);
+        let mut effects = EffectSurfacePool::new(frame.width, frame.height);
+        let mut compositions = CompositionSurfacePool::new();
+        let mut cache = ByteLruCache::new(0);
+        compose(
+            &frame,
+            &mut assets,
+            &mut canvas,
+            &mut effects,
+            &mut compositions,
+            &mut cache,
+            &mut crate::render::metrics::CpuHotPathTimings::default(),
+            false,
+        );
+        canvas
+    }
+
+    fn frame_with_layers(layers: Vec<EvaluatedLayer>) -> EvaluatedFrame {
+        EvaluatedFrame {
+            time: 0,
+            background: [0, 0, 0, 0],
+            width: 16,
+            height: 16,
+            layers,
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        }
+    }
+
+    fn image_layer(index: usize, position: crate::domain::Point) -> EvaluatedLayer {
+        EvaluatedLayer {
+            compiled_layer_index: index,
+            content_dependency: TemporalDependency::Dynamic,
+            source: EvaluatedSource::Image {
+                asset_index: 0,
+                crop: Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                sizing: crate::plan::CompiledSizing::Fit,
+                cacheable_crop: false,
+                transform: Transform2D {
+                    position,
+                    ..identity_transform()
+                },
+            },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }
+    }
+
+    fn scaled_image_layer(index: usize, position: crate::domain::Point) -> EvaluatedLayer {
+        let mut layer = image_layer(index, position);
+        if let EvaluatedSource::Image { transform, .. } = &mut layer.source {
+            transform.scale = crate::domain::Point { x: 0.35, y: 0.35 };
+        }
+        layer
+    }
+
+    fn solid_layer(index: usize, colour: [u8; 4]) -> EvaluatedLayer {
+        EvaluatedLayer {
+            compiled_layer_index: index,
+            content_dependency: TemporalDependency::Dynamic,
+            source: EvaluatedSource::SolidColor { colour },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }
+    }
+
+    fn group_layer(
+        index: usize,
+        children: Vec<EvaluatedLayer>,
+        effects: Vec<EvaluatedEffect>,
+        transform: Transform2D,
+    ) -> EvaluatedLayer {
+        EvaluatedLayer {
+            compiled_layer_index: index,
+            content_dependency: TemporalDependency::Dynamic,
+            source: EvaluatedSource::Group {
+                composition: EvaluatedComposition { layers: children },
+                transform,
+            },
+            opacity: 1.0,
+            colour_transform: ColourTransform::from_effects(effects.clone()),
+            effects,
+            blend_mode: crate::project::BlendMode::Normal,
         }
     }
 
@@ -363,6 +608,466 @@ mod tests {
         );
         assert_eq!(stats.opaque_copy_fast_path_hits, 0);
         assert_eq!(stats.generic_blend_surface_calls, 2);
+    }
+
+    #[test]
+    fn group_opacity_is_applied_once_to_the_isolated_child_result() {
+        let validated = crate::project::load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &crate::project::ValidationOptions {
+                check_backend: false,
+                ..crate::project::ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
+            .expect("fixture compiles");
+        let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
+        let child = |index, colour| EvaluatedLayer {
+            compiled_layer_index: index,
+            content_dependency: TemporalDependency::Dynamic,
+            source: EvaluatedSource::SolidColor { colour },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        };
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0, 0, 0, 0],
+            width: 2,
+            height: 2,
+            layers: vec![EvaluatedLayer {
+                compiled_layer_index: 50,
+                content_dependency: TemporalDependency::Dynamic,
+                source: EvaluatedSource::Group {
+                    composition: EvaluatedComposition {
+                        layers: vec![
+                            child(51, [255, 0, 0, 128]),
+                            EvaluatedLayer {
+                                compiled_layer_index: 52,
+                                content_dependency: TemporalDependency::Dynamic,
+                                source: EvaluatedSource::Group {
+                                    composition: EvaluatedComposition {
+                                        layers: vec![child(53, [0, 0, 255, 128])],
+                                    },
+                                    transform: Transform2D::identity(
+                                        crate::domain::Point { x: 0.5, y: 0.5 },
+                                        crate::domain::Point { x: 0.5, y: 0.5 },
+                                    ),
+                                },
+                                opacity: 1.0,
+                                effects: Vec::new(),
+                                colour_transform: ColourTransform::default(),
+                                blend_mode: crate::project::BlendMode::Normal,
+                            },
+                        ],
+                    },
+                    transform: Transform2D::identity(
+                        crate::domain::Point { x: 0.5, y: 0.5 },
+                        crate::domain::Point { x: 0.5, y: 0.5 },
+                    ),
+                },
+                opacity: 0.5,
+                effects: Vec::new(),
+                colour_transform: ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let mut canvas = RgbaImage::new(2, 2);
+        let mut effects = EffectSurfacePool::new(2, 2);
+        let mut compositions = CompositionSurfacePool::new();
+        let mut cache = ByteLruCache::new(0);
+        compose(
+            &frame,
+            &mut assets,
+            &mut canvas,
+            &mut effects,
+            &mut compositions,
+            &mut cache,
+            &mut crate::render::metrics::CpuHotPathTimings::default(),
+            false,
+        );
+
+        let mut isolated = Rgba([0, 0, 0, 0]);
+        isolated = blend_pixel(
+            isolated,
+            Rgba([255, 0, 0, 128]),
+            crate::project::BlendMode::Normal,
+            1.0,
+        );
+        isolated = blend_pixel(
+            isolated,
+            Rgba([0, 0, 255, 128]),
+            crate::project::BlendMode::Normal,
+            1.0,
+        );
+        let expected = blend_pixel(
+            Rgba([0, 0, 0, 0]),
+            isolated,
+            crate::project::BlendMode::Normal,
+            0.5,
+        );
+        assert_eq!(canvas.get_pixel(0, 0), &expected);
+    }
+
+    #[test]
+    fn group_basic_colour_effect_is_applied_once() {
+        let effects = vec![EvaluatedEffect::Brightness { amount: 0.1 }];
+        let output = render_test_frame(frame_with_layers(vec![group_layer(
+            1,
+            vec![EvaluatedLayer {
+                compiled_layer_index: 2,
+                content_dependency: TemporalDependency::Dynamic,
+                source: EvaluatedSource::SolidColor {
+                    colour: [80, 110, 160, 255],
+                },
+                opacity: 1.0,
+                effects: Vec::new(),
+                colour_transform: ColourTransform::default(),
+                blend_mode: crate::project::BlendMode::Normal,
+            }],
+            effects.clone(),
+            identity_transform(),
+        )]));
+        let expected = apply_colour_transform(
+            Rgba([80, 110, 160, 255]),
+            ColourTransform::from_effects(effects),
+        );
+        assert_eq!(output.get_pixel(8, 8), &expected);
+    }
+
+    #[test]
+    fn group_multiple_basic_colour_effects_match_ordinary_layer_semantics() {
+        let effects = vec![
+            EvaluatedEffect::Brightness { amount: 0.08 },
+            EvaluatedEffect::Contrast { amount: 1.15 },
+            EvaluatedEffect::Saturation { amount: 0.6 },
+        ];
+        let group = group_layer(
+            1,
+            vec![solid_layer(2, [80, 110, 160, 255])],
+            effects.clone(),
+            identity_transform(),
+        );
+        let mut child = solid_layer(2, [80, 110, 160, 255]);
+        child.effects = effects.clone();
+        child.colour_transform = ColourTransform::from_effects(effects);
+        let grouped = render_test_frame(frame_with_layers(vec![group]));
+        let ordinary = render_test_frame(frame_with_layers(vec![child]));
+        assert_eq!(grouped, ordinary);
+    }
+
+    #[test]
+    fn group_mixed_effects_match_ordinary_order_in_both_declared_orders() {
+        for effects in [
+            vec![
+                EvaluatedEffect::Brightness { amount: 0.15 },
+                EvaluatedEffect::GaussianBlur { radius: 1.0 },
+            ],
+            vec![
+                EvaluatedEffect::GaussianBlur { radius: 1.0 },
+                EvaluatedEffect::Brightness { amount: 0.15 },
+            ],
+        ] {
+            let mut ordinary = image_layer(1, crate::domain::Point { x: 0.5, y: 0.5 });
+            ordinary.effects = effects.clone();
+            ordinary.colour_transform = ColourTransform::from_effects(effects.clone());
+            let group = group_layer(
+                3,
+                vec![image_layer(4, crate::domain::Point { x: 0.5, y: 0.5 })],
+                effects,
+                identity_transform(),
+            );
+            assert_eq!(
+                render_test_frame(frame_with_layers(vec![group])),
+                render_test_frame(frame_with_layers(vec![ordinary])),
+            );
+        }
+    }
+
+    #[test]
+    fn group_transform_moves_the_completed_multi_child_arrangement() {
+        let children = vec![
+            scaled_image_layer(1, crate::domain::Point { x: 0.25, y: 0.5 }),
+            scaled_image_layer(2, crate::domain::Point { x: 0.75, y: 0.5 }),
+        ];
+        let unchanged = render_test_frame(frame_with_layers(vec![group_layer(
+            3,
+            children.clone(),
+            Vec::new(),
+            identity_transform(),
+        )]));
+        let shifted = render_test_frame(frame_with_layers(vec![group_layer(
+            3,
+            children,
+            Vec::new(),
+            Transform2D {
+                position: crate::domain::Point { x: 0.65, y: 0.5 },
+                ..identity_transform()
+            },
+        )]));
+        assert_ne!(unchanged, shifted);
+        assert!(
+            shifted
+                .enumerate_pixels()
+                .any(|(x, _, pixel)| x > 8 && pixel[3] > 0)
+        );
+    }
+
+    #[test]
+    fn group_transform_preserves_transparent_edges_and_empty_groups() {
+        let background = [9, 8, 7, 255];
+        let child = scaled_image_layer(1, crate::domain::Point { x: 0.5, y: 0.5 });
+        let mut frame = frame_with_layers(vec![group_layer(
+            2,
+            vec![child],
+            Vec::new(),
+            Transform2D {
+                rotation_radians: 0.35,
+                ..identity_transform()
+            },
+        )]);
+        frame.background = background;
+        let output = render_test_frame(frame);
+        assert_eq!(output.get_pixel(0, 0), &Rgba(background));
+
+        let mut empty = frame_with_layers(vec![group_layer(
+            4,
+            Vec::new(),
+            Vec::new(),
+            identity_transform(),
+        )]);
+        empty.background = background;
+        let output = render_test_frame(empty);
+        assert!(output.pixels().all(|pixel| *pixel == Rgba(background)));
+    }
+
+    #[test]
+    fn sibling_groups_keep_both_surfaces_and_group_blend_applies_to_completed_result() {
+        let siblings = vec![
+            group_layer(
+                1,
+                vec![scaled_image_layer(
+                    2,
+                    crate::domain::Point { x: 0.25, y: 0.5 },
+                )],
+                Vec::new(),
+                identity_transform(),
+            ),
+            group_layer(
+                3,
+                vec![scaled_image_layer(
+                    4,
+                    crate::domain::Point { x: 0.75, y: 0.5 },
+                )],
+                Vec::new(),
+                identity_transform(),
+            ),
+        ];
+        let output = render_test_frame(frame_with_layers(siblings));
+        assert!(
+            output
+                .enumerate_pixels()
+                .any(|(x, _, pixel)| x < 6 && pixel[3] > 0)
+        );
+        assert!(
+            output
+                .enumerate_pixels()
+                .any(|(x, _, pixel)| x > 9 && pixel[3] > 0)
+        );
+
+        let background = Rgba([40, 100, 200, 255]);
+        let source = Rgba([200, 80, 20, 255]);
+        let mut frame = frame_with_layers(vec![group_layer(
+            5,
+            vec![solid_layer(6, source.0)],
+            Vec::new(),
+            identity_transform(),
+        )]);
+        frame.background = background.0;
+        if let Some(layer) = frame.layers.first_mut() {
+            layer.blend_mode = crate::project::BlendMode::Multiply;
+        }
+        assert_eq!(
+            render_test_frame(frame).get_pixel(8, 8),
+            &blend_pixel(background, source, crate::project::BlendMode::Multiply, 1.0)
+        );
+    }
+
+    #[test]
+    fn three_nested_groups_recurse_without_losing_the_child() {
+        let child = solid_layer(4, [180, 20, 40, 255]);
+        let level_c = group_layer(3, vec![child], Vec::new(), identity_transform());
+        let level_b = group_layer(2, vec![level_c], Vec::new(), identity_transform());
+        let level_a = group_layer(1, vec![level_b], Vec::new(), identity_transform());
+        let output = render_test_frame(frame_with_layers(vec![level_a]));
+        assert_eq!(output.get_pixel(8, 8), &Rgba([180, 20, 40, 255]));
+    }
+
+    #[test]
+    fn particle_and_spectrum_sources_render_inside_groups_deterministically() {
+        let particle_system = crate::plan::CompiledParticleSystem {
+            seed: 7,
+            emitter: crate::project::ParticleEmitter::default(),
+            rate_units_per_second: 0,
+            lifetime_nanos: 1_000_000_000,
+            lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
+            initial_velocity: crate::domain::Point { x: 0.0, y: 0.0 },
+            speed: crate::project::ScalarRange { min: 0.0, max: 0.0 },
+            direction_degrees: 0.0,
+            direction_spread_degrees: 0.0,
+            acceleration: crate::domain::Point { x: 0.0, y: 0.0 },
+            size: 0.5,
+            size_range: None,
+            opacity: 1.0,
+            colour: [220, 40, 20, 255],
+            rotation_degrees: 0.0,
+            rotation_range: None,
+            angular_velocity_degrees: 0.0,
+            angular_velocity_range: None,
+            primitive: crate::project::ParticlePrimitive::Square,
+            blend_mode: crate::project::ParticleBlendMode::Normal,
+            bursts: vec![crate::plan::CompiledParticleBurst {
+                time_nanos: 0,
+                count: 1,
+            }],
+            maximum_live_particles: 1,
+            lifetime_size: None,
+            lifetime_opacity: None,
+            lifetime_colour: None,
+            audio_size: None,
+            audio_opacity: None,
+            audio_intensity: None,
+        };
+        let particle = EvaluatedLayer {
+            compiled_layer_index: 2,
+            content_dependency: TemporalDependency::Dynamic,
+            source: EvaluatedSource::ParticleSystem {
+                system: std::sync::Arc::new(particle_system),
+                time_nanos: 0,
+                appearance: crate::plan::EvaluatedParticleAppearance::default(),
+            },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        };
+        let particle_group = group_layer(
+            1,
+            vec![particle],
+            Vec::new(),
+            Transform2D {
+                position: crate::domain::Point { x: 0.6, y: 0.5 },
+                ..identity_transform()
+            },
+        );
+        let first = render_test_frame(frame_with_layers(vec![particle_group.clone()]));
+        let second = render_test_frame(frame_with_layers(vec![particle_group]));
+        assert_eq!(first, second);
+        assert!(first.pixels().any(|pixel| pixel[3] > 0));
+
+        let spectrum = EvaluatedLayer {
+            compiled_layer_index: 4,
+            content_dependency: TemporalDependency::Dynamic,
+            source: EvaluatedSource::Spectrum2D {
+                bands: vec![1.0, 0.75, 0.5],
+                x: 0.25,
+                y: 0.25,
+                width: 0.5,
+                height: 0.5,
+                bar_gap_ratio: 0.1,
+                min_bar_height_ratio: 0.1,
+                layout: crate::project::Spectrum2DLayout::default(),
+                gradient: None,
+                colour: [30, 180, 240, 255],
+            },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        };
+        let spectrum_output = render_test_frame(frame_with_layers(vec![group_layer(
+            5,
+            vec![spectrum],
+            Vec::new(),
+            identity_transform(),
+        )]));
+        assert!(spectrum_output.pixels().any(|pixel| pixel[3] > 0));
+    }
+
+    #[test]
+    fn canonical_group_project_validates_compiles_evaluates_and_renders_on_cpu() {
+        let project = crate::project::Project::from_json(
+            r##"{
+                "schema_version": 2,
+                "name": "cpu group integration",
+                "output": {
+                    "path": "group.mp4",
+                    "width": 4,
+                    "height": 4,
+                    "frame_rate": "24/1",
+                    "background": "#00000000",
+                    "quality": "preview",
+                    "audio": false,
+                    "duration_mode": "automatic"
+                },
+                "assets": [],
+                "visual": {
+                    "clips": [{
+                        "id": "group",
+                        "source": {
+                            "type": "group",
+                            "clips": [{
+                                "id": "child",
+                                "source": { "type": "solid_color", "colour": "#4C8CCC" },
+                                "start": 0,
+                                "duration": 1,
+                                "layer": 0,
+                                "opacity": { "base_value": 1 }
+                            }]
+                        },
+                        "start": 0,
+                        "duration": 1,
+                        "layer": 0,
+                        "opacity": { "base_value": 1 },
+                        "effects": [{
+                            "id": "lift",
+                            "type": "brightness",
+                            "amount": { "base_value": 0.1 }
+                        }]
+                    }]
+                }
+            }"##,
+        )
+        .expect("canonical Group JSON parses");
+        let report = vestra_core::validation::validate(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+        );
+        assert!(report.is_valid(), "{:?}", report.diagnostics());
+
+        let asset_paths = std::collections::BTreeMap::new();
+        let audio_durations = std::collections::BTreeMap::new();
+        let warnings = Vec::new();
+        let input = crate::plan::PlanCompileInput::new(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+            std::path::Path::new("."),
+            &asset_paths,
+            &audio_durations,
+            1.0,
+            (24, 1),
+            24,
+            &warnings,
+        );
+        let plan = crate::plan::compile(&input, crate::plan::CompileOptions::default())
+            .expect("canonical Group compiles");
+        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(0)], 0);
+        let output = render_frame_with_plan(frame, &plan);
+        assert_eq!(output.get_pixel(2, 2), &Rgba([102, 166, 230, 255]));
     }
     #[test]
     fn alpha_composition_is_known() {

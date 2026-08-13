@@ -220,16 +220,6 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
         self.check_healthy()?;
-        if frame
-            .layers
-            .iter()
-            .any(|layer| matches!(&layer.source, crate::plan::EvaluatedSource::Group { .. }))
-        {
-            return Err(Self::diagnostic(
-                "CPU-GROUP-UNSUPPORTED",
-                "CPU Group rendering is not implemented",
-            ));
-        }
         let worker_id = (0..self.workers.len())
             .map(|offset| (self.next_worker + offset) % self.workers.len())
             .find(|&id| !self.worker_busy[id])

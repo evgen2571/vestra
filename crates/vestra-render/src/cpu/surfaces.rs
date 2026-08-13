@@ -6,6 +6,64 @@ use crate::plan::EffectResource;
 
 const SURFACE_COUNT: usize = 3;
 
+/// Worker-local full-frame surfaces used for isolated nested compositions.
+///
+/// A surface is removed from the pool while it is live. This makes parent and
+/// child compositions unable to alias, while sibling surfaces can be reused
+/// once their result has been blended into the parent.
+pub(crate) struct CompositionSurfacePool {
+    surfaces: Vec<Option<RgbaImage>>,
+    allocations: u64,
+    reuses: u64,
+}
+
+impl CompositionSurfacePool {
+    #[must_use]
+    pub(crate) fn new() -> Self {
+        Self {
+            surfaces: Vec::new(),
+            allocations: 0,
+            reuses: 0,
+        }
+    }
+
+    pub(crate) fn acquire(&mut self, depth: usize, width: u32, height: u32) -> RgbaImage {
+        if self.surfaces.len() <= depth {
+            self.surfaces.resize_with(depth + 1, || None);
+        }
+        let (mut surface, reused) = if let Some(surface) = self.surfaces[depth].take() {
+            (surface, true)
+        } else {
+            self.allocations += 1;
+            (RgbaImage::new(width, height), false)
+        };
+        if surface.width() != width || surface.height() != height {
+            self.allocations += 1;
+            surface = RgbaImage::new(width, height);
+        } else if reused {
+            self.reuses += 1;
+        }
+        for pixel in surface.pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
+        }
+        surface
+    }
+
+    pub(crate) fn release(&mut self, depth: usize, surface: RgbaImage) {
+        let slot = self
+            .surfaces
+            .get_mut(depth)
+            .expect("released composition depth was not acquired");
+        assert!(slot.is_none(), "composition surface depth is still live");
+        *slot = Some(surface);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn stats(&self) -> (u64, u64, usize) {
+        (self.allocations, self.reuses, self.surfaces.len())
+    }
+}
+
 pub(crate) struct EffectSurfacePool {
     surfaces: [RgbaImage; SURFACE_COUNT],
     current_slot: usize,
@@ -245,6 +303,24 @@ fn image_bytes(image: &RgbaImage) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn composition_surfaces_clear_on_reuse_and_grow_by_depth() {
+        let mut pool = CompositionSurfacePool::new();
+        let mut parent = pool.acquire(0, 2, 2);
+        parent.put_pixel(0, 0, Rgba([10, 20, 30, 255]));
+        let child = pool.acquire(1, 2, 2);
+        assert_eq!(child.get_pixel(0, 0), &Rgba([0, 0, 0, 0]));
+        pool.release(1, child);
+        pool.release(0, parent);
+
+        let reused = pool.acquire(0, 2, 2);
+        assert_eq!(reused.get_pixel(0, 0), &Rgba([0, 0, 0, 0]));
+        let (allocations, reuses, retained_depths) = pool.stats();
+        assert_eq!(allocations, 2);
+        assert_eq!(reuses, 1);
+        assert_eq!(retained_depths, 2);
+    }
 
     fn copy_pass(pool: &mut EffectSurfacePool, input: EffectResource, output: EffectResource) {
         pool.run_pass(input, None, output, |source, _, target| {

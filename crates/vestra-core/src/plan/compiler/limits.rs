@@ -6,11 +6,19 @@ pub(super) fn enforce_active_layer_limit(
     layers: &[CompiledLayer],
     composition_end_frame: u64,
     maximum_active_layers: usize,
+    effective_start_frame: u64,
+    effective_end_frame: u64,
 ) -> Result<(), Diagnostic> {
     let mut events = Vec::with_capacity(layers.len() * 2);
     for layer in layers {
-        let clipped_start = layer.start_frame.min(composition_end_frame);
-        let clipped_end = layer.end_frame.min(composition_end_frame);
+        let clipped_start = layer
+            .start_frame
+            .max(effective_start_frame)
+            .min(composition_end_frame);
+        let clipped_end = layer
+            .end_frame
+            .min(effective_end_frame)
+            .min(composition_end_frame);
         if clipped_start < clipped_end {
             events.push((clipped_start, true));
             events.push((clipped_end, false));

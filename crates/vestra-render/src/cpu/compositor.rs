@@ -282,6 +282,20 @@ fn render_group(
     depth: usize,
     stats: &mut ComposeStats,
 ) {
+    if layer.content_dependency == TemporalDependency::Static {
+        if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
+            composite_cached_surface(
+                parent,
+                &cached,
+                layer,
+                stats,
+                profiling_enabled.then_some(&mut timings.composition_cases),
+            );
+            return;
+        }
+        stats.static_layer_renders += 1;
+    }
+
     let mut group_surface = compositions.acquire(depth, width, height);
     compose_layers(
         &composition.layers,
@@ -320,18 +334,46 @@ fn render_group(
     if !direct_colour_path {
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
     }
-    let started = profiling_enabled.then(Instant::now);
-    blend_surface(
-        parent,
-        surfaces.current(),
-        layer.blend_mode,
-        layer.opacity,
-        profiling_enabled.then_some(&mut timings.composition_cases),
-    );
-    if let Some(started) = started {
-        timings.layer_composition += started.elapsed();
+    if layer.content_dependency == TemporalDependency::Static {
+        let bytes = u64::from(width) * u64::from(height) * 4;
+        if let Some(cached) = static_layers.insert_with(layer.compiled_layer_index, bytes, || {
+            Arc::new(CachedCpuLayerSurface::from_image(surfaces.take_current()))
+        }) {
+            composite_cached_surface(
+                parent,
+                cached,
+                layer,
+                stats,
+                profiling_enabled.then_some(&mut timings.composition_cases),
+            );
+        } else {
+            let started = profiling_enabled.then(Instant::now);
+            blend_surface(
+                parent,
+                surfaces.current(),
+                layer.blend_mode,
+                layer.opacity,
+                profiling_enabled.then_some(&mut timings.composition_cases),
+            );
+            if let Some(started) = started {
+                timings.layer_composition += started.elapsed();
+            }
+            stats.generic_blend_surface_calls += 1;
+        }
+    } else {
+        let started = profiling_enabled.then(Instant::now);
+        blend_surface(
+            parent,
+            surfaces.current(),
+            layer.blend_mode,
+            layer.opacity,
+            profiling_enabled.then_some(&mut timings.composition_cases),
+        );
+        if let Some(started) = started {
+            timings.layer_composition += started.elapsed();
+        }
+        stats.generic_blend_surface_calls += 1;
     }
-    stats.generic_blend_surface_calls += 1;
     compositions.release(depth, group_surface);
 }
 
@@ -559,6 +601,116 @@ mod tests {
             effects,
             blend_mode: crate::project::BlendMode::Normal,
         }
+    }
+
+    #[test]
+    fn static_group_is_cached_at_the_complete_layer_stage() {
+        let validated = crate::project::load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &crate::project::ValidationOptions {
+                check_backend: false,
+                ..crate::project::ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
+            .expect("fixture compiles");
+        let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
+        let child = {
+            let mut child = solid_layer(2, [40, 80, 120, 255]);
+            child.content_dependency = TemporalDependency::Static;
+            child
+        };
+        let mut group = group_layer(1, vec![child], Vec::new(), identity_transform());
+        group.content_dependency = TemporalDependency::Static;
+        let frame = frame_with_layers(vec![group]);
+        let mut canvas = RgbaImage::new(frame.width, frame.height);
+        let mut surfaces = EffectSurfacePool::new(frame.width, frame.height);
+        let mut compositions = CompositionSurfacePool::new();
+        let mut cache = ByteLruCache::new(u64::from(frame.width) * u64::from(frame.height) * 4 * 4);
+        let mut timings = crate::render::metrics::CpuHotPathTimings::default();
+
+        let first = compose(
+            &frame,
+            &mut assets,
+            &mut canvas,
+            &mut surfaces,
+            &mut compositions,
+            &mut cache,
+            &mut timings,
+            false,
+        );
+        let first_pixels = canvas.clone();
+        let second = compose(
+            &frame,
+            &mut assets,
+            &mut canvas,
+            &mut surfaces,
+            &mut compositions,
+            &mut cache,
+            &mut timings,
+            false,
+        );
+
+        assert_eq!(first.static_layer_renders, 2);
+        assert_eq!(second.static_layer_renders, 0);
+        assert_eq!(cache.stats().insertions, 2);
+        assert_eq!(cache.stats().hits, 1);
+        assert_eq!(canvas, first_pixels);
+    }
+
+    #[test]
+    fn dynamic_group_never_reuses_a_static_surface() {
+        let validated = crate::project::load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &crate::project::ValidationOptions {
+                check_backend: false,
+                ..crate::project::ValidationOptions::default()
+            },
+        )
+        .expect("fixture validates");
+        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
+            .expect("fixture compiles");
+        let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
+        let make_frame = |colour| {
+            frame_with_layers(vec![group_layer(
+                1,
+                vec![solid_layer(2, colour)],
+                Vec::new(),
+                identity_transform(),
+            )])
+        };
+        let first_frame = make_frame([255, 0, 0, 255]);
+        let second_frame = make_frame([0, 0, 255, 255]);
+        let mut canvas = RgbaImage::new(first_frame.width, first_frame.height);
+        let mut surfaces = EffectSurfacePool::new(first_frame.width, first_frame.height);
+        let mut compositions = CompositionSurfacePool::new();
+        let mut cache = ByteLruCache::new(16 * 16 * 4 * 4);
+        let mut timings = crate::render::metrics::CpuHotPathTimings::default();
+
+        compose(
+            &first_frame,
+            &mut assets,
+            &mut canvas,
+            &mut surfaces,
+            &mut compositions,
+            &mut cache,
+            &mut timings,
+            false,
+        );
+        let first_pixel = *canvas.get_pixel(8, 8);
+        compose(
+            &second_frame,
+            &mut assets,
+            &mut canvas,
+            &mut surfaces,
+            &mut compositions,
+            &mut cache,
+            &mut timings,
+            false,
+        );
+        assert_ne!(first_pixel, *canvas.get_pixel(8, 8));
+        assert_eq!(cache.stats().requests, 0);
     }
 
     #[test]
@@ -1069,6 +1221,68 @@ mod tests {
         let output = render_frame_with_plan(frame, &plan);
         assert_eq!(output.get_pixel(2, 2), &Rgba([102, 166, 230, 255]));
     }
+
+    #[test]
+    fn root_group_crossfade_renders_the_complete_group_layers_on_cpu() {
+        let project = crate::project::Project::from_json(
+            r##"{
+                "schema_version": 2,
+                "output": {
+                    "path": "group-transition.mp4", "width": 2, "height": 2,
+                    "frame_rate": "24/1", "background": "#00000000",
+                    "quality": "preview", "audio": false,
+                    "duration_mode": "automatic"
+                },
+                "assets": [],
+                "visual": {
+                    "clips": [
+                        {"id": "red-group", "source": {"type": "group", "clips": [
+                            {"id": "child", "source": {"type": "solid_color", "colour": "#FF0000"},
+                             "start": 0, "duration": 2, "layer": 0, "opacity": {"base_value": 1}}
+                        ]}, "start": 0, "duration": 2, "layer": 0, "opacity": {"base_value": 1}},
+                        {"id": "blue-group", "source": {"type": "group", "clips": [
+                            {"id": "child", "source": {"type": "solid_color", "colour": "#0000FF"},
+                             "start": 0, "duration": 2, "layer": 1, "opacity": {"base_value": 1}}
+                        ]}, "start": 0, "duration": 2, "layer": 1, "opacity": {"base_value": 1}}
+                    ],
+                    "transitions": [{"type": "crossfade", "id": "fade", "outgoing": "red-group",
+                        "incoming": "blue-group", "start": 0.5, "duration": 1.0,
+                        "interpolation": "linear"}]
+                }
+            }"##,
+        )
+        .expect("Group transition JSON parses");
+        let report = vestra_core::validation::validate(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+        );
+        assert!(report.is_valid(), "{:?}", report.diagnostics());
+        let assets = std::collections::BTreeMap::new();
+        let durations = std::collections::BTreeMap::new();
+        let warnings = Vec::new();
+        let input = crate::plan::PlanCompileInput::new(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+            std::path::Path::new("."),
+            &assets,
+            &durations,
+            2.0,
+            (24, 1),
+            48,
+            &warnings,
+        );
+        let plan = crate::plan::compile(&input, crate::plan::CompileOptions::default())
+            .expect("Group transition compiles");
+        let frame = crate::plan::evaluate(
+            &plan,
+            &[crate::plan::ScheduledItem(0), crate::plan::ScheduledItem(1)],
+            1_000_000_000,
+        );
+        let output = render_frame_with_plan(frame, &plan);
+        let pixel = output.get_pixel(1, 1);
+        assert!(pixel[0] > 0 && pixel[2] > 0 && pixel[1] == 0);
+    }
+
     #[test]
     fn alpha_composition_is_known() {
         assert_eq!(

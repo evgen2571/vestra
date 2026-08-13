@@ -162,12 +162,16 @@ pub(super) fn validate(visual: &crate::project::Visual, errors: &mut Vec<Diagnos
                     path.clone(),
                 )),
                 Some(clip)
-                    if !matches!(clip.source, crate::project::VisualSource::Image { .. }) =>
+                    if !matches!(
+                        clip.source,
+                        crate::project::VisualSource::Image { .. }
+                            | crate::project::VisualSource::Group(_)
+                    ) =>
                 {
                     errors.push(Diagnostic::error(
                         "MVP-TRANSITION-SOURCE",
                         Category::Semantic,
-                        format!("transition requires image clip '{clip_id}'"),
+                        format!("transition requires image or group clip '{clip_id}'"),
                         path.clone(),
                     ));
                 }

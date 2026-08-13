@@ -147,6 +147,164 @@ fn groups_compile_nested_layers_and_use_local_time_with_parent_clipping() {
 }
 
 #[test]
+fn static_group_dependency_ignores_children_outside_its_effective_interval() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let mut child = project.visual.clips[1].clone();
+    child.id = "group-child".to_owned();
+    child.start = 0.0;
+    child.duration = 6.0;
+    child.effects = vec![Effect::Brightness {
+        id: "nested-brightness".to_owned(),
+        amount: Track::constant(0.1).into(),
+    }];
+    let mut group = child.clone();
+    group.id = "static-group".to_owned();
+    group.source = VisualSource::Group(Group {
+        clips: vec![child.clone()],
+    });
+    group.transform = None;
+    group.effects.clear();
+    group.start = 0.0;
+    group.duration = 6.0;
+    project.visual.clips = vec![group];
+
+    let plan = compile_project(project.clone());
+    let super::CompiledVisualSource::Group(composition) = &plan.layers[0].source else {
+        panic!("expected Group source");
+    };
+    assert_eq!(composition.dependency, TemporalDependency::Static);
+    assert_eq!(
+        plan.layers[0].content_dependency,
+        TemporalDependency::Static
+    );
+    assert_eq!(plan.compilation.image_source_count, 1);
+    assert_eq!(plan.compilation.static_layer_count, 2);
+    assert_eq!(plan.compilation.local_effect_count, 1);
+
+    let mut outside = child;
+    outside.id = "outside".to_owned();
+    outside.start = 10.0;
+    outside.duration = 10.0;
+    if let VisualSource::Group(group) = &mut project.visual.clips[0].source {
+        group.clips = vec![outside];
+    }
+    let plan = compile_project(project);
+    let super::CompiledVisualSource::Group(composition) = &plan.layers[0].source else {
+        panic!("expected Group source");
+    };
+    assert_eq!(composition.dependency, TemporalDependency::Static);
+}
+
+#[test]
+fn group_dependency_tracks_membership_and_nested_dynamic_content() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let mut first = project.visual.clips[0].clone();
+    first.id = "first".to_owned();
+    first.start = 0.0;
+    first.duration = 3.0;
+    let mut second = first.clone();
+    second.id = "second".to_owned();
+    second.start = 3.0;
+    second.duration = 3.0;
+    let mut group = first.clone();
+    group.id = "group".to_owned();
+    group.source = VisualSource::Group(Group {
+        clips: vec![first.clone(), second],
+    });
+    group.transform = None;
+    group.start = 0.0;
+    group.duration = 6.0;
+    project.visual.clips = vec![group];
+    let plan = compile_project(project.clone());
+    let super::CompiledVisualSource::Group(composition) = &plan.layers[0].source else {
+        panic!("expected Group source");
+    };
+    assert_eq!(composition.dependency, TemporalDependency::Dynamic);
+
+    let mut animated = first;
+    animated.id = "animated".to_owned();
+    animated.opacity.track.keyframes = vec![Keyframe {
+        time: 1.0,
+        value: 0.5,
+        interpolation: Interpolation::Named(InterpolationName::Linear),
+    }];
+    let mut inner = animated.clone();
+    inner.id = "inner".to_owned();
+    inner.source = VisualSource::Group(Group {
+        clips: vec![animated],
+    });
+    inner.transform = None;
+    inner.start = 0.0;
+    inner.duration = 6.0;
+    project.visual.clips[0].source = VisualSource::Group(Group { clips: vec![inner] });
+    let plan = compile_project(project);
+    assert_eq!(
+        plan.layers[0].content_dependency,
+        TemporalDependency::Dynamic
+    );
+}
+
+#[test]
+fn effective_ancestor_window_excludes_invisible_nested_layers_from_limits() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let mut child = project.visual.clips[0].clone();
+    child.start = 5.0;
+    child.duration = 5.0;
+    child.id = "a".to_owned();
+    let mut second = child.clone();
+    second.id = "b".to_owned();
+    let mut group = child.clone();
+    group.id = "group".to_owned();
+    group.start = 5.0;
+    group.duration = 20.0;
+    group.transform = None;
+    group.source = VisualSource::Group(Group {
+        clips: vec![child, second],
+    });
+    project.visual.clips = vec![group];
+    let limits = ResourceLimits {
+        maximum_active_layers: 1,
+        ..ResourceLimits::default()
+    };
+    compile_project_with_limits(project, limits);
+}
+
+#[test]
+fn root_transitions_accept_groups_without_resolving_nested_ids() {
+    let mut project = canonical_project();
+    let child = project.visual.clips[0].clone();
+    let mut group = child.clone();
+    group.id = "group".to_owned();
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    group.transform = None;
+    group.start = 0.0;
+    group.duration = 6.0;
+    let mut image = project.visual.clips[1].clone();
+    image.id = "root-image".to_owned();
+    image.start = 0.0;
+    image.duration = 6.0;
+    project.visual.clips = vec![group, image];
+    project.visual.transitions = vec![crate::project::Transition::Crossfade {
+        id: "group-crossfade".to_owned(),
+        outgoing: "group".to_owned(),
+        incoming: "root-image".to_owned(),
+        start: 1.0,
+        duration: 1.0,
+        interpolation: Interpolation::Named(InterpolationName::Linear),
+    }];
+
+    let plan = compile_project(project);
+    assert!(plan.layers[0].opacity_contributions.len() == 1);
+    assert_eq!(
+        plan.layers[0].content_dependency,
+        TemporalDependency::Dynamic
+    );
+}
+
+#[test]
 fn nested_clips_use_root_preset_and_normalization_semantics_recursively() {
     let mut root_project = canonical_project();
     root_project.visual.transitions.clear();

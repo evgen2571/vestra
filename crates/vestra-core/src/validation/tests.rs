@@ -1,7 +1,10 @@
 use serde_json::{Value, json};
 
 use super::{ResourceLimits, validate};
-use crate::{Severity, project::Project};
+use crate::{
+    Severity,
+    project::{Interpolation, Project, Transition},
+};
 
 fn project(audio: Value) -> Project {
     serde_json::from_value(json!({
@@ -100,6 +103,37 @@ fn grouped_project(clips: Vec<Value>) -> Project {
         "visual": {"clips": clips, "transitions": [], "flashes": [], "post_effects": []}
     });
     serde_json::from_value(value.take()).expect("grouped project")
+}
+
+fn crossfade(id: &str, outgoing: &str, incoming: &str) -> Transition {
+    Transition::Crossfade {
+        id: id.to_owned(),
+        outgoing: outgoing.to_owned(),
+        incoming: incoming.to_owned(),
+        start: 10.0,
+        duration: 1.0,
+        interpolation: Interpolation::Named(crate::project::InterpolationName::Linear),
+    }
+}
+
+#[test]
+fn root_group_transition_endpoints_are_valid_but_procedural_endpoints_are_not() {
+    let mut project = grouped_project(vec![
+        group_clip("group-a", vec![solid_clip("nested", 0.0, 5.0)]),
+        group_clip("group-b", vec![solid_clip("nested", 0.0, 5.0)]),
+    ]);
+    project.visual.transitions = vec![crossfade("groups", "group-a", "group-b")];
+    assert!(!has(&project, "MVP-TRANSITION-SOURCE"));
+
+    let mut invalid = grouped_project(vec![
+        solid_clip("solid", 10.0, 5.0),
+        group_clip("group", vec![solid_clip("nested", 0.0, 5.0)]),
+    ]);
+    invalid.visual.transitions = vec![crossfade("solid-group", "solid", "group")];
+    assert!(has(&invalid, "MVP-TRANSITION-SOURCE"));
+
+    invalid.visual.transitions = vec![crossfade("nested-id", "nested", "group")];
+    assert!(has(&invalid, "MVP-TRANSITION-CLIP"));
 }
 
 fn image_clip(id: &str, asset: &str, start: f64, duration: f64) -> Value {

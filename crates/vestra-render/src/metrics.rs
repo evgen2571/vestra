@@ -287,6 +287,7 @@ pub(crate) struct CpuHotPathTimings {
     pub(crate) other_effects: Duration,
     pub(crate) global_post_effect: Duration,
     pub(crate) surface_copy: Duration,
+    pub(crate) composition_cases: crate::blend::CompositionCaseCounts,
 }
 
 impl CpuHotPathTimings {
@@ -310,11 +311,19 @@ impl CpuHotPathTimings {
         self.other_effects += other.other_effects;
         self.global_post_effect += other.global_post_effect;
         self.surface_copy += other.surface_copy;
+        self.composition_cases.source_alpha_zero += other.composition_cases.source_alpha_zero;
+        self.composition_cases.source_alpha_opaque += other.composition_cases.source_alpha_opaque;
+        self.composition_cases.destination_alpha_zero +=
+            other.composition_cases.destination_alpha_zero;
+        self.composition_cases.destination_alpha_opaque +=
+            other.composition_cases.destination_alpha_opaque;
+        self.composition_cases.general_partial_alpha +=
+            other.composition_cases.general_partial_alpha;
     }
 
     pub(crate) fn report_line(&self, workers: usize, frames: u64) -> String {
         format!(
-            "vestra_cpu_profile workers={workers} frames={frames} source_rasterization_ns={} transform_sampling_ns={} layer_composition_ns={} effect_execution_ns={} gaussian_blur_ns={} zoom_blur_ns={} bloom_glow_ns={} bloom_highlight_extract_ns={} bloom_gaussian_blur_ns={} bloom_composite_ns={} chromatic_aberration_ns={} vignette_ns={} color_adjust_ns={} sharpen_ns={} sharpen_gaussian_ns={} sharpen_unsharp_composite_ns={} other_effects_ns={} global_post_effect_ns={} surface_copy_ns={}",
+            "vestra_cpu_profile workers={workers} frames={frames} source_rasterization_ns={} transform_sampling_ns={} layer_composition_ns={} effect_execution_ns={} gaussian_blur_ns={} zoom_blur_ns={} bloom_glow_ns={} bloom_highlight_extract_ns={} bloom_gaussian_blur_ns={} bloom_composite_ns={} chromatic_aberration_ns={} vignette_ns={} color_adjust_ns={} sharpen_ns={} sharpen_gaussian_ns={} sharpen_unsharp_composite_ns={} other_effects_ns={} global_post_effect_ns={} surface_copy_ns={} composition_source_alpha_zero={} composition_source_alpha_opaque={} composition_destination_alpha_zero={} composition_destination_alpha_opaque={} composition_general_partial_alpha={}",
             self.source_rasterization.as_nanos(),
             self.transform_sampling.as_nanos(),
             self.layer_composition.as_nanos(),
@@ -334,6 +343,11 @@ impl CpuHotPathTimings {
             self.other_effects.as_nanos(),
             self.global_post_effect.as_nanos(),
             self.surface_copy.as_nanos(),
+            self.composition_cases.source_alpha_zero,
+            self.composition_cases.source_alpha_opaque,
+            self.composition_cases.destination_alpha_zero,
+            self.composition_cases.destination_alpha_opaque,
+            self.composition_cases.general_partial_alpha,
         )
     }
 }

@@ -66,6 +66,260 @@ fn particle_project() -> Project {
     serde_json::from_value(value).expect("particle project")
 }
 
+fn solid_clip(id: &str, start: f64, duration: f64) -> Value {
+    json!({
+        "id": id,
+        "source": {"type": "solid_color", "colour": "#112233"},
+        "start": start,
+        "duration": duration,
+        "layer": 0,
+        "opacity": {"base_value": 1.0}
+    })
+}
+
+fn group_clip(id: &str, clips: Vec<Value>) -> Value {
+    json!({
+        "id": id,
+        "source": {"type": "group", "clips": clips},
+        "start": 10.0,
+        "duration": 5.0,
+        "layer": 0,
+        "opacity": {"base_value": 1.0}
+    })
+}
+
+fn grouped_project(clips: Vec<Value>) -> Project {
+    let mut value = serde_json::json!({
+        "schema_version": 2,
+        "output": {
+            "path": "out.mp4", "width": 2, "height": 2,
+            "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
+            "audio": false, "duration_mode": "explicit", "duration": 20.0
+        },
+        "assets": [],
+        "visual": {"clips": clips, "transitions": [], "flashes": [], "post_effects": []}
+    });
+    serde_json::from_value(value.take()).expect("grouped project")
+}
+
+fn image_clip(id: &str, asset: &str, start: f64, duration: f64) -> Value {
+    let example: Value = serde_json::from_str(include_str!(
+        "../../../../examples/projects/animation-effects.json"
+    ))
+    .expect("image fixture project");
+    json!({
+        "id": id,
+        "source": {"type": "image", "asset": asset},
+        "start": start,
+        "duration": duration,
+        "layer": 0,
+        "transform": example["visual"]["clips"][0]["transform"].clone(),
+        "opacity": {"base_value": 1.0}
+    })
+}
+
+fn asset_usage_project(clips: Vec<Value>) -> Project {
+    serde_json::from_value(json!({
+        "schema_version": 2,
+        "output": {
+            "path": "out.mp4", "width": 2, "height": 2,
+            "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
+            "audio": false, "duration_mode": "explicit", "duration": 20.0
+        },
+        "assets": [
+            {"id": "image-a", "type": "image", "source": "image-a.png"},
+            {"id": "image-b", "type": "image", "source": "image-b.png"}
+        ],
+        "visual": {"clips": clips, "transitions": [], "flashes": [], "post_effects": []}
+    }))
+    .expect("asset usage project")
+}
+
+fn unused_asset_ids(project: &Project) -> Vec<String> {
+    validate(project, ResourceLimits::default())
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "MVP-ASSET-UNUSED")
+        .filter_map(|diagnostic| diagnostic.related_id.clone())
+        .collect()
+}
+
+#[test]
+fn unused_asset_warning_traverses_group_descendants() {
+    let direct = asset_usage_project(vec![group_clip(
+        "group",
+        vec![image_clip("child", "image-a", 0.0, 1.0)],
+    )]);
+    assert_eq!(unused_asset_ids(&direct), vec!["image-b"]);
+
+    let nested = asset_usage_project(vec![group_clip(
+        "group-a",
+        vec![group_clip(
+            "group-b",
+            vec![image_clip("deep-child", "image-a", 0.0, 1.0)],
+        )],
+    )]);
+    assert_eq!(unused_asset_ids(&nested), vec!["image-b"]);
+}
+
+#[test]
+fn unused_asset_warning_preserves_flat_project_behavior() {
+    let used = asset_usage_project(vec![image_clip("root", "image-a", 0.0, 1.0)]);
+    assert_eq!(unused_asset_ids(&used), vec!["image-b"]);
+}
+
+#[test]
+fn groups_use_composition_local_ids_and_preserve_local_times() {
+    let project = grouped_project(vec![
+        group_clip("left", vec![solid_clip("x", 0.0, 10.0)]),
+        group_clip("right", vec![solid_clip("x", 2.0, 10.0)]),
+    ]);
+    assert!(validate(&project, ResourceLimits::default()).is_valid());
+    let crate::project::VisualSource::Group(group) = &project.visual.clips[0].source else {
+        panic!("group source")
+    };
+    assert_eq!(group.clips[0].start, 0.0);
+    assert_eq!(group.clips[0].duration, 10.0);
+}
+
+#[test]
+fn groups_reject_duplicate_sibling_ids_with_nested_path() {
+    let project = grouped_project(vec![group_clip(
+        "group",
+        vec![solid_clip("x", 0.0, 1.0), solid_clip("x", 2.0, 10.0)],
+    )]);
+    let report = validate(&project, ResourceLimits::default());
+    let diagnostic = report
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == "MVP-CLIP-ID")
+        .expect("duplicate id diagnostic");
+    assert_eq!(
+        diagnostic.pointer.as_deref(),
+        Some("/visual/clips/0/source/clips/1/id")
+    );
+}
+
+#[test]
+fn group_depth_boundaries_are_explicit() {
+    fn nested(depth: usize) -> Value {
+        let mut value = solid_clip("leaf", 0.0, 1.0);
+        for index in 0..depth {
+            value = group_clip(&format!("group-{index}"), vec![value]);
+        }
+        value
+    }
+
+    for depth in [1, 31, 32] {
+        assert!(
+            validate(
+                &grouped_project(vec![nested(depth)]),
+                ResourceLimits::default()
+            )
+            .is_valid(),
+            "depth {depth} should pass"
+        );
+    }
+    let report = validate(
+        &grouped_project(vec![nested(33)]),
+        ResourceLimits::default(),
+    );
+    assert!(report.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == "MVP-GROUP-DEPTH"
+            && diagnostic
+                .pointer
+                .as_deref()
+                .is_some_and(|pointer| pointer.contains("/source/clips"))
+    }));
+}
+
+#[test]
+fn nested_groups_count_against_the_clip_limit() {
+    let project = grouped_project(vec![group_clip(
+        "group",
+        vec![solid_clip("child", 0.0, 1.0)],
+    )]);
+    let limits = ResourceLimits {
+        maximum_clips: 2,
+        ..ResourceLimits::default()
+    };
+    assert!(validate(&project, limits).is_valid());
+    let limits = ResourceLimits {
+        maximum_clips: 1,
+        ..ResourceLimits::default()
+    };
+    assert!(
+        validate(&project, limits)
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-CLIPS")
+    );
+}
+
+#[test]
+fn nested_particle_validation_reuses_canonical_rules() {
+    let mut project = particle_project();
+    let particle = project.visual.clips[0].clone();
+    project.visual.clips[0].source = crate::project::VisualSource::Group(crate::project::Group {
+        clips: vec![particle],
+    });
+    let crate::project::VisualSource::Group(group) = &mut project.visual.clips[0].source else {
+        panic!("group source")
+    };
+    let crate::project::VisualSource::ParticleSystem(system) = &mut group.clips[0].source else {
+        panic!("particle source")
+    };
+    system.particle.lifetime = 0.0;
+    assert!(codes(&project).contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+}
+
+#[test]
+fn group_rejects_image_only_properties_but_keeps_group_properties_generic() {
+    let mut value = group_clip("group", vec![solid_clip("child", 0.0, 1.0)]);
+    value["sizing"] = json!({"mode": "fit"});
+    let project = grouped_project(vec![value]);
+    assert!(codes(&project).contains(&"MVP-GROUP-PROPERTIES".to_owned()));
+}
+
+#[test]
+fn aggregate_particle_limits_include_particles_in_sibling_groups() {
+    let source_project = particle_project();
+    let child = source_project.visual.clips[0].clone();
+    let mut child_value = serde_json::to_value(&child).expect("particle child JSON");
+    fn remove_nulls(value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                object.retain(|_, item| !item.is_null());
+                for item in object.values_mut() {
+                    remove_nulls(item);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    remove_nulls(item);
+                }
+            }
+            _ => {}
+        }
+    }
+    remove_nulls(&mut child_value);
+    let mut left = group_clip("left", vec![child_value.clone()]);
+    let mut right = group_clip("right", vec![child_value]);
+    left["start"] = json!(0.0);
+    right["start"] = json!(0.0);
+    let project = grouped_project(vec![left, right]);
+    let limits = ResourceLimits {
+        maximum_total_live_particles: 1,
+        ..ResourceLimits::default()
+    };
+    assert!(
+        validate(&project, limits)
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES-TOTAL")
+    );
+}
+
 #[test]
 fn particle_system_validates_without_audio_or_clip_transforms() {
     let project = particle_project();

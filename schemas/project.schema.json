@@ -622,13 +622,6 @@
       "additionalProperties": false,
       "allOf": [
         {
-          "else": {
-            "not": {
-              "required": [
-                "transform"
-              ]
-            }
-          },
           "if": {
             "properties": {
               "source": {
@@ -650,6 +643,32 @@
             "required": [
               "transform"
             ]
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "source": {
+                  "properties": {
+                    "type": {
+                      "const": "group"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                }
+              },
+              "required": [
+                "source"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "transform"
+                ]
+              }
+            }
           }
         }
       ],
@@ -1371,6 +1390,25 @@
         "radius",
         "intensity",
         "colour"
+      ],
+      "type": "object"
+    },
+    "group": {
+      "additionalProperties": false,
+      "properties": {
+        "clips": {
+          "items": {
+            "$ref": "#/$defs/clip"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "group"
+        }
+      },
+      "required": [
+        "type",
+        "clips"
       ],
       "type": "object"
     },
@@ -2612,6 +2650,9 @@
         },
         {
           "$ref": "#/$defs/particle_system"
+        },
+        {
+          "$ref": "#/$defs/group"
         }
       ]
     },

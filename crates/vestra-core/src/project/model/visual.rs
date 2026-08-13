@@ -415,6 +415,20 @@ pub struct Clip {
     pub preset: Option<Preset>,
 }
 
+/// An isolated nested composition whose child clip times and layer values are
+/// local to this Group. Groups inherit the containing canvas dimensions and
+/// conceptually render into a transparent RGBA surface. V1 Groups do not
+/// contain transitions, flashes, or post effects. A Group's explicit parent
+/// interval clips descendants without rewriting their authored local starts or
+/// durations. Child ordering is local to the Group, using the existing layer,
+/// start, and ID ordering contract. Later rendering applies the Group's
+/// transform, effects, opacity, and blend mode to its complete precomposition.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Group {
+    pub clips: Vec<Clip>,
+}
+
 const fn default_visible() -> bool {
     true
 }
@@ -432,6 +446,7 @@ pub enum VisualSource {
     Spectrum2D(Spectrum2D),
     #[serde(rename = "particle_system")]
     ParticleSystem(ParticleSystem),
+    Group(Group),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -517,6 +532,47 @@ mod tests {
         assert_eq!(value["type"], "spectrum2d");
         let round_trip = serde_json::from_value::<VisualSource>(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(round_trip).unwrap(), value);
+    }
+
+    #[test]
+    fn group_source_round_trips_with_local_child_timing() {
+        let source: VisualSource = serde_json::from_value(serde_json::json!({
+            "type": "group",
+            "clips": [{
+                "id": "child",
+                "source": {"type": "solid_color", "colour": "#112233"},
+                "start": 2.0,
+                "duration": 10.0,
+                "layer": 7,
+                "opacity": {"base_value": 1.0}
+            }]
+        }))
+        .expect("group source JSON");
+        let value = serde_json::to_value(&source).expect("group source serializes");
+        assert_eq!(value["type"], "group");
+        assert_eq!(value["clips"][0]["start"], 2.0);
+        assert_eq!(value["clips"][0]["duration"], 10.0);
+        let mut reloadable = value.clone();
+        fn remove_nulls(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(object) => {
+                    object.retain(|_, item| !item.is_null());
+                    for item in object.values_mut() {
+                        remove_nulls(item);
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        remove_nulls(item);
+                    }
+                }
+                _ => {}
+            }
+        }
+        remove_nulls(&mut reloadable);
+        let decoded =
+            serde_json::from_value::<VisualSource>(reloadable.clone()).expect("group JSON");
+        assert_eq!(serde_json::to_value(decoded).expect("group JSON"), value);
     }
 
     #[test]

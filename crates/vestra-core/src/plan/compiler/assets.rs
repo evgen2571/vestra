@@ -21,7 +21,8 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
             crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
             crate::project::VisualSource::SolidColor { .. }
             | crate::project::VisualSource::Spectrum2D(_)
-            | crate::project::VisualSource::ParticleSystem(_) => None,
+            | crate::project::VisualSource::ParticleSystem(_)
+            | crate::project::VisualSource::Group(_) => None,
         })
         .collect();
     let images: Vec<_> = project

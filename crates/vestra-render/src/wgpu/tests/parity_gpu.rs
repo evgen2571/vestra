@@ -22,6 +22,7 @@ use crate::{
 };
 use bytemuck::Zeroable;
 use image::RgbaImage;
+use serde_json::{Value, json};
 
 fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
     EvaluatedFrame {
@@ -82,6 +83,163 @@ fn scalar(track: Track<f64>) -> CompiledScalarProperty {
     CompiledScalarProperty::authored(track)
 }
 
+fn group_project(
+    children: Vec<Value>,
+    group: Value,
+    transitions: Vec<Value>,
+) -> crate::project::Project {
+    let mut value = json!({
+        "schema_version": 2,
+        "output": {
+            "path": "group-parity.mp4", "width": 32, "height": 32,
+            "frame_rate": "24/1", "background": "#101018", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 2.0
+        },
+        "assets": [],
+        "visual": {
+            "clips": [{
+                "id": "group", "source": {"type": "group", "clips": children},
+                "start": 0.0, "duration": 2.0, "layer": 0,
+                "opacity": {"base_value": 1.0}
+            }],
+            "transitions": transitions, "flashes": [], "post_effects": []
+        }
+    });
+    if let Some(object) = value["visual"]["clips"][0].as_object_mut()
+        && let Some(group_object) = group.as_object()
+    {
+        for (key, value) in group_object {
+            object.insert(key.clone(), value.clone());
+        }
+    }
+    serde_json::from_value(value.take()).expect("Group parity project parses")
+}
+
+fn solid_child(id: &str, colour: &str, layer: i32) -> Value {
+    json!({
+        "id": id, "source": {"type": "solid_color", "colour": colour},
+        "start": 0.0, "duration": 2.0, "layer": layer,
+        "opacity": {"base_value": 1.0}
+    })
+}
+
+fn transform(position: (f64, f64), scale: (f64, f64), rotation_degrees: f64) -> Value {
+    json!({
+        "position": {"base_value": {"x": position.0, "y": position.1}},
+        "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+        "scale": {"base_value": {"x": scale.0, "y": scale.1}},
+        "rotation_degrees": {"base_value": rotation_degrees}
+    })
+}
+
+fn root_group_transition_project(transition: Value) -> crate::project::Project {
+    let value = json!({
+        "schema_version": 2,
+        "output": {
+            "path": "group-transition.mp4", "width": 32, "height": 32,
+            "frame_rate": "24/1", "background": "#101018", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 3.0
+        },
+        "assets": [],
+        "visual": {
+            "clips": [
+                {"id": "out", "source": {"type": "group", "clips": [solid_child("out-child", "#E05050", 0)]},
+                 "start": 0.0, "duration": 2.0, "layer": 0, "opacity": {"base_value": 1.0}},
+                {"id": "in", "source": {"type": "group", "clips": [solid_child("in-child", "#50A0E0", 0)]},
+                 "start": 1.0, "duration": 2.0, "layer": 1, "opacity": {"base_value": 1.0}}
+            ],
+            "transitions": [transition], "flashes": [], "post_effects": []
+        }
+    });
+    serde_json::from_value(value).expect("Group transition project parses")
+}
+
+fn render_project_parity(project: crate::project::Project, time: u128, tolerance: u8) -> RgbaImage {
+    let report = vestra_core::validation::validate(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+    );
+    assert!(
+        report.is_valid(),
+        "Group parity project is invalid: {:?}",
+        report.diagnostics()
+    );
+    let mut assets = std::collections::BTreeMap::new();
+    assets.insert("tone".to_owned(), std::path::PathBuf::from("tone.wav"));
+    let mut durations = std::collections::BTreeMap::new();
+    durations.insert("tone".to_owned(), 2.0);
+    let input = crate::plan::PlanCompileInput::new(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+        std::path::Path::new("."),
+        &assets,
+        &durations,
+        1.0,
+        (24, 1),
+        48,
+        &[],
+    );
+    let plan = compile(&input, CompileOptions::default()).expect("Group parity project compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("Group parity assets decode");
+    let active = active_items_at(&plan, time);
+    let frame = crate::plan::evaluate(&plan, &active, time);
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        panic!("strict Group parity tests require a WGPU adapter");
+    };
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU Group frame renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("Vulkan WGPU Group frame renders");
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
+    assert!(
+        difference.maximum_absolute_channel_error <= tolerance,
+        "Group parity exceeded tolerance {tolerance}: {difference:?}"
+    );
+    gpu_output
+}
+
+fn assert_particle_group_plan_targets_group_canvas(project: &crate::project::Project) {
+    let report = vestra_core::validation::validate(
+        project,
+        vestra_core::validation::ResourceLimits::default(),
+    );
+    assert!(report.is_valid(), "particle Group project is invalid");
+    let assets = std::collections::BTreeMap::new();
+    let durations = std::collections::BTreeMap::new();
+    let input = crate::plan::PlanCompileInput::new(
+        project,
+        vestra_core::validation::ResourceLimits::default(),
+        std::path::Path::new("."),
+        &assets,
+        &durations,
+        1.0,
+        (24, 1),
+        24,
+        &[],
+    );
+    let plan = compile(&input, CompileOptions::default()).expect("particle Group plan compiles");
+    let frame = crate::plan::evaluate(&plan, &active_items_at(&plan, 0), 0);
+    let frame_plan = GpuFramePlan::build(&frame);
+    frame_plan
+        .validate(0)
+        .expect("particle Group plan validates");
+    assert!(frame_plan.operations.iter().any(|operation| matches!(
+        operation,
+        super::frame_plan::GpuOperation::ResolveParticleLayer { .. }
+    )));
+    assert!(frame_plan.operations.iter().any(|operation| matches!(
+        operation,
+        super::frame_plan::GpuOperation::CompositeLayer {
+            canvas_destination: super::frame_plan::TextureSlot::GroupCanvasA(0)
+                | super::frame_plan::TextureSlot::GroupCanvasB(0),
+            ..
+        }
+    )));
+}
+
 fn evaluated_effect_pass_count(frame: &EvaluatedFrame) -> usize {
     frame
         .layers
@@ -90,6 +248,237 @@ fn evaluated_effect_pass_count(frame: &EvaluatedFrame) -> usize {
         .chain(&frame.post_effects)
         .map(|effect| effect_pass_plan(effect).as_slice().len())
         .sum()
+}
+
+#[test]
+fn gpu_nested_group_matches_cpu_when_an_adapter_is_available() {
+    let project = crate::project::Project::from_json(
+        r##"{
+            "schema_version": 2,
+            "output": {
+                "path": "nested-group.mp4", "width": 4, "height": 4,
+                "frame_rate": "24/1", "background": "#00000000",
+                "quality": "preview", "audio": false, "duration_mode": "automatic"
+            },
+            "assets": [],
+            "visual": { "clips": [{
+                "id": "outer", "source": { "type": "group", "clips": [{
+                    "id": "inner", "source": { "type": "group", "clips": [{
+                        "id": "pixel", "source": { "type": "solid_color", "colour": "#4C8CCC" },
+                        "start": 0, "duration": 1, "layer": 0, "opacity": { "base_value": 1 }
+                    }]}, "start": 0, "duration": 1, "layer": 0, "opacity": { "base_value": 1 }
+                }]}, "start": 0, "duration": 1, "layer": 0, "opacity": { "base_value": 1 }
+            }]}
+        }"##,
+    )
+    .expect("nested Group project parses");
+    let report = vestra_core::validation::validate(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+    );
+    assert!(report.is_valid(), "{:?}", report.diagnostics());
+    let assets = std::collections::BTreeMap::new();
+    let durations = std::collections::BTreeMap::new();
+    let warnings = Vec::new();
+    let input = crate::plan::PlanCompileInput::new(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+        std::path::Path::new("."),
+        &assets,
+        &durations,
+        1.0,
+        (24, 1),
+        24,
+        &warnings,
+    );
+    let plan = compile(&input, CompileOptions::default()).expect("nested Group compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("nested Group assets decode");
+    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU Group renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("WGPU Group renders");
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+    assert!(
+        difference.maximum_absolute_channel_error <= 2,
+        "nested Group parity exceeded tolerance: {difference:?}"
+    );
+}
+
+#[test]
+fn gpu_group_brightness_and_mixed_effect_order_match_cpu_on_vulkan() {
+    let brightness = json!({
+        "effects": [{"id": "brightness", "type": "brightness", "amount": {"base_value": 0.35}}]
+    });
+    render_project_parity(
+        group_project(
+            vec![solid_child("colour", "#204060", 0)],
+            brightness,
+            vec![],
+        ),
+        0,
+        2,
+    );
+
+    let mixed = json!({
+        "effects": [
+            {"id": "blur", "type": "gaussian_blur", "radius": {"base_value": 1.5}},
+            {"id": "brightness", "type": "brightness", "amount": {"base_value": 0.22}}
+        ]
+    });
+    render_project_parity(
+        group_project(
+            vec![
+                solid_child("left", "#204060", 0),
+                solid_child("right", "#D09030", 1),
+            ],
+            mixed,
+            vec![],
+        ),
+        0,
+        3,
+    );
+}
+
+#[test]
+fn gpu_group_transform_transparency_opacity_and_blend_match_cpu_on_vulkan() {
+    let group = json!({
+        "transform": transform((0.58, 0.48), (0.72, 0.72), 0.0),
+        "opacity": {"base_value": 0.55}
+    });
+    let output = render_project_parity(
+        group_project(
+            vec![
+                solid_child("left", "#E05050", 0),
+                solid_child("right", "#50A0E0", 1),
+            ],
+            group,
+            vec![],
+        ),
+        0,
+        2,
+    );
+    assert!(
+        output.pixels().any(|pixel| pixel[3] > 0),
+        "transformed Group should produce visible pixels"
+    );
+
+    render_project_parity(
+        group_project(
+            vec![solid_child("blend", "#E05050", 0)],
+            json!({"blend_mode": "multiply"}),
+            vec![],
+        ),
+        0,
+        2,
+    );
+}
+
+#[test]
+fn gpu_particle_system_inside_group_matches_cpu_on_vulkan() {
+    let particle = json!({
+        "id": "particles",
+        "source": {
+            "type": "particle_system", "seed": 41,
+            "emitter": {"type": "point", "position": {"x": 0.5, "y": 0.5}},
+            "emission": {"bursts": [{"time": 0.0, "count": 8}]},
+            "particle": {
+                "lifetime": 1.0, "size": 0.12, "speed": 0.0,
+                "direction_spread_degrees": 0.0, "colour": "#FFD27A",
+                "primitive": "square", "blend_mode": "normal"
+            }
+        },
+        "start": 0.0, "duration": 2.0, "layer": 0,
+        "opacity": {"base_value": 1.0}
+    });
+    let project = group_project(vec![particle], json!({}), vec![]);
+    assert_particle_group_plan_targets_group_canvas(&project);
+    let output = render_project_parity(project, 250_000_000, 2);
+    assert!(
+        output.pixels().any(|pixel| pixel[3] > 0),
+        "Group particle fixture should produce visible output"
+    );
+}
+
+#[test]
+fn gpu_spectrum2d_inside_group_matches_cpu_on_vulkan() {
+    let project = group_project(
+        vec![solid_child("placeholder", "#000000", 0)],
+        json!({}),
+        vec![],
+    );
+    let report = vestra_core::validation::validate(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+    );
+    assert!(
+        report.is_valid(),
+        "Spectrum Group project is invalid: {:?}",
+        report.diagnostics()
+    );
+    let assets = std::collections::BTreeMap::new();
+    let durations = std::collections::BTreeMap::new();
+    let input = crate::plan::PlanCompileInput::new(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+        std::path::Path::new("."),
+        &assets,
+        &durations,
+        1.0,
+        (24, 1),
+        24,
+        &[],
+    );
+    let plan = compile(&input, CompileOptions::default()).expect("Spectrum Group plan compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("Spectrum Group assets decode");
+    let active = active_items_at(&plan, 0);
+    let mut frame = crate::plan::evaluate(&plan, &active, 0);
+    let spectrum = spectrum_frame(vec![1.0, 0.5, 0.25, 0.75], 0.0)
+        .layers
+        .remove(0)
+        .source;
+    let crate::plan::EvaluatedSource::Group { composition, .. } = &mut frame.layers[0].source
+    else {
+        panic!("expected Group source");
+    };
+    composition.layers[0].source = spectrum;
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        panic!("strict Group parity tests require a WGPU adapter");
+    };
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU Spectrum Group frame renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("Vulkan Spectrum Group frame renders");
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+    assert!(
+        difference.maximum_absolute_channel_error <= 2,
+        "Spectrum Group parity exceeded tolerance: {difference:?}"
+    );
+}
+
+#[test]
+fn gpu_group_crossfade_and_directional_push_match_cpu_on_vulkan() {
+    let crossfade = json!({
+        "type": "crossfade", "id": "crossfade", "outgoing": "out", "incoming": "in",
+        "start": 1.0, "duration": 1.0, "interpolation": "linear"
+    });
+    render_project_parity(root_group_transition_project(crossfade), 1_500_000_000, 2);
+
+    let push = json!({
+        "type": "directional_push", "id": "push", "outgoing": "out", "incoming": "in",
+        "start": 1.0, "duration": 1.0, "interpolation": "linear",
+        "angle_degrees": 0.0, "distance": 0.75, "blur_radius": 0.0
+    });
+    render_project_parity(root_group_transition_project(push), 1_500_000_000, 3);
 }
 
 /// Prepares exactly the parameter capacity an evaluated catalogue case uses.

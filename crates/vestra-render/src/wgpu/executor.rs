@@ -121,11 +121,13 @@ pub(super) fn append_particle_upload(
 /// with a different dynamic parameter offset for every frame operation.
 pub(super) struct FrameBindGroups {
     clear_canvas_a: wgpu::BindGroup,
+    clear_group_canvases: Vec<(TextureSlot, wgpu::BindGroup)>,
     solid_layer: wgpu::BindGroup,
     spectrum2d_layer: wgpu::BindGroup,
     particle_layer: wgpu::BindGroup,
     particle_resolve: wgpu::BindGroup,
     image_layers: Vec<wgpu::BindGroup>,
+    surface_layers: Vec<(TextureSlot, wgpu::BindGroup)>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
     persistent_created: usize,
@@ -159,6 +161,23 @@ impl FrameBindGroups {
                 .view,
             parameters,
         );
+        let clear_group_canvases = frame
+            .working
+            .composition_slots()
+            .filter(|slot| !matches!(slot, TextureSlot::CanvasA | TextureSlot::CanvasB))
+            .map(|slot| {
+                (
+                    slot,
+                    layer_group(
+                        device,
+                        &pipelines.layer_bindings,
+                        &sources.solid_texture.view,
+                        &frame.working.get(slot).view,
+                        parameters,
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
         let spectrum2d_layer = spectrum2d_group(
             device,
             &pipelines.spectrum2d_bindings,
@@ -191,6 +210,23 @@ impl FrameBindGroups {
                 )
             })
             .collect::<Vec<_>>();
+        let surface_layers = frame
+            .working
+            .composition_slots()
+            .filter(|slot| !matches!(slot, TextureSlot::CanvasA | TextureSlot::CanvasB))
+            .map(|slot| {
+                (
+                    slot,
+                    layer_group(
+                        device,
+                        &pipelines.layer_bindings,
+                        &frame.working.get(slot).view,
+                        &frame.working.get(TextureSlot::Layer).view,
+                        parameters,
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
         let layer_slots = if frame.working.has_effects() {
             let mut slots = vec![TextureSlot::Layer, TextureSlot::EffectA];
             if frame.working.has_effect_b() {
@@ -201,12 +237,9 @@ impl FrameBindGroups {
             vec![TextureSlot::Layer]
         };
         let mut composites = Vec::new();
-        for canvas in [TextureSlot::CanvasA, TextureSlot::CanvasB] {
-            let output = match canvas {
-                TextureSlot::CanvasA => TextureSlot::CanvasB,
-                TextureSlot::CanvasB => TextureSlot::CanvasA,
-                _ => unreachable!(),
-            };
+        for canvas in frame.working.composition_slots() {
+            let output = super::frame_plan::alternate_canvas_for_bindings(canvas)
+                .expect("composition slots contain only canvas textures");
             for layer in layer_slots.iter().copied() {
                 composites.push((
                     canvas,
@@ -262,14 +295,21 @@ impl FrameBindGroups {
                 }
             }
         }
-        let persistent_created = sources.textures.len() + 5 + composites.len() + effects.len();
+        let persistent_created = sources.textures.len()
+            + 5
+            + clear_group_canvases.len()
+            + surface_layers.len()
+            + composites.len()
+            + effects.len();
         Self {
             clear_canvas_a,
+            clear_group_canvases,
             solid_layer,
             spectrum2d_layer,
             particle_layer,
             particle_resolve,
             image_layers,
+            surface_layers,
             composites,
             effects,
             persistent_created,
@@ -291,6 +331,36 @@ impl FrameBindGroups {
                 "",
             )
         })
+    }
+
+    fn clear_group(&self, slot: TextureSlot) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.clear_group_canvases
+            .iter()
+            .find(|(cached, _)| *cached == slot)
+            .map(|(_, group)| group)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-BIND-GROUP",
+                    crate::Category::Backend,
+                    "missing Group clear bind group",
+                    "",
+                )
+            })
+    }
+
+    fn surface(&self, slot: TextureSlot) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.surface_layers
+            .iter()
+            .find(|(cached, _)| *cached == slot)
+            .map(|(_, group)| group)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-BIND-GROUP",
+                    crate::Category::Backend,
+                    "missing Group surface bind group",
+                    "",
+                )
+            })
     }
 
     fn composite(
@@ -385,7 +455,14 @@ pub(super) fn encode_and_submit(
                 ..
             } => {
                 let group = if matches!(operation, GpuOperation::ClearCanvas { .. }) {
-                    &bind_groups.clear_canvas_a
+                    match operation {
+                        GpuOperation::ClearCanvas { destination, .. }
+                            if *destination != TextureSlot::CanvasA =>
+                        {
+                            bind_groups.clear_group(*destination)?
+                        }
+                        _ => &bind_groups.clear_canvas_a,
+                    }
                 } else {
                     debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
                     &bind_groups.solid_layer
@@ -527,11 +604,10 @@ pub(super) fn encode_and_submit(
                 let group = &bind_groups.particle_resolve;
                 debug_assert_eq!(*source, TextureSlot::ParticleAccumulation);
                 debug_assert_eq!(*destination, TextureSlot::Layer);
-                dispatch(
+                dispatch_without_dynamic_offset(
                     &mut encoder,
                     &pipelines.particle_resolve,
                     group,
-                    0,
                     width,
                     height,
                 );
@@ -558,6 +634,25 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
             }
+            GpuOperation::RenderSurfaceLayer {
+                source,
+                destination,
+                parameters_index,
+                ..
+            } => {
+                debug_assert_eq!(*destination, TextureSlot::Layer);
+                dispatch(
+                    &mut encoder,
+                    &pipelines.layer,
+                    bind_groups.surface(*source)?,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
+            }
             GpuOperation::CompositeLayer {
                 layer_source,
                 canvas_source,
@@ -566,14 +661,8 @@ pub(super) fn encode_and_submit(
                 ..
             } => {
                 debug_assert_eq!(
-                    *canvas_destination,
-                    match canvas_source {
-                        super::frame_plan::TextureSlot::CanvasA =>
-                            super::frame_plan::TextureSlot::CanvasB,
-                        super::frame_plan::TextureSlot::CanvasB =>
-                            super::frame_plan::TextureSlot::CanvasA,
-                        _ => unreachable!("frame-plan validation requires a canvas source"),
-                    }
+                    Some(*canvas_destination),
+                    super::frame_plan::alternate_canvas_for_bindings(*canvas_source)
                 );
                 let group = bind_groups.composite(*canvas_source, *layer_source)?;
                 dispatch(
@@ -797,6 +886,22 @@ fn dispatch(
     });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, group, &[offset]);
+    pass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
+}
+
+fn dispatch_without_dynamic_offset(
+    encoder: &mut wgpu::CommandEncoder,
+    pipeline: &wgpu::ComputePipeline,
+    group: &wgpu::BindGroup,
+    width: u32,
+    height: u32,
+) {
+    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+        label: Some("vestra texture operation without dynamic offset"),
+        timestamp_writes: None,
+    });
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, group, &[]);
     pass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
 }
 fn layer_group<'a>(

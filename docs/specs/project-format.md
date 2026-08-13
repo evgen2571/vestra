@@ -136,9 +136,10 @@ root-only.
 Existing root transitions accept Image and Group endpoints in any combination.
 Transition lookup remains root-only: a nested child ID cannot be used as a root
 endpoint. Internal Group transitions, flashes, and post-effects remain outside
-Group V1. WGPU Group rendering remains unsupported and reports a backend-specific
-diagnostic, including for Group transition projects. Python Group authoring is
-not supported.
+Group V1. CPU and WGPU render supported Groups through isolated transparent
+composition targets; WGPU temporary targets scale with nested depth and its
+Group cache remains deliberately conservative. Python Group authoring is not
+supported.
 
 Solid-colour clips and flashes cover the full output canvas. They support
 opacity and colour effects; transforms are intentionally not accepted for

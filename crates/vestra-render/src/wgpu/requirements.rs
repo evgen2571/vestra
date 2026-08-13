@@ -7,7 +7,7 @@
 
 use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 
-use super::frame_plan::plan_requires_auxiliary;
+use super::frame_plan::{GpuFramePlan, plan_requires_auxiliary};
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
 const BASE_WORKING_TEXTURE_COUNT: u64 = 4;
@@ -87,13 +87,40 @@ impl GpuRequirements {
             .flat_map(|asset| [decoded.image(asset).width(), decoded.image(asset).height()])
             .max()
             .unwrap_or(1);
-        let parameter_record_count = u32::try_from(plan.layers.len())
+        fn compiled_counts(layers: &[crate::plan::CompiledLayer]) -> (usize, usize) {
+            layers
+                .iter()
+                .fold((0, 0), |(layer_count, group_count), layer| {
+                    let (nested_layers, nested_groups) = match &layer.source {
+                        crate::plan::CompiledVisualSource::Group(composition) => {
+                            compiled_counts(&composition.layers)
+                        }
+                        _ => (0, 0),
+                    };
+                    (
+                        layer_count + 1 + nested_layers,
+                        group_count
+                            + usize::from(matches!(
+                                &layer.source,
+                                crate::plan::CompiledVisualSource::Group(_)
+                            ))
+                            + nested_groups,
+                    )
+                })
+        }
+        let (compiled_layer_count, compiled_group_count) = compiled_counts(&plan.layers);
+        let parameter_record_count = u32::try_from(compiled_layer_count)
             .ok()
             .and_then(|count| count.checked_mul(2))
             .and_then(|count| {
                 u32::try_from(plan.compilation.effect_pass_count)
                     .ok()
                     .and_then(|passes| count.checked_add(passes))
+            })
+            .and_then(|count| {
+                u32::try_from(compiled_group_count)
+                    .ok()
+                    .and_then(|groups| count.checked_add(groups))
             })
             .and_then(|count| count.checked_add(1))
             .ok_or_else(|| parameter_overflow("frame parameter record count overflow"))?;
@@ -111,10 +138,17 @@ impl GpuRequirements {
             _ => 2,
         };
         let auxiliary_texture_count = u64::from(plan_requires_auxiliary(plan));
+        let group_texture_count = u64::try_from(GpuFramePlan::required_group_depth(plan))
+            .ok()
+            .and_then(|depth| depth.checked_mul(2))
+            .ok_or_else(|| resource_overflow("Group texture count overflow"))?;
         let working_texture_bytes = estimated_texture_bytes(
             plan.canvas.width,
             plan.canvas.height,
-            BASE_WORKING_TEXTURE_COUNT + effect_texture_count + auxiliary_texture_count,
+            BASE_WORKING_TEXTURE_COUNT
+                + effect_texture_count
+                + auxiliary_texture_count
+                + group_texture_count,
         )?;
         let source_texture_bytes = (0..plan.images.len()).try_fold(0_u64, |total, asset| {
             let image = decoded.image(asset);
@@ -135,7 +169,8 @@ impl GpuRequirements {
             source_texture_count: plan.images.len() as u64,
             working_texture_count: BASE_WORKING_TEXTURE_COUNT
                 + effect_texture_count
-                + auxiliary_texture_count,
+                + auxiliary_texture_count
+                + group_texture_count,
             effect_texture_count,
             auxiliary_texture_count,
             source_texture_bytes,

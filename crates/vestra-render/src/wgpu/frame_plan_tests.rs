@@ -153,6 +153,272 @@ fn static_frame() -> EvaluatedFrame {
 }
 
 #[test]
+fn nested_groups_use_isolated_depth_indexed_composition_targets() {
+    let transform = crate::animation::Transform2D::identity(
+        crate::domain::Point { x: 0.5, y: 0.5 },
+        crate::domain::Point { x: 0.5, y: 0.5 },
+    );
+    let child = |index| crate::plan::EvaluatedLayer {
+        compiled_layer_index: index,
+        content_dependency: crate::plan::TemporalDependency::Static,
+        source: EvaluatedSource::SolidColor {
+            colour: [255, 0, 0, 255],
+        },
+        opacity: 1.0,
+        effects: Vec::new(),
+        colour_transform: crate::plan::ColourTransform::default(),
+        blend_mode: crate::project::BlendMode::Normal,
+    };
+    let nested = crate::plan::EvaluatedLayer {
+        compiled_layer_index: 2,
+        content_dependency: crate::plan::TemporalDependency::Static,
+        source: EvaluatedSource::Group {
+            composition: crate::plan::EvaluatedComposition {
+                layers: vec![child(3)],
+            },
+            transform,
+        },
+        opacity: 1.0,
+        effects: Vec::new(),
+        colour_transform: crate::plan::ColourTransform::default(),
+        blend_mode: crate::project::BlendMode::Normal,
+    };
+    let frame = EvaluatedFrame {
+        time: 0,
+        background: [0, 0, 0, 0],
+        width: 4,
+        height: 4,
+        layers: vec![crate::plan::EvaluatedLayer {
+            compiled_layer_index: 1,
+            content_dependency: crate::plan::TemporalDependency::Static,
+            source: EvaluatedSource::Group {
+                composition: crate::plan::EvaluatedComposition {
+                    layers: vec![nested],
+                },
+                transform,
+            },
+            opacity: 1.0,
+            effects: Vec::new(),
+            colour_transform: crate::plan::ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }],
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    };
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(0).expect("nested Group frame plan validates");
+    assert!(plan.operations.iter().any(|operation| matches!(
+        operation,
+        GpuOperation::ClearCanvas {
+            destination: TextureSlot::GroupCanvasA(0),
+            ..
+        }
+    )));
+    assert!(plan.operations.iter().any(|operation| matches!(
+        operation,
+        GpuOperation::ClearCanvas {
+            destination: TextureSlot::GroupCanvasA(1),
+            ..
+        }
+    )));
+    assert!(
+        plan.operations
+            .iter()
+            .any(|operation| matches!(operation, GpuOperation::RenderSurfaceLayer { .. }))
+    );
+}
+
+#[test]
+fn canvas_alternation_preserves_root_role_and_group_depth() {
+    let cases = [
+        (TextureSlot::CanvasA, Some(TextureSlot::CanvasB)),
+        (TextureSlot::CanvasB, Some(TextureSlot::CanvasA)),
+        (
+            TextureSlot::GroupCanvasA(0),
+            Some(TextureSlot::GroupCanvasB(0)),
+        ),
+        (
+            TextureSlot::GroupCanvasB(0),
+            Some(TextureSlot::GroupCanvasA(0)),
+        ),
+        (
+            TextureSlot::GroupCanvasA(3),
+            Some(TextureSlot::GroupCanvasB(3)),
+        ),
+        (
+            TextureSlot::GroupCanvasB(3),
+            Some(TextureSlot::GroupCanvasA(3)),
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(alternate_canvas_for_bindings(source), expected);
+    }
+    assert_eq!(alternate_canvas_for_bindings(TextureSlot::Layer), None);
+}
+
+#[test]
+fn group_composite_uses_a_same_depth_canvas_alternate() {
+    let mut plan = GpuFramePlan::build(&group_frame(Vec::new()));
+    plan.validate(0).expect("Group frame plan validates");
+    let Some(group_composite) = plan.operations.iter_mut().find(|operation| {
+        matches!(
+            operation,
+            GpuOperation::CompositeLayer {
+                canvas_source: TextureSlot::GroupCanvasA(_) | TextureSlot::GroupCanvasB(_),
+                ..
+            }
+        )
+    }) else {
+        panic!("Group frame plan contains no Group canvas composite");
+    };
+    let GpuOperation::CompositeLayer {
+        canvas_source,
+        canvas_destination,
+        ..
+    } = group_composite
+    else {
+        unreachable!("the match above selected a Group canvas composite");
+    };
+    assert_eq!(
+        alternate_canvas_for_bindings(*canvas_source),
+        Some(*canvas_destination)
+    );
+
+    *canvas_destination = match *canvas_source {
+        TextureSlot::GroupCanvasA(_) => TextureSlot::GroupCanvasB(1),
+        TextureSlot::GroupCanvasB(_) => TextureSlot::GroupCanvasA(1),
+        _ => unreachable!("the source is known to be a Group canvas"),
+    };
+    assert!(
+        plan.validate(0).is_err(),
+        "Group canvas depth must not change"
+    );
+}
+
+fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
+    let transform = crate::animation::Transform2D::identity(
+        crate::domain::Point { x: 0.5, y: 0.5 },
+        crate::domain::Point { x: 0.5, y: 0.5 },
+    );
+    EvaluatedFrame {
+        time: 0,
+        background: [0, 0, 0, 0],
+        width: 4,
+        height: 4,
+        layers: vec![crate::plan::EvaluatedLayer {
+            compiled_layer_index: 1,
+            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            source: EvaluatedSource::Group {
+                composition: crate::plan::EvaluatedComposition {
+                    layers: vec![crate::plan::EvaluatedLayer {
+                        compiled_layer_index: 2,
+                        content_dependency: crate::plan::TemporalDependency::Static,
+                        source: EvaluatedSource::SolidColor {
+                            colour: [255, 0, 0, 255],
+                        },
+                        opacity: 1.0,
+                        effects: Vec::new(),
+                        colour_transform: crate::plan::ColourTransform::default(),
+                        blend_mode: crate::project::BlendMode::Normal,
+                    }],
+                },
+                transform,
+            },
+            opacity: 1.0,
+            effects,
+            colour_transform: crate::plan::ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }],
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    }
+}
+
+#[test]
+fn group_basic_colour_effects_are_emitted_once_after_neutral_surface_rasterization() {
+    let frame = group_frame(vec![crate::plan::EvaluatedEffect::Brightness {
+        amount: 0.25,
+    }]);
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(0)
+        .expect("Group colour-effect plan validates");
+    assert_eq!(
+        plan.operations
+            .iter()
+            .filter(|operation| matches!(operation, GpuOperation::RenderSurfaceLayer { .. }))
+            .count(),
+        1
+    );
+    let effects = plan
+        .operations
+        .iter()
+        .filter_map(|operation| match operation {
+            GpuOperation::ApplyEffect {
+                layer_index,
+                effect_index,
+                ..
+            } => Some((*layer_index, *effect_index)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(effects, vec![(Some(0), 0)]);
+}
+
+#[test]
+fn group_effect_chain_preserves_author_order_and_emits_each_effect_once() {
+    let frame = group_frame(vec![
+        crate::plan::EvaluatedEffect::Brightness { amount: 0.25 },
+        crate::plan::EvaluatedEffect::Contrast { amount: 1.25 },
+        crate::plan::EvaluatedEffect::Saturation { amount: 1.5 },
+        crate::plan::EvaluatedEffect::GaussianBlur { radius: 1.0 },
+    ]);
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(0)
+        .expect("ordered Group effect plan validates");
+    let effect_indices = plan
+        .operations
+        .iter()
+        .filter_map(|operation| match operation {
+            GpuOperation::ApplyEffect {
+                layer_index: Some(0),
+                effect_index,
+                ..
+            } => Some(*effect_index),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(effect_indices, vec![0, 1, 2, 3, 3]);
+}
+
+#[test]
+fn sibling_groups_reuse_one_depth_pair_sequentially() {
+    let mut frame = group_frame(Vec::new());
+    frame.layers.push(frame.layers[0].clone());
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(0).expect("sibling Group plan validates");
+    assert_eq!(
+        plan.operations
+            .iter()
+            .filter(|operation| matches!(
+                operation,
+                GpuOperation::ClearCanvas {
+                    destination: TextureSlot::GroupCanvasA(0),
+                    ..
+                }
+            ))
+            .count(),
+        2
+    );
+    assert!(!plan.operations.iter().any(|operation| matches!(
+        operation,
+        GpuOperation::ClearCanvas {
+            destination: TextureSlot::GroupCanvasA(1),
+            ..
+        }
+    )));
+}
+
+#[test]
 fn static_layer_store_then_reuse_stays_before_destination_composition() {
     let frame = static_frame();
     let targets = BTreeSet::from([3]);
@@ -539,6 +805,7 @@ fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
         ],
         parameter_count: 5,
         final_canvas: TextureSlot::CanvasB,
+        layers: Vec::new(),
     };
     plan.validate(0)
         .expect("self-describing effect plan validates");
@@ -612,6 +879,7 @@ fn global_effect_chain_can_follow_layer_composition() {
         ],
         parameter_count: 4,
         final_canvas: TextureSlot::EffectA,
+        layers: Vec::new(),
     };
     plan.validate(0).expect("global effect plan validates");
 }
@@ -827,6 +1095,7 @@ fn validation_rejects_effect_scope_destination_and_auxiliary_contract_violations
         ],
         parameter_count: 2,
         final_canvas: TextureSlot::CanvasA,
+        layers: Vec::new(),
     };
     assert_eq!(
         plan.validate(0).expect_err("invalid effect contract").code,

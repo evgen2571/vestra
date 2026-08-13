@@ -6,8 +6,11 @@ use super::{
 };
 use crate::{
     animation::Track,
-    plan::{CompileOptions, CompiledEffect, CompiledScalarProperty, TimedEffect, compile},
-    project::{ValidationOptions, load_and_validate},
+    plan::{
+        CompileOptions, CompiledEffect, CompiledScalarProperty, PlanCompileInput, TimedEffect,
+        compile,
+    },
+    project::{Project, ValidationOptions, load_and_validate},
 };
 
 fn scalar(track: Track<f64>) -> CompiledScalarProperty {
@@ -36,6 +39,85 @@ fn fixture_requirements() -> (
     )
     .expect("requirements calculate with checked arithmetic");
     (plan, decoded, requirements)
+}
+
+fn nested_group_requirements(
+    depth: usize,
+    auxiliary_effect: bool,
+) -> (
+    crate::plan::RenderPlan,
+    std::sync::Arc<crate::DecodedAssets>,
+) {
+    assert!(depth > 0);
+    let effects = if auxiliary_effect {
+        r##", "effects": [{
+            "id": "glow",
+            "type": "glow",
+            "threshold": {"base_value": 0.2},
+            "radius": {"base_value": 2},
+            "intensity": {"base_value": 0.8},
+            "colour": "#FFFFFF"
+        }]"##
+    } else {
+        ""
+    };
+    let mut child = format!(
+        r##"{{
+        "id": "pixel",
+        "source": {{"type": "solid_color", "colour": "#4C8CCC"}},
+        "start": 0,
+        "duration": 1,
+        "layer": 0,
+        "opacity": {{"base_value": 1}}{effects}
+    }}"##
+    );
+    for level in 0..depth {
+        child = format!(
+            r##"{{
+                "id": "group{level}",
+                "source": {{"type": "group", "clips": [{child}]}},
+                "start": 0,
+                "duration": 1,
+                "layer": 0,
+                "opacity": {{"base_value": 1}}
+            }}"##
+        );
+    }
+    let project = Project::from_json(&format!(
+        r##"{{
+            "schema_version": 2,
+            "output": {{
+                "path": "nested-group.mp4", "width": 4, "height": 4,
+                "frame_rate": "24/1", "background": "#00000000",
+                "quality": "preview", "audio": false, "duration_mode": "automatic"
+            }},
+            "assets": [],
+            "visual": {{"clips": [{child}]}}
+        }}"##
+    ))
+    .expect("nested Group requirements project parses");
+    let report = vestra_core::validation::validate(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+    );
+    assert!(report.is_valid(), "{:?}", report.diagnostics());
+    let assets = std::collections::BTreeMap::new();
+    let durations = std::collections::BTreeMap::new();
+    let warnings = Vec::new();
+    let input = PlanCompileInput::new(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+        std::path::Path::new("."),
+        &assets,
+        &durations,
+        1.0,
+        (24, 1),
+        24,
+        &warnings,
+    );
+    let plan = compile(&input, CompileOptions::default()).expect("nested Group compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("nested Group assets decode");
+    (plan, decoded)
 }
 
 #[test]
@@ -265,5 +347,70 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
             + estimates.working_texture_bytes
             + estimates.readback_buffer_bytes
             + estimates.parameter_buffer_bytes
+    );
+}
+
+#[test]
+fn auxiliary_requirement_recurses_through_one_and_multiple_group_depths() {
+    for depth in [1, 3] {
+        let (plan, decoded) = nested_group_requirements(depth, true);
+        let requirements = GpuRequirements::from_plan(
+            &plan,
+            &decoded,
+            std::mem::size_of::<LayerParameters>() as u32,
+        )
+        .expect("nested Group requirements calculate");
+        let estimates = requirements
+            .resource_estimates(256)
+            .expect("nested Group resource estimates calculate");
+        assert_eq!(estimates.auxiliary_texture_count, 1, "depth {depth}");
+    }
+}
+
+#[test]
+fn nested_groups_without_auxiliary_effects_do_not_reserve_auxiliary() {
+    let (plan, decoded) = nested_group_requirements(3, false);
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("effect-free nested Group requirements calculate");
+    let estimates = requirements
+        .resource_estimates(256)
+        .expect("effect-free nested Group estimates calculate");
+    assert_eq!(estimates.auxiliary_texture_count, 0);
+}
+
+#[test]
+fn group_working_texture_estimates_scale_with_depth_not_group_count() {
+    let (deep_plan, deep_decoded) = nested_group_requirements(3, false);
+    let deep = GpuRequirements::from_plan(
+        &deep_plan,
+        &deep_decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("deep Group requirements calculate")
+    .resource_estimates(256)
+    .expect("deep Group estimates calculate");
+    let (shallow_plan, shallow_decoded) = nested_group_requirements(1, false);
+    let shallow = GpuRequirements::from_plan(
+        &shallow_plan,
+        &shallow_decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("shallow Group requirements calculate")
+    .resource_estimates(256)
+    .expect("shallow Group estimates calculate");
+    let one_texture =
+        estimated_texture_bytes(shallow_plan.canvas.width, shallow_plan.canvas.height, 1)
+            .expect("one Group canvas texture estimate");
+    assert_eq!(
+        deep.working_texture_count - shallow.working_texture_count,
+        4
+    );
+    assert_eq!(
+        deep.working_texture_bytes - shallow.working_texture_bytes,
+        one_texture * 4
     );
 }

@@ -195,7 +195,13 @@ fn phase10_preparation_matrix() {
             1280,
             720,
         ),
-        measure_preparation(&directory, "mixed", "effects-ready-v1.json", 1920, 1080),
+        measure_preparation(
+            &directory,
+            "mixed-layers-10",
+            "effects-ready-v1.json",
+            1920,
+            1080,
+        ),
     ];
     let output = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../docs/audits/phase10d-preparation-results.json");
@@ -319,7 +325,7 @@ fn phase10_release_matrix() {
         ),
         ("dynamic-effects", "heavy-impact.json", 1280, 720, 100, None),
         (
-            "many-layers-10",
+            "mixed-layers-10",
             "animation-effects.json",
             1280,
             720,
@@ -327,7 +333,7 @@ fn phase10_release_matrix() {
             None,
         ),
         (
-            "many-layers-25",
+            "mixed-layers-25",
             "animation-effects.json",
             1280,
             720,
@@ -335,14 +341,14 @@ fn phase10_release_matrix() {
             None,
         ),
         (
-            "many-layers-50",
+            "mixed-layers-50",
             "animation-effects.json",
             1280,
             720,
             30,
             None,
         ),
-        ("transition", "zoom-blur.json", 1280, 720, 100, None),
+        ("zoom-blur-focused", "zoom-blur.json", 1280, 720, 100, None),
         (
             "global-post",
             "global-post-effects.json",
@@ -351,7 +357,7 @@ fn phase10_release_matrix() {
             30,
             None,
         ),
-        ("mixed", "effects-ready-v1.json", 1920, 1080, 30, None),
+        ("short-mixed", "effects-ready-v1.json", 1920, 1080, 30, None),
         (
             "long-combined",
             "effects-ready-v1.json",
@@ -553,7 +559,7 @@ fn write_fixture(
             .into();
     }
     if let Some(count) = workload
-        .strip_prefix("many-layers-")
+        .strip_prefix("mixed-layers-")
         .and_then(|value| value.parse::<usize>().ok())
     {
         let static_clip = project["visual"]["clips"][1].clone();

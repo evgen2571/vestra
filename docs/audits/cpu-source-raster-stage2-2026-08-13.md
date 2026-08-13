@@ -77,7 +77,7 @@ The corresponding source-raster profile was about 10.8 seconds aggregate per
 
 ### Dynamic multi-layer
 
-The existing `many-layers-10` fixture was used at 1280x720 for 30 frames:
+The existing `mixed-layers-10` fixture was used at 1280x720 for 30 frames:
 
 ```text
 86.759083, 99.573733, 96.599789, 99.152325, 98.338845 ms/frame
@@ -187,7 +187,7 @@ The focused and canonical suites covered:
 ```text
 simple/static cache behavior: passed
 animated transform: measured; experiments rejected
-dynamic multi-layer: measured baseline; no production change retained
+mixed static/dynamic multi-layer: measured baseline; no production change retained
 ZoomBlur: existing CPU tests passed, production unchanged
 Color Adjust LUT: existing CPU tests passed, production unchanged
 Chromatic Aberration: existing byte-equivalence tests passed, production unchanged

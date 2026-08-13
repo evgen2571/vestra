@@ -7,6 +7,7 @@ from .tracks import CropTrack, ModulatableScalarTrack, Transform
 from .presets import PresetCollection
 from .spectrum2d import Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DLayout, Spectrum2DRadialLayout
 from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
+from .particles import ParticleSystem
 
 
 def _timing(value: int | float, name: str, *, positive: bool = False) -> float:
@@ -237,6 +238,36 @@ class SolidColorClip(_Clip):
 
     def __repr__(self) -> str:
         return f"SolidColorClip(id={self.id!r}, colour={self.colour!r})"
+
+
+class ParticleSystemClip(_Clip):
+    """A CPU-rendered procedural particle source."""
+
+    __slots__ = ("_particle_system",)
+    _particle_system: ParticleSystem
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("ParticleSystemClip objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, identifier: str, particle_system: ParticleSystem, *, start: int | float,
+                duration: int | float, layer: int, visible: bool, opacity: int | float) -> "ParticleSystemClip":
+        if not isinstance(particle_system, ParticleSystem):
+            raise TypeError("particle_system must be ParticleSystem")
+        instance = object.__new__(cls)
+        instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
+                             visible=visible, opacity=opacity)
+        instance._particle_system = particle_system
+        return instance
+
+    @property
+    def particle_system(self) -> ParticleSystem:
+        return self._particle_system
+
+    def to_canonical(self) -> dict[str, object]:
+        data = self._canonical_common()
+        data["source"] = self.particle_system.to_canonical()
+        return data
 
 
 class Spectrum2DClip(_Clip):

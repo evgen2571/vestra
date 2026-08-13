@@ -307,7 +307,7 @@ for CI or headless troubleshooting. The legacy `VIDEO_EDITOR_WGPU_FORCE_FALLBACK
 and `VIDEO_EDITOR_WGPU_BACKEND` names remain accepted when the canonical names
 are unset.
 
-See [the project format](docs/specs/project-format.md), [the effects-ready example](examples/projects/effects-ready-v1.json), [the effects benchmark recipe](docs/benchmarks/effects-ready-v1.md), [the WGPU renderer guide](docs/wgpu-renderer.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Regenerate the checked-in schema with `cargo run -p vestra-cli -- generate-schema`. Run the canonical check suite with:
+See [the project format](docs/specs/project-format.md), [ParticleSystem authoring](docs/particles.md), [the effects-ready example](examples/projects/effects-ready-v1.json), [the effects benchmark recipe](docs/benchmarks/effects-ready-v1.md), [the WGPU renderer guide](docs/wgpu-renderer.md), [the canonical schema](schemas/project.schema.json), and [the animation/effects example](examples/projects/animation-effects.json) for the complete contract. Regenerate the checked-in schema with `cargo run -p vestra-cli -- generate-schema`. Run the canonical check suite with:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt

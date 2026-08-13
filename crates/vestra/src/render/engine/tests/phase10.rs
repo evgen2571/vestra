@@ -309,6 +309,14 @@ fn phase10_release_matrix() {
             100,
             None,
         ),
+        (
+            "composition-focused",
+            "animation-effects.json",
+            1280,
+            720,
+            60,
+            Some(0),
+        ),
         ("dynamic-effects", "heavy-impact.json", 1280, 720, 100, None),
         (
             "many-layers-10",
@@ -477,6 +485,44 @@ fn write_fixture(
         project["visual"]["clips"] = serde_json::json!([clip]);
         project["visual"]["transitions"] = serde_json::json!([]);
         project["visual"]["post_effects"] = serde_json::json!([]);
+        project["visual"]["flashes"] = serde_json::json!([]);
+    }
+    if workload == "composition-focused" {
+        let red = project["visual"]["clips"][0].clone();
+        let blue = project["visual"]["clips"][1].clone();
+        let duration = serde_json::json!(frames as f64 / FRAME_RATE as f64);
+        let clips = (0..12)
+            .map(|layer| {
+                let mut clip = if layer % 2 == 0 {
+                    red.clone()
+                } else {
+                    blue.clone()
+                };
+                clip["id"] = format!("composition-layer-{layer}").into();
+                clip["start"] = 0.into();
+                clip["duration"] = duration.clone();
+                clip["layer"] = layer.into();
+                let opacity = [0.2, 0.35, 0.5, 0.65, 0.8, 1.0][layer % 6];
+                clip["opacity"] = serde_json::json!({"base_value": opacity});
+                clip["blend_mode"] = "normal".into();
+                clip["effects"] = serde_json::json!([{
+                    "id": format!("composition-shake-{layer}"),
+                    "type": "camera_shake",
+                    "position_amount": { "base_value": 0.002 },
+                    "rotation_degrees": { "base_value": 0.1 },
+                    "scale_amount": { "base_value": 0.001 },
+                    "frequency": { "base_value": 8 },
+                    "seed": layer + 1,
+                    "attack": 0.03,
+                    "decay": 0.2,
+                    "start": 0.0,
+                    "duration": duration.clone()
+                }]);
+                clip
+            })
+            .collect::<Vec<_>>();
+        project["visual"]["clips"] = clips.into();
+        project["visual"]["transitions"] = serde_json::json!([]);
         project["visual"]["flashes"] = serde_json::json!([]);
     }
     if workload == "static-expensive" {

@@ -84,7 +84,13 @@ pub fn compose(
     for layer in &frame.layers {
         if layer.content_dependency == TemporalDependency::Static {
             if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
-                composite_cached_surface(canvas, &cached, layer, &mut stats);
+                composite_cached_surface(
+                    canvas,
+                    &cached,
+                    layer,
+                    &mut stats,
+                    profiling_enabled.then_some(&mut timings.composition_cases),
+                );
                 continue;
             }
             surfaces.clear();
@@ -125,10 +131,22 @@ pub fn compose(
                     Arc::new(CachedCpuLayerSurface::from_image(surfaces.take_current()))
                 })
             {
-                composite_cached_surface(canvas, cached, layer, &mut stats);
+                composite_cached_surface(
+                    canvas,
+                    cached,
+                    layer,
+                    &mut stats,
+                    profiling_enabled.then_some(&mut timings.composition_cases),
+                );
             } else {
                 let started = profiling_enabled.then(Instant::now);
-                blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+                blend_surface(
+                    canvas,
+                    surfaces.current(),
+                    layer.blend_mode,
+                    layer.opacity,
+                    profiling_enabled.then_some(&mut timings.composition_cases),
+                );
                 if let Some(started) = started {
                     timings.layer_composition += started.elapsed();
                 }
@@ -168,7 +186,13 @@ pub fn compose(
         }
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
         let started = profiling_enabled.then(Instant::now);
-        blend_surface(canvas, surfaces.current(), layer.blend_mode, layer.opacity);
+        blend_surface(
+            canvas,
+            surfaces.current(),
+            layer.blend_mode,
+            layer.opacity,
+            profiling_enabled.then_some(&mut timings.composition_cases),
+        );
         if let Some(started) = started {
             timings.layer_composition += started.elapsed();
         }
@@ -202,13 +226,20 @@ fn composite_cached_surface(
     cached: &CachedCpuLayerSurface,
     layer: &EvaluatedLayer,
     stats: &mut ComposeStats,
+    cases: Option<&mut crate::blend::CompositionCaseCounts>,
 ) {
     if is_opaque_copy(layer, cached, canvas.width(), canvas.height()) {
         canvas.as_mut().copy_from_slice(cached.image.as_raw());
         stats.opaque_copy_fast_path_hits += 1;
         stats.opaque_copy_fast_path_bytes += cached.image.as_raw().len() as u64;
     } else {
-        blend_surface(canvas, &cached.image, layer.blend_mode, layer.opacity);
+        blend_surface(
+            canvas,
+            &cached.image,
+            layer.blend_mode,
+            layer.opacity,
+            cases,
+        );
         stats.generic_blend_surface_calls += 1;
     }
 }
@@ -293,6 +324,7 @@ mod tests {
             &cached,
             &layer(1.0, crate::project::BlendMode::Normal),
             &mut stats,
+            None,
         );
         assert_eq!(canvas.as_raw(), cached.image.as_raw());
         assert_eq!(stats.opaque_copy_fast_path_hits, 1);
@@ -303,6 +335,7 @@ mod tests {
             &cached,
             &layer(0.999, crate::project::BlendMode::Normal),
             &mut stats,
+            None,
         );
         assert_eq!(stats.opaque_copy_fast_path_hits, 1);
         assert_eq!(stats.generic_blend_surface_calls, 1);
@@ -317,12 +350,14 @@ mod tests {
             &cached(254),
             &layer(1.0, crate::project::BlendMode::Normal),
             &mut stats,
+            None,
         );
         composite_cached_surface(
             &mut canvas,
             &cached(255),
             &layer(1.0, crate::project::BlendMode::Screen),
             &mut stats,
+            None,
         );
         assert_eq!(stats.opaque_copy_fast_path_hits, 0);
         assert_eq!(stats.generic_blend_surface_calls, 2);

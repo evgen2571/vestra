@@ -1,9 +1,42 @@
 use image::{Rgba, RgbaImage};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CompositionCaseCounts {
+    pub(crate) source_alpha_zero: u64,
+    pub(crate) source_alpha_opaque: u64,
+    pub(crate) destination_alpha_zero: u64,
+    pub(crate) destination_alpha_opaque: u64,
+    pub(crate) general_partial_alpha: u64,
+}
+
+impl CompositionCaseCounts {
+    pub(crate) fn record(&mut self, destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) {
+        let source_alpha = f64::from(source[3]) / 255.0 * opacity;
+        if source_alpha == 0.0 {
+            self.source_alpha_zero += 1;
+        } else if source_alpha == 1.0 {
+            self.source_alpha_opaque += 1;
+        } else if destination[3] == 0 {
+            self.destination_alpha_zero += 1;
+        } else if destination[3] == u8::MAX {
+            self.destination_alpha_opaque += 1;
+        } else {
+            self.general_partial_alpha += 1;
+        }
+    }
+}
+
 /// Composites straight-alpha source pixels over a straight-alpha destination.
 pub(crate) fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgba<u8> {
     let source_alpha = f64::from(source[3]) / 255.0 * opacity;
     let destination_alpha = f64::from(destination[3]) / 255.0;
+    if source_alpha == 0.0 {
+        return if destination_alpha > 0.0 {
+            destination
+        } else {
+            Rgba([0, 0, 0, 0])
+        };
+    }
     let alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
     if alpha <= 0.0 {
         return Rgba([0, 0, 0, 0]);
@@ -25,9 +58,19 @@ pub(crate) fn blend_surface(
     source: &RgbaImage,
     mode: crate::project::BlendMode,
     opacity: f64,
+    mut cases: Option<&mut CompositionCaseCounts>,
 ) {
-    for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
-        *destination = blend_pixel(*destination, *source, mode, opacity);
+    if matches!(mode, crate::project::BlendMode::Normal) {
+        for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
+            if let Some(cases) = cases.as_deref_mut() {
+                cases.record(*destination, *source, opacity);
+            }
+            *destination = source_over(*destination, *source, opacity);
+        }
+    } else {
+        for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
+            *destination = blend_pixel(*destination, *source, mode, opacity);
+        }
     }
 }
 
@@ -78,12 +121,108 @@ pub(crate) fn blend_pixel(
 mod tests {
     use super::*;
 
+    fn source_over_reference(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgba<u8> {
+        let source_alpha = f64::from(source[3]) / 255.0 * opacity;
+        let destination_alpha = f64::from(destination[3]) / 255.0;
+        let alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
+        if alpha <= 0.0 {
+            return Rgba([0, 0, 0, 0]);
+        }
+        let mut result = [0; 4];
+        for channel in 0..3 {
+            result[channel] = ((f64::from(source[channel]) * source_alpha
+                + f64::from(destination[channel]) * destination_alpha * (1.0 - source_alpha))
+                / alpha)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+        result[3] = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
+        Rgba(result)
+    }
+
     #[test]
     fn normal_blend_preserves_straight_alpha_composition() {
         assert_eq!(
             source_over(Rgba([0, 0, 255, 255]), Rgba([255, 0, 0, 128]), 1.0),
             Rgba([128, 0, 127, 255])
         );
+    }
+
+    #[test]
+    fn source_over_fast_path_is_byte_identical_to_reference() {
+        let colours = [
+            [0, 0, 0],
+            [255, 255, 255],
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [17, 83, 211],
+            [241, 129, 7],
+        ];
+        let opacities = [0.0, 1.0 / 255.0, 0.125, 0.5, 0.996_093_75, 1.0];
+        for source_alpha in 0..=u8::MAX {
+            for destination_alpha in 0..=u8::MAX {
+                for opacity in opacities {
+                    for source_rgb in colours {
+                        for destination_rgb in colours {
+                            let source =
+                                Rgba([source_rgb[0], source_rgb[1], source_rgb[2], source_alpha]);
+                            let destination = Rgba([
+                                destination_rgb[0],
+                                destination_rgb[1],
+                                destination_rgb[2],
+                                destination_alpha,
+                            ]);
+                            assert_eq!(
+                                source_over(destination, source, opacity),
+                                source_over_reference(destination, source, opacity),
+                                "source alpha {source_alpha}, destination alpha {destination_alpha}, opacity {opacity}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normal_surface_is_byte_identical_to_reference_surface() {
+        let width = 37;
+        let height = 29;
+        let mut optimized = RgbaImage::new(width, height);
+        let mut reference = RgbaImage::new(width, height);
+        let source = RgbaImage::from_fn(width, height, |x, y| {
+            Rgba([
+                ((x * 17 + y * 3) % 256) as u8,
+                ((x * 5 + y * 23) % 256) as u8,
+                ((x * 31 + y * 7) % 256) as u8,
+                ((x * 11 + y * 19) % 256) as u8,
+            ])
+        });
+        for (index, pixel) in optimized.pixels_mut().enumerate() {
+            *pixel = Rgba([
+                ((index * 13) % 256) as u8,
+                ((index * 29 + 7) % 256) as u8,
+                ((index * 47 + 3) % 256) as u8,
+                ((index * 61) % 256) as u8,
+            ]);
+        }
+        reference.clone_from(&optimized);
+        for opacity in [0.0, 0.125, 0.5, 0.996_093_75, 1.0] {
+            let mut expected = reference.clone();
+            for (destination, source) in expected.pixels_mut().zip(source.pixels()) {
+                *destination = source_over_reference(*destination, *source, opacity);
+            }
+            let mut actual = reference.clone();
+            blend_surface(
+                &mut actual,
+                &source,
+                crate::project::BlendMode::Normal,
+                opacity,
+                None,
+            );
+            assert_eq!(actual, expected, "opacity {opacity}");
+        }
     }
 
     #[test]

@@ -20,7 +20,8 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
         .filter_map(|clip| match &clip.source {
             crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
             crate::project::VisualSource::SolidColor { .. }
-            | crate::project::VisualSource::Spectrum2D(_) => None,
+            | crate::project::VisualSource::Spectrum2D(_)
+            | crate::project::VisualSource::ParticleSystem(_) => None,
         })
         .collect();
     let images: Vec<_> = project

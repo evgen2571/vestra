@@ -56,6 +56,116 @@ const fn default_spectrum2d_min_bar_height_ratio() -> f64 {
     0.0
 }
 
+const fn default_particle_rate() -> f64 {
+    0.0
+}
+
+const fn default_particle_lifetime() -> f64 {
+    1.0
+}
+
+const fn default_particle_size() -> f64 {
+    1.0
+}
+
+const fn default_particle_opacity() -> f64 {
+    1.0
+}
+
+const fn default_particle_position() -> Point {
+    Point { x: 0.5, y: 0.5 }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ParticleEmitter {
+    Point { position: Point },
+}
+
+impl Default for ParticleEmitter {
+    fn default() -> Self {
+        Self::Point {
+            position: default_particle_position(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleBurst {
+    pub time: f64,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleEmission {
+    #[serde(default = "default_particle_rate")]
+    pub rate: f64,
+    #[serde(default)]
+    pub bursts: Vec<ParticleBurst>,
+}
+
+impl Default for ParticleEmission {
+    fn default() -> Self {
+        Self {
+            rate: default_particle_rate(),
+            bursts: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleDefinition {
+    #[serde(default = "default_particle_lifetime")]
+    pub lifetime: f64,
+    #[serde(default)]
+    pub initial_velocity: Point,
+    #[serde(default)]
+    pub acceleration: Point,
+    #[serde(default = "default_particle_size")]
+    pub size: f64,
+    #[serde(default = "default_particle_opacity")]
+    pub opacity: f64,
+    #[serde(default = "default_spectrum2d_colour")]
+    pub colour: String,
+    #[serde(default)]
+    pub rotation_degrees: f64,
+    #[serde(default)]
+    pub angular_velocity_degrees: f64,
+}
+
+impl Default for ParticleDefinition {
+    fn default() -> Self {
+        Self {
+            lifetime: default_particle_lifetime(),
+            initial_velocity: Point { x: 0.0, y: 0.0 },
+            acceleration: Point { x: 0.0, y: 0.0 },
+            size: default_particle_size(),
+            opacity: default_particle_opacity(),
+            colour: default_spectrum2d_colour(),
+            rotation_degrees: 0.0,
+            angular_velocity_degrees: 0.0,
+        }
+    }
+}
+
+/// A renderer-independent procedural source. Its state is reconstructed from
+/// system-local time, never carried from one frame to the next.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleSystem {
+    #[serde(default)]
+    pub seed: u64,
+    #[serde(default)]
+    pub emitter: ParticleEmitter,
+    #[serde(default)]
+    pub emission: ParticleEmission,
+    #[serde(default)]
+    pub particle: ParticleDefinition,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Spectrum2DLinearAnchor {
@@ -197,6 +307,8 @@ pub enum VisualSource {
     },
     #[serde(rename = "spectrum2d")]
     Spectrum2D(Spectrum2D),
+    #[serde(rename = "particle_system")]
+    ParticleSystem(ParticleSystem),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -311,6 +423,30 @@ mod tests {
                 .windows(2)
                 .all(|pair| (pair[0] - pair[1]).abs() < 1.0e-12)
         );
+    }
+}
+
+#[cfg(test)]
+mod particle_tests {
+    use super::*;
+
+    #[test]
+    fn particle_system_round_trips_with_canonical_source_tag() {
+        let source = VisualSource::ParticleSystem(ParticleSystem {
+            seed: 42,
+            emission: ParticleEmission {
+                rate: 2.5,
+                bursts: vec![ParticleBurst {
+                    time: 0.0,
+                    count: 3,
+                }],
+            },
+            ..ParticleSystem::default()
+        });
+        let json = serde_json::to_value(&source).expect("particle source JSON");
+        assert_eq!(json["type"], "particle_system");
+        let decoded = serde_json::from_value::<VisualSource>(json.clone()).expect("source JSON");
+        assert_eq!(serde_json::to_value(decoded).expect("source JSON"), json);
     }
 }
 

@@ -1696,6 +1696,117 @@
       ],
       "type": "object"
     },
+    "particle_burst": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "time": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "time",
+        "count"
+      ],
+      "type": "object"
+    },
+    "particle_definition": {
+      "additionalProperties": false,
+      "properties": {
+        "acceleration": {
+          "$ref": "#/$defs/point"
+        },
+        "angular_velocity_degrees": {
+          "type": "number"
+        },
+        "colour": {
+          "$ref": "#/$defs/colour",
+          "default": "#ffffff"
+        },
+        "initial_velocity": {
+          "$ref": "#/$defs/point"
+        },
+        "lifetime": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "opacity": {
+          "default": 1.0,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "rotation_degrees": {
+          "type": "number"
+        },
+        "size": {
+          "default": 1.0,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "particle_emitter": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/point"
+        },
+        "type": {
+          "const": "point"
+        }
+      },
+      "required": [
+        "type",
+        "position"
+      ],
+      "type": "object"
+    },
+    "particle_system": {
+      "additionalProperties": false,
+      "properties": {
+        "emission": {
+          "additionalProperties": false,
+          "properties": {
+            "bursts": {
+              "items": {
+                "$ref": "#/$defs/particle_burst"
+              },
+              "type": "array"
+            },
+            "rate": {
+              "default": 0.0,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "emitter": {
+          "$ref": "#/$defs/particle_emitter"
+        },
+        "particle": {
+          "$ref": "#/$defs/particle_definition"
+        },
+        "seed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "particle_system"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
     "playback_speed_audio_effect": {
       "additionalProperties": false,
       "properties": {
@@ -2307,6 +2418,9 @@
         },
         {
           "$ref": "#/$defs/spectrum2d"
+        },
+        {
+          "$ref": "#/$defs/particle_system"
         }
       ]
     },

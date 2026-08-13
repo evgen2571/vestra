@@ -24,6 +24,9 @@ mod limits;
 mod metrics;
 mod optimization;
 mod output;
+mod particles {
+    pub(super) use crate::plan::particles::compile;
+}
 mod presets;
 mod signals;
 mod transitions;

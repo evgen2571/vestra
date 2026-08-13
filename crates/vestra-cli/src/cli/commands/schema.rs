@@ -349,6 +349,25 @@ mod tests {
         assert_eq!(spectrum["properties"]["band_count"]["default"], 24);
     }
 
+    #[test]
+    fn particle_system_is_registered_with_canonical_defaults() {
+        let schema = schema();
+        let source = &schema["$defs"]["source"]["oneOf"];
+        assert!(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|branch| branch["$ref"] == "#/$defs/particle_system")
+        );
+        let particle = &schema["$defs"]["particle_system"];
+        assert_eq!(particle["properties"]["type"]["const"], "particle_system");
+        assert_eq!(
+            particle["properties"]["particle"]["$ref"],
+            "#/$defs/particle_definition"
+        );
+    }
+
     fn branch_ids(schema: &Value, name: &str) -> BTreeSet<String> {
         schema["$defs"][name]["oneOf"]
             .as_array()

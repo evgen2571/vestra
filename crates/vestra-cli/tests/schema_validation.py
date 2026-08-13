@@ -88,6 +88,21 @@ invalid_colour = copy.deepcopy(spectrum_explicit)
 invalid_colour["visual"]["clips"][0]["source"]["colour"] = "not-a-colour"
 assert errors(invalid_colour), "invalid Spectrum2D colour must not validate"
 
+particle = copy.deepcopy(solid_colour)
+particle["visual"]["clips"][0]["source"] = {
+    "type": "particle_system",
+    "seed": 7,
+    "emitter": {"type": "point", "position": {"x": 0.5, "y": 0.5}},
+    "emission": {"rate": 2.5, "bursts": [{"time": 0, "count": 2}]},
+    "particle": {"lifetime": 1, "initial_velocity": {"x": 0, "y": 0},
+                  "acceleration": {"x": 0, "y": 0}, "size": 1, "opacity": 1,
+                  "colour": "#ffffff"},
+}
+assert not errors(particle), "ParticleSystem source must validate"
+particle_with_transform = copy.deepcopy(particle)
+particle_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert errors(particle_with_transform), "ParticleSystem transforms must remain unsupported"
+
 wrong_position = copy.deepcopy(project)
 wrong_position["visual"]["clips"][0]["transform"]["position"]["base_value"] = 1
 assert errors(wrong_position), "scalar position must not validate"

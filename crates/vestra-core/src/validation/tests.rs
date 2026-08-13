@@ -42,6 +42,198 @@ fn has(project: &Project, code: &str) -> bool {
     codes(project).iter().any(|item| item == code)
 }
 
+fn particle_project() -> Project {
+    let mut value: Value = serde_json::from_str(include_str!(
+        "../../../../examples/projects/animation-effects.json"
+    ))
+    .expect("fixture project");
+    let clip = value["visual"]["clips"][0].as_object_mut().expect("clip");
+    clip.insert(
+        "source".to_owned(),
+        json!({
+            "type": "particle_system",
+            "seed": 7,
+            "emitter": {"type": "point", "position": {"x": 0.5, "y": 0.5}},
+            "emission": {"rate": 2.5, "bursts": [{"time": 0.0, "count": 4}]},
+            "particle": {"lifetime": 1.0, "initial_velocity": {"x": 0.1, "y": 0.0},
+                "acceleration": {"x": 0.0, "y": 0.1}, "size": 1.0, "opacity": 1.0,
+                "colour": "#ffffff", "rotation_degrees": 0.0, "angular_velocity_degrees": 10.0}
+        }),
+    );
+    clip.remove("sizing");
+    clip.remove("transform");
+    value["visual"]["transitions"] = json!([]);
+    serde_json::from_value(value).expect("particle project")
+}
+
+#[test]
+fn particle_system_validates_without_audio_or_clip_transforms() {
+    let project = particle_project();
+    let report = validate(&project, ResourceLimits::default());
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.severity != Severity::Fatal),
+        "{:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn particle_system_rejects_invalid_lifetime_and_transform() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.particle.lifetime = 0.0;
+    project.visual.clips[0].transform = Some(crate::project::Transform {
+        position: crate::project::Track::constant(crate::domain::Point { x: 0.5, y: 0.5 }),
+        anchor: crate::project::Track::constant(crate::domain::Point { x: 0.5, y: 0.5 }),
+        scale: crate::project::Track::constant(crate::domain::Point { x: 1.0, y: 1.0 }),
+        rotation_degrees: crate::project::ScalarProperty::from_track(
+            crate::project::Track::constant(0.0),
+        ),
+        component_modifiers: Default::default(),
+    });
+    let codes = codes(&project);
+    assert!(codes.contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+    assert!(codes.contains(&"MVP-PARTICLE-SYSTEM-TRANSFORM".to_owned()));
+}
+
+#[test]
+fn particle_system_rejects_positive_lifetime_that_quantizes_to_zero() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.particle.lifetime = 0.000_000_000_1;
+    assert!(codes(&project).contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+}
+
+#[test]
+fn particle_system_rejects_quantized_zero_lifetime_with_burst() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.particle.lifetime = 0.000_000_000_1;
+    system.emission.bursts = vec![crate::project::ParticleBurst {
+        time: 0.0,
+        count: 1,
+    }];
+    assert!(codes(&project).contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+}
+
+#[test]
+fn particle_system_custom_live_limit_is_enforced() {
+    let project = particle_project();
+    let limits = ResourceLimits {
+        maximum_live_particles_per_system: 2,
+        ..ResourceLimits::default()
+    };
+    assert!(
+        validate(&project, limits)
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES")
+    );
+}
+
+#[test]
+fn particle_emitter_accepts_finite_off_canvas_coordinates() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.emitter = crate::project::ParticleEmitter::Point {
+        position: crate::domain::Point { x: -3.0, y: 4.0 },
+    };
+    assert!(!codes(&project).contains(&"MVP-PARTICLE-NUMERIC".to_owned()));
+}
+
+#[test]
+fn particle_emitter_rejects_non_finite_coordinates() {
+    for (x, y, field) in [
+        (f64::NAN, 0.5, "x"),
+        (0.5, f64::NAN, "y"),
+        (f64::INFINITY, 0.5, "x"),
+        (0.5, f64::NEG_INFINITY, "y"),
+    ] {
+        let mut project = particle_project();
+        let crate::project::VisualSource::ParticleSystem(system) =
+            &mut project.visual.clips[0].source
+        else {
+            panic!("particle source")
+        };
+        system.emitter = crate::project::ParticleEmitter::Point {
+            position: crate::domain::Point { x, y },
+        };
+        assert!(
+            validate(&project, ResourceLimits::default())
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.pointer
+                    == Some(format!("/visual/clips/0/source/emitter/position/{field}")))
+        );
+    }
+}
+
+#[test]
+fn sequential_particle_clips_do_not_consume_aggregate_budget_twice() {
+    let mut project = particle_project();
+    project.visual.clips[0].start = 0.0;
+    project.visual.clips[0].duration = 10.0;
+    let mut next = project.visual.clips[0].clone();
+    next.id = "particles-2".to_owned();
+    next.start = 10.0;
+    project.visual.clips.push(next);
+    let limits = ResourceLimits {
+        maximum_total_live_particles: 10,
+        ..ResourceLimits::default()
+    };
+    assert!(accepted(&project, limits));
+}
+
+#[test]
+fn overlapping_particle_clips_consume_aggregate_budget() {
+    let mut project = particle_project();
+    project.visual.clips[0].duration = 20.0;
+    let mut next = project.visual.clips[0].clone();
+    next.id = "particles-2".to_owned();
+    next.start = 10.0;
+    project.visual.clips.push(next);
+    let limits = ResourceLimits {
+        maximum_total_live_particles: 7,
+        ..ResourceLimits::default()
+    };
+    assert!(
+        validate(&project, limits)
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES-TOTAL")
+    );
+}
+
+#[test]
+fn particle_clip_end_and_start_at_same_time_do_not_overlap() {
+    let mut project = particle_project();
+    project.visual.clips[0].duration = 10.0;
+    let mut next = project.visual.clips[0].clone();
+    next.id = "particles-2".to_owned();
+    next.start = 10.0;
+    project.visual.clips.push(next);
+    let limits = ResourceLimits {
+        maximum_total_live_particles: 7,
+        ..ResourceLimits::default()
+    };
+    assert!(accepted(&project, limits));
+}
+
 fn accepted(project: &Project, limits: ResourceLimits) -> bool {
     validate(project, limits)
         .diagnostics()

@@ -182,6 +182,7 @@ pub enum CompiledVisualSource {
         )>,
         colour: [u8; 4],
     },
+    ParticleSystem(crate::plan::CompiledParticleSystem),
 }
 
 #[derive(Clone, Debug)]

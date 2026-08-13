@@ -61,6 +61,8 @@ pub struct CompiledParticleSystem {
     pub colour: [u8; 4],
     pub rotation_degrees: f64,
     pub angular_velocity_degrees: f64,
+    pub primitive: crate::project::ParticlePrimitive,
+    pub blend_mode: crate::project::ParticleBlendMode,
     pub bursts: Vec<CompiledParticleBurst>,
     pub maximum_live_particles: u64,
 }
@@ -332,6 +334,8 @@ pub(super) fn compile(
         })?,
         rotation_degrees: system.particle.rotation_degrees,
         angular_velocity_degrees: system.particle.angular_velocity_degrees,
+        primitive: system.particle.primitive,
+        blend_mode: system.particle.blend_mode,
         bursts,
         maximum_live_particles,
     })

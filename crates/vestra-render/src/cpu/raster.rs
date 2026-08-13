@@ -6,6 +6,7 @@ use crate::{
     plan::{ColourTransform, EvaluatedLayer, EvaluatedSource},
     render::{
         blend::source_over,
+        cpu::particles,
         cpu::{assets::PreparedAssets, spectrum2d},
         geometry,
         metrics::CpuHotPathTimings,
@@ -94,9 +95,9 @@ pub(crate) fn draw_layer(
             opacity,
             colour_transform,
         ),
-        // Particle semantics live in core first. Rasterization is intentionally
-        // deferred to the particle rendering subphase.
-        EvaluatedSource::ParticleSystem { .. } => {}
+        EvaluatedSource::ParticleSystem { system, time_nanos } => {
+            particles::rasterize(canvas, system, *time_nanos, colour_transform)
+        }
     }
 }
 

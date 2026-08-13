@@ -496,19 +496,16 @@ mod tests {
                 emitter: crate::project::ParticleEmitter::default(),
                 rate_units_per_second: 0,
                 lifetime_nanos: 1,
-                lifetime_range: crate::project::ScalarRange {
-                    min: 0.000000001,
-                    max: 0.000000001,
-                },
+                lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
                 initial_velocity: crate::domain::Point { x: 0.0, y: 0.0 },
                 speed: crate::project::ScalarRange { min: 0.0, max: 0.0 },
                 direction_degrees: 0.0,
                 direction_spread_degrees: 0.0,
                 acceleration: crate::domain::Point { x: 0.0, y: 0.0 },
-                size: 0.1,
+                size: 0.0,
                 size_range: None,
-                opacity: 1.0,
-                colour: [255, 0, 0, 255],
+                opacity: 0.0,
+                colour: [0; 4],
                 rotation_degrees: 0.0,
                 rotation_range: None,
                 angular_velocity_degrees: 0.0,
@@ -517,8 +514,15 @@ mod tests {
                 blend_mode: crate::project::ParticleBlendMode::Normal,
                 bursts: Vec::new(),
                 maximum_live_particles: 0,
+                lifetime_size: None,
+                lifetime_opacity: None,
+                lifetime_colour: None,
+                audio_size: None,
+                audio_opacity: None,
+                audio_intensity: None,
             }),
             time_nanos: 0,
+            appearance: crate::plan::EvaluatedParticleAppearance::default(),
         };
         particle_layer.effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
         assert!(!uses_direct_colour_path(&particle_layer));
@@ -552,6 +556,12 @@ mod tests {
                 count: 1,
             }],
             maximum_live_particles: 1,
+            lifetime_size: None,
+            lifetime_opacity: None,
+            lifetime_colour: None,
+            audio_size: None,
+            audio_opacity: None,
+            audio_intensity: None,
         };
         let mut surfaces = EffectSurfacePool::new(4, 4);
         surfaces.clear();

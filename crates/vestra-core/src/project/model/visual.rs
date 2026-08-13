@@ -85,6 +85,50 @@ pub struct ScalarRange {
     pub max: f64,
 }
 
+/// A value at a normalized particle-lifetime position. Positions are in the
+/// half-open domain `[0, 1)`, with `1` allowed as the terminal interpolation
+/// endpoint.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ScalarLifetimeStop {
+    pub t: f64,
+    pub value: f64,
+}
+
+/// A color tint at a normalized particle-lifetime position.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ColourLifetimeStop {
+    pub t: f64,
+    pub colour: String,
+}
+
+/// Renderer-independent appearance changes evaluated from particle age.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleLifetimeStyle {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub size: Vec<ScalarLifetimeStop>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opacity: Vec<ScalarLifetimeStop>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub colour: Vec<ColourLifetimeStop>,
+}
+
+/// Instantaneous appearance-only audio modulation. These properties are
+/// sampled at the current project timestamp and never participate in spawn or
+/// motion reconstruction.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleAudioReactive {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<ScalarProperty>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<ScalarProperty>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intensity: Option<ScalarProperty>,
+}
+
 const fn default_particle_position() -> Point {
     Point { x: 0.5, y: 0.5 }
 }
@@ -176,6 +220,10 @@ pub struct ParticleDefinition {
     pub primitive: ParticlePrimitive,
     #[serde(default)]
     pub blend_mode: ParticleBlendMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifetime_style: Option<Box<ParticleLifetimeStyle>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_reactive: Option<Box<ParticleAudioReactive>>,
 }
 
 /// The geometric primitive used to rasterize each particle. `size` is the
@@ -220,6 +268,8 @@ impl Default for ParticleDefinition {
             angular_velocity_range: None,
             primitive: ParticlePrimitive::Disc,
             blend_mode: ParticleBlendMode::Normal,
+            lifetime_style: None,
+            audio_reactive: None,
         }
     }
 }

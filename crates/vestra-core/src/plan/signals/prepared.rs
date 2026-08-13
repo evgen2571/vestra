@@ -111,12 +111,29 @@ impl PreparedScalarSignals {
 /// Runtime resources for a single plan evaluation.
 pub struct EvaluationContext<'a> {
     scalar_signals: &'a PreparedScalarSignals,
+    #[cfg(test)]
+    property_evaluations: std::cell::Cell<usize>,
 }
 
 impl<'a> EvaluationContext<'a> {
     #[must_use]
     pub const fn new(scalar_signals: &'a PreparedScalarSignals) -> Self {
-        Self { scalar_signals }
+        Self {
+            scalar_signals,
+            #[cfg(test)]
+            property_evaluations: std::cell::Cell::new(0),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_property_evaluation(&self) {
+        self.property_evaluations
+            .set(self.property_evaluations.get().saturating_add(1));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn property_evaluation_count(&self) -> usize {
+        self.property_evaluations.get()
     }
 
     pub(crate) fn sample_scalar(

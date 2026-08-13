@@ -9,7 +9,7 @@ use super::Track;
 /// The track remains flattened so existing schema-v2 documents retain their
 /// `base_value` and `keyframes` shape. Modifiers are applied in declaration
 /// order after authored animation.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ScalarProperty {
     #[serde(flatten)]
@@ -34,7 +34,7 @@ impl From<Track<f64>> for ScalarProperty {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ScalarModifier {
     pub operation: ScalarModifierOperation,
@@ -51,7 +51,7 @@ pub enum ScalarModifierOperation {
 
 /// An immutable scalar signal specification. Equivalent specifications are
 /// deduplicated by plan compilation; canonical documents contain no signal IDs.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ScalarSignal {
     pub source: ScalarSignalSource,
@@ -59,7 +59,7 @@ pub struct ScalarSignal {
     pub transforms: Vec<SignalTransform>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ScalarSignalSource {
     Audio {
@@ -74,7 +74,7 @@ pub enum AudioAnalysisTap {
     Master,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AudioScalarFeature {
     Rms,
@@ -82,7 +82,7 @@ pub enum AudioScalarFeature {
     BandEnergy { min_hz: f64, max_hz: f64 },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SignalTransform {
     Gain {

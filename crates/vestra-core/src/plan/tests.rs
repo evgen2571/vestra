@@ -272,18 +272,24 @@ fn particle_system_compiles_and_evaluates_from_clip_local_time() {
     let _ = evaluate(2_000_000_000);
     let repeated = evaluate(1_500_000_000);
     let source = |frame: &super::EvaluatedFrame| match &frame.layers[0].source {
-        super::EvaluatedSource::ParticleSystem { system, time_nanos } => (
-            system.iter_alive(*time_nanos).collect::<Vec<_>>(),
-            *time_nanos,
-        ),
+        super::EvaluatedSource::ParticleSystem {
+            system,
+            time_nanos,
+            appearance,
+        } => {
+            let particles: Vec<_> = system
+                .evaluated_particles_at_with_appearance(*time_nanos, *appearance)
+                .collect();
+            (particles.clone(), particles.len())
+        }
         _ => panic!("expected particle source"),
     };
     assert_eq!(source(&direct), source(&repeated));
-    assert_eq!(source(&direct).1, 1_500_000_000);
+    assert_eq!(source(&direct).1, source(&repeated).1);
 }
 
 #[test]
-fn particle_evaluation_shares_compiled_system_without_deep_cloning() {
+fn particle_evaluation_emits_concrete_instances_for_the_renderer() {
     let mut project = canonical_project();
     project.visual.transitions.clear();
     project.visual.clips[0].source = VisualSource::ParticleSystem(ParticleSystem::default());
@@ -294,6 +300,11 @@ fn particle_evaluation_shares_compiled_system_without_deep_cloning() {
         .iter()
         .position(|layer| matches!(layer.source, super::CompiledVisualSource::ParticleSystem(_)))
         .expect("particle layer");
+    let super::CompiledVisualSource::ParticleSystem(compiled_system) =
+        &plan.layers[particle_index].source
+    else {
+        panic!("expected compiled particle source");
+    };
     let frame = evaluate(
         &plan,
         &[super::ScheduledItem(particle_index)],
@@ -303,11 +314,8 @@ fn particle_evaluation_shares_compiled_system_without_deep_cloning() {
     let super::EvaluatedSource::ParticleSystem { system, .. } = &frame.layers[0].source else {
         panic!("expected particle source");
     };
-    let super::CompiledVisualSource::ParticleSystem(compiled) = &plan.layers[particle_index].source
-    else {
-        panic!("expected compiled particle source");
-    };
-    assert!(std::sync::Arc::ptr_eq(system, compiled));
+    assert!(std::sync::Arc::ptr_eq(system, compiled_system));
+    assert_eq!(system.maximum_live_particles, 0);
 }
 
 #[test]

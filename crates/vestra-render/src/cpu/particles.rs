@@ -4,17 +4,21 @@ use image::{Rgba, RgbaImage};
 
 use crate::{
     blend::{blend_pixel, source_over},
-    plan::{ColourTransform, CompiledParticleSystem},
+    plan::ColourTransform,
     project::{BlendMode, ParticleBlendMode, ParticlePrimitive},
 };
+
+#[cfg(test)]
+use crate::plan::CompiledParticleSystem;
 
 /// Rasterizes particles into an already-cleared procedural source surface.
 /// Positions and sizes are normalized canvas values; one scalar pixel scale is
 /// used for both axes so discs remain circular on non-square surfaces.
-pub(super) fn rasterize(
+pub(super) fn rasterize_instances(
     target: &mut RgbaImage,
-    system: &CompiledParticleSystem,
-    time_nanos: u128,
+    particles: impl IntoIterator<Item = crate::plan::EvaluatedParticleInstance>,
+    primitive: ParticlePrimitive,
+    blend_mode: ParticleBlendMode,
     colour_transform: ColourTransform,
 ) {
     let width = target.width();
@@ -23,7 +27,7 @@ pub(super) fn rasterize(
         return;
     }
     let scale = f64::from(width.min(height));
-    for particle in system.evaluated_particles_at(time_nanos) {
+    for particle in particles {
         if !particle.opacity.is_finite()
             || particle.opacity <= 0.0
             || !particle.size.is_finite()
@@ -43,7 +47,7 @@ pub(super) fn rasterize(
             continue;
         }
         let half = size / 2.0;
-        let (half_x, half_y) = match system.primitive {
+        let (half_x, half_y) = match primitive {
             ParticlePrimitive::Disc => (half, half),
             ParticlePrimitive::Square => {
                 let radians = particle.rotation_degrees.to_radians();
@@ -59,7 +63,7 @@ pub(super) fn rasterize(
         };
         let source =
             crate::cpu::raster::apply_colour_transform(Rgba(particle.colour), colour_transform);
-        let (sin, cos) = if matches!(system.primitive, ParticlePrimitive::Square) {
+        let (sin, cos) = if matches!(primitive, ParticlePrimitive::Square) {
             let radians = particle.rotation_degrees.to_radians();
             (radians.sin(), radians.cos())
         } else {
@@ -70,7 +74,7 @@ pub(super) fn rasterize(
             for px in min_x..max_x {
                 let dx = f64::from(px) + 0.5 - cx;
                 let dy = f64::from(py) + 0.5 - cy;
-                let inside = match system.primitive {
+                let inside = match primitive {
                     ParticlePrimitive::Disc => dx * dx + dy * dy <= radius_squared,
                     ParticlePrimitive::Square => {
                         let local_x = cos * dx + sin * dy;
@@ -82,7 +86,7 @@ pub(super) fn rasterize(
                     continue;
                 }
                 let destination = target.get_pixel_mut(px, py);
-                *destination = match system.blend_mode {
+                *destination = match blend_mode {
                     ParticleBlendMode::Normal => {
                         source_over(*destination, source, particle.opacity.clamp(0.0, 1.0))
                     }
@@ -96,6 +100,25 @@ pub(super) fn rasterize(
             }
         }
     }
+}
+
+#[cfg(test)]
+pub(super) fn rasterize(
+    target: &mut RgbaImage,
+    system: &CompiledParticleSystem,
+    time_nanos: u128,
+    colour_transform: ColourTransform,
+) {
+    rasterize_instances(
+        target,
+        system.evaluated_particles_at_with_appearance(
+            time_nanos,
+            crate::plan::EvaluatedParticleAppearance::default(),
+        ),
+        system.primitive,
+        system.blend_mode,
+        colour_transform,
+    );
 }
 
 fn pixel_bounds(start: f64, end: f64, limit: u32) -> Option<(u32, u32)> {
@@ -151,6 +174,12 @@ mod tests {
                 count: 1,
             }],
             maximum_live_particles: 1,
+            lifetime_size: None,
+            lifetime_opacity: None,
+            lifetime_colour: None,
+            audio_size: None,
+            audio_opacity: None,
+            audio_intensity: None,
         }
     }
 
@@ -346,6 +375,45 @@ mod tests {
         );
         assert_eq!(first.as_raw(), second.as_raw());
         assert!(first.pixels().any(|pixel| pixel[3] != 0));
+    }
+
+    #[test]
+    fn resolved_lifetime_size_changes_cpu_pixels_without_backend_curve_evaluation() {
+        let mut particle_system = system(ParticlePrimitive::Square, ParticleBlendMode::Normal);
+        particle_system.lifetime_size = Some(crate::plan::CompiledScalarLifetimeCurve {
+            stops: vec![
+                crate::project::ScalarLifetimeStop { t: 0.0, value: 0.5 },
+                crate::project::ScalarLifetimeStop { t: 1.0, value: 1.0 },
+            ],
+        });
+        let signals = crate::plan::PreparedScalarSignals::empty();
+        let context = crate::plan::EvaluationContext::new(&signals);
+        let at_start = particle_system
+            .evaluate_particles_at(0, 0, &context)
+            .expect("start particles");
+        let at_end = particle_system
+            .evaluate_particles_at(500_000_000, 500_000_000, &context)
+            .expect("mid-life particles");
+        let mut small = RgbaImage::new(10, 10);
+        let mut large = RgbaImage::new(10, 10);
+        rasterize_instances(
+            &mut small,
+            at_start,
+            particle_system.primitive,
+            particle_system.blend_mode,
+            ColourTransform::default(),
+        );
+        rasterize_instances(
+            &mut large,
+            at_end,
+            particle_system.primitive,
+            particle_system.blend_mode,
+            ColourTransform::default(),
+        );
+        assert!(
+            large.pixels().filter(|pixel| pixel[3] > 0).count()
+                > small.pixels().filter(|pixel| pixel[3] > 0).count()
+        );
     }
 
     #[test]

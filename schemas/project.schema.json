@@ -1723,6 +1723,9 @@
         "angular_velocity_degrees": {
           "type": "number"
         },
+        "angular_velocity_range": {
+          "$ref": "#/$defs/scalar_range"
+        },
         "blend_mode": {
           "default": "normal",
           "enum": [
@@ -1734,6 +1737,16 @@
           "$ref": "#/$defs/colour",
           "default": "#ffffff"
         },
+        "direction_degrees": {
+          "default": 0.0,
+          "type": "number"
+        },
+        "direction_spread_degrees": {
+          "default": 0.0,
+          "maximum": 360,
+          "minimum": 0,
+          "type": "number"
+        },
         "initial_velocity": {
           "$ref": "#/$defs/point"
         },
@@ -1741,6 +1754,9 @@
           "default": 1.0,
           "exclusiveMinimum": 0,
           "type": "number"
+        },
+        "lifetime_range": {
+          "$ref": "#/$defs/scalar_range"
         },
         "opacity": {
           "default": 1.0,
@@ -1758,29 +1774,93 @@
         "rotation_degrees": {
           "type": "number"
         },
+        "rotation_range": {
+          "$ref": "#/$defs/scalar_range"
+        },
         "size": {
           "default": 1.0,
           "minimum": 0,
           "type": "number"
+        },
+        "size_range": {
+          "$ref": "#/$defs/scalar_range"
+        },
+        "speed": {
+          "default": 0.0,
+          "minimum": 0,
+          "type": "number"
+        },
+        "speed_range": {
+          "$ref": "#/$defs/scalar_range"
         }
       },
       "type": "object"
     },
     "particle_emitter": {
-      "additionalProperties": false,
-      "properties": {
-        "position": {
-          "$ref": "#/$defs/point"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "$ref": "#/$defs/point"
+            },
+            "type": {
+              "const": "point"
+            }
+          },
+          "required": [
+            "type",
+            "position"
+          ],
+          "type": "object"
         },
-        "type": {
-          "const": "point"
+        {
+          "additionalProperties": false,
+          "properties": {
+            "center": {
+              "$ref": "#/$defs/point"
+            },
+            "size": {
+              "$ref": "#/$defs/point"
+            },
+            "type": {
+              "const": "rectangle"
+            }
+          },
+          "required": [
+            "type",
+            "center",
+            "size"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "center": {
+              "$ref": "#/$defs/point"
+            },
+            "inner_radius": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "outer_radius": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "type": {
+              "const": "circle"
+            }
+          },
+          "required": [
+            "type",
+            "center",
+            "inner_radius",
+            "outer_radius"
+          ],
+          "type": "object"
         }
-      },
-      "required": [
-        "type",
-        "position"
-      ],
-      "type": "object"
+      ]
     },
     "particle_system": {
       "additionalProperties": false,
@@ -2031,6 +2111,22 @@
       },
       "required": [
         "base_value"
+      ],
+      "type": "object"
+    },
+    "scalar_range": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "min",
+        "max"
       ],
       "type": "object"
     },

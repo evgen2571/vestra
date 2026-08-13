@@ -129,6 +129,95 @@ fn particle_system_rejects_quantized_zero_lifetime_with_burst() {
 }
 
 #[test]
+fn base_lifetime_remains_required_when_a_valid_range_is_present() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.particle.lifetime = 0.0;
+    system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 1.0, max: 3.0 });
+    let report = validate(&project, ResourceLimits::default());
+    assert!(report.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == "MVP-PARTICLE-LIFETIME"
+            && diagnostic.pointer.as_deref() == Some("/visual/clips/0/source/particle/lifetime")
+    }));
+}
+
+#[test]
+fn lifetime_range_is_validated_separately_from_the_base_lifetime() {
+    let mut project = particle_project();
+    if let crate::project::VisualSource::ParticleSystem(system) =
+        &mut project.visual.clips[0].source
+    {
+        system.particle.lifetime = 2.0;
+        system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 3.0, max: 1.0 });
+    } else {
+        panic!("particle source");
+    }
+    let report = validate(&project, ResourceLimits::default());
+    assert!(report.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == "MVP-PARTICLE-RANGE"
+            && diagnostic.pointer.as_deref()
+                == Some("/visual/clips/0/source/particle/lifetime_range")
+    }));
+
+    if let crate::project::VisualSource::ParticleSystem(system) =
+        &mut project.visual.clips[0].source
+    {
+        system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 1.0, max: 3.0 });
+    } else {
+        panic!("particle source");
+    }
+    assert!(accepted(&project, ResourceLimits::default()));
+}
+
+#[test]
+fn particle_live_limit_uses_lifetime_range_maximum_not_its_minimum() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.emission.rate = 1.0;
+    system.particle.lifetime_range = Some(crate::project::ScalarRange {
+        min: 1.0,
+        max: 10.0,
+    });
+    let limits = ResourceLimits {
+        maximum_live_particles_per_system: 5,
+        ..ResourceLimits::default()
+    };
+    assert!(
+        validate(&project, limits)
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES")
+    );
+}
+
+#[test]
+fn rectangle_component_diagnostics_use_json_pointer_segments() {
+    let mut project = particle_project();
+    let crate::project::VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source
+    else {
+        panic!("particle source")
+    };
+    system.emitter = crate::project::ParticleEmitter::Rectangle {
+        center: crate::domain::Point { x: 0.5, y: 0.5 },
+        size: crate::domain::Point { x: -1.0, y: 0.25 },
+    };
+    assert!(
+        validate(&project, ResourceLimits::default())
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| {
+                diagnostic.pointer.as_deref() == Some("/visual/clips/0/source/emitter/size/x")
+            })
+    );
+}
+
+#[test]
 fn particle_system_custom_live_limit_is_enforced() {
     let project = particle_project();
     let limits = ResourceLimits {
@@ -173,14 +262,55 @@ fn particle_emitter_rejects_non_finite_coordinates() {
         system.emitter = crate::project::ParticleEmitter::Point {
             position: crate::domain::Point { x, y },
         };
+        let report = validate(&project, ResourceLimits::default());
         assert!(
-            validate(&project, ResourceLimits::default())
+            report
                 .diagnostics()
                 .iter()
                 .any(|diagnostic| diagnostic.pointer
                     == Some(format!("/visual/clips/0/source/emitter/position/{field}")))
         );
     }
+}
+
+#[test]
+fn particle_emitters_and_ranges_validate_their_bounds() {
+    let mut project = particle_project();
+    {
+        let crate::project::VisualSource::ParticleSystem(system) =
+            &mut project.visual.clips[0].source
+        else {
+            panic!("particle source")
+        };
+        system.emitter = crate::project::ParticleEmitter::Rectangle {
+            center: crate::domain::Point { x: 0.5, y: 0.5 },
+            size: crate::domain::Point { x: 0.0, y: 0.25 },
+        };
+        system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 1.0, max: 3.0 });
+        system.particle.size_range = Some(crate::project::ScalarRange {
+            min: 0.01,
+            max: 0.1,
+        });
+    }
+    assert!(accepted(&project, ResourceLimits::default()));
+
+    if let crate::project::VisualSource::ParticleSystem(system) =
+        &mut project.visual.clips[0].source
+    {
+        system.emitter = crate::project::ParticleEmitter::Circle {
+            center: crate::domain::Point { x: 0.5, y: 0.5 },
+            inner_radius: 0.8,
+            outer_radius: 0.2,
+        };
+    }
+    assert!(codes(&project).contains(&"MVP-PARTICLE-EMITTER-RADIUS".to_owned()));
+    if let crate::project::VisualSource::ParticleSystem(system) =
+        &mut project.visual.clips[0].source
+    {
+        system.emitter = crate::project::ParticleEmitter::default();
+        system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 3.0, max: 1.0 });
+    }
+    assert!(codes(&project).contains(&"MVP-PARTICLE-RANGE".to_owned()));
 }
 
 #[test]

@@ -444,8 +444,10 @@ fn validate_particle_system(
         ));
     }
     let lifetime = system.particle.lifetime;
-    let lifetime_nanos = crate::timeline::seconds_to_nanos(lifetime);
-    if !lifetime.is_finite() || lifetime <= 0.0 || lifetime_nanos.is_none_or(|nanos| nanos == 0) {
+    if !lifetime.is_finite()
+        || lifetime <= 0.0
+        || crate::timeline::seconds_to_nanos(lifetime).is_none_or(|nanos| nanos == 0)
+    {
         errors.push(Diagnostic::error(
             "MVP-PARTICLE-LIFETIME",
             Category::Semantic,
@@ -453,24 +455,90 @@ fn validate_particle_system(
             format!("{path}/particle/lifetime"),
         ));
     }
-    let (emitter_x, emitter_y) = match &system.emitter {
-        crate::project::ParticleEmitter::Point { position } => (position.x, position.y),
+    let lifetime_range = system
+        .particle
+        .lifetime_range
+        .unwrap_or(crate::project::ScalarRange {
+            min: lifetime,
+            max: lifetime,
+        });
+    let lifetime_nanos = crate::timeline::seconds_to_nanos(lifetime_range.max);
+    if system.particle.lifetime_range.is_some()
+        && (!valid_range(lifetime_range)
+            || lifetime_range.min <= 0.0
+            || crate::timeline::seconds_to_nanos(lifetime_range.min).is_none_or(|nanos| nanos == 0)
+            || lifetime_range.max <= 0.0
+            || lifetime_nanos.is_none_or(|nanos| nanos == 0))
+    {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-RANGE",
+            Category::Semantic,
+            "particle lifetime range must be finite, ordered, positive, and representable as positive timeline durations",
+            format!("{path}/particle/lifetime_range"),
+        ));
+    }
+    let emitter_values = match &system.emitter {
+        crate::project::ParticleEmitter::Point { position } => {
+            vec![("position/x", position.x), ("position/y", position.y)]
+        }
+        crate::project::ParticleEmitter::Rectangle { center, size } => vec![
+            ("center/x", center.x),
+            ("center/y", center.y),
+            ("size/x", size.x),
+            ("size/y", size.y),
+        ],
+        crate::project::ParticleEmitter::Circle {
+            center,
+            inner_radius,
+            outer_radius,
+        } => vec![
+            ("center/x", center.x),
+            ("center/y", center.y),
+            ("inner_radius", *inner_radius),
+            ("outer_radius", *outer_radius),
+        ],
     };
-    for (field, value) in [("x", emitter_x), ("y", emitter_y)] {
+    for (field, value) in emitter_values {
         if !value.is_finite() {
             errors.push(Diagnostic::error(
                 "MVP-PARTICLE-NUMERIC",
                 Category::Semantic,
                 "particle emitter coordinates must be finite",
-                format!("{path}/emitter/position/{field}"),
+                format!("{path}/emitter/{field}"),
             ));
         }
     }
+    if let crate::project::ParticleEmitter::Rectangle { size, .. } = &system.emitter {
+        for (field, value) in [("size/x", size.x), ("size/y", size.y)] {
+            if value < 0.0 {
+                errors.push(Diagnostic::error(
+                    "MVP-PARTICLE-EMITTER-SIZE",
+                    Category::Semantic,
+                    "rectangle emitter size must be non-negative",
+                    format!("{path}/emitter/{field}"),
+                ));
+            }
+        }
+    }
+    if let crate::project::ParticleEmitter::Circle {
+        inner_radius,
+        outer_radius,
+        ..
+    } = &system.emitter
+        && (*inner_radius < 0.0 || *outer_radius < 0.0 || inner_radius > outer_radius)
+    {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-EMITTER-RADIUS",
+            Category::Semantic,
+            "circle emitter radii must be non-negative and inner_radius <= outer_radius",
+            format!("{path}/emitter"),
+        ));
+    }
     for (field, value) in [
-        ("initial_velocity.x", system.particle.initial_velocity.x),
-        ("initial_velocity.y", system.particle.initial_velocity.y),
-        ("acceleration.x", system.particle.acceleration.x),
-        ("acceleration.y", system.particle.acceleration.y),
+        ("initial_velocity/x", system.particle.initial_velocity.x),
+        ("initial_velocity/y", system.particle.initial_velocity.y),
+        ("acceleration/x", system.particle.acceleration.x),
+        ("acceleration/y", system.particle.acceleration.y),
         ("rotation_degrees", system.particle.rotation_degrees),
         (
             "angular_velocity_degrees",
@@ -492,6 +560,58 @@ fn validate_particle_system(
             Category::Semantic,
             "particle size must be finite and non-negative",
             format!("{path}/particle/size"),
+        ));
+    }
+    for (field, range, minimum) in [
+        ("size_range", system.particle.size_range, Some(0.0)),
+        ("speed_range", system.particle.speed_range, Some(0.0)),
+        ("rotation_range", system.particle.rotation_range, None),
+        (
+            "angular_velocity_range",
+            system.particle.angular_velocity_range,
+            None,
+        ),
+    ] {
+        if let Some(range) = range
+            && (!valid_range(range) || minimum.is_some_and(|value| range.min < value))
+        {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-RANGE",
+                Category::Semantic,
+                "particle ranges must be finite, ordered, and satisfy their property bounds",
+                format!("{path}/particle/{field}"),
+            ));
+        }
+    }
+    for (field, value) in [
+        ("speed", system.particle.speed),
+        ("direction_degrees", system.particle.direction_degrees),
+        (
+            "direction_spread_degrees",
+            system.particle.direction_spread_degrees,
+        ),
+    ] {
+        if !value.is_finite() {
+            errors.push(Diagnostic::error(
+                "MVP-PARTICLE-NUMERIC",
+                Category::Semantic,
+                "particle motion properties must be finite",
+                format!("{path}/particle/{field}"),
+            ));
+        }
+    }
+    if system.particle.speed < 0.0
+        || system
+            .particle
+            .speed_range
+            .is_some_and(|range| range.min < 0.0)
+        || !(0.0..=360.0).contains(&system.particle.direction_spread_degrees)
+    {
+        errors.push(Diagnostic::error(
+            "MVP-PARTICLE-MOTION",
+            Category::Semantic,
+            "particle speed must be non-negative and direction spread must be in 0..=360 degrees",
+            format!("{path}/particle"),
         ));
     }
     if !super::unit(system.particle.opacity) {
@@ -547,8 +667,8 @@ fn validate_particle_system(
     }
     let live_count = if system.emission.rate.is_finite()
         && system.emission.rate >= 0.0
-        && lifetime.is_finite()
-        && lifetime > 0.0
+        && lifetime_range.max.is_finite()
+        && lifetime_range.max > 0.0
     {
         let rate_units = (system.emission.rate * crate::plan::RATE_SCALE as f64).round();
         let lifetime_nanos = lifetime_nanos.filter(|nanos| *nanos > 0);
@@ -596,6 +716,10 @@ fn validate_particle_system(
         ));
     }
     live_count
+}
+
+fn valid_range(range: crate::project::ScalarRange) -> bool {
+    range.min.is_finite() && range.max.is_finite() && range.min <= range.max
 }
 
 fn maximum_concurrent_particles(intervals: &[(u128, u128, u64)]) -> Option<u64> {

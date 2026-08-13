@@ -72,6 +72,19 @@ const fn default_particle_opacity() -> f64 {
     1.0
 }
 
+const fn default_particle_speed() -> f64 {
+    0.0
+}
+
+/// A deterministic, inclusive authored range. Random samples use `[min, max)`;
+/// equal endpoints represent a fixed value.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ScalarRange {
+    pub min: f64,
+    pub max: f64,
+}
+
 const fn default_particle_position() -> Point {
     Point { x: 0.5, y: 0.5 }
 }
@@ -79,7 +92,16 @@ const fn default_particle_position() -> Point {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ParticleEmitter {
+    /// A single normalized procedural position.
     Point { position: Point },
+    /// Uniform area sampling in normalized coordinates; zero dimensions are valid.
+    Rectangle { center: Point, size: Point },
+    /// Uniform annulus-area sampling; equal radii produce an exact ring.
+    Circle {
+        center: Point,
+        inner_radius: f64,
+        outer_radius: f64,
+    },
 }
 
 impl Default for ParticleEmitter {
@@ -120,20 +142,36 @@ impl Default for ParticleEmission {
 pub struct ParticleDefinition {
     #[serde(default = "default_particle_lifetime")]
     pub lifetime: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifetime_range: Option<ScalarRange>,
     #[serde(default)]
     pub initial_velocity: Point,
     #[serde(default)]
     pub acceleration: Point,
     #[serde(default = "default_particle_size")]
     pub size: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_range: Option<ScalarRange>,
+    #[serde(default = "default_particle_speed")]
+    pub speed: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_range: Option<ScalarRange>,
+    #[serde(default)]
+    pub direction_degrees: f64,
+    #[serde(default)]
+    pub direction_spread_degrees: f64,
     #[serde(default = "default_particle_opacity")]
     pub opacity: f64,
     #[serde(default = "default_spectrum2d_colour")]
     pub colour: String,
     #[serde(default)]
     pub rotation_degrees: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation_range: Option<ScalarRange>,
     #[serde(default)]
     pub angular_velocity_degrees: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angular_velocity_range: Option<ScalarRange>,
     #[serde(default)]
     pub primitive: ParticlePrimitive,
     #[serde(default)]
@@ -165,13 +203,21 @@ impl Default for ParticleDefinition {
     fn default() -> Self {
         Self {
             lifetime: default_particle_lifetime(),
+            lifetime_range: None,
             initial_velocity: Point { x: 0.0, y: 0.0 },
             acceleration: Point { x: 0.0, y: 0.0 },
             size: default_particle_size(),
+            size_range: None,
+            speed: default_particle_speed(),
+            speed_range: None,
+            direction_degrees: 0.0,
+            direction_spread_degrees: 0.0,
             opacity: default_particle_opacity(),
             colour: default_spectrum2d_colour(),
             rotation_degrees: 0.0,
+            rotation_range: None,
             angular_velocity_degrees: 0.0,
+            angular_velocity_range: None,
             primitive: ParticlePrimitive::Disc,
             blend_mode: ParticleBlendMode::Normal,
         }

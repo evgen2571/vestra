@@ -8,7 +8,7 @@
 
 use crate::plan::RenderPlan;
 
-use super::frame_plan::{TextureSlot, plan_requires_auxiliary};
+use super::frame_plan::{GpuFramePlan, TextureSlot, plan_requires_auxiliary};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
@@ -82,6 +82,8 @@ pub(super) struct TexturePool {
     effect_a: Option<WorkingTexture>,
     effect_b: Option<WorkingTexture>,
     auxiliary: Option<WorkingTexture>,
+    group_canvas_a: Vec<WorkingTexture>,
+    group_canvas_b: Vec<WorkingTexture>,
 }
 
 impl TexturePool {
@@ -93,6 +95,7 @@ impl TexturePool {
             usage: WORKING_TEXTURE_USAGE,
         };
         let effect_pass_count = plan.compilation.effect_pass_count;
+        let group_depth = GpuFramePlan::required_group_depth(plan);
         Self {
             canvas_a: create_texture(device, descriptor, "vestra canvas A"),
             canvas_b: create_texture(device, descriptor, "vestra canvas B"),
@@ -108,6 +111,24 @@ impl TexturePool {
                 .then(|| create_texture(device, descriptor, "vestra effect B")),
             auxiliary: plan_requires_auxiliary(plan)
                 .then(|| create_texture(device, descriptor, "vestra retained effect original")),
+            group_canvas_a: (0..group_depth)
+                .map(|depth| {
+                    create_texture(
+                        device,
+                        descriptor,
+                        &format!("vestra group canvas A {depth}"),
+                    )
+                })
+                .collect(),
+            group_canvas_b: (0..group_depth)
+                .map(|depth| {
+                    create_texture(
+                        device,
+                        descriptor,
+                        &format!("vestra group canvas B {depth}"),
+                    )
+                })
+                .collect(),
         }
     }
 
@@ -129,6 +150,14 @@ impl TexturePool {
                 .auxiliary
                 .as_ref()
                 .expect("effect plan requires prepared Auxiliary texture"),
+            TextureSlot::GroupCanvasA(depth) => self
+                .group_canvas_a
+                .get(depth)
+                .expect("group plan requires prepared Group canvas A"),
+            TextureSlot::GroupCanvasB(depth) => self
+                .group_canvas_b
+                .get(depth)
+                .expect("group plan requires prepared Group canvas B"),
         }
     }
 
@@ -149,6 +178,16 @@ impl TexturePool {
                 .auxiliary
                 .as_ref()
                 .map_or(0, |texture| texture.estimated_bytes)
+            + self
+                .group_canvas_a
+                .iter()
+                .map(|texture| texture.estimated_bytes)
+                .sum::<u64>()
+            + self
+                .group_canvas_b
+                .iter()
+                .map(|texture| texture.estimated_bytes)
+                .sum::<u64>()
     }
 
     pub(super) fn has_effects(&self) -> bool {
@@ -164,9 +203,25 @@ impl TexturePool {
     }
 
     pub(super) fn texture_count(&self) -> usize {
-        4 + usize::from(self.effect_a.is_some())
+        4 + self.group_canvas_a.len() * 2
+            + usize::from(self.effect_a.is_some())
             + usize::from(self.effect_b.is_some())
             + usize::from(self.auxiliary.is_some())
+    }
+
+    pub(super) fn group_depth(&self) -> usize {
+        self.group_canvas_a.len()
+    }
+
+    pub(super) fn composition_slots(&self) -> impl Iterator<Item = TextureSlot> + '_ {
+        std::iter::once(TextureSlot::CanvasA)
+            .chain(std::iter::once(TextureSlot::CanvasB))
+            .chain((0..self.group_depth()).flat_map(|depth| {
+                [
+                    TextureSlot::GroupCanvasA(depth),
+                    TextureSlot::GroupCanvasB(depth),
+                ]
+            }))
     }
 }
 

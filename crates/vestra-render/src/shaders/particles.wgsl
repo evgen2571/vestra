@@ -19,17 +19,24 @@ struct VertexOutput {
     @location(1) colour: vec4<f32>,
 };
 
+fn quad_vertex(index: u32) -> vec2<f32> {
+    switch index {
+        case 0u: { return vec2<f32>(-0.5, -0.5); }
+        case 1u: { return vec2<f32>(0.5, -0.5); }
+        case 2u: { return vec2<f32>(0.5, 0.5); }
+        case 3u: { return vec2<f32>(-0.5, -0.5); }
+        case 4u: { return vec2<f32>(0.5, 0.5); }
+        default: { return vec2<f32>(-0.5, 0.5); }
+    }
+}
+
 @vertex
 fn vertex(
     @builtin(vertex_index) vertex_index: u32,
     @location(2) position_size_rotation_opacity: vec4<f32>,
     @location(3) colour: vec4<f32>,
 ) -> VertexOutput {
-    let quad = array<vec2<f32>, 6>(
-        vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, -0.5), vec2<f32>(0.5, 0.5),
-        vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, 0.5), vec2<f32>(-0.5, 0.5),
-    );
-    let local = quad[vertex_index];
+    let local = quad_vertex(vertex_index);
     let angle = radians(position_size_rotation_opacity.w);
     let rotation = mat2x2<f32>(
         vec2<f32>(cos(angle), sin(angle)),

@@ -6,7 +6,7 @@
 //! allocated `Auxiliary` are fixed slots,
 //! so the normal path never needs a frame-sized allocation after preparation.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     Category, Diagnostic,
@@ -17,7 +17,7 @@ use crate::{
 
 /// Fixed full-frame working texture roles. Effect slots are allocated when the
 /// compiled plan contains a non-transform visual effect.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(super) enum TextureSlot {
     CanvasA,
     CanvasB,
@@ -26,6 +26,21 @@ pub(super) enum TextureSlot {
     EffectA,
     EffectB,
     Auxiliary,
+    GroupCanvasA(usize),
+    GroupCanvasB(usize),
+}
+
+impl TextureSlot {
+    pub(super) fn is_group_canvas(self) -> bool {
+        matches!(self, Self::GroupCanvasA(_) | Self::GroupCanvasB(_))
+    }
+
+    fn is_canvas(self) -> bool {
+        matches!(
+            self,
+            Self::CanvasA | Self::CanvasB | Self::GroupCanvasA(_) | Self::GroupCanvasB(_)
+        )
+    }
 }
 
 /// Whether a pass belongs to a rendered layer or to the final canvas.  Keeping
@@ -46,6 +61,12 @@ pub(super) enum GpuOperation {
     RenderImageLayer {
         layer_index: usize,
         source_asset_index: usize,
+        destination: TextureSlot,
+        parameters_index: u32,
+    },
+    RenderSurfaceLayer {
+        layer_index: usize,
+        source: TextureSlot,
         destination: TextureSlot,
         parameters_index: u32,
     },
@@ -126,11 +147,20 @@ pub(super) enum GpuOperation {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub(super) struct GpuFramePlan {
     pub(super) operations: Vec<GpuOperation>,
     pub(super) parameter_count: u32,
     pub(super) final_canvas: TextureSlot,
+    pub(super) layers: Vec<crate::plan::EvaluatedLayer>,
+}
+
+impl PartialEq for GpuFramePlan {
+    fn eq(&self, other: &Self) -> bool {
+        self.operations == other.operations
+            && self.parameter_count == other.parameter_count
+            && self.final_canvas == other.final_canvas
+    }
 }
 
 impl GpuFramePlan {
@@ -149,6 +179,7 @@ impl GpuFramePlan {
     ) -> Self {
         let mut operations =
             Vec::with_capacity(2 + frame.layers.len() * 4 + frame.post_effects.len() * 2);
+        let mut layers = Vec::new();
         let mut parameter_count = 0_u32;
         operations.push(GpuOperation::ClearCanvas {
             destination: TextureSlot::CanvasA,
@@ -160,115 +191,20 @@ impl GpuFramePlan {
         parameter_count += 1;
 
         let mut canvas = TextureSlot::CanvasA;
-        for (layer_index, layer) in frame.layers.iter().enumerate() {
-            if cached_layers.contains(&layer.compiled_layer_index) {
-                let destination = alternate_canvas(canvas);
-                operations.push(GpuOperation::CompositeCachedLayer {
-                    cache_key: layer.compiled_layer_index,
-                    layer_index,
-                    canvas_source: canvas,
-                    expected_canvas_value: canvas_value,
-                    canvas_destination: destination,
-                    result_value: next_value,
-                    parameters_index: parameter_count,
-                });
-                parameter_count += 1;
-                canvas = destination;
-                canvas_value = next_value;
-                next_value += 1;
-                continue;
-            }
-            match layer.source {
-                EvaluatedSource::Image { asset_index, .. } => {
-                    operations.push(GpuOperation::RenderImageLayer {
-                        layer_index,
-                        source_asset_index: asset_index,
-                        destination: TextureSlot::Layer,
-                        parameters_index: parameter_count,
-                    });
-                }
-                EvaluatedSource::SolidColor { .. } => {
-                    operations.push(GpuOperation::RenderSolidLayer {
-                        layer_index,
-                        destination: TextureSlot::Layer,
-                        parameters_index: parameter_count,
-                    });
-                }
-                EvaluatedSource::Spectrum2D { .. } => {
-                    operations.push(GpuOperation::RenderSpectrum2DLayer {
-                        layer_index,
-                        destination: TextureSlot::Layer,
-                        parameters_index: parameter_count,
-                    });
-                }
-                EvaluatedSource::ParticleSystem { .. } => {
-                    let blend_mode = match &layer.source {
-                        EvaluatedSource::ParticleSystem { system, .. } => system.blend_mode,
-                        _ => unreachable!(),
-                    };
-                    operations.push(GpuOperation::RenderParticleLayer {
-                        layer_index,
-                        destination: match blend_mode {
-                            crate::project::ParticleBlendMode::Normal => {
-                                TextureSlot::ParticleAccumulation
-                            }
-                            crate::project::ParticleBlendMode::Additive => TextureSlot::Layer,
-                        },
-                        parameters_index: parameter_count,
-                        instance_offset: 0,
-                        instance_count: 0,
-                        blend_mode,
-                    });
-                    if matches!(blend_mode, crate::project::ParticleBlendMode::Normal) {
-                        operations.push(GpuOperation::ResolveParticleLayer {
-                            source: TextureSlot::ParticleAccumulation,
-                            destination: TextureSlot::Layer,
-                        });
-                    }
-                }
-                EvaluatedSource::Group { .. } => unreachable!(
-                    "WGPU Group rendering is rejected by WgpuBackend before frame planning"
-                ),
-            }
-            parameter_count += 1;
-            let mut layer_result = TextureSlot::Layer;
-            let mut layer_value = next_value;
-            next_value += 1;
-            for (effect_index, effect) in layer.effects.iter().enumerate() {
-                append_effect_chain(
-                    &mut operations,
-                    &mut parameter_count,
-                    EffectScope::Layer,
-                    Some(layer_index),
-                    effect_index,
-                    effect,
-                    &mut layer_result,
-                    &mut layer_value,
-                    &mut next_value,
-                );
-            }
-            if cache_targets.contains(&layer.compiled_layer_index) {
-                operations.push(GpuOperation::StoreStaticLayer {
-                    cache_key: layer.compiled_layer_index,
-                    source: layer_result,
-                    expected_source_value: layer_value,
-                });
-            }
-            let destination = alternate_canvas(canvas);
-            operations.push(GpuOperation::CompositeLayer {
-                layer_index,
-                layer_source: layer_result,
-                expected_layer_value: layer_value,
-                canvas_source: canvas,
-                expected_canvas_value: canvas_value,
-                canvas_destination: destination,
-                result_value: next_value,
-                parameters_index: parameter_count,
-            });
-            parameter_count += 1;
-            canvas = destination;
-            canvas_value = next_value;
-            next_value += 1;
+        for layer in &frame.layers {
+            append_layer(
+                layer,
+                canvas,
+                0,
+                &mut operations,
+                &mut layers,
+                &mut parameter_count,
+                &mut next_value,
+                &mut canvas,
+                &mut canvas_value,
+                cached_layers,
+                cache_targets,
+            );
         }
         let mut final_texture = canvas;
         let mut final_value = canvas_value;
@@ -293,13 +229,39 @@ impl GpuFramePlan {
             operations,
             parameter_count,
             final_canvas: final_texture,
+            layers,
         }
     }
 
+    pub(super) fn required_group_depth(plan: &RenderPlan) -> usize {
+        fn composition_depth(composition: &crate::plan::CompiledComposition) -> usize {
+            composition
+                .layers
+                .iter()
+                .filter_map(|layer| match &layer.source {
+                    crate::plan::CompiledVisualSource::Group(child) => {
+                        Some(1 + composition_depth(child))
+                    }
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0)
+        }
+        plan.layers
+            .iter()
+            .filter_map(|layer| match &layer.source {
+                crate::plan::CompiledVisualSource::Group(composition) => {
+                    Some(1 + composition_depth(composition))
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
     pub(super) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
-        let mut states = [TextureState::default(); 7];
+        let mut states = BTreeMap::new();
         let mut next_value = 1_u64;
-        let mut expected_canvas = TextureSlot::CanvasA;
         let mut final_canvas = None;
         for (operation_index, operation) in self.operations.iter().enumerate() {
             let parameter_index = match operation {
@@ -307,6 +269,9 @@ impl GpuFramePlan {
                     parameters_index, ..
                 }
                 | GpuOperation::RenderImageLayer {
+                    parameters_index, ..
+                }
+                | GpuOperation::RenderSurfaceLayer {
                     parameters_index, ..
                 }
                 | GpuOperation::RenderSolidLayer {
@@ -342,10 +307,12 @@ impl GpuFramePlan {
             }
             match operation {
                 GpuOperation::ClearCanvas { destination, .. } => {
-                    if *destination != TextureSlot::CanvasA || operation_index != 0 {
-                        return Err(invalid(operation_index, "must clear CanvasA first"));
+                    if !destination.is_canvas()
+                        || (operation_index == 0 && *destination != TextureSlot::CanvasA)
+                    {
+                        return Err(invalid(operation_index, "must clear a composition canvas"));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
                 GpuOperation::RenderImageLayer {
@@ -362,21 +329,41 @@ impl GpuFramePlan {
                             "references an invalid source asset",
                         ));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states.insert(*destination, TextureState::written(next_value));
+                    next_value += 1;
+                }
+                GpuOperation::RenderSurfaceLayer {
+                    source,
+                    destination,
+                    ..
+                } => {
+                    if !source.is_canvas() || *destination != TextureSlot::Layer {
+                        return Err(invalid(
+                            operation_index,
+                            "must rasterize a composition into Layer",
+                        ));
+                    }
+                    if !states.get(source).copied().unwrap_or_default().initialized {
+                        return Err(invalid(
+                            operation_index,
+                            "must rasterize an initialized composition",
+                        ));
+                    }
+                    states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
                 GpuOperation::RenderSolidLayer { destination, .. } => {
                     if *destination != TextureSlot::Layer {
                         return Err(invalid(operation_index, "must render a layer into Layer"));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
                 GpuOperation::RenderSpectrum2DLayer { destination, .. } => {
                     if *destination != TextureSlot::Layer {
                         return Err(invalid(operation_index, "must render a layer into Layer"));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
                 GpuOperation::RenderParticleLayer { destination, .. } => {
@@ -389,7 +376,7 @@ impl GpuFramePlan {
                             "must render a particle source into a particle texture",
                         ));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
                 GpuOperation::ResolveParticleLayer {
@@ -398,14 +385,14 @@ impl GpuFramePlan {
                 } => {
                     if *source != TextureSlot::ParticleAccumulation
                         || *destination != TextureSlot::Layer
-                        || !states[index(*source)].initialized
+                        || !states.get(source).copied().unwrap_or_default().initialized
                     {
                         return Err(invalid(
                             operation_index,
                             "must resolve initialized particle accumulation into Layer",
                         ));
                     }
-                    states[index(*destination)] = TextureState::written(next_value);
+                    states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
                 GpuOperation::CopyForEffect {
@@ -415,15 +402,18 @@ impl GpuFramePlan {
                 } => {
                     if *destination != TextureSlot::Auxiliary
                         || source == destination
-                        || !states[index(*source)].initialized
-                        || states[index(*source)].value != Some(*value)
+                        || !states.get(source).copied().unwrap_or_default().initialized
+                        || states.get(source).and_then(|state| state.value) != Some(*value)
                     {
                         return Err(invalid(
                             operation_index,
                             "does not retain the expected original value",
                         ));
                     }
-                    states[index(*destination)] = states[index(*source)];
+                    states.insert(
+                        *destination,
+                        states.get(source).copied().unwrap_or_default(),
+                    );
                 }
                 GpuOperation::ApplyEffect {
                     kernel,
@@ -455,28 +445,32 @@ impl GpuFramePlan {
                             "stores a kernel that does not match its effect operation",
                         ));
                     }
-                    if states[index(*source)].value != Some(*expected_source_value) {
+                    if states.get(source).and_then(|state| state.value)
+                        != Some(*expected_source_value)
+                    {
                         return Err(stale_value(
                             operation_index,
                             source_context,
                             *source,
                             *expected_source_value,
-                            states[index(*source)].value,
+                            states.get(source).and_then(|state| state.value),
                         ));
                     }
                     if !scope_is_valid
                         || !destination_is_effect
                         || source == destination
-                        || !states[index(*source)].initialized
+                        || !states.get(source).copied().unwrap_or_default().initialized
                         || *result_value != next_value
                         || auxiliary.is_some_and(|slot| {
-                            slot == *destination || !states[index(slot)].initialized
+                            slot == *destination
+                                || !states.get(&slot).copied().unwrap_or_default().initialized
                         })
                         || (auxiliary_is_required
                             && match *auxiliary {
                                 Some(slot) => {
                                     auxiliary_value.is_none()
-                                        || states[index(slot)].value != *auxiliary_value
+                                        || states.get(&slot).and_then(|state| state.value)
+                                            != *auxiliary_value
                                 }
                                 None => true,
                             })
@@ -488,7 +482,7 @@ impl GpuFramePlan {
                             "uses an invalid effect texture dependency",
                         ));
                     }
-                    states[index(*destination)] = TextureState::written(*result_value);
+                    states.insert(*destination, TextureState::written(*result_value));
                     next_value += 1;
                 }
                 GpuOperation::CompositeLayer {
@@ -500,32 +494,44 @@ impl GpuFramePlan {
                     result_value,
                     ..
                 } => {
-                    if states[index(*layer_source)].value != Some(*expected_layer_value) {
+                    if states.get(layer_source).and_then(|state| state.value)
+                        != Some(*expected_layer_value)
+                    {
                         return Err(stale_value(
                             operation_index,
                             "composition layer source",
                             *layer_source,
                             *expected_layer_value,
-                            states[index(*layer_source)].value,
+                            states.get(layer_source).and_then(|state| state.value),
                         ));
                     }
-                    if states[index(*canvas_source)].value != Some(*expected_canvas_value) {
+                    if states.get(canvas_source).and_then(|state| state.value)
+                        != Some(*expected_canvas_value)
+                    {
                         return Err(stale_value(
                             operation_index,
                             "composition canvas source",
                             *canvas_source,
                             *expected_canvas_value,
-                            states[index(*canvas_source)].value,
+                            states.get(canvas_source).and_then(|state| state.value),
                         ));
                     }
                     if !matches!(
                         layer_source,
                         TextureSlot::Layer | TextureSlot::EffectA | TextureSlot::EffectB
-                    ) || *canvas_source != expected_canvas
-                        || *canvas_destination != alternate_canvas(expected_canvas)
+                    ) || !canvas_source.is_canvas()
+                        || Some(*canvas_destination) != alternate_canvas(*canvas_source)
                         || canvas_source == canvas_destination
-                        || !states[index(*layer_source)].initialized
-                        || !states[index(*canvas_source)].initialized
+                        || !states
+                            .get(layer_source)
+                            .copied()
+                            .unwrap_or_default()
+                            .initialized
+                        || !states
+                            .get(canvas_source)
+                            .copied()
+                            .unwrap_or_default()
+                            .initialized
                         || *result_value != next_value
                     {
                         return Err(invalid(
@@ -533,22 +539,23 @@ impl GpuFramePlan {
                             "has invalid canvas ping-pong sequencing",
                         ));
                     }
-                    states[index(*canvas_destination)] = TextureState::written(*result_value);
+                    states.insert(*canvas_destination, TextureState::written(*result_value));
                     next_value += 1;
-                    expected_canvas = *canvas_destination;
                 }
                 GpuOperation::StoreStaticLayer {
                     source,
                     expected_source_value,
                     ..
                 } => {
-                    if states[index(*source)].value != Some(*expected_source_value) {
+                    if states.get(source).and_then(|state| state.value)
+                        != Some(*expected_source_value)
+                    {
                         return Err(stale_value(
                             operation_index,
                             "static cache source",
                             *source,
                             *expected_source_value,
-                            states[index(*source)].value,
+                            states.get(source).and_then(|state| state.value),
                         ));
                     }
                 }
@@ -559,9 +566,10 @@ impl GpuFramePlan {
                     result_value,
                     ..
                 } => {
-                    if states[index(*canvas_source)].value != Some(*expected_canvas_value)
-                        || *canvas_source != expected_canvas
-                        || *canvas_destination != alternate_canvas(expected_canvas)
+                    if states.get(canvas_source).and_then(|state| state.value)
+                        != Some(*expected_canvas_value)
+                        || !canvas_source.is_canvas()
+                        || Some(*canvas_destination) != alternate_canvas(*canvas_source)
                         || *result_value != next_value
                     {
                         return Err(invalid(
@@ -569,25 +577,24 @@ impl GpuFramePlan {
                             "has invalid cached-layer canvas sequencing",
                         ));
                     }
-                    states[index(*canvas_destination)] = TextureState::written(*result_value);
+                    states.insert(*canvas_destination, TextureState::written(*result_value));
                     next_value += 1;
-                    expected_canvas = *canvas_destination;
                 }
                 GpuOperation::CopyForReadback {
                     source,
                     expected_value,
                 } => {
-                    if states[index(*source)].value != Some(*expected_value) {
+                    if states.get(source).and_then(|state| state.value) != Some(*expected_value) {
                         return Err(stale_value(
                             operation_index,
                             "readback source",
                             *source,
                             *expected_value,
-                            states[index(*source)].value,
+                            states.get(source).and_then(|state| state.value),
                         ));
                     }
                     if operation_index + 1 != self.operations.len()
-                        || !states[index(*source)].initialized
+                        || !states.get(source).copied().unwrap_or_default().initialized
                     {
                         return Err(invalid(operation_index, "has an invalid readback source"));
                     }
@@ -605,10 +612,222 @@ impl GpuFramePlan {
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the frame-plan builder keeps all value-liveness state explicit at the call site"
-)]
+#[allow(clippy::too_many_arguments)]
+fn append_layer(
+    layer: &crate::plan::EvaluatedLayer,
+    parent_canvas: TextureSlot,
+    depth: usize,
+    operations: &mut Vec<GpuOperation>,
+    layers: &mut Vec<crate::plan::EvaluatedLayer>,
+    parameter_count: &mut u32,
+    next_value: &mut u64,
+    canvas: &mut TextureSlot,
+    canvas_value: &mut u64,
+    cached_layers: &BTreeSet<usize>,
+    cache_targets: &BTreeSet<usize>,
+) {
+    let layer_index = layers.len();
+    layers.push(layer.clone());
+    if matches!(layer.source, EvaluatedSource::Group { .. }) {
+        let composition = match &layer.source {
+            EvaluatedSource::Group { composition, .. } => composition,
+            _ => unreachable!(),
+        };
+        let mut group_canvas = TextureSlot::GroupCanvasA(depth);
+        let mut group_value;
+        operations.push(GpuOperation::ClearCanvas {
+            destination: group_canvas,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        *next_value += 1;
+        group_value = *next_value - 1;
+        for child in &composition.layers {
+            append_layer(
+                child,
+                group_canvas,
+                depth + 1,
+                operations,
+                layers,
+                parameter_count,
+                next_value,
+                &mut group_canvas,
+                &mut group_value,
+                cached_layers,
+                cache_targets,
+            );
+        }
+        operations.push(GpuOperation::RenderSurfaceLayer {
+            layer_index,
+            source: group_canvas,
+            destination: TextureSlot::Layer,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        let mut layer_result = TextureSlot::Layer;
+        let mut layer_value = *next_value;
+        *next_value += 1;
+        for (effect_index, effect) in layer.effects.iter().enumerate() {
+            append_effect_chain(
+                operations,
+                parameter_count,
+                EffectScope::Layer,
+                Some(layer_index),
+                effect_index,
+                effect,
+                &mut layer_result,
+                &mut layer_value,
+                next_value,
+            );
+        }
+        append_composite(
+            layer_index,
+            layer_result,
+            layer_value,
+            parent_canvas,
+            canvas_value,
+            operations,
+            parameter_count,
+            next_value,
+            canvas,
+        );
+        return;
+    }
+    if cached_layers.contains(&layer.compiled_layer_index) {
+        let destination =
+            alternate_canvas(*canvas).expect("composition slots contain only canvas textures");
+        operations.push(GpuOperation::CompositeCachedLayer {
+            cache_key: layer.compiled_layer_index,
+            layer_index,
+            canvas_source: *canvas,
+            expected_canvas_value: *canvas_value,
+            canvas_destination: destination,
+            result_value: *next_value,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        *canvas = destination;
+        *canvas_value = *next_value;
+        *next_value += 1;
+        return;
+    }
+    match &layer.source {
+        EvaluatedSource::Image { asset_index, .. } => {
+            operations.push(GpuOperation::RenderImageLayer {
+                layer_index,
+                source_asset_index: *asset_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            })
+        }
+        EvaluatedSource::SolidColor { .. } => operations.push(GpuOperation::RenderSolidLayer {
+            layer_index,
+            destination: TextureSlot::Layer,
+            parameters_index: *parameter_count,
+        }),
+        EvaluatedSource::Spectrum2D { .. } => {
+            operations.push(GpuOperation::RenderSpectrum2DLayer {
+                layer_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            })
+        }
+        EvaluatedSource::ParticleSystem { system, .. } => {
+            let blend_mode = system.blend_mode;
+            let destination = match blend_mode {
+                crate::project::ParticleBlendMode::Normal => TextureSlot::ParticleAccumulation,
+                crate::project::ParticleBlendMode::Additive => TextureSlot::Layer,
+            };
+            operations.push(GpuOperation::RenderParticleLayer {
+                layer_index,
+                destination,
+                parameters_index: *parameter_count,
+                instance_offset: 0,
+                instance_count: 0,
+                blend_mode,
+            });
+            if matches!(blend_mode, crate::project::ParticleBlendMode::Normal) {
+                operations.push(GpuOperation::ResolveParticleLayer {
+                    source: TextureSlot::ParticleAccumulation,
+                    destination: TextureSlot::Layer,
+                });
+                // Resolving the accumulation texture writes a fresh Layer
+                // value, just like every other operation that produces a
+                // texture. Keep the logical liveness values in sync with
+                // validation before the layer is composited into its parent.
+                *next_value += 1;
+            }
+        }
+        EvaluatedSource::Group { .. } => unreachable!(),
+    }
+    *parameter_count += 1;
+    let mut layer_result = TextureSlot::Layer;
+    let mut layer_value = *next_value;
+    *next_value += 1;
+    for (effect_index, effect) in layer.effects.iter().enumerate() {
+        append_effect_chain(
+            operations,
+            parameter_count,
+            EffectScope::Layer,
+            Some(layer_index),
+            effect_index,
+            effect,
+            &mut layer_result,
+            &mut layer_value,
+            next_value,
+        );
+    }
+    if cache_targets.contains(&layer.compiled_layer_index) {
+        operations.push(GpuOperation::StoreStaticLayer {
+            cache_key: layer.compiled_layer_index,
+            source: layer_result,
+            expected_source_value: layer_value,
+        });
+    }
+    append_composite(
+        layer_index,
+        layer_result,
+        layer_value,
+        parent_canvas,
+        canvas_value,
+        operations,
+        parameter_count,
+        next_value,
+        canvas,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_composite(
+    layer_index: usize,
+    layer_source: TextureSlot,
+    expected_layer_value: u64,
+    canvas_source: TextureSlot,
+    canvas_value: &mut u64,
+    operations: &mut Vec<GpuOperation>,
+    parameter_count: &mut u32,
+    next_value: &mut u64,
+    canvas: &mut TextureSlot,
+) {
+    let destination =
+        alternate_canvas(canvas_source).expect("composition source must be a canvas texture");
+    operations.push(GpuOperation::CompositeLayer {
+        layer_index,
+        layer_source,
+        expected_layer_value,
+        canvas_source,
+        expected_canvas_value: *canvas_value,
+        canvas_destination: destination,
+        result_value: *next_value,
+        parameters_index: *parameter_count,
+    });
+    *parameter_count += 1;
+    *canvas = destination;
+    *canvas_value = *next_value;
+    *next_value += 1;
+}
+
+#[allow(clippy::too_many_arguments)]
 fn append_effect_chain(
     operations: &mut Vec<GpuOperation>,
     parameter_count: &mut u32,
@@ -821,24 +1040,18 @@ fn resource_is_live_after(
     false
 }
 
-fn alternate_canvas(current: TextureSlot) -> TextureSlot {
+fn alternate_canvas(current: TextureSlot) -> Option<TextureSlot> {
     match current {
-        TextureSlot::CanvasA => TextureSlot::CanvasB,
-        TextureSlot::CanvasB => TextureSlot::CanvasA,
-        _ => unreachable!("only canvas textures can be ping-ponged"),
+        TextureSlot::CanvasA => Some(TextureSlot::CanvasB),
+        TextureSlot::CanvasB => Some(TextureSlot::CanvasA),
+        TextureSlot::GroupCanvasA(depth) => Some(TextureSlot::GroupCanvasB(depth)),
+        TextureSlot::GroupCanvasB(depth) => Some(TextureSlot::GroupCanvasA(depth)),
+        _ => None,
     }
 }
 
-fn index(slot: TextureSlot) -> usize {
-    match slot {
-        TextureSlot::CanvasA => 0,
-        TextureSlot::CanvasB => 1,
-        TextureSlot::Layer => 2,
-        TextureSlot::ParticleAccumulation => 3,
-        TextureSlot::EffectA => 4,
-        TextureSlot::EffectB => 5,
-        TextureSlot::Auxiliary => 6,
-    }
+pub(super) fn alternate_canvas_for_bindings(current: TextureSlot) -> Option<TextureSlot> {
+    alternate_canvas(current)
 }
 
 #[derive(Clone, Copy, Default)]
@@ -861,11 +1074,26 @@ impl TextureState {
 /// Resource topology is owned by core effect-pass planning; WGPU deliberately
 /// does not infer it from authored/compiled effect identities.
 pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
-    plan.layers
-        .iter()
-        .flat_map(|layer| layer.effects.iter().map(|timed| &timed.effect))
-        .chain(plan.post_effects.iter().map(|timed| &timed.effect))
-        .any(|effect| compiled_effect_pass_requirements(effect).retains_original())
+    fn layers_require_auxiliary(layers: &[crate::plan::CompiledLayer]) -> bool {
+        layers.iter().any(|layer| {
+            layer
+                .effects
+                .iter()
+                .any(|timed| compiled_effect_pass_requirements(&timed.effect).retains_original())
+                || match &layer.source {
+                    crate::plan::CompiledVisualSource::Group(composition) => {
+                        layers_require_auxiliary(&composition.layers)
+                    }
+                    _ => false,
+                }
+        })
+    }
+
+    layers_require_auxiliary(&plan.layers)
+        || plan
+            .post_effects
+            .iter()
+            .any(|timed| compiled_effect_pass_requirements(&timed.effect).retains_original())
 }
 
 fn invalid(operation_index: usize, message: &str) -> Diagnostic {

@@ -376,18 +376,7 @@ impl RenderBackend for WgpuBackend {
                 "",
             ));
         }
-        if evaluated
-            .layers
-            .iter()
-            .any(|layer| matches!(&layer.source, crate::plan::EvaluatedSource::Group { .. }))
-        {
-            return Err(Diagnostic::error(
-                "WGPU-GROUP-UNSUPPORTED",
-                crate::Category::Backend,
-                "WGPU Group rendering is not implemented",
-                "",
-            ));
-        }
+        let has_groups = evaluated.layers.iter().any(contains_group);
         let token = self.readback.acquire(frame_number)?;
         let slot = &mut self.slots[token.slot_index];
         if slot.uses > 0 {
@@ -397,7 +386,7 @@ impl RenderBackend for WgpuBackend {
         let mut cached_layers = BTreeSet::new();
         let mut cache_targets = BTreeSet::new();
         let mut textures = BTreeMap::new();
-        for layer in &evaluated.layers {
+        for layer in evaluated.layers.iter().filter(|_| !has_groups) {
             if layer.content_dependency != crate::plan::TemporalDependency::Static {
                 continue;
             }
@@ -866,10 +855,14 @@ fn encode_parameters(
     particle_uploads.clear();
     for operation in &mut plan.operations {
         match operation {
-            GpuOperation::ClearCanvas { .. } => {
+            GpuOperation::ClearCanvas { destination, .. } => {
                 arena.push(&LayerParameters {
                     header: [frame.width, frame.height, 0, 0],
-                    solid_or_background: frame.background.map(f64::from).map(|value| value as f32),
+                    solid_or_background: if destination.is_group_canvas() {
+                        [0.0; 4]
+                    } else {
+                        frame.background.map(f64::from).map(|value| value as f32)
+                    },
                     ..LayerParameters::zeroed()
                 })?;
             }
@@ -884,7 +877,7 @@ fn encode_parameters(
                     transform,
                     cacheable_crop,
                     ..
-                } = &frame.layers[*layer_index].source
+                } = &plan.layers[*layer_index].source
                 else {
                     unreachable!("image frame operation must reference image source")
                 };
@@ -901,8 +894,24 @@ fn encode_parameters(
                     crate::plan::ColourTransform::default(),
                 ))?;
             }
+            GpuOperation::RenderSurfaceLayer { layer_index, .. } => {
+                let crate::plan::EvaluatedSource::Group { transform, .. } =
+                    &plan.layers[*layer_index].source
+                else {
+                    unreachable!("surface frame operation must reference a Group source")
+                };
+                // Group effects are emitted below as ordinary ordered effect
+                // passes.  Keep the surface rasterization neutral so a basic
+                // colour chain is not applied once here and once again by
+                // ApplyEffect.
+                arena.push(&parameters::surface(
+                    frame,
+                    *transform,
+                    crate::plan::ColourTransform::default(),
+                ))?;
+            }
             GpuOperation::RenderSolidLayer { layer_index, .. } => {
-                let EvaluatedSource::SolidColor { colour } = frame.layers[*layer_index].source
+                let EvaluatedSource::SolidColor { colour } = plan.layers[*layer_index].source
                 else {
                     unreachable!("solid frame operation must reference solid source")
                 };
@@ -929,7 +938,7 @@ fn encode_parameters(
                     layout,
                     gradient,
                     colour,
-                } = &frame.layers[*layer_index].source
+                } = &plan.layers[*layer_index].source
                 else {
                     unreachable!("Spectrum2D frame operation must reference Spectrum2D source")
                 };
@@ -957,7 +966,7 @@ fn encode_parameters(
                     system,
                     time_nanos,
                     appearance,
-                } = &frame.layers[*layer_index].source
+                } = &plan.layers[*layer_index].source
                 else {
                     unreachable!("particle frame operation must reference particle source")
                 };
@@ -1049,9 +1058,9 @@ fn encode_parameters(
                         frame.width,
                         frame.height,
                         0,
-                        blend_mode(frame.layers[*layer_index].blend_mode),
+                        blend_mode(plan.layers[*layer_index].blend_mode),
                     ],
-                    effective: [0.0, 0.0, frame.layers[*layer_index].opacity as f32, 0.0],
+                    effective: [0.0, 0.0, plan.layers[*layer_index].opacity as f32, 0.0],
                     ..LayerParameters::zeroed()
                 })?;
             }
@@ -1086,6 +1095,10 @@ const fn blend_mode(mode: BlendMode) -> u32 {
         BlendMode::Multiply => 3,
         BlendMode::Overlay => 4,
     }
+}
+
+fn contains_group(layer: &crate::plan::EvaluatedLayer) -> bool {
+    matches!(layer.source, crate::plan::EvaluatedSource::Group { .. })
 }
 
 #[cfg(test)]

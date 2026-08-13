@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use super::WgpuBackend;
+use crate::render::RenderBackend;
 
 pub(super) fn wgpu_backend_or_skip(
     plan: &crate::plan::RenderPlan,
@@ -10,7 +11,24 @@ pub(super) fn wgpu_backend_or_skip(
 ) -> Option<WgpuBackend> {
     match WgpuBackend::new(plan, decoded) {
         Ok(backend) => {
-            eprintln!("WGPU_RUNTIME_EXECUTED adapter=available backend=wgpu");
+            let adapter = backend.adapter().expect("WGPU backend reports its adapter");
+            eprintln!(
+                "WGPU_RUNTIME_EXECUTED adapter={} backend={} device_type={} vendor={} device={}",
+                adapter.adapter_name,
+                adapter.graphics_backend,
+                adapter.device_type,
+                adapter.vendor_id,
+                adapter.device_id,
+            );
+            if std::env::var_os("VESTRA_REQUIRE_WGPU").is_some()
+                && let Some(requested) = std::env::var_os("VESTRA_WGPU_BACKEND")
+                && requested.eq_ignore_ascii_case("vulkan")
+            {
+                assert_eq!(
+                    adapter.graphics_backend, "vulkan",
+                    "strict Vulkan verification selected a different WGPU backend"
+                );
+            }
             Some(backend)
         }
         Err(error) if std::env::var_os("VESTRA_REQUIRE_WGPU").is_some() => {
@@ -40,7 +58,24 @@ pub(super) fn wgpu_backend_or_skip_depth(
 ) -> Option<WgpuBackend> {
     match WgpuBackend::new_with_pipeline_depth(plan, decoded, depth) {
         Ok(backend) => {
-            eprintln!("WGPU_RUNTIME_EXECUTED adapter=available backend=wgpu");
+            let adapter = backend.adapter().expect("WGPU backend reports its adapter");
+            eprintln!(
+                "WGPU_RUNTIME_EXECUTED adapter={} backend={} device_type={} vendor={} device={} depth={depth}",
+                adapter.adapter_name,
+                adapter.graphics_backend,
+                adapter.device_type,
+                adapter.vendor_id,
+                adapter.device_id,
+            );
+            if std::env::var_os("VESTRA_REQUIRE_WGPU").is_some()
+                && let Some(requested) = std::env::var_os("VESTRA_WGPU_BACKEND")
+                && requested.eq_ignore_ascii_case("vulkan")
+            {
+                assert_eq!(
+                    adapter.graphics_backend, "vulkan",
+                    "strict Vulkan verification selected a different WGPU backend"
+                );
+            }
             Some(backend)
         }
         Err(error) if std::env::var_os("VESTRA_REQUIRE_WGPU").is_some() => {

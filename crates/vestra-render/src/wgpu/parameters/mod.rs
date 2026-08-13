@@ -14,6 +14,7 @@ pub(super) use effects::{
 };
 pub(super) use source::{
     LayerParameters, ParticleParameters, Spectrum2DParameters, image, particles, spectrum2d,
+    surface,
 };
 
 const fn max_parameter_size(left: usize, right: usize) -> u64 {

@@ -237,3 +237,26 @@ pub(in crate::wgpu) fn image(
         solid_or_background: [0.0; 4],
     }
 }
+
+pub(in crate::wgpu) fn surface(
+    frame: &EvaluatedFrame,
+    transform: Transform2D,
+    colour: ColourTransform,
+) -> LayerParameters {
+    image(
+        frame,
+        frame.width,
+        frame.height,
+        Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        },
+        true,
+        &CompiledSizing::Original,
+        transform,
+        1.0,
+        colour,
+    )
+}

@@ -27,6 +27,8 @@ pub(super) struct FrameExecutionMetrics {
     pub(super) submission: Duration,
     pub(super) compute_passes: u64,
     pub(super) dispatches: u64,
+    pub(super) render_passes: u64,
+    pub(super) draws: u64,
     pub(super) texture_copies: u64,
     pub(super) parameter_uploads: u64,
     pub(super) parameter_uploaded_bytes: u64,
@@ -36,6 +38,84 @@ pub(super) struct FrameExecutionMetrics {
     pub(super) bind_group_cache_misses: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ParticleUpload {
+    pub(super) offset: wgpu::BufferAddress,
+    pub(super) bytes_per_row: u32,
+}
+
+pub(super) fn append_particle_upload(
+    arena: &mut Vec<u8>,
+    source: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<ParticleUpload, Diagnostic> {
+    if width == 0 || height == 0 {
+        return Err(Diagnostic::error(
+            "WGPU-PARTICLE-UPLOAD",
+            crate::Category::Backend,
+            "particle upload dimensions must be non-zero",
+            "",
+        ));
+    }
+    let row_bytes = width.checked_mul(4).ok_or_else(|| {
+        Diagnostic::error(
+            "WGPU-PARTICLE-UPLOAD",
+            crate::Category::Backend,
+            "particle row size overflow",
+            "",
+        )
+    })?;
+    let bytes_per_row = u64::from(row_bytes)
+        .div_ceil(u64::from(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
+        .checked_mul(u64::from(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-PARTICLE-UPLOAD",
+                crate::Category::Backend,
+                "particle padded row size overflow",
+                "",
+            )
+        })?;
+    let source_len = usize::try_from(row_bytes)
+        .ok()
+        .and_then(|row| {
+            usize::try_from(height)
+                .ok()
+                .and_then(|rows| row.checked_mul(rows))
+        })
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-PARTICLE-UPLOAD",
+                crate::Category::Backend,
+                "particle source size overflow",
+                "",
+            )
+        })?;
+    if source.len() != source_len {
+        return Err(Diagnostic::error(
+            "WGPU-PARTICLE-UPLOAD",
+            crate::Category::Backend,
+            "particle source has an unexpected size",
+            "",
+        ));
+    }
+    let offset = arena.len().div_ceil(wgpu::COPY_BUFFER_ALIGNMENT as usize)
+        * wgpu::COPY_BUFFER_ALIGNMENT as usize;
+    arena.resize(offset, 0);
+    let padded_row = usize::try_from(bytes_per_row).expect("WGPU row alignment fits usize");
+    let row = usize::try_from(row_bytes).expect("validated row size fits usize");
+    for source_row in source.chunks_exact(row) {
+        arena.extend_from_slice(source_row);
+        arena.resize(arena.len() + padded_row - row, 0);
+    }
+    Ok(ParticleUpload {
+        offset: offset as wgpu::BufferAddress,
+        bytes_per_row,
+    })
+}
+
 /// Bind groups reference backend-lifetime textures and the fixed parameter
 /// allocation. They are created once during backend preparation, then reused
 /// with a different dynamic parameter offset for every frame operation.
@@ -43,6 +123,8 @@ pub(super) struct FrameBindGroups {
     clear_canvas_a: wgpu::BindGroup,
     solid_layer: wgpu::BindGroup,
     spectrum2d_layer: wgpu::BindGroup,
+    particle_layer: wgpu::BindGroup,
+    particle_resolve: wgpu::BindGroup,
     image_layers: Vec<wgpu::BindGroup>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
@@ -85,6 +167,13 @@ impl FrameBindGroups {
                 .get(super::frame_plan::TextureSlot::Layer)
                 .view,
             parameters,
+        );
+        let particle_layer = particle_group(device, &pipelines.particle_bindings, parameters);
+        let particle_resolve = resolve_particle_group(
+            device,
+            &pipelines.particle_resolve_bindings,
+            &frame.working.get(TextureSlot::ParticleAccumulation).view,
+            &frame.working.get(TextureSlot::Layer).view,
         );
         let image_layers = sources
             .textures
@@ -173,11 +262,13 @@ impl FrameBindGroups {
                 }
             }
         }
-        let persistent_created = sources.textures.len() + 3 + composites.len() + effects.len();
+        let persistent_created = sources.textures.len() + 5 + composites.len() + effects.len();
         Self {
             clear_canvas_a,
             solid_layer,
             spectrum2d_layer,
+            particle_layer,
+            particle_resolve,
             image_layers,
             composites,
             effects,
@@ -266,6 +357,9 @@ pub(super) fn encode_and_submit(
     static_layers: &BTreeMap<usize, Arc<StaticLayerTexture>>,
     width: u32,
     height: u32,
+    particle_buffer: Option<&wgpu::Buffer>,
+    particle_upload_buffer: Option<&wgpu::Buffer>,
+    particle_uploads: &[Option<ParticleUpload>],
 ) -> Result<FrameExecutionMetrics, Diagnostic> {
     queue.write_buffer(parameter_buffer, 0, parameters.bytes());
     let started = Instant::now();
@@ -278,6 +372,7 @@ pub(super) fn encode_and_submit(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("vestra texture frame"),
     });
+    let mut particle_upload_index = 0;
     for operation in &plan.operations {
         match operation {
             GpuOperation::ClearCanvas {
@@ -324,6 +419,124 @@ pub(super) fn encode_and_submit(
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
+            }
+            GpuOperation::RenderParticleLayer {
+                destination,
+                parameters_index,
+                instance_offset,
+                instance_count,
+                blend_mode,
+                ..
+            } => {
+                let upload = particle_uploads.get(particle_upload_index).ok_or_else(|| {
+                    Diagnostic::error(
+                        "WGPU-PARTICLE-UPLOAD",
+                        crate::Category::Backend,
+                        "particle operation has no matching source upload entry",
+                        "",
+                    )
+                })?;
+                particle_upload_index += 1;
+                debug_assert!(matches!(
+                    (*blend_mode, *destination),
+                    (
+                        crate::project::ParticleBlendMode::Normal,
+                        TextureSlot::ParticleAccumulation
+                    ) | (
+                        crate::project::ParticleBlendMode::Additive,
+                        TextureSlot::Layer
+                    )
+                ));
+                if let Some(upload) = upload {
+                    let buffer = particle_upload_buffer.ok_or_else(|| {
+                        Diagnostic::error(
+                            "WGPU-PARTICLE-UPLOAD",
+                            crate::Category::Backend,
+                            "particle upload requested without an upload buffer",
+                            "",
+                        )
+                    })?;
+                    encoder.copy_buffer_to_texture(
+                        wgpu::ImageCopyBuffer {
+                            buffer,
+                            layout: wgpu::ImageDataLayout {
+                                offset: upload.offset,
+                                bytes_per_row: Some(upload.bytes_per_row),
+                                rows_per_image: Some(height),
+                            },
+                        },
+                        wgpu::ImageCopyTexture {
+                            texture: &frame.working.get(TextureSlot::Layer).texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                    metrics.texture_copies += 1;
+                    continue;
+                }
+                let pipeline = &pipelines.particle_normal;
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("vestra particle source"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &frame.working.get(*destination).view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                if *instance_count > 0 {
+                    let buffer = particle_buffer.ok_or_else(|| {
+                        Diagnostic::error(
+                            "WGPU-PARTICLE-BUFFER",
+                            crate::Category::Backend,
+                            "particle draw requested without an instance buffer",
+                            "",
+                        )
+                    })?;
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(
+                        0,
+                        &bind_groups.particle_layer,
+                        &[parameters.offset(*parameters_index)?],
+                    );
+                    pass.set_vertex_buffer(0, buffer.slice(..));
+                    pass.draw(
+                        0..6,
+                        *instance_offset..instance_offset.saturating_add(*instance_count),
+                    );
+                }
+                drop(pass);
+                metrics.render_passes += 1;
+                metrics.draws += 1;
+            }
+            GpuOperation::ResolveParticleLayer {
+                source,
+                destination,
+            } => {
+                let group = &bind_groups.particle_resolve;
+                debug_assert_eq!(*source, TextureSlot::ParticleAccumulation);
+                debug_assert_eq!(*destination, TextureSlot::Layer);
+                dispatch(
+                    &mut encoder,
+                    &pipelines.particle_resolve,
+                    group,
+                    0,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
             }
             GpuOperation::RenderImageLayer {
                 source_asset_index,
@@ -672,4 +885,91 @@ fn parameter_binding(buffer: &wgpu::Buffer) -> wgpu::BindingResource<'_> {
         offset: 0,
         size: wgpu::BufferSize::new(super::parameters::PARAMETER_RECORD_BYTES),
     })
+}
+
+fn particle_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    parameters: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vestra particle source"),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: parameter_binding(parameters),
+        }],
+    })
+}
+
+fn resolve_particle_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    source: &wgpu::TextureView,
+    destination: &wgpu::TextureView,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vestra particle straight-alpha resolve"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(destination),
+            },
+        ],
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ParticleUpload, append_particle_upload};
+
+    #[test]
+    fn particle_upload_pads_each_row_and_preserves_row_order() {
+        let source: Vec<u8> = (0..24).collect();
+        let mut arena = Vec::new();
+        let upload = append_particle_upload(&mut arena, &source, 3, 2).expect("packed upload");
+
+        assert_eq!(
+            upload,
+            ParticleUpload {
+                offset: 0,
+                bytes_per_row: 256,
+            }
+        );
+        assert_eq!(&arena[..12], &source[..12]);
+        assert_eq!(&arena[256..268], &source[12..]);
+        assert!(arena[12..256].iter().all(|byte| *byte == 0));
+        assert!(arena[280..].iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn particle_upload_regions_are_distinct_and_aligned() {
+        for width in [1, 2, 63, 64, 65, 100, 128, 1920] {
+            let source_a = vec![0x11; width * 4];
+            let source_b = vec![0x22; width * 4];
+            let mut arena = Vec::new();
+            let first = append_particle_upload(&mut arena, &source_a, width as u32, 1)
+                .expect("first packed upload");
+            let second = append_particle_upload(&mut arena, &source_b, width as u32, 1)
+                .expect("second packed upload");
+            assert_eq!(first.offset % 4, 0);
+            assert_eq!(second.offset % 4, 0);
+            assert_eq!(first.bytes_per_row % 256, 0);
+            assert_eq!(second.bytes_per_row % 256, 0);
+            assert!(second.offset >= first.offset + u64::from(first.bytes_per_row));
+            assert_eq!(arena[first.offset as usize], 0x11);
+            assert_eq!(arena[second.offset as usize], 0x22);
+        }
+    }
+
+    #[test]
+    fn particle_upload_rejects_zero_dimensions_and_wrong_source_size() {
+        assert!(append_particle_upload(&mut Vec::new(), &[], 0, 1).is_err());
+        assert!(append_particle_upload(&mut Vec::new(), &[0; 4], 2, 1).is_err());
+    }
 }

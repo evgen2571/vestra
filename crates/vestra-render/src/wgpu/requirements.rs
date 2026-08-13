@@ -10,7 +10,7 @@ use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 use super::frame_plan::plan_requires_auxiliary;
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
-const BASE_WORKING_TEXTURE_COUNT: u64 = 3;
+const BASE_WORKING_TEXTURE_COUNT: u64 = 4;
 
 /// Conservative allocation estimates for resources the renderer owns for one
 /// prepared WGPU backend. They exclude driver metadata, row-padding inside

@@ -11,7 +11,6 @@ use std::{
 };
 
 use bytemuck::Zeroable;
-#[cfg(test)]
 use image::RgbaImage;
 
 use crate::{
@@ -27,7 +26,10 @@ use crate::{
 use super::{
     context::GpuContext,
     diagnostics::{environment_value, finish_error_scopes},
-    executor::{FrameBindGroups, FrameExecutionMetrics, encode_and_submit},
+    executor::{
+        FrameBindGroups, FrameExecutionMetrics, ParticleUpload, append_particle_upload,
+        encode_and_submit,
+    },
     frame_plan::{GpuFramePlan, GpuOperation},
     parameters::{self, FrameParameterArena, LayerParameters},
     pipeline::GpuPipelines,
@@ -66,6 +68,12 @@ pub struct WgpuBackend {
 struct FrameSlotResources {
     parameters: FrameParameterArena,
     parameter_buffer: wgpu::Buffer,
+    particle_instances: Vec<super::particles::GpuParticleInstance>,
+    particle_pixels: Vec<u8>,
+    particle_upload_bytes: Vec<u8>,
+    particle_uploads: Vec<Option<ParticleUpload>>,
+    particle_buffer: Option<wgpu::Buffer>,
+    particle_upload_buffer: Option<wgpu::Buffer>,
     bind_groups: FrameBindGroups,
     uses: u64,
 }
@@ -195,6 +203,12 @@ impl WgpuBackend {
             slots.push(FrameSlotResources {
                 parameters: FrameParameterArena::new(alignment, parameter_buffer_bytes),
                 parameter_buffer,
+                particle_instances: Vec::new(),
+                particle_pixels: Vec::new(),
+                particle_upload_bytes: Vec::new(),
+                particle_uploads: Vec::new(),
+                particle_buffer: None,
+                particle_upload_buffer: None,
                 bind_groups,
                 uses: 0,
             });
@@ -217,6 +231,12 @@ impl WgpuBackend {
             slots.push(FrameSlotResources {
                 parameters: FrameParameterArena::new(alignment, parameter_buffer_bytes),
                 parameter_buffer,
+                particle_instances: Vec::new(),
+                particle_pixels: Vec::new(),
+                particle_upload_bytes: Vec::new(),
+                particle_uploads: Vec::new(),
+                particle_buffer: None,
+                particle_upload_buffer: None,
                 bind_groups,
                 uses: 0,
             });
@@ -404,15 +424,90 @@ impl RenderBackend for WgpuBackend {
             );
             textures.insert(key, texture);
         }
-        let plan = GpuFramePlan::build_with_static_cache(evaluated, &cached_layers, &cache_targets);
+        let mut plan =
+            GpuFramePlan::build_with_static_cache(evaluated, &cached_layers, &cache_targets);
         if let Err(error) = plan.validate(self.sources.textures.len()).and_then(|()| {
             slot.parameters.reset();
-            encode_parameters(&mut slot.parameters, evaluated, &plan, &self.sources)
+            encode_parameters(
+                &mut slot.parameters,
+                evaluated,
+                &mut plan,
+                &self.sources,
+                &mut slot.particle_instances,
+                &mut slot.particle_pixels,
+                &mut slot.particle_upload_bytes,
+                &mut slot.particle_uploads,
+            )
         }) {
             let error = self.runtime_context(error, Some(token));
             self.abort();
             return Err(error);
         }
+        let mut particle_buffer = slot.particle_buffer.take();
+        if !slot.particle_instances.is_empty() {
+            let required = slot
+                .particle_instances
+                .len()
+                .checked_mul(std::mem::size_of::<super::particles::GpuParticleInstance>())
+                .and_then(|bytes| u64::try_from(bytes).ok())
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        "WGPU-PARTICLE-BUFFER",
+                        crate::Category::Backend,
+                        "particle instance buffer size overflow",
+                        "",
+                    )
+                })?;
+            let replace = particle_buffer
+                .as_ref()
+                .is_none_or(|buffer| buffer.size() < required);
+            if replace {
+                particle_buffer =
+                    Some(self.context.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("vestra particle instances"),
+                        size: required.next_power_of_two().max(32),
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }));
+            }
+            self.context.queue.write_buffer(
+                particle_buffer.as_ref().expect("particle buffer created"),
+                0,
+                bytemuck::cast_slice(&slot.particle_instances),
+            );
+        }
+        slot.particle_buffer = particle_buffer;
+        let mut particle_upload_buffer = slot.particle_upload_buffer.take();
+        if !slot.particle_upload_bytes.is_empty() {
+            let required = u64::try_from(slot.particle_upload_bytes.len()).map_err(|_| {
+                Diagnostic::error(
+                    "WGPU-PARTICLE-UPLOAD",
+                    crate::Category::Backend,
+                    "particle upload size overflow",
+                    "",
+                )
+            })?;
+            if particle_upload_buffer
+                .as_ref()
+                .is_none_or(|buffer| buffer.size() < required)
+            {
+                particle_upload_buffer =
+                    Some(self.context.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("vestra additive particle uploads"),
+                        size: required.next_power_of_two().max(32),
+                        usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }));
+            }
+            self.context.queue.write_buffer(
+                particle_upload_buffer
+                    .as_ref()
+                    .expect("particle upload buffer created"),
+                0,
+                &slot.particle_upload_bytes,
+            );
+        }
+        slot.particle_upload_buffer = particle_upload_buffer;
         let execution = match encode_and_submit(
             &self.context.device,
             &self.context.queue,
@@ -426,6 +521,9 @@ impl RenderBackend for WgpuBackend {
             &textures,
             evaluated.width,
             evaluated.height,
+            slot.particle_buffer.as_ref(),
+            slot.particle_upload_buffer.as_ref(),
+            &slot.particle_uploads,
         ) {
             Ok(execution) => execution,
             Err(error) => {
@@ -737,13 +835,24 @@ fn invalid_pipeline_depth(value: &str) -> Diagnostic {
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "parameter preparation receives reusable frame-slot arenas separately to preserve their lifetimes"
+)]
 fn encode_parameters(
     arena: &mut FrameParameterArena,
     frame: &EvaluatedFrame,
-    plan: &GpuFramePlan,
+    plan: &mut GpuFramePlan,
     sources: &SourceResources,
+    particle_instances: &mut Vec<super::particles::GpuParticleInstance>,
+    particle_pixels: &mut Vec<u8>,
+    particle_upload_bytes: &mut Vec<u8>,
+    particle_uploads: &mut Vec<Option<ParticleUpload>>,
 ) -> Result<(), Diagnostic> {
-    for operation in &plan.operations {
+    particle_instances.clear();
+    particle_upload_bytes.clear();
+    particle_uploads.clear();
+    for operation in &mut plan.operations {
         match operation {
             GpuOperation::ClearCanvas { .. } => {
                 arena.push(&LayerParameters {
@@ -826,6 +935,101 @@ fn encode_parameters(
                     *colour,
                 )?)?;
             }
+            GpuOperation::RenderParticleLayer {
+                layer_index,
+                instance_offset,
+                instance_count,
+                ..
+            } => {
+                let EvaluatedSource::ParticleSystem {
+                    system,
+                    time_nanos,
+                    appearance,
+                } = &frame.layers[*layer_index].source
+                else {
+                    unreachable!("particle frame operation must reference particle source")
+                };
+                particle_uploads.push(None);
+                *instance_offset = u32::try_from(particle_instances.len()).map_err(|_| {
+                    Diagnostic::error(
+                        "WGPU-PARTICLE-COUNT",
+                        crate::Category::Backend,
+                        "particle instance count exceeds WGPU draw range",
+                        "",
+                    )
+                })?;
+                if matches!(
+                    system.blend_mode,
+                    crate::project::ParticleBlendMode::Additive
+                ) {
+                    // CPU Additive is a saturated straight-alpha blend. Portable
+                    // fixed-function WGPU blending cannot express that equation
+                    // while preserving ordered overlap in one draw, so this is
+                    // the exact compatibility path. Effects and outer composition
+                    // still run on WGPU after this source upload.
+                    let pixel_len = usize::try_from(frame.width)
+                        .ok()
+                        .and_then(|width| {
+                            usize::try_from(frame.height)
+                                .ok()
+                                .and_then(|height| width.checked_mul(height))
+                        })
+                        .and_then(|pixels| pixels.checked_mul(4))
+                        .ok_or_else(|| {
+                            Diagnostic::error(
+                                "WGPU-PARTICLE-UPLOAD",
+                                crate::Category::Backend,
+                                "particle image size overflow",
+                                "",
+                            )
+                        })?;
+                    particle_pixels.resize(pixel_len, 0);
+                    particle_pixels.fill(0);
+                    let mut image = RgbaImage::from_raw(
+                        frame.width,
+                        frame.height,
+                        std::mem::take(particle_pixels),
+                    )
+                    .expect("validated particle image dimensions");
+                    crate::cpu::particles::rasterize_instances(
+                        &mut image,
+                        system.evaluated_particles_at_with_appearance(*time_nanos, *appearance),
+                        system.primitive,
+                        system.blend_mode,
+                        crate::plan::ColourTransform::default(),
+                    );
+                    let pixels = image.into_raw();
+                    let upload = append_particle_upload(
+                        particle_upload_bytes,
+                        &pixels,
+                        frame.width,
+                        frame.height,
+                    )?;
+                    particle_uploads
+                        .last_mut()
+                        .expect("upload entry exists")
+                        .replace(upload);
+                    *particle_pixels = pixels;
+                    *instance_count = 0;
+                    arena.push(&parameters::particles(frame, system.primitive))?;
+                    continue;
+                }
+                let range = super::particles::pack_into(
+                    particle_instances,
+                    system,
+                    *time_nanos,
+                    *appearance,
+                )?;
+                *instance_count = u32::try_from(range.len()).map_err(|_| {
+                    Diagnostic::error(
+                        "WGPU-PARTICLE-COUNT",
+                        crate::Category::Backend,
+                        "particle instance count exceeds WGPU draw range",
+                        "",
+                    )
+                })?;
+                arena.push(&parameters::particles(frame, system.primitive))?;
+            }
             GpuOperation::CompositeLayer { layer_index, .. }
             | GpuOperation::CompositeCachedLayer { layer_index, .. } => {
                 arena.push(&LayerParameters {
@@ -852,6 +1056,7 @@ fn encode_parameters(
                 parameters::push_effect_parameters(arena, parameters)?;
             }
             GpuOperation::CopyForEffect { .. }
+            | GpuOperation::ResolveParticleLayer { .. }
             | GpuOperation::StoreStaticLayer { .. }
             | GpuOperation::CopyForReadback { .. } => {
                 continue;

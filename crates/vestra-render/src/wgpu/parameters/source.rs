@@ -41,6 +41,29 @@ pub(in crate::wgpu) struct Spectrum2DParameters {
     pub(in crate::wgpu) bands: [[f32; 4]; 12],
 }
 
+/// Uniform contract for the instanced particle render pass.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
+pub(in crate::wgpu) struct ParticleParameters {
+    pub(in crate::wgpu) canvas: [u32; 2],
+    pub(in crate::wgpu) primitive: u32,
+    pub(in crate::wgpu) _padding: u32,
+}
+
+pub(in crate::wgpu) fn particles(
+    frame: &EvaluatedFrame,
+    primitive: crate::project::ParticlePrimitive,
+) -> ParticleParameters {
+    ParticleParameters {
+        canvas: [frame.width, frame.height],
+        primitive: match primitive {
+            crate::project::ParticlePrimitive::Disc => 0,
+            crate::project::ParticlePrimitive::Square => 1,
+        },
+        _padding: 0,
+    }
+}
+
 // Canonical Spectrum2D parameter contract shared with spectrum2d.wgsl.
 // header[3] is geometry/style flags; colour alpha lives in the packed colour
 // words in extra[0..1] and is never interpreted as geometry.

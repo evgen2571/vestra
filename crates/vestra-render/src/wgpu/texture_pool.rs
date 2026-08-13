@@ -1,8 +1,10 @@
 //! Fixed reusable working textures for the WGPU frame graph.
 //!
-//! All working textures use `Rgba8Unorm`. Values are encoded straight-alpha
-//! channel values, not linear-light values. Compute shaders clamp before each
-//! write, which matches the CPU renderer's byte-oriented semantics.
+//! All public working textures use `Rgba8Unorm` with straight-alpha channel
+//! values, not linear-light values. `ParticleAccumulation` is the one private
+//! exception: it holds premultiplied Normal-particle data until its resolve
+//! pass writes `Layer`. Compute shaders clamp before each write, which matches
+//! the CPU renderer's byte-oriented semantics.
 
 use crate::plan::RenderPlan;
 
@@ -11,6 +13,7 @@ use super::frame_plan::{TextureSlot, plan_requires_auxiliary};
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
     .union(wgpu::TextureUsages::STORAGE_BINDING)
+    .union(wgpu::TextureUsages::RENDER_ATTACHMENT)
     .union(wgpu::TextureUsages::COPY_SRC)
     .union(wgpu::TextureUsages::COPY_DST);
 
@@ -75,6 +78,7 @@ pub(super) struct TexturePool {
     canvas_a: WorkingTexture,
     canvas_b: WorkingTexture,
     layer: WorkingTexture,
+    particle_accumulation: WorkingTexture,
     effect_a: Option<WorkingTexture>,
     effect_b: Option<WorkingTexture>,
     auxiliary: Option<WorkingTexture>,
@@ -93,6 +97,11 @@ impl TexturePool {
             canvas_a: create_texture(device, descriptor, "vestra canvas A"),
             canvas_b: create_texture(device, descriptor, "vestra canvas B"),
             layer: create_texture(device, descriptor, "vestra layer"),
+            particle_accumulation: create_texture(
+                device,
+                descriptor,
+                "vestra particle premultiplied accumulation",
+            ),
             effect_a: (effect_pass_count > 0)
                 .then(|| create_texture(device, descriptor, "vestra effect A")),
             effect_b: (effect_pass_count > 1)
@@ -107,6 +116,7 @@ impl TexturePool {
             TextureSlot::CanvasA => &self.canvas_a,
             TextureSlot::CanvasB => &self.canvas_b,
             TextureSlot::Layer => &self.layer,
+            TextureSlot::ParticleAccumulation => &self.particle_accumulation,
             TextureSlot::EffectA => self
                 .effect_a
                 .as_ref()
@@ -126,6 +136,7 @@ impl TexturePool {
         self.canvas_a.estimated_bytes
             + self.canvas_b.estimated_bytes
             + self.layer.estimated_bytes
+            + self.particle_accumulation.estimated_bytes
             + self
                 .effect_a
                 .as_ref()
@@ -153,7 +164,7 @@ impl TexturePool {
     }
 
     pub(super) fn texture_count(&self) -> usize {
-        3 + usize::from(self.effect_a.is_some())
+        4 + usize::from(self.effect_a.is_some())
             + usize::from(self.effect_b.is_some())
             + usize::from(self.auxiliary.is_some())
     }
@@ -200,8 +211,8 @@ mod tests {
     }
 
     #[test]
-    fn effect_pipeline_working_texture_memory_uses_five_full_frame_slots() {
+    fn effect_pipeline_working_texture_memory_uses_six_full_frame_slots() {
         let bytes = u64::from(1920_u32) * 1080 * 4;
-        assert_eq!(bytes * 5, 41_472_000);
+        assert_eq!(bytes * 6, 49_766_400);
     }
 }

@@ -226,6 +226,9 @@ impl GpuFramePlan {
                         });
                     }
                 }
+                EvaluatedSource::Group { .. } => unreachable!(
+                    "WGPU Group rendering is rejected by WgpuBackend before frame planning"
+                ),
             }
             parameter_count += 1;
             let mut layer_result = TextureSlot::Layer;

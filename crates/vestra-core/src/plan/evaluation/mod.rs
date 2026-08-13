@@ -84,6 +84,15 @@ pub enum EvaluatedSource {
         time_nanos: u128,
         appearance: crate::plan::EvaluatedParticleAppearance,
     },
+    Group {
+        composition: EvaluatedComposition,
+        transform: Transform2D,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct EvaluatedComposition {
+    pub layers: Vec<EvaluatedLayer>,
 }
 
 /// Evaluates a plan with no prepared procedural resources.
@@ -111,12 +120,63 @@ pub fn evaluate_with_context(
     project_time: u128,
     context: &EvaluationContext<'_>,
 ) -> Result<EvaluatedFrame, EvaluationError> {
+    let (layers, evaluated_track_count) = evaluate_layers(
+        &plan.layers,
+        active,
+        project_time,
+        project_time,
+        plan.frame_rate,
+        plan.canvas.width,
+        plan.canvas.height,
+        true,
+        context,
+    )?;
+    Ok(EvaluatedFrame {
+        time: project_time,
+        background: plan.canvas.background,
+        width: plan.canvas.width,
+        height: plan.canvas.height,
+        layers,
+        post_effects: plan
+            .post_effects
+            .iter()
+            .filter(|effect| effect.active_at(project_time))
+            .map(|effect| {
+                effects::evaluate(
+                    &effect.effect,
+                    project_time - effect.start,
+                    project_time,
+                    context,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        evaluated_track_count,
+    })
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the recursive evaluator keeps local time, root time, and immutable frame context explicit"
+)]
+fn evaluate_layers(
+    compiled_layers: &[crate::plan::CompiledLayer],
+    active: &[ScheduledItem],
+    composition_time: u128,
+    root_project_time: u128,
+    frame_rate: (u64, u64),
+    width: u32,
+    height: u32,
+    root_composition: bool,
+    context: &EvaluationContext<'_>,
+) -> Result<(Vec<EvaluatedLayer>, u64), EvaluationError> {
     let mut layers = Vec::with_capacity(active.len());
     let mut evaluated_track_count = 0;
     for ScheduledItem(index) in active {
-        let layer = &plan.layers[*index];
-        let relative = project_time.saturating_sub(layer.start_nanos);
-        let mut opacity = layer.opacity.evaluate(relative, project_time, context)?;
+        let layer = &compiled_layers[*index];
+        let relative = composition_time.saturating_sub(layer.start_nanos);
+        let mut opacity = layer
+            .opacity
+            .evaluate(relative, root_project_time, context)?;
         evaluated_track_count += 1;
         for track in &layer.opacity_contributions {
             opacity *= track.evaluate(relative);
@@ -145,7 +205,7 @@ pub fn evaluate_with_context(
                     transform: transform::evaluate(
                         layer,
                         relative,
-                        project_time,
+                        root_project_time,
                         context,
                         &mut evaluated_track_count,
                     )?,
@@ -168,7 +228,7 @@ pub fn evaluate_with_context(
             } => EvaluatedSource::Spectrum2D {
                 bands: band_signals
                     .iter()
-                    .map(|signal| context.sample_scalar(*signal, project_time))
+                    .map(|signal| context.sample_scalar(*signal, root_project_time))
                     .collect::<Result<Vec<_>, _>>()?
                     .into_iter()
                     .map(|amplitude| amplitude.clamp(0.0, 1.0) as f32)
@@ -184,11 +244,41 @@ pub fn evaluate_with_context(
                 colour: *colour,
             },
             CompiledVisualSource::ParticleSystem(system) => {
-                let appearance = system.evaluate_appearance_at(relative, project_time, context)?;
+                let appearance =
+                    system.evaluate_appearance_at(relative, root_project_time, context)?;
                 EvaluatedSource::ParticleSystem {
                     system: system.clone(),
                     time_nanos: relative,
                     appearance,
+                }
+            }
+            CompiledVisualSource::Group(composition) => {
+                let nested_active = composition
+                    .schedule
+                    .active_at_time(&composition.layers, relative);
+                let (nested_layers, nested_count) = evaluate_layers(
+                    &composition.layers,
+                    &nested_active,
+                    relative,
+                    root_project_time,
+                    frame_rate,
+                    width,
+                    height,
+                    false,
+                    context,
+                )?;
+                evaluated_track_count += nested_count;
+                EvaluatedSource::Group {
+                    composition: EvaluatedComposition {
+                        layers: nested_layers,
+                    },
+                    transform: transform::evaluate(
+                        layer,
+                        relative,
+                        root_project_time,
+                        context,
+                        &mut evaluated_track_count,
+                    )?,
                 }
             }
         };
@@ -201,7 +291,7 @@ pub fn evaluate_with_context(
                 effects::evaluate(
                     &effect.effect,
                     relative - effect.start,
-                    project_time,
+                    root_project_time,
                     context,
                 )
             })
@@ -216,16 +306,24 @@ pub fn evaluate_with_context(
                 ..
             } = effect
             {
-                let frame_duration = (1_000_000_000_u128 * u128::from(plan.frame_rate.1))
-                    / u128::from(plan.frame_rate.0);
+                let frame_duration =
+                    (1_000_000_000_u128 * u128::from(frame_rate.1)) / u128::from(frame_rate.0);
                 let exposure = (frame_duration as f64 * (*shutter_angle / 360.0)).round() as u128;
                 let half_window = exposure / 2;
                 let (lower, upper) = motion::sample_bounds(layer, relative);
                 let before = relative.saturating_sub(half_window).max(lower);
                 let after = relative.saturating_add(half_window).min(upper);
                 let mut ignored_tracks = 0;
-                let before_project_time = layer.start_nanos.saturating_add(before);
-                let after_project_time = layer.start_nanos.saturating_add(after);
+                let before_project_time = if root_composition {
+                    layer.start_nanos.saturating_add(before)
+                } else {
+                    sample_root_time(root_project_time, relative, before)
+                };
+                let after_project_time = if root_composition {
+                    layer.start_nanos.saturating_add(after)
+                } else {
+                    sample_root_time(root_project_time, relative, after)
+                };
                 let start = transform::evaluate(
                     layer,
                     before,
@@ -242,8 +340,8 @@ pub fn evaluate_with_context(
                     &mut ignored_tracks,
                 )?
                 .position;
-                let dx = (end.x - start.x) * f64::from(plan.canvas.width);
-                let dy = (end.y - start.y) * f64::from(plan.canvas.height);
+                let dx = (end.x - start.x) * f64::from(width);
+                let dy = (end.y - start.y) * f64::from(height);
                 let displacement = (dx * dx + dy * dy).sqrt();
                 if displacement <= 0.000_1 || exposure == 0 {
                     *radius = 0.0;
@@ -253,7 +351,9 @@ pub fn evaluate_with_context(
                 }
             }
         }
-        if let EvaluatedSource::Image { transform, .. } = &mut source {
+        if let EvaluatedSource::Image { transform, .. } | EvaluatedSource::Group { transform, .. } =
+            &mut source
+        {
             for effect in &effects {
                 if let EvaluatedEffect::CameraShake {
                     local_time,
@@ -281,7 +381,7 @@ pub fn evaluate_with_context(
             }
         }
         layers.push(EvaluatedLayer {
-            compiled_layer_index: *index,
+            compiled_layer_index: layer.compiled_identity,
             content_dependency: layer.content_dependency,
             source,
             opacity,
@@ -290,25 +390,17 @@ pub fn evaluate_with_context(
             blend_mode: layer.blend_mode,
         });
     }
-    Ok(EvaluatedFrame {
-        time: project_time,
-        background: plan.canvas.background,
-        width: plan.canvas.width,
-        height: plan.canvas.height,
-        layers,
-        post_effects: plan
-            .post_effects
-            .iter()
-            .filter(|effect| effect.active_at(project_time))
-            .map(|effect| {
-                effects::evaluate(
-                    &effect.effect,
-                    project_time - effect.start,
-                    project_time,
-                    context,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        evaluated_track_count,
-    })
+    Ok((layers, evaluated_track_count))
+}
+
+fn sample_root_time(
+    current_root_time: u128,
+    current_local_time: u128,
+    sample_local_time: u128,
+) -> u128 {
+    if sample_local_time >= current_local_time {
+        current_root_time.saturating_add(sample_local_time - current_local_time)
+    } else {
+        current_root_time.saturating_sub(current_local_time - sample_local_time)
+    }
 }

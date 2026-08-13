@@ -12,19 +12,21 @@ pub(super) struct ImageTable {
 /// Keeps the project asset order while omitting unused and non-image assets.
 #[must_use]
 pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> ImageTable {
-    let image_ids: BTreeSet<&str> = project
-        .visual
-        .clips
-        .iter()
-        .filter(|clip| clip.visible)
-        .filter_map(|clip| match &clip.source {
-            crate::project::VisualSource::Image { asset } => Some(asset.as_str()),
-            crate::project::VisualSource::SolidColor { .. }
-            | crate::project::VisualSource::Spectrum2D(_)
-            | crate::project::VisualSource::ParticleSystem(_)
-            | crate::project::VisualSource::Group(_) => None,
-        })
-        .collect();
+    fn collect<'a>(clips: &'a [crate::project::Clip], ids: &mut BTreeSet<&'a str>) {
+        for clip in clips.iter().filter(|clip| clip.visible) {
+            match &clip.source {
+                crate::project::VisualSource::Image { asset } => {
+                    ids.insert(asset.as_str());
+                }
+                crate::project::VisualSource::Group(group) => collect(&group.clips, ids),
+                crate::project::VisualSource::SolidColor { .. }
+                | crate::project::VisualSource::Spectrum2D(_)
+                | crate::project::VisualSource::ParticleSystem(_) => {}
+            }
+        }
+    }
+    let mut image_ids = BTreeSet::new();
+    collect(&project.visual.clips, &mut image_ids);
     let images: Vec<_> = project
         .assets
         .iter()

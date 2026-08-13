@@ -7,8 +7,8 @@ use crate::{
     animation::Track,
     domain::{Crop, Point},
     plan::{
-        CompilationStats, CompiledLayer, CompiledScalarProperty, CompiledSizing,
-        CompiledTransformTracks, CompiledVisualSource, DrawKey, PlanCompileInput,
+        CompilationStats, CompiledComposition, CompiledLayer, CompiledScalarProperty,
+        CompiledSizing, CompiledTransformTracks, CompiledVisualSource, DrawKey, PlanCompileInput,
         ScalarPropertyConstraint, ScalarPropertyTarget, ScalarSignalInterner,
     },
     project::{Clip, VisualSource, parse_colour},
@@ -22,7 +22,10 @@ pub(super) fn compile(
     image_indices: &BTreeMap<String, usize>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
+    next_compiled_identity: &mut usize,
 ) -> Result<CompiledLayer, Diagnostic> {
+    let compiled_identity = *next_compiled_identity;
+    *next_compiled_identity = (*next_compiled_identity).saturating_add(1);
     let start_nanos = time::to_nanos(clip.start, &clip.id)?;
     let end_nanos = start_nanos.saturating_add(time::to_nanos(clip.duration, &clip.id)?);
     let source = match &clip.source {
@@ -167,14 +170,15 @@ pub(super) fn compile(
                 scalar_signal_interner,
             )?))
         }
-        VisualSource::Group(_) => {
-            return Err(Diagnostic::error(
-                "MVP-PLAN-GROUP-UNSUPPORTED",
-                Category::Internal,
-                "Group compilation and rendering are not implemented yet",
-                format!("clip '{}' source", clip.id),
-            ));
-        }
+        VisualSource::Group(group) => CompiledVisualSource::Group(Arc::new(compile_group(
+            group,
+            clip.duration,
+            validated,
+            image_indices,
+            compilation,
+            scalar_signal_interner,
+            next_compiled_identity,
+        )?)),
     };
     let effects = clip
         .effects
@@ -184,6 +188,7 @@ pub(super) fn compile(
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(CompiledLayer {
+        compiled_identity,
         id: clip.id.clone(),
         start_nanos,
         duration_nanos: end_nanos - start_nanos,
@@ -213,6 +218,90 @@ pub(super) fn compile(
         effects,
         blend_mode: clip.blend_mode,
         content_dependency: crate::plan::TemporalDependency::Static,
+    })
+}
+
+pub(super) fn compile_with_preset(
+    clip: &Clip,
+    validated: &PlanCompileInput<'_>,
+    image_indices: &BTreeMap<String, usize>,
+    compilation: &mut CompilationStats,
+    scalar_signal_interner: &mut ScalarSignalInterner,
+    next_compiled_identity: &mut usize,
+) -> Result<CompiledLayer, Diagnostic> {
+    let mut layer = compile(
+        clip,
+        validated,
+        image_indices,
+        compilation,
+        scalar_signal_interner,
+        next_compiled_identity,
+    )?;
+    if let Some(preset) = &clip.preset {
+        super::presets::apply(&mut layer, preset, clip.duration, compilation)?;
+    }
+    Ok(layer)
+}
+
+fn compile_group(
+    group: &crate::project::Group,
+    duration: f64,
+    validated: &PlanCompileInput<'_>,
+    image_indices: &BTreeMap<String, usize>,
+    compilation: &mut CompilationStats,
+    scalar_signal_interner: &mut ScalarSignalInterner,
+    next_compiled_identity: &mut usize,
+) -> Result<CompiledComposition, Diagnostic> {
+    let mut layers = Vec::new();
+    for child in group.clips.iter().filter(|clip| clip.visible) {
+        layers.push(compile_with_preset(
+            child,
+            validated,
+            image_indices,
+            compilation,
+            scalar_signal_interner,
+            next_compiled_identity,
+        )?);
+    }
+    let duration_nanos = time::to_nanos(duration, "Group")?;
+    let composition_end_frame =
+        time::first_frame_at_or_after(duration_nanos, validated.frame_rate)?;
+    let mut post_effects = Vec::new();
+    super::finalize_composition_layers(
+        &mut layers,
+        &mut post_effects,
+        duration_nanos,
+        composition_end_frame,
+        compilation,
+        validated.limits.maximum_active_layers,
+    )?;
+    // A non-empty Group remains conservatively dynamic until composition-level
+    // static caching is implemented. Child content dependencies are still
+    // normalized above and therefore remain accurate.
+    let dependency = layers.iter().fold(
+        crate::plan::TemporalDependency::Static,
+        |dependency, layer| {
+            let activity_changes = layer.start_nanos != 0
+                || layer.start_nanos.saturating_add(layer.duration_nanos) < duration_nanos;
+            dependency
+                .combine(layer.content_dependency)
+                .combine(if activity_changes {
+                    crate::plan::TemporalDependency::Dynamic
+                } else {
+                    crate::plan::TemporalDependency::Static
+                })
+        },
+    );
+    let dependency = if layers.is_empty() {
+        dependency
+    } else {
+        crate::plan::TemporalDependency::Dynamic
+    };
+    let schedule = crate::plan::ActiveSchedule::compile_layers(&layers);
+    Ok(CompiledComposition {
+        layers,
+        schedule,
+        dependency,
     })
 }
 

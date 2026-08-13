@@ -70,6 +70,7 @@ pub fn compile(
     })?;
     let image_table = assets::build(&validated, project);
     let mut layers = Vec::new();
+    let mut next_compiled_identity = 0;
     let mut scalar_signal_interner = ScalarSignalInterner::default();
     let mut compilation = CompilationStats {
         parsed_colour_count: 1,
@@ -83,21 +84,14 @@ pub fn compile(
         ..CompilationStats::default()
     };
     for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
-        layers.push(clips::compile(
+        layers.push(clips::compile_with_preset(
             clip,
             &validated,
             &image_table.indices,
             &mut compilation,
             &mut scalar_signal_interner,
+            &mut next_compiled_identity,
         )?);
-        if let Some(preset) = &clip.preset {
-            presets::apply(
-                layers.last_mut().expect("layer was inserted"),
-                preset,
-                clip.duration,
-                &mut compilation,
-            )?;
-        }
     }
     compilation.rendered_clip_count = layers
         .iter()
@@ -120,6 +114,11 @@ pub fn compile(
             flash,
             validated.frame_rate,
             validated.frame_count,
+            {
+                let identity = next_compiled_identity;
+                next_compiled_identity = next_compiled_identity.saturating_add(1);
+                identity
+            },
         )?);
     }
     compilation.parsed_colour_count += project.visual.flashes.len() as u64;
@@ -142,12 +141,14 @@ pub fn compile(
         .map(|layer| layer.effects.len())
         .sum::<usize>()
         + post_effects.len();
-    optimization::normalize(
+    finalize_composition_layers(
         &mut layers,
         &mut post_effects,
         time::to_nanos(validated.duration, "project")?,
+        validated.frame_count,
         &mut compilation,
-    );
+        validated.limits.maximum_active_layers,
+    )?;
     let post_effect_dependency = post_effects
         .iter()
         .fold(TemporalDependency::Static, |dependency, effect| {
@@ -170,7 +171,6 @@ pub fn compile(
         .sum::<usize>()
         + post_effects.len();
     metrics::record(&mut compilation, &layers, &post_effects);
-    limits::enforce_active_layer_limit(&layers, validated.limits.maximum_active_layers)?;
     let audio_mix = audio::compile(&validated)?;
     let scalar_signals = scalar_signal_interner.finish();
     let audio_analysis_requirements = scalar_signals.audio_analysis_requirements();
@@ -213,4 +213,20 @@ pub fn compile(
         compilation,
         warnings: validated.warnings.to_vec(),
     })
+}
+
+/// Applies compiler-owned semantics shared by the root and every nested
+/// composition. Root transitions are lowered before this is called; Group
+/// children have no containing-composition transitions yet.
+#[allow(clippy::result_large_err)]
+pub(super) fn finalize_composition_layers(
+    layers: &mut [crate::plan::CompiledLayer],
+    post_effects: &mut Vec<crate::plan::TimedEffect>,
+    composition_duration: u128,
+    composition_end_frame: u64,
+    compilation: &mut CompilationStats,
+    maximum_active_layers: usize,
+) -> Result<(), Diagnostic> {
+    optimization::normalize(layers, post_effects, composition_duration, compilation);
+    limits::enforce_active_layer_limit(layers, composition_end_frame, maximum_active_layers)
 }

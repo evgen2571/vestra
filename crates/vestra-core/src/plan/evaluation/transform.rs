@@ -102,6 +102,7 @@ mod tests {
 
     fn layer() -> CompiledLayer {
         CompiledLayer {
+            compiled_identity: 0,
             id: "layer".into(),
             start_nanos: 5_000_000_000,
             duration_nanos: 2_000_000_000,

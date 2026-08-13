@@ -15,6 +15,7 @@ pub(super) fn compile(
     flash: &Flash,
     rate: (u64, u64),
     frame_count: u64,
+    compiled_identity: usize,
 ) -> Result<CompiledLayer, Diagnostic> {
     let start_nanos = to_nanos(flash.start, &flash.id)?;
     let duration_nanos = to_nanos(flash.duration, &flash.id)?;
@@ -69,6 +70,7 @@ pub(super) fn compile(
         );
     }
     Ok(CompiledLayer {
+        compiled_identity,
         id: flash.id.clone(),
         start_nanos,
         duration_nanos,

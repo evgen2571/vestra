@@ -1,14 +1,14 @@
-use crate::plan::{DrawKey, RenderPlan, ScheduledItem};
+use crate::plan::{CompiledLayer, RenderPlan, ScheduledItem};
 
 /// The sole compositing-order policy for active scheduled items.  The
 /// `DrawKey` has an explicit stable-id tiebreaker, so this produces a
 /// deterministic order independent of project insertion and event order.
 pub fn sort_active_items(plan: &RenderPlan, items: &mut [ScheduledItem]) {
-    items.sort_by(|left, right| draw_key(plan, *left).cmp(draw_key(plan, *right)));
+    sort_active_layers(&plan.layers, items);
 }
 
-fn draw_key(plan: &RenderPlan, item: ScheduledItem) -> &DrawKey {
-    &plan.layers[item.0].draw_key
+pub(crate) fn sort_active_layers(layers: &[CompiledLayer], items: &mut [ScheduledItem]) {
+    items.sort_by(|left, right| layers[left.0].draw_key.cmp(&layers[right.0].draw_key));
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -37,10 +37,9 @@ pub struct ScheduleCursor<'schedule> {
 }
 
 impl ActiveSchedule {
-    #[must_use]
-    pub fn compile(plan: &RenderPlan) -> Self {
+    pub(crate) fn compile_layers(layers: &[CompiledLayer]) -> Self {
         let events = crate::plan_schedule::compile(
-            plan.layers
+            layers
                 .iter()
                 .map(|layer| (layer.start_frame, layer.end_frame)),
         )
@@ -55,6 +54,11 @@ impl ActiveSchedule {
         })
         .collect();
         Self { events }
+    }
+
+    #[must_use]
+    pub fn compile(plan: &RenderPlan) -> Self {
+        Self::compile_layers(&plan.layers)
     }
 
     #[must_use]
@@ -82,6 +86,24 @@ impl ActiveSchedule {
             }
         }
         sort_active_items(plan, &mut active);
+        active
+    }
+
+    /// Selects nested children using their authored local nanosecond spans.
+    /// Unlike frame scheduling, this does not require converting a Group's
+    /// local clock into root frame numbers.
+    #[must_use]
+    pub fn active_at_time(&self, layers: &[CompiledLayer], time_nanos: u128) -> Vec<ScheduledItem> {
+        let mut active = layers
+            .iter()
+            .enumerate()
+            .filter(|(_, layer)| {
+                layer.start_nanos <= time_nanos
+                    && time_nanos < layer.start_nanos.saturating_add(layer.duration_nanos)
+            })
+            .map(|(index, _)| ScheduledItem(index))
+            .collect::<Vec<_>>();
+        sort_active_layers(layers, &mut active);
         active
     }
 }

@@ -15,11 +15,11 @@ use crate::{
     plan::{CompiledEffect, TemporalDependency},
     project::{
         ActiveInterval, AudioAnalysisTap as ProjectAudioAnalysisTap,
-        AudioScalarFeature as ProjectAudioScalarFeature, Effect, Interpolation, InterpolationName,
-        Keyframe, ParticleBurst, ParticleEmission, ParticleSystem, Preset, Project, ScalarModifier,
-        ScalarModifierOperation as ProjectScalarModifierOperation, ScalarSignal,
-        ScalarSignalSource, SignalTransform, Spectrum2D, Spectrum2DBandMapping, Spectrum2DLayout,
-        Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Track, VisualSource,
+        AudioScalarFeature as ProjectAudioScalarFeature, Effect, Group, Interpolation,
+        InterpolationName, Keyframe, ParticleBurst, ParticleEmission, ParticleSystem, Preset,
+        Project, ScalarModifier, ScalarModifierOperation as ProjectScalarModifierOperation,
+        ScalarSignal, ScalarSignalSource, SignalTransform, Spectrum2D, Spectrum2DBandMapping,
+        Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Track, VisualSource,
     },
     validation::ResourceLimits,
 };
@@ -50,6 +50,17 @@ fn canonical_input() -> PlanCompileInput<'static> {
 }
 
 fn compile_project(project: Project) -> super::RenderPlan {
+    compile_project_with_limits(project, ResourceLimits::default())
+}
+
+fn compile_project_with_limits(project: Project, limits: ResourceLimits) -> super::RenderPlan {
+    compile_project_result(project, limits).expect("plan")
+}
+
+fn compile_project_result(
+    project: Project,
+    limits: ResourceLimits,
+) -> Result<super::RenderPlan, Box<crate::Diagnostic>> {
     let project = Box::leak(Box::new(project));
     let assets = Box::leak(Box::new(BTreeMap::from([
         ("red".to_owned(), PathBuf::from("/resolved/red.png")),
@@ -59,7 +70,7 @@ fn compile_project(project: Project) -> super::RenderPlan {
     compile(
         PlanCompileInput::new(
             project,
-            ResourceLimits::default(),
+            limits,
             std::path::Path::new("/projects"),
             assets,
             durations,
@@ -70,7 +81,7 @@ fn compile_project(project: Project) -> super::RenderPlan {
         ),
         CompileOptions::default(),
     )
-    .expect("plan")
+    .map_err(Box::new)
 }
 
 fn canonical_project() -> Project {
@@ -78,6 +89,392 @@ fn canonical_project() -> Project {
         "../../../../examples/projects/animation-effects.json"
     ))
     .expect("fixture project")
+}
+
+#[test]
+fn groups_compile_nested_layers_and_use_local_time_with_parent_clipping() {
+    let mut project = canonical_project();
+    let mut child = project.visual.clips[0].clone();
+    child.id = "nested-child".to_owned();
+    child.start = 2.0;
+    child.duration = 10.0;
+    let mut parent = child.clone();
+    parent.id = "group".to_owned();
+    parent.start = 10.0;
+    parent.duration = 5.0;
+    parent.source = VisualSource::Group(Group { clips: vec![child] });
+    parent.transform = None;
+    project.visual.clips = vec![parent];
+
+    let plan = compile_project(project);
+    let super::CompiledVisualSource::Group(composition) = &plan.layers[0].source else {
+        panic!("expected compiled Group source");
+    };
+    assert_eq!(composition.layers.len(), 1);
+    assert_eq!(composition.layers[0].start_nanos, 2_000_000_000);
+    assert!(
+        composition
+            .schedule
+            .active_at_time(&composition.layers, 1_999_999_999)
+            .is_empty()
+    );
+    assert_eq!(
+        composition
+            .schedule
+            .active_at_time(&composition.layers, 2_000_000_000)
+            .len(),
+        1
+    );
+
+    let before = evaluate(&plan, &[super::ScheduledItem(0)], 11_999_999_999).expect("frame");
+    let at_start = evaluate(&plan, &[super::ScheduledItem(0)], 12_000_000_000).expect("frame");
+    let super::EvaluatedSource::Group {
+        composition: before_group,
+        ..
+    } = &before.layers[0].source
+    else {
+        panic!("expected evaluated Group source");
+    };
+    assert!(before_group.layers.is_empty());
+    let super::EvaluatedSource::Group {
+        composition: start_group,
+        ..
+    } = &at_start.layers[0].source
+    else {
+        panic!("expected evaluated Group source");
+    };
+    assert_eq!(start_group.layers.len(), 1);
+}
+
+#[test]
+fn nested_clips_use_root_preset_and_normalization_semantics_recursively() {
+    let mut root_project = canonical_project();
+    root_project.visual.transitions.clear();
+    let mut root_clip = root_project.visual.clips[0].clone();
+    root_clip.preset = Some(Preset::FocusReveal {
+        timing: ActiveInterval {
+            start: 0.0,
+            duration: Some(0.5),
+        },
+        intensity: 1.0,
+    });
+    root_project.visual.clips = vec![root_clip.clone()];
+    let root = compile_project(root_project);
+
+    let mut nested_project = canonical_project();
+    nested_project.visual.transitions.clear();
+    let mut group = root_clip.clone();
+    group.id = "group".into();
+    group.preset = None;
+    group.transform = None;
+    group.source = VisualSource::Group(Group {
+        clips: vec![root_clip.clone()],
+    });
+    nested_project.visual.clips = vec![group];
+    let nested = compile_project(nested_project);
+
+    let super::CompiledVisualSource::Group(composition) = &nested.layers[0].source else {
+        panic!("expected Group");
+    };
+    let child = &composition.layers[0];
+    assert_eq!(child.effects.len(), root.layers[0].effects.len());
+    assert_eq!(
+        child.transform_contributions.len(),
+        root.layers[0].transform_contributions.len()
+    );
+    assert_eq!(child.content_dependency, root.layers[0].content_dependency);
+    assert!(child.opacity.authored_track.keyframes.is_empty());
+
+    let mut deep_project = canonical_project();
+    deep_project.visual.transitions.clear();
+    let mut inner = group_clip_with_child(root_clip);
+    inner.id = "inner".into();
+    let mut outer = inner.clone();
+    outer.id = "outer".into();
+    outer.source = VisualSource::Group(Group { clips: vec![inner] });
+    deep_project.visual.clips = vec![outer];
+    let deep = compile_project(deep_project);
+    let super::CompiledVisualSource::Group(outer_composition) = &deep.layers[0].source else {
+        panic!("expected outer Group");
+    };
+    let super::CompiledVisualSource::Group(inner_composition) = &outer_composition.layers[0].source
+    else {
+        panic!("expected inner Group");
+    };
+    assert_eq!(
+        inner_composition.layers[0].effects.len(),
+        root.layers[0].effects.len()
+    );
+}
+
+fn group_clip_with_child(child: crate::project::Clip) -> crate::project::Clip {
+    let mut group = child.clone();
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    group.preset = None;
+    group.transform = None;
+    group
+}
+
+#[test]
+fn nested_compositions_enforce_active_layer_limits_independently() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let template = project.visual.clips[0].clone();
+    let children = (0..3)
+        .map(|index| {
+            let mut child = template.clone();
+            child.id = format!("child-{index}");
+            child.start = 0.0;
+            child.duration = 2.0;
+            child
+        })
+        .collect();
+    let mut group = template;
+    group.id = "group".into();
+    group.start = 0.0;
+    group.duration = 2.0;
+    group.transform = None;
+    group.source = VisualSource::Group(Group { clips: children });
+    project.visual.clips = vec![group];
+
+    let limits = ResourceLimits {
+        maximum_active_layers: 2,
+        ..ResourceLimits::default()
+    };
+    let project = Box::leak(Box::new(project));
+    let assets = Box::leak(Box::new(BTreeMap::from([
+        ("red".to_owned(), PathBuf::from("/resolved/red.png")),
+        ("blue".to_owned(), PathBuf::from("/resolved/blue.png")),
+    ])));
+    let durations = Box::leak(Box::new(BTreeMap::new()));
+    let error = compile(
+        PlanCompileInput::new(
+            project,
+            limits,
+            std::path::Path::new("/projects"),
+            assets,
+            durations,
+            2.0,
+            (24, 1),
+            48,
+            &[],
+        ),
+        CompileOptions::default(),
+    )
+    .expect_err("nested active-layer limit must not be bypassed");
+    assert_eq!(error.code, "MVP-LIMIT-ACTIVE-LAYERS");
+}
+
+#[test]
+fn nested_active_layer_limit_ignores_children_after_group_duration() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.flashes.clear();
+    let template = project.visual.clips[0].clone();
+    let children = (0..3)
+        .map(|index| {
+            let mut child = template.clone();
+            child.id = format!("child-{index}");
+            child.start = 10.0;
+            child.duration = 10.0;
+            child
+        })
+        .collect();
+    let mut group = template;
+    group.id = "group".into();
+    group.start = 0.0;
+    group.duration = 5.0;
+    group.transform = None;
+    group.source = VisualSource::Group(Group { clips: children });
+    project.visual.clips = vec![group];
+
+    let plan = compile_project_with_limits(
+        project,
+        ResourceLimits {
+            maximum_active_layers: 2,
+            ..ResourceLimits::default()
+        },
+    );
+    let super::CompiledVisualSource::Group(composition) = &plan.layers[0].source else {
+        panic!("expected Group");
+    };
+    assert_eq!(composition.layers[0].start_nanos, 10_000_000_000);
+}
+
+#[test]
+fn nested_active_layer_limit_counts_only_partial_overlap_before_group_end() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.flashes.clear();
+    let template = project.visual.clips[0].clone();
+    let children = [("a", 0.0), ("b", 4.0), ("c", 6.0)]
+        .into_iter()
+        .map(|(id, start)| {
+            let mut child = template.clone();
+            child.id = id.into();
+            child.start = start;
+            child.duration = 10.0;
+            child
+        })
+        .collect();
+    let mut group = template;
+    group.id = "group".into();
+    group.start = 0.0;
+    group.duration = 5.0;
+    group.transform = None;
+    group.source = VisualSource::Group(Group { clips: children });
+    project.visual.clips = vec![group];
+
+    let error = compile_project_result(
+        project.clone(),
+        ResourceLimits {
+            maximum_active_layers: 1,
+            ..ResourceLimits::default()
+        },
+    )
+    .expect_err("peak overlap must exceed limit 1");
+    assert_eq!(error.code, "MVP-LIMIT-ACTIVE-LAYERS");
+    compile_project_with_limits(
+        project,
+        ResourceLimits {
+            maximum_active_layers: 2,
+            ..ResourceLimits::default()
+        },
+    );
+}
+
+#[test]
+fn child_starting_at_group_end_is_not_active() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.flashes.clear();
+    let template = project.visual.clips[0].clone();
+    let mut child = template.clone();
+    child.id = "child".into();
+    child.start = 5.0;
+    child.duration = 10.0;
+    let mut group = template;
+    group.id = "group".into();
+    group.start = 0.0;
+    group.duration = 5.0;
+    group.transform = None;
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    project.visual.clips = vec![group];
+
+    compile_project_with_limits(
+        project,
+        ResourceLimits {
+            maximum_active_layers: 1,
+            ..ResourceLimits::default()
+        },
+    );
+}
+
+#[test]
+fn deeply_nested_active_layer_limit_uses_inner_group_duration() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.flashes.clear();
+    let template = project.visual.clips[0].clone();
+    let children = (0..3)
+        .map(|index| {
+            let mut child = template.clone();
+            child.id = format!("child-{index}");
+            child.start = 6.0;
+            child.duration = 4.0;
+            child
+        })
+        .collect();
+    let mut inner = template.clone();
+    inner.id = "inner".into();
+    inner.start = 0.0;
+    inner.duration = 5.0;
+    inner.transform = None;
+    inner.source = VisualSource::Group(Group { clips: children });
+    let mut outer = template;
+    outer.id = "outer".into();
+    outer.start = 0.0;
+    outer.duration = 10.0;
+    outer.transform = None;
+    outer.source = VisualSource::Group(Group { clips: vec![inner] });
+    project.visual.clips = vec![outer];
+
+    compile_project_with_limits(
+        project,
+        ResourceLimits {
+            maximum_active_layers: 1,
+            ..ResourceLimits::default()
+        },
+    );
+}
+
+fn camera_shake(position_amount: f64) -> Effect {
+    Effect::CameraShake {
+        id: "shake".into(),
+        timing: ActiveInterval::default(),
+        position_amount: Track::constant(position_amount).into(),
+        rotation_degrees: Track::constant(0.2).into(),
+        scale_amount: Track::constant(0.05).into(),
+        frequency: Track::constant(14.0).into(),
+        seed: 7,
+        attack: 0.0,
+        decay: 1.0,
+    }
+}
+
+#[test]
+fn camera_shake_targets_group_transform_and_preserves_child_transform() {
+    let mut without = canonical_project();
+    without.visual.transitions.clear();
+    let child_template = without.visual.clips[0].clone();
+    let mut child = child_template.clone();
+    child.id = "child".into();
+    child.effects.clear();
+    let mut group = child_template;
+    group.id = "group".into();
+    group.start = 0.0;
+    group.duration = 2.0;
+    group.transform = None;
+    group.effects.clear();
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    without.visual.clips = vec![group];
+
+    let mut with_shake = without.clone();
+    with_shake.visual.clips[0].effects = vec![camera_shake(0.1)];
+    let plain = compile_project(without);
+    let shaken = compile_project(with_shake);
+    let plain_frame = evaluate(&plain, &[super::ScheduledItem(0)], 500_000_000).expect("frame");
+    let shaken_frame = evaluate(&shaken, &[super::ScheduledItem(0)], 500_000_000).expect("frame");
+    let super::EvaluatedSource::Group {
+        composition: plain_composition,
+        transform: plain_transform,
+    } = &plain_frame.layers[0].source
+    else {
+        panic!("expected plain Group");
+    };
+    let super::EvaluatedSource::Group {
+        composition: shaken_composition,
+        transform: shaken_transform,
+    } = &shaken_frame.layers[0].source
+    else {
+        panic!("expected shaken Group");
+    };
+    assert_ne!(plain_transform.position, shaken_transform.position);
+    let super::EvaluatedSource::Image {
+        transform: plain_child_transform,
+        ..
+    } = &plain_composition.layers[0].source
+    else {
+        panic!("expected plain Image child");
+    };
+    let super::EvaluatedSource::Image {
+        transform: shaken_child_transform,
+        ..
+    } = &shaken_composition.layers[0].source
+    else {
+        panic!("expected shaken Image child");
+    };
+    assert_eq!(plain_child_transform, shaken_child_transform);
 }
 
 fn stage_layer_from_five_to_six_seconds(layer: &mut super::CompiledLayer) {
@@ -237,6 +634,56 @@ fn spectrum2d_evaluation_samples_absolute_project_time_deterministically() {
 }
 
 #[test]
+fn nested_spectrum2d_samples_root_project_time() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let child = {
+        let mut clip = project.visual.clips[0].clone();
+        clip.id = "spectrum-child".into();
+        clip.start = 2.0;
+        clip.duration = 5.0;
+        clip.source = VisualSource::Spectrum2D(Spectrum2D::default());
+        clip.transform = None;
+        clip
+    };
+    let mut group = child.clone();
+    group.id = "spectrum-group".into();
+    group.start = 10.0;
+    group.duration = 10.0;
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    project.visual.clips = vec![group];
+    let plan = compile_project(project);
+
+    let prepared = PreparedScalarSignals::new(
+        (0..24)
+            .map(|_| {
+                PreparedScalarSignal::new(0, 1_000_000_000, {
+                    let mut samples = vec![0.0; 20];
+                    samples[3] = 0.2;
+                    samples[15] = 0.8;
+                    samples
+                })
+                .expect("prepared band")
+            })
+            .collect(),
+    );
+    let frame = evaluate_with_context(
+        &plan,
+        &[super::ScheduledItem(0)],
+        15_000_000_000,
+        &EvaluationContext::new(&prepared),
+    )
+    .expect("nested Spectrum2D frame");
+    let super::EvaluatedSource::Group { composition, .. } = &frame.layers[0].source else {
+        panic!("expected Group");
+    };
+    let super::EvaluatedSource::Spectrum2D { bands, .. } = &composition.layers[0].source else {
+        panic!("expected nested Spectrum2D");
+    };
+    assert_eq!(bands[0], 0.8);
+}
+
+#[test]
 fn particle_system_compiles_and_evaluates_from_clip_local_time() {
     let mut project = canonical_project();
     project.visual.transitions.clear();
@@ -286,6 +733,91 @@ fn particle_system_compiles_and_evaluates_from_clip_local_time() {
     };
     assert_eq!(source(&direct), source(&repeated));
     assert_eq!(source(&direct).1, source(&repeated).1);
+}
+
+#[test]
+fn nested_particles_keep_local_age_and_random_access_determinism() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let mut child = project.visual.clips[0].clone();
+    child.id = "particle-child".into();
+    child.start = 10.0;
+    child.duration = 5.0;
+    child.source = VisualSource::ParticleSystem(ParticleSystem {
+        seed: 17,
+        emission: ParticleEmission {
+            rate: 2.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    child.transform = None;
+    let mut group = child.clone();
+    group.id = "particle-group".into();
+    group.start = 10.0;
+    group.duration = 20.0;
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    project.visual.clips = vec![group];
+    let plan = compile_project(project);
+    let prepared = PreparedScalarSignals::empty();
+    let context = EvaluationContext::new(&prepared);
+    let evaluate_nested = |time| {
+        evaluate_with_context(&plan, &[super::ScheduledItem(0)], time, &context)
+            .expect("nested particle frame")
+    };
+    let direct = evaluate_nested(22_000_000_000);
+    let _ = evaluate_nested(20_000_000_000);
+    let repeated = evaluate_nested(22_000_000_000);
+    let particles = |frame: &super::EvaluatedFrame| {
+        let super::EvaluatedSource::Group { composition, .. } = &frame.layers[0].source else {
+            panic!("expected Group");
+        };
+        let super::EvaluatedSource::ParticleSystem {
+            system,
+            time_nanos,
+            appearance,
+        } = &composition.layers[0].source
+        else {
+            panic!("expected nested particles");
+        };
+        (
+            *time_nanos,
+            system
+                .evaluated_particles_at_with_appearance(*time_nanos, *appearance)
+                .collect::<Vec<_>>(),
+        )
+    };
+    let (time, direct_particles) = particles(&direct);
+    assert_eq!(time, 2_000_000_000);
+    assert_eq!(direct_particles, particles(&repeated).1);
+}
+
+#[test]
+fn compiled_identities_are_unique_across_compositions_with_local_ids() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let child = project.visual.clips[0].clone();
+    let mut first = child.clone();
+    first.id = "group-a".into();
+    first.source = VisualSource::Group(Group {
+        clips: vec![child.clone()],
+    });
+    first.transform = None;
+    let mut second = first.clone();
+    second.id = "group-b".into();
+    project.visual.clips = vec![first, second];
+    let plan = compile_project(project);
+    let children = plan
+        .layers
+        .iter()
+        .filter_map(|layer| match &layer.source {
+            super::CompiledVisualSource::Group(composition) => Some(&composition.layers[0]),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(children.len(), 2);
+    assert_eq!(children[0].id, children[1].id);
+    assert_ne!(children[0].compiled_identity, children[1].compiled_identity);
 }
 
 #[test]
@@ -568,6 +1100,62 @@ fn motion_blur_samples_transform_modifiers_at_each_historical_project_time() {
         Some(super::EvaluatedEffect::MotionBlur { radius, angle_degrees, .. })
             if (*radius - expected_radius).abs() < 1.0e-9
                 && angle_degrees.abs() < 1.0e-12
+    ));
+}
+
+#[test]
+fn nested_motion_blur_shutter_samples_shift_root_project_time() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    let mut child = project.visual.clips[0].clone();
+    child.id = "nested-image".into();
+    child.start = 0.0;
+    child.duration = 3.0;
+    child.effects.clear();
+    let mut group = child.clone();
+    group.id = "group".into();
+    group.transform = None;
+    group.source = VisualSource::Group(Group { clips: vec![child] });
+    project.visual.clips = vec![group];
+    let mut plan = compile_project(project);
+
+    let super::CompiledVisualSource::Group(composition) = &mut plan.layers[0].source else {
+        panic!("expected Group");
+    };
+    let composition = std::sync::Arc::get_mut(composition).expect("unique composition");
+    let layer = &mut composition.layers[0];
+    layer.transform.position = CompiledTrack::new(crate::domain::Point { x: 0.0, y: 0.0 });
+    layer.transform.position_x_modifiers = vec![CompiledScalarModifier {
+        operation: ScalarModifierOperation::Add,
+        signal: ScalarSignalId::new(0),
+    }];
+    layer.effects.push(TimedEffect {
+        start: 0,
+        end: layer.duration_nanos,
+        effect: CompiledEffect::MotionBlur {
+            intensity: CompiledScalarProperty::authored(CompiledTrack::new(1.0)),
+            shutter_angle: CompiledScalarProperty::authored(CompiledTrack::new(360.0)),
+            max_radius: CompiledScalarProperty::authored(CompiledTrack::new(32.0)),
+            samples: 8,
+        },
+        dependency: TemporalDependency::Dynamic,
+    });
+
+    let signal =
+        PreparedScalarSignal::new(0, 1_000_000_000, vec![0.0, 1.0, 2.0, 3.0]).expect("signal");
+    let frame = evaluate_with_context(
+        &plan,
+        &[super::ScheduledItem(0)],
+        1_500_000_000,
+        &EvaluationContext::new(&PreparedScalarSignals::new(vec![signal])),
+    )
+    .expect("nested motion blur evaluation");
+    let super::EvaluatedSource::Group { composition, .. } = &frame.layers[0].source else {
+        panic!("expected evaluated Group");
+    };
+    assert!(matches!(
+        composition.layers[0].effects.last(),
+        Some(super::EvaluatedEffect::MotionBlur { radius, .. }) if *radius > 1.0
     ));
 }
 

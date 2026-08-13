@@ -111,10 +111,18 @@ operation for each evaluated layer.
 ## Groups (V1)
 
 A Group owns a recursive list of child clips. Child clip IDs are local to their
-containing composition, and Group nesting is limited to 32 levels. Group
-rendering is not implemented yet, so compilation deliberately reports the
-explicit Group-unsupported diagnostic. Group transition endpoints are not
-supported; nested transitions, flashes, and post-effects are outside Group V1.
+containing composition, and Group nesting is limited to 32 levels. Core
+compilation and evaluation preserve this nesting: child scheduling and
+animation use composition-local time while audio and other project-global
+signals retain root project time. Nested clips use the same preset application
+and compiler normalization path as root clips; active-layer limits apply
+independently to each composition. Motion-blur shutter samples preserve the
+corresponding root-project-time offset for global signals. CPU and WGPU Group
+rendering are not yet implemented and report backend-specific unsupported diagnostics. Group
+transition endpoints are not supported; nested transitions, flashes, and
+post-effects are outside Group V1.
+Compilation metrics remain root-layer oriented until recursive metrics traversal
+is added.
 
 Solid-colour clips and flashes cover the full output canvas. They support
 opacity and colour effects; transforms are intentionally not accepted for

@@ -4,15 +4,17 @@ use crate::{Category, Diagnostic, plan::CompiledLayer};
 
 pub(super) fn enforce_active_layer_limit(
     layers: &[CompiledLayer],
+    composition_end_frame: u64,
     maximum_active_layers: usize,
 ) -> Result<(), Diagnostic> {
     let mut events = Vec::with_capacity(layers.len() * 2);
-    for layer in layers
-        .iter()
-        .filter(|layer| layer.start_frame < layer.end_frame)
-    {
-        events.push((layer.start_frame, true));
-        events.push((layer.end_frame, false));
+    for layer in layers {
+        let clipped_start = layer.start_frame.min(composition_end_frame);
+        let clipped_end = layer.end_frame.min(composition_end_frame);
+        if clipped_start < clipped_end {
+            events.push((clipped_start, true));
+            events.push((clipped_end, false));
+        }
     }
     events.sort_unstable();
     let mut active = 0_usize;

@@ -130,13 +130,20 @@ mod tests {
             },
             rate_units_per_second: 0,
             lifetime_nanos: 1_000_000_000,
+            lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
             initial_velocity: Point { x: 0.0, y: 0.0 },
+            speed: crate::project::ScalarRange { min: 0.0, max: 0.0 },
+            direction_degrees: 0.0,
+            direction_spread_degrees: 0.0,
             acceleration: Point { x: 0.0, y: 0.0 },
             size: 0.4,
+            size_range: None,
             opacity: 1.0,
             colour: [255, 0, 0, 255],
             rotation_degrees: 0.0,
+            rotation_range: None,
             angular_velocity_degrees: 0.0,
+            angular_velocity_range: None,
             primitive,
             blend_mode,
             bursts: vec![CompiledParticleBurst {
@@ -298,6 +305,50 @@ mod tests {
     }
 
     #[test]
+    fn expanded_particle_model_rasterizes_deterministically_at_nonzero_age() {
+        let mut particle_system = system(ParticlePrimitive::Disc, ParticleBlendMode::Normal);
+        particle_system.seed = 77;
+        particle_system.emitter = ParticleEmitter::Rectangle {
+            center: Point { x: 0.5, y: 0.25 },
+            size: Point { x: 0.4, y: 0.2 },
+        };
+        particle_system.bursts[0].count = 32;
+        particle_system.maximum_live_particles = 32;
+        particle_system.size_range = Some(crate::project::ScalarRange {
+            min: 0.01,
+            max: 0.02,
+        });
+        particle_system.speed = crate::project::ScalarRange { min: 0.1, max: 0.2 };
+        particle_system.direction_degrees = 90.0;
+        particle_system.direction_spread_degrees = 30.0;
+        particle_system.rotation_range = Some(crate::project::ScalarRange {
+            min: -10.0,
+            max: 10.0,
+        });
+        particle_system.angular_velocity_range = Some(crate::project::ScalarRange {
+            min: -5.0,
+            max: 5.0,
+        });
+
+        let mut first = RgbaImage::new(160, 90);
+        let mut second = RgbaImage::new(160, 90);
+        rasterize(
+            &mut first,
+            &particle_system,
+            500_000_000,
+            ColourTransform::default(),
+        );
+        rasterize(
+            &mut second,
+            &particle_system,
+            500_000_000,
+            ColourTransform::default(),
+        );
+        assert_eq!(first.as_raw(), second.as_raw());
+        assert!(first.pixels().any(|pixel| pixel[3] != 0));
+    }
+
+    #[test]
     fn normalized_particle_geometry_scales_with_resolution() {
         fn visible_bounds(image: &RgbaImage) -> (u32, u32, u32, u32) {
             let points: Vec<_> = image
@@ -358,6 +409,39 @@ mod tests {
             );
             eprintln!(
                 "particle_cpu_benchmark workload=small_particles alive_particles={count} resolution=1280x720 primitive=disc size=0.01 blend_mode=normal distribution=point_motion sample_time_ns=500000000 elapsed_ns={}",
+                started.elapsed().as_nanos()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "manual release CPU particle scaling benchmark"]
+    fn particle_cpu_expanded_motion_benchmark() {
+        for count in [1_000_u64, 5_000] {
+            let mut particle_system = system(ParticlePrimitive::Disc, ParticleBlendMode::Normal);
+            particle_system.emitter = ParticleEmitter::Rectangle {
+                center: Point { x: 0.5, y: 0.5 },
+                size: Point { x: 1.0, y: 0.2 },
+            };
+            particle_system.bursts[0].count = count;
+            particle_system.maximum_live_particles = count;
+            particle_system.size_range = Some(crate::project::ScalarRange {
+                min: 0.005,
+                max: 0.015,
+            });
+            particle_system.speed = crate::project::ScalarRange { min: 0.1, max: 0.4 };
+            particle_system.direction_degrees = 90.0;
+            particle_system.direction_spread_degrees = 30.0;
+            let mut image = RgbaImage::new(1280, 720);
+            let started = std::time::Instant::now();
+            rasterize(
+                &mut image,
+                &particle_system,
+                500_000_000,
+                ColourTransform::default(),
+            );
+            eprintln!(
+                "particle_cpu_benchmark workload=expanded_motion alive_particles={count} resolution=1280x720 emitter=rectangle size_range=0.005..0.015 speed_range=0.1..0.4 direction=90 spread=30 sample_time_ns=500000000 elapsed_ns={}",
                 started.elapsed().as_nanos()
             );
         }

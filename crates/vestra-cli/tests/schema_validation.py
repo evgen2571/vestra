@@ -105,6 +105,34 @@ particle_explicit["visual"]["clips"][0]["source"]["particle"].update({
     "blend_mode": "additive",
 })
 assert not errors(particle_explicit), "explicit particle primitive and blend mode must validate"
+expanded_particle = copy.deepcopy(particle)
+expanded_particle["visual"]["clips"][0]["source"].update({
+    "emitter": {"type": "circle", "center": {"x": 0.5, "y": 0.5},
+                "inner_radius": 0.1, "outer_radius": 0.3},
+    "particle": {
+        "lifetime": 2, "lifetime_range": {"min": 1, "max": 3},
+        "size": 0.02, "size_range": {"min": 0.01, "max": 0.04},
+        "speed": 0.2, "speed_range": {"min": 0.1, "max": 0.4},
+        "direction_degrees": 90, "direction_spread_degrees": 30,
+        "rotation_range": {"min": -180, "max": 180},
+        "angular_velocity_range": {"min": -90, "max": 90},
+        "colour": "#ffffff",
+    },
+})
+assert not errors(expanded_particle), "expanded particle fields must validate"
+rectangle_particle = copy.deepcopy(expanded_particle)
+rectangle_particle["visual"]["clips"][0]["source"]["emitter"] = {
+    "type": "rectangle", "center": {"x": 0.5, "y": 0.5},
+    "size": {"x": 1, "y": 0},
+}
+assert not errors(rectangle_particle), "rectangle emitter must validate"
+for invalid_range in [{"min": "bad", "max": 1}, {"min": 3}]:
+    invalid_particle = copy.deepcopy(expanded_particle)
+    invalid_particle["visual"]["clips"][0]["source"]["particle"]["size_range"] = invalid_range
+    assert errors(invalid_particle), "invalid particle range must not validate"
+invalid_circle = copy.deepcopy(expanded_particle)
+invalid_circle["visual"]["clips"][0]["source"]["emitter"]["outer_radius"] = -1
+assert errors(invalid_circle), "negative circle radius must not validate"
 for field, invalid in [("primitive", "triangle"), ("blend_mode", "screen")]:
     invalid_particle = copy.deepcopy(particle_explicit)
     invalid_particle["visual"]["clips"][0]["source"]["particle"][field] = invalid

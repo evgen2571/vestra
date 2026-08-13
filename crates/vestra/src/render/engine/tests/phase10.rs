@@ -345,6 +345,22 @@ fn phase10_release_matrix() {
         ),
         ("mixed", "effects-ready-v1.json", 1920, 1080, 30, None),
         (
+            "long-combined",
+            "effects-ready-v1.json",
+            1920,
+            1080,
+            180,
+            None,
+        ),
+        (
+            "chromatic-focused",
+            "effects-ready-v1.json",
+            1280,
+            720,
+            100,
+            Some(0),
+        ),
+        (
             "color-adjust-focused",
             "color-adjust.json",
             1280,
@@ -365,7 +381,7 @@ fn phase10_release_matrix() {
             serde_json::to_string(&measurement).expect("serialize measurement")
         );
         results.push(measurement);
-        if cache_bytes.is_none() {
+        if cache_bytes.is_none() || workload == "chromatic-focused" {
             let measurement = measure_null(&mut prepared, directory.path(), workload, "warm");
             println!(
                 "vestra_benchmark {}",
@@ -451,6 +467,16 @@ fn write_fixture(
         clip["duration"] = serde_json::json!(frames as f64 / FRAME_RATE as f64);
         project["visual"]["clips"] = serde_json::json!([clip]);
         project["visual"]["transitions"] = serde_json::json!([]);
+        project["visual"]["flashes"] = serde_json::json!([]);
+    }
+    if workload == "chromatic-focused" {
+        let mut clip = project["visual"]["clips"][1].clone();
+        clip["id"] = "chromatic-focused".into();
+        clip["start"] = 0.into();
+        clip["duration"] = serde_json::json!(frames as f64 / FRAME_RATE as f64);
+        project["visual"]["clips"] = serde_json::json!([clip]);
+        project["visual"]["transitions"] = serde_json::json!([]);
+        project["visual"]["post_effects"] = serde_json::json!([]);
         project["visual"]["flashes"] = serde_json::json!([]);
     }
     if workload == "static-expensive" {

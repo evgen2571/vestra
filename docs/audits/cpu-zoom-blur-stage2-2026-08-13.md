@@ -66,7 +66,7 @@ operations per process and five measured processes. Warm-2 raw results:
 | 5 | 9930.997 | 100 | 99.310 | 10.069 | 552.291 |
 
 Median: 9873.395 total wall ms, 98.734 ms/frame, 10.128 FPS, range
-9581.394–9997.244 total wall ms (95.814–99.972 ms/frame), and 552.525
+9581.394–9997.244 total wall ms (95.814–99.972 ms/frame), and 552.291
 aggregate ZoomBlur CPU-ms/frame. Source rasterization median was 135.1
 CPU-ms/frame and layer composition median was 2.24 CPU-ms/frame.
 
@@ -153,7 +153,7 @@ The retained implementation changes the primary ZoomBlur transition from
 
 ZoomBlur aggregate CPU timing changes from 552.525 to 534.531 CPU-ms/frame:
 
-- kernel reduction: 3.26%.
+- kernel reduction: 3.22%.
 
 Kernel and whole-render deltas are separate measurements.
 

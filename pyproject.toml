@@ -24,7 +24,7 @@ test = ["mypy>=1.13", "pytest>=8"]
 manifest-path = "crates/vestra-python/Cargo.toml"
 module-name = "vestra._native"
 python-source = "python"
-python-packages = ["vestra", "video_editor"]
+python-packages = ["vestra"]
 
 [tool.pytest.ini_options]
 testpaths = ["python-tests"]

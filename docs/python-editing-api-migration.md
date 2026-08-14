@@ -10,14 +10,16 @@ snapshot.
 | Previous entry point | v2 name and role |
 | --- | --- |
 | `vestra.Project` as the immutable native JSON project | `vestra.ProjectSnapshot` |
-| `video_editor.Project` | Still the native compatibility project, equivalent to `vestra.ProjectSnapshot` |
+| `video_editor.Project` | `vestra.ProjectSnapshot` for the old immutable/native project role |
 | `vestra.authoring.ProjectBuilder` | Still supported advanced and canonical authoring |
 | `vestra._native.Project` | Implementation-level native binding, not normal authoring |
 | CLI subprocess rendering | Replace with `Project.render()` or native `Editor`/`PreparedProject` workflows |
 
-The compatibility package is intentionally not the recommendation for new
-code. It remains available so native JSON projects and existing integrations
-have a stable import while callers move to explicit `ProjectSnapshot` naming.
+The legacy `video_editor` package was removed before the v2 API became stable.
+It is no longer shipped or supported. This guide preserves the semantic
+mapping for migration: old native-project imports become
+`vestra.ProjectSnapshot`, while new mutable editing projects use
+`vestra.Project`.
 
 ## From a native project
 
@@ -35,9 +37,8 @@ frame = prepared.render_frame_number(0)
 ```
 
 `ProjectSnapshot.from_json()`, `from_dict()`, `to_json()`, `to_dict()`, and
-`save()` retain the native project workflow. `video_editor.Project` remains a
-compatibility alias for this native role. Do not assume it is the mutable
-editor graph.
+`save()` retain the native project workflow. Do not replace the old import with
+mutable `vestra.Project` blindly: the types have different semantics.
 
 ## From `ProjectBuilder`
 
@@ -83,9 +84,10 @@ Builder-specific operations such as exact canonical IDs and low-level asset
 handles remain advanced-only. Keep those calls in `vestra.authoring` rather
 than reaching into `_native`.
 
-## From legacy `video_editor`
+## Migrating from legacy `video_editor`
 
-Import the new package and choose the role explicitly:
+The old package is no longer importable from Vestra. Choose the modern type
+that matches the old code’s role explicitly:
 
 ```python
 import vestra
@@ -94,9 +96,9 @@ snapshot = vestra.ProjectSnapshot.load("project.json")
 editor_project = vestra.Project(size=(1280, 720), fps=30, duration=10)
 ```
 
-`video_editor.Project` is still native compatibility. It is not renamed to the
-mutable `vestra.Project`, and the compatibility package is not removed by this
-migration. New code should not add more dependencies on the legacy package.
+For old native immutable projects, replace `video_editor.Project` with
+`vestra.ProjectSnapshot`. For new mutable editing graphs, use
+`vestra.Project`; these are not interchangeable aliases.
 
 There is no CLI subprocess step in the editor API. A render call lowers and
 executes through the Rust SDK directly:
@@ -122,10 +124,8 @@ The public split is intentional and documented as follows:
 3. `vestra.authoring.ProjectBuilder` remains supported as an advanced API.
 4. `vestra._native` remains implementation-level and may change with the
    binding, so application code should not make it its primary import.
-5. `video_editor` remains a native compatibility package while migration is
-   in progress. Any future deprecation or removal will be announced in a
-   separate compatibility change with a tested migration path. This guide does
-   not promise a removal date.
+5. The legacy `video_editor` package is removed and is not part of the
+   supported API.
 
 The rule for new features is additive. A feature that is not available in the
 editor graph is documented as advanced-only or unsupported; it is not silently

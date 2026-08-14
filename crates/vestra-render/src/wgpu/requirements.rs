@@ -290,27 +290,37 @@ impl GpuRequirements {
     pub(super) fn requested_device_limits(
         self,
         plan: &RenderPlan,
+        adapter_limits: &wgpu::Limits,
     ) -> Result<wgpu::Limits, Diagnostic> {
-        let mut limits = wgpu::Limits::downlevel_defaults();
-        limits.max_texture_dimension_2d = self.max_texture_dimension_2d;
-        limits.max_bind_groups = 1;
-        limits.max_bindings_per_bind_group = 4;
-        limits.max_sampled_textures_per_shader_stage = 2;
-        limits.max_storage_textures_per_shader_stage = 1;
-        limits.max_uniform_buffers_per_shader_stage = 1;
-        limits.max_dynamic_uniform_buffers_per_pipeline_layout = 1;
-        limits.max_uniform_buffer_binding_size = self.uniform_bytes;
-        limits.max_buffer_size = self.copy_bytes.max(self.parameter_buffer_bytes);
-        limits.max_compute_invocations_per_workgroup = 64;
-        limits.max_compute_workgroup_size_x = 8;
-        limits.max_compute_workgroup_size_y = 8;
-        limits.max_compute_workgroup_size_z = 1;
-        limits.max_compute_workgroups_per_dimension = plan
-            .canvas
-            .width
-            .div_ceil(8)
-            .max(plan.canvas.height.div_ceil(8));
-        Ok(limits)
+        // Resolve against the discovered adapter before asking WGPU for a
+        // device. The returned descriptor contains only Vestra's required
+        // fields on top of wgpu's minimum baseline; adapter limits are not
+        // copied wholesale into the request.
+        self.validate(adapter_limits, plan)?;
+        // Start from the current wgpu baseline instead of requesting the
+        // complete downlevel profile.  The latter includes limits unrelated
+        // to Vestra's pipelines and can reject otherwise-capable adapters.
+        Ok(wgpu::Limits {
+            max_texture_dimension_2d: self.max_texture_dimension_2d,
+            max_bind_groups: 1,
+            max_bindings_per_bind_group: 4,
+            max_sampled_textures_per_shader_stage: 2,
+            max_storage_textures_per_shader_stage: 1,
+            max_uniform_buffers_per_shader_stage: 1,
+            max_dynamic_uniform_buffers_per_pipeline_layout: 1,
+            max_uniform_buffer_binding_size: self.uniform_bytes,
+            max_buffer_size: self.copy_bytes.max(self.parameter_buffer_bytes),
+            max_compute_invocations_per_workgroup: 64,
+            max_compute_workgroup_size_x: 8,
+            max_compute_workgroup_size_y: 8,
+            max_compute_workgroup_size_z: 1,
+            max_compute_workgroups_per_dimension: plan
+                .canvas
+                .width
+                .div_ceil(8)
+                .max(plan.canvas.height.div_ceil(8)),
+            ..wgpu::Limits::default()
+        })
     }
 
     pub(super) fn parameter_buffer_bytes(self, alignment: u32) -> Result<u64, Diagnostic> {

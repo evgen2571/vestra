@@ -39,6 +39,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class SourceCapabilities:
+    """Facts used by lowering and the extension contract.
+
+    Direct transform, direct transition endpoint, transition adapter, and
+    cinematic preset are consumed by current editor/lowering paths. Sizing and
+    crop describe native source ownership and are retained for source-specific
+    lowering and future source families. Intrinsic duration and audio
+    requirements are deliberately future-facing descriptors: Video and richer
+    audio-reactive sources can use them without adding source-type branches to
+    ``Composition``.
+    """
+
     has_intrinsic_duration: bool = False
     supports_direct_transform: bool = False
     supports_direct_transition_endpoint: bool = False
@@ -342,7 +353,10 @@ class LoweringContext:
                     native_clip.set_gain_automation(clip.gain_automation)
                 _lower_audio_effects(clip.effects, native_clip.effects)
         _lower_audio_effects(timeline.effects, self.builder.audio.effects)
-        _lower_visual_effects(timeline._project.post_effects, self.builder.post_effects)
+
+    def lower_post_effects(self, effects: EffectStack) -> None:
+        """Lower root visual post-effects independently from the audio graph."""
+        _lower_visual_effects(effects, self.builder.post_effects)
 
 
 def _lower_audio_effects(source: AudioEffectStack, target: Any) -> None:

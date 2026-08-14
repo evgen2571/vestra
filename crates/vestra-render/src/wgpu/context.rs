@@ -73,8 +73,7 @@ impl GpuContext {
             device_id: info.device,
         };
         let adapter_limits = adapter.limits();
-        requirements.validate(&adapter_limits, plan)?;
-        let requested_limits = requirements.requested_device_limits(plan)?;
+        let requested_limits = requirements.requested_device_limits(plan, &adapter_limits)?;
         let device_request_started = Instant::now();
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {

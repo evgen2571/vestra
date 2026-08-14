@@ -4,8 +4,9 @@ set -euo pipefail
 : "${VESTRA_WGPU_BACKEND:=vulkan}"
 export VESTRA_WGPU_BACKEND
 export VESTRA_REQUIRE_WGPU=1
+export VESTRA_REQUIRE_HARDWARE_WGPU=1
 
-echo "WGPU Phase 3 strict verification (backend: ${VESTRA_WGPU_BACKEND})"
+echo "WGPU Phase 3 strict hardware verification (backend: ${VESTRA_WGPU_BACKEND})"
 echo "A software adapter validates correctness only. This script does not claim hardware performance."
 
 cargo fmt --check

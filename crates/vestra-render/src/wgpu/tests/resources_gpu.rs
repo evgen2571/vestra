@@ -310,7 +310,13 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
     assert_eq!(initial.source_texture_count, plan.images.len());
     assert_eq!(initial.source_texture_bytes, initial.uploaded_texture_bytes);
     assert_eq!(initial.sampler_count, 0);
-    assert_eq!(initial.output_texture_count, 4);
+    assert_eq!(
+        initial.output_texture_count,
+        4 + usize::from(plan.compilation.effect_pass_count > 0)
+            + usize::from(plan.compilation.effect_pass_count > 1)
+            + usize::from(super::frame_plan::plan_requires_auxiliary(&plan))
+            + super::frame_plan::GpuFramePlan::required_group_depth(&plan) * 2
+    );
     assert_eq!(initial.accumulation_buffer_count, 0);
     assert_eq!(initial.readback_buffer_count, 3);
     let estimates = gpu.resource_estimates();
@@ -319,10 +325,9 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         estimates.readback_buffer_bytes,
         initial.readback_buffer_bytes
     );
-    assert_eq!(estimates.effect_texture_bytes, 0);
     assert_eq!(
         estimates.working_texture_bytes,
-        estimates.canvas_texture_bytes + estimates.layer_texture_bytes
+        estimates.packed_frame_bytes * estimates.working_texture_count
     );
     assert_eq!(
         estimates.total_persistent_bytes,
@@ -345,7 +350,10 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         assert_eq!(execution.bind_groups_created, 0);
         assert_eq!(execution.bind_groups_recreated_for_parameter_growth, 0);
         assert_eq!(execution.bind_group_cache_misses, 0);
-        assert_eq!(execution.bind_group_cache_hits, 3);
+        assert_eq!(
+            execution.bind_group_cache_hits,
+            3 + plan.compilation.effect_pass_count as u64
+        );
     }
     let final_stats = gpu.stats();
     assert_eq!(

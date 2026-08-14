@@ -139,7 +139,7 @@ fn project_requirements_reject_unsupported_limits_before_wgpu_creation() {
 fn project_requirements_construct_the_requested_device_limits() {
     let (plan, _decoded, requirements) = fixture_requirements();
     let requested = requirements
-        .requested_device_limits(&plan)
+        .requested_device_limits(&plan, &wgpu::Limits::default())
         .expect("canonical requirements fit WGPU texture compositor limits");
     assert_eq!(
         requested.max_texture_dimension_2d,
@@ -156,6 +156,19 @@ fn project_requirements_construct_the_requested_device_limits() {
     assert_eq!(requested.max_storage_textures_per_shader_stage, 1);
     assert_eq!(requested.max_compute_workgroup_size_x, 8);
     assert_eq!(requested.max_compute_workgroup_size_y, 8);
+}
+
+#[test]
+fn requested_device_limits_resolve_against_the_discovered_adapter() {
+    let (plan, _decoded, requirements) = fixture_requirements();
+    let adapter_limits = wgpu::Limits {
+        max_bind_groups: 0,
+        ..wgpu::Limits::default()
+    };
+    let error = requirements
+        .requested_device_limits(&plan, &adapter_limits)
+        .expect_err("adapter limits must be checked before device creation");
+    assert_eq!(error.code, "WGPU-BINDING-LIMIT");
 }
 
 #[test]

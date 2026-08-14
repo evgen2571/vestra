@@ -29,7 +29,7 @@ mod particles {
 }
 mod presets;
 pub(crate) mod signals;
-mod transitions;
+pub(crate) mod transitions;
 
 #[derive(Clone, Copy)]
 pub(super) struct ActiveLayerWindow {

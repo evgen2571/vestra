@@ -4,6 +4,467 @@ use std::collections::BTreeSet;
 
 use crate::{Category, Diagnostic, project::parse_colour};
 
+pub(crate) fn validate_normalized_track<T>(
+    track: &crate::project::NormalizedTrack<T>,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+    valid_value: impl Fn(&T) -> bool,
+) {
+    if track.keyframes.len() < 2 {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-TRACK-COUNT",
+            Category::Semantic,
+            "normalized transition tracks require at least two keyframes",
+            format!("{path}/keyframes"),
+        ));
+        return;
+    }
+    if track
+        .keyframes
+        .first()
+        .is_none_or(|keyframe| keyframe.progress != 0.0)
+        || track
+            .keyframes
+            .last()
+            .is_none_or(|keyframe| keyframe.progress != 1.0)
+    {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-TRACK-ANCHOR",
+            Category::Semantic,
+            "normalized transition tracks must start at 0 and end at 1",
+            format!("{path}/keyframes"),
+        ));
+    }
+
+    let mut previous = None;
+    for (index, keyframe) in track.keyframes.iter().enumerate() {
+        if !keyframe.progress.is_finite()
+            || !(0.0..=1.0).contains(&keyframe.progress)
+            || previous.is_some_and(|progress| keyframe.progress <= progress)
+        {
+            errors.push(Diagnostic::error(
+                "MVP-TRANSITION-TRACK-PROGRESS",
+                Category::Semantic,
+                "normalized keyframe progress must be finite, inside 0..=1, and strictly increasing",
+                format!("{path}/keyframes/{index}/progress"),
+            ));
+        }
+        if !valid_value(&keyframe.value) {
+            errors.push(Diagnostic::error(
+                "MVP-TRANSITION-VALUE",
+                Category::Semantic,
+                "normalized transition keyframe value is invalid",
+                format!("{path}/keyframes/{index}/value"),
+            ));
+        }
+        validate_interpolation(
+            &keyframe.interpolation,
+            &format!("{path}/keyframes/{index}/interpolation"),
+            errors,
+        );
+        previous = Some(keyframe.progress);
+    }
+}
+
+pub(crate) fn validate_definition(
+    definition: &crate::project::TransitionDefinition,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if definition.outgoing.opacity.is_none()
+        && definition.outgoing.position_offset.is_none()
+        && definition.outgoing.scale_multiplier.is_none()
+        && definition.outgoing.rotation_offset_degrees.is_none()
+        && definition.incoming.opacity.is_none()
+        && definition.incoming.position_offset.is_none()
+        && definition.incoming.scale_multiplier.is_none()
+        && definition.incoming.rotation_offset_degrees.is_none()
+    {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-EMPTY",
+            Category::Semantic,
+            "transition definition must contain at least one presentation channel",
+            path,
+        ));
+    }
+    for (name, presentation) in [
+        ("outgoing", &definition.outgoing),
+        ("incoming", &definition.incoming),
+    ] {
+        let presentation_path = format!("{path}/{name}");
+        if let Some(track) = &presentation.opacity {
+            validate_normalized_track(
+                track,
+                &format!("{presentation_path}/opacity"),
+                errors,
+                |value| value.is_finite() && (0.0..=1.0).contains(value),
+            );
+        }
+        if let Some(track) = &presentation.position_offset {
+            validate_normalized_track(
+                track,
+                &format!("{presentation_path}/position_offset"),
+                errors,
+                |value| value.x.is_finite() && value.y.is_finite(),
+            );
+        }
+        if let Some(track) = &presentation.scale_multiplier {
+            validate_normalized_track(
+                track,
+                &format!("{presentation_path}/scale_multiplier"),
+                errors,
+                |value| {
+                    value.x.is_finite() && value.x > 0.0 && value.y.is_finite() && value.y > 0.0
+                },
+            );
+        }
+        if let Some(track) = &presentation.rotation_offset_degrees {
+            validate_normalized_track(
+                track,
+                &format!("{presentation_path}/rotation_offset_degrees"),
+                errors,
+                |value| value.is_finite(),
+            );
+        }
+    }
+}
+
+pub(crate) fn validate_placement(
+    placement: &crate::project::TransitionPlacement,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if placement.id.trim().is_empty() {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-ID",
+            Category::Semantic,
+            "transition id must not be empty",
+            format!("{path}/id"),
+        ));
+    }
+    if placement.outgoing.trim().is_empty() || placement.incoming.trim().is_empty() {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-ENDPOINT",
+            Category::Semantic,
+            "transition endpoints must not be empty",
+            path,
+        ));
+    }
+    if placement.outgoing == placement.incoming {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-SELF",
+            Category::Semantic,
+            "transition requires two different endpoints",
+            path,
+        ));
+    }
+    if !placement.start.is_finite()
+        || placement.start < 0.0
+        || !placement.duration.is_finite()
+        || placement.duration <= 0.0
+    {
+        errors.push(Diagnostic::error(
+            "MVP-TRANSITION-TIME",
+            Category::Semantic,
+            "transition start must be finite and non-negative, and duration must be finite and positive",
+            path,
+        ));
+    }
+    validate_definition(&placement.definition, &format!("{path}/definition"), errors);
+}
+
+fn validate_interpolation(
+    interpolation: &crate::project::Interpolation,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    let crate::project::Interpolation::CubicBezier(bezier) = interpolation else {
+        return;
+    };
+    if !bezier.x1.is_finite()
+        || !bezier.y1.is_finite()
+        || !bezier.x2.is_finite()
+        || !bezier.y2.is_finite()
+        || !(0.0..=1.0).contains(&bezier.x1)
+        || !(0.0..=1.0).contains(&bezier.x2)
+    {
+        errors.push(Diagnostic::error(
+            "MVP-BEZIER",
+            Category::Semantic,
+            "cubic Bézier controls must be finite and have x controls in 0..=1",
+            path,
+        ));
+    }
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::items_after_test_module,
+    reason = "the legacy v1 validator remains below the staged v2A foundation"
+)]
+mod transition_v2_tests {
+    use super::{validate_definition, validate_normalized_track, validate_placement};
+    use crate::project::{
+        Interpolation, InterpolationName, NormalizedKeyframe, NormalizedTrack, Point,
+        TransitionDefinition, TransitionPlacement, TransitionPresentation,
+    };
+
+    fn keyframe<T>(progress: f64, value: T) -> NormalizedKeyframe<T> {
+        NormalizedKeyframe {
+            progress,
+            value,
+            interpolation: Interpolation::Named(InterpolationName::Linear),
+        }
+    }
+
+    fn scalar_track(values: &[(f64, f64)]) -> NormalizedTrack<f64> {
+        NormalizedTrack {
+            keyframes: values
+                .iter()
+                .map(|&(progress, value)| keyframe(progress, value))
+                .collect(),
+        }
+    }
+
+    fn valid_definition() -> TransitionDefinition {
+        TransitionDefinition {
+            outgoing: TransitionPresentation {
+                opacity: Some(scalar_track(&[(0.0, 1.0), (1.0, 0.0)])),
+                ..TransitionPresentation::default()
+            },
+            incoming: TransitionPresentation::default(),
+        }
+    }
+
+    #[test]
+    fn normalized_track_requires_explicit_anchors() {
+        let mut errors = Vec::new();
+        validate_normalized_track(
+            &scalar_track(&[(0.2, 1.0), (1.0, 0.0)]),
+            "/definition/outgoing/opacity",
+            &mut errors,
+            |_| true,
+        );
+        assert_eq!(errors[0].code, "MVP-TRANSITION-TRACK-ANCHOR");
+    }
+
+    #[test]
+    fn normalized_track_rejects_duplicate_progress() {
+        let mut errors = Vec::new();
+        validate_normalized_track(
+            &scalar_track(&[(0.0, 1.0), (0.5, 0.5), (0.5, 0.0), (1.0, 0.0)]),
+            "/track",
+            &mut errors,
+            |_| true,
+        );
+        assert_eq!(errors[0].code, "MVP-TRANSITION-TRACK-PROGRESS");
+    }
+
+    #[test]
+    fn normalized_track_rejects_single_keyframe() {
+        let mut errors = Vec::new();
+        validate_normalized_track(&scalar_track(&[(0.0, 1.0)]), "/track", &mut errors, |_| {
+            true
+        });
+        assert_eq!(errors[0].code, "MVP-TRANSITION-TRACK-COUNT");
+    }
+
+    #[test]
+    fn normalized_track_rejects_out_of_range_progress() {
+        let mut errors = Vec::new();
+        validate_normalized_track(
+            &scalar_track(&[(-0.1, 1.0), (1.1, 0.0)]),
+            "/track",
+            &mut errors,
+            |_| true,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-TRANSITION-TRACK-PROGRESS")
+        );
+    }
+
+    #[test]
+    fn normalized_track_rejects_non_finite_progress() {
+        let mut errors = Vec::new();
+        validate_normalized_track(
+            &scalar_track(&[(0.0, 1.0), (f64::NAN, 0.0)]),
+            "/track",
+            &mut errors,
+            |_| true,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-TRANSITION-TRACK-PROGRESS")
+        );
+    }
+
+    #[test]
+    fn normalized_track_rejects_invalid_cubic_bezier() {
+        let mut errors = Vec::new();
+        validate_normalized_track(
+            &NormalizedTrack {
+                keyframes: vec![
+                    NormalizedKeyframe {
+                        progress: 0.0,
+                        value: 0.0,
+                        interpolation: Interpolation::Named(InterpolationName::Linear),
+                    },
+                    NormalizedKeyframe {
+                        progress: 1.0,
+                        value: 1.0,
+                        interpolation: Interpolation::CubicBezier(crate::project::CubicBezier {
+                            kind: crate::project::CubicBezierKind::CubicBezier,
+                            x1: 1.2,
+                            y1: 0.0,
+                            x2: 0.5,
+                            y2: f64::INFINITY,
+                        }),
+                    },
+                ],
+            },
+            "/track",
+            &mut errors,
+            |_| true,
+        );
+        assert_eq!(errors[0].code, "MVP-BEZIER");
+    }
+
+    #[test]
+    fn opacity_values_must_be_finite_and_unit_interval() {
+        let mut opacity_errors = Vec::new();
+        validate_definition(
+            &TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(scalar_track(&[(0.0, 0.0), (1.0, 1.1)])),
+                    ..TransitionPresentation::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+            "/definition",
+            &mut opacity_errors,
+        );
+        assert_eq!(opacity_errors[0].code, "MVP-TRANSITION-VALUE");
+    }
+
+    #[test]
+    fn position_offsets_accept_negative_values_but_reject_non_finite_values() {
+        let mut position_errors = Vec::new();
+        validate_definition(
+            &TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    position_offset: Some(NormalizedTrack {
+                        keyframes: vec![
+                            keyframe(0.0, Point { x: -2.0, y: 3.0 }),
+                            keyframe(
+                                1.0,
+                                Point {
+                                    x: f64::NAN,
+                                    y: 0.0,
+                                },
+                            ),
+                        ],
+                    }),
+                    ..TransitionPresentation::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+            "/definition",
+            &mut position_errors,
+        );
+        assert_eq!(position_errors[0].code, "MVP-TRANSITION-VALUE");
+    }
+
+    #[test]
+    fn scale_multipliers_must_be_finite_and_positive() {
+        let mut errors = Vec::new();
+        validate_definition(
+            &TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    scale_multiplier: Some(NormalizedTrack {
+                        keyframes: vec![
+                            keyframe(0.0, Point { x: 1.0, y: 1.0 }),
+                            keyframe(
+                                1.0,
+                                Point {
+                                    x: 0.0,
+                                    y: f64::INFINITY,
+                                },
+                            ),
+                        ],
+                    }),
+                    ..TransitionPresentation::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+            "/definition",
+            &mut errors,
+        );
+        assert_eq!(errors[0].code, "MVP-TRANSITION-VALUE");
+    }
+
+    #[test]
+    fn rotation_offsets_must_be_finite_degrees() {
+        let mut errors = Vec::new();
+        validate_definition(
+            &TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    rotation_offset_degrees: Some(scalar_track(&[(0.0, 0.0), (1.0, f64::NAN)])),
+                    ..TransitionPresentation::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+            "/definition",
+            &mut errors,
+        );
+        assert_eq!(errors[0].code, "MVP-TRANSITION-VALUE");
+    }
+
+    #[test]
+    fn definition_requires_at_least_one_channel() {
+        let mut errors = Vec::new();
+        validate_definition(
+            &TransitionDefinition {
+                outgoing: TransitionPresentation::default(),
+                incoming: TransitionPresentation::default(),
+            },
+            "/definition",
+            &mut errors,
+        );
+        assert_eq!(errors[0].code, "MVP-TRANSITION-EMPTY");
+    }
+
+    #[test]
+    fn placement_validates_identity_and_timing() {
+        let mut errors = Vec::new();
+        validate_placement(
+            &TransitionPlacement {
+                id: " ".to_owned(),
+                outgoing: "same".to_owned(),
+                incoming: "same".to_owned(),
+                start: -1.0,
+                duration: 0.0,
+                definition: valid_definition(),
+            },
+            "/transition",
+            &mut errors,
+        );
+        assert!(errors.iter().any(|error| error.code == "MVP-TRANSITION-ID"));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-TRANSITION-SELF")
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-TRANSITION-TIME")
+        );
+    }
+}
+
 pub(super) fn validate(visual: &crate::project::Visual, errors: &mut Vec<Diagnostic>) {
     let clips: std::collections::BTreeMap<&str, &crate::project::Clip> = visual
         .clips

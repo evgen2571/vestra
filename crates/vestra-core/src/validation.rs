@@ -183,6 +183,28 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
     ValidationReport::new(errors)
 }
 
+/// Validates a generic transition definition independently of composition
+/// endpoint and timing relationships.
+#[must_use]
+pub fn validate_transition_definition(
+    definition: &crate::project::TransitionDefinition,
+) -> ValidationReport {
+    let mut errors = Vec::new();
+    transitions::validate_definition(definition, "/definition", &mut errors);
+    ValidationReport::new(errors)
+}
+
+/// Validates a generic transition placement's local identity, endpoints,
+/// timing, and reusable definition.
+#[must_use]
+pub fn validate_transition_placement(
+    placement: &crate::project::TransitionPlacement,
+) -> ValidationReport {
+    let mut errors = Vec::new();
+    transitions::validate_placement(placement, "/transition", &mut errors);
+    ValidationReport::new(errors)
+}
+
 fn visual_duration(project: &Project) -> f64 {
     project
         .visual

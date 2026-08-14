@@ -32,7 +32,10 @@ pub use signals::{
     AudioAnalysisTap, AudioScalarFeature, ScalarModifier, ScalarModifierOperation, ScalarProperty,
     ScalarSignal, ScalarSignalSource, SignalTransform,
 };
-pub use transitions::{Flash, Transition};
+pub use transitions::{
+    Flash, NormalizedKeyframe, NormalizedTrack, Transition, TransitionDefinition,
+    TransitionPlacement, TransitionPresentation,
+};
 pub use visual::{
     BlendMode, Clip, ColourLifetimeStop, Group, ParticleAudioReactive, ParticleBlendMode,
     ParticleBurst, ParticleDefinition, ParticleEmission, ParticleEmitter, ParticleLifetimeStyle,

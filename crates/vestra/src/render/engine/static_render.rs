@@ -25,6 +25,16 @@ fn emit_static_ffmpeg_progress(
     emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
 ) -> Option<&'static str> {
     let reported = encoder.static_progress_frames()?;
+    emit_static_progress_events(reported, options, total_frames, last_progress, emit)
+}
+
+fn emit_static_progress_events(
+    reported: u64,
+    options: &RenderOptions,
+    total_frames: u64,
+    last_progress: &mut u64,
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+) -> Option<&'static str> {
     // `completed` is the only event allowed to report 100%. FFmpeg is free to
     // jump directly to its terminal frame count, especially for tiny static
     // encodes, so clamp that terminal sample to the final legitimate
@@ -33,17 +43,41 @@ fn emit_static_ffmpeg_progress(
     if progress == 0 || progress <= *last_progress {
         return None;
     }
-    *last_progress = progress;
-    if emit(events::progress(progress, total_frames)) == RenderObserverControl::Cancel {
-        return Some("render cancelled by observer");
+    for frame in (*last_progress + 1)..=progress {
+        *last_progress = frame;
+        if emit(events::progress(frame, total_frames)) == RenderObserverControl::Cancel {
+            return Some("render cancelled by observer");
+        }
+        // The legacy callback can request cancellation only through the shared
+        // token. Check immediately after emitting progress because FFmpeg may
+        // already have finished and there may be no later polling iteration.
+        if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Some("render cancelled");
+        }
     }
-    // The legacy callback can request cancellation only through the shared
-    // token. Check immediately after emitting progress because FFmpeg may
-    // already have finished and there may be no later polling iteration.
-    options
-        .cancelled
-        .load(std::sync::atomic::Ordering::Relaxed)
-        .then_some("render cancelled")
+    None
+}
+
+fn static_encoder_failure(
+    output: &OutputTarget,
+    plan: &RenderPlan,
+    reported_frames: u64,
+    diagnostic: Diagnostic,
+) -> RenderError {
+    let completed_frames = reported_frames.min(plan.frame_count);
+    let (stage, attempted_frame) = if completed_frames < plan.frame_count {
+        (RenderFailureStage::FrameWrite, Some(completed_frames))
+    } else {
+        (RenderFailureStage::EncoderFinalization, None)
+    };
+    cleanup_error(
+        output,
+        plan,
+        stage,
+        completed_frames,
+        attempted_frame,
+        diagnostic,
+    )
 }
 
 fn cancel_static_ffmpeg(
@@ -163,9 +197,12 @@ pub(super) fn render_static_ffmpeg(
         })?;
     if let Err(error) = image.save(&image_path) {
         let _ = std::fs::remove_file(&image_path);
-        let _ = output.cleanup();
-        return Err(frame_error(
-            prepared,
+        return Err(cleanup_error(
+            &output,
+            &plan,
+            RenderFailureStage::OutputPreparation,
+            0,
+            None,
             Diagnostic::error("MVP-STATIC-PNG", Category::Output, error.to_string(), ""),
         ));
     }
@@ -174,9 +211,12 @@ pub(super) fn render_static_ffmpeg(
             Ok(encoder) => encoder,
             Err(error) => {
                 let _ = std::fs::remove_file(&image_path);
-                let _ = output.cleanup();
-                return Err(frame_error(
-                    prepared,
+                return Err(cleanup_error(
+                    &output,
+                    &plan,
+                    RenderFailureStage::EncoderStartup,
+                    0,
+                    None,
                     Diagnostic::error(
                         "MVP-BACKEND-START",
                         Category::Backend,
@@ -241,21 +281,42 @@ pub(super) fn render_static_ffmpeg(
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(25)),
             Err(error) => {
-                let _ = output.cleanup();
-                return Err(frame_error(
-                    prepared,
+                // `try_finish_static` joins FFmpeg's progress reader before
+                // returning a process failure. Read the final monotonic sample
+                // instead of relying only on the last polling iteration.
+                let reported_frames = encoder
+                    .static_progress_frames()
+                    .unwrap_or(last_progress)
+                    .max(last_progress);
+                let failure = static_encoder_failure(
+                    &output,
+                    &plan,
+                    reported_frames,
                     Diagnostic::error("MVP-ENCODE", Category::Render, error.to_string(), ""),
-                ));
+                );
+                // Match the generic path: a write-stage failure invalidates
+                // prepared backend state, while encoder finalization happens
+                // after the backend is already known idle and remains reusable.
+                if failure.context.stage == RenderFailureStage::FrameWrite {
+                    prepared.invalidate();
+                }
+                return Err(failure);
             }
         }
     };
     if result.frames_written != plan.frame_count {
-        let _ = output.cleanup();
-        return Err(frame_error(
-            prepared,
-            frame_diagnostic(
+        let completed_frames = result.frames_written.min(plan.frame_count);
+        return Err(cleanup_error(
+            &output,
+            &plan,
+            RenderFailureStage::EncoderFinalization,
+            completed_frames,
+            None,
+            Diagnostic::error(
                 "MVP-SINK-FRAME-COUNT",
+                Category::Render,
                 "static FFmpeg frame count differs from the plan",
+                "",
             ),
         ));
     }
@@ -268,8 +329,16 @@ pub(super) fn render_static_ffmpeg(
         &backend_metrics_after,
         &plan,
     ) {
-        let _ = output.cleanup();
-        return Err(error);
+        prepared.backend.abort();
+        prepared.invalidate();
+        return Err(cleanup_error(
+            &output,
+            &plan,
+            RenderFailureStage::FrameComposition,
+            plan.frame_count,
+            None,
+            error.diagnostic,
+        ));
     }
     performance.absorb_staged(&prepared.backend.staged_metrics());
     // Static rendering submits one backend frame and reuses it for the whole
@@ -295,8 +364,12 @@ pub(super) fn render_static_ffmpeg(
     performance.encoder_video_frames_pushed_from_rust = 0;
     performance.rendered_frame_count = plan.frame_count;
     output.publish().map_err(|error| {
-        frame_error(
-            prepared,
+        cleanup_error(
+            &output,
+            &plan,
+            RenderFailureStage::OutputPublication,
+            plan.frame_count,
+            None,
             Diagnostic::error(
                 "MVP-OUTPUT-PUBLISH",
                 Category::Output,
@@ -332,4 +405,76 @@ pub(super) fn render_static_ffmpeg(
         backend_fallback: prepared.backend_fallback.clone(),
         adapter: prepared.backend.adapter(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::{Arc, atomic::AtomicBool};
+
+    use super::*;
+
+    #[test]
+    fn static_progress_catches_up_each_pre_completion_frame() {
+        let options = RenderOptions {
+            output_override: None,
+            overwrite: false,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            backend_preference: super::super::types::RenderBackendPreference::Cpu,
+        };
+        let mut last_progress = 0;
+        let mut frames = Vec::new();
+
+        let cancellation =
+            emit_static_progress_events(3, &options, 3, &mut last_progress, &mut |event| {
+                frames.push(event.frame);
+                RenderObserverControl::Continue
+            });
+
+        assert_eq!(cancellation, None);
+        assert_eq!(frames, [1, 2]);
+        assert_eq!(last_progress, 2);
+    }
+
+    #[test]
+    fn static_encoder_failure_reports_frame_write_context() {
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/wgpu-small-rgba.json");
+        let validated = crate::project::load_and_validate(
+            &fixture,
+            &crate::project::ValidationOptions::default(),
+        )
+        .expect("fixture validates");
+        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
+            .expect("fixture compiles");
+        let directory = tempfile::tempdir().expect("temporary output directory");
+        let output = OutputTarget::prepare(directory.path().join("failed.mp4"), false)
+            .expect("output target");
+
+        let error = static_encoder_failure(
+            &output,
+            &plan,
+            0,
+            Diagnostic::error("MVP-ENCODE", Category::Render, "forced failure", ""),
+        );
+
+        assert_eq!(error.context.stage, RenderFailureStage::FrameWrite);
+        assert_eq!(error.context.completed_frames, 0);
+        assert_eq!(error.context.attempted_frame, Some(0));
+        assert_eq!(error.context.output_path, Some(output.final_path.clone()));
+        assert!(error.temporary_removed);
+
+        let bounded = static_encoder_failure(
+            &output,
+            &plan,
+            u64::MAX,
+            Diagnostic::error("MVP-ENCODE", Category::Render, "forced failure", ""),
+        );
+        assert_eq!(
+            bounded.context.stage,
+            RenderFailureStage::EncoderFinalization
+        );
+        assert_eq!(bounded.context.completed_frames, plan.frame_count);
+        assert_eq!(bounded.context.attempted_frame, None);
+    }
 }

@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from types import MappingProxyType
-from typing import Callable, Mapping, Self, TypeVar, cast
+from typing import Callable, Literal, Mapping, Self, TypeVar, cast
 
 from ._internal import _IdAllocator, _Owner, _number
+from .signals import ScalarSignal
 from .tracks import ModulatableScalarTrack, ScalarTrack
-from .values import Color, Point, color_to_canonical
+from .values import Color, CubicBezier, Interpolation, Point, color_to_canonical
 from vestra._native import effect_definitions as _native_effect_definitions
 
 
@@ -75,10 +76,11 @@ def effect_definition(effect_type: str) -> Mapping[str, object]:
 
 
 def _parameter_descriptor(definition: Mapping[str, object], name: str) -> Mapping[str, object]:
-    for parameter in definition["parameters"]:  # type: ignore[union-attr]
+    parameters = cast(tuple[Mapping[str, object], ...], definition["parameters"])
+    for parameter in parameters:
         if parameter["name"] == name:
             return parameter
-    names = ", ".join(str(parameter["name"]) for parameter in definition["parameters"])  # type: ignore[union-attr]
+    names = ", ".join(str(parameter["name"]) for parameter in parameters)
     raise TypeError(f"unknown parameter {name!r} for effect {definition['id']!r}; expected: {names}")
 
 
@@ -91,11 +93,13 @@ def _integer_in_range(value: int, name: str, minimum: int, maximum: int) -> int:
 
 
 def _validate_descriptor_value(parameter: Mapping[str, object], value: float) -> None:
-    minimum = parameter["minimum"]
-    maximum = parameter["maximum"]
-    if minimum is not None and (value <= minimum if parameter["minimum_exclusive"] else value < minimum):
+    minimum = cast(float | None, parameter["minimum"])
+    maximum = cast(float | None, parameter["maximum"])
+    minimum_exclusive = cast(bool, parameter["minimum_exclusive"])
+    maximum_exclusive = cast(bool, parameter["maximum_exclusive"])
+    if minimum is not None and (value <= minimum if minimum_exclusive else value < minimum):
         raise ValueError(f"{parameter['name']} is outside its authored range")
-    if maximum is not None and (value >= maximum if parameter["maximum_exclusive"] else value > maximum):
+    if maximum is not None and (value >= maximum if maximum_exclusive else value > maximum):
         raise ValueError(f"{parameter['name']} is outside its authored range")
 
 
@@ -107,28 +111,28 @@ def _canonical_parameter(
     if kind == "scalar_property":
         # Existing tracks are copied into canonical data. The generic effect
         # never retains a live reference to another builder's track.
-        track = value if isinstance(value, ScalarTrack) else ModulatableScalarTrack._create(owner, value)  # type: ignore[arg-type]
+        track = value if isinstance(value, ScalarTrack) else ModulatableScalarTrack._create(owner, cast(int | float, value))
         if validate_descriptor_values:
             _validate_descriptor_value(parameter, track.base_value)
             for keyframe in track.keyframes:
                 _validate_descriptor_value(parameter, keyframe.value)
         return track.to_canonical()
     if kind == "plain_track":
-        track = value if isinstance(value, ScalarTrack) else ScalarTrack._create(owner, value)  # type: ignore[arg-type]
+        track = value if isinstance(value, ScalarTrack) else ScalarTrack._create(owner, cast(float, value))
         if validate_descriptor_values:
             _validate_descriptor_value(parameter, track.base_value)
             for keyframe in track.keyframes:
                 _validate_descriptor_value(parameter, keyframe.value)
         return track.to_canonical()
     if kind == "colour":
-        return color_to_canonical(value)  # type: ignore[arg-type]
+        return color_to_canonical(cast(Color | str, value))
     if kind == "integer":
-        minimum = parameter["integer_minimum"]
-        maximum = parameter["integer_maximum"]
+        minimum = cast(int | None, parameter["integer_minimum"])
+        maximum = cast(int | None, parameter["integer_maximum"])
         assert minimum is not None and maximum is not None
-        return _integer_in_range(value, name, int(minimum), int(maximum))  # type: ignore[arg-type]
+        return _integer_in_range(cast(int, value), name, minimum, maximum)
     if kind == "number":
-        number = _number(value, name)  # type: ignore[arg-type]
+        number = _number(cast(int | float, value), name)
         if validate_descriptor_values:
             _validate_descriptor_value(parameter, number)
         return number
@@ -140,7 +144,8 @@ def _canonical_parameter(
         return value.to_canonical()
     if kind == "enum":
         candidate = value.value if isinstance(value, Enum) else value
-        values = tuple(str(item) for item in parameter["enum_values"])
+        enum_values = cast(tuple[object, ...], parameter["enum_values"])
+        values = tuple(str(item) for item in enum_values)
         if not isinstance(candidate, str):
             raise TypeError(f"{name} must be a string or enum value")
         if candidate not in values:
@@ -164,7 +169,8 @@ def _build_registered_effect(
 ) -> dict[str, object]:
     """Build one canonical registered effect from the Rust descriptor."""
     definition = effect_definition(effect_type)
-    descriptors = {str(parameter["name"]): parameter for parameter in definition["parameters"]}  # type: ignore[union-attr]
+    parameters = cast(tuple[Mapping[str, object], ...], definition["parameters"])
+    descriptors = {str(parameter["name"]): parameter for parameter in parameters}
     values: dict[str, object] = {}
     provided_parameters = set(supplied)
     for name, value in supplied.items():
@@ -173,7 +179,7 @@ def _build_registered_effect(
             parameter, value, owner, validate_descriptor_values=validate_descriptor_values,
         )
         if parameter["kind"] == "active_interval":
-            values.update(canonical)  # type: ignore[arg-type]
+            values.update(cast(Mapping[str, object], canonical))
         else:
             values[name] = canonical
     for name, parameter in descriptors.items():
@@ -199,6 +205,10 @@ class Effect:
     """Base class for factory-created effects. It has no public parameters."""
 
     __slots__ = ("_owner", "_scope", "_id", "_kind")
+    _owner: _Owner
+    _scope: object
+    _id: str
+    _kind: str
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError(f"{type(self).__name__} objects must be created by an effect collection")
@@ -240,6 +250,7 @@ class GenericEffect(Effect):
     """Registered effect handle used by the generic authoring escape hatch."""
 
     __slots__ = ("_data",)
+    _data: dict[str, object]
 
     @classmethod
     def _create(
@@ -248,10 +259,64 @@ class GenericEffect(Effect):
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, str(definition["id"]))
         instance._data = {"id": identifier, "type": definition["id"], **values}
+        # Generic effects are also used as a lowering seam.  Keep scalar
+        # parameters as fresh owner-bound tracks, while retaining the same
+        # canonical representation as the historical dictionary path.
+        parameters = cast(tuple[Mapping[str, object], ...], definition["parameters"])
+        for parameter in parameters:
+            name = str(parameter["name"])
+            if parameter["kind"] not in {"scalar_property", "plain_track"}:
+                continue
+            canonical = instance._data.get(name)
+            if not isinstance(canonical, Mapping):
+                continue
+            track_type = ModulatableScalarTrack if parameter["kind"] == "scalar_property" else ScalarTrack
+            track = track_type._create(owner, cast(int | float, canonical["base_value"]))
+            for frame in cast(list[Mapping[str, object]], canonical.get("keyframes", [])):
+                interpolation = frame["interpolation"]
+                if isinstance(interpolation, Mapping):
+                    interpolation = CubicBezier(
+                        cast(float, interpolation["x1"]),
+                        cast(float, interpolation["y1"]),
+                        cast(float, interpolation["x2"]),
+                        cast(float, interpolation["y2"]),
+                    )
+                else:
+                    interpolation = Interpolation(cast(str, interpolation))
+                track.keyframe(
+                    time=cast(float, frame["time"]), value=cast(float, frame["value"]),
+                    interpolation=interpolation,
+                )
+            if isinstance(track, ModulatableScalarTrack):
+                for modifier in cast(
+                    list[Mapping[str, object]], canonical.get("modifiers", [])
+                ):
+                    signal = cast(Mapping[str, object], modifier["signal"])
+                    source = cast(Mapping[str, object], signal["source"])
+                    feature = cast(Mapping[str, object], source["feature"])
+                    transforms = cast(
+                        tuple[Mapping[str, object], ...],
+                        tuple(cast(list[Mapping[str, object]], signal.get("transforms", []))),
+                    )
+                    track.modulate(
+                        ScalarSignal(feature, transforms),
+                        mode=cast(
+                            Literal["replace", "add", "multiply"],
+                            modifier["operation"],
+                        ),
+                    )
+            instance._data[name] = track
         return instance
 
     def to_canonical(self) -> dict[str, object]:
-        return {**self._data, "id": self.id}
+        return {key: value.to_canonical() if isinstance(value, ScalarTrack) else value for key, value in {**self._data, "id": self.id}.items()}
+
+    def parameter_track(self, name: str) -> ScalarTrack:
+        """Return the builder-owned track for one scalar effect parameter."""
+        value = self._data.get(name)
+        if not isinstance(value, ScalarTrack):
+            raise TypeError(f"effect parameter {name!r} is not a scalar track")
+        return value
 
 
 class _AmountEffect(Effect):
@@ -449,6 +514,9 @@ class GlowEffect(Effect):
 
 class BloomEffect(Effect):
     __slots__ = ("_threshold", "_radius", "_intensity")
+    _threshold: ModulatableScalarTrack
+    _radius: ModulatableScalarTrack
+    _intensity: ModulatableScalarTrack
 
     @classmethod
     def _create(cls, owner: _Owner, scope: object, identifier: str, threshold: int | float, radius: int | float, intensity: int | float) -> Self:

@@ -10,7 +10,7 @@ from vestra import (
     FrameRate,
     PrepareOptions,
     PreparedVideoRenderRequest,
-    Project,
+    ProjectSnapshot,
     ProjectError,
     RenderRequest,
 )
@@ -94,7 +94,7 @@ def test_schema_v1_and_old_global_audio_shape_are_rejected() -> None:
     data = builder().to_dict()
     data["schema_version"] = 1
     with pytest.raises(ProjectError):
-        Project.from_dict(data)
+        ProjectSnapshot.from_dict(data)
 
 
 def test_audio_effects_are_typed_at_clip_track_and_master_scopes() -> None:
@@ -233,7 +233,7 @@ def test_multi_clip_audio_renders_and_preserves_legacy_shape_rejection(tmp_path:
     data = builder().to_dict()
     data["audio"] = {"asset": "tone", "timeline_start": 0, "trim_start": 0, "volume": 1}
     with pytest.raises(ProjectError):
-        Project.from_dict(data)
+        ProjectSnapshot.from_dict(data)
 
 
 def test_prepared_multi_clip_audio_renders_twice(tmp_path: Path) -> None:

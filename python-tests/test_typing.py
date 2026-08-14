@@ -3,14 +3,28 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 import vestra
-from vestra import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, VideoEditorError
+from vestra import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, ProjectSnapshot, Source, Transform, VideoEditorError
 from vestra.authoring import (
     AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
     Preset, ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
 )
+from vestra.audio import AudioClip, AudioTimeline, AudioTrack, PlaybackSpeed
 
 if TYPE_CHECKING:
-    project: Project = Project.from_dict({"schema_version": 2, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
+    high_level_project = Project(size=(2, 2), fps=(30, 1), duration=1)
+    placed_source: Source = vestra.sources.Color("#112233")
+    placed_layer = high_level_project.root.add(placed_source, z=1)
+    placed_layer.opacity = 0.75
+    placed_layer.transform.position = (0.25, 0.75)
+    placed_layer.transform.anchor = (0.5, 0.5)
+    placed_layer.transform.scale = 1.25
+    placed_layer.transform.rotation = 15.0
+    replacement_transform: Transform = Transform()
+    placed_layer.transform = replacement_transform
+    nested: vestra.CompositionLayer = high_level_project.root.group("nested")
+    nested.add(vestra.sources.Color("#334455"))
+    assert placed_layer.composition is high_level_project.root
+    project: ProjectSnapshot = ProjectSnapshot.from_dict({"schema_version": 2, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
     report = Editor().validate(project)
     path: Path = project.base_directory
     assert report.is_valid
@@ -46,7 +60,7 @@ if TYPE_CHECKING:
         output_path="out.mp4", duration=1.0,
     )
     authored: dict[str, object] = builder.to_dict()
-    authored_project: Project = builder.build()
+    authored_project: ProjectSnapshot = builder.build()
     authored_report: vestra.ValidationReport = builder.validate()
     point = Point(1.0, 1.0)
     sizing_original = Sizing.original()
@@ -85,6 +99,11 @@ if TYPE_CHECKING:
     builder.timeline.shift_clip(image_clip, delta=0.0)
     builder.timeline.shift_clips([image_clip], delta=0.0)
     assert preset and audio_clip and incoming_audio_clip
+    audio_timeline: AudioTimeline = high_level_project.audio
+    audio_track: AudioTrack = audio_timeline.track("music")
+    high_level_audio_clip: AudioClip = audio_track.add("tone.wav", start=0, trim_end=1)
+    high_level_audio_clip.effects.add(PlaybackSpeed(1.25))
+    assert audio_track.project is high_level_project
 
 
 def test_negative_immutability_fixture_is_rejected() -> None:
@@ -127,6 +146,66 @@ def test_negative_authoring_track_replacement_fixture_is_rejected() -> None:
     )
     assert result.returncode == 1
     assert result.stdout.count("read-only") == 4
+
+
+def test_negative_high_level_property_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_properties.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("Incompatible types") == 4
+
+
+def test_negative_high_level_audio_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_audio.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+
+
+def test_negative_high_level_signal_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_signals.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("error:") >= 3
+
+
+def test_positive_high_level_effect_fixture_typechecks() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_effects.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_negative_high_level_effect_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_effects.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("error:") >= 2
+
+
+def test_positive_high_level_timeline_fixture_typechecks() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_timeline_features.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_negative_high_level_timeline_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_timeline_features.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("error:") >= 4
 
 
 def test_negative_authoring_sizing_fixture_is_rejected() -> None:

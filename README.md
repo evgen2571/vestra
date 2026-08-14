@@ -2,13 +2,51 @@
 
 `vestra` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image, solid-colour, procedural, and recursively owned Group layers, and can author an ordered audio timeline of mixer tracks and clips.
 
-## Python authoring
+## Python editing API
 
-The Python package has mutable pure-Python authoring alongside immutable native
-project, execution, and report APIs. `ProjectBuilder` creates an owned canonical
-schema-version 2 dictionary, then `build()` passes that dictionary to
-`Project.from_dict()` and returns the existing immutable native `Project`.
-There is no second project format.
+For new Python code, use the mutable editor API in `vestra`. `vestra.Project`
+owns a root `Composition`; compositions own `Layer` placements; layers own
+source-specific values, timing, presentation, effects, and animation. A call
+to `snapshot()` lowers that graph to an immutable native `vestra.ProjectSnapshot`.
+
+```python
+from vestra import Project
+from vestra.effects import Vignette
+from vestra.sources import Image
+
+project = Project(size=(1920, 1080), fps=30, duration=5, base_directory=".")
+scene = project.root
+background = scene.add(Image("examples/assets/red.png", sizing="cover"), duration=5)
+background.effects.add(Vignette(0.2, 1.0, 0.5, "#000000"))
+
+report = project.validate()
+assert report.is_valid
+result = project.render("examples/output/python-api.mp4", backend="cpu", overwrite=True)
+print(result.selected_backend, result.output_path)
+```
+
+The high-level API lowers through the same canonical model as the advanced
+authoring layer. It does not launch the `ve` command. Use `ProjectSnapshot`
+when you need immutable native JSON loading, inspection, or direct SDK control.
+`vestra.authoring.ProjectBuilder` remains the supported advanced and canonical
+authoring API. `vestra._native` is an implementation-level binding used by the
+public wrappers, not the normal authoring entry point.
+
+See [the Python editing API guide](docs/python-editing-api.md),
+[the migration guide](docs/python-editing-api-migration.md), and the runnable
+[v2 examples](examples/python/v2/) for the complete editor workflow.
+
+## Advanced Python authoring
+
+The advanced API gives exact control over the schema-version 2 dictionary,
+builder-owned handles, and native SDK handoff. It remains useful for canonical
+fixtures, lowering code, compatibility, and projects that need exact schema
+control. The normal editor API above is a better starting point for mutable
+projects.
+
+`ProjectBuilder` creates an owned canonical schema-version 2 dictionary, then
+`build()` passes that dictionary to `ProjectSnapshot.from_dict()`. There is no
+second project format.
 
 Groups are authored as owned recursive clips. Child timing remains local to
 the Group, while presentation belongs to the Group itself:
@@ -33,7 +71,7 @@ single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
 ```python
-from vestra import Editor, FrameRate, RenderRequest
+from vestra import Editor, FrameRate, ProjectSnapshot, RenderRequest
 from vestra.authoring import Interpolation, Point, ProjectBuilder, Sizing, sparks
 
 builder = ProjectBuilder(
@@ -449,7 +487,7 @@ RGBA8 frames by frame number or exact integer nanoseconds:
 ```python
 import vestra
 
-project = vestra.Project.load("project.json")
+project = vestra.ProjectSnapshot.load("project.json")
 prepared = vestra.Editor().prepare(
     project,
     vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
@@ -530,7 +568,7 @@ encode a video. WGPU availability depends on the runtime adapter.
 import vestra
 
 editor = vestra.Editor()
-project = vestra.Project.load("project.json")
+project = vestra.ProjectSnapshot.load("project.json")
 prepared = editor.prepare(
     project,
     vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
@@ -560,17 +598,18 @@ python3 -m venv .venv
 .venv/bin/python -m pytest python-tests
 ```
 
-Use `import vestra`. `Project.from_dict()` follows the same native path
+Use `import vestra`. `ProjectSnapshot.from_dict()` follows the same native path
 as JSON. It is a lower-level way to construct the same current canonical
 schema-version 2 model, useful for canonical JSON, low-level integrations, and
 generated project dictionaries. It represents ordered multi-track audio timelines, renders arbitrary valid
 static multi-input mixes, and accepts the schema-v2 scalar signal/modifier
 surface used by audio-reactive visuals. Video assets and nested compositions
-remain future work. Package path properties return `pathlib.Path` values. The
-binding audits are recorded in
+are separate concerns: video assets remain future work, while nested editor
+compositions lower through the existing native Group model. Package path
+properties return `pathlib.Path` values. The binding audits are recorded in
 `docs/audits/phase7a.md`, `docs/audits/phase7b.md`, and
 `docs/audits/phase7c.md`; together they record Phase 7 finalization.
 
-The exposed Python API is immutable. `Project.from_dict()` accepts
+The low-level native snapshot API is immutable. `ProjectSnapshot.from_dict()` accepts
 `collections.abc.Mapping` values. Python does not expose asynchronous or
 background rendering.

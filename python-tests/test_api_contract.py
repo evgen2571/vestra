@@ -38,7 +38,7 @@ def test_native_runtime_names_are_exact_public_names() -> None:
     import vestra._native as native
 
     classes = {
-        "Project": vestra.Project,
+        "Project": vestra.ProjectSnapshot,
         "Editor": vestra.Editor,
         "PreflightOptions": vestra.PreflightOptions,
         "Diagnostic": vestra.Diagnostic,
@@ -101,7 +101,7 @@ def test_audio_inspection_dtos_are_top_level_public_symbols() -> None:
 
 
 def test_frozen_values_and_diagnostic_ownership() -> None:
-    report = vestra.Editor().validate(vestra.Project.from_dict(VALID))
+    report = vestra.Editor().validate(vestra.ProjectSnapshot.from_dict(VALID))
     assert isinstance(report.diagnostics, tuple)
     with pytest.raises(AttributeError):
         report.is_valid = False  # type: ignore[misc]
@@ -114,12 +114,12 @@ def test_non_finite_dict_values_are_rejected(value: float) -> None:
     payload = dict(VALID)
     payload["metadata"] = {"value": value}
     with pytest.raises(ValueError):
-        vestra.Project.from_dict(payload)
+        vestra.ProjectSnapshot.from_dict(payload)
 
 
 def test_project_error_has_complete_base_contract(tmp_path: Path) -> None:
     with pytest.raises(vestra.ProjectError) as raised:
-        vestra.Project.load(tmp_path / "missing.json")
+        vestra.ProjectSnapshot.load(tmp_path / "missing.json")
     error = raised.value
     assert error.kind == "project"
     assert isinstance(error.diagnostics, tuple)
@@ -152,8 +152,8 @@ def test_every_preflight_constructor_preserves_its_exposed_state(tmp_path: Path)
 
 
 def test_from_dict_accepts_general_mappings() -> None:
-    assert vestra.Project.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 2
-    assert vestra.Project.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 2
+    assert vestra.ProjectSnapshot.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 2
+    assert vestra.ProjectSnapshot.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 2
 
     class DeterministicMapping(Mapping[str, object]):
         def __init__(self, values: dict[str, object]) -> None:
@@ -169,6 +169,6 @@ def test_from_dict_accepts_general_mappings() -> None:
             return len(self.items_by_key)
 
     source = DeterministicMapping({**VALID, "metadata": DeterministicMapping({"nested": True})})
-    project = vestra.Project.from_dict(source)
+    project = vestra.ProjectSnapshot.from_dict(source)
     del source
     assert project.to_dict()["metadata"] == {"nested": True}

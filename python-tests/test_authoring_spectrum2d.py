@@ -31,7 +31,7 @@ def builder(**changes: object) -> ProjectBuilder:
 
 
 def _native_spectrum_defaults() -> dict[str, object]:
-    native = vestra.Project.from_dict({
+    native = vestra.ProjectSnapshot.from_dict({
         "schema_version": 2,
         "output": {"path": "out.mp4", "width": 64, "height": 64, "frame_rate": "10/1",
                     "background": "#000000", "quality": "balanced", "audio": False,
@@ -264,7 +264,7 @@ def test_spectrum2d_preset_native_round_trip_preserves_expansion() -> None:
     authored = builder()
     authored.add_spectrum2d_clip(start=0, duration=0.2, layer=1, id="spectrum", preset="neon")
     canonical = authored.to_dict()
-    reloaded = vestra.Project.from_dict(canonical).to_dict()
+    reloaded = vestra.ProjectSnapshot.from_dict(canonical).to_dict()
     original_clip = canonical["visual"]["clips"][0]  # type: ignore[index]
     reloaded_clip = reloaded["visual"]["clips"][0]  # type: ignore[index]
     assert reloaded_clip["source"] == original_clip["source"]  # type: ignore[index]
@@ -298,6 +298,6 @@ def test_spectrum2d_with_authored_audio_validates() -> None:
     project.add_spectrum2d_clip(start=0, duration=0.2, layer=1)
     authored = project.to_dict()
     assert not list(VALIDATOR.iter_errors(authored))
-    reloaded = vestra.Project.from_dict(authored, base_directory=ROOT).to_dict()
+    reloaded = vestra.ProjectSnapshot.from_dict(authored, base_directory=ROOT).to_dict()
     assert reloaded["visual"]["clips"][0]["source"] == authored["visual"]["clips"][0]["source"]  # type: ignore[index]
     assert project.validate().is_valid

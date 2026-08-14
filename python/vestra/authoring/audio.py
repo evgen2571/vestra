@@ -64,6 +64,7 @@ class AudioClip:
     _fade_out: float
     _fade_in_curve: AudioFadeCurve
     _fade_out_curve: AudioFadeCurve
+    _effects: AudioEffectCollection
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError("AudioClip objects must be created by AudioTrack")
 
@@ -183,6 +184,7 @@ class AudioTrack:
     _mute: bool
     _gain: float
     _clips: list[AudioClip]
+    _effects: AudioEffectCollection
     def __init__(self, *args: object, **kwargs: object) -> None: raise TypeError("AudioTrack objects must be created by AudioTimeline")
     @classmethod
     def _create(cls, owner: _Owner, ids: _IdAllocator, identifier: str, *, mute: bool, gain: int | float) -> "AudioTrack":
@@ -230,6 +232,7 @@ class AudioTimeline:
     _ids: _IdAllocator
     _tracks: list[AudioTrack]
     _master: MasterAudioSignals
+    _effects: AudioEffectCollection
     def __init__(self, *args: object, **kwargs: object) -> None: raise TypeError("AudioTimeline objects must be created by ProjectBuilder")
     @classmethod
     def _create(cls, owner: _Owner, ids: _IdAllocator) -> "AudioTimeline":
@@ -267,7 +270,7 @@ class AudioTimeline:
         outgoing._fade_out, outgoing._fade_out_curve = overlap, curve
         incoming._fade_in, incoming._fade_in_curve = overlap, curve
     def to_canonical(self) -> dict[str, object]:
-        data = {"tracks": [track.to_canonical() for track in self._tracks]}
+        data: dict[str, object] = {"tracks": [track.to_canonical() for track in self._tracks]}
         if self.effects.items: data["effects"] = [effect.to_canonical() for effect in self.effects.items]
         return data
     def __repr__(self) -> str: return f"AudioTimeline(tracks={len(self.tracks)})"

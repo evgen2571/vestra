@@ -4,7 +4,7 @@ import os
 import pytest
 
 import vestra
-from vestra import FrameRate, Project
+from vestra import FrameRate, ProjectSnapshot
 from vestra.authoring import (
     BlendMode,
     GroupClip,
@@ -46,7 +46,7 @@ def test_group_serializes_owned_nested_tree_and_parent_presentation() -> None:
     assert root["effects"][0]["type"] == "brightness"
 
     native = authored.build()
-    assert Project.from_dict(native.to_dict()).to_dict() == native.to_dict()
+    assert ProjectSnapshot.from_dict(native.to_dict()).to_dict() == native.to_dict()
 
 
 def test_group_accepts_particle_and_spectrum_children() -> None:

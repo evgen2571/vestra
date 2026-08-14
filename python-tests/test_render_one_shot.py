@@ -14,8 +14,8 @@ def request(output: Path, **kwargs: object) -> vestra.RenderRequest:
     )
 
 
-def multi_frame_project(tmp_path: Path) -> vestra.Project:
-    return vestra.Project.from_dict(
+def multi_frame_project(tmp_path: Path) -> vestra.ProjectSnapshot:
+    return vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -41,7 +41,7 @@ def test_one_shot_callback_failure_on_started_preserves_original_error(tmp_path:
         raise OneShotStartedFailure("one-shot started failure")
 
     with pytest.raises(OneShotStartedFailure, match="one-shot started failure") as raised:
-        vestra.Editor().render(vestra.Project.load(FIXTURE), request(output), progress=callback)
+        vestra.Editor().render(vestra.ProjectSnapshot.load(FIXTURE), request(output), progress=callback)
 
     assert seen == ["started"]
     assert not output.exists()
@@ -75,7 +75,7 @@ def test_one_shot_already_cancelled_and_progress_cancellation_clean_up(tmp_path:
     token.cancel()
     output = tmp_path / "already-cancelled.mp4"
     with pytest.raises(vestra.CancelledError) as raised:
-        vestra.Editor().render(vestra.Project.load(FIXTURE), request(output), cancellation=token)
+        vestra.Editor().render(vestra.ProjectSnapshot.load(FIXTURE), request(output), cancellation=token)
     assert raised.value.temporary_removed is True
     assert token.is_cancelled
     assert not output.exists()
@@ -107,14 +107,14 @@ def test_one_shot_overwrite_and_event_policy(tmp_path: Path) -> None:
     original = b"keep this output"
     output.write_bytes(original)
     with pytest.raises(vestra.RenderError) as raised:
-        vestra.Editor().render(vestra.Project.load(FIXTURE), request(output))
+        vestra.Editor().render(vestra.ProjectSnapshot.load(FIXTURE), request(output))
     assert raised.value.kind == "project"
     assert output.read_bytes() == original
     assert list(tmp_path.iterdir()) == [output]
 
     events: list[vestra.RenderEvent] = []
     result = vestra.Editor().render(
-        vestra.Project.load(FIXTURE), request(output, overwrite=True), progress=events.append
+        vestra.ProjectSnapshot.load(FIXTURE), request(output, overwrite=True), progress=events.append
     )
     assert result.output_path == output
     assert output.read_bytes() != original

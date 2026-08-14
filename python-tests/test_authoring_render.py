@@ -88,7 +88,8 @@ def test_public_spectrum2d_integration_project_exercises_audio_reactive_backgrou
         )
         audio = builder.add_audio_asset("examples/assets/tone.wav")
         track = builder.audio.add_track(id="music")
-        track.add_clip(asset=audio, start=0, trim_end=3)
+        # Keep the reactive bands above the valid low-energy/no-bars case.
+        track.add_clip(asset=audio, start=0, trim_end=3, gain=2.0)
         spectrum = None
         if with_spectrum:
             spectrum = builder.add_spectrum2d_clip(

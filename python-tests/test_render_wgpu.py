@@ -11,7 +11,7 @@ UNAVAILABLE = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
 
 
 def wgpu_prepared() -> vestra.PreparedProject:
-    project = vestra.Project.load(FIXTURE)
+    project = vestra.ProjectSnapshot.load(FIXTURE)
     try:
         return vestra.Editor().prepare(
             project,
@@ -44,7 +44,7 @@ def test_one_shot_wgpu_video_render_preserves_backend_metadata(tmp_path: Path) -
     wgpu_prepared()
     output = tmp_path / "one-shot-wgpu.mp4"
     result = vestra.Editor().render(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.RenderRequest(output, backend=vestra.BackendPreference.WGPU),
     )
     assert output.exists() and output.stat().st_size > 0

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, overload
 
 from ._internal import _number
 
@@ -42,7 +42,33 @@ class ScalarSignal:
     def gain(self, value: int | float) -> "ScalarSignal":
         return self._append({"type": "gain", "gain": _finite(value, "gain")})
 
-    def remap(self, input_min: int | float, input_max: int | float, output_start: int | float, output_end: int | float) -> "ScalarSignal":
+    @overload
+    def remap(self, input_min: int | float, input_max: int | float, output_start: int | float, output_end: int | float) -> "ScalarSignal": ...
+
+    @overload
+    def remap(self, *, input: tuple[int | float, int | float], output: tuple[int | float, int | float]) -> "ScalarSignal": ...
+
+    def remap(
+        self,
+        input_min: int | float | None = None,
+        input_max: int | float | None = None,
+        output_start: int | float | None = None,
+        output_end: int | float | None = None,
+        *,
+        input: tuple[int | float, int | float] | None = None,
+        output: tuple[int | float, int | float] | None = None,
+    ) -> "ScalarSignal":
+        if input is not None or output is not None:
+            if input is None or output is None or any(value is not None for value in (input_min, input_max, output_start, output_end)):
+                raise TypeError("remap requires either four positional values or input/output pairs")
+            if len(input) != 2 or len(output) != 2:
+                raise TypeError("input and output must each be pairs")
+            input_min, input_max = input
+            output_start, output_end = output
+        if any(value is None for value in (input_min, input_max, output_start, output_end)):
+            raise TypeError("remap requires four positional values or input/output pairs")
+        assert input_min is not None and input_max is not None
+        assert output_start is not None and output_end is not None
         start, end = _finite(input_min, "input_min"), _finite(input_max, "input_max")
         if start >= end:
             raise ValueError("input_min must be smaller than input_max")
@@ -90,3 +116,5 @@ class MasterAudioSignals:
         if low < 0 or low >= high or high > 24_000:
             raise ValueError("band requires 0 <= min_hz < max_hz <= 24000")
         return ScalarSignal({"type": "band_energy", "min_hz": low, "max_hz": high})
+
+    band_energy = band

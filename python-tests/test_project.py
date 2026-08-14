@@ -17,18 +17,18 @@ PROJECT = {
 
 
 def test_project_dictionary_round_trip(tmp_path: Path) -> None:
-    project = vestra.Project.from_dict(PROJECT, base_directory=tmp_path)
-    assert vestra.Project.from_json(project.to_json()).to_dict() == project.to_dict()
+    project = vestra.ProjectSnapshot.from_dict(PROJECT, base_directory=tmp_path)
+    assert vestra.ProjectSnapshot.from_json(project.to_json()).to_dict() == project.to_dict()
     output = tmp_path / "project.json"
     project.save(output)
-    loaded = vestra.Project.load(output)
+    loaded = vestra.ProjectSnapshot.load(output)
     assert loaded.source_path == output
     assert loaded.base_directory == tmp_path
 
 
 def test_invalid_mapping_key_is_rejected() -> None:
     try:
-        vestra.Project.from_dict({1: "not valid"})  # type: ignore[dict-item]
+        vestra.ProjectSnapshot.from_dict({1: "not valid"})  # type: ignore[dict-item]
     except TypeError:
         pass
     else:
@@ -49,7 +49,7 @@ def test_project_errors_and_custom_pathlike(tmp_path: Path) -> None:
     payload["schema_version"] = 3
     source.write_text(json.dumps(payload), encoding="utf-8")
     try:
-        vestra.Project.load(CustomPath(source))
+        vestra.ProjectSnapshot.load(CustomPath(source))
     except vestra.ProjectError as error:
         assert error.kind == "project"
         assert isinstance(error.diagnostics, tuple)
@@ -59,7 +59,7 @@ def test_project_errors_and_custom_pathlike(tmp_path: Path) -> None:
         raise AssertionError("unsupported schema was accepted")
 
     try:
-        vestra.Project.from_json("not json")
+        vestra.ProjectSnapshot.from_json("not json")
     except vestra.ProjectError as error:
         assert error.kind == "project"
         assert isinstance(error.diagnostics, tuple)

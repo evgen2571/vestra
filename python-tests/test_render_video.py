@@ -12,13 +12,13 @@ FIXTURE = Path("tests/fixtures/wgpu-small-rgba.json")
 
 def cpu_prepared() -> vestra.PreparedProject:
     return vestra.Editor().prepare(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
 
 
 def multi_frame_prepared(tmp_path: Path) -> vestra.PreparedProject:
-    project = vestra.Project.from_dict(
+    project = vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -68,7 +68,7 @@ def test_prepared_render_without_callback_never_reattaches_to_python(tmp_path: P
 def test_one_shot_video_render_uses_one_shot_timing_scope(tmp_path: Path) -> None:
     output = tmp_path / "one-shot.mp4"
     result = vestra.Editor().render(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU),
     )
     assert output.exists() and output.stat().st_size > 0
@@ -84,7 +84,7 @@ def test_one_shot_render_without_callback_never_reattaches_to_python(tmp_path: P
     native._test_reset_callback_attach_count()
 
     result = vestra.Editor().render(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU),
     )
 
@@ -108,7 +108,7 @@ def test_callback_attachment_count_matches_forwarded_events(tmp_path: Path) -> N
     one_shot_events: list[vestra.RenderEvent] = []
     native._test_reset_callback_attach_count()
     vestra.Editor().render(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.RenderRequest(
             tmp_path / "one-shot-callback-count.mp4",
             backend=vestra.BackendPreference.CPU,
@@ -299,7 +299,7 @@ def test_non_callable_progress_is_rejected_before_one_shot_preparation(tmp_path:
 
     with pytest.raises(TypeError, match="progress must be callable or None"):
         vestra.Editor().render(
-            vestra.Project.load(FIXTURE),
+            vestra.ProjectSnapshot.load(FIXTURE),
             vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU),
             progress=123,
         )

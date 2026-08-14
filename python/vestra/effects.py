@@ -1,0 +1,970 @@
+"""Mutable, builder-independent visual effects for the high-level editor."""
+
+from __future__ import annotations
+
+from enum import Enum
+from functools import lru_cache
+from types import MappingProxyType
+from typing import Iterable, Mapping, Self, TypeVar, cast
+
+from .authoring.effects import ActiveInterval, ZoomBlurDirection
+from .authoring.effects import available_effects as _native_effects
+from .authoring.effects import effect_definition
+from .authoring.values import Color, Point, color_to_canonical
+from .properties import BindableScalarProperty, ScalarProperty
+
+
+def _freeze(value: object) -> object:
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
+@lru_cache(maxsize=1)
+def available_effects() -> tuple[Mapping[str, object], ...]:
+    """Return the native visual-effect catalog as immutable metadata."""
+    return cast(
+        tuple[Mapping[str, object], ...],
+        tuple(_freeze(item) for item in _native_effects()),
+    )
+
+
+def _descriptor(effect_type: str) -> Mapping[str, object]:
+    return effect_definition(effect_type)
+
+
+def _parameter(effect_type: str, name: str) -> Mapping[str, object]:
+    for item in cast(
+        tuple[Mapping[str, object], ...], _descriptor(effect_type)["parameters"]
+    ):
+        if item["name"] == name:
+            return item
+    raise TypeError(f"unknown parameter {name!r} for effect {effect_type!r}")
+
+
+def _number(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError(f"{name} must be a real number")
+    result = float(value)
+    if result != result or result in (float("inf"), float("-inf")):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
+def _integer(
+    value: object, name: str, *, minimum: int | None = None, maximum: int | None = None
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be an integer")
+    if (
+        minimum is not None
+        and value < minimum
+        or maximum is not None
+        and value > maximum
+    ):
+        raise ValueError(f"{name} is outside its authored range")
+    return value
+
+
+def _validate_number(parameter: Mapping[str, object], value: object) -> float:
+    result = _number(value, str(parameter["name"]))
+    minimum = cast(float | None, parameter["minimum"])
+    maximum = cast(float | None, parameter["maximum"])
+    if minimum is not None and (
+        result <= minimum if parameter["minimum_exclusive"] else result < minimum
+    ):
+        raise ValueError(f"{parameter['name']} is outside its authored range")
+    if maximum is not None and (
+        result >= maximum if parameter["maximum_exclusive"] else result > maximum
+    ):
+        raise ValueError(f"{parameter['name']} is outside its authored range")
+    return result
+
+
+def _property(parameter: Mapping[str, object], value: object) -> ScalarProperty:
+    minimum = cast(float | None, parameter["minimum"])
+    maximum = cast(float | None, parameter["maximum"])
+    property_type: type[ScalarProperty] = (
+        BindableScalarProperty
+        if parameter["kind"] == "scalar_property"
+        else ScalarProperty
+    )
+    return property_type(
+        _validate_number(parameter, value),
+        minimum=minimum,
+        maximum=maximum,
+        minimum_exclusive=bool(parameter["minimum_exclusive"]),
+        maximum_exclusive=bool(parameter["maximum_exclusive"]),
+    )
+
+
+def _copy_property(source: ScalarProperty, target: ScalarProperty) -> None:
+    target._validate(source.value)
+    for frame in source.keyframes:
+        target._validate(frame.value)
+    source._copy_to(target)
+    if isinstance(target, BindableScalarProperty) and not isinstance(
+        source, BindableScalarProperty
+    ):
+        target.clear_bindings()
+
+
+def _point(value: object, name: str) -> Point:
+    if isinstance(value, tuple) and len(value) == 2:
+        value = Point(_number(value[0], f"{name}.x"), _number(value[1], f"{name}.y"))
+    if not isinstance(value, Point):
+        raise TypeError(f"{name} must be Point")
+    if not 0 <= value.x <= 1 or not 0 <= value.y <= 1:
+        raise ValueError(f"{name} must be within unit space")
+    return Point(value.x, value.y)
+
+
+def _enum(
+    value: object, name: str, enum_type: type[Enum], values: tuple[object, ...]
+) -> Enum:
+    candidate = value.value if isinstance(value, Enum) else value
+    if not isinstance(candidate, str):
+        raise TypeError(f"{name} must be a string or enum value")
+    if candidate not in values:
+        raise ValueError(
+            f"{name} must be one of: {', '.join(str(item) for item in values)}"
+        )
+    return enum_type(candidate)
+
+
+class Effect:
+    """A mutable visual-effect descriptor independent of native builder ownership."""
+
+    __slots__ = ("_values", "_properties", "_id")
+    effect_type: str
+
+    def __init__(self) -> None:
+        self._values: dict[str, object] = {}
+        self._properties: dict[str, ScalarProperty] = {}
+        self._id: str | None = None
+
+    @property
+    def type(self) -> str:
+        return self.effect_type
+
+    @property
+    def kind(self) -> str:
+        return self.effect_type
+
+    @property
+    def id(self) -> str | None:
+        return self._id
+
+    def _set_id(self, value: str | None) -> None:
+        if value is not None and (
+            not isinstance(value, str) or not value or value.isspace()
+        ):
+            raise ValueError("id must be a non-empty string or None")
+        self._id = value
+
+    def _set_property(self, name: str, value: object) -> None:
+        target = self._properties[name]
+        if isinstance(value, ScalarProperty):
+            _copy_property(value, target)
+        else:
+            target.value = cast(float, value)
+
+    def _set_value(self, name: str, value: object) -> None:
+        parameter = _parameter(self.effect_type, name)
+        kind = parameter["kind"]
+        if kind in {"scalar_property", "plain_track"}:
+            self._set_property(name, value)
+            return
+        if kind == "colour":
+            self._values[name] = color_to_canonical(cast(Color | str, value))
+            return
+        if kind == "integer":
+            self._values[name] = _integer(
+                value,
+                name,
+                minimum=cast(int, parameter["integer_minimum"]),
+                maximum=cast(int, parameter["integer_maximum"]),
+            )
+            return
+        if kind == "number":
+            self._values[name] = _validate_number(parameter, value)
+            return
+        if kind == "point2d":
+            self._values[name] = _point(value, name)
+            return
+        if kind == "enum":
+            self._values[name] = _enum(
+                value,
+                name,
+                ZoomBlurDirection,
+                tuple(cast(tuple[object, ...], parameter["enum_values"])),
+            )
+            return
+        if kind == "active_interval":
+            if not isinstance(value, ActiveInterval):
+                raise TypeError(f"{name} must be ActiveInterval")
+            self._values[name] = value
+            return
+        raise TypeError(f"unsupported effect parameter kind: {kind!r}")
+
+    def _init(self, values: Mapping[str, object], *, id: str | None = None) -> None:
+        # Stage all values before publishing any state, so constructor failures
+        # cannot leave a partially initialized descriptor.
+        staged_values: dict[str, object] = {}
+        staged_properties: dict[str, ScalarProperty] = {}
+        parameters = cast(
+            tuple[Mapping[str, object], ...],
+            _descriptor(self.effect_type)["parameters"],
+        )
+        definitions = {str(item["name"]): item for item in parameters}
+        unknown = set(values) - set(definitions)
+        missing = {
+            name
+            for name, item in definitions.items()
+            if item["required"] and name not in values
+        }
+        if unknown or missing:
+            raise TypeError(
+                f"invalid parameters for {self.effect_type!r}: unknown={unknown}, missing={missing}"
+            )
+        for name, parameter in definitions.items():
+            if name not in values:
+                default = parameter["default"]
+                if default is None:
+                    if parameter["kind"] == "active_interval":
+                        default = ActiveInterval()
+                    else:
+                        continue
+                values = {**values, name: default}
+            kind = parameter["kind"]
+            if kind in {"scalar_property", "plain_track"}:
+                staged_properties[name] = _property(parameter, values[name])
+            else:
+                # Use a temporary descriptor state for the shared validators.
+                self._values = staged_values
+                self._properties = staged_properties
+                self._set_value(name, values[name])
+                staged_values = self._values
+                staged_properties = self._properties
+        if id is not None and (not isinstance(id, str) or not id or id.isspace()):
+            raise ValueError("id must be a non-empty string or None")
+        self._values = staged_values
+        self._properties = staged_properties
+        self._id = id
+
+    def _native_parameters(self) -> dict[str, object]:
+        result = dict(self._values)
+        for name, property_value in self._properties.items():
+            result[name] = property_value.value
+        for name, value in list(result.items()):
+            if isinstance(value, Enum):
+                result[name] = value.value
+        return result
+
+    def _property_items(self) -> tuple[tuple[str, ScalarProperty], ...]:
+        return tuple(self._properties.items())
+
+    def to_canonical(self) -> dict[str, object]:
+        data: dict[str, object] = {"type": self.type}
+        if self.id is not None:
+            data["id"] = self.id
+        data.update(self._values)
+        for name, property_value in self._properties.items():
+            data[name] = property_value.to_canonical()
+        active = data.pop("active_interval", None)
+        if isinstance(active, ActiveInterval):
+            data.update(active.to_canonical())
+        for name, value in list(data.items()):
+            if isinstance(value, Point | Enum):
+                data[name] = (
+                    value.to_canonical() if isinstance(value, Point) else value.value
+                )
+        return data
+
+    def copy(self) -> Self:
+        result = object.__new__(type(self))
+        result._values = dict(self._values)
+        result._properties = {}
+        for name, source in self._properties.items():
+            property_type: type[ScalarProperty] = (
+                BindableScalarProperty
+                if isinstance(source, BindableScalarProperty)
+                else ScalarProperty
+            )
+            target = property_type(
+                source.value,
+                minimum=source._minimum,
+                maximum=source._maximum,
+                minimum_exclusive=source._minimum_exclusive,
+                maximum_exclusive=source._maximum_exclusive,
+            )
+            source._copy_to(target)
+            result._properties[name] = target
+        result._id = self._id
+        return result
+
+
+class _AmountEffect(Effect):
+    __slots__ = ()
+
+    def __init__(
+        self, amount: int | float | ScalarProperty, *, id: str | None = None
+    ) -> None:
+        super().__init__()
+        self._init({"amount": amount}, id=id)
+
+    @property
+    def amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["amount"])
+
+    @amount.setter
+    def amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("amount", value)
+
+
+class Brightness(_AmountEffect):
+    effect_type = "brightness"
+
+
+class Contrast(_AmountEffect):
+    effect_type = "contrast"
+
+
+class Saturation(_AmountEffect):
+    effect_type = "saturation"
+
+
+class Tint(Effect):
+    __slots__ = ()
+    effect_type = "tint"
+
+    def __init__(
+        self,
+        colour: Color | str,
+        amount: int | float | ScalarProperty,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init({"colour": colour, "amount": amount}, id=id)
+
+    @property
+    def colour(self) -> str:
+        return cast(str, self._values["colour"])
+
+    @colour.setter
+    def colour(self, value: Color | str) -> None:
+        self._set_value("colour", value)
+
+    @property
+    def amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["amount"])
+
+    @amount.setter
+    def amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("amount", value)
+
+
+class GaussianBlur(Effect):
+    __slots__ = ()
+    effect_type = "gaussian_blur"
+
+    def __init__(
+        self, radius: int | float | ScalarProperty, *, id: str | None = None
+    ) -> None:
+        super().__init__()
+        self._init({"radius": radius}, id=id)
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+
+class DirectionalBlur(Effect):
+    __slots__ = ()
+    effect_type = "directional_blur"
+
+    def __init__(
+        self,
+        radius: int | float | ScalarProperty,
+        angle_degrees: int | float | ScalarProperty,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init({"radius": radius, "angle_degrees": angle_degrees}, id=id)
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+    @property
+    def angle_degrees(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["angle_degrees"])
+
+    @angle_degrees.setter
+    def angle_degrees(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("angle_degrees", value)
+
+
+class ZoomBlur(Effect):
+    __slots__ = ()
+    effect_type = "zoom_blur"
+
+    def __init__(
+        self,
+        radius: int | float | ScalarProperty,
+        samples: int,
+        anchor: Point | tuple[int | float, int | float],
+        direction: ZoomBlurDirection = ZoomBlurDirection.CENTERED,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {
+                "radius": radius,
+                "samples": samples,
+                "anchor": anchor,
+                "direction": direction,
+            },
+            id=id,
+        )
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+    @property
+    def samples(self) -> int:
+        return cast(int, self._values["samples"])
+
+    @samples.setter
+    def samples(self, value: int) -> None:
+        self._set_value("samples", value)
+
+    @property
+    def anchor(self) -> Point:
+        return cast(Point, self._values["anchor"])
+
+    @anchor.setter
+    def anchor(self, value: Point | tuple[int | float, int | float]) -> None:
+        self._set_value("anchor", value)
+
+    @property
+    def direction(self) -> ZoomBlurDirection:
+        return cast(ZoomBlurDirection, self._values["direction"])
+
+    @direction.setter
+    def direction(self, value: ZoomBlurDirection | str) -> None:
+        self._set_value("direction", value)
+
+
+class Bloom(Effect):
+    __slots__ = ()
+    effect_type = "bloom"
+
+    def __init__(
+        self,
+        threshold: int | float | ScalarProperty,
+        radius: int | float | ScalarProperty,
+        intensity: int | float | ScalarProperty,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {"threshold": threshold, "radius": radius, "intensity": intensity}, id=id
+        )
+
+    @property
+    def threshold(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["threshold"])
+
+    @threshold.setter
+    def threshold(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("threshold", value)
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+    @property
+    def intensity(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["intensity"])
+
+    @intensity.setter
+    def intensity(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("intensity", value)
+
+
+class Glow(Effect):
+    __slots__ = ()
+    effect_type = "glow"
+
+    def __init__(
+        self,
+        threshold: int | float | ScalarProperty,
+        radius: int | float | ScalarProperty,
+        intensity: int | float | ScalarProperty,
+        colour: Color | str,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {
+                "threshold": threshold,
+                "radius": radius,
+                "intensity": intensity,
+                "colour": colour,
+            },
+            id=id,
+        )
+
+    @property
+    def threshold(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["threshold"])
+
+    @threshold.setter
+    def threshold(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("threshold", value)
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+    @property
+    def intensity(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["intensity"])
+
+    @intensity.setter
+    def intensity(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("intensity", value)
+
+    @property
+    def colour(self) -> str:
+        return cast(str, self._values["colour"])
+
+    @colour.setter
+    def colour(self, value: Color | str) -> None:
+        self._set_value("colour", value)
+
+
+class ChromaticAberration(Effect):
+    __slots__ = ()
+    effect_type = "chromatic_aberration"
+
+    def __init__(
+        self,
+        amount: int | float | ScalarProperty,
+        angle_degrees: int | float | ScalarProperty,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init({"amount": amount, "angle_degrees": angle_degrees}, id=id)
+
+    @property
+    def amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["amount"])
+
+    @amount.setter
+    def amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("amount", value)
+
+    @property
+    def angle_degrees(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["angle_degrees"])
+
+    @angle_degrees.setter
+    def angle_degrees(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("angle_degrees", value)
+
+
+class Vignette(Effect):
+    __slots__ = ()
+    effect_type = "vignette"
+
+    def __init__(
+        self,
+        amount: int | float | ScalarProperty,
+        radius: int | float | ScalarProperty,
+        softness: int | float | ScalarProperty,
+        colour: Color | str,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {
+                "amount": amount,
+                "radius": radius,
+                "softness": softness,
+                "colour": colour,
+            },
+            id=id,
+        )
+
+    @property
+    def amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["amount"])
+
+    @amount.setter
+    def amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("amount", value)
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+    @property
+    def softness(self) -> ScalarProperty:
+        return self._properties["softness"]
+
+    @softness.setter
+    def softness(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("softness", value)
+
+    @property
+    def colour(self) -> str:
+        return cast(str, self._values["colour"])
+
+    @colour.setter
+    def colour(self, value: Color | str) -> None:
+        self._set_value("colour", value)
+
+
+class Sharpen(Effect):
+    __slots__ = ()
+    effect_type = "sharpen"
+
+    def __init__(
+        self,
+        amount: int | float | ScalarProperty,
+        radius: int | float | ScalarProperty,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init({"amount": amount, "radius": radius}, id=id)
+
+    @property
+    def amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["amount"])
+
+    @amount.setter
+    def amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("amount", value)
+
+    @property
+    def radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["radius"])
+
+    @radius.setter
+    def radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("radius", value)
+
+
+class ColorAdjust(Effect):
+    __slots__ = ()
+    effect_type = "color_adjust"
+
+    def __init__(
+        self,
+        exposure: int | float | ScalarProperty,
+        gamma: int | float | ScalarProperty,
+        black_point: int | float | ScalarProperty,
+        white_point: int | float | ScalarProperty,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {
+                "exposure": exposure,
+                "gamma": gamma,
+                "black_point": black_point,
+                "white_point": white_point,
+            },
+            id=id,
+        )
+
+    @property
+    def exposure(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["exposure"])
+
+    @exposure.setter
+    def exposure(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("exposure", value)
+
+    @property
+    def gamma(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["gamma"])
+
+    @gamma.setter
+    def gamma(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("gamma", value)
+
+    @property
+    def black_point(self) -> ScalarProperty:
+        return self._properties["black_point"]
+
+    @black_point.setter
+    def black_point(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("black_point", value)
+
+    @property
+    def white_point(self) -> ScalarProperty:
+        return self._properties["white_point"]
+
+    @white_point.setter
+    def white_point(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("white_point", value)
+
+
+class CameraShake(Effect):
+    __slots__ = ()
+    effect_type = "camera_shake"
+
+    def __init__(
+        self,
+        position_amount: int | float | ScalarProperty,
+        rotation_degrees: int | float | ScalarProperty,
+        scale_amount: int | float | ScalarProperty,
+        frequency: int | float | ScalarProperty,
+        seed: int,
+        attack: int | float,
+        decay: int | float,
+        active_interval: ActiveInterval = ActiveInterval(),
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {
+                "active_interval": active_interval,
+                "position_amount": position_amount,
+                "rotation_degrees": rotation_degrees,
+                "scale_amount": scale_amount,
+                "frequency": frequency,
+                "seed": seed,
+                "attack": attack,
+                "decay": decay,
+            },
+            id=id,
+        )
+
+    @property
+    def active_interval(self) -> ActiveInterval:
+        return cast(ActiveInterval, self._values["active_interval"])
+
+    @active_interval.setter
+    def active_interval(self, value: ActiveInterval) -> None:
+        self._set_value("active_interval", value)
+
+    @property
+    def position_amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["position_amount"])
+
+    @position_amount.setter
+    def position_amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("position_amount", value)
+
+    @property
+    def rotation_degrees(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["rotation_degrees"])
+
+    @rotation_degrees.setter
+    def rotation_degrees(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("rotation_degrees", value)
+
+    @property
+    def scale_amount(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["scale_amount"])
+
+    @scale_amount.setter
+    def scale_amount(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("scale_amount", value)
+
+    @property
+    def frequency(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["frequency"])
+
+    @frequency.setter
+    def frequency(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("frequency", value)
+
+    @property
+    def seed(self) -> int:
+        return cast(int, self._values["seed"])
+
+    @seed.setter
+    def seed(self, value: int) -> None:
+        self._set_value("seed", value)
+
+    @property
+    def attack(self) -> float:
+        return cast(float, self._values["attack"])
+
+    @attack.setter
+    def attack(self, value: int | float) -> None:
+        self._set_value("attack", value)
+
+    @property
+    def decay(self) -> float:
+        return cast(float, self._values["decay"])
+
+    @decay.setter
+    def decay(self, value: int | float) -> None:
+        self._set_value("decay", value)
+
+
+class MotionBlur(Effect):
+    __slots__ = ()
+    effect_type = "motion_blur"
+
+    def __init__(
+        self,
+        intensity: int | float | ScalarProperty,
+        shutter_angle: int | float | ScalarProperty,
+        max_radius: int | float | ScalarProperty,
+        samples: int,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._init(
+            {
+                "intensity": intensity,
+                "shutter_angle": shutter_angle,
+                "max_radius": max_radius,
+                "samples": samples,
+            },
+            id=id,
+        )
+
+    @property
+    def intensity(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["intensity"])
+
+    @intensity.setter
+    def intensity(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("intensity", value)
+
+    @property
+    def shutter_angle(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["shutter_angle"])
+
+    @shutter_angle.setter
+    def shutter_angle(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("shutter_angle", value)
+
+    @property
+    def max_radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["max_radius"])
+
+    @max_radius.setter
+    def max_radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("max_radius", value)
+
+    @property
+    def samples(self) -> int:
+        return cast(int, self._values["samples"])
+
+    @samples.setter
+    def samples(self, value: int) -> None:
+        self._set_value("samples", value)
+
+
+class EffectStack:
+    """Ordered high-level effects with scope checks and copy-on-add ownership."""
+
+    __slots__ = ("_scope", "_items")
+
+    def __init__(self, scope: str) -> None:
+        if scope not in {"layer", "post"}:
+            raise ValueError("scope must be layer or post")
+        self._scope = scope
+        self._items: list[Effect] = []
+
+    @property
+    def items(self) -> tuple[Effect, ...]:
+        return tuple(self._items)
+
+    def _validate(self, effect: Effect) -> None:
+        if not isinstance(effect, Effect):
+            raise TypeError("effect must be a visual Effect")
+        if self._scope == "post" and _descriptor(effect.type)["scope"] == "clip_only":
+            raise ValueError(f"effect {effect.type!r} is only valid on layers")
+        if effect.id is not None and any(item.id == effect.id for item in self._items):
+            raise ValueError(f"duplicate effect ID: {effect.id!r}")
+
+    def add(self, effect: "EffectType") -> "EffectType":
+        self._validate(effect)
+        copied = effect.copy()
+        self._items.append(copied)
+        return copied
+
+    def extend(self, effects: Iterable[Effect]) -> None:
+        staged = tuple(effects)
+        for effect in staged:
+            self._validate(effect)
+        identifiers = [effect.id for effect in staged if effect.id is not None]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("duplicate effect ID in extension")
+        copied = tuple(effect.copy() for effect in staged)
+        self._items.extend(copied)
+
+
+EffectType = TypeVar("EffectType", bound=Effect)
+
+
+__all__ = [
+    "ActiveInterval",
+    "Effect",
+    "EffectStack",
+    "Brightness",
+    "Contrast",
+    "Saturation",
+    "Tint",
+    "GaussianBlur",
+    "DirectionalBlur",
+    "ZoomBlur",
+    "ZoomBlurDirection",
+    "Glow",
+    "Bloom",
+    "ChromaticAberration",
+    "Vignette",
+    "Sharpen",
+    "ColorAdjust",
+    "CameraShake",
+    "MotionBlur",
+    "available_effects",
+]

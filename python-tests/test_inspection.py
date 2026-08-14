@@ -7,7 +7,7 @@ import vestra
 
 def test_inspection_exposes_sdk_owned_snapshot() -> None:
     fixture = Path("tests/fixtures/wgpu-small-rgba.json")
-    project = vestra.Project.load(fixture)
+    project = vestra.ProjectSnapshot.load(fixture)
     editor = vestra.Editor()
 
     preflight = editor.preflight(project, vestra.PreflightOptions.for_inspection())
@@ -25,7 +25,7 @@ def test_inspection_exposes_sdk_owned_snapshot() -> None:
 
 
 def test_missing_asset_is_a_preflight_report_not_an_exception(tmp_path: Path) -> None:
-    project = vestra.Project.from_dict(
+    project = vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
@@ -41,7 +41,7 @@ def test_missing_asset_is_a_preflight_report_not_an_exception(tmp_path: Path) ->
 
 
 def test_inspection_failure_retains_structured_editor_error(tmp_path: Path) -> None:
-    project = vestra.Project.from_dict(
+    project = vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},

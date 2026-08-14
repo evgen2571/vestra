@@ -7,7 +7,7 @@ import vestra
 
 
 def test_wgpu_prepared_frame_has_owned_cpu_bytes_when_adapter_is_available() -> None:
-    project = vestra.Project.load(Path("tests/fixtures/wgpu-small-rgba.json"))
+    project = vestra.ProjectSnapshot.load(Path("tests/fixtures/wgpu-small-rgba.json"))
     try:
         prepared = vestra.Editor().prepare(
             project,
@@ -33,7 +33,7 @@ def test_wgpu_prepared_frame_has_owned_cpu_bytes_when_adapter_is_available() -> 
 
 
 def test_wgpu_random_access_matches_cpu_metadata_when_adapter_is_available(tmp_path: Path) -> None:
-    project = vestra.Project.from_dict(
+    project = vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {

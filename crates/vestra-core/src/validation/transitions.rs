@@ -173,6 +173,106 @@ pub(crate) fn validate_placement(
     validate_definition(&placement.definition, &format!("{path}/definition"), errors);
 }
 
+/// Validates a staged generic placement set, including the ordinary per-track
+/// resource bound that will be wired into the active project validator in v2C.
+#[allow(
+    dead_code,
+    reason = "the generic validator is staged for the v2C root cutover"
+)]
+pub(crate) fn validate_placement_set(
+    placements: &[crate::project::TransitionPlacement],
+    maximum_keyframes: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    for (index, placement) in placements.iter().enumerate() {
+        let path = format!("/visual/transitions/{index}");
+        validate_placement(placement, &path, errors);
+        for (name, track_count) in [
+            (
+                "outgoing/opacity",
+                placement
+                    .definition
+                    .outgoing
+                    .opacity
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "outgoing/position_offset",
+                placement
+                    .definition
+                    .outgoing
+                    .position_offset
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "outgoing/scale_multiplier",
+                placement
+                    .definition
+                    .outgoing
+                    .scale_multiplier
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "outgoing/rotation_offset_degrees",
+                placement
+                    .definition
+                    .outgoing
+                    .rotation_offset_degrees
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "incoming/opacity",
+                placement
+                    .definition
+                    .incoming
+                    .opacity
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "incoming/position_offset",
+                placement
+                    .definition
+                    .incoming
+                    .position_offset
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "incoming/scale_multiplier",
+                placement
+                    .definition
+                    .incoming
+                    .scale_multiplier
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+            (
+                "incoming/rotation_offset_degrees",
+                placement
+                    .definition
+                    .incoming
+                    .rotation_offset_degrees
+                    .as_ref()
+                    .map(|t| t.keyframes.len()),
+            ),
+        ] {
+            if track_count.is_some_and(|count| count > maximum_keyframes) {
+                errors.push(Diagnostic::error(
+                    "MVP-LIMIT-KEYFRAMES",
+                    Category::Semantic,
+                    "normalized transition track exceeds the keyframe limit",
+                    format!("{path}/definition/{name}/keyframes"),
+                ));
+            }
+        }
+    }
+}
+
 fn validate_interpolation(
     interpolation: &crate::project::Interpolation,
     path: &str,
@@ -203,7 +303,9 @@ fn validate_interpolation(
     reason = "the legacy v1 validator remains below the staged v2A foundation"
 )]
 mod transition_v2_tests {
-    use super::{validate_definition, validate_normalized_track, validate_placement};
+    use super::{
+        validate_definition, validate_normalized_track, validate_placement, validate_placement_set,
+    };
     use crate::project::{
         Interpolation, InterpolationName, NormalizedKeyframe, NormalizedTrack, Point,
         TransitionDefinition, TransitionPlacement, TransitionPresentation,
@@ -461,6 +563,31 @@ mod transition_v2_tests {
             errors
                 .iter()
                 .any(|error| error.code == "MVP-TRANSITION-TIME")
+        );
+    }
+
+    #[test]
+    fn placement_set_enforces_normalized_track_keyframe_limits() {
+        let placement = TransitionPlacement {
+            id: "limited".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 0.0,
+            duration: 1.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(scalar_track(&[(0.0, 1.0), (0.5, 0.5), (1.0, 0.0)])),
+                    ..TransitionPresentation::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut errors = Vec::new();
+        validate_placement_set(&[placement], 2, &mut errors);
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
         );
     }
 }

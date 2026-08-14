@@ -3,7 +3,7 @@ from math import inf, nan
 import pytest
 
 from vestra.authoring import ProjectBuilder
-from vestra import FrameRate, Project
+from vestra import FrameRate, ProjectSnapshot
 
 
 def builder(*, metadata: object = None) -> ProjectBuilder:
@@ -17,7 +17,7 @@ def test_metadata_omits_top_level_none_and_preserves_nested_null() -> None:
     assert "metadata" not in builder().to_dict()
     data = builder(metadata={"description": None, "items": [1, None, 3]}).to_dict()
     assert data["metadata"] == {"description": None, "items": [1, None, 3]}
-    assert isinstance(Project.from_dict(data), Project)
+    assert isinstance(ProjectSnapshot.from_dict(data), ProjectSnapshot)
 
 
 def test_metadata_is_deeply_owned_in_both_directions() -> None:

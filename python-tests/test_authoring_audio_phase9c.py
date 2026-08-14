@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from vestra import (
     BackendPreference, CancellationToken, CancelledError, Editor, FrameRate, PrepareOptions,
-    PreparedVideoRenderRequest, Project, RenderRequest, InspectAudioGainKeyframe,
+    PreparedVideoRenderRequest, ProjectSnapshot, RenderRequest, InspectAudioGainKeyframe,
 )
 
 from vestra.authoring import (
@@ -144,7 +144,7 @@ def test_automation_round_trips_and_inspection_exposes_canonical_details() -> No
     ])
     project.audio.crossfade(outgoing, incoming, curve=AudioFadeCurve.EQUAL_POWER)
     authored = project.to_dict()
-    native = Project.from_dict(authored)
+    native = ProjectSnapshot.from_dict(authored)
     assert native.to_dict() == authored
     inspection = Editor().inspect(native)
     clip = inspection.audio.tracks[0].clips[0]  # type: ignore[union-attr]
@@ -162,8 +162,8 @@ def test_audio_json_round_trip_stabilizes() -> None:
         AudioGainKeyframe(0.12345, 1.25),
     ])
     project.audio.crossfade(outgoing, incoming, curve=AudioFadeCurve.EQUAL_POWER)
-    first = Project.from_json(Project.from_dict(project.to_dict()).to_json())
-    second = Project.from_json(first.to_json())
+    first = ProjectSnapshot.from_json(ProjectSnapshot.from_dict(project.to_dict()).to_json())
+    second = ProjectSnapshot.from_json(first.to_json())
     assert first.to_dict() == second.to_dict() == project.to_dict()
 
 

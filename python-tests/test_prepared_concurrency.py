@@ -8,7 +8,7 @@ import vestra
 
 def prepared() -> vestra.PreparedProject:
     return vestra.Editor().prepare(
-        vestra.Project.load(Path("tests/fixtures/wgpu-small-rgba.json")),
+        vestra.ProjectSnapshot.load(Path("tests/fixtures/wgpu-small-rgba.json")),
         vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
 
@@ -51,7 +51,7 @@ def test_prepared_frame_operation_releases_gil_and_rejects_same_object_busy() ->
 def test_preparation_releases_gil() -> None:
     import vestra._native as native
 
-    project = vestra.Project.load(Path("tests/fixtures/wgpu-small-rgba.json"))
+    project = vestra.ProjectSnapshot.load(Path("tests/fixtures/wgpu-small-rgba.json"))
     native._test_arm_prepared_operation()
     completed = threading.Event()
     errors: list[BaseException] = []

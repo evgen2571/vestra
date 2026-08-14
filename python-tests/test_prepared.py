@@ -18,7 +18,7 @@ PIXELS_B = base64.b64decode(
 
 def prepared() -> vestra.PreparedProject:
     return vestra.Editor().prepare(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
 
@@ -27,8 +27,8 @@ def cpu_options() -> vestra.PrepareOptions:
     return vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)
 
 
-def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vestra.Project:
-    return vestra.Project.from_dict(
+def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vestra.ProjectSnapshot:
+    return vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -64,8 +64,8 @@ def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vest
     )
 
 
-def multi_frame_project(tmp_path: Path) -> vestra.Project:
-    return vestra.Project.from_dict(
+def multi_frame_project(tmp_path: Path) -> vestra.ProjectSnapshot:
+    return vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -198,7 +198,7 @@ def test_prepared_values_are_immutable() -> None:
 
 
 def test_fractional_frame_rate_uses_native_canonical_timestamp_boundaries(tmp_path: Path) -> None:
-    project = vestra.Project.from_dict(
+    project = vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {

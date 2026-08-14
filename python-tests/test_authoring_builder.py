@@ -47,14 +47,14 @@ def test_snapshots_and_native_projects_are_isolated(tmp_path: Path) -> None:
     authored.name = "later"
     assert project.to_dict() == before
     assert project.base_directory == tmp_path
-    assert isinstance(project, vestra.Project)
+    assert isinstance(project, vestra.ProjectSnapshot)
 
 
 def test_build_validate_and_native_round_trip() -> None:
     authored = builder()
     project = authored.build()
     assert authored.validate().is_valid
-    reloaded = vestra.Project.from_dict(project.to_dict(), base_directory=project.base_directory)
+    reloaded = vestra.ProjectSnapshot.from_dict(project.to_dict(), base_directory=project.base_directory)
     assert reloaded.to_dict() == project.to_dict()
 
 

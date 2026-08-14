@@ -9,7 +9,7 @@ import typing
 
 import pytest
 
-from vestra import FrameRate, Project
+from vestra import FrameRate, ProjectSnapshot
 from vestra import authoring as api
 from vestra.authoring import (
     AudioAsset, AudioClip, AudioTimeline, AudioTrack, Crop, ImageAsset, ImageClip, Point, PresetCollection, ProjectBuilder,
@@ -109,7 +109,7 @@ def test_authoring_round_trips_through_native_canonical_project(kind: str) -> No
     if kind in {"audio", "complete"}:
         builder.audio.add_track(id="music").add_clip(asset=audio, start=0, trim_end=0.2)
     native = builder.build()
-    round_trip = Project.from_dict(native.to_dict(), base_directory=native.base_directory)
+    round_trip = ProjectSnapshot.from_dict(native.to_dict(), base_directory=native.base_directory)
     assert native.to_dict() == round_trip.to_dict()
 
 

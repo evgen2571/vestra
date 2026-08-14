@@ -14,7 +14,7 @@ from vestra import FrameRate
 from vestra.authoring import (
     ActiveInterval, BloomEffect, BlendMode, BrightnessEffect, CameraShakeEffect, ChromaticAberrationEffect,
     ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect, GaussianBlurEffect, GlowEffect,
-    Interpolation, MotionBlurEffect, Point, ProjectBuilder, SaturationEffect, SharpenEffect,
+    CubicBezier, Interpolation, MotionBlurEffect, Point, ProjectBuilder, SaturationEffect, SharpenEffect,
     Sizing, TintEffect, VignetteEffect, ZoomBlurDirection, ZoomBlurEffect, available_effects, effect_definition,
 )
 from vestra.authoring.effects import ClipEffectCollection, PostEffectCollection
@@ -566,6 +566,22 @@ def test_generic_effect_matches_typed_serialization() -> None:
     animated_generic = generic_clip.effects.add_effect("brightness", amount=animated_typed.amount)
     assert animated_typed.to_canonical() == animated_generic.to_canonical()
     assert typed_builder.validate().is_valid and generic_builder.validate().is_valid
+
+
+def test_generic_effect_copies_cubic_keyframes_and_signal_modifiers() -> None:
+    typed_builder, typed_clip = builder()
+    typed = typed_clip.effects.add_brightness(amount=0.2)
+    typed.amount.keyframe(
+        time=0.5,
+        value=0.8,
+        interpolation=CubicBezier(0.25, 0.1, 0.25, 1.0),
+    )
+    typed.amount.modulate(typed_builder.audio.master.rms(), mode="multiply")
+
+    _, generic_clip = builder()
+    generic = generic_clip.effects.add_effect("brightness", amount=typed.amount)
+
+    assert generic.to_canonical() == typed.to_canonical()
 
 
 def test_generic_camera_shake_preserves_explicit_interval_and_matches_typed() -> None:

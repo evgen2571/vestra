@@ -19,7 +19,7 @@ def test_encoder_failure_preserves_structured_render_context(
     fake_ffmpeg.write_text("#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then exit 0; fi\necho forced failure >&2\nexit 1\n")
     fake_ffmpeg.chmod(0o755)
     prepared = vestra.Editor().prepare(
-        vestra.Project.load(FIXTURE),
+        vestra.ProjectSnapshot.load(FIXTURE),
         vestra.PrepareOptions(backend=vestra.BackendPreference.CPU),
     )
     output = tmp_path / "encoder-failure.mp4"

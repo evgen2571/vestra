@@ -156,7 +156,7 @@ def test_checked_in_particle_examples_are_schema_and_native_valid() -> None:
     for path in sorted((ROOT / "examples/particles").glob("*.json")):
         data = json.loads(path.read_text())
         assert not list(VALIDATOR.iter_errors(data)), path
-        project = vestra.Project.from_dict(data, base_directory=ROOT)
+        project = vestra.ProjectSnapshot.from_dict(data, base_directory=ROOT)
         assert vestra.Editor().validate(project).is_valid, path
 
 
@@ -174,7 +174,7 @@ def test_audio_reactive_python_example_authors_valid_audio_material() -> None:
     )
     without_audio["assets"] = []
     del without_audio["audio"]
-    invalid = vestra.Project.from_dict(without_audio, base_directory=ROOT)
+    invalid = vestra.ProjectSnapshot.from_dict(without_audio, base_directory=ROOT)
     assert not vestra.Editor().validate(invalid).is_valid
 
 

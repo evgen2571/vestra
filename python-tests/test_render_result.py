@@ -15,8 +15,8 @@ def cpu_request(output: Path, *, preview: bool = False) -> vestra.RenderRequest:
     )
 
 
-def audio_project() -> vestra.Project:
-    return vestra.Project.from_dict(
+def audio_project() -> vestra.ProjectSnapshot:
+    return vestra.ProjectSnapshot.from_dict(
         {
             "schema_version": 2,
             "output": {
@@ -76,7 +76,7 @@ def assert_full_result(result: vestra.RenderResult, output: Path, *, scope: vest
 
 
 def test_prepared_and_one_shot_results_are_complete_immutable_snapshots(tmp_path: Path) -> None:
-    project = vestra.Project.load(FIXTURE)
+    project = vestra.ProjectSnapshot.load(FIXTURE)
     editor = vestra.Editor()
     prepared = editor.prepare(project, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
     prepared_output = tmp_path / "prepared.mp4"
@@ -102,7 +102,7 @@ def test_prepared_and_one_shot_results_are_complete_immutable_snapshots(tmp_path
 def test_preview_and_audio_results_match_readable_streams(tmp_path: Path) -> None:
     preview_request = cpu_request(tmp_path / "preview.mp4", preview=True)
     assert preview_request.preview is True
-    preview_result = vestra.Editor().render(vestra.Project.load(FIXTURE), preview_request)
+    preview_result = vestra.Editor().render(vestra.ProjectSnapshot.load(FIXTURE), preview_request)
     assert preview_result.preview is True
     assert stream_types(preview_result.output_path) == {"video"}
 

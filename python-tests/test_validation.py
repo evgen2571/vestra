@@ -8,6 +8,6 @@ PROJECT = {
 
 
 def test_validation_is_a_report() -> None:
-    report = vestra.Editor().validate(vestra.Project.from_dict(PROJECT))
+    report = vestra.Editor().validate(vestra.ProjectSnapshot.from_dict(PROJECT))
     assert report.is_valid
     assert report.errors == ()

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import TypeAlias, cast, overload
 
-from vestra import Editor, FrameRate, Project, ValidationReport
+from .._native import Editor, FrameRate, Project as ProjectSnapshot, ValidationReport
 
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
@@ -528,12 +528,12 @@ class ProjectBuilder:
             data["name"] = self.name
         if self.metadata is not None:
             data["metadata"] = _json_snapshot(self.metadata)
-        if self._audio.tracks:
+        if self._audio.tracks or self._audio.effects.items:
             data["audio"] = self._audio.to_canonical()
         return data
 
-    def build(self) -> Project:
-        return Project.from_dict(self.to_dict(), base_directory=self.base_directory)
+    def build(self) -> ProjectSnapshot:
+        return ProjectSnapshot.from_dict(self.to_dict(), base_directory=self.base_directory)
 
     def validate(self) -> ValidationReport:
         return Editor().validate(self.build())

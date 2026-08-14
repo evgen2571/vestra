@@ -1,6 +1,6 @@
-from vestra import AdapterInfo, BackendFallback, CancellationToken, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, Project, RenderEvent, RenderResult
+from vestra import AdapterInfo, BackendFallback, CancellationToken, Diagnostic, Editor, FrameRate, PreflightOptions, PrepareOptions, ProjectSnapshot, RenderEvent, RenderResult
 
-project = Project.from_dict({
+project = ProjectSnapshot.from_dict({
     "schema_version": 2,
     "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
     "assets": [],

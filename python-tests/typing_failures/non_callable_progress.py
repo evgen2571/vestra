@@ -1,7 +1,7 @@
 import vestra
 
 
-project: vestra.Project
+project: vestra.ProjectSnapshot
 prepared: vestra.PreparedProject
 prepared_request: vestra.PreparedVideoRenderRequest
 render_request: vestra.RenderRequest

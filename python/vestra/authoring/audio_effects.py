@@ -30,6 +30,10 @@ def audio_effect_definition(effect_type: str) -> Mapping[str, object]:
 
 class AudioEffect:
     __slots__ = ("_owner", "_id", "_type", "_data")
+    _owner: _Owner
+    _id: str
+    _type: str
+    _data: dict[str, object]
 
     @classmethod
     def _create(cls, owner: _Owner, identifier: str, effect_type: str, data: Mapping[str, object]) -> "AudioEffect":
@@ -60,6 +64,11 @@ class BassBoostAudioEffect(AudioEffect):
 
 class AudioEffectCollection:
     __slots__ = ("_owner", "_ids", "_scope", "_scope_kind", "_items")
+    _owner: _Owner
+    _ids: _IdAllocator
+    _scope: object
+    _scope_kind: str
+    _items: list[AudioEffect]
 
     @classmethod
     def _create(cls, owner: _Owner, ids: _IdAllocator, scope: object, scope_kind: str) -> "AudioEffectCollection":
@@ -72,26 +81,30 @@ class AudioEffectCollection:
 
     def _add(self, effect_type: str, parameters: Mapping[str, object], identifier: str | None, effect_class: type[AudioEffect] = AudioEffect) -> AudioEffect:
         definition = audio_effect_definition(effect_type)
-        if self._scope_kind not in definition["scopes"]:
+        scopes = cast(tuple[str, ...], definition["scopes"])
+        if self._scope_kind not in scopes:
             raise ValueError(f"audio effect {effect_type!r} is not valid at this scope")
-        descriptors = {str(parameter["name"]): parameter for parameter in definition["parameters"]}
-        values = dict(parameters)
+        parameter_definitions = cast(tuple[Mapping[str, object], ...], definition["parameters"])
+        descriptors = {str(parameter["name"]): parameter for parameter in parameter_definitions}
+        raw_values = dict(parameters)
         for name, descriptor in descriptors.items():
-            if name not in values and descriptor.get("default") is not None:
-                values[name] = descriptor["default"]
-        if set(values) != set(descriptors):
-            unknown = set(values) - set(descriptors)
-            missing = set(descriptors) - set(values)
+            if name not in raw_values and descriptor.get("default") is not None:
+                raw_values[name] = descriptor["default"]
+        if set(raw_values) != set(descriptors):
+            unknown = set(raw_values) - set(descriptors)
+            missing = set(descriptors) - set(raw_values)
             raise TypeError(f"invalid parameters for {effect_type!r}: unknown={unknown}, missing={missing}")
-        raw_values = values
         values: dict[str, float] = {}
         for name, raw in raw_values.items():
-            value = _number(raw, name)  # type: ignore[arg-type]
+            value = _number(cast(int | float, raw), name)
             descriptor = descriptors[name]
-            minimum, maximum = descriptor["minimum"], descriptor["maximum"]
+            minimum = cast(float | None, descriptor["minimum"])
+            maximum = cast(float | None, descriptor["maximum"])
+            minimum_exclusive = cast(bool, descriptor["minimum_exclusive"])
+            maximum_exclusive = cast(bool, descriptor["maximum_exclusive"])
             if (
-                (minimum is not None and (value <= minimum if descriptor["minimum_exclusive"] else value < minimum))
-                or (maximum is not None and (value >= maximum if descriptor["maximum_exclusive"] else value > maximum))
+                (minimum is not None and (value <= minimum if minimum_exclusive else value < minimum))
+                or (maximum is not None and (value >= maximum if maximum_exclusive else value > maximum))
             ):
                 raise ValueError(f"{name} is outside its authored range")
             values[name] = value

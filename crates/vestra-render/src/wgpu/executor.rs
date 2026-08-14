@@ -257,12 +257,8 @@ impl FrameBindGroups {
         }
         let mut effects = Vec::new();
         if frame.working.has_effects() {
-            let mut slots = vec![
-                TextureSlot::CanvasA,
-                TextureSlot::CanvasB,
-                TextureSlot::Layer,
-                TextureSlot::EffectA,
-            ];
+            let mut slots = frame.working.composition_slots().collect::<Vec<_>>();
+            slots.extend([TextureSlot::Layer, TextureSlot::EffectA]);
             if frame.working.has_effect_b() {
                 slots.push(TextureSlot::EffectB);
             }
@@ -403,7 +399,9 @@ impl FrameBindGroups {
                 Diagnostic::error(
                     "WGPU-BIND-GROUP",
                     crate::Category::Backend,
-                    "missing cached effect bind group",
+                    format!(
+                        "missing cached effect bind group for {source:?}->{destination:?} with auxiliary {auxiliary:?}"
+                    ),
                     "",
                 )
             })

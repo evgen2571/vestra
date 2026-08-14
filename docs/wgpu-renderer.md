@@ -215,10 +215,12 @@ VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 \
   scripts/verify-wgpu-phase3.sh
 ```
 
-The agent environment has no compatible adapter, so real hardware throughput was
-not measured. Lavapipe or another software adapter can validate correctness, but
-its timings do not demonstrate GPU acceleration. The script exits nonzero when
-strict tests cannot obtain an adapter.
+The available Vulkan adapter may be Lavapipe/llvmpipe software rendering.
+Software WGPU is useful for smoke, resource-lifecycle, validation, and readback
+checks, but its timings do not demonstrate GPU acceleration and it is not a
+hardware parity result. The phase verification scripts enable
+`VESTRA_REQUIRE_HARDWARE_WGPU=1`, so hardware-conformance parity fails rather
+than being reported as passed on a software adapter.
 
 ## Headless setup and diagnostics
 
@@ -229,21 +231,26 @@ Mesa Lavapipe for CI. Select discovery behavior with:
 VESTRA_WGPU_BACKEND=vulkan
 VESTRA_WGPU_FORCE_FALLBACK=1
 VESTRA_REQUIRE_WGPU=1
+# Require a non-software adapter for hardware-conformance parity tests.
+VESTRA_REQUIRE_HARDWARE_WGPU=1
 ```
 
 The backend derives and validates output and source texture dimensions, padded
 row/copy sizes, uniform size, texture bindings, and compute workgroup limits
 before creating render resources. It
-requests those project-derived limits on top of WGPU's downlevel baseline, then
+resolves those project-derived requirements against the discovered adapter and
+requests only Vestra's required limits on top of WGPU's minimum baseline, then
 checks the limits returned by the requested device again. Initialization, limit,
 and readback failures are returned as structured diagnostics. Normal staged
 submission does not synchronously await per-frame error scopes because that
 would serialize the pipeline; asynchronous uncaptured and device-loss callbacks
-trigger the normal encoder-abort and output-cleanup path. In environments without an adapter,
-adapter-dependent parity tests print an explicit skip reason; this is not GPU
-verification. They skip only when structured diagnostics report no compatible
-adapter. Device creation and every later backend failure always fail; with
-`VESTRA_REQUIRE_WGPU=1`, adapter absence fails too. The project-local
+trigger the normal encoder-abort and output-cleanup path. In normal mode, adapter-dependent hardware-conformance parity tests print
+`WGPU_RUNTIME_SKIPPED reason=software-adapter` for Lavapipe/llvmpipe and similar
+software adapters. This is distinct from the software-WGPU smoke tests, which
+continue to execute. With `VESTRA_REQUIRE_HARDWARE_WGPU=1`, that software
+adapter decision becomes a failure; with `VESTRA_REQUIRE_WGPU=1`, no compatible
+adapter is also a failure. Device creation and every later backend failure
+always fail. The project-local
 `nix develop .#software-vulkan` shell discovers Lavapipe through Nix's Mesa ICD
 path and enables strict Vulkan verification.
 
@@ -257,6 +264,23 @@ adapter absence into a failure; device, shader, pipeline, texture, project, and
 all mixed failures always fail in either mode.
 
 ## Verification and benchmark
+
+For software-WGPU smoke validation, require an adapter but allow a software
+adapter and do not set `VESTRA_REQUIRE_HARDWARE_WGPU`:
+
+```bash
+VESTRA_WGPU_BACKEND=vulkan \
+  VESTRA_REQUIRE_WGPU=1 cargo test -p vestra-render --lib --all-features -- \
+  --nocapture --test-threads=1
+```
+
+For hardware-WGPU conformance, use a real GPU and enable the explicit hardware
+requirement. The phase scripts set both strict variables themselves:
+
+```bash
+VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase2.sh
+VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase3.sh
+```
 
 Run adapter-independent checks with:
 

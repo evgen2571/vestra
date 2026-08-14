@@ -5,7 +5,7 @@ use std::sync::Arc;
 use super::{
     compare_rgba,
     frame_plan::GpuFramePlan,
-    gpu::wgpu_backend_or_skip,
+    gpu::{hardware_wgpu_backend_or_skip, wgpu_backend_or_skip},
     parameters::{FrameParameterArena, LayerParameters},
     requirements::GpuRequirements,
 };
@@ -503,6 +503,25 @@ fn plan_for_evaluated_effect_case(base: &RenderPlan, frame: &EvaluatedFrame) -> 
         "evaluated frame parameter count must match the prepared capacity formula"
     );
     plan.compilation.effect_pass_count = effect_pass_count;
+    if frame
+        .layers
+        .iter()
+        .flat_map(|layer| &layer.effects)
+        .chain(&frame.post_effects)
+        .any(|effect| effect_pass_plan(effect).requirements().retains_original())
+        && !super::frame_plan::plan_requires_auxiliary(&plan)
+    {
+        plan.post_effects.push(TimedEffect {
+            start: 0,
+            end: u128::MAX,
+            effect: CompiledEffect::Bloom {
+                threshold: scalar(Track::new(0.0)),
+                radius: scalar(Track::new(1.0)),
+                intensity: scalar(Track::new(1.0)),
+            },
+            dependency: crate::plan::TemporalDependency::Static,
+        });
+    }
     plan
 }
 
@@ -515,7 +534,7 @@ fn gpu_effect_case_matches_cpu(
 ) -> bool {
     let plan = plan_for_evaluated_effect_case(base_plan, frame);
     let mut cpu = CpuBackend::new(&plan, Arc::clone(decoded));
-    let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(decoded)) else {
+    let Some(mut gpu) = hardware_wgpu_backend_or_skip(&plan, Arc::clone(decoded)) else {
         return false;
     };
     let mut cpu_output = RgbaImage::new(frame.width, frame.height);
@@ -963,7 +982,7 @@ fn gpu_spectrum2d_uses_the_existing_bloom_pipeline() {
     }];
     let bloom_plan = plan_for_evaluated_effect_case(&base_plan, &frame);
     let bloom_decoded = crate::DecodedAssets::build(&bloom_plan).expect("fixture decodes");
-    let Some(mut with_bloom) = wgpu_backend_or_skip(&bloom_plan, bloom_decoded) else {
+    let Some(mut with_bloom) = hardware_wgpu_backend_or_skip(&bloom_plan, bloom_decoded) else {
         return;
     };
     let mut with_output = RgbaImage::new(10, 4);
@@ -1147,13 +1166,13 @@ fn gpu_multilayer_frame_uses_nonzero_dynamic_offsets_without_validation_errors()
     let execution = gpu.last_execution_metrics();
     assert_eq!(execution.command_encoders, 1);
     assert_eq!(execution.queue_submissions, 1);
-    assert_eq!(execution.compute_passes, 5); // clear + two layers + two composites
-    assert_eq!(execution.dispatches, 5);
+    assert_eq!(execution.compute_passes, 4);
+    assert_eq!(execution.dispatches, 4);
     assert_eq!(execution.texture_copies, 1);
     assert_eq!(execution.parameter_uploads, 1);
     assert_eq!(execution.bind_groups_created, 0);
     assert_eq!(execution.bind_groups_recreated_for_parameter_growth, 0);
-    assert_eq!(execution.bind_group_cache_hits, 5);
+    assert_eq!(execution.bind_group_cache_hits, 4);
     assert_eq!(execution.bind_group_cache_misses, 0);
     let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
     assert!(
@@ -1224,7 +1243,7 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     plan.layers.push(upper);
     plan.compilation.effect_pass_count = 1;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
-    let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+    let Some(mut gpu) = hardware_wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
     };
     let mut cpu = CpuBackend::new(&plan, decoded);
@@ -1598,7 +1617,7 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
         .collect();
         let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
-        let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
+        let Some(mut gpu) = hardware_wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
         };
         let mut cpu_output = RgbaImage::new(frame.width, frame.height);

@@ -517,7 +517,16 @@ def _layer_id(value: str | None, index: int, used: set[str]) -> str:
 
 
 class Project:
-    """Mutable normal-user project with one root composition."""
+    """Mutable normal-user project with one root composition.
+
+    ``output_audio`` is the only project-level configuration with editor-style
+    mutation. Size, frame rate, duration, background, quality, base directory,
+    name, metadata, and the default output path are construction-time
+    configuration; changing them after layers or prepared snapshots exist would
+    make their existing timing, validation, or asset-path assumptions unclear.
+    Pass new values to a new ``Project`` instead. ``snapshot(output=...)`` is
+    the supported per-render output-path override.
+    """
 
     __slots__ = (
         "_width",
@@ -654,6 +663,7 @@ class Project:
         context = LoweringContext(builder)
         context.lower_composition(self._root)
         context.lower_overlays(self._root.transitions, self._flashes)
+        context.lower_post_effects(self._post_effects)
         context.lower_audio(self._audio)
         return builder.build()
 

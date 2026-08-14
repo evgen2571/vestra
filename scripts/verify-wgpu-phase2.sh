@@ -4,8 +4,9 @@ set -euo pipefail
 : "${VESTRA_WGPU_BACKEND:=vulkan}"
 export VESTRA_WGPU_BACKEND
 export VESTRA_REQUIRE_WGPU=1
+export VESTRA_REQUIRE_HARDWARE_WGPU=1
 
-echo "WGPU Phase 2 strict verification (backend: ${VESTRA_WGPU_BACKEND})"
+echo "WGPU Phase 2 strict hardware verification (backend: ${VESTRA_WGPU_BACKEND})"
 echo "The render result below includes the selected adapter metadata."
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT

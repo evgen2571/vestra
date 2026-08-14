@@ -7,6 +7,12 @@ editing API v2 work. The point of the `Project` to `Composition` to `Layer` to
 
 ## The source boundary
 
+The public source namespace is a package. Shared source contracts live in
+`vestra.sources.base`; concrete families belong in `image.py`, `color.py`,
+`particles.py`, `spectrum.py`, or a new family module. `vestra.sources` keeps
+the stable re-export façade, so adding a family does not require growing one
+implementation file or changing `Composition`.
+
 A source owns source-specific data only. A future `Text` could hold its string,
 font, size, and text layout. A future `Rectangle` could hold fill and stroke
 values. A future `Video` could hold its asset, trim, and decode options.
@@ -64,6 +70,24 @@ transforms, direct transition endpoints, sizing, crop, presets, and audio
 requirements. A source can report that it supports a direct transform, or the
 lowering layer can place it inside a presentation group when that is the
 validated native equivalent.
+
+The current registry has a deliberate split between consumed and extension
+contract fields:
+
+| Capability | Current consumers | Status | Future purpose |
+| --- | --- | --- | --- |
+| `supports_direct_transform` | layer lowering | consumed | native Video/Text transforms |
+| `supports_direct_transition_endpoint` | transition validation/lowering | consumed | source-specific transition support |
+| `supports_transition_adapter` | transition validation | consumed | adapter-backed source endpoints |
+| `supports_cinematic_preset` | preset validation | consumed | native preset-capable sources |
+| `supports_sizing`, `supports_crop` | source registry/tests and source lowering | descriptor | source-specific sizing/crop capability checks |
+| `requires_audio` | capability inspection/tests | descriptor | audio-reactive source preparation |
+| `has_intrinsic_duration` | none yet | future-facing | Video duration inference and trim validation |
+
+`Video` should register intrinsic duration and source-trim capability at its
+source boundary. `Composition.add()` should continue to accept a `Source`
+without an `isinstance(Video)` branch; duration and trim resolution belong in
+the source registration/lowering contract.
 
 Transitions are currently root-only. Direct native endpoints are `Image` and
 `Group`; the high-level adapter can support current `Color`, `ParticleSystem`,

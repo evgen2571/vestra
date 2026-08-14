@@ -1,6 +1,8 @@
 """Mutable static visual clips owned by a project builder."""
 
-from ._internal import _Owner, _number
+from __future__ import annotations
+
+from ._internal import _IdAllocator, _Owner, _number
 from .assets import ImageAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ModulatableScalarTrack, Transform
@@ -39,12 +41,13 @@ class _OpacityTrack(ModulatableScalarTrack):
 
 
 class _Clip:
-    __slots__ = ("_owner", "_id", "_start", "_duration", "_layer", "_visible", "_opacity", "_effects", "_blend_mode")
+    __slots__ = ("_owner", "_id", "_id_scope", "_start", "_duration", "_layer", "_visible", "_opacity", "_effects", "_blend_mode")
 
     def _initialize(self, owner: _Owner, identifier: str, *, start: int | float, duration: int | float,
                     layer: int, visible: bool, opacity: int | float) -> None:
         self._owner = owner
         self._id = identifier
+        self._id_scope: object = None
         self._start = _timing(start, "start")
         self._duration = _timing(duration, "duration", positive=True)
         self._layer = _layer(layer)
@@ -116,6 +119,14 @@ class _Clip:
         if self.blend_mode is not BlendMode.NORMAL:
             data["blend_mode"] = self.blend_mode.to_canonical()
         return data
+
+    def _move_to_scope(self, ids: _IdAllocator, scope: object) -> None:
+        ids.release("clip", self.id, scope=self._id_scope)
+        ids.reserve("clip", self.id, scope=scope)
+        self._id_scope = scope
+
+    def to_canonical(self) -> dict[str, object]:
+        raise NotImplementedError
 
 
 class ImageClip(_Clip):
@@ -483,3 +494,49 @@ class Spectrum2DClip(_Clip):
 
     def __repr__(self) -> str:
         return f"Spectrum2DClip(id={self.id!r}, band_count={self.band_count})"
+
+
+class GroupClip(_Clip):
+    """A recursively owned composition of supported visual clips."""
+
+    __slots__ = ("_clips", "_transform", "_scope")
+    _clips: tuple[_Clip, ...]
+    _transform: Transform
+    _scope: object
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("GroupClip objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, identifier: str, clips: tuple[_Clip, ...], *,
+                start: int | float, duration: int | float, layer: int, visible: bool,
+                opacity: int | float, ids: _IdAllocator) -> "GroupClip":
+        instance = object.__new__(cls)
+        instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
+                             visible=visible, opacity=opacity)
+        instance._clips = clips
+        instance._transform = Transform._create(owner)
+        instance._scope = object()
+        for child in clips:
+            child._move_to_scope(ids, instance._scope)
+        return instance
+
+    @property
+    def clips(self) -> tuple[_Clip, ...]:
+        return self._clips
+
+    @property
+    def transform(self) -> Transform:
+        return self._transform
+
+    def to_canonical(self) -> dict[str, object]:
+        data = self._canonical_common()
+        data["source"] = {"type": "group", "clips": [clip.to_canonical() for clip in self.clips]}
+        data["transform"] = self.transform.to_canonical()
+        return data
+
+    def __repr__(self) -> str:
+        return f"GroupClip(id={self.id!r}, clips={len(self.clips)})"
+
+
+VisualClip = ImageClip | SolidColorClip | ParticleSystemClip | Spectrum2DClip | GroupClip

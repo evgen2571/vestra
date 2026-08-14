@@ -1,6 +1,6 @@
 # Vestra
 
-`vestra` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image and full-canvas solid-colour layers, and can author an ordered audio timeline of mixer tracks and clips.
+`vestra` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image, solid-colour, procedural, and recursively owned Group layers, and can author an ordered audio timeline of mixer tracks and clips.
 
 ## Python authoring
 
@@ -10,13 +10,31 @@ schema-version 2 dictionary, then `build()` passes that dictionary to
 `Project.from_dict()` and returns the existing immutable native `Project`.
 There is no second project format.
 
+Groups are authored as owned recursive clips. Child timing remains local to
+the Group, while presentation belongs to the Group itself:
+
+```python
+particles = builder.add_particle_system_clip(
+    particle_system=sparks(seed=7), start=0.0, duration=1.0, layer=0,
+)
+group = builder.add_group_clip(
+    clips=[clip, particles], start=0.0, duration=1.0, layer=1, opacity=0.8,
+)
+builder.timeline.add_crossfade_between(clip, group, duration=0.25)
+```
+
+Groups support nested Groups, Image/SolidColor/Spectrum2D/ParticleSystem
+children, parent transforms/effects/opacity/blend, and top-level Image/Group
+transitions. Internal Group transitions, nested flashes/post-effects, named
+compositions, and independent Group canvas sizing remain unsupported.
+
 Phase 9 executes typed schema-version 2 audio mixer timelines. The old
 single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
 ```python
 from vestra import Editor, FrameRate, RenderRequest
-from vestra.authoring import Interpolation, Point, ProjectBuilder, Sizing
+from vestra.authoring import Interpolation, Point, ProjectBuilder, Sizing, sparks
 
 builder = ProjectBuilder(
     width=160,

@@ -134,6 +134,7 @@ where
         .into_iter()
         .collect::<Vec<_>>();
     prepared.backend.reset_operation_metrics();
+    let operation_metrics_before = prepared.backend.stats();
     let cancelled_before_started = options.cancelled.load(std::sync::atomic::Ordering::Relaxed);
     if emit(events::started(plan.frame_count, &output.final_path)) == RenderObserverControl::Cancel
     {
@@ -233,7 +234,7 @@ where
     performance.absorb_backend_snapshot(&preparation);
     if let Err(error) = operation_backend_metrics(
         &mut performance,
-        &backend_metrics_before,
+        &operation_metrics_before,
         &preparation,
         &plan,
     ) {

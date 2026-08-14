@@ -322,9 +322,11 @@ impl ReadbackRing {
 
     pub(super) fn abort(&mut self) {
         for slot in &mut self.slots {
-            if slot.state == ReadbackState::Mapping {
-                slot.buffer.unmap();
-            }
+            // `Mapping` means map_async was requested, not necessarily that
+            // the callback has completed and the buffer is mapped. Calling
+            // unmap while that request is still pending panics in wgpu.
+            // Aborted backends are not reused, so dropping the buffer cancels
+            // any pending mapping without requiring an invalid unmap.
             slot.state = ReadbackState::Aborted;
             slot.frame_number = None;
             slot.submission_index = None;

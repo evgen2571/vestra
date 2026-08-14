@@ -11,8 +11,9 @@ from vestra import Editor, FrameRate, Project, ValidationReport
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioTimeline
-from .clips import ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
+from .clips import GroupClip, ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip, VisualClip
 from .effects import ClipEffectCollection, PostEffectCollection
+from .errors import AuthoringError
 from .flashes import FlashCollection
 from .spectrum2d import (
     Spectrum2DEffectPreset, Spectrum2DPreset, Spectrum2DValue, Spectrum2DLayout, Spectrum2DGradient, Spectrum2DLinearLayout, _UNSET, _Unset,
@@ -115,7 +116,7 @@ class ProjectBuilder:
             self._duration_mode = DurationMode.EXPLICIT
             self._duration = _number(duration, "duration")
         self._assets: list[ImageAsset | AudioAsset] = []
-        self._clips: list[ImageClip | ParticleSystemClip | SolidColorClip | Spectrum2DClip] = []
+        self._clips: list[VisualClip] = []
         if not isinstance(output_audio, bool):
             raise TypeError("output_audio must be a boolean")
         self._output_audio = output_audio
@@ -248,7 +249,7 @@ class ProjectBuilder:
         return tuple(self._assets)
 
     @property
-    def clips(self) -> tuple[ImageClip | ParticleSystemClip | SolidColorClip | Spectrum2DClip, ...]:
+    def clips(self) -> tuple[VisualClip, ...]:
         """Visual clips in canonical creation order."""
         return tuple(self._clips)
 
@@ -368,6 +369,41 @@ class ProjectBuilder:
             self._ids.validate("clip", id)
         staged._id = self._ids.allocate("clip", "particle_system") if id is None else self._ids.reserve("clip", id)
         staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        self._clips.append(staged)
+        return staged
+
+    def add_group_clip(
+        self, *, clips: list[VisualClip] | tuple[VisualClip, ...], start: int | float,
+        duration: int | float, layer: int, visible: bool = True, opacity: int | float = 1.0,
+        id: str | None = None,
+    ) -> GroupClip:
+        """Create a recursively owned Group from builder-created visual clips."""
+        if not isinstance(clips, list | tuple):
+            raise TypeError("clips must be a list or tuple of visual clips")
+        children = tuple(clips)
+        supported = (ImageClip, SolidColorClip, ParticleSystemClip, Spectrum2DClip, GroupClip)
+        for child in children:
+            if not isinstance(child, supported):
+                raise TypeError("clips must contain supported visual clips")
+            _require_owner(self._owner, child._owner)
+            if child not in self._clips:
+                raise ValueError("Group children must be builder-owned root clips")
+        if len({child for child in children}) != len(children):
+            raise ValueError("Group clips must be distinct")
+        for transition in self.transitions.items:
+            if any(child is transition.outgoing or child is transition.incoming for child in children):
+                raise AuthoringError("cannot group clips that are transition endpoints")
+        if id is not None:
+            if all(child.id != id for child in children):
+                self._ids.validate("clip", id)
+        staged = GroupClip._create(
+            self._owner, "", children, start=start, duration=duration, layer=layer,
+            visible=visible, opacity=opacity, ids=self._ids,
+        )
+        staged._id = self._ids.allocate("clip", "group") if id is None else self._ids.reserve("clip", id)
+        staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        for child in children:
+            self._clips.remove(child)
         self._clips.append(staged)
         return staged
 

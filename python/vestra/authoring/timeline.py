@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._internal import _Owner, _number, _require_owner
-from .clips import ImageClip, SolidColorClip, Spectrum2DClip
+from .clips import GroupClip, ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
 from .transitions import CrossfadeTransition
 
 if TYPE_CHECKING:
     from .builder import ProjectBuilder
 
-Clip = ImageClip | SolidColorClip | Spectrum2DClip
+Clip = ImageClip | SolidColorClip | ParticleSystemClip | Spectrum2DClip | GroupClip
 
 
 class Timeline:
@@ -36,8 +36,8 @@ class Timeline:
         return _number(value, "delta")
 
     def _check_clip(self, clip: Clip) -> None:
-        if not isinstance(clip, ImageClip | SolidColorClip | Spectrum2DClip):
-            raise TypeError("clip must be ImageClip, SolidColorClip, or Spectrum2DClip")
+        if not isinstance(clip, ImageClip | SolidColorClip | ParticleSystemClip | Spectrum2DClip | GroupClip):
+            raise TypeError("clip must be a supported visual clip")
         _require_owner(self._owner, clip._owner)
 
     def shift_clip(self, clip: Clip, *, delta: int | float) -> None:
@@ -60,12 +60,12 @@ class Timeline:
         for clip, start in zip(unique, starts, strict=True):
             clip.start = start
 
-    def add_crossfade_between(self, outgoing: ImageClip, incoming: ImageClip, *, duration: int | float) -> CrossfadeTransition:
+    def add_crossfade_between(self, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, *, duration: int | float) -> CrossfadeTransition:
         """Place a crossfade at the start of the two clips' existing overlap."""
         self._check_clip(outgoing)
         self._check_clip(incoming)
-        if not isinstance(outgoing, ImageClip) or not isinstance(incoming, ImageClip):
-            raise TypeError("outgoing and incoming must be ImageClip")
+        if not isinstance(outgoing, ImageClip | GroupClip) or not isinstance(incoming, ImageClip | GroupClip):
+            raise TypeError("outgoing and incoming must be ImageClip or GroupClip")
         span = _number(duration, "duration")
         if span <= 0:
             raise ValueError("duration must be positive")

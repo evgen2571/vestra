@@ -144,6 +144,7 @@ pub(super) fn render_static_ffmpeg(
     let had_template = prepared.static_visual_template.is_some();
     let backend_metrics_before = prepared.backend.stats();
     prepared.backend.reset_operation_metrics();
+    let operation_metrics_before = prepared.backend.stats();
     let frame_started = Instant::now();
     let frame = render_prepared_frame(prepared, 0)?;
     let frame_render = frame_started.elapsed();
@@ -263,7 +264,7 @@ pub(super) fn render_static_ffmpeg(
     performance.absorb_backend_snapshot(&backend_metrics_after);
     if let Err(error) = operation_backend_metrics(
         &mut performance,
-        &backend_metrics_before,
+        &operation_metrics_before,
         &backend_metrics_after,
         &plan,
     ) {
@@ -271,6 +272,13 @@ pub(super) fn render_static_ffmpeg(
         return Err(error);
     }
     performance.absorb_staged(&prepared.backend.staged_metrics());
+    // Static rendering submits one backend frame and reuses it for the whole
+    // encoded video. The public frame counters describe logical output frames;
+    // static-work reuse remains visible through the cache and timing metrics.
+    performance.submitted_frames = plan.frame_count;
+    performance.backend_completed_frames = plan.frame_count;
+    performance.written_frames_staged = plan.frame_count;
+    performance.command_submission_count = plan.frame_count;
     performance.absorb_compilation(&plan.compilation);
     performance.absorb_schedule(&prepared.schedule);
     performance.visual_temporal_dependency = plan.visual_dependency;

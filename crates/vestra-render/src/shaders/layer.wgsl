@@ -18,9 +18,27 @@ fn texel(coord: vec2<i32>) -> vec4<f32> {
 }
 fn bilinear(position: vec2<f32>) -> vec4<f32> {
     let adjusted = position - vec2<f32>(0.5); let base = vec2<i32>(floor(adjusted)); let fraction = adjusted - vec2<f32>(base);
-    let top = mix(texel(base), texel(base + vec2<i32>(1, 0)), fraction.x);
-    let bottom = mix(texel(base + vec2<i32>(0, 1)), texel(base + vec2<i32>(1, 1)), fraction.x);
-    return round(mix(top, bottom, fraction.y));
+    let weights = vec4<f32>(
+        (1.0 - fraction.x) * (1.0 - fraction.y),
+        fraction.x * (1.0 - fraction.y),
+        (1.0 - fraction.x) * fraction.y,
+        fraction.x * fraction.y,
+    );
+    let top_left = texel(base);
+    let top_right = texel(base + vec2<i32>(1, 0));
+    let bottom_left = texel(base + vec2<i32>(0, 1));
+    let bottom_right = texel(base + vec2<i32>(1, 1));
+    let samples = vec4<f32>(top_left.a, top_right.a, bottom_left.a, bottom_right.a) / 255.0;
+    let weighted_alpha = samples * weights;
+    var premultiplied = vec3<f32>(0.0);
+    let alpha = dot(weighted_alpha, vec4<f32>(1.0));
+    premultiplied = premultiplied
+        + top_left.rgb / 255.0 * weighted_alpha.x
+        + top_right.rgb / 255.0 * weighted_alpha.y
+        + bottom_left.rgb / 255.0 * weighted_alpha.z
+        + bottom_right.rgb / 255.0 * weighted_alpha.w;
+    if (alpha <= 0.0000001) { return vec4<f32>(0.0); }
+    return vec4<f32>(round(clamp(premultiplied / alpha * 255.0, vec3<f32>(0.0), vec3<f32>(255.0))), round(alpha * 255.0));
 }
 fn transformed_colour(pixel: vec4<f32>) -> vec4<f32> {
     let rgb = round(clamp(vec3<f32>(dot(params.colour_row0.xyz, pixel.rgb), dot(params.colour_row1.xyz, pixel.rgb), dot(params.colour_row2.xyz, pixel.rgb)) + params.colour_offset.xyz, vec3<f32>(0.0), vec3<f32>(255.0)));

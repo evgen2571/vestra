@@ -138,8 +138,11 @@ Transition lookup remains root-only: a nested child ID cannot be used as a root
 endpoint. Internal Group transitions, flashes, and post-effects remain outside
 Group V1. CPU and WGPU render supported Groups through isolated transparent
 composition targets; WGPU temporary targets scale with nested depth and its
-Group cache remains deliberately conservative. Python Group authoring is not
-supported.
+Group cache remains deliberately conservative. Python Group authoring is
+supported through `ProjectBuilder.add_group_clip`; it preserves the owned
+recursive tree and composition-local child timing. Group V1 does not provide
+named reusable compositions, an independent canvas size, crop, sizing, or
+preset fields; nested flashes and nested post-effects remain unsupported.
 
 Solid-colour clips and flashes cover the full output canvas. They support
 opacity and colour effects; transforms are intentionally not accepted for
@@ -148,7 +151,7 @@ its whole half-open interval. With a fade-out it holds until `end - fade_out`
 and then reaches zero at `end`.
 
 Solid-colour clips also reject image-only sizing, crop, and preset fields.
-Coordinated transitions reference visible image clips only.
+Coordinated transitions reference visible root Image or Group clips.
 
 Spectrum2D clips are presentation-only bars driven by authored Master audio.
 Linear layouts support bottom, top, and center anchors with forward, reverse, or

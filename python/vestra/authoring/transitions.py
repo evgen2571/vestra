@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Self
 
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .animation import InterpolationValue, interpolation_to_canonical
-from .clips import ImageClip
+from .clips import GroupClip, ImageClip
 from .errors import AuthoringError
 from .values import Color, CubicBezier, Interpolation, color_to_canonical
 
@@ -44,7 +44,7 @@ class Transition:
         raise TypeError(f"{type(self).__name__} objects must be created by builder.transitions")
 
     def _initialize(self, owner: _Owner, scope: object, identifier: str, kind: str,
-                    outgoing: ImageClip, incoming: ImageClip, start: int | float,
+                    outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, start: int | float,
                     duration: int | float, interpolation: InterpolationValue) -> None:
         self._owner = owner
         self._scope = scope
@@ -61,9 +61,9 @@ class Transition:
     @property
     def kind(self) -> str: return self._kind
     @property
-    def outgoing(self) -> ImageClip: return self._outgoing
+    def outgoing(self) -> ImageClip | GroupClip: return self._outgoing
     @property
-    def incoming(self) -> ImageClip: return self._incoming
+    def incoming(self) -> ImageClip | GroupClip: return self._incoming
     @property
     def start(self) -> float: return self._start
     @start.setter
@@ -90,8 +90,8 @@ class Transition:
 
 class CrossfadeTransition(Transition):
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip,
-                incoming: ImageClip, start: int | float, duration: int | float,
+    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip | GroupClip,
+                incoming: ImageClip | GroupClip, start: int | float, duration: int | float,
                 interpolation: InterpolationValue) -> Self:
         instance = object.__new__(cls)
         instance._initialize(owner, scope, identifier, "crossfade", outgoing, incoming, start, duration, interpolation)
@@ -101,7 +101,7 @@ class CrossfadeTransition(Transition):
 class ZoomCrossfadeTransition(Transition):
     __slots__ = ("_outgoing_zoom", "_incoming_start_zoom")
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip, incoming: ImageClip,
+    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip,
                 start: int | float, duration: int | float, interpolation: InterpolationValue,
                 outgoing_zoom: int | float, incoming_start_zoom: int | float) -> Self:
         instance = object.__new__(cls)
@@ -123,7 +123,7 @@ class ZoomCrossfadeTransition(Transition):
 class FlashCutTransition(Transition):
     __slots__ = ("_colour", "_intensity")
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip, incoming: ImageClip,
+    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip,
                 start: int | float, duration: int | float, interpolation: InterpolationValue,
                 colour: Color | str, intensity: int | float) -> Self:
         instance = object.__new__(cls)
@@ -145,7 +145,7 @@ class FlashCutTransition(Transition):
 class DirectionalPushTransition(Transition):
     __slots__ = ("_angle_degrees", "_distance", "_blur_radius")
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip, incoming: ImageClip,
+    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip,
                 start: int | float, duration: int | float, interpolation: InterpolationValue,
                 angle_degrees: int | float, distance: int | float, blur_radius: int | float) -> Self:
         instance = object.__new__(cls)
@@ -172,7 +172,7 @@ class DirectionalPushTransition(Transition):
 class ZoomBlurTransition(Transition):
     __slots__ = ("_outgoing_zoom", "_incoming_start_zoom", "_blur_radius")
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip, incoming: ImageClip,
+    def _create(cls, owner: _Owner, scope: object, identifier: str, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip,
                 start: int | float, duration: int | float, interpolation: InterpolationValue,
                 outgoing_zoom: int | float, incoming_start_zoom: int | float, blur_radius: int | float) -> Self:
         instance = object.__new__(cls)
@@ -227,16 +227,18 @@ class TransitionCollection:
         instance = object.__new__(cls); instance._owner = owner; instance._ids = ids; instance._builder = builder; instance._items = []; return instance
     @property
     def items(self) -> tuple[Transition, ...]: return tuple(self._items)
-    def _add(self, factory: Callable[..., Transition], identifier: str | None, outgoing: ImageClip, incoming: ImageClip, *args: object) -> Transition:
-        if not isinstance(outgoing, ImageClip) or not isinstance(incoming, ImageClip): raise TypeError("outgoing and incoming must be ImageClip")
+    def _add(self, factory: Callable[..., Transition], identifier: str | None, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, *args: object) -> Transition:
+        if not isinstance(outgoing, ImageClip | GroupClip) or not isinstance(incoming, ImageClip | GroupClip): raise TypeError("outgoing and incoming must be ImageClip or GroupClip")
         _require_owner(self._owner, outgoing._owner); _require_owner(self._owner, incoming._owner)
+        if outgoing not in self._builder.clips or incoming not in self._builder.clips:
+            raise AuthoringError("transitions require visible root clips; nested Group children are not endpoints")
         if outgoing is incoming: raise AuthoringError("transition requires two different clips")
         if identifier is not None: self._ids.validate("transition", identifier)
         transition = factory(self._owner, self, "", outgoing, incoming, *args)
         transition._id = self._ids.allocate("transition") if identifier is None else self._ids.reserve("transition", identifier)
         self._items.append(transition); return transition
-    def add_crossfade(self, *, outgoing: ImageClip, incoming: ImageClip, start: int | float, duration: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> CrossfadeTransition: return self._add(CrossfadeTransition._create, id, outgoing, incoming, start, duration, interpolation)  # type: ignore[return-value]
-    def add_zoom_crossfade(self, *, outgoing: ImageClip, incoming: ImageClip, start: int | float, duration: int | float, outgoing_zoom: int | float, incoming_start_zoom: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> ZoomCrossfadeTransition: return self._add(ZoomCrossfadeTransition._create, id, outgoing, incoming, start, duration, interpolation, outgoing_zoom, incoming_start_zoom)  # type: ignore[return-value]
-    def add_flash_cut(self, *, outgoing: ImageClip, incoming: ImageClip, start: int | float, duration: int | float, colour: Color | str, intensity: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> FlashCutTransition: return self._add(FlashCutTransition._create, id, outgoing, incoming, start, duration, interpolation, colour, intensity)  # type: ignore[return-value]
-    def add_directional_push(self, *, outgoing: ImageClip, incoming: ImageClip, start: int | float, duration: int | float, angle_degrees: int | float, distance: int | float, blur_radius: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> DirectionalPushTransition: return self._add(DirectionalPushTransition._create, id, outgoing, incoming, start, duration, interpolation, angle_degrees, distance, blur_radius)  # type: ignore[return-value]
-    def add_zoom_blur(self, *, outgoing: ImageClip, incoming: ImageClip, start: int | float, duration: int | float, outgoing_zoom: int | float, incoming_start_zoom: int | float, blur_radius: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> ZoomBlurTransition: return self._add(ZoomBlurTransition._create, id, outgoing, incoming, start, duration, interpolation, outgoing_zoom, incoming_start_zoom, blur_radius)  # type: ignore[return-value]
+    def add_crossfade(self, *, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, start: int | float, duration: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> CrossfadeTransition: return self._add(CrossfadeTransition._create, id, outgoing, incoming, start, duration, interpolation)  # type: ignore[return-value]
+    def add_zoom_crossfade(self, *, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, start: int | float, duration: int | float, outgoing_zoom: int | float, incoming_start_zoom: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> ZoomCrossfadeTransition: return self._add(ZoomCrossfadeTransition._create, id, outgoing, incoming, start, duration, interpolation, outgoing_zoom, incoming_start_zoom)  # type: ignore[return-value]
+    def add_flash_cut(self, *, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, start: int | float, duration: int | float, colour: Color | str, intensity: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> FlashCutTransition: return self._add(FlashCutTransition._create, id, outgoing, incoming, start, duration, interpolation, colour, intensity)  # type: ignore[return-value]
+    def add_directional_push(self, *, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, start: int | float, duration: int | float, angle_degrees: int | float, distance: int | float, blur_radius: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> DirectionalPushTransition: return self._add(DirectionalPushTransition._create, id, outgoing, incoming, start, duration, interpolation, angle_degrees, distance, blur_radius)  # type: ignore[return-value]
+    def add_zoom_blur(self, *, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, start: int | float, duration: int | float, outgoing_zoom: int | float, incoming_start_zoom: int | float, blur_radius: int | float, interpolation: InterpolationValue = Interpolation.LINEAR, id: str | None = None) -> ZoomBlurTransition: return self._add(ZoomBlurTransition._create, id, outgoing, incoming, start, duration, interpolation, outgoing_zoom, incoming_start_zoom, blur_radius)  # type: ignore[return-value]

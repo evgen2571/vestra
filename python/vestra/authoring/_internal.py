@@ -55,6 +55,9 @@ class _IdAllocator:
                 self._reserved[reserved_key].add(identifier)
                 return identifier
 
+    def release(self, namespace: str, identifier: str, *, scope: object = None) -> None:
+        self._reserved[(namespace, scope)].discard(identifier)
+
 
 class _Owner:
     """An identity-only token that never enters canonical project data."""

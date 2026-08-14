@@ -35,9 +35,9 @@ intended to prevent a feature from disappearing behind the new recommended
 | Structured diagnostics | `ValidationReport`, native exception classes and diagnostics | `vestra._native` DTOs | Public wrappers retain codes, categories, pointers, hints, and warnings. |
 | Backend selection | `backend="auto"`, `"cpu"`, or `"wgpu"` | `BackendPreference`, `BackendKind`, adapter/fallback reports | High-level. CPU and WGPU reports are truthful. `wgpu` does not silently fall back; `auto` may fall back before first frame. |
 | Frame bytes | `Frame.to_bytes()` | Native `Frame`, RGBA8 metadata | Public native DTO. NumPy and buffer protocol are intentionally not required. |
-| Advanced exact canonical authoring | Not the normal editor path | `vestra.authoring.ProjectBuilder` | Advanced-only by design. Needed for exact schema handles, fixtures, lowering, and compatibility. |
+| Advanced exact canonical authoring | Not the normal editor path | `vestra.authoring.ProjectBuilder` | Advanced-only by design. Needed for exact schema handles, fixtures, lowering, and canonical schema work. |
 | Low-level binding | Not the normal user path | `vestra._native` | Implementation-level. High-level wrappers keep PyO3 thin. |
-| Legacy package | Not recommended for new editing code | `video_editor.Project` | Compatibility. It remains the native project alias while migration is explicit. |
+| Removed legacy package | No supported import | `video_editor.Project` → `vestra.ProjectSnapshot` | The old package is no longer shipped. Native-project users must import `vestra.ProjectSnapshot`; do not substitute mutable `vestra.Project` without reviewing semantics. |
 
 ## Architecture checks
 

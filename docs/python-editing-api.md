@@ -158,11 +158,27 @@ and `Spectrum2D` endpoints through a presentation group when their semantics
 permit it.
 
 ```python
+from vestra import Interpolation
 from vestra.transitions import Crossfade
 
-incoming = scene.add(Image("examples/assets/blue.png", sizing="cover"), start=0.5, duration=4.5)
-scene.transitions.add(background, incoming, Crossfade(), start=0.5, duration=0.5)
+fade = Crossfade(easing=Interpolation.EASE_IN_OUT)
+incoming = scene.add(
+    Image("examples/assets/blue.png", sizing="cover"),
+    start=0.5,
+    duration=4.5,
+)
+scene.transitions.add(
+    background,
+    incoming,
+    fade,
+    start=0.5,
+    duration=0.5,
+)
 ```
+
+`fade` is a reusable `TransitionDefinition`. The placement owns the
+endpoints, timing, and generated placement ID, so the same definition can be
+used for multiple intervals.
 
 Custom definitions use normalized presentation channels and can be reused at
 different placements. Timing and IDs stay on `scene.transitions.add()`.
@@ -210,6 +226,61 @@ transition-local effects are appended deterministically for the placement.
 Nested compositions expose the same `transitions` collection. Their placement
 times are local to that composition and accumulate through parent composition
 offsets during evaluation. Cinematic presets are image-only and layer-owned.
+
+```python
+from vestra.sources import Image
+
+chapter = project.root.group(start=5.0, duration=4.0)
+chapter_outgoing = chapter.add(
+    Image("examples/assets/red.png"), duration=4.0
+)
+chapter_incoming = chapter.add(
+    Image("examples/assets/blue.png"), duration=4.0
+)
+chapter.transitions.add(
+    chapter_outgoing,
+    chapter_incoming,
+    Crossfade(),
+    start=1.0,
+    duration=0.8,
+)
+```
+
+The `start` and `duration` above are local to `chapter`; both endpoints must
+live in that composition and outlast the local placement interval.
+
+### Transition preset reference
+
+Presets are reusable definitions. They do not contain layer endpoints, timing,
+or IDs. Pass one to `Composition.transitions.add()` to create a placement.
+
+| Preset | Purpose | Channels and effects |
+| --- | --- | --- |
+| `Crossfade` | Basic opacity transition | opacity |
+| `DirectionalPush` | Push layers at an arbitrary angle | position offset |
+| `PushLeft`, `PushRight`, `PushUp`, `PushDown` | Common directional pushes | position offset |
+| `ZoomCrossfade` | Crossfade while scaling both endpoints | opacity, scale multiplier |
+| `ZoomIn` | Incoming layer starts smaller and scales to 1.0 | opacity, scale multiplier |
+| `ZoomOut` | Outgoing layer scales away from 1.0 | opacity, scale multiplier |
+| `BlurCrossfade` | Crossfade with temporary Gaussian blur | opacity, GaussianBlur |
+| `ZoomBlurTransition` | Zooming crossfade with temporary zoom blur | opacity, scale multiplier, ZoomBlur |
+| `WhipPanLeft`, `WhipPanRight` | Directional pan with motion blur | opacity, position offset, DirectionalBlur |
+
+`angle_degrees` uses the native coordinate convention. `distance` is in
+normalized composition coordinates. Scale values are multipliers. Preset
+constructors use `easing=` consistently; effect parameters keep the names and
+units of their ordinary effect counterparts.
+
+`ZoomBlurTransition` is intentionally named to distinguish the transition
+preset from the ordinary `vestra.effects.ZoomBlur` effect.
+
+Transition definitions compare by value. They are intentionally unhashable;
+reuse them directly rather than using them as dictionary or set keys.
+
+Current transition definitions do not provide mask/reveal primitives, custom
+transition shaders, or signal/audio-reactive transition bindings. Flash cuts,
+dip-to-black, and dip-to-white are also not part of the supported transition
+preset family.
 
 ```python
 from vestra import Flash, Preset

@@ -89,8 +89,9 @@ source boundary. `Composition.add()` should continue to accept a `Source`
 without an `isinstance(Video)` branch; duration and trim resolution belong in
 the source registration/lowering contract.
 
-Transitions are currently root-only. Direct native endpoints are `Image` and
-`Group`; the high-level adapter can support current `Color`, `ParticleSystem`,
-and `Spectrum2D` cases where the lowering semantics are valid. This rule is a
-capability decision, not a reason to hardcode source names throughout the
-editor.
+Transitions work on root and nested `Composition` scopes. Direct native
+endpoints are `Image` and `Group`; the high-level adapter can support current
+`Color`, `ParticleSystem`, and `Spectrum2D` cases where the lowering semantics
+are valid. Endpoints must be siblings in the owning composition, and placement
+times are local to that composition. This rule is a capability decision, not a
+reason to hardcode source names throughout the editor.

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Hashable
+
 import pytest
 
 import vestra
+import vestra.transitions as transition_module
 from vestra.effects import GaussianBlur
 from vestra.sources import Color
 from vestra.transitions import Animate, CustomTransition, TransitionLayer
@@ -45,6 +48,104 @@ def test_direction_presets_follow_native_position_conventions() -> None:
     ]["value"]["y"] == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize(
+    ("convenience", "angle"),
+    [
+        (vestra.PushLeft, 180.0),
+        (vestra.PushRight, 0.0),
+        (vestra.PushUp, -90.0),
+        (vestra.PushDown, 90.0),
+    ],
+)
+def test_direction_presets_match_directional_push(
+    convenience: type[vestra.DirectionalPush], angle: float
+) -> None:
+    assert (
+        convenience(distance=1.25).to_canonical()
+        == vestra.DirectionalPush(angle_degrees=angle, distance=1.25).to_canonical()
+    )
+
+
+def test_effect_presets_are_value_like_and_inspectable() -> None:
+    first = vestra.BlurCrossfade(radius=4)
+    second = vestra.BlurCrossfade(radius=4)
+    assert first == second
+    assert "BlurCrossfade" in repr(first)
+    assert "radius=4.0" in repr(first)
+    assert "keyframes" not in repr(first)
+
+
+def test_zoom_direction_preset_names_describe_their_endpoints() -> None:
+    zoom_in = vestra.ZoomIn(amount=0.8).to_canonical()
+    zoom_out = vestra.ZoomOut(amount=1.2).to_canonical()
+    assert zoom_in["incoming"]["scale_multiplier"]["keyframes"][0]["value"] == {
+        "x": 0.8,
+        "y": 0.8,
+    }
+    assert zoom_in["outgoing"]["scale_multiplier"]["keyframes"][-1]["value"] == {
+        "x": 1.0,
+        "y": 1.0,
+    }
+    assert zoom_out["outgoing"]["scale_multiplier"]["keyframes"][-1]["value"] == {
+        "x": 1.2,
+        "y": 1.2,
+    }
+    assert zoom_out["incoming"]["scale_multiplier"]["keyframes"][0]["value"] == {
+        "x": 1.0,
+        "y": 1.0,
+    }
+
+
+def test_convenience_preset_reprs_use_public_constructor_semantics() -> None:
+    assert repr(vestra.PushLeft(distance=1.25)) == (
+        "PushLeft(distance=1.25, easing=Interpolation.EASE_IN_OUT)"
+    )
+    assert repr(vestra.ZoomIn(amount=0.8)) == (
+        "ZoomIn(amount=0.8, easing=Interpolation.EASE_IN_OUT)"
+    )
+    assert "outgoing_zoom" not in repr(vestra.ZoomIn())
+    assert "incoming_start_zoom" not in repr(vestra.ZoomIn())
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        vestra.Crossfade(),
+        vestra.PushLeft(distance=1.0),
+        vestra.ZoomIn(amount=0.9),
+        vestra.BlurCrossfade(radius=4.0),
+    ],
+)
+def test_transition_definitions_are_explicitly_unhashable(
+    definition: vestra.TransitionDefinition,
+) -> None:
+    assert type(definition).__hash__ is None
+    assert not isinstance(definition, Hashable)
+    with pytest.raises(TypeError):
+        hash(definition)
+
+
+def test_transition_definitions_preserve_value_equality() -> None:
+    assert vestra.Crossfade() == vestra.Crossfade()
+    assert vestra.PushLeft(distance=1.0) == vestra.PushLeft(distance=1.0)
+    assert vestra.PushLeft(distance=1.0) != vestra.PushLeft(distance=0.5)
+
+
+def test_custom_transition_is_explicitly_unhashable_and_value_equal() -> None:
+    def make_custom() -> CustomTransition:
+        return CustomTransition(
+            outgoing=TransitionLayer(opacity=Animate(1.0, 0.0)),
+            incoming=TransitionLayer(opacity=Animate(0.0, 1.0)),
+        )
+
+    custom = make_custom()
+    assert type(custom).__hash__ is None
+    assert not isinstance(custom, Hashable)
+    with pytest.raises(TypeError):
+        hash(custom)
+    assert custom == make_custom()
+
+
 def test_definition_reuse_does_not_share_placement_identity_or_timing() -> None:
     project, first, second = _project()
     third = project.root.add(vestra.Image("third.png"), id="third")
@@ -63,6 +164,31 @@ def test_old_timing_and_unsupported_transition_presets_are_not_public() -> None:
     with pytest.raises(TypeError):
         vestra.Crossfade(start=0, duration=1)  # type: ignore[call-arg]
     assert not hasattr(vestra, "FlashCut")
+
+
+def test_transition_module_exports_only_supported_public_names() -> None:
+    assert set(transition_module.__all__) == {
+        "InterpolationValue",
+        "Animate",
+        "TransitionLayer",
+        "CustomTransition",
+        "TransitionDefinition",
+        "TransitionPlacement",
+        "TransitionCollection",
+        "Crossfade",
+        "DirectionalPush",
+        "PushLeft",
+        "PushRight",
+        "PushUp",
+        "PushDown",
+        "ZoomCrossfade",
+        "ZoomIn",
+        "ZoomOut",
+        "BlurCrossfade",
+        "ZoomBlurTransition",
+        "WhipPanLeft",
+        "WhipPanRight",
+    }
 
 
 def test_transition_layer_accepts_existing_effects_with_normalized_tracks() -> None:
@@ -122,7 +248,9 @@ def test_nested_composition_transitions_are_owned_and_serialized_locally() -> No
     project = vestra.Project(size=(8, 6), fps=10, duration=20)
     nested = project.root.group(start=10, duration=5, id="chapter")
     first = nested.child.add(vestra.Image("first.png"), id="first", start=0, duration=5)
-    second = nested.child.add(vestra.Image("second.png"), id="second", start=0, duration=5)
+    second = nested.child.add(
+        vestra.Image("second.png"), id="second", start=0, duration=5
+    )
 
     nested.child.transitions.add(first, second, vestra.Crossfade(), start=2, duration=1)
 
@@ -140,10 +268,14 @@ def test_nested_transition_rejects_cross_scope_endpoints_atomically() -> None:
     second = first_group.add(Color("#00ff00"), id="second", duration=5)
     other = second_group.add(Color("#0000ff"), id="other", duration=5)
 
-    first_group.child.transitions.add(first, second, vestra.Crossfade(), start=1, duration=1)
+    first_group.child.transitions.add(
+        first, second, vestra.Crossfade(), start=1, duration=1
+    )
     before = first_group.child.transitions.items
     with pytest.raises(ValueError, match="same composition"):
-        first_group.child.transitions.add(first, other, vestra.Crossfade(), start=1, duration=1)
+        first_group.child.transitions.add(
+            first, other, vestra.Crossfade(), start=1, duration=1
+        )
     assert first_group.child.transitions.items == before
 
 
@@ -162,9 +294,14 @@ def test_nested_custom_transition_reuses_generic_channels() -> None:
     )
     nested.child.transitions.add(first, second, definition, start=2, duration=1)
 
-    transition = project.snapshot().to_dict()["visual"]["clips"][0]["source"]["transitions"][0]
+    transition = project.snapshot().to_dict()["visual"]["clips"][0]["source"][
+        "transitions"
+    ][0]
     assert set(transition["definition"]["outgoing"]) == {
-        "opacity", "position_offset", "scale_multiplier", "rotation_offset_degrees"
+        "opacity",
+        "position_offset",
+        "scale_multiplier",
+        "rotation_offset_degrees",
     }
 
 
@@ -177,10 +314,14 @@ def test_nested_transition_uses_composition_local_time_at_runtime() -> None:
         outgoing, incoming, vestra.Crossfade(), start=2, duration=2
     )
 
-    assert project.render_frame(11, backend="cpu").to_bytes()[:4] == bytes((255, 0, 0, 255))
+    assert project.render_frame(11, backend="cpu").to_bytes()[:4] == bytes(
+        (255, 0, 0, 255)
+    )
     midpoint = project.render_frame(13, backend="cpu").to_bytes()[:4]
     assert midpoint not in {bytes((255, 0, 0, 255)), bytes((0, 0, 255, 255))}
-    assert project.render_frame(14, backend="cpu").to_bytes()[:4] == bytes((0, 0, 255, 255))
+    assert project.render_frame(14, backend="cpu").to_bytes()[:4] == bytes(
+        (0, 0, 255, 255)
+    )
 
 
 def test_nested_transition_offsets_accumulate_through_deep_compositions() -> None:
@@ -193,12 +334,16 @@ def test_nested_transition_offsets_accumulate_through_deep_compositions() -> Non
         outgoing, incoming, vestra.Crossfade(), start=2, duration=2
     )
 
-    assert project.render_frame(9, backend="cpu").to_bytes()[:4] == bytes((255, 0, 0, 255))
+    assert project.render_frame(9, backend="cpu").to_bytes()[:4] == bytes(
+        (255, 0, 0, 255)
+    )
     midpoint = project.render_frame(11, backend="cpu").to_bytes()[:4]
     assert midpoint not in {bytes((255, 0, 0, 255)), bytes((0, 0, 255, 255))}
 
 
-def test_root_and_sibling_nested_scopes_reuse_one_definition_without_id_collisions() -> None:
+def test_root_and_sibling_nested_scopes_reuse_one_definition_without_id_collisions() -> (
+    None
+):
     project = vestra.Project(size=(2, 2), fps=10, duration=20)
     root_first = project.root.add(Color("#ff0000"), id="root-first", duration=20)
     root_second = project.root.add(Color("#0000ff"), id="root-second", duration=20)
@@ -210,15 +355,22 @@ def test_root_and_sibling_nested_scopes_reuse_one_definition_without_id_collisio
     second_b = second_group.add(Color("#0000ff"), id="b", duration=5)
     definition = vestra.Crossfade()
 
-    project.root.transitions.add(root_first, root_second, definition, start=1, duration=1, id="fade")
-    first_group.child.transitions.add(first_a, first_b, definition, start=1, duration=1, id="fade")
-    second_group.child.transitions.add(second_a, second_b, definition, start=1, duration=1, id="fade")
+    project.root.transitions.add(
+        root_first, root_second, definition, start=1, duration=1, id="fade"
+    )
+    first_group.child.transitions.add(
+        first_a, first_b, definition, start=1, duration=1, id="fade"
+    )
+    second_group.child.transitions.add(
+        second_a, second_b, definition, start=1, duration=1, id="fade"
+    )
 
     snapshot = project.snapshot().to_dict()
     assert snapshot["visual"]["transitions"][0]["id"] == "fade"
-    assert [clip["source"]["transitions"][0]["id"] for clip in snapshot["visual"]["clips"][2:]] == [
-        "fade", "fade"
-    ]
+    assert [
+        clip["source"]["transitions"][0]["id"]
+        for clip in snapshot["visual"]["clips"][2:]
+    ] == ["fade", "fade"]
 
 
 def test_nested_effect_transition_uses_the_existing_effect_path() -> None:
@@ -231,7 +383,9 @@ def test_nested_effect_transition_uses_the_existing_effect_path() -> None:
     )
 
     assert project.validate().is_valid
-    effects = project.snapshot().to_dict()["visual"]["clips"][0]["source"]["transitions"][0]["definition"]["outgoing"]["effects"]
+    effects = project.snapshot().to_dict()["visual"]["clips"][0]["source"][
+        "transitions"
+    ][0]["definition"]["outgoing"]["effects"]
     assert effects[0]["type"] == "gaussian_blur"
 
 
@@ -258,7 +412,9 @@ def test_nested_transition_random_access_is_deterministic() -> None:
         outgoing, incoming, vestra.Crossfade(), start=2, duration=2
     )
 
-    frames = [project.render_frame(time, backend="cpu").to_bytes() for time in (13, 9, 12, 13)]
+    frames = [
+        project.render_frame(time, backend="cpu").to_bytes() for time in (13, 9, 12, 13)
+    ]
     assert frames[0] == frames[-1]
 
 

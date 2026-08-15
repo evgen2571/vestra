@@ -132,8 +132,8 @@ impl ForwardAffine {
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedRasterGeometry {
     pub(crate) source: ResolvedSourceRegion,
-    pub(crate) origin_x: f64,
-    pub(crate) origin_y: f64,
+    pub(crate) logical_origin_x: f64,
+    pub(crate) logical_origin_y: f64,
     pub(crate) effective_width: f64,
     pub(crate) effective_height: f64,
     pub(crate) forward: ForwardAffine,
@@ -152,14 +152,19 @@ impl ResolvedRasterGeometry {
         debug_assert_eq!(
             self.transformed_corners,
             [
-                self.forward.map(self.origin_x, self.origin_y),
                 self.forward
-                    .map(self.origin_x + self.effective_width, self.origin_y),
-                self.forward
-                    .map(self.origin_x, self.origin_y + self.effective_height),
+                    .map(self.logical_origin_x, self.logical_origin_y),
                 self.forward.map(
-                    self.origin_x + self.effective_width,
-                    self.origin_y + self.effective_height,
+                    self.logical_origin_x + self.effective_width,
+                    self.logical_origin_y
+                ),
+                self.forward.map(
+                    self.logical_origin_x,
+                    self.logical_origin_y + self.effective_height
+                ),
+                self.forward.map(
+                    self.logical_origin_x + self.effective_width,
+                    self.logical_origin_y + self.effective_height,
                 ),
             ]
         );
@@ -212,14 +217,16 @@ pub(crate) fn resolve_raster_geometry(
         canvas_width,
         canvas_height,
     );
-    let origin_x = intrinsic.offset_x + f64::from(source.origin_x);
-    let origin_y = intrinsic.offset_y + f64::from(source.origin_y);
+    let logical_origin_x = intrinsic.offset_x;
+    let logical_origin_y = intrinsic.offset_y;
     let forward = ForwardAffine::for_transform(
         transform,
         canvas_width,
         canvas_height,
         effective_width,
         effective_height,
+        logical_origin_x,
+        logical_origin_y,
     );
     let inverse = InverseAffine::for_transform(
         transform,
@@ -227,17 +234,22 @@ pub(crate) fn resolve_raster_geometry(
         canvas_height,
         effective_width,
         effective_height,
+        logical_origin_x,
+        logical_origin_y,
     );
     let transformed_corners = [
-        forward.map(origin_x, origin_y),
-        forward.map(origin_x + effective_width, origin_y),
-        forward.map(origin_x, origin_y + effective_height),
-        forward.map(origin_x + effective_width, origin_y + effective_height),
+        forward.map(logical_origin_x, logical_origin_y),
+        forward.map(logical_origin_x + effective_width, logical_origin_y),
+        forward.map(logical_origin_x, logical_origin_y + effective_height),
+        forward.map(
+            logical_origin_x + effective_width,
+            logical_origin_y + effective_height,
+        ),
     ];
     ResolvedRasterGeometry {
         source,
-        origin_x,
-        origin_y,
+        logical_origin_x,
+        logical_origin_y,
         effective_width,
         effective_height,
         forward,
@@ -254,12 +266,14 @@ impl InverseAffine {
         canvas_height: u32,
         source_width: f64,
         source_height: f64,
+        logical_origin_x: f64,
+        logical_origin_y: f64,
     ) -> Self {
         let (sine, cosine) = transform.rotation_radians.sin_cos();
         let destination_x = transform.position.x * f64::from(canvas_width);
         let destination_y = transform.position.y * f64::from(canvas_height);
-        let anchor_x = transform.anchor.x * source_width;
-        let anchor_y = transform.anchor.y * source_height;
+        let anchor_x = logical_origin_x + transform.anchor.x * source_width;
+        let anchor_y = logical_origin_y + transform.anchor.y * source_height;
         let m00 = cosine / transform.scale.x;
         let m01 = sine / transform.scale.x;
         let m10 = -sine / transform.scale.y;
@@ -291,12 +305,14 @@ impl ForwardAffine {
         canvas_height: u32,
         source_width: f64,
         source_height: f64,
+        logical_origin_x: f64,
+        logical_origin_y: f64,
     ) -> Self {
         let (sine, cosine) = transform.rotation_radians.sin_cos();
         let destination_x = transform.position.x * f64::from(canvas_width);
         let destination_y = transform.position.y * f64::from(canvas_height);
-        let anchor_x = transform.anchor.x * source_width;
-        let anchor_y = transform.anchor.y * source_height;
+        let anchor_x = logical_origin_x + transform.anchor.x * source_width;
+        let anchor_y = logical_origin_y + transform.anchor.y * source_height;
         let m00 = cosine * transform.scale.x;
         let m01 = -sine * transform.scale.y;
         let m10 = sine * transform.scale.x;
@@ -378,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn raster_origin_changes_transformed_corners() {
+    fn raster_origin_preserves_normalized_top_left_anchor() {
         let transform = transform(Point { x: 1.0, y: 1.0 }, 0.0, Point { x: 0.0, y: 0.0 });
         let origin = resolve_raster_geometry(
             IntrinsicSize::new(10, 8),
@@ -413,14 +429,7 @@ mod tests {
             40,
             30,
         );
-        assert_eq!(
-            shifted.transformed_corners[0].x - origin.transformed_corners[0].x,
-            5.0
-        );
-        assert_eq!(
-            shifted.transformed_corners[0].y - origin.transformed_corners[0].y,
-            -3.0
-        );
+        assert_eq!(shifted.transformed_corners, origin.transformed_corners);
     }
 
     fn transform(scale: Point, rotation_radians: f64, anchor: Point) -> Transform2D {
@@ -465,16 +474,16 @@ mod tests {
             );
             for source in [
                 Point {
-                    x: geometry.origin_x,
-                    y: geometry.origin_y,
+                    x: geometry.logical_origin_x,
+                    y: geometry.logical_origin_y,
                 },
                 Point {
-                    x: geometry.origin_x + geometry.effective_width * 0.4,
-                    y: geometry.origin_y + geometry.effective_height * 0.7,
+                    x: geometry.logical_origin_x + geometry.effective_width * 0.4,
+                    y: geometry.logical_origin_y + geometry.effective_height * 0.7,
                 },
                 Point {
-                    x: geometry.origin_x + geometry.effective_width,
-                    y: geometry.origin_y + geometry.effective_height,
+                    x: geometry.logical_origin_x + geometry.effective_width,
+                    y: geometry.logical_origin_y + geometry.effective_height,
                 },
             ] {
                 let destination = geometry.forward.map(source.x, source.y);
@@ -515,5 +524,114 @@ mod tests {
                 .iter()
                 .all(|point| point.x.is_finite() && point.y.is_finite())
         );
+    }
+
+    #[test]
+    fn crop_sampling_origin_does_not_shift_logical_raster_geometry() {
+        let crop = Crop {
+            x: 0.2,
+            y: 0.1,
+            width: 0.4,
+            height: 0.3,
+        };
+        let transform = Transform2D {
+            position: Point { x: 0.5, y: 0.5 },
+            anchor: Point { x: 0.5, y: 0.5 },
+            scale: Point { x: 1.0, y: 1.0 },
+            rotation_radians: 0.0,
+        };
+        let direct = resolve_raster_geometry(
+            IntrinsicSize::new(1000, 1000),
+            crop,
+            false,
+            &CompiledSizing::Original,
+            transform,
+            1000,
+            1000,
+        );
+        let cached = resolve_raster_geometry(
+            IntrinsicSize::new(1000, 1000),
+            crop,
+            true,
+            &CompiledSizing::Original,
+            transform,
+            1000,
+            1000,
+        );
+
+        assert_eq!(direct.logical_origin_x, cached.logical_origin_x);
+        assert_eq!(direct.logical_origin_y, cached.logical_origin_y);
+        assert_eq!((direct.source.origin_x, direct.source.origin_y), (0, 0));
+        assert_eq!((cached.source.origin_x, cached.source.origin_y), (200, 100));
+        let direct_center = direct.forward.map(
+            direct.logical_origin_x + direct.effective_width * 0.5,
+            direct.logical_origin_y + direct.effective_height * 0.5,
+        );
+        let cached_center = cached.forward.map(
+            cached.logical_origin_x + cached.effective_width * 0.5,
+            cached.logical_origin_y + cached.effective_height * 0.5,
+        );
+        assert_eq!(direct_center, Point { x: 500.0, y: 500.0 });
+        assert_eq!(cached_center, Point { x: 500.0, y: 500.0 });
+    }
+
+    #[test]
+    fn centered_anchor_uses_non_zero_logical_raster_bounds() {
+        let geometry = resolve_raster_geometry(
+            IntrinsicSize {
+                width: 200,
+                height: 100,
+                offset_x: -100.0,
+                offset_y: -50.0,
+            },
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            false,
+            &CompiledSizing::Original,
+            Transform2D {
+                position: Point { x: 0.5, y: 0.5 },
+                anchor: Point { x: 0.5, y: 0.5 },
+                scale: Point { x: 1.0, y: 1.0 },
+                rotation_radians: 0.0,
+            },
+            1000,
+            1000,
+        );
+
+        assert_eq!(geometry.forward.map(0.0, 0.0), Point { x: 500.0, y: 500.0 });
+    }
+
+    #[test]
+    fn rotation_uses_non_zero_logical_raster_anchor() {
+        let geometry = resolve_raster_geometry(
+            IntrinsicSize {
+                width: 200,
+                height: 100,
+                offset_x: -100.0,
+                offset_y: -50.0,
+            },
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            false,
+            &CompiledSizing::Original,
+            Transform2D {
+                position: Point { x: 0.5, y: 0.5 },
+                anchor: Point { x: 0.5, y: 0.5 },
+                scale: Point { x: 1.0, y: 1.0 },
+                rotation_radians: std::f64::consts::FRAC_PI_2,
+            },
+            1000,
+            1000,
+        );
+
+        assert_eq!(geometry.forward.map(0.0, 0.0), Point { x: 500.0, y: 500.0 });
     }
 }

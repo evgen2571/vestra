@@ -1612,7 +1612,8 @@ mod tests {
             scale: crate::domain::Point { x: 1.3, y: 0.8 },
             rotation_radians: 0.42,
         };
-        let inverse = geometry::InverseAffine::for_transform(transform, 320, 180, 140.0, 90.0);
+        let inverse =
+            geometry::InverseAffine::for_transform(transform, 320, 180, 140.0, 90.0, 0.0, 0.0);
         let mapped = inverse.map(81.5, 44.5);
         let reference = transform.destination_to_source(81.5, 44.5, 320, 180, 140, 90);
         assert!((mapped.x - reference.x).abs() < 1e-10 && (mapped.y - reference.y).abs() < 1e-10);
@@ -1665,7 +1666,7 @@ mod tests {
             rotation_radians: 0.7,
         };
         let (min_x, max_x, min_y, max_y) = visible_bounds(transform, 4.0, 2.0, 12, 12);
-        let inverse = geometry::InverseAffine::for_transform(transform, 12, 12, 4.0, 2.0);
+        let inverse = geometry::InverseAffine::for_transform(transform, 12, 12, 4.0, 2.0, 0.0, 0.0);
         let entering_row = (min_y..max_y)
             .find(|y| {
                 let first = inverse.map(f64::from(min_x) + 0.5, f64::from(*y) + 0.5);

@@ -31,10 +31,27 @@ struct TransitionSegment<T> {
 
 #[derive(Default)]
 struct LayerTransitionSegments {
+    intervals: Vec<TransitionInterval>,
+    transforms: Vec<TransitionTransform>,
     opacity: Vec<TransitionSegment<f64>>,
     position: Vec<TransitionSegment<Point>>,
     scale: Vec<TransitionSegment<Point>>,
     rotation: Vec<TransitionSegment<f64>>,
+}
+
+#[derive(Clone)]
+struct TransitionInterval {
+    start: u128,
+    end: u128,
+    id: String,
+}
+
+#[derive(Clone)]
+struct TransitionTransform {
+    start: u128,
+    end: u128,
+    id: String,
+    presentation: TransitionPresentation,
 }
 
 /// Compiles the staged generic transition model into the ordinary runtime
@@ -83,10 +100,19 @@ pub(crate) fn compile_transition_placements(
                 &placement.id,
                 &mut grouped[layer_index],
             );
+            grouped[layer_index].intervals.push(TransitionInterval {
+                start,
+                end,
+                id: placement.id.clone(),
+            });
         }
     }
 
     for (layer, segments) in layers.iter_mut().zip(grouped) {
+        validate_layer_intervals(&segments.intervals)?;
+        validate_touching_boundaries(&segments.position)?;
+        validate_touching_boundaries(&segments.scale)?;
+        validate_touching_boundaries(&segments.rotation)?;
         if !segments.opacity.is_empty() {
             layer.opacity_contributions.push(aggregate_channel(
                 segments.opacity,
@@ -95,28 +121,96 @@ pub(crate) fn compile_transition_placements(
             )?);
         }
 
-        if !segments.position.is_empty()
-            || !segments.scale.is_empty()
-            || !segments.rotation.is_empty()
-        {
+        let mut transforms = segments.transforms;
+        transforms.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id)));
+        for transform in transforms {
             let mut contribution = TransformContribution::identity();
-            if !segments.position.is_empty() {
+            contribution.start = transform.start.saturating_sub(layer.start_nanos);
+            contribution.end = transform.end.saturating_sub(layer.start_nanos);
+            if let Some(track) = transform.presentation.position_offset {
                 contribution.position_offset = aggregate_channel(
-                    segments.position,
+                    vec![TransitionSegment {
+                        start: transform.start,
+                        end: transform.end,
+                        id: transform.id.clone(),
+                        track,
+                    }],
                     Point { x: 0.0, y: 0.0 },
                     layer.start_nanos,
                 )?;
             }
-            if !segments.scale.is_empty() {
-                contribution.scale_multiplier =
-                    aggregate_channel(segments.scale, Point { x: 1.0, y: 1.0 }, layer.start_nanos)?;
+            if let Some(track) = transform.presentation.scale_multiplier {
+                contribution.scale_multiplier = aggregate_channel(
+                    vec![TransitionSegment {
+                        start: transform.start,
+                        end: transform.end,
+                        id: transform.id.clone(),
+                        track,
+                    }],
+                    Point { x: 1.0, y: 1.0 },
+                    layer.start_nanos,
+                )?;
             }
-            if !segments.rotation.is_empty() {
-                let degrees = aggregate_channel(segments.rotation, 0.0, layer.start_nanos)?;
+            if let Some(track) = transform.presentation.rotation_offset_degrees {
+                let degrees = aggregate_channel(
+                    vec![TransitionSegment {
+                        start: transform.start,
+                        end: transform.end,
+                        id: transform.id,
+                        track,
+                    }],
+                    0.0,
+                    layer.start_nanos,
+                )?;
                 contribution.rotation_radians_offset =
                     crate::plan_tracks::degrees_to_radians(degrees);
             }
             layer.transform_contributions.push(contribution);
+        }
+    }
+    Ok(())
+}
+
+fn validate_touching_boundaries<T: Copy + PartialEq>(
+    segments: &[TransitionSegment<T>],
+) -> Result<(), Diagnostic> {
+    let mut ordered = segments.to_vec();
+    ordered.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id)));
+    for pair in ordered.windows(2) {
+        if pair[0].end == pair[1].start
+            && pair[0]
+                .track
+                .keyframes
+                .last()
+                .map(|keyframe| keyframe.value)
+                != pair[1]
+                    .track
+                    .keyframes
+                    .first()
+                    .map(|keyframe| keyframe.value)
+        {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-TRANSITION-BOUNDARY",
+                Category::Semantic,
+                "touching transition channel values must be continuous",
+                format!("/visual/transitions/{}/definition", pair[1].id),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_layer_intervals(intervals: &[TransitionInterval]) -> Result<(), Diagnostic> {
+    let mut intervals = intervals.to_vec();
+    intervals.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id)));
+    for pair in intervals.windows(2) {
+        if pair[1].start < pair[0].end {
+            return Err(Diagnostic::error(
+                "MVP-PLAN-TRANSITION-OVERLAP",
+                Category::Internal,
+                "generic transition participation overlaps on one layer",
+                format!("/visual/transitions/{}", pair[1].id),
+            ));
         }
     }
     Ok(())
@@ -129,6 +223,17 @@ fn collect_presentation(
     id: &str,
     grouped: &mut LayerTransitionSegments,
 ) {
+    if presentation.position_offset.is_some()
+        || presentation.scale_multiplier.is_some()
+        || presentation.rotation_offset_degrees.is_some()
+    {
+        grouped.transforms.push(TransitionTransform {
+            start,
+            end,
+            id: id.to_owned(),
+            presentation: presentation.clone(),
+        });
+    }
     if let Some(track) = &presentation.opacity {
         grouped.opacity.push(TransitionSegment {
             start,
@@ -163,13 +268,17 @@ fn collect_presentation(
     }
 }
 
-fn aggregate_channel<T: Copy>(
+fn aggregate_channel<T: Copy + PartialEq>(
     mut segments: Vec<TransitionSegment<T>>,
     identity: T,
     layer_start: u128,
 ) -> Result<Track<T>, Diagnostic> {
     segments.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id)));
-    let mut result = Track::new(identity);
+    let base_value = segments
+        .first()
+        .and_then(|segment| segment.track.keyframes.first())
+        .map_or(identity, |keyframe| keyframe.value);
+    let mut result = Track::new(base_value);
     let mut previous_end = None;
     for segment in segments {
         if segment.track.keyframes.len() < 2 {
@@ -190,7 +299,26 @@ fn aggregate_channel<T: Copy>(
         }
         let relative_start = segment.start.saturating_sub(layer_start);
         let relative_end = segment.end.saturating_sub(layer_start);
+        let touching = previous_end == Some(segment.start);
+        if touching {
+            let previous_value = result
+                .keyframes
+                .last()
+                .expect("a touching segment has a preceding ending keyframe")
+                .value;
+            if previous_value != segment.track.keyframes[0].value {
+                return Err(Diagnostic::error(
+                    "MVP-PLAN-TRANSITION-BOUNDARY",
+                    Category::Semantic,
+                    "touching transition channel values must be continuous",
+                    format!("/visual/transitions/{}/definition", segment.id),
+                ));
+            }
+        }
         for (index, keyframe) in segment.track.keyframes.iter().enumerate() {
+            if touching && index == 0 {
+                continue;
+            }
             let time = relative_start.saturating_add(
                 ((relative_end.saturating_sub(relative_start)) as f64 * keyframe.progress) as u128,
             );
@@ -770,19 +898,118 @@ mod generic_tests {
         let mut layers = vec![layer("a"), layer("b")];
         let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
         compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
-        assert_eq!(
-            layers[0].opacity_contributions[0].evaluate(2_000_000_000),
-            0.5
-        );
+        let opacity = &layers[0].opacity_contributions[0];
         let contribution = &layers[0].transform_contributions[0];
-        assert_eq!(contribution.position_offset.evaluate(2_000_000_000).x, -0.5);
-        assert_eq!(contribution.scale_multiplier.evaluate(2_000_000_000).x, 1.1);
+        for (time, expected) in [
+            (0, (1.0, 0.0, 1.0, 0.0)),
+            (1, (0.75, -0.25, 1.05, std::f64::consts::FRAC_PI_8)),
+            (2, (0.5, -0.5, 1.1, std::f64::consts::FRAC_PI_4)),
+            (3, (0.25, -0.75, 1.15, 3.0 * std::f64::consts::FRAC_PI_8)),
+            (4, (0.0, -1.0, 1.2, std::f64::consts::FRAC_PI_2)),
+        ] {
+            let time = time * 1_000_000_000;
+            assert!((opacity.evaluate(time) - expected.0).abs() < 1e-12);
+            assert!((contribution.position_offset.evaluate(time).x - expected.1).abs() < 1e-12);
+            assert!((contribution.scale_multiplier.evaluate(time).x - expected.2).abs() < 1e-12);
+            assert!(
+                (contribution.rotation_radians_offset.evaluate(time) - expected.3).abs() < 1e-12
+            );
+        }
+        assert!((0.8 * opacity.evaluate(2_000_000_000) - 0.4).abs() < 1e-12);
+        assert!((0.2 + contribution.position_offset.evaluate(2_000_000_000).x + 0.3).abs() < 1e-12);
         assert!(
-            (contribution.rotation_radians_offset.evaluate(2_000_000_000)
-                - std::f64::consts::FRAC_PI_4)
-                .abs()
+            (1.5 * contribution.scale_multiplier.evaluate(2_000_000_000).x - 1.65).abs() < 1e-12
+        );
+        assert!(
+            (10.0_f64.to_radians() + contribution.rotation_radians_offset.evaluate(2_000_000_000)
+                - (55.0_f64.to_radians()))
+            .abs()
                 < 1e-12
         );
+    }
+
+    #[test]
+    fn generic_opacity_uses_first_incoming_value_before_its_placement() {
+        let placement = TransitionPlacement {
+            id: "incoming".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 4.0,
+            duration: 2.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation::default(),
+                incoming: TransitionPresentation {
+                    opacity: Some(scalar_track(0.0, 1.0)),
+                    ..Default::default()
+                },
+            },
+        };
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
+
+        let opacity = &layers[1].opacity_contributions[0];
+        for (time, expected) in [
+            (0.0, 0.0),
+            (3.0, 0.0),
+            (4.0, 0.0),
+            (5.0, 0.5),
+            (6.0, 1.0),
+            (8.0, 1.0),
+        ] {
+            assert!((opacity.evaluate((time * 1e9) as u128) - expected).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn generic_opacity_uses_first_outgoing_value_before_its_placement() {
+        let placement = TransitionPlacement {
+            id: "outgoing".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 4.0,
+            duration: 2.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(scalar_track(1.0, 0.0)),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
+
+        let opacity = &layers[0].opacity_contributions[0];
+        for (time, expected) in [(0.0, 1.0), (4.0, 1.0), (5.0, 0.5), (6.0, 0.0), (8.0, 0.0)] {
+            assert!((opacity.evaluate((time * 1e9) as u128) - expected).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn generic_opacity_uses_first_non_neutral_value_before_its_placement() {
+        let placement = TransitionPlacement {
+            id: "custom".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 4.0,
+            duration: 2.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(scalar_track(0.25, 0.75)),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
+
+        let opacity = &layers[0].opacity_contributions[0];
+        assert!((opacity.evaluate(0) - 0.25).abs() < 1e-12);
+        assert!((opacity.evaluate(5_000_000_000) - 0.5).abs() < 1e-12);
     }
 
     #[test]
@@ -812,7 +1039,7 @@ mod generic_tests {
             &mut second,
         )
         .expect("compile");
-        for time in [2.5, 3.0, 4.5, 5.5] {
+        for time in [0.0, 2.5, 3.0, 4.5, 5.5, 3.5, 1.0, 2.5, 3.5, 0.0] {
             assert_eq!(
                 first[0].opacity_contributions[0].evaluate((time * 1e9) as u128),
                 second[0].opacity_contributions[0].evaluate((time * 1e9) as u128)
@@ -822,6 +1049,36 @@ mod generic_tests {
             first[0].opacity_contributions[0].evaluate(3_000_000_000),
             0.4
         );
+    }
+
+    #[test]
+    fn generic_compiler_copies_non_linear_interpolation_to_the_ending_keyframe() {
+        let mut track = scalar_track(0.0, 1.0);
+        track.keyframes[1].interpolation =
+            crate::project::Interpolation::Named(InterpolationName::EaseInOut);
+        let placement = TransitionPlacement {
+            id: "ease".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 0.0,
+            duration: 4.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(track),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
+        let track = &layers[0].opacity_contributions[0];
+        assert!(matches!(
+            track.keyframes[1].interpolation,
+            crate::animation::Interpolation::EaseInOut
+        ));
+        assert!((track.evaluate(1_000_000_000) - 0.15625).abs() < 1e-12);
     }
 
     #[test]
@@ -880,13 +1137,158 @@ mod generic_tests {
         // each layer's channel must be aggregated from its own participation.
         compile_transition_placements(&placements, &indices, &mut layers).expect("compile");
         let b = &layers[1].opacity_contributions[0];
+        assert_eq!(b.evaluate(0), 0.0);
         assert_eq!(b.evaluate(1_500_000_000), 0.5);
         assert_eq!(b.evaluate(2_000_000_000), 1.0);
         assert_eq!(b.evaluate(3_500_000_000), 0.5);
         let d = &layers[3].opacity_contributions[0];
+        assert_eq!(d.evaluate(0), 1.0);
         assert_eq!(d.evaluate(1_500_000_000), 0.5);
         assert_eq!(d.evaluate(2_000_000_000), 0.0);
         assert_eq!(d.evaluate(3_500_000_000), 0.5);
+    }
+
+    #[test]
+    fn generic_compiler_preserves_interpolation_at_a_continuous_touching_boundary() {
+        let mut first = scalar_track(1.0, 0.0);
+        first.keyframes[1].interpolation =
+            crate::project::Interpolation::Named(InterpolationName::EaseIn);
+        let second = scalar_track(0.0, 1.0);
+        let make = |id: &str, start: f64, track| TransitionPlacement {
+            id: id.into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start,
+            duration: 1.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(track),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let placements = vec![make("first", 1.0, first), make("second", 2.0, second)];
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&placements, &indices, &mut layers).expect("compile");
+        let track = &layers[0].opacity_contributions[0];
+        assert_eq!(track.evaluate(1_500_000_000), 0.75);
+        assert!(matches!(
+            track.keyframes[1].interpolation,
+            crate::animation::Interpolation::EaseIn
+        ));
+        assert_eq!(track.evaluate(2_000_000_000), 0.0);
+        assert_eq!(track.evaluate(2_500_000_000), 0.5);
+    }
+
+    #[test]
+    fn generic_compiler_rejects_a_discontinuous_touching_boundary() {
+        let make = |id: &str, start: f64, from: f64, to: f64| TransitionPlacement {
+            id: id.into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start,
+            duration: 1.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    opacity: Some(scalar_track(from, to)),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let placements = vec![
+            make("first", 1.0, 1.0, 0.25),
+            make("second", 2.0, 0.75, 1.0),
+        ];
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        let error = compile_transition_placements(&placements, &indices, &mut layers)
+            .expect_err("discontinuous boundary must fail");
+        assert_eq!(error.code, "MVP-PLAN-TRANSITION-BOUNDARY");
+    }
+
+    #[test]
+    fn generic_transform_contribution_is_scoped_to_its_placement() {
+        let placement = TransitionPlacement {
+            id: "position".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 2.0,
+            duration: 2.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    position_offset: Some(point_track(
+                        Point { x: 0.0, y: 0.0 },
+                        Point { x: -1.0, y: 0.0 },
+                    )),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
+        let contribution = &layers[0].transform_contributions[0];
+        assert_eq!(contribution.start, 2_000_000_000);
+        assert_eq!(contribution.end, 4_000_000_000);
+        assert_eq!(contribution.position_offset.evaluate(1_000_000_000).x, 0.0);
+        assert_eq!(contribution.position_offset.evaluate(3_000_000_000).x, -0.5);
+        assert_eq!(contribution.position_offset.evaluate(5_000_000_000).x, -1.0);
+    }
+
+    #[test]
+    fn generic_transform_contributions_remain_separate_when_a_layer_changes_roles() {
+        let make =
+            |id: &str, outgoing: &str, incoming: &str, start: f64, x: f64| TransitionPlacement {
+                id: id.into(),
+                outgoing: outgoing.into(),
+                incoming: incoming.into(),
+                start,
+                duration: 1.0,
+                definition: TransitionDefinition {
+                    outgoing: TransitionPresentation {
+                        position_offset: Some(point_track(
+                            Point { x: 0.0, y: 0.0 },
+                            Point { x, y: 0.0 },
+                        )),
+                        ..Default::default()
+                    },
+                    incoming: TransitionPresentation::default(),
+                },
+            };
+        let placements = vec![
+            make("push", "b", "a", 2.0, -1.0),
+            TransitionPlacement {
+                id: "later".into(),
+                outgoing: "c".into(),
+                incoming: "b".into(),
+                start: 5.0,
+                duration: 1.0,
+                definition: TransitionDefinition {
+                    outgoing: TransitionPresentation::default(),
+                    incoming: TransitionPresentation {
+                        position_offset: Some(point_track(
+                            Point { x: 0.0, y: 0.0 },
+                            Point { x: 0.5, y: 0.0 },
+                        )),
+                        ..Default::default()
+                    },
+                },
+            },
+        ];
+        let mut layers = vec![layer("a"), layer("b"), layer("c")];
+        let indices = BTreeMap::from([
+            (String::from("a"), 0),
+            (String::from("b"), 1),
+            (String::from("c"), 2),
+        ]);
+        compile_transition_placements(&placements, &indices, &mut layers).expect("compile");
+        assert_eq!(layers[1].transform_contributions.len(), 2);
+        assert_eq!(layers[1].transform_contributions[0].end, 3_000_000_000);
+        assert_eq!(layers[1].transform_contributions[1].start, 5_000_000_000);
     }
 }
 

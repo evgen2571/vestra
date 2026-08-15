@@ -95,7 +95,7 @@ mod tests {
         plan::{
             CompiledScalarModifier, CompiledScalarProperty, CompiledTransformTracks,
             CompiledVisualSource, DrawKey, PreparedScalarSignal, PreparedScalarSignals,
-            ScalarModifierOperation, ScalarSignalId, TemporalDependency,
+            ScalarModifierOperation, ScalarSignalId, TemporalDependency, TransformContribution,
         },
         project::BlendMode,
     };
@@ -194,5 +194,49 @@ mod tests {
 
         assert_eq!(transform.position, Point { x: 10.0, y: 25.0 });
         assert_eq!(transform.scale, Point { x: 1.1, y: 1.1 });
+    }
+
+    #[test]
+    fn timed_transform_contribution_is_inactive_before_and_after_its_interval() {
+        let mut layer = layer();
+        layer.transform.position = Track::new(Point { x: 0.0, y: 0.0 });
+        layer.transform.position_x_modifiers.clear();
+        layer.transform.position_y_modifiers.clear();
+        layer.transform.scale_x_modifiers.clear();
+        layer.transform.scale_y_modifiers.clear();
+        layer.transform.rotation_degrees.modifiers.clear();
+        let mut contribution = TransformContribution::identity();
+        contribution.start = 2_000_000_000;
+        contribution.end = 4_000_000_000;
+        contribution.position_offset = Track {
+            base_value: Point { x: 0.0, y: 0.0 },
+            keyframes: vec![
+                crate::animation::Keyframe {
+                    time: 2_000_000_000,
+                    value: Point { x: 0.0, y: 0.0 },
+                    interpolation: crate::animation::Interpolation::Linear,
+                },
+                crate::animation::Keyframe {
+                    time: 4_000_000_000,
+                    value: Point { x: -1.0, y: 0.0 },
+                    interpolation: crate::animation::Interpolation::Linear,
+                },
+            ],
+        };
+        layer.transform_contributions.push(contribution);
+        let signals = PreparedScalarSignals::new(Vec::new());
+        let context = EvaluationContext::new(&signals);
+        let sample = |time| {
+            let mut count = 0;
+            evaluate(&layer, time, time, &context, &mut count)
+                .expect("transform")
+                .position
+                .x
+        };
+        assert_eq!(sample(1_000_000_000), 0.0);
+        assert_eq!(sample(2_000_000_000), 0.0);
+        assert_eq!(sample(3_000_000_000), -0.5);
+        assert_eq!(sample(4_000_000_000), 0.0);
+        assert_eq!(sample(5_000_000_000), 0.0);
     }
 }

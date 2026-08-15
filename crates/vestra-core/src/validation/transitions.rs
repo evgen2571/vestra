@@ -184,9 +184,36 @@ pub(crate) fn validate_placement_set(
     maximum_keyframes: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
+    let mut ids = BTreeSet::new();
+    let mut intervals: std::collections::BTreeMap<&str, Vec<(f64, f64, usize)>> =
+        std::collections::BTreeMap::new();
     for (index, placement) in placements.iter().enumerate() {
         let path = format!("/visual/transitions/{index}");
         validate_placement(placement, &path, errors);
+        if !ids.insert(placement.id.as_str()) {
+            errors.push(Diagnostic::error(
+                "MVP-TRANSITION-ID",
+                Category::Semantic,
+                "transition placement ids must be unique",
+                format!("{path}/id"),
+            ));
+        }
+        if placement.start.is_finite()
+            && placement.start >= 0.0
+            && placement.duration.is_finite()
+            && placement.duration > 0.0
+        {
+            let end = placement.start + placement.duration;
+            if end.is_finite() {
+                for endpoint in [&placement.outgoing, &placement.incoming] {
+                    intervals.entry(endpoint.as_str()).or_default().push((
+                        placement.start,
+                        end,
+                        index,
+                    ));
+                }
+            }
+        }
         for (name, track_count) in [
             (
                 "outgoing/opacity",
@@ -267,6 +294,19 @@ pub(crate) fn validate_placement_set(
                     Category::Semantic,
                     "normalized transition track exceeds the keyframe limit",
                     format!("{path}/definition/{name}/keyframes"),
+                ));
+            }
+        }
+    }
+    for layer_intervals in intervals.values_mut() {
+        layer_intervals.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.total_cmp(&b.1)));
+        for pair in layer_intervals.windows(2) {
+            if pair[1].0 < pair[0].1 {
+                errors.push(Diagnostic::error(
+                    "MVP-TRANSITION-OVERLAP",
+                    Category::Semantic,
+                    "transition placements overlap on a layer",
+                    format!("/visual/transitions/{}/start", pair[1].2),
                 ));
             }
         }
@@ -588,6 +628,61 @@ mod transition_v2_tests {
             errors
                 .iter()
                 .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
+        );
+    }
+
+    #[test]
+    fn placement_set_rejects_duplicate_ids() {
+        let first = TransitionPlacement {
+            id: "duplicate".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 0.0,
+            duration: 1.0,
+            definition: valid_definition(),
+        };
+        let mut second = first.clone();
+        second.start = 2.0;
+        let mut errors = Vec::new();
+        validate_placement_set(&[first, second], 10, &mut errors);
+        assert!(errors.iter().any(|error| error.code == "MVP-TRANSITION-ID"));
+    }
+
+    #[test]
+    fn placement_set_rejects_overlap_independent_of_channels() {
+        let first = TransitionPlacement {
+            id: "opacity".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 0.0,
+            duration: 2.0,
+            definition: valid_definition(),
+        };
+        let second = TransitionPlacement {
+            id: "scale".into(),
+            outgoing: "b".into(),
+            incoming: "c".into(),
+            start: 1.0,
+            duration: 2.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    scale_multiplier: Some(NormalizedTrack {
+                        keyframes: vec![
+                            keyframe(0.0, Point { x: 1.0, y: 1.0 }),
+                            keyframe(1.0, Point { x: 1.2, y: 1.2 }),
+                        ],
+                    }),
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut errors = Vec::new();
+        validate_placement_set(&[first, second], 10, &mut errors);
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-TRANSITION-OVERLAP")
         );
     }
 }

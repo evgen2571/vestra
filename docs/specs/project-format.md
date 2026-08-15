@@ -133,10 +133,10 @@ windows without rewriting authored timing. Compilation source, layer, effect,
 and keyframe totals include nested Groups; root-authored clip counts remain
 root-only.
 
-Existing root transitions accept Image and Group endpoints in any combination.
-Transition lookup remains root-only: a nested child ID cannot be used as a root
-endpoint. Internal Group transitions, flashes, and post-effects remain outside
-Group V1. CPU and WGPU render supported Groups through isolated transparent
+Root and nested Group transitions accept the same generic placements and resolve
+endpoint IDs within their owning composition. A nested child ID cannot be used
+as a root endpoint. Nested flashes and post-effects remain outside Group V1.
+CPU and WGPU render supported Groups through isolated transparent
 composition targets; WGPU temporary targets scale with nested depth and its
 Group cache remains deliberately conservative. Python Group authoring is
 supported through `ProjectBuilder.add_group_clip`; it preserves the owned

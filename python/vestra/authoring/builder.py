@@ -122,7 +122,7 @@ class ProjectBuilder:
         self._output_audio = output_audio
         self._audio = AudioTimeline._create(self._owner, self._ids)
         self._post_effects = PostEffectCollection._create(self._owner, self._ids, self)
-        self._transitions = TransitionCollection._create(self._owner, self._ids, self)
+        self._transitions = TransitionCollection._create(self._owner, self._ids, self._clips)
         self._flashes = FlashCollection._create(self._owner, self._ids, self)
         self._timeline = Timeline._create(self)
 
@@ -264,7 +264,8 @@ class ProjectBuilder:
 
     @output_audio.setter
     def output_audio(self, value: bool) -> None:
-        if not isinstance(value, bool): raise TypeError("output_audio must be a boolean")
+        if not isinstance(value, bool):
+            raise TypeError("output_audio must be a boolean")
         self._output_audio = value
 
     @property

@@ -128,7 +128,7 @@ fn validate_with_depth(
                     let mut nested_errors = Vec::new();
                     let nested_visual = crate::project::Visual {
                         clips: group.clips.clone(),
-                        transitions: Vec::new(),
+                        transitions: group.transitions.clone(),
                         flashes: Vec::new(),
                         post_effects: Vec::new(),
                     };

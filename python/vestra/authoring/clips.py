@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ._internal import _IdAllocator, _Owner, _number
 from .assets import ImageAsset
 from .effects import ClipEffectCollection
@@ -10,6 +12,9 @@ from .presets import PresetCollection
 from .spectrum2d import Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DLayout, Spectrum2DRadialLayout
 from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
 from .particles import ParticleSystem
+
+if TYPE_CHECKING:
+    from .transitions import TransitionCollection
 
 
 def _timing(value: int | float, name: str, *, positive: bool = False) -> float:
@@ -499,7 +504,7 @@ class Spectrum2DClip(_Clip):
 class GroupClip(_Clip):
     """A recursively owned composition of supported visual clips."""
 
-    __slots__ = ("_clips", "_transform", "_scope")
+    __slots__ = ("_clips", "_transform", "_scope", "_transitions")
     _clips: tuple[_Clip, ...]
     _transform: Transform
     _scope: object
@@ -517,6 +522,11 @@ class GroupClip(_Clip):
         instance._clips = clips
         instance._transform = Transform._create(owner)
         instance._scope = object()
+        from .transitions import TransitionCollection
+
+        instance._transitions = TransitionCollection._create(
+            owner, ids, instance._clips, scope=instance._scope
+        )
         for child in clips:
             child._move_to_scope(ids, instance._scope)
         return instance
@@ -529,9 +539,19 @@ class GroupClip(_Clip):
     def transform(self) -> Transform:
         return self._transform
 
+    @property
+    def transitions(self) -> TransitionCollection:
+        """Stable ordered transitions between this Group's direct children."""
+        return self._transitions
+
     def to_canonical(self) -> dict[str, object]:
         data = self._canonical_common()
-        data["source"] = {"type": "group", "clips": [clip.to_canonical() for clip in self.clips]}
+        source: dict[str, object] = {
+            "type": "group", "clips": [clip.to_canonical() for clip in self.clips]
+        }
+        if self._transitions.items:
+            source["transitions"] = [transition.to_canonical() for transition in self._transitions.items]
+        data["source"] = source
         data["transform"] = self.transform.to_canonical()
         return data
 

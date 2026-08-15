@@ -184,7 +184,94 @@ def test_nested_group_children_are_not_transition_endpoints() -> None:
     authored.add_group_clip(clips=[child], start=0, duration=2, layer=0)
     other = authored.add_image_clip(source=asset, start=0, duration=2, layer=1)
 
-    with pytest.raises(AuthoringError, match="nested Group children"):
+    with pytest.raises(AuthoringError, match="direct children"):
         authored.transitions.add_transition(
             outgoing=child, incoming=other, start=0, duration=1, definition=Crossfade().to_canonical(),
         )
+
+
+def test_group_transitions_use_the_generic_collection_and_serialize_canonically() -> None:
+    authored = builder()
+    asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
+    outgoing = authored.add_image_clip(source=asset, start=0, duration=2, layer=0, id="out")
+    incoming = authored.add_image_clip(source=asset, start=0, duration=2, layer=1, id="in")
+    group = authored.add_group_clip(clips=[outgoing, incoming], start=0, duration=2, layer=0, id="group")
+
+    placement = group.transitions.add_transition(
+        outgoing=outgoing,
+        incoming=incoming,
+        start=0.5,
+        duration=1,
+        definition=Crossfade().to_canonical(),
+    )
+
+    assert placement.id == "transition-000001"
+    assert group.to_canonical()["source"]["transitions"] == [placement.to_canonical()]  # type: ignore[index]
+    assert authored.build()
+
+
+def test_group_transition_rejects_cross_scope_endpoints_atomically() -> None:
+    authored = builder()
+    asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
+    first = authored.add_image_clip(source=asset, start=0, duration=2, layer=0, id="first")
+    second = authored.add_image_clip(source=asset, start=0, duration=2, layer=1, id="second")
+    third = authored.add_image_clip(source=asset, start=0, duration=2, layer=2, id="third")
+    fourth = authored.add_image_clip(source=asset, start=0, duration=2, layer=3, id="fourth")
+    first_group = authored.add_group_clip(clips=[first, second], start=0, duration=2, layer=0, id="first-group")
+    authored.add_group_clip(clips=[third, fourth], start=0, duration=2, layer=1, id="second-group")
+
+    with pytest.raises(AuthoringError, match="direct children"):
+        first_group.transitions.add_transition(
+            outgoing=first,
+            incoming=third,
+            start=0,
+            duration=1,
+            definition=Crossfade().to_canonical(),
+        )
+
+    assert first_group.transitions.items == ()
+    assert first_group.transitions.add_transition(
+        outgoing=first,
+        incoming=second,
+        start=0,
+        duration=1,
+        definition=Crossfade().to_canonical(),
+    ).id == "transition-000001"
+
+
+def test_group_transition_ids_are_collection_local_and_atomic() -> None:
+    authored = builder()
+    asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
+    clips = [
+        authored.add_image_clip(source=asset, start=0, duration=2, layer=index, id=f"clip-{index}")
+        for index in range(6)
+    ]
+    first_group = authored.add_group_clip(clips=clips[:2], start=0, duration=2, layer=0, id="first-group")
+    second_group = authored.add_group_clip(clips=clips[2:4], start=0, duration=2, layer=1, id="second-group")
+    third_group = authored.add_group_clip(clips=clips[4:], start=0, duration=2, layer=2, id="third-group")
+
+    first_group.transitions.add_transition(
+        outgoing=clips[0], incoming=clips[1], start=0, duration=1,
+        definition=Crossfade().to_canonical(), id="fade",
+    )
+    assert first_group.transitions.add_transition(
+        outgoing=clips[0], incoming=clips[1], start=1, duration=1,
+        definition=Crossfade().to_canonical(),
+    ).id == "transition-000001"
+    assert second_group.transitions.add_transition(
+        outgoing=clips[2], incoming=clips[3], start=0, duration=1,
+        definition=Crossfade().to_canonical(), id="fade",
+    ).id == "fade"
+    assert third_group.transitions.add_transition(
+        outgoing=clips[4], incoming=clips[5], start=0, duration=1,
+        definition=Crossfade().to_canonical(), id="transition-000001",
+    ).id == "transition-000001"
+    with pytest.raises(AuthoringError, match="duplicate transition ID"):
+        third_group.transitions.add_transition(
+            outgoing=clips[4], incoming=clips[5], start=1, duration=1,
+            definition=Crossfade().to_canonical(), id="transition-000001",
+        )
+    assert third_group.transitions.add_transition(
+        outgoing=clips[4], incoming=clips[5], start=1, duration=1,
+        definition=Crossfade().to_canonical(),
+    ).id == "transition-000002"

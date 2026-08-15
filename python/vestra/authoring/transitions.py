@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TYPE_CHECKING, Self
+from collections.abc import Collection
+from typing import Self
 
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .clips import GroupClip, ImageClip
 from .errors import AuthoringError
-
-if TYPE_CHECKING:
-    from .builder import ProjectBuilder
 
 Clip = ImageClip | GroupClip
 
@@ -91,17 +89,25 @@ class TransitionPlacement:
 
 
 class TransitionCollection:
-    __slots__ = ("_owner", "_ids", "_builder", "_items")
+    __slots__ = ("_owner", "_ids", "_clips", "_scope", "_items")
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        raise TypeError("TransitionCollection is owned by ProjectBuilder")
+        raise TypeError("TransitionCollection is owned by a visual composition")
 
     @classmethod
-    def _create(cls, owner: _Owner, ids: _IdAllocator, builder: ProjectBuilder) -> Self:
+    def _create(
+        cls,
+        owner: _Owner,
+        ids: _IdAllocator,
+        clips: Collection[Clip],
+        *,
+        scope: object = None,
+    ) -> Self:
         instance = object.__new__(cls)
         instance._owner = owner
         instance._ids = ids
-        instance._builder = builder
+        instance._clips = clips
+        instance._scope = scope
         instance._items = []
         return instance
 
@@ -114,16 +120,20 @@ class TransitionCollection:
             raise TypeError("outgoing and incoming must be ImageClip or GroupClip")
         _require_owner(self._owner, outgoing._owner)
         _require_owner(self._owner, incoming._owner)
-        if outgoing not in self._builder.clips or incoming not in self._builder.clips:
-            raise AuthoringError("transitions require visible root clips; nested Group children are not endpoints")
+        if outgoing not in self._clips or incoming not in self._clips:
+            raise AuthoringError("transition endpoints must be direct children of this composition")
         if outgoing is incoming:
             raise AuthoringError("transition requires two different clips")
         if id is not None:
-            self._ids.validate("transition", id)
+            self._ids.validate("transition", id, scope=self._scope)
         # Construct and validate every value before reserving an ID or mutating the collection.
         resolved = definition if isinstance(definition, TransitionDefinition) else TransitionDefinition(definition)
         placement = TransitionPlacement._create(self._owner, "", outgoing, incoming, start, duration, resolved)
-        placement._id = self._ids.allocate("transition") if id is None else self._ids.reserve("transition", id)
+        placement._id = (
+            self._ids.allocate("transition", scope=self._scope)
+            if id is None
+            else self._ids.reserve("transition", id, scope=self._scope)
+        )
         self._items.append(placement)
         return placement
 

@@ -4,6 +4,7 @@ import pytest
 
 import vestra
 from vestra.effects import GaussianBlur
+from vestra.sources import Color
 from vestra.transitions import Animate, CustomTransition, TransitionLayer
 
 
@@ -115,6 +116,150 @@ def test_effect_enabled_transition_validates_and_preserves_generic_schema() -> N
     transition = project.snapshot().to_dict()["visual"]["transitions"][0]
     assert transition["definition"]["outgoing"]["effects"][0]["type"] == "gaussian_blur"
     assert "preset" not in str(transition)
+
+
+def test_nested_composition_transitions_are_owned_and_serialized_locally() -> None:
+    project = vestra.Project(size=(8, 6), fps=10, duration=20)
+    nested = project.root.group(start=10, duration=5, id="chapter")
+    first = nested.child.add(vestra.Image("first.png"), id="first", start=0, duration=5)
+    second = nested.child.add(vestra.Image("second.png"), id="second", start=0, duration=5)
+
+    nested.child.transitions.add(first, second, vestra.Crossfade(), start=2, duration=1)
+
+    snapshot = project.snapshot().to_dict()
+    transitions = snapshot["visual"]["clips"][0]["source"]["transitions"]
+    assert transitions[0]["start"] == 2.0
+    assert transitions[0]["outgoing"] == "chapter/first"
+
+
+def test_nested_transition_rejects_cross_scope_endpoints_atomically() -> None:
+    project = vestra.Project(size=(8, 6), fps=10, duration=20)
+    first_group = project.root.group(start=2, duration=5, id="first-group")
+    second_group = project.root.group(start=8, duration=5, id="second-group")
+    first = first_group.add(Color("#ff0000"), id="first", duration=5)
+    second = first_group.add(Color("#00ff00"), id="second", duration=5)
+    other = second_group.add(Color("#0000ff"), id="other", duration=5)
+
+    first_group.child.transitions.add(first, second, vestra.Crossfade(), start=1, duration=1)
+    before = first_group.child.transitions.items
+    with pytest.raises(ValueError, match="same composition"):
+        first_group.child.transitions.add(first, other, vestra.Crossfade(), start=1, duration=1)
+    assert first_group.child.transitions.items == before
+
+
+def test_nested_custom_transition_reuses_generic_channels() -> None:
+    project = vestra.Project(size=(8, 6), fps=10, duration=20)
+    nested = project.root.group(start=10, duration=5, id="chapter")
+    first = nested.add(Color("#ff0000"), id="first", duration=5)
+    second = nested.add(Color("#0000ff"), id="second", duration=5)
+    definition = CustomTransition(
+        outgoing=TransitionLayer(
+            opacity=Animate(1.0, 0.0),
+            position=Animate((0.0, 0.0), (1.0, 0.0)),
+            scale=Animate(1.0, 1.1),
+            rotation=Animate(0.0, 30.0),
+        )
+    )
+    nested.child.transitions.add(first, second, definition, start=2, duration=1)
+
+    transition = project.snapshot().to_dict()["visual"]["clips"][0]["source"]["transitions"][0]
+    assert set(transition["definition"]["outgoing"]) == {
+        "opacity", "position_offset", "scale_multiplier", "rotation_offset_degrees"
+    }
+
+
+def test_nested_transition_uses_composition_local_time_at_runtime() -> None:
+    project = vestra.Project(size=(2, 2), fps=10, duration=20)
+    nested = project.root.group(start=10, duration=5, id="chapter")
+    outgoing = nested.add(Color("#ff0000"), id="outgoing", duration=5)
+    incoming = nested.add(Color("#0000ff"), id="incoming", duration=5)
+    nested.child.transitions.add(
+        outgoing, incoming, vestra.Crossfade(), start=2, duration=2
+    )
+
+    assert project.render_frame(11, backend="cpu").to_bytes()[:4] == bytes((255, 0, 0, 255))
+    midpoint = project.render_frame(13, backend="cpu").to_bytes()[:4]
+    assert midpoint not in {bytes((255, 0, 0, 255)), bytes((0, 0, 255, 255))}
+    assert project.render_frame(14, backend="cpu").to_bytes()[:4] == bytes((0, 0, 255, 255))
+
+
+def test_nested_transition_offsets_accumulate_through_deep_compositions() -> None:
+    project = vestra.Project(size=(2, 2), fps=10, duration=20)
+    outer = project.root.group(start=5, duration=10, id="outer")
+    inner = outer.group(start=3, duration=5, id="inner")
+    outgoing = inner.add(Color("#ff0000"), id="outgoing", duration=5)
+    incoming = inner.add(Color("#0000ff"), id="incoming", duration=5)
+    inner.child.transitions.add(
+        outgoing, incoming, vestra.Crossfade(), start=2, duration=2
+    )
+
+    assert project.render_frame(9, backend="cpu").to_bytes()[:4] == bytes((255, 0, 0, 255))
+    midpoint = project.render_frame(11, backend="cpu").to_bytes()[:4]
+    assert midpoint not in {bytes((255, 0, 0, 255)), bytes((0, 0, 255, 255))}
+
+
+def test_root_and_sibling_nested_scopes_reuse_one_definition_without_id_collisions() -> None:
+    project = vestra.Project(size=(2, 2), fps=10, duration=20)
+    root_first = project.root.add(Color("#ff0000"), id="root-first", duration=20)
+    root_second = project.root.add(Color("#0000ff"), id="root-second", duration=20)
+    first_group = project.root.group(start=2, duration=5, id="first-group")
+    second_group = project.root.group(start=8, duration=5, id="second-group")
+    first_a = first_group.add(Color("#ff0000"), id="a", duration=5)
+    first_b = first_group.add(Color("#0000ff"), id="b", duration=5)
+    second_a = second_group.add(Color("#ff0000"), id="a", duration=5)
+    second_b = second_group.add(Color("#0000ff"), id="b", duration=5)
+    definition = vestra.Crossfade()
+
+    project.root.transitions.add(root_first, root_second, definition, start=1, duration=1, id="fade")
+    first_group.child.transitions.add(first_a, first_b, definition, start=1, duration=1, id="fade")
+    second_group.child.transitions.add(second_a, second_b, definition, start=1, duration=1, id="fade")
+
+    snapshot = project.snapshot().to_dict()
+    assert snapshot["visual"]["transitions"][0]["id"] == "fade"
+    assert [clip["source"]["transitions"][0]["id"] for clip in snapshot["visual"]["clips"][2:]] == [
+        "fade", "fade"
+    ]
+
+
+def test_nested_effect_transition_uses_the_existing_effect_path() -> None:
+    project = vestra.Project(size=(2, 2), fps=10, duration=20)
+    nested = project.root.group(start=10, duration=5, id="chapter")
+    outgoing = nested.add(Color("#ff0000"), id="outgoing", duration=5)
+    incoming = nested.add(Color("#0000ff"), id="incoming", duration=5)
+    nested.child.transitions.add(
+        outgoing, incoming, vestra.BlurCrossfade(radius=4), start=2, duration=2
+    )
+
+    assert project.validate().is_valid
+    effects = project.snapshot().to_dict()["visual"]["clips"][0]["source"]["transitions"][0]["definition"]["outgoing"]["effects"]
+    assert effects[0]["type"] == "gaussian_blur"
+
+
+def test_nested_transition_fit_is_checked_against_local_child_lifetimes() -> None:
+    project = vestra.Project(size=(2, 2), fps=10, duration=20)
+    nested = project.root.group(start=10, duration=5, id="chapter")
+    outgoing = nested.add(Color("#ff0000"), id="outgoing", duration=5)
+    incoming = nested.add(Color("#0000ff"), id="incoming", start=2, duration=4)
+    nested.child.transitions.add(
+        outgoing, incoming, vestra.Crossfade(), start=5, duration=1
+    )
+
+    report = project.validate()
+    assert not report.is_valid
+    assert any(diagnostic.code == "MVP-TRANSITION-FIT" for diagnostic in report.errors)
+
+
+def test_nested_transition_random_access_is_deterministic() -> None:
+    project = vestra.Project(size=(2, 2), fps=10, duration=20)
+    nested = project.root.group(start=10, duration=5, id="chapter")
+    outgoing = nested.add(Color("#ff0000"), id="outgoing", duration=5)
+    incoming = nested.add(Color("#0000ff"), id="incoming", duration=5)
+    nested.child.transitions.add(
+        outgoing, incoming, vestra.Crossfade(), start=2, duration=2
+    )
+
+    frames = [project.render_frame(time, backend="cpu").to_bytes() for time in (13, 9, 12, 13)]
+    assert frames[0] == frames[-1]
 
 
 @pytest.mark.parametrize(

@@ -196,15 +196,20 @@ effectful = CustomTransition(
 ```
 
 Custom channels cover opacity, position offset, scale multiplier, rotation
-offset, and existing visual effects. Effect keyframes in a transition layer
-use normalized times from 0.0 to 1.0 and are active only for the placement
-interval. They are compiled into the same schema-version 3 transition
-definition as built-in transitions.
+offset, and existing visual effects. Effect property-track keyframes in a
+transition layer and an effect's transition-local `ActiveInterval` use
+normalized times from 0.0 to 1.0. They are scaled by the placement duration,
+then offset by the placement's local start. Ordinary effect parameters whose
+meaning is a duration, such as `CameraShake.attack` and `CameraShake.decay`,
+retain their normal effect units; they are not silently treated as normalized
+timeline coordinates. These effects are compiled into the same schema-version
+3 transition definition as built-in transitions.
 Authored layer effects remain first in their existing declaration order;
 transition-local effects are appended deterministically for the placement.
 
-Nested composition transitions are rejected. Cinematic presets are image-only
-and layer-owned.
+Nested compositions expose the same `transitions` collection. Their placement
+times are local to that composition and accumulate through parent composition
+offsets during evaluation. Cinematic presets are image-only and layer-owned.
 
 ```python
 from vestra import Flash, Preset

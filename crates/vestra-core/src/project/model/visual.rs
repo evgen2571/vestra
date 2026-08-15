@@ -497,6 +497,8 @@ pub struct TextSource {
     pub align: TextAlignment,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_width: Option<f64>,
+    /// Line height multiplier relative to `font_size`; line height is
+    /// `font_size * line_spacing` and must be finite and positive.
     #[serde(default = "default_text_line_spacing", skip_serializing_if = "is_one")]
     pub line_spacing: f64,
     #[serde(default, skip_serializing_if = "is_zero")]

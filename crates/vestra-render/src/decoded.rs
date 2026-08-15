@@ -7,6 +7,7 @@
 
 use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
+use cosmic_text::SwashCache;
 use image::RgbaImage;
 
 use crate::shape_raster::{PreparedShape, raster_dimensions};
@@ -171,6 +172,10 @@ impl DecodedAssets {
         for font in &plan.fonts {
             font_systems.insert(font.id.clone(), crate::text::load_font(&font.path)?);
         }
+        let mut glyph_caches = font_systems
+            .keys()
+            .map(|font_id| (font_id.clone(), SwashCache::new()))
+            .collect::<BTreeMap<_, _>>();
         let mut texts = Vec::with_capacity(plan.texts.len());
         for text in &plan.texts {
             let font_system = font_systems.get_mut(&text.font).ok_or_else(|| {
@@ -181,41 +186,27 @@ impl DecodedAssets {
                     "",
                 )
             })?;
-            let prepared = crate::text::prepare(text, font_system)?;
-            let pixels = u64::from(prepared.pixels.width())
+            let cache = glyph_caches.get_mut(&text.font).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-TEXT-FONT",
+                    Category::Media,
+                    "prepared text has no font cache",
+                    "",
+                )
+            })?;
+            let prepared =
+                crate::text::prepare(text, font_system, cache, decoded_source_bytes, &plan.limits)?;
+            let bytes = u64::from(prepared.pixels.width())
                 .checked_mul(u64::from(prepared.pixels.height()))
+                .and_then(|pixels| pixels.checked_mul(4))
                 .ok_or_else(|| {
                     Diagnostic::error(
                         "MVP-TEXT-SIZE",
                         Category::Media,
-                        "prepared text dimensions overflow",
+                        "prepared text bytes overflow",
                         "",
                     )
                 })?;
-            if pixels > plan.limits.maximum_source_pixels {
-                return Err(Diagnostic::error(
-                    "MVP-LIMIT-SOURCE-PIXELS",
-                    Category::Media,
-                    "prepared text exceeds configured pixel limit",
-                    "",
-                ));
-            }
-            let bytes = pixels.checked_mul(4).ok_or_else(|| {
-                Diagnostic::error(
-                    "MVP-TEXT-SIZE",
-                    Category::Media,
-                    "prepared text is too large",
-                    "",
-                )
-            })?;
-            if bytes > plan.limits.maximum_decoded_asset_bytes {
-                return Err(Diagnostic::error(
-                    "MVP-LIMIT-DECODED-ASSET",
-                    Category::Media,
-                    "prepared text exceeds configured byte limit",
-                    "",
-                ));
-            }
             decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
                 Diagnostic::error(
                     "MVP-TEXT-TOTAL-SIZE",
@@ -224,14 +215,6 @@ impl DecodedAssets {
                     "",
                 )
             })?;
-            if decoded_source_bytes > plan.limits.maximum_total_decoded_bytes {
-                return Err(Diagnostic::error(
-                    "MVP-LIMIT-DECODED-TOTAL",
-                    Category::Media,
-                    "decoded sources exceed configured byte limit",
-                    "",
-                ));
-            }
             texts.push(prepared);
         }
         Ok(Arc::new(Self {

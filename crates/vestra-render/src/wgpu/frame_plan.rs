@@ -58,7 +58,7 @@ pub(super) enum GpuOperation {
         destination: TextureSlot,
         parameters_index: u32,
     },
-    RenderImageLayer {
+    RenderRasterLayer {
         layer_index: usize,
         source_asset_index: usize,
         destination: TextureSlot,
@@ -268,7 +268,7 @@ impl GpuFramePlan {
                 GpuOperation::ClearCanvas {
                     parameters_index, ..
                 }
-                | GpuOperation::RenderImageLayer {
+                | GpuOperation::RenderRasterLayer {
                     parameters_index, ..
                 }
                 | GpuOperation::RenderSurfaceLayer {
@@ -315,7 +315,7 @@ impl GpuFramePlan {
                     states.insert(*destination, TextureState::written(next_value));
                     next_value += 1;
                 }
-                GpuOperation::RenderImageLayer {
+                GpuOperation::RenderRasterLayer {
                     source_asset_index,
                     destination,
                     ..
@@ -713,7 +713,7 @@ fn append_layer(
     }
     match &layer.source {
         EvaluatedSource::Image { asset_index, .. } => {
-            operations.push(GpuOperation::RenderImageLayer {
+            operations.push(GpuOperation::RenderRasterLayer {
                 layer_index,
                 source_asset_index: *asset_index,
                 destination: TextureSlot::Layer,

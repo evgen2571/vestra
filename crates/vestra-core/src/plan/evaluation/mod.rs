@@ -39,6 +39,9 @@ pub struct EvaluatedLayer {
     /// reclassifying tracks or effect parameters.
     pub content_dependency: TemporalDependency,
     pub source: EvaluatedSource,
+    /// Frame-local Layer presentation state. Source variants contain only
+    /// source-local content and evaluation data.
+    pub transform: Transform2D,
     pub opacity: f64,
     /// Ordered local effect chain. Image effects consume and produce complete
     /// surfaces, so its order is never inferred or rearranged by a backend.
@@ -56,7 +59,6 @@ pub enum EvaluatedSource {
         crop: Crop,
         sizing: CompiledSizing,
         cacheable_crop: bool,
-        transform: Transform2D,
     },
     SolidColor {
         colour: [u8; 4],
@@ -86,7 +88,6 @@ pub enum EvaluatedSource {
     },
     Group {
         composition: EvaluatedComposition,
-        transform: Transform2D,
     },
 }
 
@@ -189,7 +190,14 @@ fn evaluate_layers(
         if opacity <= 0.0 {
             continue;
         }
-        let mut source = match &layer.source {
+        let mut transform = transform::evaluate(
+            layer,
+            relative,
+            root_project_time,
+            context,
+            &mut evaluated_track_count,
+        )?;
+        let source = match &layer.source {
             CompiledVisualSource::Image {
                 asset_index,
                 crop,
@@ -202,13 +210,6 @@ fn evaluate_layers(
                     crop: crop.evaluate(relative),
                     sizing: sizing.clone(),
                     cacheable_crop: *cacheable_crop,
-                    transform: transform::evaluate(
-                        layer,
-                        relative,
-                        root_project_time,
-                        context,
-                        &mut evaluated_track_count,
-                    )?,
                 }
             }
             CompiledVisualSource::SolidColor { colour } => {
@@ -272,13 +273,6 @@ fn evaluate_layers(
                     composition: EvaluatedComposition {
                         layers: nested_layers,
                     },
-                    transform: transform::evaluate(
-                        layer,
-                        relative,
-                        root_project_time,
-                        context,
-                        &mut evaluated_track_count,
-                    )?,
                 }
             }
         };
@@ -351,9 +345,7 @@ fn evaluate_layers(
                 }
             }
         }
-        if let EvaluatedSource::Image { transform, .. } | EvaluatedSource::Group { transform, .. } =
-            &mut source
-        {
+        if source.supports_direct_transform() {
             for effect in &effects {
                 if let EvaluatedEffect::CameraShake {
                     local_time,
@@ -367,7 +359,7 @@ fn evaluate_layers(
                 } = effect
                 {
                     crate::camera_shake::apply(
-                        transform,
+                        &mut transform,
                         *local_time,
                         *position_amount,
                         *rotation_radians,
@@ -384,6 +376,7 @@ fn evaluate_layers(
             compiled_layer_index: layer.compiled_identity,
             content_dependency: layer.content_dependency,
             source,
+            transform,
             opacity,
             colour_transform: ColourTransform::from_effects(effects.clone()),
             effects,
@@ -402,5 +395,14 @@ fn sample_root_time(
         current_root_time.saturating_add(sample_local_time - current_local_time)
     } else {
         current_root_time.saturating_sub(current_local_time - sample_local_time)
+    }
+}
+
+impl EvaluatedSource {
+    /// Whether Layer transform presentation is applied directly to this
+    /// source. Sources that need an adapter keep that decision centralized.
+    #[must_use]
+    const fn supports_direct_transform(&self) -> bool {
+        matches!(self, Self::Image { .. } | Self::Group { .. })
     }
 }

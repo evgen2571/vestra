@@ -49,3 +49,17 @@ def test_transition_ownership_is_atomic() -> None:
     with pytest.raises(AuthoringError):
         project.transitions.add_transition(outgoing=outgoing, incoming=outgoing, start=0, duration=1, definition=definition)
     assert project.transitions.items == ()
+
+
+def test_builder_transitions_use_a_shared_endpoint_contract() -> None:
+    project, outgoing, incoming = builder()
+    placement = project.transitions.add_transition(
+        outgoing=outgoing,
+        incoming=incoming,
+        start=0,
+        duration=1,
+        definition=vestra.Crossfade().to_canonical(),
+    )
+
+    assert placement.outgoing is outgoing
+    assert placement.incoming is incoming

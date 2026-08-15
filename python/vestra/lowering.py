@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from .authoring.assets import AudioAsset, ImageAsset
 from .authoring.builder import ProjectBuilder
-from .authoring.clips import GroupClip, ImageClip, VisualClip
+from .authoring.clips import GroupClip, ImageClip, TransitionCapableClip, VisualClip
 from .authoring.values import BlendMode, Color as AuthoringColor
 from .sources import Color, Image, ParticleSystem, Source, Spectrum2D
 from .audio import AudioEffectStack, AudioTimeline
@@ -249,8 +249,8 @@ class LoweringContext:
     ) -> None:
         collection = self.builder.transitions if target is None else target.transitions
         for placement in transitions.items:
-            outgoing = cast(ImageClip | GroupClip, self.layer_clips[placement.outgoing])
-            incoming = cast(ImageClip | GroupClip, self.layer_clips[placement.incoming])
+            outgoing = cast(TransitionCapableClip, self.layer_clips[placement.outgoing])
+            incoming = cast(TransitionCapableClip, self.layer_clips[placement.incoming])
             collection.add_transition(
                 outgoing=outgoing,
                 incoming=incoming,

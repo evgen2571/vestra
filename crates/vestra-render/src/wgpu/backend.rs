@@ -866,7 +866,7 @@ fn encode_parameters(
                     ..LayerParameters::zeroed()
                 })?;
             }
-            GpuOperation::RenderImageLayer {
+            GpuOperation::RenderRasterLayer {
                 layer_index,
                 source_asset_index,
                 ..
@@ -874,14 +874,14 @@ fn encode_parameters(
                 let EvaluatedSource::Image {
                     crop,
                     sizing,
-                    transform,
                     cacheable_crop,
                     ..
                 } = &plan.layers[*layer_index].source
                 else {
                     unreachable!("image frame operation must reference image source")
                 };
-                let (width, height) = sources.dimensions[*source_asset_index];
+                let intrinsic = sources.textures[*source_asset_index].intrinsic_size;
+                let (width, height) = (intrinsic.width, intrinsic.height);
                 arena.push(&parameters::image(
                     frame,
                     width,
@@ -889,14 +889,13 @@ fn encode_parameters(
                     *crop,
                     *cacheable_crop,
                     sizing,
-                    *transform,
+                    plan.layers[*layer_index].transform,
                     1.0,
                     crate::plan::ColourTransform::default(),
                 ))?;
             }
             GpuOperation::RenderSurfaceLayer { layer_index, .. } => {
-                let crate::plan::EvaluatedSource::Group { transform, .. } =
-                    &plan.layers[*layer_index].source
+                let crate::plan::EvaluatedSource::Group { .. } = &plan.layers[*layer_index].source
                 else {
                     unreachable!("surface frame operation must reference a Group source")
                 };
@@ -906,7 +905,7 @@ fn encode_parameters(
                 // ApplyEffect.
                 arena.push(&parameters::surface(
                     frame,
-                    *transform,
+                    plan.layers[*layer_index].transform,
                     crate::plan::ColourTransform::default(),
                 ))?;
             }

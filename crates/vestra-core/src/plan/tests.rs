@@ -777,33 +777,27 @@ fn camera_shake_targets_group_transform_and_preserves_child_transform() {
     let shaken = compile_project(with_shake);
     let plain_frame = evaluate(&plain, &[super::ScheduledItem(0)], 500_000_000).expect("frame");
     let shaken_frame = evaluate(&shaken, &[super::ScheduledItem(0)], 500_000_000).expect("frame");
+    let plain_transform = plain_frame.layers[0].transform;
     let super::EvaluatedSource::Group {
         composition: plain_composition,
-        transform: plain_transform,
     } = &plain_frame.layers[0].source
     else {
         panic!("expected plain Group");
     };
+    let shaken_transform = shaken_frame.layers[0].transform;
     let super::EvaluatedSource::Group {
         composition: shaken_composition,
-        transform: shaken_transform,
     } = &shaken_frame.layers[0].source
     else {
         panic!("expected shaken Group");
     };
     assert_ne!(plain_transform.position, shaken_transform.position);
-    let super::EvaluatedSource::Image {
-        transform: plain_child_transform,
-        ..
-    } = &plain_composition.layers[0].source
-    else {
+    let plain_child_transform = plain_composition.layers[0].transform;
+    let super::EvaluatedSource::Image { .. } = &plain_composition.layers[0].source else {
         panic!("expected plain Image child");
     };
-    let super::EvaluatedSource::Image {
-        transform: shaken_child_transform,
-        ..
-    } = &shaken_composition.layers[0].source
-    else {
+    let shaken_child_transform = shaken_composition.layers[0].transform;
+    let super::EvaluatedSource::Image { .. } = &shaken_composition.layers[0].source else {
         panic!("expected shaken Image child");
     };
     assert_eq!(plain_child_transform, shaken_child_transform);

@@ -8,10 +8,10 @@ from collections.abc import Collection
 from typing import Self
 
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
-from .clips import GroupClip, ImageClip
+from .clips import TransitionCapableClip
 from .errors import AuthoringError
 
-Clip = ImageClip | GroupClip
+Clip = TransitionCapableClip
 
 
 def _start(value: int | float) -> float:
@@ -116,8 +116,8 @@ class TransitionCollection:
 
     def add_transition(self, *, outgoing: Clip, incoming: Clip, start: int | float, duration: int | float,
                        definition: TransitionDefinition | Mapping[str, object], id: str | None = None) -> TransitionPlacement:
-        if not isinstance(outgoing, ImageClip | GroupClip) or not isinstance(incoming, ImageClip | GroupClip):
-            raise TypeError("outgoing and incoming must be ImageClip or GroupClip")
+        if not isinstance(outgoing, TransitionCapableClip) or not isinstance(incoming, TransitionCapableClip):
+            raise TypeError("outgoing and incoming must support direct transitions")
         _require_owner(self._owner, outgoing._owner)
         _require_owner(self._owner, incoming._owner)
         if outgoing not in self._clips or incoming not in self._clips:

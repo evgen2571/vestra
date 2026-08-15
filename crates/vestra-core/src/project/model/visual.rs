@@ -451,6 +451,21 @@ pub enum VisualSource {
     Group(Group),
 }
 
+impl VisualSource {
+    /// Whether ordinary Layer presentation transform tracks can be applied
+    /// directly to this source without an adapter.
+    #[must_use]
+    pub const fn supports_direct_transform(&self) -> bool {
+        matches!(self, Self::Image { .. } | Self::Group(_))
+    }
+
+    /// Whether this source may be used as a direct transition endpoint.
+    #[must_use]
+    pub const fn supports_direct_transition_endpoint(&self) -> bool {
+        self.supports_direct_transform()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Spectrum2D {

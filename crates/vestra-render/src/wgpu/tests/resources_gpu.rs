@@ -30,6 +30,10 @@ fn static_frame(
             .map(|compiled_layer_index| EvaluatedLayer {
                 compiled_layer_index,
                 content_dependency: TemporalDependency::Static,
+                transform: crate::animation::Transform2D::identity(
+                    crate::domain::Point { x: 0.5, y: 0.5 },
+                    crate::domain::Point { x: 0.5, y: 0.5 },
+                ),
                 source: EvaluatedSource::SolidColor {
                     colour: [30, 60, 90, 255],
                 },
@@ -64,6 +68,10 @@ fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available
         layers: vec![EvaluatedLayer {
             compiled_layer_index: 99,
             content_dependency: TemporalDependency::Static,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [30, 60, 90, 255],
             },
@@ -116,6 +124,10 @@ fn gpu_in_flight_static_cache_population_reserves_one_key_when_an_adapter_is_ava
         layers: vec![EvaluatedLayer {
             compiled_layer_index: 101,
             content_dependency: TemporalDependency::Static,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [30, 60, 90, 255],
             },

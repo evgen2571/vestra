@@ -444,10 +444,10 @@ fn preparation_evaluates_bass_scale_rms_glow_and_high_band_chromatic_reference_t
         .iter()
         .find(|layer| layer.compiled_layer_index == 0)
         .expect("reference layer is active");
-    let transform = match &layer.source {
-        EvaluatedSource::Image { transform, .. } => transform,
-        source => panic!("expected image reference layer, found {source:?}"),
+    let EvaluatedSource::Image { .. } = &layer.source else {
+        panic!("expected image reference layer, found {:?}", layer.source);
     };
+    let transform = &layer.transform;
     let bass_value = prepared
         .scalar_signals()
         .get(bass_id)

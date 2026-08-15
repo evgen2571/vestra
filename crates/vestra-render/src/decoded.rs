@@ -17,7 +17,7 @@ use crate::{
 
 /// Decoded source bytes shared by all render backends for one render.
 pub struct DecodedAssets {
-    images: Vec<RgbaImage>,
+    images: Vec<Arc<RgbaImage>>,
     stats: PreparationStats,
     timings: PreparationTimings,
 }
@@ -99,7 +99,7 @@ impl DecodedAssets {
                     "",
                 ));
             }
-            decoded.push(image);
+            decoded.push(Arc::new(image));
         }
         Ok(Arc::new(Self {
             stats: PreparationStats {
@@ -119,7 +119,12 @@ impl DecodedAssets {
 
     #[must_use]
     pub fn image(&self, asset: usize) -> &RgbaImage {
-        &self.images[asset]
+        self.images[asset].as_ref()
+    }
+
+    #[must_use]
+    pub fn image_resource(&self, asset: usize) -> Arc<RgbaImage> {
+        Arc::clone(&self.images[asset])
     }
 
     #[must_use]

@@ -36,20 +36,18 @@ pub(crate) fn draw_layer(
             crop,
             sizing,
             cacheable_crop,
-            transform,
         } => {
-            let (original_width, original_height) = {
-                let original = assets.image(*asset_index);
-                (original.width(), original.height())
-            };
+            let prepared = assets.raster_source(*asset_index);
+            let intrinsic = prepared.intrinsic_size();
+            let (original_width, original_height) = (intrinsic.width, intrinsic.height);
             let (source, resolved_cacheable_crop) = if *cacheable_crop {
                 if let Some(source) = assets.crop(*asset_index, *crop) {
                     (source, true)
                 } else {
-                    (assets.image(*asset_index), false)
+                    (prepared.pixels(), false)
                 }
             } else {
-                (assets.image(*asset_index), false)
+                (prepared.pixels(), false)
             };
             let resolved = geometry::resolve_image_geometry(
                 original_width,
@@ -57,11 +55,11 @@ pub(crate) fn draw_layer(
                 *crop,
                 resolved_cacheable_crop,
                 sizing,
-                *transform,
+                layer.transform,
                 canvas.width(),
                 canvas.height(),
             );
-            if transform.is_valid() {
+            if layer.transform.is_valid() {
                 let started = profiling_enabled.then(std::time::Instant::now);
                 draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
                 if let Some(started) = started {

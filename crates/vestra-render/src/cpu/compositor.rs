@@ -123,15 +123,11 @@ fn compose_layers(
     stats: &mut ComposeStats,
 ) {
     for layer in layers {
-        if let EvaluatedSource::Group {
-            composition,
-            transform,
-        } = &layer.source
-        {
+        if let EvaluatedSource::Group { composition } = &layer.source {
             render_group(
                 layer,
                 composition,
-                *transform,
+                layer.transform,
                 width,
                 height,
                 canvas,
@@ -478,6 +474,7 @@ mod tests {
             source: EvaluatedSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },
+            transform: identity_transform(),
             opacity,
             effects: Vec::new(),
             colour_transform: ColourTransform::default(),
@@ -551,10 +548,10 @@ mod tests {
                 },
                 sizing: crate::plan::CompiledSizing::Fit,
                 cacheable_crop: false,
-                transform: Transform2D {
-                    position,
-                    ..identity_transform()
-                },
+            },
+            transform: Transform2D {
+                position,
+                ..identity_transform()
             },
             opacity: 1.0,
             effects: Vec::new(),
@@ -565,9 +562,7 @@ mod tests {
 
     fn scaled_image_layer(index: usize, position: crate::domain::Point) -> EvaluatedLayer {
         let mut layer = image_layer(index, position);
-        if let EvaluatedSource::Image { transform, .. } = &mut layer.source {
-            transform.scale = crate::domain::Point { x: 0.35, y: 0.35 };
-        }
+        layer.transform.scale = crate::domain::Point { x: 0.35, y: 0.35 };
         layer
     }
 
@@ -576,6 +571,7 @@ mod tests {
             compiled_layer_index: index,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::SolidColor { colour },
+            transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
             colour_transform: ColourTransform::default(),
@@ -594,8 +590,8 @@ mod tests {
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::Group {
                 composition: EvaluatedComposition { layers: children },
-                transform,
             },
+            transform,
             opacity: 1.0,
             colour_transform: ColourTransform::from_effects(effects.clone()),
             effects,
@@ -779,6 +775,7 @@ mod tests {
             compiled_layer_index: index,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::SolidColor { colour },
+            transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
             colour_transform: ColourTransform::default(),
@@ -803,11 +800,11 @@ mod tests {
                                     composition: EvaluatedComposition {
                                         layers: vec![child(53, [0, 0, 255, 128])],
                                     },
-                                    transform: Transform2D::identity(
-                                        crate::domain::Point { x: 0.5, y: 0.5 },
-                                        crate::domain::Point { x: 0.5, y: 0.5 },
-                                    ),
                                 },
+                                transform: Transform2D::identity(
+                                    crate::domain::Point { x: 0.5, y: 0.5 },
+                                    crate::domain::Point { x: 0.5, y: 0.5 },
+                                ),
                                 opacity: 1.0,
                                 effects: Vec::new(),
                                 colour_transform: ColourTransform::default(),
@@ -815,11 +812,11 @@ mod tests {
                             },
                         ],
                     },
-                    transform: Transform2D::identity(
-                        crate::domain::Point { x: 0.5, y: 0.5 },
-                        crate::domain::Point { x: 0.5, y: 0.5 },
-                    ),
                 },
+                transform: Transform2D::identity(
+                    crate::domain::Point { x: 0.5, y: 0.5 },
+                    crate::domain::Point { x: 0.5, y: 0.5 },
+                ),
                 opacity: 0.5,
                 effects: Vec::new(),
                 colour_transform: ColourTransform::default(),
@@ -876,6 +873,7 @@ mod tests {
                 source: EvaluatedSource::SolidColor {
                     colour: [80, 110, 160, 255],
                 },
+                transform: identity_transform(),
                 opacity: 1.0,
                 effects: Vec::new(),
                 colour_transform: ColourTransform::default(),
@@ -1102,6 +1100,7 @@ mod tests {
                 time_nanos: 0,
                 appearance: crate::plan::EvaluatedParticleAppearance::default(),
             },
+            transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
             colour_transform: ColourTransform::default(),
@@ -1136,6 +1135,7 @@ mod tests {
                 gradient: None,
                 colour: [30, 180, 240, 255],
             },
+            transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
             colour_transform: ColourTransform::default(),
@@ -1400,6 +1400,7 @@ mod tests {
             source: EvaluatedSource::SolidColor {
                 colour: [0, 0, 0, 255],
             },
+            transform: identity_transform(),
             opacity: 1.0,
             effects: vec![EvaluatedEffect::Brightness { amount: 0.1 }],
             colour_transform: ColourTransform::default(),

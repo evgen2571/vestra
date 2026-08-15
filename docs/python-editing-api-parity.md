@@ -20,7 +20,7 @@ intended to prevent a feature from disappearing behind the new recommended
 | Effects | `Layer.effects`, `EffectStack` | Native effect catalog and renderer | High-level. Layer and project scopes are checked; clip-only effects remain clip-only. |
 | Signals and audio reactivity | `project.audio.signal`, `ScalarSignal`, `.bind()` | Native master analysis and modifiers | High-level. `rms`, `peak`, and band energy are available; whole-scale and independent position/scale component bindings lower to native modifiers; analysis occurs during prepare. |
 | Audio tracks and clips | `AudioTimeline`, `AudioTrack`, `AudioClip` | Canonical audio mixer and FFmpeg | High-level. Gain, mute, trims, fades, automation, crossfade, and supported EQ/bass/speed effects are preserved. |
-| Transitions | `Composition.transitions.add()` | Canonical transition compiler and renderer | High-level with limits. Root composition only. Direct native endpoints are Image/Group; current Color/Particle/Spectrum paths use the capability adapter where valid. Nested transitions are rejected. |
+| Transitions | `Composition.transitions.add()` | Canonical transition compiler and renderer | High-level with limits. Root and nested compositions use the same generic placement collection. Direct native endpoints are Image/Group; current Color/Particle/Spectrum paths use the capability adapter where valid. |
 | Cinematic presets | `Layer.presets`, `Preset` | ImageClip presets and native compiler | High-level. Image-only and at most one preset per layer. |
 | Flashes | `Project.flashes`, `Flash` | Root visual overlays | High-level. Root-only. |
 | Post-effects | `Project.post_effects` | Root post-effect collection | High-level. Root-only; native scope rules are retained. |

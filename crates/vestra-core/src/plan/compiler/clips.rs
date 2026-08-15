@@ -290,6 +290,20 @@ fn compile_group(
             effective_visible_window,
         )?);
     }
+    let indices = layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| (layer.id.clone(), index))
+        .collect();
+    super::transitions::compile_transition_placements_with_interner(
+        &group.transitions,
+        &indices,
+        &mut layers,
+        scalar_signal_interner,
+    )?;
+    compilation.compiled_transition_association_count = compilation
+        .compiled_transition_association_count
+        .saturating_add(group.transitions.len() as u64 * 2);
     let composition_end_frame =
         time::first_frame_at_or_after(duration_nanos, validated.frame_rate)?;
     let visible_start_frame =

@@ -187,9 +187,19 @@ pub(crate) fn validate_placement(
 }
 
 /// Validates a generic placement set and its per-layer transition schedule.
+#[cfg(test)]
 pub(crate) fn validate_placement_set(
     placements: &[crate::project::TransitionPlacement],
     maximum_keyframes: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    validate_placement_set_at(placements, maximum_keyframes, "/visual", errors);
+}
+
+fn validate_placement_set_at(
+    placements: &[crate::project::TransitionPlacement],
+    maximum_keyframes: usize,
+    scope_path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
     let mut ids = BTreeSet::new();
@@ -200,7 +210,7 @@ pub(crate) fn validate_placement_set(
     let mut scale: ChannelRanges<'_, crate::project::Point> = std::collections::BTreeMap::new();
     let mut rotation: ChannelRanges<'_, f64> = std::collections::BTreeMap::new();
     for (index, placement) in placements.iter().enumerate() {
-        let path = format!("/visual/transitions/{index}");
+        let path = format!("{scope_path}/transitions/{index}");
         validate_placement(placement, &path, errors);
         if !ids.insert(placement.id.as_str()) {
             errors.push(Diagnostic::error(
@@ -390,15 +400,15 @@ pub(crate) fn validate_placement_set(
                     "MVP-TRANSITION-OVERLAP",
                     Category::Semantic,
                     "transition placements overlap on a layer",
-                    format!("/visual/transitions/{}/start", pair[1].2),
+                    format!("{scope_path}/transitions/{}/start", pair[1].2),
                 ));
             }
         }
     }
-    validate_touching_channels(opacity, errors);
-    validate_touching_channels(position, errors);
-    validate_touching_channels(scale, errors);
-    validate_touching_channels(rotation, errors);
+    validate_touching_channels(opacity, scope_path, errors);
+    validate_touching_channels(position, scope_path, errors);
+    validate_touching_channels(scale, scope_path, errors);
+    validate_touching_channels(rotation, scope_path, errors);
 }
 
 type ChannelRange<T> = (f64, f64, T, T, usize);
@@ -406,6 +416,7 @@ type ChannelRanges<'a, T> = std::collections::BTreeMap<&'a str, Vec<ChannelRange
 
 fn validate_touching_channels<T: Copy + PartialEq>(
     channels: ChannelRanges<'_, T>,
+    scope_path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
     for mut values in channels.into_values() {
@@ -420,7 +431,7 @@ fn validate_touching_channels<T: Copy + PartialEq>(
                     "MVP-TRANSITION-BOUNDARY",
                     Category::Semantic,
                     "touching transition channel values must be continuous",
-                    format!("/visual/transitions/{}/definition", pair[1].4),
+                    format!("{scope_path}/transitions/{}/definition", pair[1].4),
                 ));
             }
         }
@@ -513,7 +524,7 @@ mod generic_transition_tests {
             frequency: track,
             seed: 1,
             attack: 0.0,
-            decay: 0.0,
+            decay: 1.0,
         }
     }
 
@@ -882,16 +893,76 @@ pub(super) fn validate(
     maximum_effects: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
-    let clips: std::collections::BTreeMap<&str, &crate::project::Clip> = visual
-        .clips
+    validate_scope(
+        &visual.transitions,
+        &visual.clips,
+        "/visual",
+        maximum_keyframes,
+        maximum_effects,
+        errors,
+    );
+    validate_nested_groups(
+        &visual.clips,
+        "/visual/clips",
+        0,
+        maximum_keyframes,
+        maximum_effects,
+        errors,
+    );
+}
+
+fn validate_nested_groups(
+    clips: &[crate::project::Clip],
+    path: &str,
+    group_depth: usize,
+    maximum_keyframes: usize,
+    maximum_effects: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    for (index, clip) in clips.iter().enumerate() {
+        if let crate::project::VisualSource::Group(group) = &clip.source {
+            let child_depth = group_depth.saturating_add(1);
+            if child_depth > super::visual::MAX_GROUP_NESTING_DEPTH {
+                continue;
+            }
+            let source_path = format!("{path}/{index}/source");
+            validate_scope(
+                &group.transitions,
+                &group.clips,
+                &source_path,
+                maximum_keyframes,
+                maximum_effects,
+                errors,
+            );
+            validate_nested_groups(
+                &group.clips,
+                &format!("{source_path}/clips"),
+                child_depth,
+                maximum_keyframes,
+                maximum_effects,
+                errors,
+            );
+        }
+    }
+}
+
+fn validate_scope(
+    placements: &[crate::project::TransitionPlacement],
+    scope_clips: &[crate::project::Clip],
+    scope_path: &str,
+    maximum_keyframes: usize,
+    maximum_effects: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
+    let clips: std::collections::BTreeMap<&str, &crate::project::Clip> = scope_clips
         .iter()
         .map(|clip| (clip.id.as_str(), clip))
         .collect();
-    validate_placement_set(&visual.transitions, maximum_keyframes, errors);
+    validate_placement_set_at(placements, maximum_keyframes, scope_path, errors);
     let mut affected: std::collections::BTreeMap<&str, Vec<(f64, f64)>> =
         std::collections::BTreeMap::new();
-    for (index, placement) in visual.transitions.iter().enumerate() {
-        let path = format!("/visual/transitions/{index}");
+    for (index, placement) in placements.iter().enumerate() {
+        let path = format!("{scope_path}/transitions/{index}");
         let end = placement.start + placement.duration;
         for (name, endpoint, presentation) in [
             (
@@ -973,7 +1044,7 @@ pub(super) fn validate(
                 "MVP-TRANSITION-CONFLICT",
                 Category::Semantic,
                 format!("clip '{clip}' has overlapping transitions"),
-                "/visual/transitions",
+                format!("{scope_path}/transitions"),
             ));
         }
     }

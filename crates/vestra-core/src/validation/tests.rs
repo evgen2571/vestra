@@ -407,6 +407,52 @@ fn group_depth_boundaries_are_explicit() {
 }
 
 #[test]
+fn over_depth_groups_with_transitions_use_the_bounded_group_walk() {
+    let mut nested = json!({
+        "id": "leaf",
+        "source": {"type": "group", "clips": []},
+        "start": 0.0,
+        "duration": 5.0,
+        "layer": 0,
+        "opacity": {"base_value": 1.0}
+    });
+    for depth in 0..40 {
+        let nested_id = format!("nested-{depth}");
+        let peer_id = format!("peer-{depth}");
+        let peer = json!({
+            "id": peer_id,
+            "source": {"type": "group", "clips": []},
+            "start": 0.0,
+            "duration": 5.0,
+            "layer": 1,
+            "opacity": {"base_value": 1.0}
+        });
+        let mut placement = crossfade("local-transition", &nested_id, &peer_id);
+        placement.start = 0.0;
+        nested = json!({
+            "id": nested_id,
+            "source": {
+                "type": "group",
+                "clips": [nested, peer],
+                "transitions": [serde_json::to_value(placement).expect("placement")]
+            },
+            "start": 0.0,
+            "duration": 5.0,
+            "layer": 0,
+            "opacity": {"base_value": 1.0}
+        });
+    }
+
+    let report = validate(&grouped_project(vec![nested]), ResourceLimits::default());
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "MVP-GROUP-DEPTH")
+    );
+}
+
+#[test]
 fn nested_groups_count_against_the_clip_limit() {
     let project = grouped_project(vec![group_clip(
         "group",
@@ -435,6 +481,7 @@ fn nested_particle_validation_reuses_canonical_rules() {
     let particle = project.visual.clips[0].clone();
     project.visual.clips[0].source = crate::project::VisualSource::Group(crate::project::Group {
         clips: vec![particle],
+        transitions: vec![],
     });
     let crate::project::VisualSource::Group(group) = &mut project.visual.clips[0].source else {
         panic!("group source")

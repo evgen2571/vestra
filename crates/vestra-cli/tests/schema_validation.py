@@ -95,6 +95,14 @@ group["visual"]["clips"] = [{
     "layer": 0,
     "opacity": {"base_value": 1},
 }]
+group["visual"]["clips"][0]["source"]["transitions"] = [{
+    "id": "nested-transition",
+    "outgoing": "child",
+    "incoming": "child-2",
+    "start": 2,
+    "duration": 1,
+    "definition": copy.deepcopy(project["visual"]["transitions"][0]["definition"]),
+}]
 assert not errors(group), "nested Group source must validate"
 group_with_transform = copy.deepcopy(group)
 group_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]

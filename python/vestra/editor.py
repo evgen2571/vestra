@@ -417,7 +417,7 @@ class Composition:
 
     @property
     def transitions(self) -> TransitionCollection:
-        """Stable ordered transitions between sibling root layers."""
+        """Stable ordered transitions between sibling layers in this composition."""
         return self._transitions
 
     def add(

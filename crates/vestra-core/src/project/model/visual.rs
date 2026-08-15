@@ -417,8 +417,8 @@ pub struct Clip {
 
 /// An isolated nested composition whose child clip times and layer values are
 /// local to this Group. Groups inherit the containing canvas dimensions and
-/// conceptually render into a transparent RGBA surface. V1 Groups do not
-/// contain transitions, flashes, or post effects. A Group's explicit parent
+/// conceptually render into a transparent RGBA surface. Groups do not contain
+/// flashes or post effects. A Group's explicit parent
 /// interval clips descendants without rewriting their authored local starts or
 /// durations. Child ordering is local to the Group, using the existing layer,
 /// start, and ID ordering contract. Later rendering applies the Group's
@@ -427,6 +427,8 @@ pub struct Clip {
 #[serde(deny_unknown_fields)]
 pub struct Group {
     pub clips: Vec<Clip>,
+    #[serde(default)]
+    pub transitions: Vec<super::TransitionPlacement>,
 }
 
 const fn default_visible() -> bool {

@@ -590,8 +590,6 @@ class TransitionCollection:
     ) -> TransitionPlacement:
         from .editor import Layer
 
-        if self._composition.parent_layer is not None:
-            raise ValueError("transitions are supported only on the root composition")
         if not isinstance(outgoing, Layer) or not isinstance(incoming, Layer):
             raise TypeError("transition endpoints must be Layer objects")
         if not isinstance(definition, TransitionDefinition):

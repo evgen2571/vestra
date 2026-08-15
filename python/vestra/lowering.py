@@ -148,13 +148,13 @@ class LoweringContext:
     def lower_composition(
         self, composition: Composition, *, scope: tuple[str, ...] = ()
     ) -> list[VisualClip]:
-        if not scope and not self._reserved_root_ids:
+        if not self._reserved_root_ids:
             self._reserved_root_ids = {layer.id for layer in composition.layers}
-            self._transition_endpoints = {
-                endpoint
-                for transition in composition.transitions.items
-                for endpoint in (transition.outgoing, transition.incoming)
-            }
+        self._transition_endpoints.update(
+            endpoint
+            for transition in composition.transitions.items
+            for endpoint in (transition.outgoing, transition.incoming)
+        )
         clips: list[VisualClip] = []
         for layer in composition.layers:
             clips.append(self._lower_layer_parts(layer, scope))
@@ -173,7 +173,7 @@ class LoweringContext:
 
         if isinstance(layer, CompositionLayer):
             children = self.lower_composition(layer.child, scope=(*scope, layer.id))
-            clip: VisualClip = self.builder.add_group_clip(
+            clip = self.builder.add_group_clip(
                 clips=children,
                 start=layer.start,
                 duration=layer.duration,
@@ -182,6 +182,7 @@ class LoweringContext:
                 opacity=layer.opacity.value,
                 id=native_id,
             )
+            self._lower_transitions(layer.child.transitions, clip)
             _lower_presentation(layer, clip, include_transform=True)
             _lower_visual_effects(layer.effects, clip.effects)
             self.layer_clips[layer] = clip
@@ -230,17 +231,7 @@ class LoweringContext:
         self, transitions: TransitionCollection, flashes: FlashCollection
     ) -> None:
         """Lower root transitions and flashes after all endpoint clips exist."""
-        for placement in transitions.items:
-            outgoing = cast(ImageClip | GroupClip, self.layer_clips[placement.outgoing])
-            incoming = cast(ImageClip | GroupClip, self.layer_clips[placement.incoming])
-            self.builder.transitions.add_transition(
-                outgoing=outgoing,
-                incoming=incoming,
-                start=placement.start,
-                duration=placement.duration,
-                definition=placement.definition.to_canonical(),
-                id=placement.id,
-            )
+        self._lower_transitions(transitions)
         for flash in flashes.items:
             self.builder.flashes.add(
                 start=flash.start,
@@ -251,6 +242,22 @@ class LoweringContext:
                 fade_out=flash.fade_out,
                 layer=flash.layer,
                 id=flash.id,
+            )
+
+    def _lower_transitions(
+        self, transitions: TransitionCollection, target: GroupClip | None = None
+    ) -> None:
+        collection = self.builder.transitions if target is None else target.transitions
+        for placement in transitions.items:
+            outgoing = cast(ImageClip | GroupClip, self.layer_clips[placement.outgoing])
+            incoming = cast(ImageClip | GroupClip, self.layer_clips[placement.incoming])
+            collection.add_transition(
+                outgoing=outgoing,
+                incoming=incoming,
+                start=placement.start,
+                duration=placement.duration,
+                definition=placement.definition.to_canonical(),
+                id=placement.id,
             )
 
     def image_asset(self, source: Image) -> ImageAsset:

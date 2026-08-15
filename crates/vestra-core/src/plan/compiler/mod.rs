@@ -117,7 +117,9 @@ pub fn compile(
         &mut layers,
         &mut scalar_signal_interner,
     )?;
-    compilation.compiled_transition_association_count = project.visual.transitions.len() as u64 * 2;
+    compilation.compiled_transition_association_count = compilation
+        .compiled_transition_association_count
+        .saturating_add(project.visual.transitions.len() as u64 * 2);
     for flash in &project.visual.flashes {
         layers.push(flashes::compile(
             flash,

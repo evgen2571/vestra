@@ -65,7 +65,7 @@ from .audio import (
     ParametricEq,
     PlaybackSpeed,
 )
-from .sources import Circle, Ellipse, Image, Line, Polygon, Rectangle, RoundedRectangle, Shape, Source
+from .sources import Circle, Ellipse, Image, Line, Polygon, Rectangle, Shape, Source
 from .flashes import Flash, FlashCollection
 from .presets import Preset, PresetCollection
 from .transitions import (
@@ -152,7 +152,6 @@ __all__ = [
     "Image",
     "Shape",
     "Rectangle",
-    "RoundedRectangle",
     "Ellipse",
     "Circle",
     "Line",

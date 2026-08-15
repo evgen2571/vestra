@@ -247,7 +247,6 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
         matches!(
             &layer.source,
             crate::plan::CompiledVisualSource::Spectrum2D { .. }
-                | crate::plan::CompiledVisualSource::Shape { .. }
                 | crate::plan::CompiledVisualSource::ParticleSystem(_)
         ),
         matches!(&layer.source, crate::plan::CompiledVisualSource::Group(composition)
@@ -601,6 +600,38 @@ mod tests {
         layer.transform.scale.keyframes.push(Keyframe {
             time: 1,
             value: Point { x: 1.1, y: 1.1 },
+            interpolation: Interpolation::Linear,
+        });
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
+    }
+
+    #[test]
+    fn static_shape_source_is_static_until_layer_presentation_animates() {
+        let mut layer = CompiledLayer {
+            compiled_identity: 0,
+            id: "shape".into(),
+            start_nanos: 0,
+            duration_nanos: 10,
+            start_frame: 0,
+            end_frame: 1,
+            draw_key: crate::plan::DrawKey {
+                layer: 0,
+                start_nanos: 0,
+                id: "shape".into(),
+            },
+            source: crate::plan::CompiledVisualSource::Shape { shape_index: 0 },
+            transform: transform(),
+            transform_contributions: vec![],
+            opacity: scalar(1.0),
+            opacity_contributions: vec![],
+            effects: vec![],
+            blend_mode: crate::project::BlendMode::Normal,
+            content_dependency: TemporalDependency::Static,
+        };
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
+        layer.transform.position.keyframes.push(Keyframe {
+            time: 1,
+            value: Point { x: 0.6, y: 0.5 },
             interpolation: Interpolation::Linear,
         });
         assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);

@@ -12,7 +12,6 @@ from vestra import (
     Polygon,
     Project,
     Rectangle,
-    RoundedRectangle,
 )
 from vestra.effects import Brightness
 
@@ -21,7 +20,7 @@ def test_shape_sources_lower_to_one_canonical_shape_model() -> None:
     project = Project(size=(64, 64), fps=1, duration=1)
     sources = [
         Rectangle(width=20, height=10, fill="#ff0000"),
-        RoundedRectangle(width=20, height=10, corner_radius=2, fill="#00ff00"),
+        Rectangle(width=20, height=10, corner_radius=2, fill="#00ff00"),
         Ellipse(width=20, height=10, fill="#0000ff"),
         Circle(radius=5, fill="#ffffff"),
         Line(start=(-4, 0), end=(4, 0), stroke="#ffffff", stroke_width=2),

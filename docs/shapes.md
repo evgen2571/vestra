@@ -17,7 +17,7 @@ badge = scene.add(
 badge.transform.position.value = (0.5, 0.5)
 ```
 
-The other public primitives are `RoundedRectangle`, `Ellipse`, `Line`, and
-`Polygon`. Shapes are rasterized once during preparation into the shared
+The other public primitives are `Rectangle` with an optional `corner_radius`,
+`Ellipse`, `Line`, and `Polygon`. Shapes are rasterized once during preparation into the shared
 generic raster Source path; Layer transforms and effects are evaluated per
 frame.

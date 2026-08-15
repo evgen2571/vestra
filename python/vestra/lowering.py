@@ -11,7 +11,7 @@ from .authoring.assets import AudioAsset, ImageAsset
 from .authoring.builder import ProjectBuilder
 from .authoring.clips import GroupClip, ImageClip, TransitionCapableClip, VisualClip
 from .authoring.values import BlendMode, Color as AuthoringColor
-from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, RoundedRectangle, Shape, Source, Spectrum2D
+from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D
 from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
@@ -502,7 +502,7 @@ register_source(
 register_source(
     Color, _lower_color, SourceCapabilities(supports_transition_adapter=True)
 )
-for _shape_type in (Shape, Rectangle, RoundedRectangle, Ellipse, Circle, Line, Polygon):
+for _shape_type in (Shape, Rectangle, Ellipse, Circle, Line, Polygon):
     register_source(
         _shape_type,
         _lower_shape,

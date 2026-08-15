@@ -81,6 +81,7 @@ __all__ = [
     "Interpolation",
     "ImageAsset",
     "ImageClip",
+    "ShapeClip",
     "GroupClip",
     "ParticleSystemClip", "ParticleSystem", "PointEmitter", "RectangleEmitter", "CircleEmitter",
     "ParticleBurst", "ScalarRange", "ParticlePrimitive", "ParticleBlendMode",

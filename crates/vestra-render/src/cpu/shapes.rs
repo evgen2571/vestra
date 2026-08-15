@@ -1,7 +1,7 @@
 //! Deterministic CPU preparation of source-local procedural shapes.
 
 use image::{Rgba, RgbaImage};
-use tiny_skia::{Color, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{Color, LineCap, LineJoin, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
 
 use vestra_core::project::{Point, ShapeGeometry, ShapeSource, parse_colour};
 
@@ -55,6 +55,8 @@ pub(crate) fn prepare(source: &ShapeSource) -> PreparedShape {
         paint.anti_alias = true;
         let stroke_style = Stroke {
             width: source.stroke_width as f32,
+            line_cap: LineCap::Butt,
+            line_join: LineJoin::Bevel,
             ..Stroke::default()
         };
         pixmap.stroke_path(&path, &paint, &stroke_style, Transform::identity(), None);
@@ -253,6 +255,26 @@ mod tests {
     }
 
     #[test]
+    fn semi_transparent_stroke_is_unpremultiplied_once() {
+        let prepared = prepare(&ShapeSource {
+            geometry: ShapeGeometry::Rectangle {
+                width: 10.0,
+                height: 10.0,
+                corner_radius: 0.0,
+            },
+            fill: None,
+            stroke: Some("#ff000080".to_owned()),
+            stroke_width: 2.0,
+        });
+        assert!(
+            prepared
+                .pixels
+                .pixels()
+                .any(|pixel| pixel[3] > 0 && pixel[3] < 255 && pixel[0] == 255)
+        );
+    }
+
+    #[test]
     fn stroked_rectangle_expands_logical_bounds() {
         let prepared = prepare(&ShapeSource {
             geometry: ShapeGeometry::Rectangle {
@@ -268,5 +290,43 @@ mod tests {
         assert_eq!(prepared.intrinsic_size.offset_y, -1.0);
         assert_eq!(prepared.intrinsic_size.width, 12);
         assert_eq!(prepared.intrinsic_size.height, 8);
+    }
+
+    #[test]
+    fn acute_stroked_polygon_uses_bounded_join_inside_prepared_bounds() {
+        let prepared = prepare(&ShapeSource {
+            geometry: ShapeGeometry::Polygon {
+                points: vec![
+                    Point { x: 0.0, y: -100.0 },
+                    Point { x: -20.0, y: 100.0 },
+                    Point { x: 20.0, y: 100.0 },
+                ],
+            },
+            fill: None,
+            stroke: Some("#ffffff".to_owned()),
+            stroke_width: 20.0,
+        });
+        assert_eq!(prepared.intrinsic_size.offset_x, -30.0);
+        assert_eq!(prepared.intrinsic_size.offset_y, -110.0);
+        assert_eq!(prepared.intrinsic_size.width, 60);
+        assert_eq!(prepared.intrinsic_size.height, 220);
+
+        let alpha_bounds = prepared
+            .pixels
+            .enumerate_pixels()
+            .filter(|(_, _, pixel)| pixel[3] != 0)
+            .fold(None::<(u32, u32, u32, u32)>, |bounds, (x, y, _)| {
+                Some(match bounds {
+                    Some((min_x, min_y, max_x, max_y)) => {
+                        (min_x.min(x), min_y.min(y), max_x.max(x), max_y.max(y))
+                    }
+                    None => (x, y, x, y),
+                })
+            })
+            .expect("acute polygon stroke should rasterize");
+        // Bevel joins stay within the half-width expansion, leaving the
+        // prepared raster with a margin beyond the acute vertex.
+        assert!(alpha_bounds.1 > 0);
+        assert!(alpha_bounds.1 < prepared.pixels.height() - 1);
     }
 }

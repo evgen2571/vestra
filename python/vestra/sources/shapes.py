@@ -126,16 +126,6 @@ class Rectangle(Shape):
         return {"type": "shape", "geometry": geometry, **self._canonical_style()}
 
 
-class RoundedRectangle(Rectangle):
-    """Rectangle authoring convenience requiring a corner radius."""
-
-    def __init__(self, *, width: int | float, height: int | float, corner_radius: int | float,
-                 fill: Color | str | None = None, stroke: Color | str | None = None,
-                 stroke_width: int | float = 0.0) -> None:
-        super().__init__(width=width, height=height, corner_radius=corner_radius, fill=fill,
-                         stroke=stroke, stroke_width=stroke_width)
-
-
 class Ellipse(Shape):
     """A source-local ellipse."""
 
@@ -213,4 +203,4 @@ class Polygon(Shape):
         return {"type": "shape", "geometry": {"type": "polygon", "points": [point.to_canonical() for point in self.points]}, **self._canonical_style()}
 
 
-__all__ = ["Shape", "Rectangle", "RoundedRectangle", "Ellipse", "Circle", "Line", "Polygon"]
+__all__ = ["Shape", "Rectangle", "Ellipse", "Circle", "Line", "Polygon"]

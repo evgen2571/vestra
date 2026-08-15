@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Interpolation, Point};
+use super::{Effect, Interpolation, Point};
 
 /// A transition-local track whose progress is mapped to placement time during
 /// compilation. Keyframe interpolation follows ordinary Vestra keyframe
@@ -35,6 +35,8 @@ pub struct TransitionPresentation {
     pub scale_multiplier: Option<NormalizedTrack<Point>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotation_offset_degrees: Option<NormalizedTrack<f64>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<Effect>,
 }
 
 /// Reusable transition presentation behavior independent of endpoints and
@@ -135,6 +137,7 @@ mod generic_transition_tests {
                         },
                     ],
                 }),
+                effects: Vec::new(),
             },
             incoming: TransitionPresentation::default(),
         }

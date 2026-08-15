@@ -2933,6 +2933,12 @@
     "transition_presentation": {
       "additionalProperties": false,
       "properties": {
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/effect"
+          },
+          "type": "array"
+        },
         "opacity": {
           "$ref": "#/$defs/normalized_scalar_track"
         },

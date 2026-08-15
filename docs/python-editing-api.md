@@ -179,13 +179,29 @@ cinematic = CustomTransition(
     ),
 )
 scene.transitions.add(background, incoming, cinematic, start=2.0, duration=1.25)
-scene.transitions.add(incoming, background, cinematic, start=8.0, duration=0.75)
+scene.transitions.add(incoming, background, cinematic, start=4.0, duration=0.75)
 ```
 
-Custom channels currently cover opacity, position offset, scale multiplier, and
-rotation offset. They are compiled into the same schema-version 3 transition
-definition as built-in transitions; transition-local effects are not part of
-this API.
+Transition layers can reuse ordinary effects. Their property keyframes use
+normalized transition time:
+
+```python
+from vestra.effects import GaussianBlur
+
+blur = GaussianBlur(0.0)
+blur.radius.keyframe(0.5, 12.0)
+effectful = CustomTransition(
+    outgoing=TransitionLayer(effects=[blur]),
+)
+```
+
+Custom channels cover opacity, position offset, scale multiplier, rotation
+offset, and existing visual effects. Effect keyframes in a transition layer
+use normalized times from 0.0 to 1.0 and are active only for the placement
+interval. They are compiled into the same schema-version 3 transition
+definition as built-in transitions.
+Authored layer effects remain first in their existing declaration order;
+transition-local effects are appended deterministically for the placement.
 
 Nested composition transitions are rejected. Cinematic presets are image-only
 and layer-owned.

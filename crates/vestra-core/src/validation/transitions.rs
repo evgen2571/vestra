@@ -79,6 +79,8 @@ pub(crate) fn validate_definition(
         && definition.incoming.position_offset.is_none()
         && definition.incoming.scale_multiplier.is_none()
         && definition.incoming.rotation_offset_degrees.is_none()
+        && definition.outgoing.effects.is_empty()
+        && definition.incoming.effects.is_empty()
     {
         errors.push(Diagnostic::error(
             "MVP-TRANSITION-EMPTY",
@@ -92,6 +94,17 @@ pub(crate) fn validate_definition(
         ("incoming", &definition.incoming),
     ] {
         let presentation_path = format!("{path}/{name}");
+        let mut effect_ids = BTreeSet::new();
+        for (index, effect) in presentation.effects.iter().enumerate() {
+            if effect.id().trim().is_empty() || !effect_ids.insert(effect.id()) {
+                errors.push(Diagnostic::error(
+                    "MVP-TRANSITION-EFFECT-ID",
+                    Category::Semantic,
+                    "transition-local effect ids must be non-empty and unique",
+                    format!("{presentation_path}/effects/{index}/id"),
+                ));
+            }
+        }
         if let Some(track) = &presentation.opacity {
             validate_normalized_track(
                 track,
@@ -353,6 +366,21 @@ pub(crate) fn validate_placement_set(
                 ));
             }
         }
+        for (name, effects) in [
+            ("outgoing/effects", &placement.definition.outgoing.effects),
+            ("incoming/effects", &placement.definition.incoming.effects),
+        ] {
+            for (index, effect) in effects.iter().enumerate() {
+                crate::validation::effects::validate_parameters(
+                    effect,
+                    1.0,
+                    &format!("{path}/definition/{name}/{index}"),
+                    maximum_keyframes,
+                    errors,
+                    false,
+                );
+            }
+        }
     }
     for layer_intervals in intervals.values_mut() {
         layer_intervals.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.total_cmp(&b.1)));
@@ -433,8 +461,9 @@ mod generic_transition_tests {
         validate_definition, validate_normalized_track, validate_placement, validate_placement_set,
     };
     use crate::project::{
-        Interpolation, InterpolationName, NormalizedKeyframe, NormalizedTrack, Point,
-        TransitionDefinition, TransitionPlacement, TransitionPresentation,
+        ActiveInterval, Effect, Interpolation, InterpolationName, NormalizedKeyframe,
+        NormalizedTrack, Point, ScalarProperty, Track, TransitionDefinition, TransitionPlacement,
+        TransitionPresentation,
     };
 
     fn keyframe<T>(progress: f64, value: T) -> NormalizedKeyframe<T> {
@@ -461,6 +490,30 @@ mod generic_transition_tests {
                 ..TransitionPresentation::default()
             },
             incoming: TransitionPresentation::default(),
+        }
+    }
+
+    fn camera_shake_with_keyframes(count: usize) -> Effect {
+        let track = ScalarProperty::from_track(Track {
+            base_value: 0.0,
+            keyframes: (0..count)
+                .map(|index| crate::project::Keyframe {
+                    time: (index + 1) as f64 / (count + 1) as f64,
+                    value: 0.0,
+                    interpolation: Interpolation::Named(InterpolationName::Linear),
+                })
+                .collect(),
+        });
+        Effect::CameraShake {
+            id: "shake".into(),
+            timing: ActiveInterval::default(),
+            position_amount: track.clone(),
+            rotation_degrees: track.clone(),
+            scale_amount: track.clone(),
+            frequency: track,
+            seed: 1,
+            attack: 0.0,
+            decay: 0.0,
         }
     }
 
@@ -718,6 +771,56 @@ mod generic_transition_tests {
     }
 
     #[test]
+    fn placement_set_uses_the_configured_keyframe_limit_for_transition_effects() {
+        let placement = TransitionPlacement {
+            id: "configured-limit".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 0.0,
+            duration: 1.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    effects: vec![camera_shake_with_keyframes(1_100)],
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut errors = Vec::new();
+        validate_placement_set(&[placement], 1_200, &mut errors);
+        assert!(
+            !errors
+                .iter()
+                .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
+        );
+
+        let mut errors = Vec::new();
+        validate_placement_set(
+            &[TransitionPlacement {
+                id: "configured-limit-low".into(),
+                outgoing: "a".into(),
+                incoming: "b".into(),
+                start: 0.0,
+                duration: 1.0,
+                definition: TransitionDefinition {
+                    outgoing: TransitionPresentation {
+                        effects: vec![camera_shake_with_keyframes(1_100)],
+                        ..Default::default()
+                    },
+                    incoming: TransitionPresentation::default(),
+                },
+            }],
+            1_000,
+            &mut errors,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
+        );
+    }
+
+    #[test]
     fn placement_set_rejects_duplicate_ids() {
         let first = TransitionPlacement {
             id: "duplicate".into(),
@@ -776,6 +879,7 @@ mod generic_transition_tests {
 pub(super) fn validate(
     visual: &crate::project::Visual,
     maximum_keyframes: usize,
+    maximum_effects: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
     let clips: std::collections::BTreeMap<&str, &crate::project::Clip> = visual
@@ -789,7 +893,32 @@ pub(super) fn validate(
     for (index, placement) in visual.transitions.iter().enumerate() {
         let path = format!("/visual/transitions/{index}");
         let end = placement.start + placement.duration;
-        for endpoint in [&placement.outgoing, &placement.incoming] {
+        for (name, endpoint, presentation) in [
+            (
+                "outgoing",
+                &placement.outgoing,
+                &placement.definition.outgoing,
+            ),
+            (
+                "incoming",
+                &placement.incoming,
+                &placement.definition.incoming,
+            ),
+        ] {
+            if let Some(clip) = clips.get(endpoint.as_str()) {
+                let authored_count = clip.effects.len();
+                let transition_count = presentation.effects.len();
+                if authored_count.saturating_add(transition_count) > maximum_effects {
+                    errors.push(Diagnostic::error(
+                        "MVP-LIMIT-TRANSITION-EFFECTS",
+                        Category::Semantic,
+                        format!(
+                            "clip '{endpoint}' has {authored_count} authored effects and transition adds {transition_count}, exceeding maximum_effects_per_clip={maximum_effects}"
+                        ),
+                        format!("{path}/definition/{name}/effects"),
+                    ));
+                }
+            }
             match clips.get(endpoint.as_str()) {
                 Some(clip) if !clip.visible => errors.push(Diagnostic::error(
                     "MVP-TRANSITION-HIDDEN",

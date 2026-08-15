@@ -6,8 +6,10 @@ use crate::{
     Category, Diagnostic,
     animation::{Interpolation, Keyframe, Track},
     domain::Point,
-    plan::{CompiledLayer, TransformContribution},
-    project::{NormalizedTrack, TransitionPlacement, TransitionPresentation},
+    plan::{CompiledLayer, ScalarSignalInterner, TransformContribution},
+    project::{
+        Effect, NormalizedTrack, ScalarProperty, TransitionPlacement, TransitionPresentation,
+    },
 };
 
 use super::to_nanos;
@@ -28,6 +30,7 @@ struct LayerTransitionSegments {
     position: Vec<TransitionSegment<Point>>,
     scale: Vec<TransitionSegment<Point>>,
     rotation: Vec<TransitionSegment<f64>>,
+    effects: Vec<TransitionEffectSegment>,
 }
 
 #[derive(Clone)]
@@ -45,11 +48,31 @@ struct TransitionTransform {
     presentation: TransitionPresentation,
 }
 
+#[derive(Clone)]
+struct TransitionEffectSegment {
+    start: u128,
+    ordinal: usize,
+    id: String,
+    duration: f64,
+    effect: Effect,
+}
+
 /// Compiles generic transition placements into ordinary runtime tracks.
+#[cfg(test)]
 pub(super) fn compile_transition_placements(
     placements: &[TransitionPlacement],
     indices: &BTreeMap<String, usize>,
     layers: &mut [CompiledLayer],
+) -> Result<(), Diagnostic> {
+    let mut interner = ScalarSignalInterner::default();
+    compile_transition_placements_with_interner(placements, indices, layers, &mut interner)
+}
+
+pub(super) fn compile_transition_placements_with_interner(
+    placements: &[TransitionPlacement],
+    indices: &BTreeMap<String, usize>,
+    layers: &mut [CompiledLayer],
+    scalar_signal_interner: &mut ScalarSignalInterner,
 ) -> Result<(), Diagnostic> {
     let mut grouped = (0..layers.len())
         .map(|_| LayerTransitionSegments::default())
@@ -152,6 +175,27 @@ pub(super) fn compile_transition_placements(
             }
             layer.transform_contributions.push(contribution);
         }
+        let mut effects = segments.effects;
+        effects.sort_by(|a, b| {
+            a.start
+                .cmp(&b.start)
+                .then_with(|| a.ordinal.cmp(&b.ordinal))
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        for segment in effects {
+            let mut effect = segment.effect;
+            map_effect_times(&mut effect, segment.duration);
+            let mut timed = super::effects::compile_timed(
+                &effect,
+                &segment.id,
+                segment.duration,
+                scalar_signal_interner,
+            )?;
+            let local_start = segment.start.saturating_sub(layer.start_nanos);
+            timed.start = local_start.saturating_add(timed.start);
+            timed.end = local_start.saturating_add(timed.end);
+            layer.effects.push(timed);
+        }
     }
     Ok(())
 }
@@ -251,6 +295,117 @@ fn collect_presentation(
             track: track.clone(),
         });
     }
+    for (ordinal, effect) in presentation.effects.iter().enumerate() {
+        grouped.effects.push(TransitionEffectSegment {
+            start,
+            ordinal,
+            id: format!("{id}/effect-{ordinal}"),
+            duration: (end - start) as f64 / 1_000_000_000.0,
+            effect: effect.clone(),
+        });
+    }
+}
+
+fn map_effect_times(effect: &mut Effect, duration: f64) {
+    let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
+    let track = |value: &mut crate::project::Track<f64>| map_project_track(value, duration);
+    match effect {
+        Effect::Brightness { amount, .. }
+        | Effect::Contrast { amount, .. }
+        | Effect::Saturation { amount, .. } => scalar(amount),
+        Effect::Tint { amount, .. } => scalar(amount),
+        Effect::GaussianBlur { radius, .. } => scalar(radius),
+        Effect::DirectionalBlur {
+            radius,
+            angle_degrees,
+            ..
+        } => {
+            scalar(radius);
+            scalar(angle_degrees);
+        }
+        Effect::ZoomBlur { radius, .. } => scalar(radius),
+        Effect::Glow {
+            threshold,
+            radius,
+            intensity,
+            ..
+        }
+        | Effect::Bloom {
+            threshold,
+            radius,
+            intensity,
+            ..
+        } => {
+            scalar(threshold);
+            scalar(radius);
+            scalar(intensity);
+        }
+        Effect::ChromaticAberration {
+            amount,
+            angle_degrees,
+            ..
+        } => {
+            scalar(amount);
+            scalar(angle_degrees);
+        }
+        Effect::Vignette {
+            amount,
+            radius,
+            softness,
+            ..
+        } => {
+            scalar(amount);
+            scalar(radius);
+            track(softness);
+        }
+        Effect::Sharpen { amount, radius, .. } => {
+            scalar(amount);
+            scalar(radius);
+        }
+        Effect::ColorAdjust {
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+            ..
+        } => {
+            scalar(exposure);
+            scalar(gamma);
+            track(black_point);
+            track(white_point);
+        }
+        Effect::CameraShake {
+            timing,
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            ..
+        } => {
+            timing.start *= duration;
+            timing.duration = timing.duration.map(|value| value * duration);
+            scalar(position_amount);
+            scalar(rotation_degrees);
+            scalar(scale_amount);
+            scalar(frequency);
+        }
+        Effect::MotionBlur {
+            intensity,
+            shutter_angle,
+            max_radius,
+            ..
+        } => {
+            scalar(intensity);
+            scalar(shutter_angle);
+            scalar(max_radius);
+        }
+    }
+}
+
+fn map_project_track<T>(track: &mut crate::project::Track<T>, duration: f64) {
+    for keyframe in &mut track.keyframes {
+        keyframe.time *= duration;
+    }
 }
 
 fn aggregate_channel<T: Copy + PartialEq>(
@@ -341,11 +496,12 @@ mod generic_tests {
         animation::Track,
         domain::Point,
         plan::{
-            CompiledLayer, CompiledScalarProperty, CompiledTransformTracks, CompiledVisualSource,
-            DrawKey, TemporalDependency,
+            CompiledEffect, CompiledLayer, CompiledScalarProperty, CompiledTransformTracks,
+            CompiledVisualSource, DrawKey, TemporalDependency, TimedEffect,
         },
         project::{
-            InterpolationName, NormalizedKeyframe, NormalizedTrack, TransitionDefinition,
+            ActiveInterval, Effect, InterpolationName, Keyframe as ProjectKeyframe,
+            NormalizedKeyframe, NormalizedTrack, ScalarProperty, TransitionDefinition,
             TransitionPlacement, TransitionPresentation,
         },
     };
@@ -469,6 +625,7 @@ mod generic_tests {
                         Point { x: 1.2, y: 1.2 },
                     )),
                     rotation_offset_degrees: Some(scalar_track(0.0, 90.0)),
+                    ..Default::default()
                 },
                 incoming: TransitionPresentation::default(),
             },
@@ -867,5 +1024,188 @@ mod generic_tests {
         assert_eq!(layers[1].transform_contributions.len(), 2);
         assert_eq!(layers[1].transform_contributions[0].end, 3_000_000_000);
         assert_eq!(layers[1].transform_contributions[1].start, 5_000_000_000);
+    }
+
+    #[test]
+    fn transition_effects_compile_to_half_open_timed_effects_and_local_tracks() {
+        let effect = Effect::GaussianBlur {
+            id: "blur".into(),
+            radius: ScalarProperty::from_track(crate::project::Track {
+                base_value: 0.0,
+                keyframes: vec![ProjectKeyframe {
+                    time: 0.5,
+                    value: 10.0,
+                    interpolation: crate::project::Interpolation::Named(InterpolationName::Linear),
+                }],
+            }),
+        };
+        let definition = TransitionDefinition {
+            outgoing: TransitionPresentation {
+                effects: vec![effect],
+                ..Default::default()
+            },
+            incoming: TransitionPresentation::default(),
+        };
+        let placement = TransitionPlacement {
+            id: "blur-transition".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 4.0,
+            duration: 2.0,
+            definition: definition.clone(),
+        };
+        let reused = TransitionPlacement {
+            id: "blur-transition-reused".into(),
+            outgoing: "c".into(),
+            incoming: "d".into(),
+            start: 8.0,
+            duration: 4.0,
+            definition,
+        };
+        let mut layers = vec![layer("a"), layer("b"), layer("c"), layer("d")];
+        layers[0].effects.push(TimedEffect {
+            start: 0,
+            end: 20_000_000_000,
+            effect: CompiledEffect::Brightness {
+                amount: CompiledScalarProperty::authored(Track::new(0.0)),
+            },
+            dependency: TemporalDependency::Static,
+        });
+        let indices = BTreeMap::from([
+            (String::from("a"), 0),
+            (String::from("b"), 1),
+            (String::from("c"), 2),
+            (String::from("d"), 3),
+        ]);
+        compile_transition_placements(&[placement, reused], &indices, &mut layers)
+            .expect("compile");
+
+        assert!(matches!(
+            layers[0].effects[0].effect,
+            CompiledEffect::Brightness { .. }
+        ));
+        let timed = &layers[0].effects[1];
+        assert_eq!((timed.start, timed.end), (4_000_000_000, 6_000_000_000));
+        assert!(!timed.active_at(3_900_000_000));
+        assert!(timed.active_at(4_000_000_000));
+        assert!(timed.active_at(5_000_000_000));
+        assert!(!timed.active_at(6_000_000_000));
+        let crate::plan::CompiledEffect::GaussianBlur { radius } = &timed.effect else {
+            panic!("expected GaussianBlur");
+        };
+        assert_eq!(radius.authored_track.keyframes[0].time, 1_000_000_000);
+        let reused_timed = &layers[2].effects[0];
+        assert_eq!(
+            (reused_timed.start, reused_timed.end),
+            (8_000_000_000, 12_000_000_000)
+        );
+        let CompiledEffect::GaussianBlur { radius } = &reused_timed.effect else {
+            panic!("expected reused GaussianBlur");
+        };
+        assert_eq!(radius.authored_track.keyframes[0].time, 2_000_000_000);
+    }
+
+    #[test]
+    fn transition_effect_active_interval_scales_with_each_placement_duration() {
+        let effect = Effect::CameraShake {
+            id: "shake".into(),
+            timing: ActiveInterval {
+                start: 0.25,
+                duration: Some(0.5),
+            },
+            position_amount: ScalarProperty::from_track(crate::project::Track::constant(0.0)),
+            rotation_degrees: ScalarProperty::from_track(crate::project::Track::constant(0.0)),
+            scale_amount: ScalarProperty::from_track(crate::project::Track::constant(0.0)),
+            frequency: ScalarProperty::from_track(crate::project::Track::constant(1.0)),
+            seed: 1,
+            attack: 0.0,
+            decay: 0.0,
+        };
+        let definition = TransitionDefinition {
+            outgoing: TransitionPresentation {
+                effects: vec![effect],
+                ..Default::default()
+            },
+            incoming: TransitionPresentation::default(),
+        };
+        let placements = vec![
+            TransitionPlacement {
+                id: "two-seconds".into(),
+                outgoing: "a".into(),
+                incoming: "b".into(),
+                start: 0.0,
+                duration: 2.0,
+                definition: definition.clone(),
+            },
+            TransitionPlacement {
+                id: "four-seconds".into(),
+                outgoing: "c".into(),
+                incoming: "d".into(),
+                start: 4.0,
+                duration: 4.0,
+                definition,
+            },
+        ];
+        let mut layers = vec![layer("a"), layer("b"), layer("c"), layer("d")];
+        let indices = BTreeMap::from([
+            (String::from("a"), 0),
+            (String::from("b"), 1),
+            (String::from("c"), 2),
+            (String::from("d"), 3),
+        ]);
+        compile_transition_placements(&placements, &indices, &mut layers).expect("compile");
+
+        assert_eq!(
+            placements[0].definition.outgoing.effects[0].timing(),
+            ActiveInterval {
+                start: 0.25,
+                duration: Some(0.5)
+            }
+        );
+        assert_eq!(
+            (layers[0].effects[0].start, layers[0].effects[0].end),
+            (500_000_000, 1_500_000_000)
+        );
+        assert_eq!(
+            (layers[2].effects[0].start, layers[2].effects[0].end),
+            (5_000_000_000, 7_000_000_000)
+        );
+    }
+
+    #[test]
+    fn transition_effects_preserve_declaration_order_after_ten_entries() {
+        let effects = (0..12)
+            .map(|index| Effect::GaussianBlur {
+                id: format!("effect-{index}"),
+                radius: ScalarProperty::from_track(crate::project::Track::constant(index as f64)),
+            })
+            .collect();
+        let placement = TransitionPlacement {
+            id: "ordered".into(),
+            outgoing: "a".into(),
+            incoming: "b".into(),
+            start: 0.0,
+            duration: 1.0,
+            definition: TransitionDefinition {
+                outgoing: TransitionPresentation {
+                    effects,
+                    ..Default::default()
+                },
+                incoming: TransitionPresentation::default(),
+            },
+        };
+        let mut layers = vec![layer("a"), layer("b")];
+        let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
+        compile_transition_placements(&[placement], &indices, &mut layers).expect("compile");
+
+        let values = layers[0]
+            .effects
+            .iter()
+            .map(|timed| match &timed.effect {
+                CompiledEffect::GaussianBlur { radius } => radius.authored_track.base_value,
+                _ => panic!("expected GaussianBlur"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(values, (0..12).map(f64::from).collect::<Vec<_>>());
     }
 }

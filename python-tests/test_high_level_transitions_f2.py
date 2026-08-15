@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 import vestra
+from vestra.effects import GaussianBlur
 from vestra.transitions import Animate, CustomTransition, TransitionLayer
 
 
@@ -61,7 +62,89 @@ def test_old_timing_and_unsupported_transition_presets_are_not_public() -> None:
     with pytest.raises(TypeError):
         vestra.Crossfade(start=0, duration=1)  # type: ignore[call-arg]
     assert not hasattr(vestra, "FlashCut")
-    assert not hasattr(vestra, "ZoomBlurTransition")
+
+
+def test_transition_layer_accepts_existing_effects_with_normalized_tracks() -> None:
+    blur = GaussianBlur(0.0)
+    blur.radius.keyframe(0.5, 12.0)
+    custom = CustomTransition(
+        outgoing=TransitionLayer(
+            effects=[blur],
+            opacity=Animate(1.0, 0.0),
+        )
+    )
+
+    canonical = custom.to_canonical()
+    assert canonical["outgoing"]["effects"][0]["type"] == "gaussian_blur"
+    assert canonical["outgoing"]["effects"][0]["radius"]["keyframes"][0]["time"] == 0.5
+
+
+def test_blur_crossfade_lowers_to_channels_and_existing_effect() -> None:
+    canonical = vestra.BlurCrossfade().to_canonical()
+    assert set(canonical["outgoing"]) == {"opacity", "effects"}
+    assert canonical["incoming"]["effects"][0]["type"] == "gaussian_blur"
+
+
+def test_effect_driven_presets_lower_without_native_preset_identity() -> None:
+    definitions = (
+        vestra.BlurCrossfade(),
+        vestra.ZoomBlurTransition(),
+        vestra.WhipPanLeft(),
+        vestra.WhipPanRight(),
+    )
+    for definition in definitions:
+        canonical = definition.to_canonical()
+        assert "type" not in canonical
+        assert any("effects" in presentation for presentation in canonical.values())
+
+
+def test_effect_enabled_transition_validates_and_preserves_generic_schema() -> None:
+    project, first, second = _project()
+    blur = GaussianBlur(0.0)
+    blur.radius.keyframe(0.5, 12.0)
+    project.root.transitions.add(
+        first,
+        second,
+        CustomTransition(outgoing=TransitionLayer(effects=[blur])),
+        start=4,
+        duration=2,
+    )
+
+    report = project.validate()
+    assert report.is_valid
+    transition = project.snapshot().to_dict()["visual"]["transitions"][0]
+    assert transition["definition"]["outgoing"]["effects"][0]["type"] == "gaussian_blur"
+    assert "preset" not in str(transition)
+
+
+@pytest.mark.parametrize(
+    "keyframes",
+    [
+        ((-0.1, 0.0), (1.0, 1.0)),
+        ((0.0, 0.0), (1.1, 1.0)),
+        ((float("nan"), 0.0), (1.0, 1.0)),
+        ((0.0, 0.0), (float("inf"), 1.0)),
+        ((0.0, 0.0),),
+    ],
+)
+def test_animate_rejects_invalid_progress_values_and_keyframe_count(
+    keyframes: tuple[tuple[float, float], ...],
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        Animate.keyframes(*keyframes)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [(float("nan"), 0.0), (float("inf"), 0.0), (0.0, float("-inf"))],
+)
+def test_animate_rejects_non_finite_position_values(value: tuple[float, float]) -> None:
+    with pytest.raises(ValueError):
+        CustomTransition(
+            outgoing=TransitionLayer(
+                position=Animate(value, (0.0, 0.0)),
+            )
+        )
 
 
 def test_transition_ownership_and_failure_atomicity() -> None:

@@ -83,6 +83,10 @@ from .transitions import (
     ZoomCrossfade,
     ZoomIn,
     ZoomOut,
+    BlurCrossfade,
+    ZoomBlurTransition,
+    WhipPanLeft,
+    WhipPanRight,
     TransitionLayer,
 )
 from .properties import (
@@ -218,6 +222,10 @@ __all__ = [
     "PushDown",
     "ZoomIn",
     "ZoomOut",
+    "BlurCrossfade",
+    "ZoomBlurTransition",
+    "WhipPanLeft",
+    "WhipPanRight",
     "TransitionDefinition",
     "TransitionPlacement",
     "Preset",

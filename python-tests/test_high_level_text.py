@@ -75,6 +75,20 @@ def test_text_renders_from_file_backed_font(tmp_path) -> None:
     assert any(alpha for alpha in frame.to_bytes()[3::4])
 
 
+def test_multiple_text_sources_sharing_a_font_prepare_and_render() -> None:
+    import vestra
+
+    project = vestra.Project(size=(320, 120), fps=1, duration=1)
+    first = project.root.add(Text("AV", font=FONT, font_size=40))
+    second = project.root.add(Text("ffi", font=FONT, font_size=40))
+    first.transform.position = (0.25, 0.5)
+    second.transform.position = (0.75, 0.5)
+
+    pixels = project.render_frame(0, backend="cpu").to_bytes()
+
+    assert any(alpha for alpha in pixels[3::4])
+
+
 def test_invalid_font_data_fails_deterministically(tmp_path) -> None:
     import vestra
 

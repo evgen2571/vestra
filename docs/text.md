@@ -18,8 +18,10 @@ layer.transform.scale = (0.8, 0.8)
 
 Text supports Unicode strings, explicit newlines, word/character wrapping with
 `max_width`, and `left`, `center`, or `right` alignment. `line_spacing` is a
-multiplier over the font's normal line height (`1.0` is normal and `1.2` is
-20% larger). `letter_spacing` is additional tracking in source-local pixels.
+multiplier relative to `font_size`: the line height is `font_size ×
+line_spacing` (`1.0` means a line height equal to `font_size`, `1.2` means
+20% larger, and `2.0` doubles it). `letter_spacing` is additional tracking in
+source-local pixels.
 
 Text-local properties are static in v1C. Layer timing, transforms, opacity,
 blend mode, effects, transitions, Groups, and nested Compositions remain

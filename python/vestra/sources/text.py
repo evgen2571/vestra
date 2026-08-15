@@ -71,7 +71,9 @@ class Text(Source):
     @property
     def max_width(self) -> float | None: return self._max_width
     @property
-    def line_spacing(self) -> float: return self._line_spacing
+    def line_spacing(self) -> float:
+        """Line-height multiplier relative to ``font_size``."""
+        return self._line_spacing
     @property
     def letter_spacing(self) -> float: return self._letter_spacing
 

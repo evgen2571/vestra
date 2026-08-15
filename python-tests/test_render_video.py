@@ -20,7 +20,7 @@ def cpu_prepared() -> vestra.PreparedProject:
 def multi_frame_prepared(tmp_path: Path) -> vestra.PreparedProject:
     project = vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": False,

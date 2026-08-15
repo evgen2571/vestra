@@ -16,8 +16,8 @@ Chromatic Aberration optimization was retained.
 
 Linux x86_64, Intel Core i7-8750H, Rust 1.96.1, FFmpeg 7.1.5, Cargo release
 build, CPU backend, automatic 8 workers. The canonical ZoomBlur fixture was
-`examples/transitions/zoom-blur.json`, rendered at 1280x720 for 100 frames;
-the authored transition uses 12 ZoomBlur samples. Each benchmark process used
+`examples/effects/zoom-blur.json`, rendered at 1280x720 for 100 frames;
+the authored visual effect uses 12 ZoomBlur samples. Each benchmark process used
 the existing cold, warm, and warm-2 sequence; five independent process runs
 were compared using warm-2 medians.
 

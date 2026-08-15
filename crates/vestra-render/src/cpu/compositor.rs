@@ -1154,7 +1154,7 @@ mod tests {
     fn canonical_group_project_validates_compiles_evaluates_and_renders_on_cpu() {
         let project = crate::project::Project::from_json(
             r##"{
-                "schema_version": 2,
+                "schema_version": 3,
                 "name": "cpu group integration",
                 "output": {
                     "path": "group.mp4",
@@ -1226,7 +1226,7 @@ mod tests {
     fn root_group_crossfade_renders_the_complete_group_layers_on_cpu() {
         let project = crate::project::Project::from_json(
             r##"{
-                "schema_version": 2,
+                "schema_version": 3,
                 "output": {
                     "path": "group-transition.mp4", "width": 2, "height": 2,
                     "frame_rate": "24/1", "background": "#00000000",
@@ -1245,9 +1245,18 @@ mod tests {
                              "start": 0, "duration": 2, "layer": 1, "opacity": {"base_value": 1}}
                         ]}, "start": 0, "duration": 2, "layer": 1, "opacity": {"base_value": 1}}
                     ],
-                    "transitions": [{"type": "crossfade", "id": "fade", "outgoing": "red-group",
+                    "transitions": [{"id": "fade", "outgoing": "red-group",
                         "incoming": "blue-group", "start": 0.5, "duration": 1.0,
-                        "interpolation": "linear"}]
+                        "definition": {
+                            "outgoing": {"opacity": {"keyframes": [
+                                {"progress": 0.0, "value": 1.0, "interpolation": "linear"},
+                                {"progress": 1.0, "value": 0.0, "interpolation": "linear"}
+                            ]}},
+                            "incoming": {"opacity": {"keyframes": [
+                                {"progress": 0.0, "value": 0.0, "interpolation": "linear"},
+                                {"progress": 1.0, "value": 1.0, "interpolation": "linear"}
+                            ]}}
+                        }}]
                 }
             }"##,
         )

@@ -952,47 +952,6 @@
       ],
       "type": "object"
     },
-    "crossfade_transition": {
-      "additionalProperties": false,
-      "properties": {
-        "duration": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        },
-        "outgoing": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "start": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "type": {
-          "const": "crossfade"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation"
-      ],
-      "type": "object"
-    },
     "directional_blur_effect": {
       "additionalProperties": false,
       "properties": {
@@ -1039,62 +998,6 @@
         "type",
         "radius",
         "angle_degrees"
-      ],
-      "type": "object"
-    },
-    "directional_push_transition": {
-      "additionalProperties": false,
-      "properties": {
-        "angle_degrees": {
-          "type": "number"
-        },
-        "blur_radius": {
-          "maximum": 32,
-          "minimum": 0,
-          "type": "number"
-        },
-        "distance": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "duration": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        },
-        "outgoing": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "start": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "type": {
-          "const": "directional_push"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "angle_degrees",
-        "distance",
-        "blur_radius"
       ],
       "type": "object"
     },
@@ -1189,57 +1092,6 @@
         "colour",
         "opacity",
         "layer"
-      ],
-      "type": "object"
-    },
-    "flash_cut_transition": {
-      "additionalProperties": false,
-      "properties": {
-        "colour": {
-          "$ref": "#/$defs/colour"
-        },
-        "duration": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "intensity": {
-          "maximum": 1,
-          "minimum": 0,
-          "type": "number"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        },
-        "outgoing": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "start": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "type": {
-          "const": "flash_cut"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "colour",
-        "intensity"
       ],
       "type": "object"
     },
@@ -1588,6 +1440,82 @@
         "shutter_angle",
         "max_radius",
         "samples"
+      ],
+      "type": "object"
+    },
+    "normalized_point_keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "progress": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/point"
+        }
+      },
+      "required": [
+        "progress",
+        "value",
+        "interpolation"
+      ],
+      "type": "object"
+    },
+    "normalized_point_track": {
+      "additionalProperties": false,
+      "properties": {
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/normalized_point_keyframe"
+          },
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "keyframes"
+      ],
+      "type": "object"
+    },
+    "normalized_scalar_keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "progress": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "progress",
+        "value",
+        "interpolation"
+      ],
+      "type": "object"
+    },
+    "normalized_scalar_track": {
+      "additionalProperties": false,
+      "properties": {
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/normalized_scalar_keyframe"
+          },
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "keyframes"
       ],
       "type": "object"
     },
@@ -2947,26 +2875,30 @@
       "type": "object"
     },
     "transition": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/crossfade_transition"
-        },
-        {
-          "$ref": "#/$defs/zoom_crossfade_transition"
-        },
-        {
-          "$ref": "#/$defs/flash_cut_transition"
-        },
-        {
-          "$ref": "#/$defs/directional_push_transition"
-        },
-        {
-          "$ref": "#/$defs/zoom_blur_transition"
-        }
-      ]
+      "$ref": "#/$defs/transition_placement"
     },
-    "transition_common": {
+    "transition_definition": {
+      "additionalProperties": false,
       "properties": {
+        "incoming": {
+          "$ref": "#/$defs/transition_presentation"
+        },
+        "outgoing": {
+          "$ref": "#/$defs/transition_presentation"
+        }
+      },
+      "required": [
+        "outgoing",
+        "incoming"
+      ],
+      "type": "object"
+    },
+    "transition_placement": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "$ref": "#/$defs/transition_definition"
+        },
         "duration": {
           "exclusiveMinimum": 0,
           "type": "number"
@@ -2979,9 +2911,6 @@
           "minLength": 1,
           "type": "string"
         },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        },
         "outgoing": {
           "minLength": 1,
           "type": "string"
@@ -2992,14 +2921,31 @@
         }
       },
       "required": [
-        "type",
         "id",
         "outgoing",
         "incoming",
         "start",
         "duration",
-        "interpolation"
+        "definition"
       ],
+      "type": "object"
+    },
+    "transition_presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "opacity": {
+          "$ref": "#/$defs/normalized_scalar_track"
+        },
+        "position_offset": {
+          "$ref": "#/$defs/normalized_point_track"
+        },
+        "rotation_offset_degrees": {
+          "$ref": "#/$defs/normalized_scalar_track"
+        },
+        "scale_multiplier": {
+          "$ref": "#/$defs/normalized_point_track"
+        }
+      },
       "type": "object"
     },
     "unit_point": {
@@ -3292,114 +3238,6 @@
         "anchor"
       ],
       "type": "object"
-    },
-    "zoom_blur_transition": {
-      "additionalProperties": false,
-      "properties": {
-        "blur_radius": {
-          "maximum": 32,
-          "minimum": 0,
-          "type": "number"
-        },
-        "duration": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming_start_zoom": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        },
-        "outgoing": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "outgoing_zoom": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "start": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "type": {
-          "const": "zoom_blur"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "outgoing_zoom",
-        "incoming_start_zoom",
-        "blur_radius"
-      ],
-      "type": "object"
-    },
-    "zoom_crossfade_transition": {
-      "additionalProperties": false,
-      "properties": {
-        "duration": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "incoming_start_zoom": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "interpolation": {
-          "$ref": "#/$defs/interpolation"
-        },
-        "outgoing": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "outgoing_zoom": {
-          "exclusiveMinimum": 0,
-          "type": "number"
-        },
-        "start": {
-          "minimum": 0,
-          "type": "number"
-        },
-        "type": {
-          "const": "zoom_crossfade"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "outgoing",
-        "incoming",
-        "start",
-        "duration",
-        "interpolation",
-        "outgoing_zoom",
-        "incoming_start_zoom"
-      ],
-      "type": "object"
     }
   },
   "$id": "https://example.invalid/video-editor/project.schema.json",
@@ -3427,7 +3265,7 @@
       "$ref": "#/$defs/output"
     },
     "schema_version": {
-      "const": 2
+      "const": 3
     },
     "visual": {
       "$ref": "#/$defs/visual"

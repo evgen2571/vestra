@@ -120,7 +120,7 @@ mod tests {
     fn audio_project(start: f64, frame_rate: &str) -> Project {
         Project::from_value(
             json!({
-                "schema_version": 2,
+                "schema_version": 3,
                 "output": {
                     "path": "out.mp4", "width": 2, "height": 2,
                     "frame_rate": frame_rate, "background": "#000000",
@@ -214,7 +214,7 @@ mod tests {
                 .expect("tone duration");
         let project = |trim_end: Option<f64>, keyframe_time: f64| {
             let mut value = json!({
-                "schema_version": 2,
+                "schema_version": 3,
                 "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": false, "duration_mode": "automatic"},
                 "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
                 "visual": {"clips": []},
@@ -256,7 +256,7 @@ mod tests {
         let project = |second_time: f64, interpolation: &str| {
             Project::from_value(
                 json!({
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": false, "duration_mode": "automatic"},
                     "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
                     "visual": {"clips": []},
@@ -287,7 +287,7 @@ mod tests {
 
         let nonzero = Project::from_value(
             json!({
-                "schema_version": 2,
+                "schema_version": 3,
                 "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": false, "duration_mode": "automatic"},
                 "assets": [{"id": "tone", "type": "audio", "source": tone_path()}],
                 "visual": {"clips": []},

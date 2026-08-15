@@ -1,7 +1,7 @@
 import vestra
 
 PROJECT = {
-    "schema_version": 2,
+    "schema_version": 3,
     "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
     "assets": [], "visual": {"clips": []},
 }

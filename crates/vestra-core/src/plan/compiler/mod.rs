@@ -46,7 +46,7 @@ mod time {
 /// Transitional facade for compiler submodules while track compilation is
 /// owned by `vestra-core`.
 mod tracks {
-    pub use crate::plan_tracks::{compile, interpolation};
+    pub use crate::plan_tracks::compile;
 }
 
 use crate::plan_time::{effective_dimensions, first_frame_at_or_after, to_nanos};
@@ -111,12 +111,8 @@ pub fn compile(
         .enumerate()
         .map(|(index, layer)| (layer.id.clone(), index))
         .collect();
-    transitions::compile(
-        &project.visual.transitions,
-        &indices,
-        &mut layers,
-        &mut compilation,
-    )?;
+    transitions::compile_transition_placements(&project.visual.transitions, &indices, &mut layers)?;
+    compilation.compiled_transition_association_count = project.visual.transitions.len() as u64 * 2;
     for flash in &project.visual.flashes {
         layers.push(flashes::compile(
             flash,

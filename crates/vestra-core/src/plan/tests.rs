@@ -16,10 +16,12 @@ use crate::{
     project::{
         ActiveInterval, AudioAnalysisTap as ProjectAudioAnalysisTap,
         AudioScalarFeature as ProjectAudioScalarFeature, Effect, Group, Interpolation,
-        InterpolationName, Keyframe, ParticleBurst, ParticleEmission, ParticleSystem, Preset,
-        Project, ScalarModifier, ScalarModifierOperation as ProjectScalarModifierOperation,
-        ScalarSignal, ScalarSignalSource, SignalTransform, Spectrum2D, Spectrum2DBandMapping,
-        Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Track, VisualSource,
+        InterpolationName, Keyframe, NormalizedKeyframe, NormalizedTrack, ParticleBurst,
+        ParticleEmission, ParticleSystem, Preset, Project, ScalarModifier,
+        ScalarModifierOperation as ProjectScalarModifierOperation, ScalarSignal,
+        ScalarSignalSource, SignalTransform, Spectrum2D, Spectrum2DBandMapping, Spectrum2DLayout,
+        Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Track, TransitionDefinition,
+        TransitionPlacement, TransitionPresentation, VisualSource,
     },
     validation::ResourceLimits,
 };
@@ -105,6 +107,7 @@ fn groups_compile_nested_layers_and_use_local_time_with_parent_clipping() {
     parent.source = VisualSource::Group(Group { clips: vec![child] });
     parent.transform = None;
     project.visual.clips = vec![parent];
+    project.visual.transitions.clear();
 
     let plan = compile_project(project);
     let super::CompiledVisualSource::Group(composition) = &plan.layers[0].source else {
@@ -287,13 +290,48 @@ fn root_transitions_accept_groups_without_resolving_nested_ids() {
     image.start = 0.0;
     image.duration = 6.0;
     project.visual.clips = vec![group, image];
-    project.visual.transitions = vec![crate::project::Transition::Crossfade {
+    project.visual.transitions = vec![TransitionPlacement {
         id: "group-crossfade".to_owned(),
         outgoing: "group".to_owned(),
         incoming: "root-image".to_owned(),
         start: 1.0,
         duration: 1.0,
-        interpolation: Interpolation::Named(InterpolationName::Linear),
+        definition: TransitionDefinition {
+            outgoing: TransitionPresentation {
+                opacity: Some(NormalizedTrack {
+                    keyframes: vec![
+                        NormalizedKeyframe {
+                            progress: 0.0,
+                            value: 1.0,
+                            interpolation: Interpolation::Named(InterpolationName::Linear),
+                        },
+                        NormalizedKeyframe {
+                            progress: 1.0,
+                            value: 0.0,
+                            interpolation: Interpolation::Named(InterpolationName::Linear),
+                        },
+                    ],
+                }),
+                ..Default::default()
+            },
+            incoming: TransitionPresentation {
+                opacity: Some(NormalizedTrack {
+                    keyframes: vec![
+                        NormalizedKeyframe {
+                            progress: 0.0,
+                            value: 0.0,
+                            interpolation: Interpolation::Named(InterpolationName::Linear),
+                        },
+                        NormalizedKeyframe {
+                            progress: 1.0,
+                            value: 1.0,
+                            interpolation: Interpolation::Named(InterpolationName::Linear),
+                        },
+                    ],
+                }),
+                ..Default::default()
+            },
+        },
     }];
 
     let plan = compile_project(project);

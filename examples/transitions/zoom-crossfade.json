@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "name": "Zoom crossfade",
   "output": {
     "path": "../output/zoom-crossfade.mp4",
@@ -101,15 +101,33 @@
     ],
     "transitions": [
       {
-        "type": "zoom_crossfade",
         "id": "cut",
         "outgoing": "out",
         "incoming": "in",
         "start": 2,
         "duration": 1,
-        "interpolation": "ease_in_out",
-        "outgoing_zoom": 1.15,
-        "incoming_start_zoom": 1.12
+        "definition": {
+          "outgoing": {
+            "opacity": {"keyframes": [
+              {"progress": 0, "value": 1, "interpolation": "ease_in_out"},
+              {"progress": 1, "value": 0, "interpolation": "ease_in_out"}
+            ]},
+            "scale_multiplier": {"keyframes": [
+              {"progress": 0, "value": {"x": 1, "y": 1}, "interpolation": "ease_in_out"},
+              {"progress": 1, "value": {"x": 1.15, "y": 1.15}, "interpolation": "ease_in_out"}
+            ]}
+          },
+          "incoming": {
+            "opacity": {"keyframes": [
+              {"progress": 0, "value": 0, "interpolation": "ease_in_out"},
+              {"progress": 1, "value": 1, "interpolation": "ease_in_out"}
+            ]},
+            "scale_multiplier": {"keyframes": [
+              {"progress": 0, "value": {"x": 1.12, "y": 1.12}, "interpolation": "ease_in_out"},
+              {"progress": 1, "value": {"x": 1, "y": 1}, "interpolation": "ease_in_out"}
+            ]}
+          }
+        }
       }
     ]
   }

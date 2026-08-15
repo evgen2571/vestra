@@ -383,7 +383,7 @@ fn default_spectrum2d_colour() -> String {
 pub struct Visual {
     pub clips: Vec<Clip>,
     #[serde(default)]
-    pub transitions: Vec<super::Transition>,
+    pub transitions: Vec<super::TransitionPlacement>,
     #[serde(default)]
     pub flashes: Vec<super::Flash>,
     #[serde(default)]

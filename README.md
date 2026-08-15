@@ -38,13 +38,13 @@ See [the Python editing API guide](docs/python-editing-api.md),
 
 ## Advanced Python authoring
 
-The advanced API gives exact control over the schema-version 2 dictionary,
+The advanced API gives exact control over the schema-version 3 dictionary,
 builder-owned handles, and native SDK handoff. It remains useful for canonical
 fixtures, lowering code, compatibility, and projects that need exact schema
 control. The normal editor API above is a better starting point for mutable
 projects.
 
-`ProjectBuilder` creates an owned canonical schema-version 2 dictionary, then
+`ProjectBuilder` creates an owned canonical schema-version 3 dictionary, then
 `build()` passes that dictionary to `ProjectSnapshot.from_dict()`. There is no
 second project format.
 
@@ -58,7 +58,10 @@ particles = builder.add_particle_system_clip(
 group = builder.add_group_clip(
     clips=[clip, particles], start=0.0, duration=1.0, layer=1, opacity=0.8,
 )
-builder.timeline.add_crossfade_between(clip, group, duration=0.25)
+builder.transitions.add_transition(
+    outgoing=clip, incoming=group, definition=Crossfade().to_canonical(),
+    start=0.0, duration=0.25,
+)
 ```
 
 Groups support nested Groups, Image/SolidColor/Spectrum2D/ParticleSystem
@@ -66,12 +69,12 @@ children, parent transforms/effects/opacity/blend, and top-level Image/Group
 transitions. Internal Group transitions, nested flashes/post-effects, named
 compositions, and independent Group canvas sizing remain unsupported.
 
-Phase 9 executes typed schema-version 2 audio mixer timelines. The old
+Phase 9 executes typed schema-version 3 audio mixer timelines. The old
 single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
 ```python
-from vestra import Editor, FrameRate, ProjectSnapshot, RenderRequest
+from vestra import Crossfade, Editor, FrameRate, ProjectSnapshot, RenderRequest
 from vestra.authoring import Interpolation, Point, ProjectBuilder, Sizing, sparks
 
 builder = ProjectBuilder(
@@ -172,7 +175,10 @@ clip.presets.apply_impact(seed=17, intensity=0.8)
 # `incoming` moves from [0.50, 1.50] to [0.75, 1.75], leaving exactly
 # 0.25 seconds of overlap with `clip`, which spans [0.00, 1.00].
 builder.timeline.shift_clip(incoming, delta=0.25)
-builder.timeline.add_crossfade_between(clip, incoming, duration=0.25)
+builder.transitions.add_transition(
+    outgoing=clip, incoming=incoming, definition=Crossfade().to_canonical(),
+    start=0.75, duration=0.25,
+)
 ```
 
 `builder.timeline.shift_clip(...)` changes `clip.start` only. It does not move
@@ -184,9 +190,8 @@ transition. If a later shift makes an existing transition invalid,
 `builder.validate()` reports the native validation problem. This helper is
 deliberately narrow. It does not repair a timeline.
 
-`builder.timeline.add_crossfade_between(...)` never moves or trims clips. It
-uses the beginning of their existing overlap and requires that overlap to be at
-least the requested duration.
+Transition timing is owned by the generic placement. It never moves or trims
+clips; native validation reports any fit problem during validation.
 
 The supported blend modes are `normal`, `add`, `screen`, `multiply`, and
 `overlay`. All ordinary effects are available on clip and post-effect
@@ -600,7 +605,7 @@ python3 -m venv .venv
 
 Use `import vestra`. `ProjectSnapshot.from_dict()` follows the same native path
 as JSON. It is a lower-level way to construct the same current canonical
-schema-version 2 model, useful for canonical JSON, low-level integrations, and
+schema-version 3 model, useful for canonical JSON, low-level integrations, and
 generated project dictionaries. It represents ordered multi-track audio timelines, renders arbitrary valid
 static multi-input mixes, and accepts the schema-v2 scalar signal/modifier
 surface used by audio-reactive visuals. Video assets and nested compositions

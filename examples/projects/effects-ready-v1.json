@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "name": "Effects-ready v1",
   "output": {
     "path": "../output/effects-ready-v1.mp4",
@@ -132,20 +132,7 @@
         ]
       }
     ],
-    "transitions": [
-      {
-        "type": "zoom_blur",
-        "id": "cut",
-        "outgoing": "outgoing",
-        "incoming": "incoming",
-        "start": 2.5,
-        "duration": 1,
-        "interpolation": "ease_in_out",
-        "outgoing_zoom": 1.15,
-        "incoming_start_zoom": 1.12,
-        "blur_radius": 6
-      }
-    ],
+    "transitions": [],
     "post_effects": [
       {
         "id": "grade",

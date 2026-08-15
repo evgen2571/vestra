@@ -23,7 +23,7 @@ done
 
 for project in \
   examples/projects/effects-ready-v1.json \
-  examples/transitions/zoom-blur.json \
+  examples/effects/zoom-blur.json \
   examples/presets/heavy-impact.json \
   examples/projects/animation-effects.json; do
   stem=$(basename "$project" .json)

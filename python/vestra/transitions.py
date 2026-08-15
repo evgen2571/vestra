@@ -1,14 +1,14 @@
-"""Builder-independent transition values and root composition ownership."""
+"""Reusable transition definitions and composition-owned placements."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from dataclasses import dataclass
+from copy import deepcopy
+import math
+from typing import TYPE_CHECKING
 
 from .authoring.animation import interpolation_to_canonical
-from .authoring.values import Color, CubicBezier, Interpolation, color_to_canonical
-from .sources import Color as SourceColor
-
+from .authoring.values import CubicBezier, Interpolation
 if TYPE_CHECKING:
     from .editor import Composition, Layer
 
@@ -19,7 +19,7 @@ def _number(value: int | float, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise TypeError(f"{name} must be a real number")
     result = float(value)
-    if result != result or result in (float("inf"), float("-inf")):
+    if not math.isfinite(result):
         raise ValueError(f"{name} must be finite")
     return result
 
@@ -38,255 +38,226 @@ def _positive(value: int | float, name: str) -> float:
     return result
 
 
-def _unit(value: int | float, name: str) -> float:
-    result = _number(value, name)
-    if not 0 <= result <= 1:
-        raise ValueError(f"{name} must be between 0 and 1")
-    return result
-
-
 def _interpolation(value: InterpolationValue) -> InterpolationValue:
     if not isinstance(value, Interpolation | CubicBezier):
-        raise TypeError("interpolation must be Interpolation or CubicBezier")
+        raise TypeError("easing must be Interpolation or CubicBezier")
     return value
 
 
-def _blur(value: int | float) -> float:
-    result = _nonnegative(value, "blur_radius")
-    if result > 32:
-        raise ValueError("blur_radius must be between 0 and 32")
-    return result
+def _track(
+    values: tuple[tuple[float, object, InterpolationValue], ...],
+) -> dict[str, object]:
+    return {
+        "keyframes": [
+            {
+                "progress": progress,
+                "value": value,
+                "interpolation": interpolation_to_canonical(easing),
+            }
+            for progress, value, easing in values
+        ]
+    }
+
+
+def _definition(
+    outgoing: dict[str, object], incoming: dict[str, object]
+) -> dict[str, object]:
+    return {"outgoing": outgoing, "incoming": incoming}
+
+
+def _opacity(easing: InterpolationValue) -> tuple[dict[str, object], dict[str, object]]:
+    return (
+        {"opacity": _track(((0.0, 1.0, easing), (1.0, 0.0, easing)))},
+        {"opacity": _track(((0.0, 0.0, easing), (1.0, 1.0, easing)))},
+    )
+
+
+def _scale(value: float) -> dict[str, float]:
+    return {"x": value, "y": value}
 
 
 @dataclass(frozen=True, slots=True)
-class Transition:
-    """Immutable transition intent, independent of any native builder."""
+class TransitionDefinition:
+    """Immutable, reusable behavior with no layer, timing, or placement ID."""
 
-    start: float
-    duration: float
-    interpolation: InterpolationValue = Interpolation.LINEAR
-    id: str | None = None
-
-    kind: ClassVar[str] = "transition"
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "start", _nonnegative(self.start, "start"))
-        object.__setattr__(self, "duration", _positive(self.duration, "duration"))
-        object.__setattr__(self, "interpolation", _interpolation(self.interpolation))
-        if self.id is not None and (
-            not isinstance(self.id, str) or not self.id or self.id.isspace()
-        ):
-            raise ValueError("id must be a non-empty string or None")
+    _canonical: dict[str, object]
 
     def to_canonical(self) -> dict[str, object]:
-        data: dict[str, object] = {
-            "type": self.kind,
-            "start": self.start,
-            "duration": self.duration,
-            "interpolation": interpolation_to_canonical(self.interpolation),
-        }
-        if self.id is not None:
-            data["id"] = self.id
-        return data
+        return deepcopy(self._canonical)
 
 
 @dataclass(frozen=True, slots=True)
-class Crossfade(Transition):
-    kind: ClassVar[str] = "crossfade"
+class Crossfade(TransitionDefinition):
+    """Generic opacity crossfade."""
+
+    easing: InterpolationValue = Interpolation.EASE_IN_OUT
+
+    def __init__(self, *, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        easing = _interpolation(easing)
+        object.__setattr__(self, "easing", easing)
+        object.__setattr__(self, "_canonical", _definition(*_opacity(easing)))
 
 
 @dataclass(frozen=True, slots=True)
-class ZoomCrossfade(Transition):
-    outgoing_zoom: float = 1.0
-    incoming_start_zoom: float = 1.0
-    kind: ClassVar[str] = "zoom_crossfade"
+class DirectionalPush(TransitionDefinition):
+    """Generic position-offset push; positive angles follow native coordinates."""
 
-    def __post_init__(self) -> None:
-        Transition.__post_init__(self)
-        object.__setattr__(
-            self, "outgoing_zoom", _positive(self.outgoing_zoom, "outgoing_zoom")
-        )
-        object.__setattr__(
-            self,
-            "incoming_start_zoom",
-            _positive(self.incoming_start_zoom, "incoming_start_zoom"),
-        )
-
-    def to_canonical(self) -> dict[str, object]:
-        return {
-            **super().to_canonical(),
-            "outgoing_zoom": self.outgoing_zoom,
-            "incoming_start_zoom": self.incoming_start_zoom,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class FlashCut(Transition):
-    colour: str | Color | SourceColor = "#ffffff"
-    intensity: float = 1.0
-    kind: ClassVar[str] = "flash_cut"
-
-    def __post_init__(self) -> None:
-        Transition.__post_init__(self)
-        colour = (
-            self.colour.value if isinstance(self.colour, SourceColor) else self.colour
-        )
-        object.__setattr__(self, "colour", color_to_canonical(colour))
-        object.__setattr__(self, "intensity", _unit(self.intensity, "intensity"))
-
-    def to_canonical(self) -> dict[str, object]:
-        return {
-            **super().to_canonical(),
-            "colour": self.colour,
-            "intensity": self.intensity,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class DirectionalPush(Transition):
     angle_degrees: float = 0.0
     distance: float = 1.0
-    blur_radius: float = 0.0
-    kind: ClassVar[str] = "directional_push"
+    easing: InterpolationValue = Interpolation.EASE_IN_OUT
 
-    def __post_init__(self) -> None:
-        Transition.__post_init__(self)
-        object.__setattr__(
-            self, "angle_degrees", _number(self.angle_degrees, "angle_degrees")
-        )
-        object.__setattr__(self, "distance", _nonnegative(self.distance, "distance"))
-        object.__setattr__(self, "blur_radius", _blur(self.blur_radius))
+    def __init__(
+        self,
+        *,
+        angle_degrees: int | float = 0.0,
+        distance: int | float = 1.0,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
+        angle = _number(angle_degrees, "angle_degrees")
+        span = _nonnegative(distance, "distance")
+        easing = _interpolation(easing)
+        delta = {"x": math.cos(math.radians(angle)) * span, "y": math.sin(math.radians(angle)) * span}
+        object.__setattr__(self, "angle_degrees", angle)
+        object.__setattr__(self, "distance", span)
+        object.__setattr__(self, "easing", easing)
+        object.__setattr__(self, "_canonical", _definition(
+            {"position_offset": _track(((0.0, {"x": 0.0, "y": 0.0}, easing), (1.0, delta, easing)))},
+            {"position_offset": _track(((0.0, {"x": -delta["x"], "y": -delta["y"]}, easing), (1.0, {"x": 0.0, "y": 0.0}, easing)))},
+        ))
 
-    def to_canonical(self) -> dict[str, object]:
-        return {
-            **super().to_canonical(),
-            "angle_degrees": self.angle_degrees,
-            "distance": self.distance,
-            "blur_radius": self.blur_radius,
-        }
+
+class PushLeft(DirectionalPush):
+    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(angle_degrees=180.0, distance=distance, easing=easing)
+
+
+class PushRight(DirectionalPush):
+    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(angle_degrees=0.0, distance=distance, easing=easing)
+
+
+class PushUp(DirectionalPush):
+    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(angle_degrees=-90.0, distance=distance, easing=easing)
+
+
+class PushDown(DirectionalPush):
+    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(angle_degrees=90.0, distance=distance, easing=easing)
 
 
 @dataclass(frozen=True, slots=True)
-class ZoomBlur(Transition):
-    outgoing_zoom: float = 1.0
-    incoming_start_zoom: float = 1.0
-    blur_radius: float = 0.0
-    kind: ClassVar[str] = "zoom_blur"
+class ZoomCrossfade(TransitionDefinition):
+    outgoing_zoom: float = 1.1
+    incoming_start_zoom: float = 0.9
+    easing: InterpolationValue = Interpolation.EASE_IN_OUT
 
-    def __post_init__(self) -> None:
-        Transition.__post_init__(self)
-        object.__setattr__(
-            self, "outgoing_zoom", _positive(self.outgoing_zoom, "outgoing_zoom")
-        )
-        object.__setattr__(
-            self,
-            "incoming_start_zoom",
-            _positive(self.incoming_start_zoom, "incoming_start_zoom"),
-        )
-        object.__setattr__(self, "blur_radius", _blur(self.blur_radius))
+    def __init__(self, *, outgoing_zoom: int | float = 1.1, incoming_start_zoom: int | float = 0.9, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        outgoing = _positive(outgoing_zoom, "outgoing_zoom")
+        incoming = _positive(incoming_start_zoom, "incoming_start_zoom")
+        easing = _interpolation(easing)
+        outgoing_opacity, incoming_opacity = _opacity(easing)
+        object.__setattr__(self, "outgoing_zoom", outgoing)
+        object.__setattr__(self, "incoming_start_zoom", incoming)
+        object.__setattr__(self, "easing", easing)
+        object.__setattr__(self, "_canonical", _definition(
+            {**outgoing_opacity, "scale_multiplier": _track(((0.0, _scale(1.0), easing), (1.0, _scale(outgoing), easing)))},
+            {**incoming_opacity, "scale_multiplier": _track(((0.0, _scale(incoming), easing), (1.0, _scale(1.0), easing)))},
+        ))
+
+
+class ZoomIn(ZoomCrossfade):
+    def __init__(self, *, amount: int | float = 0.9, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(outgoing_zoom=1.0, incoming_start_zoom=amount, easing=easing)
+
+
+class ZoomOut(ZoomCrossfade):
+    def __init__(self, *, amount: int | float = 1.1, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(outgoing_zoom=amount, incoming_start_zoom=1.0, easing=easing)
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionPlacement:
+    id: str
+    outgoing: Layer
+    incoming: Layer
+    start: float
+    duration: float
+    definition: TransitionDefinition
 
     def to_canonical(self) -> dict[str, object]:
         return {
-            **super().to_canonical(),
-            "outgoing_zoom": self.outgoing_zoom,
-            "incoming_start_zoom": self.incoming_start_zoom,
-            "blur_radius": self.blur_radius,
+            "id": self.id,
+            "outgoing": self.outgoing.id,
+            "incoming": self.incoming.id,
+            "start": self.start,
+            "duration": self.duration,
+            "definition": self.definition.to_canonical(),
         }
 
 
 class TransitionCollection:
-    """Stable ordered transitions owned by one composition."""
+    """Stable ordered placements owned by one composition."""
 
     __slots__ = ("_composition", "_items", "_next_id")
 
     def __init__(self, composition: Composition) -> None:
         self._composition = composition
-        self._items: list[tuple[Layer, Layer, Transition]] = []
+        self._items: list[TransitionPlacement] = []
         self._next_id = 1
 
     @property
-    def items(self) -> tuple[Transition, ...]:
-        return tuple(item[2] for item in self._items)
+    def items(self) -> tuple[TransitionPlacement, ...]:
+        return tuple(self._items)
 
     def _valid_endpoint(self, layer: Layer) -> bool:
         from .editor import CompositionLayer
         from .lowering import source_capabilities
-
         if isinstance(layer, CompositionLayer):
             return True
         capabilities = source_capabilities(layer.source)
-        return (
-            capabilities.supports_direct_transition_endpoint
-            or capabilities.supports_transition_adapter
-        )
+        return capabilities.supports_direct_transition_endpoint or capabilities.supports_transition_adapter
 
-    def add(
-        self,
-        outgoing: Layer,
-        incoming: Layer,
-        transition: Transition,
-        *,
-        id: str | None = None,
-    ) -> Transition:
+    def add(self, outgoing: Layer, incoming: Layer, definition: TransitionDefinition, *, start: int | float, duration: int | float, id: str | None = None) -> TransitionPlacement:
+        from .editor import Layer
         if self._composition.parent_layer is not None:
             raise ValueError("transitions are supported only on the root composition")
-        from .editor import Layer
-
         if not isinstance(outgoing, Layer) or not isinstance(incoming, Layer):
             raise TypeError("transition endpoints must be Layer objects")
+        if not isinstance(definition, TransitionDefinition):
+            raise TypeError("definition must be a TransitionDefinition")
         if outgoing is incoming:
             raise ValueError("transition requires two different layers")
-        if (
-            outgoing.composition is not self._composition
-            or incoming.composition is not self._composition
-        ):
+        if outgoing.composition is not self._composition or incoming.composition is not self._composition:
             raise ValueError("transition endpoints must belong to the same composition")
-        if (
-            outgoing not in self._composition.layers
-            or incoming not in self._composition.layers
-        ):
+        if outgoing not in self._composition.layers or incoming not in self._composition.layers:
             raise ValueError("transition endpoints must be owned by this composition")
-        if type(transition) not in {
-            Crossfade,
-            ZoomCrossfade,
-            FlashCut,
-            DirectionalPush,
-            ZoomBlur,
-        }:
-            raise TypeError("transition must be a supported transition descriptor")
         if not self._valid_endpoint(outgoing) or not self._valid_endpoint(incoming):
             raise TypeError("one or both layers do not support transition endpoints")
-        identifier = transition.id if id is None else id
-        if identifier is None:
-            while any(
-                item[2].id == f"transition-{self._next_id:06d}" for item in self._items
-            ):
-                self._next_id += 1
-            identifier = f"transition-{self._next_id:06d}"
+        placement_start = _nonnegative(start, "start")
+        placement_duration = _positive(duration, "duration")
+        identifier = id if id is not None else f"transition-{self._next_id:06d}"
+        while identifier in {item.id for item in self._items}:
             self._next_id += 1
+            identifier = f"transition-{self._next_id:06d}"
         if not isinstance(identifier, str) or not identifier or identifier.isspace():
             raise ValueError("id must be a non-empty string")
-        if any(item[2].id == identifier for item in self._items):
+        if any(item.id == identifier for item in self._items):
             raise ValueError(f"duplicate transition ID: {identifier!r}")
-        stored = replace(transition, id=identifier)
-        self._items.append((outgoing, incoming, stored))
-        return stored
+        placement = TransitionPlacement(identifier, outgoing, incoming, placement_start, placement_duration, definition)
+        self._items.append(placement)
+        self._next_id += 1
+        return placement
 
-    def remove(self, transition: Transition) -> None:
-        for index, item in enumerate(self._items):
-            if item[2] is transition:
-                del self._items[index]
-                return
-        raise ValueError("transition is not owned by this collection")
+    def remove(self, placement: TransitionPlacement) -> None:
+        try:
+            self._items.remove(placement)
+        except ValueError as error:
+            raise ValueError("transition is not owned by this collection") from error
 
 
 __all__ = [
-    "InterpolationValue",
-    "Transition",
-    "Crossfade",
-    "ZoomCrossfade",
-    "FlashCut",
-    "DirectionalPush",
-    "ZoomBlur",
-    "TransitionCollection",
+    "InterpolationValue", "TransitionDefinition", "TransitionPlacement", "TransitionCollection",
+    "Crossfade", "DirectionalPush", "PushLeft", "PushRight", "PushUp", "PushDown",
+    "ZoomCrossfade", "ZoomIn", "ZoomOut",
 ]

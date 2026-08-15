@@ -60,7 +60,7 @@ pub struct TransitionPlacement {
 }
 
 #[cfg(test)]
-mod transition_v2_tests {
+mod generic_transition_tests {
     use crate::project::{
         CubicBezier, CubicBezierKind, Interpolation, InterpolationName, NormalizedKeyframe,
         NormalizedTrack, Point, TransitionDefinition, TransitionPlacement, TransitionPresentation,
@@ -174,61 +174,6 @@ mod transition_v2_tests {
         json["definition"]["outgoing"]["unexpected"] = serde_json::json!(true);
         assert!(serde_json::from_value::<TransitionPlacement>(json).is_err());
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Transition {
-    Crossfade {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-    },
-    ZoomCrossfade {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-        outgoing_zoom: f64,
-        incoming_start_zoom: f64,
-    },
-    FlashCut {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-        colour: String,
-        intensity: f64,
-    },
-    DirectionalPush {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-        angle_degrees: f64,
-        distance: f64,
-        blur_radius: f64,
-    },
-    ZoomBlur {
-        id: String,
-        outgoing: String,
-        incoming: String,
-        start: f64,
-        duration: f64,
-        interpolation: Interpolation,
-        outgoing_zoom: f64,
-        incoming_start_zoom: f64,
-        blur_radius: f64,
-    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

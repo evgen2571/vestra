@@ -348,7 +348,6 @@ fn phase10_release_matrix() {
             30,
             None,
         ),
-        ("zoom-blur-focused", "zoom-blur.json", 1280, 720, 100, None),
         (
             "global-post",
             "global-post-effects.json",
@@ -459,7 +458,6 @@ fn write_fixture(
             "audio-static-mix.json" | "animation-effects.json" | "effects-ready-v1.json" => {
                 "projects"
             }
-            "zoom-blur.json" => "transitions",
             "color-adjust.json" => "effects",
             "global-post-effects.json" => "compositing",
             "heavy-impact.json" => "presets",

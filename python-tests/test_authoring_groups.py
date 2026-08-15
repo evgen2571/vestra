@@ -4,7 +4,7 @@ import os
 import pytest
 
 import vestra
-from vestra import FrameRate, ProjectSnapshot
+from vestra import Crossfade, FrameRate, ProjectSnapshot
 from vestra.authoring import (
     BlendMode,
     GroupClip,
@@ -145,8 +145,8 @@ def test_grouping_transition_endpoint_is_rejected_without_mutation(endpoint: str
     asset = authored.add_image_asset("tests/assets/wgpu-small-rgba.png")
     outgoing = authored.add_image_clip(source=asset, start=0, duration=2, layer=0, id="out")
     incoming = authored.add_image_clip(source=asset, start=0, duration=2, layer=1, id="in")
-    transition = authored.transitions.add_crossfade(
-        outgoing=outgoing, incoming=incoming, start=0.5, duration=1, id="transition",
+    transition = authored.transitions.add_transition(
+        outgoing=outgoing, incoming=incoming, start=0.5, duration=1, id="transition", definition=Crossfade().to_canonical(),
     )
     before = authored.to_dict()
 
@@ -172,7 +172,7 @@ def test_group_is_a_supported_top_level_transition_endpoint(outgoing_kind: str, 
 
     outgoing = make(outgoing_kind, 0)
     incoming = make(incoming_kind, 1)
-    transition = authored.transitions.add_crossfade(outgoing=outgoing, incoming=incoming, start=0.5, duration=1)
+    transition = authored.transitions.add_transition(outgoing=outgoing, incoming=incoming, start=0.5, duration=1, definition=Crossfade().to_canonical())
     assert transition.to_canonical()["outgoing"] == outgoing.id
     assert transition.to_canonical()["incoming"] == incoming.id
 
@@ -185,6 +185,6 @@ def test_nested_group_children_are_not_transition_endpoints() -> None:
     other = authored.add_image_clip(source=asset, start=0, duration=2, layer=1)
 
     with pytest.raises(AuthoringError, match="nested Group children"):
-        authored.transitions.add_crossfade(
-            outgoing=child, incoming=other, start=0, duration=1,
+        authored.transitions.add_transition(
+            outgoing=child, incoming=other, start=0, duration=1, definition=Crossfade().to_canonical(),
         )

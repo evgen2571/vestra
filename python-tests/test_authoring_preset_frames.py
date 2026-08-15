@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 import vestra
-from vestra import FrameRate
+from vestra import Crossfade, FrameRate
 from vestra.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
 
 
@@ -135,7 +135,7 @@ def test_full_phase8_authoring_project_renders_frames_and_video_with_audio(tmp_p
     outgoing.blend_mode = BlendMode.SCREEN
     outgoing.presets.apply_impact(seed=7, duration=0.4)
     builder.timeline.shift_clip(incoming, delta=0.25)
-    builder.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
+    builder.transitions.add_transition(outgoing=outgoing, incoming=incoming, definition=Crossfade().to_canonical(), start=1.75, duration=0.25)
     builder.flashes.add(start=1.8, duration=0.1, colour="#ffffff", opacity=0.4, layer=3)
     builder.post_effects.add_contrast(amount=1.0)
     builder.output_audio = True

@@ -161,7 +161,7 @@ permit it.
 from vestra.transitions import Crossfade
 
 incoming = scene.add(Image("examples/assets/blue.png", sizing="cover"), start=0.5, duration=4.5)
-scene.transitions.add(background, incoming, Crossfade(start=0.5, duration=0.5))
+scene.transitions.add(background, incoming, Crossfade(), start=0.5, duration=0.5)
 ```
 
 Nested composition transitions are rejected. Cinematic presets are image-only
@@ -191,7 +191,7 @@ if not report.is_valid:
         print(diagnostic.code, diagnostic.message)
 
 snapshot = project.snapshot()
-assert snapshot.to_dict()["schema_version"] == 2
+assert snapshot.to_dict()["schema_version"] == 3
 
 prepared = project.prepare(backend="cpu")
 frame = prepared.render_frame_seconds(2.0)

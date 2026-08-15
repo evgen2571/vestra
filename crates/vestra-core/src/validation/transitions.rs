@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::{Category, Diagnostic, project::parse_colour};
+use crate::{Category, Diagnostic};
 
 pub(crate) fn validate_normalized_track<T>(
     track: &crate::project::NormalizedTrack<T>,
@@ -173,12 +173,7 @@ pub(crate) fn validate_placement(
     validate_definition(&placement.definition, &format!("{path}/definition"), errors);
 }
 
-/// Validates a staged generic placement set, including the ordinary per-track
-/// resource bound that will be wired into the active project validator in v2C.
-#[allow(
-    dead_code,
-    reason = "the generic validator is staged for the v2C root cutover"
-)]
+/// Validates a generic placement set and its per-layer transition schedule.
 pub(crate) fn validate_placement_set(
     placements: &[crate::project::TransitionPlacement],
     maximum_keyframes: usize,
@@ -187,6 +182,10 @@ pub(crate) fn validate_placement_set(
     let mut ids = BTreeSet::new();
     let mut intervals: std::collections::BTreeMap<&str, Vec<(f64, f64, usize)>> =
         std::collections::BTreeMap::new();
+    let mut opacity: ChannelRanges<'_, f64> = std::collections::BTreeMap::new();
+    let mut position: ChannelRanges<'_, crate::project::Point> = std::collections::BTreeMap::new();
+    let mut scale: ChannelRanges<'_, crate::project::Point> = std::collections::BTreeMap::new();
+    let mut rotation: ChannelRanges<'_, f64> = std::collections::BTreeMap::new();
     for (index, placement) in placements.iter().enumerate() {
         let path = format!("/visual/transitions/{index}");
         validate_placement(placement, &path, errors);
@@ -211,6 +210,63 @@ pub(crate) fn validate_placement_set(
                         end,
                         index,
                     ));
+                }
+                for (endpoint, presentation) in [
+                    (&placement.outgoing, &placement.definition.outgoing),
+                    (&placement.incoming, &placement.definition.incoming),
+                ] {
+                    if let Some(track) = &presentation.opacity {
+                        let first = track.keyframes.first();
+                        let last = track.keyframes.last();
+                        if let (Some(first), Some(last)) = (first, last) {
+                            opacity.entry(endpoint.as_str()).or_default().push((
+                                placement.start,
+                                end,
+                                first.value,
+                                last.value,
+                                index,
+                            ));
+                        }
+                    }
+                    if let Some(track) = &presentation.position_offset {
+                        let first = track.keyframes.first();
+                        let last = track.keyframes.last();
+                        if let (Some(first), Some(last)) = (first, last) {
+                            position.entry(endpoint.as_str()).or_default().push((
+                                placement.start,
+                                end,
+                                first.value,
+                                last.value,
+                                index,
+                            ));
+                        }
+                    }
+                    if let Some(track) = &presentation.scale_multiplier {
+                        let first = track.keyframes.first();
+                        let last = track.keyframes.last();
+                        if let (Some(first), Some(last)) = (first, last) {
+                            scale.entry(endpoint.as_str()).or_default().push((
+                                placement.start,
+                                end,
+                                first.value,
+                                last.value,
+                                index,
+                            ));
+                        }
+                    }
+                    if let Some(track) = &presentation.rotation_offset_degrees {
+                        let first = track.keyframes.first();
+                        let last = track.keyframes.last();
+                        if let (Some(first), Some(last)) = (first, last) {
+                            rotation.entry(endpoint.as_str()).or_default().push((
+                                placement.start,
+                                end,
+                                first.value,
+                                last.value,
+                                index,
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -311,6 +367,36 @@ pub(crate) fn validate_placement_set(
             }
         }
     }
+    validate_touching_channels(opacity, errors);
+    validate_touching_channels(position, errors);
+    validate_touching_channels(scale, errors);
+    validate_touching_channels(rotation, errors);
+}
+
+type ChannelRange<T> = (f64, f64, T, T, usize);
+type ChannelRanges<'a, T> = std::collections::BTreeMap<&'a str, Vec<ChannelRange<T>>>;
+
+fn validate_touching_channels<T: Copy + PartialEq>(
+    channels: ChannelRanges<'_, T>,
+    errors: &mut Vec<Diagnostic>,
+) {
+    for mut values in channels.into_values() {
+        values.sort_by(|left, right| {
+            left.0
+                .total_cmp(&right.0)
+                .then_with(|| left.1.total_cmp(&right.1))
+        });
+        for pair in values.windows(2) {
+            if pair[0].1 == pair[1].0 && pair[0].3 != pair[1].2 {
+                errors.push(Diagnostic::error(
+                    "MVP-TRANSITION-BOUNDARY",
+                    Category::Semantic,
+                    "touching transition channel values must be continuous",
+                    format!("/visual/transitions/{}/definition", pair[1].4),
+                ));
+            }
+        }
+    }
 }
 
 fn validate_interpolation(
@@ -340,9 +426,9 @@ fn validate_interpolation(
 #[cfg(test)]
 #[expect(
     clippy::items_after_test_module,
-    reason = "the legacy v1 validator remains below the staged v2A foundation"
+    reason = "generic transition tests remain above the project validator"
 )]
-mod transition_v2_tests {
+mod generic_transition_tests {
     use super::{
         validate_definition, validate_normalized_track, validate_placement, validate_placement_set,
     };
@@ -687,161 +773,28 @@ mod transition_v2_tests {
     }
 }
 
-pub(super) fn validate(visual: &crate::project::Visual, errors: &mut Vec<Diagnostic>) {
+pub(super) fn validate(
+    visual: &crate::project::Visual,
+    maximum_keyframes: usize,
+    errors: &mut Vec<Diagnostic>,
+) {
     let clips: std::collections::BTreeMap<&str, &crate::project::Clip> = visual
         .clips
         .iter()
         .map(|clip| (clip.id.as_str(), clip))
         .collect();
-    let mut ids = BTreeSet::new();
+    validate_placement_set(&visual.transitions, maximum_keyframes, errors);
     let mut affected: std::collections::BTreeMap<&str, Vec<(f64, f64)>> =
         std::collections::BTreeMap::new();
-    for (index, transition) in visual.transitions.iter().enumerate() {
+    for (index, placement) in visual.transitions.iter().enumerate() {
         let path = format!("/visual/transitions/{index}");
-        let (id, outgoing, incoming, start, duration) = match transition {
-            crate::project::Transition::Crossfade {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                ..
-            } => (id, outgoing, incoming, *start, *duration),
-            crate::project::Transition::ZoomCrossfade {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                outgoing_zoom,
-                incoming_start_zoom,
-                ..
-            } => {
-                if !outgoing_zoom.is_finite()
-                    || !incoming_start_zoom.is_finite()
-                    || *outgoing_zoom <= 0.0
-                    || *incoming_start_zoom <= 0.0
-                {
-                    errors.push(Diagnostic::error(
-                        "MVP-TRANSITION-PARAMETERS",
-                        Category::Semantic,
-                        "zoom crossfade zoom values must be finite and positive",
-                        path.clone(),
-                    ));
-                }
-                (id, outgoing, incoming, *start, *duration)
-            }
-            crate::project::Transition::FlashCut {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                colour,
-                intensity,
-                ..
-            } => {
-                if parse_colour(colour).is_none()
-                    || !intensity.is_finite()
-                    || *intensity < 0.0
-                    || *intensity > 1.0
-                {
-                    errors.push(Diagnostic::error(
-                        "MVP-TRANSITION-PARAMETERS",
-                        Category::Semantic,
-                        "flash cut colour or intensity is invalid",
-                        path.clone(),
-                    ));
-                }
-                (id, outgoing, incoming, *start, *duration)
-            }
-            crate::project::Transition::DirectionalPush {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                angle_degrees,
-                distance,
-                blur_radius,
-                ..
-            } => {
-                if !angle_degrees.is_finite()
-                    || !distance.is_finite()
-                    || *distance < 0.0
-                    || !blur_radius.is_finite()
-                    || *blur_radius < 0.0
-                    || *blur_radius > 32.0
-                {
-                    errors.push(Diagnostic::error(
-                        "MVP-TRANSITION-PARAMETERS",
-                        Category::Semantic,
-                        "directional push parameters are invalid",
-                        path.clone(),
-                    ));
-                }
-                (id, outgoing, incoming, *start, *duration)
-            }
-            crate::project::Transition::ZoomBlur {
-                id,
-                outgoing,
-                incoming,
-                start,
-                duration,
-                outgoing_zoom,
-                incoming_start_zoom,
-                blur_radius,
-                ..
-            } => {
-                if !outgoing_zoom.is_finite()
-                    || !incoming_start_zoom.is_finite()
-                    || *outgoing_zoom <= 0.0
-                    || *incoming_start_zoom <= 0.0
-                    || !blur_radius.is_finite()
-                    || *blur_radius < 0.0
-                    || *blur_radius > 32.0
-                {
-                    errors.push(Diagnostic::error(
-                        "MVP-TRANSITION-PARAMETERS",
-                        Category::Semantic,
-                        "zoom blur parameters are invalid",
-                        path.clone(),
-                    ));
-                }
-                (id, outgoing, incoming, *start, *duration)
-            }
-        };
-        if id.trim().is_empty() || !ids.insert(id) {
-            errors.push(Diagnostic::error(
-                "MVP-TRANSITION-ID",
-                Category::Semantic,
-                "transition ids must be non-empty and unique",
-                format!("{path}/id"),
-            ));
-        }
-        if !super::nonnegative(start) || !super::positive(duration) {
-            errors.push(Diagnostic::error(
-                "MVP-TRANSITION-TIME",
-                Category::Semantic,
-                "transition start and duration are invalid",
-                path,
-            ));
-            continue;
-        }
-        if outgoing == incoming {
-            errors.push(Diagnostic::error(
-                "MVP-TRANSITION-SELF",
-                Category::Semantic,
-                "transition requires two different clips",
-                path.clone(),
-            ));
-        }
-        for clip_id in [outgoing.as_str(), incoming.as_str()] {
-            match clips.get(clip_id) {
+        let end = placement.start + placement.duration;
+        for endpoint in [&placement.outgoing, &placement.incoming] {
+            match clips.get(endpoint.as_str()) {
                 Some(clip) if !clip.visible => errors.push(Diagnostic::error(
                     "MVP-TRANSITION-HIDDEN",
                     Category::Semantic,
-                    format!("transition cannot reference hidden clip '{clip_id}'"),
+                    format!("transition cannot reference hidden clip '{endpoint}'"),
                     path.clone(),
                 )),
                 Some(clip)
@@ -854,28 +807,31 @@ pub(super) fn validate(visual: &crate::project::Visual, errors: &mut Vec<Diagnos
                     errors.push(Diagnostic::error(
                         "MVP-TRANSITION-SOURCE",
                         Category::Semantic,
-                        format!("transition requires image or group clip '{clip_id}'"),
+                        format!("transition requires image or group clip '{endpoint}'"),
                         path.clone(),
-                    ));
+                    ))
                 }
                 Some(clip)
-                    if start >= clip.start && start + duration <= clip.start + clip.duration =>
+                    if placement.start.is_finite()
+                        && placement.duration.is_finite()
+                        && placement.start >= clip.start
+                        && end <= clip.start + clip.duration =>
                 {
                     affected
-                        .entry(clip_id)
+                        .entry(endpoint.as_str())
                         .or_default()
-                        .push((start, start + duration))
+                        .push((placement.start, end));
                 }
                 Some(_) => errors.push(Diagnostic::error(
                     "MVP-TRANSITION-FIT",
                     Category::Semantic,
-                    format!("transition must fit inside clip '{clip_id}'"),
+                    "transition interval must fit inside both endpoint lifetimes",
                     path.clone(),
                 )),
                 None => errors.push(Diagnostic::error(
                     "MVP-TRANSITION-CLIP",
                     Category::Semantic,
-                    format!("unknown clip '{clip_id}'"),
+                    "transition endpoint does not exist",
                     path.clone(),
                 )),
             }

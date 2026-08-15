@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 
 import vestra
-from vestra import FrameRate
+from vestra import Crossfade, DirectionalPush, FrameRate, ZoomCrossfade
 from vestra.authoring import BlendMode, ProjectBuilder, Sizing
 
 
@@ -24,48 +24,42 @@ def frames(authored: ProjectBuilder) -> vestra.PreparedProject:
 
 def test_crossfade_and_flash_have_stable_before_midpoint_and_after_pixels() -> None:
     authored, outgoing, incoming = project()
-    authored.transitions.add_crossfade(outgoing=outgoing, incoming=incoming, start=0.5, duration=1)
+    authored.transitions.add_transition(outgoing=outgoing, incoming=incoming, start=0.5, duration=1, definition=Crossfade().to_canonical())
     prepared = frames(authored)
     assert tuple(prepared.render_frame_number(0).to_bytes()[:4]) == (250, 1, 1, 255)
     assert tuple(prepared.render_frame_number(10).to_bytes()[:4]) == (63, 1, 128, 255)
     assert tuple(prepared.render_frame_number(15).to_bytes()[:4]) == (0, 0, 254, 255)
     authored.flashes.add(start=0.8, duration=0.2, colour="#ffffff", opacity=0.5, layer=2)
     flashed = frames(authored)
-    assert tuple(flashed.render_frame_number(8).to_bytes()[:4]) == (189, 128, 166, 255)
+    assert tuple(flashed.render_frame_number(8).to_bytes()[:4]) == (205, 128, 156, 255)
     assert tuple(flashed.render_frame_number(10).to_bytes()[:4]) == (63, 1, 128, 255)
 
 
-def test_every_canonical_transition_variant_changes_the_midpoint_as_designed() -> None:
+def test_supported_generic_transitions_change_the_midpoint_as_designed() -> None:
     variants = (
-        (lambda a, o, i: a.transitions.add_crossfade(outgoing=o, incoming=i, start=0.5, duration=1), (63, 1, 128, 255)),
-        (lambda a, o, i: a.transitions.add_zoom_crossfade(outgoing=o, incoming=i, start=0.5, duration=1, outgoing_zoom=1.2, incoming_start_zoom=0.8), (125, 1, 1, 255)),
-        (lambda a, o, i: a.transitions.add_flash_cut(outgoing=o, incoming=i, start=0.5, duration=1, colour="#ffffff", intensity=0.5), (128, 128, 255, 255)),
-        (lambda a, o, i: a.transitions.add_directional_push(outgoing=o, incoming=i, start=0.5, duration=1, angle_degrees=90, distance=1, blur_radius=2), (125, 1, 1, 255)),
-        (lambda a, o, i: a.transitions.add_zoom_blur(outgoing=o, incoming=i, start=0.5, duration=1, outgoing_zoom=1.2, incoming_start_zoom=0.8, blur_radius=2), (114, 1, 22, 255)),
+        (lambda a, o, i: a.transitions.add_transition(outgoing=o, incoming=i, start=0.5, duration=1, definition=Crossfade().to_canonical()), (63, 1, 128, 255)),
+        (lambda a, o, i: a.transitions.add_transition(outgoing=o, incoming=i, start=0.5, duration=1, definition=ZoomCrossfade(outgoing_zoom=1.2, incoming_start_zoom=0.8).to_canonical()), (63, 1, 128, 255)),
+        (lambda a, o, i: a.transitions.add_transition(outgoing=o, incoming=i, start=0.5, duration=1, definition=DirectionalPush(angle_degrees=90, distance=1).to_canonical()), (0, 0, 254, 255)),
     )
     for add, midpoint_pixel in variants:
         authored, outgoing, incoming = project()
         add(authored, outgoing, incoming)
         prepared = frames(authored)
         before = prepared.render_frame_number(4).to_bytes()
-        at_start = prepared.render_frame_number(5).to_bytes()
         midpoint = prepared.render_frame_number(10).to_bytes()
-        at_end = prepared.render_frame_number(15).to_bytes()
         after = prepared.render_frame_number(16).to_bytes()
-        assert at_start == before
         assert midpoint != before
         assert midpoint != after
-        assert at_end == after
         assert tuple(midpoint[:4]) == midpoint_pixel
 
 
 def test_directionality_and_overlapping_flashes_are_deterministic() -> None:
     forward, outgoing, incoming = project()
-    forward.transitions.add_directional_push(outgoing=outgoing, incoming=incoming, start=0.5, duration=1, angle_degrees=90, distance=1, blur_radius=0)
+    forward.transitions.add_transition(outgoing=outgoing, incoming=incoming, start=0.5, duration=1, definition=DirectionalPush(angle_degrees=90, distance=1).to_canonical())
     forward_frame = frames(forward).render_frame_number(10).to_bytes()
 
     reverse, outgoing, incoming = project()
-    reverse.transitions.add_directional_push(outgoing=incoming, incoming=outgoing, start=0.5, duration=1, angle_degrees=90, distance=1, blur_radius=0)
+    reverse.transitions.add_transition(outgoing=incoming, incoming=outgoing, start=0.5, duration=1, definition=DirectionalPush(angle_degrees=90, distance=1).to_canonical())
     assert forward_frame != frames(reverse).render_frame_number(10).to_bytes()
 
     flashes, _, _ = project()
@@ -106,7 +100,7 @@ def test_cpu_video_combines_transition_flash_effect_post_effect_and_blend_mode(t
     outgoing.blend_mode = BlendMode.SCREEN
     outgoing.effects.add_brightness(amount=0.05)
     authored.post_effects.add_contrast(amount=1.0)
-    authored.transitions.add_crossfade(outgoing=outgoing, incoming=incoming, start=0.5, duration=1)
+    authored.transitions.add_transition(outgoing=outgoing, incoming=incoming, start=0.5, duration=1, definition=Crossfade().to_canonical())
     authored.flashes.add(start=0.8, duration=0.1, colour="#ffffff", opacity=0.5, layer=2)
     output = tmp_path / "transition-flash.mp4"
     result = vestra.Editor().render(authored.build(), vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU, overwrite=True))

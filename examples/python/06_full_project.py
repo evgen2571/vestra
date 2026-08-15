@@ -22,7 +22,13 @@ outgoing.effects.add_brightness(amount=0.1)
 outgoing.blend_mode = BlendMode.SCREEN
 outgoing.presets.apply_impact(seed=7, duration=0.4)
 builder.timeline.shift_clip(incoming, delta=0.25)
-builder.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
+builder.transitions.add_transition(
+    outgoing=outgoing,
+    incoming=incoming,
+    definition=vestra.Crossfade().to_canonical(),
+    start=1.75,
+    duration=0.25,
+)
 builder.flashes.add(start=1.8, duration=0.1, colour="#ffffff", opacity=0.4, layer=3)
 music = builder.audio.add_track(id="music")
 music.add_clip(asset=audio, start=0, trim_start=0, trim_end=0.2)

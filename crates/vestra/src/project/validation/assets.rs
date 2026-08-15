@@ -55,6 +55,19 @@ pub(crate) fn validate(
                             .with_related_id(&asset.id),
                         ),
                     },
+                    AssetType::Font => {
+                        if std::fs::metadata(&resolved).is_ok_and(|metadata| metadata.len() == 0) {
+                            errors.push(
+                                Diagnostic::error(
+                                    "MVP-ASSET-FONT",
+                                    Category::Media,
+                                    format!("invalid font asset '{}': file is empty", asset.id),
+                                    format!("{pointer}/source"),
+                                )
+                                .with_related_id(&asset.id),
+                            );
+                        }
+                    }
                 }
                 paths.insert(asset.id.clone(), resolved);
             }

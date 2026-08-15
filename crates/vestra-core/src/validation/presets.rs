@@ -18,6 +18,7 @@ pub(super) fn validate(
         source,
         VisualSource::SolidColor { .. }
             | VisualSource::Shape(_)
+            | VisualSource::Text(_)
             | VisualSource::Spectrum2D(_)
             | VisualSource::ParticleSystem(_)
     ) {

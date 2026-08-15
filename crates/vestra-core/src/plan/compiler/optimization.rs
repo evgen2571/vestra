@@ -638,6 +638,38 @@ mod tests {
     }
 
     #[test]
+    fn static_text_source_is_static_until_layer_presentation_animates() {
+        let mut layer = CompiledLayer {
+            compiled_identity: 0,
+            id: "text".into(),
+            start_nanos: 0,
+            duration_nanos: 10,
+            start_frame: 0,
+            end_frame: 1,
+            draw_key: crate::plan::DrawKey {
+                layer: 0,
+                start_nanos: 0,
+                id: "text".into(),
+            },
+            source: crate::plan::CompiledVisualSource::Text { text_index: 0 },
+            transform: transform(),
+            transform_contributions: vec![],
+            opacity: scalar(1.0),
+            opacity_contributions: vec![],
+            effects: vec![],
+            blend_mode: crate::project::BlendMode::Normal,
+            content_dependency: TemporalDependency::Static,
+        };
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
+        layer.transform.scale.keyframes.push(Keyframe {
+            time: 1,
+            value: Point { x: 1.1, y: 1.1 },
+            interpolation: Interpolation::Linear,
+        });
+        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
+    }
+
+    #[test]
     fn transform_contribution_dependency_includes_half_open_activity_interval() {
         let mut layer = CompiledLayer {
             compiled_identity: 0,

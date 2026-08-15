@@ -9,21 +9,59 @@ use crate::{
 /// Dimensions of prepared source-local raster content.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct IntrinsicSize {
+    /// Prepared raster pixel dimensions.
     pub(crate) width: u32,
     pub(crate) height: u32,
+    /// Logical source-local layout dimensions used for Layer anchor/transform.
+    pub(crate) logical_width: f64,
+    pub(crate) logical_height: f64,
     /// Local coordinate of the prepared raster's top-left pixel.
     pub(crate) offset_x: f64,
     pub(crate) offset_y: f64,
+    /// Logical-box origin used for anchor calculations.
+    pub(crate) anchor_offset_x: f64,
+    pub(crate) anchor_offset_y: f64,
 }
 
 impl IntrinsicSize {
     #[must_use]
-    pub(crate) const fn new(width: u32, height: u32) -> Self {
+    pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
             width,
             height,
+            logical_width: f64::from(width),
+            logical_height: f64::from(height),
             offset_x: 0.0,
             offset_y: 0.0,
+            anchor_offset_x: 0.0,
+            anchor_offset_y: 0.0,
+        }
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the compact intrinsic-size constructor keeps renderer geometry allocation-free"
+    )]
+    #[must_use]
+    pub(crate) const fn with_logical_bounds_and_anchor(
+        width: u32,
+        height: u32,
+        logical_width: f64,
+        logical_height: f64,
+        offset_x: f64,
+        offset_y: f64,
+        anchor_offset_x: f64,
+        anchor_offset_y: f64,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            logical_width,
+            logical_height,
+            offset_x,
+            offset_y,
+            anchor_offset_x,
+            anchor_offset_y,
         }
     }
 }
@@ -136,6 +174,8 @@ pub(crate) struct ResolvedRasterGeometry {
     pub(crate) logical_origin_y: f64,
     pub(crate) effective_width: f64,
     pub(crate) effective_height: f64,
+    pub(crate) raster_effective_width: f64,
+    pub(crate) raster_effective_height: f64,
     pub(crate) forward: ForwardAffine,
     pub(crate) inverse: InverseAffine,
     pub(crate) transformed_corners: [Point; 4],
@@ -155,16 +195,16 @@ impl ResolvedRasterGeometry {
                 self.forward
                     .map(self.logical_origin_x, self.logical_origin_y),
                 self.forward.map(
-                    self.logical_origin_x + self.effective_width,
+                    self.logical_origin_x + self.raster_effective_width,
                     self.logical_origin_y
                 ),
                 self.forward.map(
                     self.logical_origin_x,
-                    self.logical_origin_y + self.effective_height
+                    self.logical_origin_y + self.raster_effective_height
                 ),
                 self.forward.map(
-                    self.logical_origin_x + self.effective_width,
-                    self.logical_origin_y + self.effective_height,
+                    self.logical_origin_x + self.raster_effective_width,
+                    self.logical_origin_y + self.raster_effective_height,
                 ),
             ]
         );
@@ -208,25 +248,29 @@ pub(crate) fn resolve_raster_geometry(
             normalized_crop: crop,
         }
     };
-    let cropped_width = source.normalized_crop.width * f64::from(source.width);
-    let cropped_height = source.normalized_crop.height * f64::from(source.height);
     let (effective_width, effective_height) = effective_dimensions(
         sizing,
-        cropped_width,
-        cropped_height,
+        intrinsic.logical_width * source.normalized_crop.width,
+        intrinsic.logical_height * source.normalized_crop.height,
         canvas_width,
         canvas_height,
     );
     let logical_origin_x = intrinsic.offset_x;
     let logical_origin_y = intrinsic.offset_y;
+    let anchor_origin_x = intrinsic.anchor_offset_x;
+    let anchor_origin_y = intrinsic.anchor_offset_y;
+    let raster_scale_x = f64::from(source.width) / intrinsic.logical_width;
+    let raster_scale_y = f64::from(source.height) / intrinsic.logical_height;
+    let raster_effective_width = effective_width * raster_scale_x;
+    let raster_effective_height = effective_height * raster_scale_y;
     let forward = ForwardAffine::for_transform(
         transform,
         canvas_width,
         canvas_height,
         effective_width,
         effective_height,
-        logical_origin_x,
-        logical_origin_y,
+        anchor_origin_x,
+        anchor_origin_y,
     );
     let inverse = InverseAffine::for_transform(
         transform,
@@ -234,16 +278,16 @@ pub(crate) fn resolve_raster_geometry(
         canvas_height,
         effective_width,
         effective_height,
-        logical_origin_x,
-        logical_origin_y,
+        anchor_origin_x,
+        anchor_origin_y,
     );
     let transformed_corners = [
         forward.map(logical_origin_x, logical_origin_y),
-        forward.map(logical_origin_x + effective_width, logical_origin_y),
-        forward.map(logical_origin_x, logical_origin_y + effective_height),
+        forward.map(logical_origin_x + raster_effective_width, logical_origin_y),
+        forward.map(logical_origin_x, logical_origin_y + raster_effective_height),
         forward.map(
-            logical_origin_x + effective_width,
-            logical_origin_y + effective_height,
+            logical_origin_x + raster_effective_width,
+            logical_origin_y + raster_effective_height,
         ),
     ];
     ResolvedRasterGeometry {
@@ -252,6 +296,8 @@ pub(crate) fn resolve_raster_geometry(
         logical_origin_y,
         effective_width,
         effective_height,
+        raster_effective_width,
+        raster_effective_height,
         forward,
         inverse,
         transformed_corners,
@@ -266,14 +312,14 @@ impl InverseAffine {
         canvas_height: u32,
         source_width: f64,
         source_height: f64,
-        logical_origin_x: f64,
-        logical_origin_y: f64,
+        anchor_origin_x: f64,
+        anchor_origin_y: f64,
     ) -> Self {
         let (sine, cosine) = transform.rotation_radians.sin_cos();
         let destination_x = transform.position.x * f64::from(canvas_width);
         let destination_y = transform.position.y * f64::from(canvas_height);
-        let anchor_x = logical_origin_x + transform.anchor.x * source_width;
-        let anchor_y = logical_origin_y + transform.anchor.y * source_height;
+        let anchor_x = anchor_origin_x + transform.anchor.x * source_width;
+        let anchor_y = anchor_origin_y + transform.anchor.y * source_height;
         let m00 = cosine / transform.scale.x;
         let m01 = sine / transform.scale.x;
         let m10 = -sine / transform.scale.y;
@@ -305,14 +351,14 @@ impl ForwardAffine {
         canvas_height: u32,
         source_width: f64,
         source_height: f64,
-        logical_origin_x: f64,
-        logical_origin_y: f64,
+        anchor_origin_x: f64,
+        anchor_origin_y: f64,
     ) -> Self {
         let (sine, cosine) = transform.rotation_radians.sin_cos();
         let destination_x = transform.position.x * f64::from(canvas_width);
         let destination_y = transform.position.y * f64::from(canvas_height);
-        let anchor_x = logical_origin_x + transform.anchor.x * source_width;
-        let anchor_y = logical_origin_y + transform.anchor.y * source_height;
+        let anchor_x = anchor_origin_x + transform.anchor.x * source_width;
+        let anchor_y = anchor_origin_y + transform.anchor.y * source_height;
         let m00 = cosine * transform.scale.x;
         let m01 = -sine * transform.scale.y;
         let m10 = sine * transform.scale.x;
@@ -375,8 +421,12 @@ mod tests {
             IntrinsicSize {
                 width: 1920,
                 height: 1080,
+                logical_width: 1920.0,
+                logical_height: 1080.0,
                 offset_x: 0.0,
                 offset_y: 0.0,
+                anchor_offset_x: 0.0,
+                anchor_offset_y: 0.0,
             }
         );
     }
@@ -386,8 +436,12 @@ mod tests {
         let bounds = IntrinsicSize {
             width: 40,
             height: 20,
+            logical_width: 40.0,
+            logical_height: 20.0,
             offset_x: -12.5,
             offset_y: 3.0,
+            anchor_offset_x: -12.5,
+            anchor_offset_y: 3.0,
         };
         assert_eq!(bounds.offset_x, -12.5);
         assert_eq!(bounds.offset_y, 3.0);
@@ -414,8 +468,12 @@ mod tests {
             IntrinsicSize {
                 width: 10,
                 height: 8,
+                logical_width: 10.0,
+                logical_height: 8.0,
                 offset_x: 5.0,
                 offset_y: -3.0,
+                anchor_offset_x: 5.0,
+                anchor_offset_y: -3.0,
             },
             Crop {
                 x: 0.0,
@@ -581,8 +639,12 @@ mod tests {
             IntrinsicSize {
                 width: 200,
                 height: 100,
+                logical_width: 200.0,
+                logical_height: 100.0,
                 offset_x: -100.0,
                 offset_y: -50.0,
+                anchor_offset_x: -100.0,
+                anchor_offset_y: -50.0,
             },
             Crop {
                 x: 0.0,
@@ -611,8 +673,12 @@ mod tests {
             IntrinsicSize {
                 width: 200,
                 height: 100,
+                logical_width: 200.0,
+                logical_height: 100.0,
                 offset_x: -100.0,
                 offset_y: -50.0,
+                anchor_offset_x: -100.0,
+                anchor_offset_y: -50.0,
             },
             Crop {
                 x: 0.0,

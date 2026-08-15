@@ -445,6 +445,7 @@ pub enum VisualSource {
         colour: String,
     },
     Shape(ShapeSource),
+    Text(TextSource),
     #[serde(rename = "spectrum2d")]
     Spectrum2D(Spectrum2D),
     #[serde(rename = "particle_system")]
@@ -457,7 +458,10 @@ impl VisualSource {
     /// directly to this source without an adapter.
     #[must_use]
     pub const fn supports_direct_transform(&self) -> bool {
-        matches!(self, Self::Image { .. } | Self::Shape(_) | Self::Group(_))
+        matches!(
+            self,
+            Self::Image { .. } | Self::Shape(_) | Self::Text(_) | Self::Group(_)
+        )
     }
 
     /// Whether this source may be used as a direct transition endpoint.
@@ -478,6 +482,42 @@ pub struct ShapeSource {
     pub stroke: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub stroke_width: f64,
+}
+
+/// A static, file-backed text source. Layout and raster data are prepared by
+/// the renderer and are intentionally absent from the canonical model.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct TextSource {
+    pub text: String,
+    pub font: String,
+    pub font_size: f64,
+    pub fill: String,
+    #[serde(default)]
+    pub align: TextAlignment,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<f64>,
+    #[serde(default = "default_text_line_spacing", skip_serializing_if = "is_one")]
+    pub line_spacing: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub letter_spacing: f64,
+}
+
+const fn default_text_line_spacing() -> f64 {
+    1.0
+}
+
+fn is_one(value: &f64) -> bool {
+    *value == 1.0
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TextAlignment {
+    #[default]
+    Left,
+    Center,
+    Right,
 }
 
 /// Primitive geometry expressed in source-local pixels.
@@ -612,6 +652,28 @@ mod tests {
         let decoded = serde_json::from_value::<VisualSource>(value.clone()).expect("shape parses");
         assert_eq!(
             serde_json::to_value(decoded).expect("shape serializes"),
+            value
+        );
+    }
+
+    #[test]
+    fn text_sources_round_trip_without_prepared_layout_data() {
+        let source = VisualSource::Text(TextSource {
+            text: "AV ffi\nΔ".to_owned(),
+            font: "font-000001".to_owned(),
+            font_size: 48.0,
+            fill: "#ffffff80".to_owned(),
+            align: TextAlignment::Center,
+            max_width: Some(640.0),
+            line_spacing: 1.2,
+            letter_spacing: 2.0,
+        });
+        let value = serde_json::to_value(&source).expect("text serializes");
+        assert_eq!(value["type"], "text");
+        assert!(value.get("glyphs").is_none());
+        assert_eq!(
+            serde_json::to_value(serde_json::from_value::<VisualSource>(value.clone()).unwrap())
+                .unwrap(),
             value
         );
     }

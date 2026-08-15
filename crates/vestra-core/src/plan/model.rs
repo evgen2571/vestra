@@ -28,6 +28,8 @@ pub struct RenderPlan {
     pub limits: crate::validation::ResourceLimits,
     pub images: Vec<ImageAsset>,
     pub shapes: Vec<crate::project::ShapeSource>,
+    pub texts: Vec<crate::project::TextSource>,
+    pub fonts: Vec<FontAsset>,
     pub layers: Vec<CompiledLayer>,
     pub post_effects: Vec<TimedEffect>,
     /// Whether the complete post-effect result can vary with project time.
@@ -88,6 +90,12 @@ pub struct Canvas {
 
 #[derive(Clone, Debug)]
 pub struct ImageAsset {
+    pub id: String,
+    pub path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+pub struct FontAsset {
     pub id: String,
     pub path: PathBuf,
 }
@@ -181,6 +189,9 @@ pub enum CompiledVisualSource {
     },
     Shape {
         shape_index: usize,
+    },
+    Text {
+        text_index: usize,
     },
     Spectrum2D {
         band_signals: Vec<crate::plan::ScalarSignalId>,

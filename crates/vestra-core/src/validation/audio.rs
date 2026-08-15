@@ -83,6 +83,12 @@ pub(super) fn validate(
                     "audio clip must reference an audio asset",
                     format!("{clip_path}/asset"),
                 )),
+                Some(AssetType::Font) => errors.push(Diagnostic::error(
+                    "MVP-AUDIO-ASSET-TYPE",
+                    Category::Semantic,
+                    "audio clip must reference an audio asset",
+                    format!("{clip_path}/asset"),
+                )),
                 None => errors.push(Diagnostic::error(
                     "MVP-AUDIO-ASSET",
                     Category::Semantic,

@@ -9,9 +9,9 @@ from typing import TypeAlias, cast, overload
 from .._native import Editor, FrameRate, Project as ProjectSnapshot, ValidationReport
 
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
-from .assets import AudioAsset, ImageAsset
+from .assets import AudioAsset, FontAsset, ImageAsset
 from .audio import AudioTimeline
-from .clips import GroupClip, ImageClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip, VisualClip
+from .clips import GroupClip, ImageClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip, TextClip, VisualClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .errors import AuthoringError
 from .flashes import FlashCollection
@@ -115,7 +115,7 @@ class ProjectBuilder:
                 raise ValueError("automatic duration mode must not specify duration")
             self._duration_mode = DurationMode.EXPLICIT
             self._duration = _number(duration, "duration")
-        self._assets: list[ImageAsset | AudioAsset] = []
+        self._assets: list[ImageAsset | AudioAsset | FontAsset] = []
         self._clips: list[VisualClip] = []
         if not isinstance(output_audio, bool):
             raise TypeError("output_audio must be a boolean")
@@ -314,6 +314,30 @@ class ProjectBuilder:
         self._assets.append(asset)
         return asset
 
+    def add_font_asset(self, source: str | os.PathLike[str], *, id: str | None = None) -> FontAsset:
+        normalized_source = self._asset_source(source)
+        if id is not None:
+            self._ids.validate("asset", id)
+        identifier = self._ids.allocate("asset", "font") if id is None else self._ids.reserve("asset", id)
+        asset = FontAsset._create(identifier, normalized_source, self._owner)
+        self._assets.append(asset)
+        return asset
+
+    def add_text_clip(
+        self, *, source: dict[str, object], font: FontAsset, start: int | float,
+        duration: int | float, layer: int, visible: bool = True,
+        opacity: int | float = 1.0, id: str | None = None,
+    ) -> TextClip:
+        if not isinstance(font, FontAsset):
+            raise TypeError("font must be FontAsset")
+        _require_owner(self._owner, font._owner)
+        staged = TextClip._create(self._owner, "", source, font, start=start, duration=duration,
+                                  layer=layer, visible=visible, opacity=opacity)
+        staged._id = self._ids.allocate("clip", "text") if id is None else self._ids.reserve("clip", id)
+        staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        self._clips.append(staged)
+        return staged
+
     def add_image_clip(
         self, *, source: ImageAsset, start: int | float, duration: int | float, layer: int,
         visible: bool = True, sizing: Sizing | None = None, crop: Crop | None = None,
@@ -398,7 +422,7 @@ class ProjectBuilder:
         if not isinstance(clips, list | tuple):
             raise TypeError("clips must be a list or tuple of visual clips")
         children = tuple(clips)
-        supported = (ImageClip, SolidColorClip, ShapeClip, ParticleSystemClip, Spectrum2DClip, GroupClip)
+        supported = (ImageClip, SolidColorClip, ShapeClip, TextClip, ParticleSystemClip, Spectrum2DClip, GroupClip)
         for child in children:
             if not isinstance(child, supported):
                 raise TypeError("clips must contain supported visual clips")

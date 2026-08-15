@@ -85,6 +85,27 @@ pub(crate) fn draw_layer(
                 );
             }
         }
+        EvaluatedSource::Text { text_index } => {
+            let prepared = assets.text_source(*text_index);
+            if layer.transform.is_valid() {
+                draw_raster(
+                    canvas,
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &crate::plan::CompiledSizing::Original,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                );
+            }
+        }
         EvaluatedSource::Spectrum2D {
             bands,
             x,
@@ -248,17 +269,17 @@ fn draw_resolved_raster(
         for x in min_x..max_x {
             if mapped.x >= geometry.logical_origin_x
                 && mapped.y >= geometry.logical_origin_y
-                && mapped.x < geometry.logical_origin_x + geometry.effective_width
-                && mapped.y < geometry.logical_origin_y + geometry.effective_height
+                && mapped.x < geometry.logical_origin_x + geometry.raster_effective_width
+                && mapped.y < geometry.logical_origin_y + geometry.raster_effective_height
             {
                 let local_x = mapped.x - geometry.logical_origin_x;
                 let local_y = mapped.y - geometry.logical_origin_y;
                 let source_x = geometry.source.normalized_crop.x * f64::from(source.width())
-                    + local_x / geometry.effective_width
+                    + local_x / geometry.raster_effective_width
                         * geometry.source.normalized_crop.width
                         * f64::from(source.width());
                 let source_y = geometry.source.normalized_crop.y * f64::from(source.height())
-                    + local_y / geometry.effective_height
+                    + local_y / geometry.raster_effective_height
                         * geometry.source.normalized_crop.height
                         * f64::from(source.height());
                 let sampled = apply_colour_transform(

@@ -43,7 +43,7 @@ pub use visual::{
     SPECTRUM2D_MIN_BAND_COUNT, ScalarLifetimeStop, ScalarRange, ShapeGeometry, ShapeSource, Sizing,
     Spectrum2D, Spectrum2DBandMapping, Spectrum2DGradient, Spectrum2DGradientDirection,
     Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Spectrum2DRadialDirection,
-    Spectrum2DRadialLayout, Transform, Visual, VisualSource,
+    Spectrum2DRadialLayout, TextAlignment, TextSource, Transform, Visual, VisualSource,
 };
 
 pub use crate::domain::{Crop, Point};

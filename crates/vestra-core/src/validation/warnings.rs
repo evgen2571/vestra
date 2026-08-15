@@ -43,6 +43,7 @@ fn collect_used_visual_assets<'a>(
             }
             crate::project::VisualSource::SolidColor { .. }
             | crate::project::VisualSource::Shape(_)
+            | crate::project::VisualSource::Text(_)
             | crate::project::VisualSource::Spectrum2D(_)
             | crate::project::VisualSource::ParticleSystem(_) => {}
         }

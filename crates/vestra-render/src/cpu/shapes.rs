@@ -29,7 +29,7 @@ pub(crate) fn raster_dimensions(source: &ShapeSource) -> Option<(u32, u32)> {
 }
 
 pub(crate) fn prepare(source: &ShapeSource) -> PreparedShape {
-    let (min_x, min_y, _, _) = bounds(source);
+    let (min_x, min_y, max_x, max_y) = bounds(source);
     let (width, height) = raster_dimensions(source).expect("validated shape dimensions fit pixmap");
     let mut pixmap = Pixmap::new(width, height).expect("validated shape dimensions fit pixmap");
     let mut path = PathBuilder::new();
@@ -77,8 +77,12 @@ pub(crate) fn prepare(source: &ShapeSource) -> PreparedShape {
         intrinsic_size: IntrinsicSize {
             width,
             height,
+            logical_width: max_x - min_x,
+            logical_height: max_y - min_y,
             offset_x: min_x,
             offset_y: min_y,
+            anchor_offset_x: min_x,
+            anchor_offset_y: min_y,
         },
     }
 }

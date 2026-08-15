@@ -5,6 +5,7 @@ from .base import ParticleAudioReactive, Source, SizingValue
 from .color import Color, SolidColor
 from .image import Image
 from .shapes import Circle, Ellipse, Line, Polygon, Rectangle, Shape
+from .text import Text
 from .particles import (
     CircleEmitter,
     ColourLifetimeStop,
@@ -35,6 +36,7 @@ __all__ = [
     "Circle",
     "Line",
     "Polygon",
+    "Text",
     "Color",
     "SolidColor",
     "Source",

@@ -61,3 +61,11 @@ class AudioAsset(_Asset):
     @property
     def kind(self) -> str:
         return "audio"
+
+
+class FontAsset(_Asset):
+    """A registered file-backed font asset."""
+
+    @property
+    def kind(self) -> str:
+        return "font"

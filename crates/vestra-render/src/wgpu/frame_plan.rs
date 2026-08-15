@@ -728,6 +728,12 @@ fn append_layer(
                 parameters_index: *parameter_count,
             })
         }
+        EvaluatedSource::Text { text_index } => operations.push(GpuOperation::RenderRasterLayer {
+            layer_index,
+            source_index: *text_index,
+            destination: TextureSlot::Layer,
+            parameters_index: *parameter_count,
+        }),
         EvaluatedSource::SolidColor { .. } => operations.push(GpuOperation::RenderSolidLayer {
             layer_index,
             destination: TextureSlot::Layer,

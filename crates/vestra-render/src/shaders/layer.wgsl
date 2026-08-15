@@ -53,7 +53,9 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (params.mode == 2u) { write_pixel(coord, transformed_colour(params.solid_or_background)); return; }
     let point = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
     let mapped = vec2<f32>(dot(params.inverse_row0.xyz, vec3<f32>(point, 1.0)), dot(params.inverse_row1.xyz, vec3<f32>(point, 1.0)));
-    if (mapped.x < 0.0 || mapped.y < 0.0 || mapped.x >= params.effective.x || mapped.y >= params.effective.y) { write_pixel(coord, vec4<f32>(0.0)); return; }
-    let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + mapped / params.effective.xy * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
+    let local_origin = params.solid_or_background.xy;
+    if (mapped.x < local_origin.x || mapped.y < local_origin.y || mapped.x >= local_origin.x + params.effective.x || mapped.y >= local_origin.y + params.effective.y) { write_pixel(coord, vec4<f32>(0.0)); return; }
+    let local = mapped - local_origin;
+    let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + local / params.effective.xy * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
     write_pixel(coord, transformed_colour(bilinear(source_position)));
 }

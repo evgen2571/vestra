@@ -3,6 +3,7 @@
 use image::{Rgba, RgbaImage};
 
 use crate::{
+    domain::Crop,
     plan::{ColourTransform, EvaluatedLayer, EvaluatedSource},
     render::{
         blend::source_over,
@@ -15,9 +16,6 @@ use crate::{
 
 #[cfg(test)]
 use crate::animation::Transform2D;
-#[cfg(test)]
-use crate::domain::Crop;
-
 pub(crate) fn draw_layer(
     canvas: &mut RgbaImage,
     assets: &mut PreparedAssets,
@@ -39,7 +37,6 @@ pub(crate) fn draw_layer(
         } => {
             let prepared = assets.raster_source(*asset_index);
             let intrinsic = prepared.intrinsic_size();
-            let (original_width, original_height) = (intrinsic.width, intrinsic.height);
             let (source, resolved_cacheable_crop) = if *cacheable_crop {
                 if let Some(source) = assets.crop(*asset_index, *crop) {
                     (source, true)
@@ -49,19 +46,19 @@ pub(crate) fn draw_layer(
             } else {
                 (prepared.pixels(), false)
             };
-            let resolved = geometry::resolve_image_geometry(
-                original_width,
-                original_height,
-                *crop,
-                resolved_cacheable_crop,
-                sizing,
-                layer.transform,
-                canvas.width(),
-                canvas.height(),
-            );
             if layer.transform.is_valid() {
                 let started = profiling_enabled.then(std::time::Instant::now);
-                draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
+                draw_raster(
+                    canvas,
+                    source,
+                    intrinsic,
+                    *crop,
+                    resolved_cacheable_crop,
+                    sizing,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                );
                 if let Some(started) = started {
                     timings.transform_sampling += started.elapsed();
                 }
@@ -110,6 +107,33 @@ pub(crate) fn draw_layer(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the shared raster seam keeps prepared pixels and presentation inputs explicit"
+)]
+pub(crate) fn draw_raster(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    intrinsic: geometry::IntrinsicSize,
+    crop: Crop,
+    cacheable_crop: bool,
+    sizing: &crate::plan::CompiledSizing,
+    transform: crate::animation::Transform2D,
+    opacity: f64,
+    colour_transform: ColourTransform,
+) {
+    let resolved = geometry::resolve_raster_geometry(
+        intrinsic,
+        crop,
+        cacheable_crop,
+        sizing,
+        transform,
+        canvas.width(),
+        canvas.height(),
+    );
+    draw_resolved_raster(canvas, source, &resolved, opacity, colour_transform);
+}
+
 pub(crate) fn draw_surface(
     canvas: &mut RgbaImage,
     source: &RgbaImage,
@@ -119,9 +143,8 @@ pub(crate) fn draw_surface(
     if !transform.is_valid() {
         return;
     }
-    let resolved = geometry::resolve_image_geometry(
-        source.width(),
-        source.height(),
+    let resolved = geometry::resolve_raster_geometry(
+        geometry::IntrinsicSize::new(source.width(), source.height()),
         crate::domain::Crop {
             x: 0.0,
             y: 0.0,
@@ -134,7 +157,7 @@ pub(crate) fn draw_surface(
         canvas.width(),
         canvas.height(),
     );
-    draw_resolved_image(canvas, source, &resolved, 1.0, colour_transform);
+    draw_resolved_raster(canvas, source, &resolved, 1.0, colour_transform);
 }
 
 pub(super) fn raster_bounds(start: f64, end: f64, limit: u32) -> Option<(u32, u32)> {
@@ -175,9 +198,8 @@ pub(crate) fn draw_image(
     opacity: f64,
     colour_transform: ColourTransform,
 ) {
-    let resolved = geometry::resolve_image_geometry(
-        source.width(),
-        source.height(),
+    let resolved = geometry::resolve_raster_geometry(
+        geometry::IntrinsicSize::new(source.width(), source.height()),
         crop,
         false,
         &crate::plan::CompiledSizing::Stretch {
@@ -188,13 +210,13 @@ pub(crate) fn draw_image(
         canvas.width(),
         canvas.height(),
     );
-    draw_resolved_image(canvas, source, &resolved, opacity, colour_transform);
+    draw_resolved_raster(canvas, source, &resolved, opacity, colour_transform);
 }
 
-fn draw_resolved_image(
+fn draw_resolved_raster(
     canvas: &mut RgbaImage,
     source: &RgbaImage,
-    geometry: &geometry::ResolvedImageGeometry,
+    geometry: &geometry::ResolvedRasterGeometry,
     opacity: f64,
     colour_transform: ColourTransform,
 ) {
@@ -203,17 +225,19 @@ fn draw_resolved_image(
     for y in min_y..max_y {
         let mut mapped = inverse.map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
         for x in min_x..max_x {
-            if mapped.x >= 0.0
-                && mapped.y >= 0.0
-                && mapped.x < geometry.effective_width
-                && mapped.y < geometry.effective_height
+            if mapped.x >= geometry.origin_x
+                && mapped.y >= geometry.origin_y
+                && mapped.x < geometry.origin_x + geometry.effective_width
+                && mapped.y < geometry.origin_y + geometry.effective_height
             {
+                let local_x = mapped.x - geometry.origin_x;
+                let local_y = mapped.y - geometry.origin_y;
                 let source_x = geometry.source.normalized_crop.x * f64::from(source.width())
-                    + mapped.x / geometry.effective_width
+                    + local_x / geometry.effective_width
                         * geometry.source.normalized_crop.width
                         * f64::from(source.width());
                 let source_y = geometry.source.normalized_crop.y * f64::from(source.height())
-                    + mapped.y / geometry.effective_height
+                    + local_y / geometry.effective_height
                         * geometry.source.normalized_crop.height
                         * f64::from(source.height());
                 let sampled = apply_colour_transform(
@@ -246,9 +270,8 @@ pub(crate) fn visible_bounds(
     canvas_width: u32,
     canvas_height: u32,
 ) -> (u32, u32, u32, u32) {
-    let geometry = geometry::resolve_image_geometry(
-        source_width as u32,
-        source_height as u32,
+    let geometry = geometry::resolve_raster_geometry(
+        geometry::IntrinsicSize::new(source_width as u32, source_height as u32),
         Crop {
             x: 0.0,
             y: 0.0,

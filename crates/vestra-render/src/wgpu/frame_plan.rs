@@ -60,7 +60,7 @@ pub(super) enum GpuOperation {
     },
     RenderRasterLayer {
         layer_index: usize,
-        source_asset_index: usize,
+        source_index: usize,
         destination: TextureSlot,
         parameters_index: u32,
     },
@@ -316,14 +316,14 @@ impl GpuFramePlan {
                     next_value += 1;
                 }
                 GpuOperation::RenderRasterLayer {
-                    source_asset_index,
+                    source_index,
                     destination,
                     ..
                 } => {
                     if *destination != TextureSlot::Layer {
                         return Err(invalid(operation_index, "must render a layer into Layer"));
                     }
-                    if *source_asset_index >= source_asset_count {
+                    if *source_index >= source_asset_count {
                         return Err(invalid(
                             operation_index,
                             "references an invalid source asset",
@@ -715,7 +715,7 @@ fn append_layer(
         EvaluatedSource::Image { asset_index, .. } => {
             operations.push(GpuOperation::RenderRasterLayer {
                 layer_index,
-                source_asset_index: *asset_index,
+                source_index: *asset_index,
                 destination: TextureSlot::Layer,
                 parameters_index: *parameter_count,
             })

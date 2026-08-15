@@ -130,8 +130,10 @@ impl ForwardAffine {
 
 /// All renderer-neutral geometry required to draw an evaluated image layer.
 #[derive(Clone, Debug)]
-pub(crate) struct ResolvedImageGeometry {
+pub(crate) struct ResolvedRasterGeometry {
     pub(crate) source: ResolvedSourceRegion,
+    pub(crate) origin_x: f64,
+    pub(crate) origin_y: f64,
     pub(crate) effective_width: f64,
     pub(crate) effective_height: f64,
     pub(crate) forward: ForwardAffine,
@@ -139,7 +141,7 @@ pub(crate) struct ResolvedImageGeometry {
     pub(crate) transformed_corners: [Point; 4],
 }
 
-impl ResolvedImageGeometry {
+impl ResolvedRasterGeometry {
     /// Returns CPU raster bounds from the shared forward transform and corners.
     #[must_use]
     pub(crate) fn visible_bounds(
@@ -150,11 +152,15 @@ impl ResolvedImageGeometry {
         debug_assert_eq!(
             self.transformed_corners,
             [
-                self.forward.map(0.0, 0.0),
-                self.forward.map(self.effective_width, 0.0),
-                self.forward.map(0.0, self.effective_height),
+                self.forward.map(self.origin_x, self.origin_y),
                 self.forward
-                    .map(self.effective_width, self.effective_height),
+                    .map(self.origin_x + self.effective_width, self.origin_y),
+                self.forward
+                    .map(self.origin_x, self.origin_y + self.effective_height),
+                self.forward.map(
+                    self.origin_x + self.effective_width,
+                    self.origin_y + self.effective_height,
+                ),
             ]
         );
         visible_bounds(&self.transformed_corners, canvas_width, canvas_height)
@@ -163,20 +169,17 @@ impl ResolvedImageGeometry {
 
 /// Resolves crop, sizing, and both affine directions once for all renderers.
 #[must_use]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the evaluated layer keeps source, crop, sizing, transform, and canvas fields separate"
-)]
-pub(crate) fn resolve_image_geometry(
-    source_width: u32,
-    source_height: u32,
+pub(crate) fn resolve_raster_geometry(
+    intrinsic: IntrinsicSize,
     crop: Crop,
     cacheable_crop: bool,
     sizing: &CompiledSizing,
     transform: Transform2D,
     canvas_width: u32,
     canvas_height: u32,
-) -> ResolvedImageGeometry {
+) -> ResolvedRasterGeometry {
+    let source_width = intrinsic.width;
+    let source_height = intrinsic.height;
     let source = if cacheable_crop {
         let bounds = crop_bounds(source_width, source_height, crop);
         ResolvedSourceRegion {
@@ -209,6 +212,8 @@ pub(crate) fn resolve_image_geometry(
         canvas_width,
         canvas_height,
     );
+    let origin_x = intrinsic.offset_x + f64::from(source.origin_x);
+    let origin_y = intrinsic.offset_y + f64::from(source.origin_y);
     let forward = ForwardAffine::for_transform(
         transform,
         canvas_width,
@@ -224,13 +229,15 @@ pub(crate) fn resolve_image_geometry(
         effective_height,
     );
     let transformed_corners = [
-        forward.map(0.0, 0.0),
-        forward.map(effective_width, 0.0),
-        forward.map(0.0, effective_height),
-        forward.map(effective_width, effective_height),
+        forward.map(origin_x, origin_y),
+        forward.map(origin_x + effective_width, origin_y),
+        forward.map(origin_x, origin_y + effective_height),
+        forward.map(origin_x + effective_width, origin_y + effective_height),
     ];
-    ResolvedImageGeometry {
+    ResolvedRasterGeometry {
         source,
+        origin_x,
+        origin_y,
         effective_width,
         effective_height,
         forward,
@@ -338,7 +345,7 @@ pub(crate) fn visible_bounds(
 
 #[cfg(test)]
 mod tests {
-    use super::{IntrinsicSize, resolve_image_geometry, visible_bounds};
+    use super::{IntrinsicSize, resolve_raster_geometry, visible_bounds};
     use crate::{
         animation::Transform2D,
         domain::{Crop, Point},
@@ -370,6 +377,52 @@ mod tests {
         assert_eq!(bounds.offset_y, 3.0);
     }
 
+    #[test]
+    fn raster_origin_changes_transformed_corners() {
+        let transform = transform(Point { x: 1.0, y: 1.0 }, 0.0, Point { x: 0.0, y: 0.0 });
+        let origin = resolve_raster_geometry(
+            IntrinsicSize::new(10, 8),
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            false,
+            &CompiledSizing::Original,
+            transform,
+            40,
+            30,
+        );
+        let shifted = resolve_raster_geometry(
+            IntrinsicSize {
+                width: 10,
+                height: 8,
+                offset_x: 5.0,
+                offset_y: -3.0,
+            },
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            false,
+            &CompiledSizing::Original,
+            transform,
+            40,
+            30,
+        );
+        assert_eq!(
+            shifted.transformed_corners[0].x - origin.transformed_corners[0].x,
+            5.0
+        );
+        assert_eq!(
+            shifted.transformed_corners[0].y - origin.transformed_corners[0].y,
+            -3.0
+        );
+    }
+
     fn transform(scale: Point, rotation_radians: f64, anchor: Point) -> Transform2D {
         Transform2D {
             position: Point { x: 0.4, y: 0.6 },
@@ -396,9 +449,8 @@ mod tests {
             ),
         ];
         for (sizing, canvas_width, canvas_height) in cases {
-            let geometry = resolve_image_geometry(
-                320,
-                200,
+            let geometry = resolve_raster_geometry(
+                IntrinsicSize::new(320, 200),
                 Crop {
                     x: 0.1,
                     y: 0.2,
@@ -412,14 +464,17 @@ mod tests {
                 canvas_height,
             );
             for source in [
-                Point { x: 0.0, y: 0.0 },
                 Point {
-                    x: geometry.effective_width * 0.4,
-                    y: geometry.effective_height * 0.7,
+                    x: geometry.origin_x,
+                    y: geometry.origin_y,
                 },
                 Point {
-                    x: geometry.effective_width,
-                    y: geometry.effective_height,
+                    x: geometry.origin_x + geometry.effective_width * 0.4,
+                    y: geometry.origin_y + geometry.effective_height * 0.7,
+                },
+                Point {
+                    x: geometry.origin_x + geometry.effective_width,
+                    y: geometry.origin_y + geometry.effective_height,
                 },
             ] {
                 let destination = geometry.forward.map(source.x, source.y);
@@ -436,9 +491,8 @@ mod tests {
 
     #[test]
     fn cacheable_crop_uses_the_same_materialized_region_as_wgpu_parameters() {
-        let geometry = resolve_image_geometry(
-            101,
-            79,
+        let geometry = resolve_raster_geometry(
+            IntrinsicSize::new(101, 79),
             Crop {
                 x: 0.13,
                 y: 0.21,

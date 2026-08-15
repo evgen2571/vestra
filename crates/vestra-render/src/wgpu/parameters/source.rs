@@ -152,10 +152,9 @@ pub(in crate::wgpu) fn spectrum2d(
     clippy::too_many_arguments,
     reason = "the evaluator's image layer fields remain separate to avoid a GPU-specific plan type"
 )]
-pub(in crate::wgpu) fn image(
+pub(in crate::wgpu) fn raster(
     frame: &EvaluatedFrame,
-    source_width: u32,
-    source_height: u32,
+    intrinsic: geometry::IntrinsicSize,
     crop: Crop,
     cacheable_crop: bool,
     sizing: &CompiledSizing,
@@ -163,9 +162,8 @@ pub(in crate::wgpu) fn image(
     opacity: f64,
     colour: ColourTransform,
 ) -> LayerParameters {
-    let geometry = geometry::resolve_image_geometry(
-        source_width,
-        source_height,
+    let geometry = geometry::resolve_raster_geometry(
+        intrinsic,
         crop,
         cacheable_crop,
         sizing,
@@ -234,7 +232,7 @@ pub(in crate::wgpu) fn image(
             colour.offset[2] as f32,
             0.0,
         ],
-        solid_or_background: [0.0; 4],
+        solid_or_background: [geometry.origin_x as f32, geometry.origin_y as f32, 0.0, 0.0],
     }
 }
 
@@ -243,10 +241,9 @@ pub(in crate::wgpu) fn surface(
     transform: Transform2D,
     colour: ColourTransform,
 ) -> LayerParameters {
-    image(
+    raster(
         frame,
-        frame.width,
-        frame.height,
+        geometry::IntrinsicSize::new(frame.width, frame.height),
         Crop {
             x: 0.0,
             y: 0.0,

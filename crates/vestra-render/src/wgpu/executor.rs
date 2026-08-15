@@ -126,7 +126,7 @@ pub(super) struct FrameBindGroups {
     spectrum2d_layer: wgpu::BindGroup,
     particle_layer: wgpu::BindGroup,
     particle_resolve: wgpu::BindGroup,
-    image_layers: Vec<wgpu::BindGroup>,
+    raster_layers: Vec<wgpu::BindGroup>,
     surface_layers: Vec<(TextureSlot, wgpu::BindGroup)>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
@@ -194,8 +194,8 @@ impl FrameBindGroups {
             &frame.working.get(TextureSlot::ParticleAccumulation).view,
             &frame.working.get(TextureSlot::Layer).view,
         );
-        let image_layers = sources
-            .textures
+        let raster_layers = sources
+            .raster_textures
             .iter()
             .map(|source| {
                 layer_group(
@@ -291,7 +291,7 @@ impl FrameBindGroups {
                 }
             }
         }
-        let persistent_created = sources.textures.len()
+        let persistent_created = sources.raster_textures.len()
             + 5
             + clear_group_canvases.len()
             + surface_layers.len()
@@ -304,7 +304,7 @@ impl FrameBindGroups {
             spectrum2d_layer,
             particle_layer,
             particle_resolve,
-            image_layers,
+            raster_layers,
             surface_layers,
             composites,
             effects,
@@ -316,14 +316,12 @@ impl FrameBindGroups {
         self.persistent_created
     }
 
-    fn image_layer(&self, source_asset_index: usize) -> Result<&wgpu::BindGroup, Diagnostic> {
-        self.image_layers.get(source_asset_index).ok_or_else(|| {
+    fn raster_layer(&self, source_index: usize) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.raster_layers.get(source_index).ok_or_else(|| {
             Diagnostic::error(
                 "WGPU-FRAME-PLAN",
                 crate::Category::Backend,
-                format!(
-                    "GPU frame operation references missing source bind group {source_asset_index}"
-                ),
+                format!("GPU frame operation references missing raster bind group {source_index}"),
                 "",
             )
         })
@@ -613,13 +611,13 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
             }
             GpuOperation::RenderRasterLayer {
-                source_asset_index,
+                source_index,
                 destination,
                 parameters_index,
                 ..
             } => {
                 debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
-                let group = bind_groups.image_layer(*source_asset_index)?;
+                let group = bind_groups.raster_layer(*source_index)?;
                 dispatch(
                     &mut encoder,
                     &pipelines.layer,

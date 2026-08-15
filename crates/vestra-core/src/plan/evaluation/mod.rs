@@ -53,6 +53,13 @@ pub struct EvaluatedLayer {
 }
 
 #[derive(Clone, Debug)]
+pub struct RasterPresentation<'a> {
+    pub crop: Crop,
+    pub sizing: &'a CompiledSizing,
+    pub cacheable_crop: bool,
+}
+
+#[derive(Clone, Debug)]
 pub enum EvaluatedSource {
     Image {
         asset_index: usize,
@@ -89,6 +96,25 @@ pub enum EvaluatedSource {
     Group {
         composition: EvaluatedComposition,
     },
+}
+
+impl EvaluatedSource {
+    #[must_use]
+    pub fn raster_presentation(&self) -> Option<RasterPresentation<'_>> {
+        match self {
+            Self::Image {
+                crop,
+                sizing,
+                cacheable_crop,
+                ..
+            } => Some(RasterPresentation {
+                crop: *crop,
+                sizing,
+                cacheable_crop: *cacheable_crop,
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

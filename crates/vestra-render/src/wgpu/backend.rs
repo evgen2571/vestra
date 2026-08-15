@@ -251,10 +251,10 @@ impl WgpuBackend {
             pipeline_depth,
         )?;
         let mut stats = decoded.stats().clone();
-        stats.source_texture_count = sources.textures.len();
+        stats.source_texture_count = sources.raster_textures.len();
         stats.source_texture_bytes = sources.uploaded_texture_bytes;
         stats.sampler_count = 0;
-        stats.uploaded_texture_count = sources.textures.len();
+        stats.uploaded_texture_count = sources.raster_textures.len();
         stats.uploaded_texture_bytes = sources.uploaded_texture_bytes;
         stats.readback_buffer_count = pipeline_depth;
         stats.readback_buffer_bytes = resource_estimates.readback_buffer_bytes;
@@ -427,19 +427,22 @@ impl RenderBackend for WgpuBackend {
         }
         let mut plan =
             GpuFramePlan::build_with_static_cache(evaluated, &cached_layers, &cache_targets);
-        if let Err(error) = plan.validate(self.sources.textures.len()).and_then(|()| {
-            slot.parameters.reset();
-            encode_parameters(
-                &mut slot.parameters,
-                evaluated,
-                &mut plan,
-                &self.sources,
-                &mut slot.particle_instances,
-                &mut slot.particle_pixels,
-                &mut slot.particle_upload_bytes,
-                &mut slot.particle_uploads,
-            )
-        }) {
+        if let Err(error) = plan
+            .validate(self.sources.raster_textures.len())
+            .and_then(|()| {
+                slot.parameters.reset();
+                encode_parameters(
+                    &mut slot.parameters,
+                    evaluated,
+                    &mut plan,
+                    &self.sources,
+                    &mut slot.particle_instances,
+                    &mut slot.particle_pixels,
+                    &mut slot.particle_upload_bytes,
+                    &mut slot.particle_uploads,
+                )
+            })
+        {
             let error = self.runtime_context(error, Some(token));
             self.abort();
             return Err(error);
@@ -868,27 +871,20 @@ fn encode_parameters(
             }
             GpuOperation::RenderRasterLayer {
                 layer_index,
-                source_asset_index,
+                source_index,
                 ..
             } => {
-                let EvaluatedSource::Image {
-                    crop,
-                    sizing,
-                    cacheable_crop,
-                    ..
-                } = &plan.layers[*layer_index].source
-                else {
-                    unreachable!("image frame operation must reference image source")
-                };
-                let intrinsic = sources.textures[*source_asset_index].intrinsic_size;
-                let (width, height) = (intrinsic.width, intrinsic.height);
-                arena.push(&parameters::image(
+                let presentation = plan.layers[*layer_index]
+                    .source
+                    .raster_presentation()
+                    .expect("raster frame operation must reference a raster source");
+                let intrinsic = sources.raster_textures[*source_index].intrinsic_size;
+                arena.push(&parameters::raster(
                     frame,
-                    width,
-                    height,
-                    *crop,
-                    *cacheable_crop,
-                    sizing,
+                    intrinsic,
+                    presentation.crop,
+                    presentation.cacheable_crop,
+                    presentation.sizing,
                     plan.layers[*layer_index].transform,
                     1.0,
                     crate::plan::ColourTransform::default(),

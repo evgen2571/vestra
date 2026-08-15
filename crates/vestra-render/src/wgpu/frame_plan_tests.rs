@@ -482,11 +482,8 @@ fn validation_rejects_invalid_source_and_ping_pong() {
     let plan = fixture();
     let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
     let mut gpu = GpuFramePlan::build(&frame);
-    if let GpuOperation::RenderRasterLayer {
-        source_asset_index, ..
-    } = &mut gpu.operations[1]
-    {
-        *source_asset_index = plan.images.len();
+    if let GpuOperation::RenderRasterLayer { source_index, .. } = &mut gpu.operations[1] {
+        *source_index = plan.images.len();
     }
     assert_eq!(
         gpu.validate(plan.images.len())

@@ -27,7 +27,7 @@ pub(super) struct PreparedRasterTexture {
 }
 
 pub(super) struct SourceResources {
-    pub(super) textures: Vec<PreparedRasterTexture>,
+    pub(super) raster_textures: Vec<PreparedRasterTexture>,
     pub(super) solid_texture: PreparedRasterTexture,
     pub(super) uploaded_texture_bytes: u64,
 }
@@ -110,7 +110,7 @@ impl SourceResources {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Ok(Self {
-            textures,
+            raster_textures: textures,
             solid_texture: PreparedRasterTexture {
                 _texture: texture,
                 view,

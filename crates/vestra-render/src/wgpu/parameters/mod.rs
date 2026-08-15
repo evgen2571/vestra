@@ -13,7 +13,7 @@ pub(super) use effects::{
     VignetteParameters, ZoomBlurParameters, effect_parameters,
 };
 pub(super) use source::{
-    LayerParameters, ParticleParameters, Spectrum2DParameters, image, particles, spectrum2d,
+    LayerParameters, ParticleParameters, Spectrum2DParameters, particles, raster, spectrum2d,
     surface,
 };
 

@@ -10,7 +10,7 @@ use image::RgbaImage;
 use crate::render::{
     ByteLruCache,
     decoded::DecodedAssets,
-    geometry::{CropBounds, crop_bounds},
+    geometry::{CropBounds, IntrinsicSize, crop_bounds},
     metrics::{PreparationStats, PreparationTimings},
 };
 
@@ -22,6 +22,33 @@ pub struct PreparedAssets {
     crops: ByteLruCache<CropKey, RgbaImage>,
     stats: PreparationStats,
     timings: PreparationTimings,
+}
+
+/// Immutable source-local pixels shared by all layer presentations.
+#[derive(Clone, Debug)]
+pub(crate) struct PreparedRasterSource {
+    pixels: Arc<RgbaImage>,
+    intrinsic_size: IntrinsicSize,
+}
+
+impl PreparedRasterSource {
+    #[must_use]
+    pub(crate) fn from_pixels(pixels: Arc<RgbaImage>, intrinsic_size: IntrinsicSize) -> Self {
+        Self {
+            pixels,
+            intrinsic_size,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn pixels(&self) -> &RgbaImage {
+        self.pixels.as_ref()
+    }
+
+    #[must_use]
+    pub(crate) const fn intrinsic_size(&self) -> IntrinsicSize {
+        self.intrinsic_size
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -87,8 +114,10 @@ impl PreparedAssets {
     }
 
     #[must_use]
-    pub fn image(&self, asset: usize) -> &RgbaImage {
-        self.decoded.image(asset)
+    pub(crate) fn raster_source(&self, asset: usize) -> PreparedRasterSource {
+        let pixels = self.decoded.image_resource(asset);
+        let intrinsic_size = IntrinsicSize::new(pixels.width(), pixels.height());
+        PreparedRasterSource::from_pixels(pixels, intrinsic_size)
     }
 
     #[must_use]
@@ -168,6 +197,25 @@ mod tests {
         assert_eq!(assets.stats().cache_current_entries, 1);
         assert_eq!(assets.stats().peak_cache_entries, 1);
         assert!(assets.stats().cache_peak_bytes > 0);
+    }
+
+    #[test]
+    fn prepared_raster_sources_share_immutable_pixels() {
+        let validated = load_and_validate(
+            std::path::Path::new("examples/projects/animation-effects.json"),
+            &ValidationOptions {
+                check_backend: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("valid fixture");
+        let plan = compile(&validated, CompileOptions::default()).expect("compiled plan");
+        let assets = PreparedAssets::build(&plan).expect("decoded assets");
+        let first = assets.raster_source(1);
+        let second = assets.raster_source(1);
+
+        assert_eq!(first.intrinsic_size(), second.intrinsic_size());
+        assert!(Arc::ptr_eq(&first.pixels, &second.pixels));
     }
 
     #[test]

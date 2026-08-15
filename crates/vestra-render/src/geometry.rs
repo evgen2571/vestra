@@ -6,6 +6,28 @@ use crate::{
     plan::CompiledSizing,
 };
 
+/// Dimensions of prepared source-local raster content.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct IntrinsicSize {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    /// Local coordinate of the prepared raster's top-left pixel.
+    pub(crate) offset_x: f64,
+    pub(crate) offset_y: f64,
+}
+
+impl IntrinsicSize {
+    #[must_use]
+    pub(crate) const fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            offset_x: 0.0,
+            offset_y: 0.0,
+        }
+    }
+}
+
 /// Integer source region produced by the project's normalized crop rule.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CropBounds {
@@ -316,12 +338,37 @@ pub(crate) fn visible_bounds(
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_image_geometry, visible_bounds};
+    use super::{IntrinsicSize, resolve_image_geometry, visible_bounds};
     use crate::{
         animation::Transform2D,
         domain::{Crop, Point},
         plan::CompiledSizing,
     };
+
+    #[test]
+    fn intrinsic_size_preserves_prepared_source_dimensions() {
+        assert_eq!(
+            IntrinsicSize::new(1920, 1080),
+            IntrinsicSize {
+                width: 1920,
+                height: 1080,
+                offset_x: 0.0,
+                offset_y: 0.0,
+            }
+        );
+    }
+
+    #[test]
+    fn intrinsic_size_can_preserve_a_non_zero_local_raster_origin() {
+        let bounds = IntrinsicSize {
+            width: 40,
+            height: 20,
+            offset_x: -12.5,
+            offset_y: 3.0,
+        };
+        assert_eq!(bounds.offset_x, -12.5);
+        assert_eq!(bounds.offset_y, 3.0);
+    }
 
     fn transform(scale: Point, rotation_radians: f64, anchor: Point) -> Transform2D {
         Transform2D {

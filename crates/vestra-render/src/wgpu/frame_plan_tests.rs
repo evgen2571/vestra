@@ -139,6 +139,10 @@ fn static_frame() -> EvaluatedFrame {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 3,
             content_dependency: crate::plan::TemporalDependency::Static,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [20, 40, 60, 255],
             },
@@ -161,6 +165,10 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
     let child = |index| crate::plan::EvaluatedLayer {
         compiled_layer_index: index,
         content_dependency: crate::plan::TemporalDependency::Static,
+        transform: crate::animation::Transform2D::identity(
+            crate::domain::Point { x: 0.5, y: 0.5 },
+            crate::domain::Point { x: 0.5, y: 0.5 },
+        ),
         source: EvaluatedSource::SolidColor {
             colour: [255, 0, 0, 255],
         },
@@ -176,8 +184,8 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
             composition: crate::plan::EvaluatedComposition {
                 layers: vec![child(3)],
             },
-            transform,
         },
+        transform,
         opacity: 1.0,
         effects: Vec::new(),
         colour_transform: crate::plan::ColourTransform::default(),
@@ -191,11 +199,11 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 1,
             content_dependency: crate::plan::TemporalDependency::Static,
+            transform,
             source: EvaluatedSource::Group {
                 composition: crate::plan::EvaluatedComposition {
                     layers: vec![nested],
                 },
-                transform,
             },
             opacity: 1.0,
             effects: Vec::new(),
@@ -308,11 +316,13 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 1,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform,
             source: EvaluatedSource::Group {
                 composition: crate::plan::EvaluatedComposition {
                     layers: vec![crate::plan::EvaluatedLayer {
                         compiled_layer_index: 2,
                         content_dependency: crate::plan::TemporalDependency::Static,
+                        transform,
                         source: EvaluatedSource::SolidColor {
                             colour: [255, 0, 0, 255],
                         },
@@ -322,7 +332,6 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
                         blend_mode: crate::project::BlendMode::Normal,
                     }],
                 },
-                transform,
             },
             opacity: 1.0,
             effects,
@@ -438,7 +447,7 @@ fn static_layer_store_then_reuse_stays_before_destination_composition() {
     )));
     assert!(!hit.operations.iter().any(|operation| matches!(
         operation,
-        GpuOperation::RenderImageLayer { .. }
+        GpuOperation::RenderRasterLayer { .. }
             | GpuOperation::RenderSolidLayer { .. }
             | GpuOperation::StoreStaticLayer { .. }
     )));
@@ -473,7 +482,7 @@ fn validation_rejects_invalid_source_and_ping_pong() {
     let plan = fixture();
     let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
     let mut gpu = GpuFramePlan::build(&frame);
-    if let GpuOperation::RenderImageLayer {
+    if let GpuOperation::RenderRasterLayer {
         source_asset_index, ..
     } = &mut gpu.operations[1]
     {
@@ -635,6 +644,10 @@ fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [20, 40, 80, 255],
             },
@@ -1008,6 +1021,10 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [100, 80, 60, 255],
             },
@@ -1113,6 +1130,10 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [20, 40, 80, 255],
             },
@@ -1161,6 +1182,10 @@ fn compiler_fused_colour_transform_is_one_wgpu_operation() {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [20, 40, 80, 255],
             },
@@ -1193,6 +1218,10 @@ fn chained_multipass_effects_retain_and_validate_their_original_values() {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::SolidColor {
                 colour: [20, 40, 80, 255],
             },

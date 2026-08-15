@@ -33,6 +33,10 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
             source: EvaluatedSource::Spectrum2D {
                 bands,
                 x: 0.0,
@@ -1055,18 +1059,12 @@ fn generated_camera_shake_changes_geometry_without_creating_a_pixel_effect_pass(
     let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
     let before = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_450_000_000);
     let during = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_550_000_000);
-    let crate::plan::EvaluatedSource::Image {
-        transform: before_transform,
-        ..
-    } = &before.layers[0].source
-    else {
+    let before_transform = before.layers[0].transform;
+    let crate::plan::EvaluatedSource::Image { .. } = &before.layers[0].source else {
         unreachable!("heavy-impact clip uses an image")
     };
-    let crate::plan::EvaluatedSource::Image {
-        transform: during_transform,
-        ..
-    } = &during.layers[0].source
-    else {
+    let during_transform = during.layers[0].transform;
+    let crate::plan::EvaluatedSource::Image { .. } = &during.layers[0].source else {
         unreachable!("heavy-impact clip uses an image")
     };
     assert_ne!(before_transform.position, during_transform.position);

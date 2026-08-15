@@ -1,6 +1,8 @@
 //! Persistent source textures, reusable working textures, and readback state.
 
-use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
+use crate::{
+    Category, Diagnostic, geometry::IntrinsicSize, plan::RenderPlan, render::DecodedAssets,
+};
 
 use super::texture_pool::TexturePool;
 
@@ -18,15 +20,15 @@ impl FrameResources {
     }
 }
 
-pub(super) struct SourceTexture {
+pub(super) struct PreparedRasterTexture {
     pub(super) _texture: wgpu::Texture,
     pub(super) view: wgpu::TextureView,
+    pub(super) intrinsic_size: IntrinsicSize,
 }
 
 pub(super) struct SourceResources {
-    pub(super) textures: Vec<SourceTexture>,
-    pub(super) solid_texture: SourceTexture,
-    pub(super) dimensions: Vec<(u32, u32)>,
+    pub(super) textures: Vec<PreparedRasterTexture>,
+    pub(super) solid_texture: PreparedRasterTexture,
     pub(super) uploaded_texture_bytes: u64,
 }
 
@@ -39,7 +41,6 @@ impl SourceResources {
         max_texture_dimension_2d: u32,
     ) -> Result<Self, Diagnostic> {
         let mut textures = Vec::with_capacity(plan.images.len());
-        let mut dimensions = Vec::with_capacity(plan.images.len());
         let mut uploaded_texture_bytes = 0_u64;
         for asset in 0..plan.images.len() {
             let image = decoded.image(asset);
@@ -86,11 +87,11 @@ impl SourceResources {
                 },
             );
             uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
-            dimensions.push((image.width(), image.height()));
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            textures.push(SourceTexture {
+            textures.push(PreparedRasterTexture {
                 _texture: texture,
                 view,
+                intrinsic_size: IntrinsicSize::new(image.width(), image.height()),
             });
         }
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -110,11 +111,11 @@ impl SourceResources {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Ok(Self {
             textures,
-            solid_texture: SourceTexture {
+            solid_texture: PreparedRasterTexture {
                 _texture: texture,
                 view,
+                intrinsic_size: IntrinsicSize::new(1, 1),
             },
-            dimensions,
             uploaded_texture_bytes,
         })
     }

@@ -612,7 +612,7 @@ pub(super) fn encode_and_submit(
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
             }
-            GpuOperation::RenderImageLayer {
+            GpuOperation::RenderRasterLayer {
                 source_asset_index,
                 destination,
                 parameters_index,

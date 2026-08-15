@@ -134,7 +134,13 @@ class _Clip:
         raise NotImplementedError
 
 
-class ImageClip(_Clip):
+class TransitionCapableClip(_Clip):
+    """Internal endpoint contract for clips lowered directly into transitions."""
+
+    __slots__ = ()
+
+
+class ImageClip(TransitionCapableClip):
     __slots__ = ("_source", "_sizing", "_transform", "_crop", "_has_crop", "_presets")
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -501,7 +507,7 @@ class Spectrum2DClip(_Clip):
         return f"Spectrum2DClip(id={self.id!r}, band_count={self.band_count})"
 
 
-class GroupClip(_Clip):
+class GroupClip(TransitionCapableClip):
     """A recursively owned composition of supported visual clips."""
 
     __slots__ = ("_clips", "_transform", "_scope", "_transitions")

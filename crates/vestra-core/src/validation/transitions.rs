@@ -995,13 +995,7 @@ fn validate_scope(
                     format!("transition cannot reference hidden clip '{endpoint}'"),
                     path.clone(),
                 )),
-                Some(clip)
-                    if !matches!(
-                        clip.source,
-                        crate::project::VisualSource::Image { .. }
-                            | crate::project::VisualSource::Group(_)
-                    ) =>
-                {
+                Some(clip) if !clip.source.supports_direct_transition_endpoint() => {
                     errors.push(Diagnostic::error(
                         "MVP-TRANSITION-SOURCE",
                         Category::Semantic,

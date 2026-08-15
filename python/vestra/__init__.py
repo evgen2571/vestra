@@ -69,7 +69,9 @@ from .sources import Image, Source
 from .flashes import Flash, FlashCollection
 from .presets import Preset, PresetCollection
 from .transitions import (
+    Animate,
     Crossfade,
+    CustomTransition,
     DirectionalPush,
     PushDown,
     PushLeft,
@@ -81,6 +83,7 @@ from .transitions import (
     ZoomCrossfade,
     ZoomIn,
     ZoomOut,
+    TransitionLayer,
 )
 from .properties import (
     BindablePointProperty,
@@ -203,7 +206,10 @@ __all__ = [
     "BassBoost",
     "ParametricEq",
     "PlaybackSpeed",
+    "Animate",
     "Crossfade",
+    "CustomTransition",
+    "TransitionLayer",
     "ZoomCrossfade",
     "DirectionalPush",
     "PushLeft",

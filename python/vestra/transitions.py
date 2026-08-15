@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from copy import deepcopy
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .authoring.animation import interpolation_to_canonical
-from .authoring.values import CubicBezier, Interpolation
+from .authoring.values import CubicBezier, Interpolation, Point
+
 if TYPE_CHECKING:
     from .editor import Composition, Layer
 
 InterpolationValue = Interpolation | CubicBezier
+AnimationValue = TypeVar("AnimationValue", covariant=True)
 
 
 def _number(value: int | float, name: str) -> float:
@@ -42,6 +44,98 @@ def _interpolation(value: InterpolationValue) -> InterpolationValue:
     if not isinstance(value, Interpolation | CubicBezier):
         raise TypeError("easing must be Interpolation or CubicBezier")
     return value
+
+
+@dataclass(frozen=True, slots=True)
+class _NormalizedKeyframe(Generic[AnimationValue]):
+    progress: float
+    value: AnimationValue
+    interpolation: InterpolationValue | None
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class Animate(Generic[AnimationValue]):
+    """An immutable animation track expressed in normalized transition progress."""
+
+    _keyframes: tuple[_NormalizedKeyframe[AnimationValue], ...]
+    _easing: InterpolationValue | None
+
+    def __init__(
+        self,
+        start_value: AnimationValue,
+        end_value: AnimationValue,
+        *,
+        easing: InterpolationValue | None = None,
+    ) -> None:
+        if easing is not None:
+            easing = _interpolation(easing)
+        object.__setattr__(
+            self,
+            "_keyframes",
+            (
+                _NormalizedKeyframe(0.0, start_value, easing),
+                _NormalizedKeyframe(1.0, end_value, easing),
+            ),
+        )
+        object.__setattr__(self, "_easing", easing)
+
+    @classmethod
+    def keyframes(
+        cls,
+        *keyframes: tuple[float, AnimationValue]
+        | tuple[float, AnimationValue, InterpolationValue],
+        easing: InterpolationValue | None = None,
+    ) -> "Animate[AnimationValue]":
+        """Create a track from normalized keyframes.
+
+        Interpolation on a keyframe controls the segment ending at that
+        keyframe, matching Vestra's native keyframe convention.
+        """
+        if easing is not None:
+            easing = _interpolation(easing)
+        if len(keyframes) < 2:
+            raise ValueError("Animate requires at least 2 keyframes")
+        normalized: list[_NormalizedKeyframe[AnimationValue]] = []
+        previous = -1.0
+        for keyframe in keyframes:
+            if not isinstance(keyframe, tuple) or len(keyframe) not in (2, 3):
+                raise TypeError("keyframes must be (progress, value[, easing]) tuples")
+            progress = _number(keyframe[0], "progress")
+            if not 0.0 <= progress <= 1.0:
+                raise ValueError("progress must be between 0 and 1")
+            if progress <= previous:
+                raise ValueError("keyframe progress must be strictly increasing")
+            interpolation = None if len(keyframe) == 2 else _interpolation(keyframe[2])
+            normalized.append(_NormalizedKeyframe(progress, keyframe[1], interpolation))
+            previous = progress
+        if normalized[0].progress != 0.0:
+            raise ValueError("first keyframe progress must be 0")
+        if normalized[-1].progress != 1.0:
+            raise ValueError("last keyframe progress must be 1")
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "_keyframes", tuple(normalized))
+        object.__setattr__(instance, "_easing", easing)
+        return instance
+
+    @property
+    def keyframe_values(self) -> tuple[_NormalizedKeyframe[AnimationValue], ...]:
+        return self._keyframes
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionLayer:
+    """Normalized presentation channels for one transition endpoint."""
+
+    opacity: Animate[float] | None = None
+    position: Animate[object] | None = None
+    scale: Animate[object] | None = None
+    rotation: Animate[float] | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("opacity", "position", "scale", "rotation"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, Animate):
+                raise TypeError(f"{name} must be an Animate instance or None")
 
 
 def _track(
@@ -86,13 +180,117 @@ class TransitionDefinition:
         return deepcopy(self._canonical)
 
 
+def _canonical_channel_value(channel: str, value: object) -> object:
+    if channel == "opacity":
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise TypeError("opacity must be a real number")
+        number = _number(value, "opacity")
+        if not 0.0 <= number <= 1.0:
+            raise ValueError("opacity must be between 0 and 1")
+        return number
+    if channel == "rotation_offset_degrees":
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise TypeError("rotation must be a real number")
+        return _number(value, "rotation")
+    if channel == "position_offset":
+        if isinstance(value, Point):
+            return value.to_canonical()
+        if isinstance(value, tuple) and len(value) == 2:
+            return Point(value[0], value[1]).to_canonical()
+        raise TypeError("position values must be Point or (x, y) tuples")
+    if channel == "scale_multiplier":
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            scale = _number(value, "scale")
+            if scale <= 0:
+                raise ValueError("scale must be positive")
+            return {"x": scale, "y": scale}
+        if isinstance(value, Point):
+            x, y = value.x, value.y
+        elif isinstance(value, tuple) and len(value) == 2:
+            x, y = value
+        else:
+            raise TypeError(
+                "scale values must be a positive scalar, Point, or (x, y) tuple"
+            )
+        x_number = _number(x, "scale.x")
+        y_number = _number(y, "scale.y")
+        if x_number <= 0 or y_number <= 0:
+            raise ValueError("scale components must be positive")
+        return {"x": x_number, "y": y_number}
+    raise ValueError(f"unsupported transition channel: {channel}")
+
+
+def _canonical_layer(
+    layer: TransitionLayer | None,
+    default_easing: InterpolationValue,
+) -> dict[str, object]:
+    if layer is None:
+        return {}
+    channels: tuple[tuple[str, Animate[object] | None], ...] = (
+        ("opacity", layer.opacity),
+        ("position_offset", layer.position),
+        ("scale_multiplier", layer.scale),
+        ("rotation_offset_degrees", layer.rotation),
+    )
+    output: dict[str, object] = {}
+    for channel, animation in channels:
+        if animation is None:
+            continue
+        keyframes = []
+        for keyframe in animation.keyframe_values:
+            easing = keyframe.interpolation or animation._easing or default_easing
+            keyframes.append(
+                {
+                    "progress": keyframe.progress,
+                    "value": _canonical_channel_value(channel, keyframe.value),
+                    "interpolation": interpolation_to_canonical(easing),
+                }
+            )
+        output[channel] = {"keyframes": keyframes}
+    return output
+
+
+@dataclass(frozen=True, slots=True)
+class CustomTransition(TransitionDefinition):
+    """Reusable normalized presentation channels with no placement state."""
+
+    outgoing: TransitionLayer | None = None
+    incoming: TransitionLayer | None = None
+    default_easing: InterpolationValue = Interpolation.LINEAR
+
+    def __init__(
+        self,
+        *,
+        outgoing: TransitionLayer | None = None,
+        incoming: TransitionLayer | None = None,
+        default_easing: InterpolationValue = Interpolation.LINEAR,
+    ) -> None:
+        default_easing = _interpolation(default_easing)
+        if outgoing is not None and not isinstance(outgoing, TransitionLayer):
+            raise TypeError("outgoing must be a TransitionLayer or None")
+        if incoming is not None and not isinstance(incoming, TransitionLayer):
+            raise TypeError("incoming must be a TransitionLayer or None")
+        canonical_outgoing = _canonical_layer(outgoing, default_easing)
+        canonical_incoming = _canonical_layer(incoming, default_easing)
+        if not canonical_outgoing and not canonical_incoming:
+            raise ValueError("custom transition requires at least one channel")
+        object.__setattr__(self, "outgoing", outgoing)
+        object.__setattr__(self, "incoming", incoming)
+        object.__setattr__(self, "default_easing", default_easing)
+        object.__setattr__(
+            self, "_canonical", _definition(canonical_outgoing, canonical_incoming)
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Crossfade(TransitionDefinition):
     """Generic opacity crossfade."""
 
     easing: InterpolationValue = Interpolation.EASE_IN_OUT
 
-    def __init__(self, *, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self, *, easing: InterpolationValue = Interpolation.EASE_IN_OUT
+    ) -> None:
         easing = _interpolation(easing)
         object.__setattr__(self, "easing", easing)
         object.__setattr__(self, "_canonical", _definition(*_opacity(easing)))
@@ -116,33 +314,71 @@ class DirectionalPush(TransitionDefinition):
         angle = _number(angle_degrees, "angle_degrees")
         span = _nonnegative(distance, "distance")
         easing = _interpolation(easing)
-        delta = {"x": math.cos(math.radians(angle)) * span, "y": math.sin(math.radians(angle)) * span}
+        delta = {
+            "x": math.cos(math.radians(angle)) * span,
+            "y": math.sin(math.radians(angle)) * span,
+        }
         object.__setattr__(self, "angle_degrees", angle)
         object.__setattr__(self, "distance", span)
         object.__setattr__(self, "easing", easing)
-        object.__setattr__(self, "_canonical", _definition(
-            {"position_offset": _track(((0.0, {"x": 0.0, "y": 0.0}, easing), (1.0, delta, easing)))},
-            {"position_offset": _track(((0.0, {"x": -delta["x"], "y": -delta["y"]}, easing), (1.0, {"x": 0.0, "y": 0.0}, easing)))},
-        ))
+        object.__setattr__(
+            self,
+            "_canonical",
+            _definition(
+                {
+                    "position_offset": _track(
+                        ((0.0, {"x": 0.0, "y": 0.0}, easing), (1.0, delta, easing))
+                    )
+                },
+                {
+                    "position_offset": _track(
+                        (
+                            (0.0, {"x": -delta["x"], "y": -delta["y"]}, easing),
+                            (1.0, {"x": 0.0, "y": 0.0}, easing),
+                        )
+                    )
+                },
+            ),
+        )
 
 
 class PushLeft(DirectionalPush):
-    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        distance: int | float = 1.0,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         super().__init__(angle_degrees=180.0, distance=distance, easing=easing)
 
 
 class PushRight(DirectionalPush):
-    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        distance: int | float = 1.0,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         super().__init__(angle_degrees=0.0, distance=distance, easing=easing)
 
 
 class PushUp(DirectionalPush):
-    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        distance: int | float = 1.0,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         super().__init__(angle_degrees=-90.0, distance=distance, easing=easing)
 
 
 class PushDown(DirectionalPush):
-    def __init__(self, *, distance: int | float = 1.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        distance: int | float = 1.0,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         super().__init__(angle_degrees=90.0, distance=distance, easing=easing)
 
 
@@ -152,7 +388,13 @@ class ZoomCrossfade(TransitionDefinition):
     incoming_start_zoom: float = 0.9
     easing: InterpolationValue = Interpolation.EASE_IN_OUT
 
-    def __init__(self, *, outgoing_zoom: int | float = 1.1, incoming_start_zoom: int | float = 0.9, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        outgoing_zoom: int | float = 1.1,
+        incoming_start_zoom: int | float = 0.9,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         outgoing = _positive(outgoing_zoom, "outgoing_zoom")
         incoming = _positive(incoming_start_zoom, "incoming_start_zoom")
         easing = _interpolation(easing)
@@ -160,19 +402,43 @@ class ZoomCrossfade(TransitionDefinition):
         object.__setattr__(self, "outgoing_zoom", outgoing)
         object.__setattr__(self, "incoming_start_zoom", incoming)
         object.__setattr__(self, "easing", easing)
-        object.__setattr__(self, "_canonical", _definition(
-            {**outgoing_opacity, "scale_multiplier": _track(((0.0, _scale(1.0), easing), (1.0, _scale(outgoing), easing)))},
-            {**incoming_opacity, "scale_multiplier": _track(((0.0, _scale(incoming), easing), (1.0, _scale(1.0), easing)))},
-        ))
+        object.__setattr__(
+            self,
+            "_canonical",
+            _definition(
+                {
+                    **outgoing_opacity,
+                    "scale_multiplier": _track(
+                        ((0.0, _scale(1.0), easing), (1.0, _scale(outgoing), easing))
+                    ),
+                },
+                {
+                    **incoming_opacity,
+                    "scale_multiplier": _track(
+                        ((0.0, _scale(incoming), easing), (1.0, _scale(1.0), easing))
+                    ),
+                },
+            ),
+        )
 
 
 class ZoomIn(ZoomCrossfade):
-    def __init__(self, *, amount: int | float = 0.9, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        amount: int | float = 0.9,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         super().__init__(outgoing_zoom=1.0, incoming_start_zoom=amount, easing=easing)
 
 
 class ZoomOut(ZoomCrossfade):
-    def __init__(self, *, amount: int | float = 1.1, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+    def __init__(
+        self,
+        *,
+        amount: int | float = 1.1,
+        easing: InterpolationValue = Interpolation.EASE_IN_OUT,
+    ) -> None:
         super().__init__(outgoing_zoom=amount, incoming_start_zoom=1.0, easing=easing)
 
 
@@ -213,13 +479,27 @@ class TransitionCollection:
     def _valid_endpoint(self, layer: Layer) -> bool:
         from .editor import CompositionLayer
         from .lowering import source_capabilities
+
         if isinstance(layer, CompositionLayer):
             return True
         capabilities = source_capabilities(layer.source)
-        return capabilities.supports_direct_transition_endpoint or capabilities.supports_transition_adapter
+        return (
+            capabilities.supports_direct_transition_endpoint
+            or capabilities.supports_transition_adapter
+        )
 
-    def add(self, outgoing: Layer, incoming: Layer, definition: TransitionDefinition, *, start: int | float, duration: int | float, id: str | None = None) -> TransitionPlacement:
+    def add(
+        self,
+        outgoing: Layer,
+        incoming: Layer,
+        definition: TransitionDefinition,
+        *,
+        start: int | float,
+        duration: int | float,
+        id: str | None = None,
+    ) -> TransitionPlacement:
         from .editor import Layer
+
         if self._composition.parent_layer is not None:
             raise ValueError("transitions are supported only on the root composition")
         if not isinstance(outgoing, Layer) or not isinstance(incoming, Layer):
@@ -228,25 +508,42 @@ class TransitionCollection:
             raise TypeError("definition must be a TransitionDefinition")
         if outgoing is incoming:
             raise ValueError("transition requires two different layers")
-        if outgoing.composition is not self._composition or incoming.composition is not self._composition:
+        if (
+            outgoing.composition is not self._composition
+            or incoming.composition is not self._composition
+        ):
             raise ValueError("transition endpoints must belong to the same composition")
-        if outgoing not in self._composition.layers or incoming not in self._composition.layers:
+        if (
+            outgoing not in self._composition.layers
+            or incoming not in self._composition.layers
+        ):
             raise ValueError("transition endpoints must be owned by this composition")
         if not self._valid_endpoint(outgoing) or not self._valid_endpoint(incoming):
             raise TypeError("one or both layers do not support transition endpoints")
         placement_start = _nonnegative(start, "start")
         placement_duration = _positive(duration, "duration")
-        identifier = id if id is not None else f"transition-{self._next_id:06d}"
-        while identifier in {item.id for item in self._items}:
-            self._next_id += 1
-            identifier = f"transition-{self._next_id:06d}"
-        if not isinstance(identifier, str) or not identifier or identifier.isspace():
+        if id is not None and (not isinstance(id, str) or not id or id.isspace()):
             raise ValueError("id must be a non-empty string")
-        if any(item.id == identifier for item in self._items):
-            raise ValueError(f"duplicate transition ID: {identifier!r}")
-        placement = TransitionPlacement(identifier, outgoing, incoming, placement_start, placement_duration, definition)
+        occupied = {item.id for item in self._items}
+        next_id = self._next_id
+        if id is None:
+            while (identifier := f"transition-{next_id:06d}") in occupied:
+                next_id += 1
+        else:
+            identifier = id
+            if identifier in occupied:
+                raise ValueError(f"duplicate transition ID: {identifier!r}")
+        placement = TransitionPlacement(
+            identifier,
+            outgoing,
+            incoming,
+            placement_start,
+            placement_duration,
+            definition,
+        )
         self._items.append(placement)
-        self._next_id += 1
+        if id is None:
+            self._next_id = next_id + 1
         return placement
 
     def remove(self, placement: TransitionPlacement) -> None:
@@ -257,7 +554,20 @@ class TransitionCollection:
 
 
 __all__ = [
-    "InterpolationValue", "TransitionDefinition", "TransitionPlacement", "TransitionCollection",
-    "Crossfade", "DirectionalPush", "PushLeft", "PushRight", "PushUp", "PushDown",
-    "ZoomCrossfade", "ZoomIn", "ZoomOut",
+    "InterpolationValue",
+    "Animate",
+    "TransitionLayer",
+    "CustomTransition",
+    "TransitionDefinition",
+    "TransitionPlacement",
+    "TransitionCollection",
+    "Crossfade",
+    "DirectionalPush",
+    "PushLeft",
+    "PushRight",
+    "PushUp",
+    "PushDown",
+    "ZoomCrossfade",
+    "ZoomIn",
+    "ZoomOut",
 ]

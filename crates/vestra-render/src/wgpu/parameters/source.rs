@@ -232,7 +232,12 @@ pub(in crate::wgpu) fn raster(
             colour.offset[2] as f32,
             0.0,
         ],
-        solid_or_background: [geometry.origin_x as f32, geometry.origin_y as f32, 0.0, 0.0],
+        solid_or_background: [
+            geometry.logical_origin_x as f32,
+            geometry.logical_origin_y as f32,
+            0.0,
+            0.0,
+        ],
     }
 }
 

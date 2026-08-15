@@ -225,13 +225,13 @@ fn draw_resolved_raster(
     for y in min_y..max_y {
         let mut mapped = inverse.map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
         for x in min_x..max_x {
-            if mapped.x >= geometry.origin_x
-                && mapped.y >= geometry.origin_y
-                && mapped.x < geometry.origin_x + geometry.effective_width
-                && mapped.y < geometry.origin_y + geometry.effective_height
+            if mapped.x >= geometry.logical_origin_x
+                && mapped.y >= geometry.logical_origin_y
+                && mapped.x < geometry.logical_origin_x + geometry.effective_width
+                && mapped.y < geometry.logical_origin_y + geometry.effective_height
             {
-                let local_x = mapped.x - geometry.origin_x;
-                let local_y = mapped.y - geometry.origin_y;
+                let local_x = mapped.x - geometry.logical_origin_x;
+                let local_y = mapped.y - geometry.logical_origin_y;
                 let source_x = geometry.source.normalized_crop.x * f64::from(source.width())
                     + local_x / geometry.effective_width
                         * geometry.source.normalized_crop.width

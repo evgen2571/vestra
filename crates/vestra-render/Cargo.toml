@@ -15,6 +15,7 @@ wgpu = ["dep:bytemuck", "dep:naga", "dep:pollster", "dep:wgpu"]
 vestra-core = { path = "../vestra-core" }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 image = { version = "0.25", default-features = true }
+tiny-skia = "0.11"
 naga = { version = "22", features = ["wgsl-in"], optional = true }
 pollster = { version = "0.4", optional = true }
 serde = { version = "1", features = ["derive"] }

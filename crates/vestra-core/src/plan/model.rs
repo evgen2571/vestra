@@ -27,6 +27,7 @@ pub struct RenderPlan {
     pub audio_output_enabled: bool,
     pub limits: crate::validation::ResourceLimits,
     pub images: Vec<ImageAsset>,
+    pub shapes: Vec<crate::project::ShapeSource>,
     pub layers: Vec<CompiledLayer>,
     pub post_effects: Vec<TimedEffect>,
     /// Whether the complete post-effect result can vary with project time.
@@ -177,6 +178,9 @@ pub enum CompiledVisualSource {
     },
     SolidColor {
         colour: [u8; 4],
+    },
+    Shape {
+        shape_index: usize,
     },
     Spectrum2D {
         band_signals: Vec<crate::plan::ScalarSignalId>,

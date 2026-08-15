@@ -9,6 +9,7 @@ use std::{sync::Arc, time::Instant};
 
 use image::RgbaImage;
 
+use crate::shape_raster::{PreparedShape, raster_dimensions};
 use crate::{
     Category, Diagnostic,
     plan::RenderPlan,
@@ -18,6 +19,7 @@ use crate::{
 /// Decoded source bytes shared by all render backends for one render.
 pub struct DecodedAssets {
     images: Vec<Arc<RgbaImage>>,
+    shapes: Vec<PreparedShape>,
     stats: PreparationStats,
     timings: PreparationTimings,
 }
@@ -101,6 +103,68 @@ impl DecodedAssets {
             }
             decoded.push(Arc::new(image));
         }
+        let mut shapes = Vec::with_capacity(plan.shapes.len());
+        for shape in &plan.shapes {
+            let (width, height) = raster_dimensions(shape).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-SHAPE-SIZE",
+                    Category::Media,
+                    "shape raster dimensions are too large",
+                    "",
+                )
+            })?;
+            let pixels = u64::from(width)
+                .checked_mul(u64::from(height))
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        "MVP-SHAPE-SIZE",
+                        Category::Media,
+                        "shape raster dimensions overflow",
+                        "",
+                    )
+                })?;
+            if pixels > plan.limits.maximum_source_pixels {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-SOURCE-PIXELS",
+                    Category::Media,
+                    "shape exceeds configured pixel limit",
+                    "",
+                ));
+            }
+            let bytes = pixels.checked_mul(4).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-SHAPE-SIZE",
+                    Category::Media,
+                    "shape raster is too large",
+                    "",
+                )
+            })?;
+            if bytes > plan.limits.maximum_decoded_asset_bytes {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-DECODED-ASSET",
+                    Category::Media,
+                    "shape exceeds configured byte limit",
+                    "",
+                ));
+            }
+            decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-SHAPE-TOTAL-SIZE",
+                    Category::Media,
+                    "decoded source bytes overflow",
+                    "",
+                )
+            })?;
+            if decoded_source_bytes > plan.limits.maximum_total_decoded_bytes {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-DECODED-TOTAL",
+                    Category::Media,
+                    "decoded sources exceed configured byte limit",
+                    "",
+                ));
+            }
+            shapes.push(crate::shape_raster::prepare(shape));
+        }
         Ok(Arc::new(Self {
             stats: PreparationStats {
                 decoded_image_count: decoded.len(),
@@ -110,6 +174,7 @@ impl DecodedAssets {
                 ..PreparationStats::default()
             },
             images: decoded,
+            shapes,
             timings: PreparationTimings {
                 decode: started.elapsed(),
                 ..PreparationTimings::default()
@@ -125,6 +190,16 @@ impl DecodedAssets {
     #[must_use]
     pub fn image_resource(&self, asset: usize) -> Arc<RgbaImage> {
         Arc::clone(&self.images[asset])
+    }
+
+    #[must_use]
+    pub(crate) fn shape(&self, shape: usize) -> &PreparedShape {
+        &self.shapes[shape]
+    }
+
+    #[must_use]
+    pub(crate) const fn image_count(&self) -> usize {
+        self.images.len()
     }
 
     #[must_use]

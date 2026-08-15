@@ -11,7 +11,7 @@ from .authoring.assets import AudioAsset, ImageAsset
 from .authoring.builder import ProjectBuilder
 from .authoring.clips import GroupClip, ImageClip, TransitionCapableClip, VisualClip
 from .authoring.values import BlendMode, Color as AuthoringColor
-from .sources import Color, Image, ParticleSystem, Source, Spectrum2D
+from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, RoundedRectangle, Shape, Source, Spectrum2D
 from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
@@ -373,6 +373,21 @@ def _lower_color(
     )
 
 
+def _lower_shape(
+    context: LoweringContext, layer: Layer, native_id: str, placement: Placement
+) -> VisualClip:
+    source = cast(Shape, layer.source)
+    return context.builder.add_shape_clip(
+        shape=source.to_canonical(),
+        start=placement.start,
+        duration=placement.duration,
+        layer=placement.layer,
+        visible=placement.visible,
+        opacity=placement.opacity,
+        id=native_id,
+    )
+
+
 def _lower_particle(
     context: LoweringContext, layer: Layer, native_id: str, placement: Placement
 ) -> VisualClip:
@@ -487,6 +502,15 @@ register_source(
 register_source(
     Color, _lower_color, SourceCapabilities(supports_transition_adapter=True)
 )
+for _shape_type in (Shape, Rectangle, RoundedRectangle, Ellipse, Circle, Line, Polygon):
+    register_source(
+        _shape_type,
+        _lower_shape,
+        SourceCapabilities(
+            supports_direct_transform=True,
+            supports_direct_transition_endpoint=True,
+        ),
+    )
 register_source(
     ParticleSystem,
     _lower_particle,

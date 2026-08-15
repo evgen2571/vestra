@@ -64,6 +64,27 @@ pub(crate) fn draw_layer(
                 }
             }
         }
+        EvaluatedSource::Shape { shape_index, .. } => {
+            let prepared = assets.shape_source(*shape_index);
+            if layer.transform.is_valid() {
+                draw_raster(
+                    canvas,
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &crate::plan::CompiledSizing::Original,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                );
+            }
+        }
         EvaluatedSource::Spectrum2D {
             bands,
             x,

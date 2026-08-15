@@ -444,6 +444,7 @@ pub enum VisualSource {
     SolidColor {
         colour: String,
     },
+    Shape(ShapeSource),
     #[serde(rename = "spectrum2d")]
     Spectrum2D(Spectrum2D),
     #[serde(rename = "particle_system")]
@@ -456,7 +457,7 @@ impl VisualSource {
     /// directly to this source without an adapter.
     #[must_use]
     pub const fn supports_direct_transform(&self) -> bool {
-        matches!(self, Self::Image { .. } | Self::Group(_))
+        matches!(self, Self::Image { .. } | Self::Shape(_) | Self::Group(_))
     }
 
     /// Whether this source may be used as a direct transition endpoint.
@@ -464,6 +465,46 @@ impl VisualSource {
     pub const fn supports_direct_transition_endpoint(&self) -> bool {
         self.supports_direct_transform()
     }
+}
+
+/// A static source-local primitive rasterized during render preparation.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ShapeSource {
+    pub geometry: ShapeGeometry,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub stroke_width: f64,
+}
+
+/// Primitive geometry expressed in source-local pixels.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ShapeGeometry {
+    Rectangle {
+        width: f64,
+        height: f64,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        corner_radius: f64,
+    },
+    Ellipse {
+        width: f64,
+        height: f64,
+    },
+    Line {
+        start: Point,
+        end: Point,
+    },
+    Polygon {
+        points: Vec<Point>,
+    },
+}
+
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -549,6 +590,30 @@ mod tests {
         assert_eq!(value["type"], "spectrum2d");
         let round_trip = serde_json::from_value::<VisualSource>(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(round_trip).unwrap(), value);
+    }
+
+    #[test]
+    fn shape_sources_round_trip_without_prepared_pixels() {
+        let source = VisualSource::Shape(ShapeSource {
+            geometry: ShapeGeometry::Polygon {
+                points: vec![
+                    super::super::Point { x: -2.0, y: 1.5 },
+                    super::super::Point { x: 0.0, y: -3.0 },
+                    super::super::Point { x: 2.0, y: 1.5 },
+                ],
+            },
+            fill: Some("#11223380".to_owned()),
+            stroke: Some("#ffffff".to_owned()),
+            stroke_width: 1.0,
+        });
+        let value = serde_json::to_value(&source).expect("shape serializes");
+        assert_eq!(value["type"], "shape");
+        assert!(value.get("pixels").is_none());
+        let decoded = serde_json::from_value::<VisualSource>(value.clone()).expect("shape parses");
+        assert_eq!(
+            serde_json::to_value(decoded).expect("shape serializes"),
+            value
+        );
     }
 
     #[test]

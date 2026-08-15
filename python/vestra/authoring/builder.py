@@ -11,7 +11,7 @@ from .._native import Editor, FrameRate, Project as ProjectSnapshot, ValidationR
 from ._internal import _IdAllocator, _Owner, _number, _require_owner
 from .assets import AudioAsset, ImageAsset
 from .audio import AudioTimeline
-from .clips import GroupClip, ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip, VisualClip
+from .clips import GroupClip, ImageClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip, VisualClip
 from .effects import ClipEffectCollection, PostEffectCollection
 from .errors import AuthoringError
 from .flashes import FlashCollection
@@ -350,6 +350,22 @@ class ProjectBuilder:
         self._clips.append(clip)
         return clip
 
+    def add_shape_clip(
+        self, *, shape: dict[str, object], start: int | float, duration: int | float, layer: int,
+        visible: bool = True, opacity: int | float = 1.0, id: str | None = None,
+    ) -> ShapeClip:
+        """Create a procedural Shape clip from a canonical Shape Source."""
+        if not isinstance(shape, dict) or shape.get("type") != "shape":
+            raise TypeError("shape must be a canonical Shape Source")
+        staged = ShapeClip._create(self._owner, "", shape, start=start, duration=duration,
+                                   layer=layer, visible=visible, opacity=opacity)
+        if id is not None:
+            self._ids.validate("clip", id)
+        staged._id = self._ids.allocate("clip", "shape") if id is None else self._ids.reserve("clip", id)
+        staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))
+        self._clips.append(staged)
+        return staged
+
     def scalar_property(self, value: int | float = 0.0) -> ModulatableScalarTrack:
         """Create a reusable scalar property for audio-reactive authoring."""
         return ModulatableScalarTrack._create(self._owner, value)
@@ -382,7 +398,7 @@ class ProjectBuilder:
         if not isinstance(clips, list | tuple):
             raise TypeError("clips must be a list or tuple of visual clips")
         children = tuple(clips)
-        supported = (ImageClip, SolidColorClip, ParticleSystemClip, Spectrum2DClip, GroupClip)
+        supported = (ImageClip, SolidColorClip, ShapeClip, ParticleSystemClip, Spectrum2DClip, GroupClip)
         for child in children:
             if not isinstance(child, supported):
                 raise TypeError("clips must contain supported visual clips")

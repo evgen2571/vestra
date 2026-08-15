@@ -2290,6 +2290,124 @@
       ],
       "type": "object"
     },
+    "shape": {
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "$ref": "#/$defs/colour"
+        },
+        "geometry": {
+          "$ref": "#/$defs/shape_geometry"
+        },
+        "stroke": {
+          "$ref": "#/$defs/colour"
+        },
+        "stroke_width": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "type": {
+          "const": "shape"
+        }
+      },
+      "required": [
+        "type",
+        "geometry"
+      ],
+      "type": "object"
+    },
+    "shape_geometry": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "corner_radius": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "height": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "type": {
+              "const": "rectangle"
+            },
+            "width": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "height": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "type": {
+              "const": "ellipse"
+            },
+            "width": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "$ref": "#/$defs/point"
+            },
+            "start": {
+              "$ref": "#/$defs/point"
+            },
+            "type": {
+              "const": "line"
+            }
+          },
+          "required": [
+            "type",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "points": {
+              "items": {
+                "$ref": "#/$defs/point"
+              },
+              "minItems": 3,
+              "type": "array"
+            },
+            "type": {
+              "const": "polygon"
+            }
+          },
+          "required": [
+            "type",
+            "points"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "sharpen_effect": {
       "additionalProperties": false,
       "properties": {
@@ -2584,6 +2702,9 @@
         },
         {
           "$ref": "#/$defs/particle_system"
+        },
+        {
+          "$ref": "#/$defs/shape"
         },
         {
           "$ref": "#/$defs/group"

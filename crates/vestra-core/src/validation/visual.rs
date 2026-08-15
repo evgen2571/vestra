@@ -99,6 +99,9 @@ fn validate_with_depth(
                 ))
             }
             crate::project::VisualSource::SolidColor { .. } => {}
+            crate::project::VisualSource::Shape(shape) => {
+                validate_shape(shape, &format!("{path}/source"), errors);
+            }
             crate::project::VisualSource::Spectrum2D(spectrum) => validate_spectrum2d(
                 spectrum,
                 &format!("{path}/source"),
@@ -202,6 +205,22 @@ fn validate_with_depth(
                         "MVP-SOLID-PROPERTIES",
                         Category::Semantic,
                         "solid-color clips cannot use image-only properties",
+                        format!("{path}/{field}"),
+                    ));
+                }
+            }
+        }
+        if matches!(clip.source, crate::project::VisualSource::Shape(_)) {
+            for (field, present) in [
+                ("sizing", clip.sizing.is_some()),
+                ("crop", clip.crop.is_some()),
+                ("preset", clip.preset.is_some()),
+            ] {
+                if present {
+                    errors.push(Diagnostic::error(
+                        "MVP-SHAPE-PROPERTIES",
+                        Category::Semantic,
+                        "Shape clips cannot use image-specific sizing, crop, or preset properties",
                         format!("{path}/{field}"),
                     ));
                 }
@@ -319,6 +338,83 @@ fn validate_with_depth(
                 has_authored_audio,
             );
         }
+    }
+}
+
+fn validate_shape(shape: &crate::project::ShapeSource, path: &str, errors: &mut Vec<Diagnostic>) {
+    let finite = |value: f64| value.is_finite();
+    let valid_geometry = match &shape.geometry {
+        crate::project::ShapeGeometry::Rectangle {
+            width,
+            height,
+            corner_radius,
+        } => {
+            finite(*width)
+                && *width > 0.0
+                && finite(*height)
+                && *height > 0.0
+                && finite(*corner_radius)
+                && *corner_radius >= 0.0
+                && *corner_radius <= width.min(*height) / 2.0
+        }
+        crate::project::ShapeGeometry::Ellipse { width, height } => {
+            finite(*width) && *width > 0.0 && finite(*height) && *height > 0.0
+        }
+        crate::project::ShapeGeometry::Line { start, end } => {
+            finite(start.x)
+                && finite(start.y)
+                && finite(end.x)
+                && finite(end.y)
+                && (start.x != end.x || start.y != end.y)
+        }
+        crate::project::ShapeGeometry::Polygon { points } => {
+            points.len() >= 3
+                && points
+                    .iter()
+                    .all(|point| finite(point.x) && finite(point.y))
+        }
+    };
+    if !valid_geometry {
+        errors.push(Diagnostic::error(
+            "MVP-SHAPE-GEOMETRY",
+            Category::Semantic,
+            "shape geometry is invalid",
+            format!("{path}/geometry"),
+        ));
+    }
+    for (name, colour) in [
+        ("fill", shape.fill.as_ref()),
+        ("stroke", shape.stroke.as_ref()),
+    ] {
+        if let Some(colour) = colour
+            && crate::project::parse_colour(colour).is_none()
+        {
+            errors.push(Diagnostic::error(
+                "MVP-SHAPE-COLOUR",
+                Category::Semantic,
+                "shape colour must use #RRGGBB or #RRGGBBAA",
+                format!("{path}/{name}"),
+            ));
+        }
+    }
+    if shape.fill.is_none() && shape.stroke.is_none() {
+        errors.push(Diagnostic::error(
+            "MVP-SHAPE-STYLE",
+            Category::Semantic,
+            "shape must have a fill or stroke",
+            path,
+        ));
+    }
+    if !finite(shape.stroke_width)
+        || shape.stroke_width < 0.0
+        || (shape.stroke.is_some() && shape.stroke_width <= 0.0)
+    {
+        errors.push(Diagnostic::error(
+            "MVP-SHAPE-STROKE",
+            Category::Semantic,
+            "stroke width must be finite and positive when stroke is enabled",
+            format!("{path}/stroke_width"),
+        ));
     }
 }
 

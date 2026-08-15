@@ -65,7 +65,7 @@ from .audio import (
     ParametricEq,
     PlaybackSpeed,
 )
-from .sources import Image, Source
+from .sources import Circle, Ellipse, Image, Line, Polygon, Rectangle, RoundedRectangle, Shape, Source
 from .flashes import Flash, FlashCollection
 from .presets import Preset, PresetCollection
 from .transitions import (
@@ -150,6 +150,13 @@ __all__ = [
     "Layer",
     "Source",
     "Image",
+    "Shape",
+    "Rectangle",
+    "RoundedRectangle",
+    "Ellipse",
+    "Circle",
+    "Line",
+    "Polygon",
     "ScalarProperty",
     "BindableScalarProperty",
     "BindablePointProperty",

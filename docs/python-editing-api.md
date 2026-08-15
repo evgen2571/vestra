@@ -164,6 +164,29 @@ incoming = scene.add(Image("examples/assets/blue.png", sizing="cover"), start=0.
 scene.transitions.add(background, incoming, Crossfade(), start=0.5, duration=0.5)
 ```
 
+Custom definitions use normalized presentation channels and can be reused at
+different placements. Timing and IDs stay on `scene.transitions.add()`.
+
+```python
+from vestra import Interpolation
+from vestra.transitions import Animate, CustomTransition, TransitionLayer
+
+cinematic = CustomTransition(
+    default_easing=Interpolation.EASE_IN_OUT,
+    outgoing=TransitionLayer(
+        opacity=Animate(1.0, 0.0),
+        scale=Animate(1.0, 1.1, easing=Interpolation.EASE_OUT),
+    ),
+)
+scene.transitions.add(background, incoming, cinematic, start=2.0, duration=1.25)
+scene.transitions.add(incoming, background, cinematic, start=8.0, duration=0.75)
+```
+
+Custom channels currently cover opacity, position offset, scale multiplier, and
+rotation offset. They are compiled into the same schema-version 3 transition
+definition as built-in transitions; transition-local effects are not part of
+this API.
+
 Nested composition transitions are rejected. Cinematic presets are image-only
 and layer-owned.
 

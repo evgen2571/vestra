@@ -111,7 +111,12 @@ pub fn compile(
         .enumerate()
         .map(|(index, layer)| (layer.id.clone(), index))
         .collect();
-    transitions::compile_transition_placements(&project.visual.transitions, &indices, &mut layers)?;
+    transitions::compile_transition_placements_with_interner(
+        &project.visual.transitions,
+        &indices,
+        &mut layers,
+        &mut scalar_signal_interner,
+    )?;
     compilation.compiled_transition_association_count = project.visual.transitions.len() as u64 * 2;
     for flash in &project.visual.flashes {
         layers.push(flashes::compile(

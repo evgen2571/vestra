@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .authoring.animation import interpolation_to_canonical
 from .authoring.values import CubicBezier, Interpolation, Point
+from .effects import DirectionalBlur, Effect, GaussianBlur, ZoomBlur
 
 if TYPE_CHECKING:
     from .editor import Composition, Layer
@@ -130,12 +131,19 @@ class TransitionLayer:
     position: Animate[object] | None = None
     scale: Animate[object] | None = None
     rotation: Animate[float] | None = None
+    effects: tuple[Effect, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("opacity", "position", "scale", "rotation"):
             value = getattr(self, name)
             if value is not None and not isinstance(value, Animate):
                 raise TypeError(f"{name} must be an Animate instance or None")
+        if not isinstance(self.effects, (list, tuple)):
+            raise TypeError("effects must be a list or tuple of Effect objects")
+        effects = tuple(self.effects)
+        if any(not isinstance(effect, Effect) for effect in effects):
+            raise TypeError("effects must contain only Effect objects")
+        object.__setattr__(self, "effects", effects)
 
 
 def _track(
@@ -247,6 +255,28 @@ def _canonical_layer(
                 }
             )
         output[channel] = {"keyframes": keyframes}
+    if layer.effects:
+        canonical_effects: list[dict[str, object]] = []
+        for index, effect in enumerate(layer.effects):
+            canonical = effect.to_canonical()
+            effect_id = effect.id or f"transition-effect-{index:06d}"
+            canonical["id"] = effect_id
+            for name, value in canonical.items():
+                if not isinstance(value, dict) or "keyframes" not in value:
+                    continue
+                keyframes = value["keyframes"]
+                if not isinstance(keyframes, list):
+                    continue
+                for keyframe in keyframes:
+                    if not isinstance(keyframe, dict):
+                        continue
+                    time = keyframe.get("time")
+                    if not isinstance(time, int | float) or not math.isfinite(float(time)):
+                        raise ValueError(f"transition effect {name} keyframe time must be finite")
+                    if not 0.0 <= float(time) <= 1.0:
+                        raise ValueError(f"transition effect {name} keyframe time must be between 0 and 1")
+            canonical_effects.append(canonical)
+        output["effects"] = canonical_effects
     return output
 
 
@@ -273,7 +303,7 @@ class CustomTransition(TransitionDefinition):
         canonical_outgoing = _canonical_layer(outgoing, default_easing)
         canonical_incoming = _canonical_layer(incoming, default_easing)
         if not canonical_outgoing and not canonical_incoming:
-            raise ValueError("custom transition requires at least one channel")
+            raise ValueError("custom transition requires at least one channel or effect")
         object.__setattr__(self, "outgoing", outgoing)
         object.__setattr__(self, "incoming", incoming)
         object.__setattr__(self, "default_easing", default_easing)
@@ -442,6 +472,66 @@ class ZoomOut(ZoomCrossfade):
         super().__init__(outgoing_zoom=amount, incoming_start_zoom=1.0, easing=easing)
 
 
+def _effect_with_radius(effect: Effect, values: tuple[tuple[float, float], ...]) -> Effect:
+    effect._set_id("transition-effect")
+    radius = effect.radius
+    radius.clear_keyframes()
+    for progress, value in values:
+        radius.keyframe(progress, value)
+    return effect
+
+
+class BlurCrossfade(TransitionDefinition):
+    """Opacity crossfade with a temporary symmetric Gaussian blur."""
+
+    def __init__(self, *, radius: int | float = 12.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        peak = _positive(radius, "radius")
+        easing = _interpolation(easing)
+        outgoing_blur = _effect_with_radius(GaussianBlur(0.0), ((0.0, 0.0), (0.5, peak), (1.0, 0.0)))
+        incoming_blur = _effect_with_radius(GaussianBlur(0.0), ((0.0, peak), (1.0, 0.0)))
+        object.__setattr__(self, "_canonical", _definition(
+            {**_opacity(easing)[0], "effects": [outgoing_blur.to_canonical()]},
+            {**_opacity(easing)[1], "effects": [incoming_blur.to_canonical()]},
+        ))
+
+
+class ZoomBlurTransition(TransitionDefinition):
+    """Zooming crossfade using the ordinary ZoomBlur effect."""
+
+    def __init__(self, *, radius: int | float = 0.8, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        peak = _nonnegative(radius, "radius")
+        easing = _interpolation(easing)
+        outgoing = _effect_with_radius(ZoomBlur(0.0, 16, (0.5, 0.5)), ((0.0, 0.0), (0.5, peak), (1.0, 0.0)))
+        incoming = _effect_with_radius(ZoomBlur(0.0, 16, (0.5, 0.5)), ((0.0, peak), (1.0, 0.0)))
+        out_opacity, in_opacity = _opacity(easing)
+        object.__setattr__(self, "_canonical", _definition(
+            {**out_opacity, "scale_multiplier": _track(((0.0, _scale(1.0), easing), (1.0, _scale(1.08), easing))), "effects": [outgoing.to_canonical()]},
+            {**in_opacity, "scale_multiplier": _track(((0.0, _scale(0.92), easing), (1.0, _scale(1.0), easing))), "effects": [incoming.to_canonical()]},
+        ))
+
+
+class _WhipPan(TransitionDefinition):
+    def __init__(self, *, angle_degrees: float, distance: int | float, radius: int | float, easing: InterpolationValue) -> None:
+        delta = {"x": math.cos(math.radians(angle_degrees)) * distance, "y": math.sin(math.radians(angle_degrees)) * distance}
+        outgoing_blur = _effect_with_radius(DirectionalBlur(0.0, angle_degrees), ((0.0, 0.0), (0.5, radius), (1.0, 0.0)))
+        incoming_blur = _effect_with_radius(DirectionalBlur(0.0, angle_degrees), ((0.0, radius), (1.0, 0.0)))
+        out_opacity, in_opacity = _opacity(easing)
+        object.__setattr__(self, "_canonical", _definition(
+            {**out_opacity, "position_offset": _track(((0.0, {"x": 0.0, "y": 0.0}, easing), (1.0, delta, easing))), "effects": [outgoing_blur.to_canonical()]},
+            {**in_opacity, "position_offset": _track(((0.0, {"x": -delta["x"], "y": -delta["y"]}, easing), (1.0, {"x": 0.0, "y": 0.0}, easing))), "effects": [incoming_blur.to_canonical()]},
+        ))
+
+
+class WhipPanLeft(_WhipPan):
+    def __init__(self, *, distance: int | float = 1.0, radius: int | float = 12.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(angle_degrees=180.0, distance=_nonnegative(distance, "distance"), radius=_nonnegative(radius, "radius"), easing=_interpolation(easing))
+
+
+class WhipPanRight(_WhipPan):
+    def __init__(self, *, distance: int | float = 1.0, radius: int | float = 12.0, easing: InterpolationValue = Interpolation.EASE_IN_OUT) -> None:
+        super().__init__(angle_degrees=0.0, distance=_nonnegative(distance, "distance"), radius=_nonnegative(radius, "radius"), easing=_interpolation(easing))
+
+
 @dataclass(frozen=True, slots=True)
 class TransitionPlacement:
     id: str
@@ -570,4 +660,8 @@ __all__ = [
     "ZoomCrossfade",
     "ZoomIn",
     "ZoomOut",
+    "BlurCrossfade",
+    "ZoomBlurTransition",
+    "WhipPanLeft",
+    "WhipPanRight",
 ]

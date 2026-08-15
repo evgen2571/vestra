@@ -4,7 +4,7 @@ use super::{ResourceLimits, validate};
 use crate::{
     Severity,
     project::{
-        Interpolation, NormalizedKeyframe, NormalizedTrack, Project, TransitionDefinition,
+        Effect, Interpolation, NormalizedKeyframe, NormalizedTrack, Project, TransitionDefinition,
         TransitionPlacement, TransitionPresentation,
     },
 };
@@ -160,6 +160,99 @@ fn crossfade(id: &str, outgoing: &str, incoming: &str) -> TransitionPlacement {
             },
         },
     }
+}
+
+fn transition_effect(id: &str) -> Effect {
+    serde_json::from_value(json!({
+        "type": "gaussian_blur",
+        "id": id,
+        "radius": {"base_value": 1.0}
+    }))
+    .expect("transition effect")
+}
+
+fn project_with_transition_effect_counts(
+    authored: usize,
+    outgoing: usize,
+    incoming: usize,
+) -> Project {
+    let mut outgoing_clip = image_clip("a", "image-a", 10.0, 5.0);
+    outgoing_clip["effects"] = json!(
+        (0..authored)
+            .map(|index| {
+                json!({
+                    "type": "gaussian_blur",
+                    "id": format!("authored-{index}"),
+                    "radius": {"base_value": 1.0}
+                })
+            })
+            .collect::<Vec<_>>()
+    );
+    let incoming_clip = image_clip("b", "image-b", 10.0, 5.0);
+    let mut project = asset_usage_project(vec![outgoing_clip, incoming_clip]);
+    let mut placement = crossfade("effects", "a", "b");
+    placement.definition.outgoing.effects = (0..outgoing)
+        .map(|index| transition_effect(&format!("outgoing-{index}")))
+        .collect();
+    placement.definition.incoming.effects = (0..incoming)
+        .map(|index| transition_effect(&format!("incoming-{index}")))
+        .collect();
+    project.visual.transitions = vec![placement];
+    project
+}
+
+#[test]
+fn transition_effect_count_combines_authored_and_outgoing_effects() {
+    let project = project_with_transition_effect_counts(2, 2, 0);
+    assert!(
+        validate(
+            &project,
+            ResourceLimits {
+                maximum_effects_per_clip: 4,
+                ..ResourceLimits::default()
+            }
+        )
+        .is_valid()
+    );
+
+    let project = project_with_transition_effect_counts(2, 3, 0);
+    assert!(
+        validate(
+            &project,
+            ResourceLimits {
+                maximum_effects_per_clip: 4,
+                ..ResourceLimits::default()
+            }
+        )
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == "MVP-LIMIT-TRANSITION-EFFECTS")
+    );
+}
+
+#[test]
+fn transition_effect_count_checks_incoming_endpoint_independently() {
+    let mut project = project_with_transition_effect_counts(2, 2, 3);
+    project.visual.clips[1].effects = (0..2)
+        .map(|index| transition_effect(&format!("incoming-authored-{index}")))
+        .collect();
+    assert!(
+        validate(
+            &project,
+            ResourceLimits {
+                maximum_effects_per_clip: 4,
+                ..ResourceLimits::default()
+            }
+        )
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| {
+            diagnostic
+                .pointer
+                .as_deref()
+                .is_some_and(|pointer| pointer.ends_with("/incoming/effects"))
+        })
+    );
 }
 
 #[test]

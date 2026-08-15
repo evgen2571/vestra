@@ -70,6 +70,10 @@ pub enum EvaluatedSource {
     SolidColor {
         colour: [u8; 4],
     },
+    Shape {
+        shape_index: usize,
+        sizing: CompiledSizing,
+    },
     Spectrum2D {
         bands: Vec<f32>,
         x: f64,
@@ -111,6 +115,16 @@ impl EvaluatedSource {
                 crop: *crop,
                 sizing,
                 cacheable_crop: *cacheable_crop,
+            }),
+            Self::Shape { sizing, .. } => Some(RasterPresentation {
+                crop: Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                sizing,
+                cacheable_crop: false,
             }),
             _ => None,
         }
@@ -241,6 +255,10 @@ fn evaluate_layers(
             CompiledVisualSource::SolidColor { colour } => {
                 EvaluatedSource::SolidColor { colour: *colour }
             }
+            CompiledVisualSource::Shape { shape_index } => EvaluatedSource::Shape {
+                shape_index: *shape_index,
+                sizing: CompiledSizing::Original,
+            },
             CompiledVisualSource::Spectrum2D {
                 band_signals,
                 x,

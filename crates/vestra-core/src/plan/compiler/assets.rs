@@ -20,6 +20,7 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
                 }
                 crate::project::VisualSource::Group(group) => collect(&group.clips, ids),
                 crate::project::VisualSource::SolidColor { .. }
+                | crate::project::VisualSource::Shape(_)
                 | crate::project::VisualSource::Spectrum2D(_)
                 | crate::project::VisualSource::ParticleSystem(_) => {}
             }

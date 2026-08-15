@@ -4,6 +4,7 @@ from ..authoring.values import Crop, Point, Sizing
 from .base import ParticleAudioReactive, Source, SizingValue
 from .color import Color, SolidColor
 from .image import Image
+from .shapes import Circle, Ellipse, Line, Polygon, Rectangle, RoundedRectangle, Shape
 from .particles import (
     CircleEmitter,
     ColourLifetimeStop,
@@ -28,6 +29,13 @@ from .spectrum import (
 
 __all__ = [
     "Image",
+    "Shape",
+    "Rectangle",
+    "RoundedRectangle",
+    "Ellipse",
+    "Circle",
+    "Line",
+    "Polygon",
     "Color",
     "SolidColor",
     "Source",

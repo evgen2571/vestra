@@ -19,6 +19,7 @@ use crate::{Diagnostic, plan::RenderPlan};
 
 pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
+    shapes: Vec<PreparedRasterSource>,
     crops: ByteLruCache<CropKey, RgbaImage>,
     stats: PreparationStats,
     timings: PreparationTimings,
@@ -67,16 +68,26 @@ impl PreparedAssets {
     #[cfg(test)]
     #[must_use]
     pub fn from_decoded(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
-        Self::from_decoded_with_cache_budget(decoded, plan.limits.maximum_cache_bytes)
+        Self::from_decoded_with_cache_budget(decoded, &plan.shapes, plan.limits.maximum_cache_bytes)
     }
 
     #[must_use]
     pub(super) fn from_decoded_with_cache_budget(
         decoded: Arc<DecodedAssets>,
+        shapes: &[vestra_core::project::ShapeSource],
         cache_budget_bytes: u64,
     ) -> Self {
+        let prepared_shapes = shapes
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let shape = decoded.shape(index);
+                PreparedRasterSource::from_pixels(Arc::clone(&shape.pixels), shape.intrinsic_size)
+            })
+            .collect();
         Self {
             decoded,
+            shapes: prepared_shapes,
             crops: ByteLruCache::new(cache_budget_bytes),
             stats: PreparationStats {
                 cache_budget_bytes,
@@ -118,6 +129,11 @@ impl PreparedAssets {
         let pixels = self.decoded.image_resource(asset);
         let intrinsic_size = IntrinsicSize::new(pixels.width(), pixels.height());
         PreparedRasterSource::from_pixels(pixels, intrinsic_size)
+    }
+
+    #[must_use]
+    pub(crate) fn shape_source(&self, shape: usize) -> PreparedRasterSource {
+        self.shapes[shape.saturating_sub(self.decoded.image_count())].clone()
     }
 
     #[must_use]

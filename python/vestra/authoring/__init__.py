@@ -6,7 +6,7 @@ from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainK
 from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEffect, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
-from .clips import GroupClip, ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
+from .clips import GroupClip, ImageClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip
 from .particles import (
     CircleEmitter, ColourLifetimeStop, ParticleAudioReactive, ParticleBlendMode,
     ParticleBurst, ParticleLifetimeStyle, ParticlePrimitive, ParticleSystem, PointEmitter,

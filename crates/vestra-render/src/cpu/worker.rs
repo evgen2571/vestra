@@ -150,6 +150,7 @@ impl CpuWorkerState {
         Self {
             assets: PreparedAssets::from_decoded_with_cache_budget(
                 decoded,
+                &plan.shapes,
                 cache_budgets.crop_cache_budget_bytes,
             ),
             effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),

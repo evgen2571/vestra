@@ -42,6 +42,7 @@ fn collect_used_visual_assets<'a>(
                 collect_used_visual_assets(&group.clips, used_assets);
             }
             crate::project::VisualSource::SolidColor { .. }
+            | crate::project::VisualSource::Shape(_)
             | crate::project::VisualSource::Spectrum2D(_)
             | crate::project::VisualSource::ParticleSystem(_) => {}
         }

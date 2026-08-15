@@ -75,6 +75,7 @@ pub fn compile(
         )
     })?;
     let image_table = assets::build(&validated, project);
+    let mut shapes = Vec::new();
     let mut layers = Vec::new();
     let mut next_compiled_identity = 0;
     let mut scalar_signal_interner = ScalarSignalInterner::default();
@@ -95,6 +96,7 @@ pub fn compile(
             clip,
             &validated,
             &image_table.indices,
+            &mut shapes,
             &mut compilation,
             &mut scalar_signal_interner,
             &mut next_compiled_identity,
@@ -215,6 +217,7 @@ pub fn compile(
         audio_output_enabled: project.output.audio,
         limits: validated.limits,
         images: image_table.images,
+        shapes,
         layers,
         post_effects,
         post_effect_dependency,

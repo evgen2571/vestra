@@ -23,10 +23,15 @@ struct GroupTiming {
     parent_visible_window: (u128, u128),
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "recursive compiler keeps validated inputs and shared source tables explicit"
+)]
 pub(super) fn compile(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    shapes: &mut Vec<crate::project::ShapeSource>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
@@ -69,6 +74,11 @@ pub(super) fn compile(
                     )
                 })?,
             }
+        }
+        VisualSource::Shape(shape) => {
+            let shape_index = image_indices.len() + shapes.len();
+            shapes.push(shape.clone());
+            CompiledVisualSource::Shape { shape_index }
         }
         VisualSource::Spectrum2D(spectrum) => {
             compilation.parsed_colour_count += 1;
@@ -187,6 +197,7 @@ pub(super) fn compile(
             },
             validated,
             image_indices,
+            shapes,
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
@@ -233,10 +244,15 @@ pub(super) fn compile(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "preset compilation forwards the recursive compiler context"
+)]
 pub(super) fn compile_with_preset(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    shapes: &mut Vec<crate::project::ShapeSource>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
@@ -246,6 +262,7 @@ pub(super) fn compile_with_preset(
         clip,
         validated,
         image_indices,
+        shapes,
         compilation,
         scalar_signal_interner,
         next_compiled_identity,
@@ -257,11 +274,16 @@ pub(super) fn compile_with_preset(
     Ok(layer)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "group compilation forwards the shared recursive compiler context"
+)]
 fn compile_group(
     group: &crate::project::Group,
     timing: GroupTiming,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    shapes: &mut Vec<crate::project::ShapeSource>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
@@ -284,6 +306,7 @@ fn compile_group(
             child,
             validated,
             image_indices,
+            shapes,
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
@@ -388,6 +411,7 @@ fn compile_transform(
         }),
         (
             VisualSource::SolidColor { .. }
+            | VisualSource::Shape(_)
             | VisualSource::Spectrum2D(_)
             | VisualSource::ParticleSystem(_),
             None,

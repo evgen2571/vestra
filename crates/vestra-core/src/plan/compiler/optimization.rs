@@ -247,6 +247,7 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
         matches!(
             &layer.source,
             crate::plan::CompiledVisualSource::Spectrum2D { .. }
+                | crate::plan::CompiledVisualSource::Shape { .. }
                 | crate::plan::CompiledVisualSource::ParticleSystem(_)
         ),
         matches!(&layer.source, crate::plan::CompiledVisualSource::Group(composition)

@@ -29,8 +29,7 @@ from .effects import (
 )
 from .flashes import Flash, FlashCollection
 from .transitions import (
-    CrossfadeTransition, DirectionalPushTransition, FlashCutTransition,
-    Transition, TransitionCollection, ZoomBlurTransition, ZoomCrossfadeTransition,
+    TransitionDefinition, TransitionPlacement, TransitionCollection,
 )
 from .tracks import CropTrack, PointTrack, ScalarTrack, Transform
 from .values import (
@@ -117,13 +116,9 @@ __all__ = [
     "effect_definition",
     "available_audio_effects",
     "audio_effect_definition",
-    "CrossfadeTransition",
-    "DirectionalPushTransition",
+    "TransitionDefinition",
+    "TransitionPlacement",
     "Flash",
     "FlashCollection",
-    "FlashCutTransition",
-    "Transition",
     "TransitionCollection",
-    "ZoomBlurTransition",
-    "ZoomCrossfadeTransition",
 ]

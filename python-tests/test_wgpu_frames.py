@@ -35,7 +35,7 @@ def test_wgpu_prepared_frame_has_owned_cpu_bytes_when_adapter_is_available() -> 
 def test_wgpu_random_access_matches_cpu_metadata_when_adapter_is_available(tmp_path: Path) -> None:
     project = vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2,
                 "frame_rate": "1/1", "background": "#102030", "quality": "preview",

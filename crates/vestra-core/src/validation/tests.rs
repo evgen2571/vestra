@@ -3,12 +3,15 @@ use serde_json::{Value, json};
 use super::{ResourceLimits, validate};
 use crate::{
     Severity,
-    project::{Interpolation, Project, Transition},
+    project::{
+        Interpolation, NormalizedKeyframe, NormalizedTrack, Project, TransitionDefinition,
+        TransitionPlacement, TransitionPresentation,
+    },
 };
 
 fn project(audio: Value) -> Project {
     serde_json::from_value(json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000",
@@ -93,7 +96,7 @@ fn group_clip(id: &str, clips: Vec<Value>) -> Value {
 
 fn grouped_project(clips: Vec<Value>) -> Project {
     let mut value = serde_json::json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
@@ -105,14 +108,57 @@ fn grouped_project(clips: Vec<Value>) -> Project {
     serde_json::from_value(value.take()).expect("grouped project")
 }
 
-fn crossfade(id: &str, outgoing: &str, incoming: &str) -> Transition {
-    Transition::Crossfade {
+fn crossfade(id: &str, outgoing: &str, incoming: &str) -> TransitionPlacement {
+    TransitionPlacement {
         id: id.to_owned(),
         outgoing: outgoing.to_owned(),
         incoming: incoming.to_owned(),
         start: 10.0,
         duration: 1.0,
-        interpolation: Interpolation::Named(crate::project::InterpolationName::Linear),
+        definition: TransitionDefinition {
+            outgoing: TransitionPresentation {
+                opacity: Some(NormalizedTrack {
+                    keyframes: vec![
+                        NormalizedKeyframe {
+                            progress: 0.0,
+                            value: 1.0,
+                            interpolation: Interpolation::Named(
+                                crate::project::InterpolationName::Linear,
+                            ),
+                        },
+                        NormalizedKeyframe {
+                            progress: 1.0,
+                            value: 0.0,
+                            interpolation: Interpolation::Named(
+                                crate::project::InterpolationName::Linear,
+                            ),
+                        },
+                    ],
+                }),
+                ..Default::default()
+            },
+            incoming: TransitionPresentation {
+                opacity: Some(NormalizedTrack {
+                    keyframes: vec![
+                        NormalizedKeyframe {
+                            progress: 0.0,
+                            value: 0.0,
+                            interpolation: Interpolation::Named(
+                                crate::project::InterpolationName::Linear,
+                            ),
+                        },
+                        NormalizedKeyframe {
+                            progress: 1.0,
+                            value: 1.0,
+                            interpolation: Interpolation::Named(
+                                crate::project::InterpolationName::Linear,
+                            ),
+                        },
+                    ],
+                }),
+                ..Default::default()
+            },
+        },
     }
 }
 
@@ -154,7 +200,7 @@ fn image_clip(id: &str, asset: &str, start: f64, duration: f64) -> Value {
 
 fn asset_usage_project(clips: Vec<Value>) -> Project {
     serde_json::from_value(json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000", "quality": "balanced",

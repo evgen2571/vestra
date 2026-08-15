@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     nested: vestra.CompositionLayer = high_level_project.root.group("nested")
     nested.add(vestra.sources.Color("#334455"))
     assert placed_layer.composition is high_level_project.root
-    project: ProjectSnapshot = ProjectSnapshot.from_dict({"schema_version": 2, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
+    project: ProjectSnapshot = ProjectSnapshot.from_dict({"schema_version": 3, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
     report = Editor().validate(project)
     path: Path = project.base_directory
     assert report.is_valid

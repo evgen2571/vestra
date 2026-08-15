@@ -15,14 +15,7 @@ from .sources import Color, Image, ParticleSystem, Source, Spectrum2D
 from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
-from .transitions import (
-    Crossfade,
-    DirectionalPush,
-    FlashCut,
-    TransitionCollection,
-    ZoomBlur,
-    ZoomCrossfade,
-)
+from .transitions import TransitionCollection
 from .properties import (
     BindablePointProperty,
     BindableScalarProperty,
@@ -159,8 +152,8 @@ class LoweringContext:
             self._reserved_root_ids = {layer.id for layer in composition.layers}
             self._transition_endpoints = {
                 endpoint
-                for transition in composition.transitions._items
-                for endpoint in transition[:2]
+                for transition in composition.transitions.items
+                for endpoint in (transition.outgoing, transition.incoming)
             }
         clips: list[VisualClip] = []
         for layer in composition.layers:
@@ -237,68 +230,17 @@ class LoweringContext:
         self, transitions: TransitionCollection, flashes: FlashCollection
     ) -> None:
         """Lower root transitions and flashes after all endpoint clips exist."""
-        for outgoing_layer, incoming_layer, transition in transitions._items:
-            outgoing = cast(ImageClip | GroupClip, self.layer_clips[outgoing_layer])
-            incoming = cast(ImageClip | GroupClip, self.layer_clips[incoming_layer])
-            if isinstance(transition, Crossfade):
-                self.builder.transitions.add_crossfade(
-                    outgoing=outgoing,
-                    incoming=incoming,
-                    start=transition.start,
-                    duration=transition.duration,
-                    interpolation=transition.interpolation,
-                    id=transition.id,
-                )
-            elif isinstance(transition, ZoomCrossfade):
-                self.builder.transitions.add_zoom_crossfade(
-                    outgoing=outgoing,
-                    incoming=incoming,
-                    start=transition.start,
-                    duration=transition.duration,
-                    interpolation=transition.interpolation,
-                    id=transition.id,
-                    outgoing_zoom=transition.outgoing_zoom,
-                    incoming_start_zoom=transition.incoming_start_zoom,
-                )
-            elif isinstance(transition, FlashCut):
-                self.builder.transitions.add_flash_cut(
-                    outgoing=outgoing,
-                    incoming=incoming,
-                    start=transition.start,
-                    duration=transition.duration,
-                    interpolation=transition.interpolation,
-                    id=transition.id,
-                    colour=cast(str, transition.colour),
-                    intensity=transition.intensity,
-                )
-            elif isinstance(transition, DirectionalPush):
-                self.builder.transitions.add_directional_push(
-                    outgoing=outgoing,
-                    incoming=incoming,
-                    start=transition.start,
-                    duration=transition.duration,
-                    interpolation=transition.interpolation,
-                    id=transition.id,
-                    angle_degrees=transition.angle_degrees,
-                    distance=transition.distance,
-                    blur_radius=transition.blur_radius,
-                )
-            elif isinstance(transition, ZoomBlur):
-                self.builder.transitions.add_zoom_blur(
-                    outgoing=outgoing,
-                    incoming=incoming,
-                    start=transition.start,
-                    duration=transition.duration,
-                    interpolation=transition.interpolation,
-                    id=transition.id,
-                    outgoing_zoom=transition.outgoing_zoom,
-                    incoming_start_zoom=transition.incoming_start_zoom,
-                    blur_radius=transition.blur_radius,
-                )
-            else:
-                raise TypeError(
-                    f"unsupported transition type: {type(transition).__name__}"
-                )
+        for placement in transitions.items:
+            outgoing = cast(ImageClip | GroupClip, self.layer_clips[placement.outgoing])
+            incoming = cast(ImageClip | GroupClip, self.layer_clips[placement.incoming])
+            self.builder.transitions.add_transition(
+                outgoing=outgoing,
+                incoming=incoming,
+                start=placement.start,
+                duration=placement.duration,
+                definition=placement.definition.to_canonical(),
+                id=placement.id,
+            )
         for flash in flashes.items:
             self.builder.flashes.add(
                 start=flash.start,

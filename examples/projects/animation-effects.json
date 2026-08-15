@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "name": "Animation and effects",
   "output": {
     "path": "../output/animation-effects.mp4",
@@ -153,13 +153,29 @@
     ],
     "transitions": [
       {
-        "type": "crossfade",
         "id": "red-blue",
         "outgoing": "red-pan",
         "incoming": "blue-in",
         "start": 3,
         "duration": 1,
-        "interpolation": "linear"
+        "definition": {
+          "outgoing": {
+            "opacity": {
+              "keyframes": [
+                {"progress": 0, "value": 1, "interpolation": "linear"},
+                {"progress": 1, "value": 0, "interpolation": "linear"}
+              ]
+            }
+          },
+          "incoming": {
+            "opacity": {
+              "keyframes": [
+                {"progress": 0, "value": 0, "interpolation": "linear"},
+                {"progress": 1, "value": 1, "interpolation": "linear"}
+              ]
+            }
+          }
+        }
       }
     ],
     "flashes": [

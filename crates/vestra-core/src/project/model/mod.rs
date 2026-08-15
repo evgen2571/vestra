@@ -33,8 +33,8 @@ pub use signals::{
     ScalarSignal, ScalarSignalSource, SignalTransform,
 };
 pub use transitions::{
-    Flash, NormalizedKeyframe, NormalizedTrack, Transition, TransitionDefinition,
-    TransitionPlacement, TransitionPresentation,
+    Flash, NormalizedKeyframe, NormalizedTrack, TransitionDefinition, TransitionPlacement,
+    TransitionPresentation,
 };
 pub use visual::{
     BlendMode, Clip, ColourLifetimeStop, Group, ParticleAudioReactive, ParticleBlendMode,

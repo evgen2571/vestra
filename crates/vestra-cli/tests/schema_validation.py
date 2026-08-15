@@ -21,6 +21,26 @@ def errors(instance):
 
 assert not errors(project), "canonical example must validate"
 
+schema_v2 = copy.deepcopy(project)
+schema_v2["schema_version"] = 2
+assert errors(schema_v2), "schema v2 must be rejected"
+
+legacy_transition = copy.deepcopy(project)
+legacy_transition["visual"]["transitions"] = [{
+    "type": "crossfade",
+    "id": "legacy",
+    "outgoing": "red-pan",
+    "incoming": "blue-in",
+    "start": 3,
+    "duration": 1,
+    "interpolation": "linear",
+}]
+assert errors(legacy_transition), "legacy transition variants must be rejected"
+
+unknown_transition_field = copy.deepcopy(project)
+unknown_transition_field["visual"]["transitions"][0]["unexpected"] = True
+assert errors(unknown_transition_field), "unknown generic transition fields must be rejected"
+
 for example in sorted((ROOT / "examples").rglob("*.json")):
     instance = json.loads(example.read_text())
     assert not errors(instance), f"example must validate: {example.relative_to(ROOT)}"

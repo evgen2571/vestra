@@ -15,7 +15,7 @@ fn fixture(path: &str) -> PathBuf {
 
 fn background_project(directory: &std::path::Path) -> vestra::Project {
     vestra::Project::from_json(
-        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        r##"{"schema_version":3,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
         directory,
     )
     .expect("project")
@@ -311,7 +311,7 @@ fn public_cpu_wgpu_parity_covers_audio_reactive_project_when_an_adapter_is_avail
     let project = vestra::Project::from_json(
         r##"
         {
-          "schema_version": 2,
+          "schema_version": 3,
           "output": {"path": "unused.mp4", "width": 32, "height": 32, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
           "assets": [
             {"id": "red", "type": "image", "source": "examples/assets/red.png"},
@@ -378,7 +378,6 @@ fn public_cpu_wgpu_parity_covers_image_alpha_and_effect_fixtures_when_an_adapter
         ("examples/projects/animation-effects.json", 2),
         ("examples/compositing/blend-modes.json", 2),
         ("examples/transitions/zoom-crossfade.json", 2),
-        ("examples/transitions/flash-cut.json", 2),
         ("examples/effects/color-adjust.json", 2),
         ("examples/effects/gaussian-blur.json", 2),
     ] {
@@ -437,7 +436,7 @@ fn public_sdk_loads_validates_preflights_and_inspects_without_cli() {
 fn public_sdk_prepares_and_renders_a_final_phase9_audio_project() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
-        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"examples/assets/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,
+        r##"{"schema_version":3,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"examples/assets/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,
         fixture("."),
     )
     .expect("schema-v2 audio project");
@@ -471,7 +470,7 @@ fn public_sdk_prepares_canonical_audio_reactive_video_without_output_audio() {
     let project = vestra::Project::from_json(
         r##"
         {
-          "schema_version": 2,
+          "schema_version": 3,
           "output": {"path": "unused.mp4", "width": 16, "height": 16, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
           "assets": [{"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}],
           "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
@@ -828,7 +827,7 @@ fn stable_sdk_enum_strings_match_report_names() {
 fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
-        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        r##"{"schema_version":3,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
         directory.path(),
     )
     .expect("project");
@@ -891,7 +890,7 @@ fn prepared_cpu_video_operation_uses_an_operation_request() {
 fn prepared_frames_have_exact_rational_timestamps_and_owned_pixels() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
-        r##"{"schema_version":2,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        r##"{"schema_version":3,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
         directory.path(),
     ).expect("project");
     let mut prepared = Editor::new()
@@ -967,7 +966,7 @@ fn prepared_frames_have_exact_rational_timestamps_and_owned_pixels() {
 #[test]
 fn render_validation_and_preflight_failures_keep_operation_timings() {
     let directory = tempdir().expect("temporary directory");
-    let invalid = r##"{"schema_version":2,"output":{"path":"out.mp4","width":0,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let invalid = r##"{"schema_version":3,"output":{"path":"out.mp4","width":0,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let project = vestra::Project::from_json(invalid, directory.path()).expect("project");
     let validation_error = Editor::new()
         .render(
@@ -986,7 +985,7 @@ fn render_validation_and_preflight_failures_keep_operation_timings() {
     assert!(timings.operation_total_ms >= timings.semantic_validation_ms);
     assert!(timings.operation_total_ms >= timings.preflight_ms);
 
-    let valid = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let valid = r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let project = vestra::Project::from_json(valid, directory.path()).expect("project");
     let preflight_error = Editor::new()
         .render(
@@ -1009,7 +1008,7 @@ fn render_validation_and_preflight_failures_keep_operation_timings() {
 #[test]
 fn project_parse_time_stays_separate_from_sdk_operation_time() {
     let directory = tempdir().expect("temporary directory");
-    let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let json = r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let from_value = vestra::Project::from_value(
         serde_json::from_str(json).expect("JSON value"),
         directory.path(),
@@ -1038,7 +1037,7 @@ fn project_parse_time_stays_separate_from_sdk_operation_time() {
 fn project_loading_keeps_relative_paths_and_does_not_preflight() {
     let directory = tempdir().expect("temporary directory");
     let json = r##"{
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"missing","type":"image","source":"missing.png"}],
         "visual":{"clips":[]}
@@ -1061,7 +1060,7 @@ fn project_loading_keeps_relative_paths_and_does_not_preflight() {
 
 #[test]
 fn unsupported_schema_version_is_rejected() {
-    let json = r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let error = vestra::Project::from_json(json, ".").expect_err("schema rejection");
     assert_eq!(error.diagnostics()[0].code, "MVP-SCHEMA-VERSION");
 }
@@ -1079,7 +1078,7 @@ fn file_loading_uses_its_parent_and_round_trips_without_relocating_paths() {
     let path = directory.path().join("project.json");
     let copy = directory.path().join("copy.json");
     let json = r##"{
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"image","type":"image","source":"assets/image.png"}],
         "visual":{"clips":[]}
@@ -1090,7 +1089,7 @@ fn file_loading_uses_its_parent_and_round_trips_without_relocating_paths() {
     project.save(&copy).expect("save project");
     let saved = std::fs::read_to_string(copy).expect("read copy");
     assert!(saved.contains("assets/image.png"));
-    assert!(saved.contains("\"schema_version\":2"));
+    assert!(saved.contains("\"schema_version\":3"));
 }
 
 #[test]
@@ -1104,7 +1103,7 @@ fn in_memory_projects_resolve_assets_and_output_against_their_base_directory() {
     )
     .expect("copy image");
     let json = r##"{
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {"path":"result.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"image","type":"image","source":"assets/image.png"}],
         "visual":{"clips":[]}
@@ -1134,7 +1133,7 @@ fn absolute_output_path_is_not_rebased() {
     let directory = tempdir().expect("temporary directory");
     let output = directory.path().join("absolute.mp4");
     let json = format!(
-        r##"{{"schema_version":2,"output":{{"path":"{}","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1}},"assets":[],"visual":{{"clips":[]}}}}"##,
+        r##"{{"schema_version":3,"output":{{"path":"{}","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1}},"assets":[],"visual":{{"clips":[]}}}}"##,
         output.display()
     );
     let project =
@@ -1152,7 +1151,7 @@ fn absolute_output_path_is_not_rebased() {
 #[test]
 fn render_preflight_checks_the_requested_output_override() {
     let directory = tempdir().expect("temporary directory");
-    let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
+    let json = r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let project = vestra::Project::from_json(json, directory.path()).expect("project");
     let report = Editor::new().preflight(
         &project,
@@ -1170,7 +1169,7 @@ fn render_preflight_checks_the_requested_output_override() {
 fn preflight_preserves_pure_warnings_when_asset_resolution_fails() {
     let directory = tempdir().expect("temporary directory");
     let json = r##"{
-        "schema_version": 2,
+        "schema_version": 3,
         "output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},
         "assets":[{"id":"unused","type":"image","source":"missing.png"}],
         "visual":{"clips":[{"id":"solid","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":1,"layer":0,"opacity":{"base_value":1}}]}

@@ -89,7 +89,7 @@ fn group_project(
     transitions: Vec<Value>,
 ) -> crate::project::Project {
     let mut value = json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {
             "path": "group-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#101018", "quality": "preview",
@@ -134,7 +134,7 @@ fn transform(position: (f64, f64), scale: (f64, f64), rotation_degrees: f64) -> 
 
 fn root_group_transition_project(transition: Value) -> crate::project::Project {
     let value = json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "output": {
             "path": "group-transition.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#101018", "quality": "preview",
@@ -256,7 +256,7 @@ fn evaluated_effect_pass_count(frame: &EvaluatedFrame) -> usize {
 fn gpu_nested_group_matches_cpu_when_an_adapter_is_available() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 2,
+            "schema_version": 3,
             "output": {
                 "path": "nested-group.mp4", "width": 4, "height": 4,
                 "frame_rate": "24/1", "background": "#00000000",
@@ -477,15 +477,34 @@ fn gpu_spectrum2d_inside_group_matches_cpu_on_vulkan() {
 #[test]
 fn gpu_group_crossfade_and_directional_push_match_cpu_on_vulkan() {
     let crossfade = json!({
-        "type": "crossfade", "id": "crossfade", "outgoing": "out", "incoming": "in",
-        "start": 1.0, "duration": 1.0, "interpolation": "linear"
+        "id": "crossfade", "outgoing": "out", "incoming": "in",
+        "start": 1.0, "duration": 1.0,
+        "definition": {
+            "outgoing": {"opacity": {"keyframes": [
+                {"progress": 0.0, "value": 1.0, "interpolation": "linear"},
+                {"progress": 1.0, "value": 0.0, "interpolation": "linear"}
+            ]}},
+            "incoming": {"opacity": {"keyframes": [
+                {"progress": 0.0, "value": 0.0, "interpolation": "linear"},
+                {"progress": 1.0, "value": 1.0, "interpolation": "linear"}
+            ]}}
+        }
     });
     render_project_parity(root_group_transition_project(crossfade), 1_500_000_000, 2);
 
     let push = json!({
-        "type": "directional_push", "id": "push", "outgoing": "out", "incoming": "in",
-        "start": 1.0, "duration": 1.0, "interpolation": "linear",
-        "angle_degrees": 0.0, "distance": 0.75, "blur_radius": 0.0
+        "id": "push", "outgoing": "out", "incoming": "in",
+        "start": 1.0, "duration": 1.0,
+        "definition": {
+            "outgoing": {"position_offset": {"keyframes": [
+                {"progress": 0.0, "value": {"x": 0.0, "y": 0.0}, "interpolation": "linear"},
+                {"progress": 1.0, "value": {"x": 0.75, "y": 0.0}, "interpolation": "linear"}
+            ]}},
+            "incoming": {"position_offset": {"keyframes": [
+                {"progress": 0.0, "value": {"x": -0.75, "y": 0.0}, "interpolation": "linear"},
+                {"progress": 1.0, "value": {"x": 0.0, "y": 0.0}, "interpolation": "linear"}
+            ]}}
+        }
     });
     render_project_parity(root_group_transition_project(push), 1_500_000_000, 3);
 }
@@ -1310,66 +1329,6 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
             4,
         ),
         (
-            "zoom-blur transition before",
-            "examples/transitions/zoom-blur.json",
-            1_999_000_000,
-            2,
-        ),
-        (
-            "zoom-blur transition start",
-            "examples/transitions/zoom-blur.json",
-            2_000_000_000,
-            2,
-        ),
-        (
-            "zoom-blur transition midpoint",
-            "examples/transitions/zoom-blur.json",
-            2_500_000_000,
-            5,
-        ),
-        (
-            "zoom-blur transition end",
-            "examples/transitions/zoom-blur.json",
-            3_000_000_000,
-            2,
-        ),
-        (
-            "zoom-blur transition after",
-            "examples/transitions/zoom-blur.json",
-            3_001_000_000,
-            2,
-        ),
-        (
-            "flash-cut transition before",
-            "examples/transitions/flash-cut.json",
-            1_999_000_000,
-            2,
-        ),
-        (
-            "flash-cut transition start",
-            "examples/transitions/flash-cut.json",
-            2_000_000_000,
-            2,
-        ),
-        (
-            "flash-cut transition",
-            "examples/transitions/flash-cut.json",
-            2_500_000_000,
-            2,
-        ),
-        (
-            "flash-cut transition end",
-            "examples/transitions/flash-cut.json",
-            3_000_000_000,
-            2,
-        ),
-        (
-            "flash-cut transition after",
-            "examples/transitions/flash-cut.json",
-            3_001_000_000,
-            2,
-        ),
-        (
             "flash overlay before",
             "examples/projects/animation-effects.json",
             1_099_000_000,
@@ -1432,20 +1391,6 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
                     EvaluatedEffect::Sharpen { .. }
                 ]
             )),
-            "zoom-blur transition midpoint" => assert!(
-                frame
-                    .layers
-                    .iter()
-                    .flat_map(|layer| &layer.effects)
-                    .any(|effect| matches!(effect, EvaluatedEffect::ZoomBlur { .. }))
-            ),
-            "flash-cut transition" => assert!(
-                frame
-                    .layers
-                    .iter()
-                    .flat_map(|layer| &layer.effects)
-                    .any(|effect| matches!(effect, EvaluatedEffect::Tint { .. }))
-            ),
             "flash overlay" => assert!(frame.layers.iter().any(|layer| matches!(
                 layer.source,
                 crate::plan::EvaluatedSource::SolidColor { .. }

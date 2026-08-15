@@ -18,7 +18,7 @@ def cpu_request(output: Path, *, preview: bool = False) -> vestra.RenderRequest:
 def audio_project() -> vestra.ProjectSnapshot:
     return vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": True,

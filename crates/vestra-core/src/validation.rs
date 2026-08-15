@@ -141,7 +141,11 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         &mut errors,
         has_authored_audio,
     );
-    transitions::validate(&project.visual, &mut errors);
+    transitions::validate(
+        &project.visual,
+        limits_config.maximum_keyframes_per_track,
+        &mut errors,
+    );
     flashes::validate(&project.visual.flashes, &mut errors);
     audio::validate(project, &asset_kinds, limits_config, &mut errors);
     let visual_duration = visual_duration(project);

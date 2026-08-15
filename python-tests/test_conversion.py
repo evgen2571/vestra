@@ -4,7 +4,7 @@ import vestra
 
 
 BASE = {
-    "schema_version": 2,
+    "schema_version": 3,
     "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
     "assets": [], "visual": {"clips": []},
 }
@@ -52,7 +52,7 @@ def test_recursive_and_nested_non_string_mapping_values_are_rejected() -> None:
 
 def test_valid_mapping_with_invalid_project_schema_raises_project_error() -> None:
     invalid_schema = dict(BASE)
-    invalid_schema["schema_version"] = 3
+    invalid_schema["schema_version"] = 2
     with pytest.raises(vestra.ProjectError) as raised:
         vestra.ProjectSnapshot.from_dict(invalid_schema)
     assert raised.value.kind == "project"

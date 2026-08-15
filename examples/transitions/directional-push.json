@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "name": "Directional push",
   "output": {
     "path": "../output/directional-push.mp4",
@@ -101,16 +101,21 @@
     ],
     "transitions": [
       {
-        "type": "directional_push",
         "id": "cut",
         "outgoing": "out",
         "incoming": "in",
         "start": 2,
         "duration": 1,
-        "interpolation": "ease_in_out",
-        "angle_degrees": 0,
-        "distance": 1,
-        "blur_radius": 4
+        "definition": {
+          "outgoing": {"position_offset": {"keyframes": [
+            {"progress": 0, "value": {"x": 0, "y": 0}, "interpolation": "ease_in_out"},
+            {"progress": 1, "value": {"x": 1, "y": 0}, "interpolation": "ease_in_out"}
+          ]}},
+          "incoming": {"position_offset": {"keyframes": [
+            {"progress": 0, "value": {"x": -1, "y": 0}, "interpolation": "ease_in_out"},
+            {"progress": 1, "value": {"x": 0, "y": 0}, "interpolation": "ease_in_out"}
+          ]}}
+        }
       }
     ]
   }

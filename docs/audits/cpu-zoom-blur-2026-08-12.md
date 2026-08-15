@@ -12,8 +12,8 @@ left unchanged.
 The measurements were made on Linux x86_64, Intel Core i7-8750H (6 cores, 12
 threads), with Rust 1.96.1, FFmpeg 7.1.5, and the Cargo release profile. The
 existing CPU renderer benchmark used automatic policy-selected 8 workers,
-1280x720 output, the `examples/transitions/zoom-blur.json` fixture, 100 frames
-at 30 fps, and the transition compiler's fixed 12 ZoomBlur samples. Each set
+1280x720 output, the `examples/effects/zoom-blur.json` fixture, 100 frames
+at 30 fps, and the visual effect's fixed 12 ZoomBlur samples. Each set
 used two in-process warm operations (`warm`, `warm-2`); five independent
 process runs were measured and the `warm-2` rows are reported below.
 

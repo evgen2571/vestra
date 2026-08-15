@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from ._internal import _Owner, _number, _require_owner
 from .clips import GroupClip, ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
-from .transitions import CrossfadeTransition
 
 if TYPE_CHECKING:
     from .builder import ProjectBuilder
@@ -59,20 +58,3 @@ class Timeline:
             raise ValueError("clip shift would make start negative")
         for clip, start in zip(unique, starts, strict=True):
             clip.start = start
-
-    def add_crossfade_between(self, outgoing: ImageClip | GroupClip, incoming: ImageClip | GroupClip, *, duration: int | float) -> CrossfadeTransition:
-        """Place a crossfade at the start of the two clips' existing overlap."""
-        self._check_clip(outgoing)
-        self._check_clip(incoming)
-        if not isinstance(outgoing, ImageClip | GroupClip) or not isinstance(incoming, ImageClip | GroupClip):
-            raise TypeError("outgoing and incoming must be ImageClip or GroupClip")
-        span = _number(duration, "duration")
-        if span <= 0:
-            raise ValueError("duration must be positive")
-        overlap_start = max(outgoing.start, incoming.start)
-        overlap_end = min(outgoing.start + outgoing.duration, incoming.start + incoming.duration)
-        if span > overlap_end - overlap_start:
-            raise ValueError("duration exceeds existing clip overlap")
-        return self._builder.transitions.add_crossfade(
-            outgoing=outgoing, incoming=incoming, start=overlap_start, duration=span
-        )

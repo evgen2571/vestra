@@ -7,7 +7,7 @@ import typing
 
 import pytest
 
-from vestra import FrameRate
+from vestra import Crossfade, FrameRate
 from vestra.authoring import AuthoringError, PresetCollection, ProjectBuilder, Sizing, Timeline
 
 
@@ -60,10 +60,10 @@ def test_timeline_shifts_only_explicit_clips_and_preserves_local_tracks() -> Non
 def test_crossfade_helper_uses_existing_overlap_without_moving_clips() -> None:
     authored, first = builder()
     second = authored.add_image_clip(source=first.source, start=2, duration=2, layer=0)
-    transition = authored.timeline.add_crossfade_between(first, second, duration=1)
+    transition = authored.transitions.add_transition(outgoing=first, incoming=second, definition=Crossfade().to_canonical(), start=2, duration=1)
     assert transition.start == 2 and (first.start, second.start) == (1, 2)
     with pytest.raises(ValueError):
-        authored.timeline.add_crossfade_between(first, second, duration=2)
+        authored.transitions.add_transition(outgoing=first, incoming=second, definition=Crossfade().to_canonical(), start=2, duration=0)
 
 
 def test_readme_shift_then_crossfade_workflow_is_valid() -> None:
@@ -73,7 +73,7 @@ def test_readme_shift_then_crossfade_workflow_is_valid() -> None:
     incoming = authored.add_image_clip(source=asset, start=0.5, duration=1, layer=1, sizing=Sizing.cover())
 
     authored.timeline.shift_clip(incoming, delta=0.25)
-    transition = authored.timeline.add_crossfade_between(outgoing, incoming, duration=0.25)
+    transition = authored.transitions.add_transition(outgoing=outgoing, incoming=incoming, definition=Crossfade().to_canonical(), start=0.75, duration=0.25)
 
     assert transition.start == 0.75
     assert authored.validate().is_valid
@@ -88,7 +88,6 @@ def test_public_preset_and_timeline_annotations_and_signatures_hide_owner_machin
         PresetCollection.apply_focus_reveal,
         Timeline.shift_clip,
         Timeline.shift_clips,
-        Timeline.add_crossfade_between,
     )
     for method in methods:
         hints = typing.get_type_hints(method)

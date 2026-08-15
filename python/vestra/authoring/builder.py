@@ -511,7 +511,7 @@ class ProjectBuilder:
         if self.duration is not None:
             output["duration"] = self.duration
         data: CanonicalProject = {
-            "schema_version": 2,
+            "schema_version": 3,
             "output": output,
             "assets": [
                 {"id": asset.id, "type": asset.kind, "source": asset.source}

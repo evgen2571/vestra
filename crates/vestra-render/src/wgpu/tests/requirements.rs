@@ -85,7 +85,7 @@ fn nested_group_requirements(
     }
     let project = Project::from_json(&format!(
         r##"{{
-            "schema_version": 2,
+            "schema_version": 3,
             "output": {{
                 "path": "nested-group.mp4", "width": 4, "height": 4,
                 "frame_rate": "24/1", "background": "#00000000",

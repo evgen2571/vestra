@@ -868,7 +868,7 @@ mod tests {
     #[test]
     fn render_failure_keeps_compilation_timing_and_deduplicates_fallback_warning() {
         let project = Project::from_json(
-            r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+            r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
             ".",
         )
         .expect("project");

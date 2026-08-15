@@ -151,7 +151,9 @@ its whole half-open interval. With a fade-out it holds until `end - fade_out`
 and then reaches zero at `end`.
 
 Solid-colour clips also reject image-only sizing, crop, and preset fields.
-Coordinated transitions reference visible root Image or Group clips.
+Coordinated transitions use generic schema-v3 placements. They reference
+visible sibling Image or Group clips, or an endpoint supported through the
+high-level capability adapter, within their owning composition.
 
 Spectrum2D clips are presentation-only bars driven by authored Master audio.
 Linear layouts support bottom, top, and center anchors with forward, reverse, or
@@ -277,16 +279,17 @@ is identity and its attack and decay use effect-local time. Motion blur samples 
 transforms, derives translation direction in screen space, and caps the
 directional blur. v1 does not derive blur from rotation or scale velocity.
 
-All valid schema-version 2 effects, blend modes, post-effects, transitions, and
-presets have WGPU plan mappings. `auto` can select CPU when no compatible
+All valid schema-version 3 effects, blend modes, post-effects, generic
+transitions, and presets have WGPU plan mappings. `auto` can select CPU when no compatible
 adapter is available or WGPU preparation fails. Explicit `wgpu` reports adapter,
 device, resource, shader, or runtime failures. Once preparation selects WGPU,
 the renderer does not switch backends mid-operation.
 
-Supported coordinated transitions are `crossfade`, `zoom_crossfade`, and
-`directional_push`. They must fit in both clips. Flash- and blur-backed
-transition presets remain deferred until generic transition-local effects are
-available; ordinary visual effects such as `zoom_blur` remain supported.
+Supported coordinated transitions are generic placements whose Python built-in
+definitions include `Crossfade`, directional pushes, zoom crossfades,
+blur-backed crossfades, zoom blur transitions, and whip pans. They must fit in
+both endpoints. Custom definitions use the same generic channels and ordinary
+transition-local effects; preset identity is not serialized.
 
 `preset` expands during compilation into generated transform contributions and
 effect tracks. The renderer evaluates authored transforms first, then applies
@@ -294,7 +297,7 @@ preset contributions, transition contributions, and camera shake. Position and
 rotation contributions add to authored values; scale contributions multiply.
 Generated transform contributions are identity outside their active interval,
 so they never replace authored keyframes.
-Every preset accepts clip-local `start` and `duration`. Omitted durations use
+Every image preset accepts clip-local `start` and `duration`. Omitted durations use
 the remaining clip for `slow_drift`, 0.35 seconds for `zoom_punch`, 0.28 for
 `impact`, 0.4 for `heavy_impact`, and 0.8 for `focus_reveal`, capped by the
 remaining clip. Available values are `slow_drift`, `zoom_punch`, `impact`, `heavy_impact`, and

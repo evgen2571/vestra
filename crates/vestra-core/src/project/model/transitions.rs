@@ -157,10 +157,17 @@ mod generic_transition_tests {
         assert!(json.get("type").is_none());
         assert!(json.get("preset").is_none());
         assert!(json["definition"].get("interpolation").is_none());
+        let decoded =
+            serde_json::from_value::<TransitionPlacement>(json.clone()).expect("placement parses");
+        assert_eq!(decoded, placement);
         assert_eq!(
-            serde_json::from_value::<TransitionPlacement>(json).expect("placement parses"),
-            placement
+            serde_json::to_value(decoded).expect("round-trip serializes"),
+            json
         );
+
+        let mut old_preset_form = json;
+        old_preset_form["type"] = serde_json::json!("crossfade");
+        assert!(serde_json::from_value::<TransitionPlacement>(old_preset_form).is_err());
     }
 
     #[test]

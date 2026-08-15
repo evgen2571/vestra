@@ -475,7 +475,7 @@ fn gpu_spectrum2d_inside_group_matches_cpu_on_vulkan() {
 }
 
 #[test]
-fn gpu_group_crossfade_and_directional_push_match_cpu_on_vulkan() {
+fn gpu_group_transition_channels_and_effects_match_cpu_on_vulkan() {
     let crossfade = json!({
         "id": "crossfade", "outgoing": "out", "incoming": "in",
         "start": 1.0, "duration": 1.0,
@@ -507,6 +507,35 @@ fn gpu_group_crossfade_and_directional_push_match_cpu_on_vulkan() {
         }
     });
     render_project_parity(root_group_transition_project(push), 1_500_000_000, 3);
+
+    let effect_transition = json!({
+        "id": "effect-transition", "outgoing": "out", "incoming": "in",
+        "start": 1.0, "duration": 1.0,
+        "definition": {
+            "outgoing": {
+                "opacity": {"keyframes": [
+                    {"progress": 0.0, "value": 1.0, "interpolation": "linear"},
+                    {"progress": 1.0, "value": 0.0, "interpolation": "linear"}
+                ]},
+                "effects": [{
+                    "id": "transition-blur", "type": "gaussian_blur",
+                    "radius": {"base_value": 0.0, "keyframes": [
+                        {"time": 0.0, "value": 0.0, "interpolation": "linear"},
+                        {"time": 1.0, "value": 2.0, "interpolation": "linear"}
+                    ]}
+                }]
+            },
+            "incoming": {"opacity": {"keyframes": [
+                {"progress": 0.0, "value": 0.0, "interpolation": "linear"},
+                {"progress": 1.0, "value": 1.0, "interpolation": "linear"}
+            ]}}
+        }
+    });
+    render_project_parity(
+        root_group_transition_project(effect_transition),
+        1_500_000_000,
+        3,
+    );
 }
 
 /// Prepares exactly the parameter capacity an evaluated catalogue case uses.

@@ -505,23 +505,25 @@ mod generic_transition_tests {
     }
 
     fn camera_shake_with_keyframes(count: usize) -> Effect {
-        let track = ScalarProperty::from_track(Track {
-            base_value: 0.0,
-            keyframes: (0..count)
-                .map(|index| crate::project::Keyframe {
-                    time: (index + 1) as f64 / (count + 1) as f64,
-                    value: 0.0,
-                    interpolation: Interpolation::Named(InterpolationName::Linear),
-                })
-                .collect(),
-        });
+        let track = |value: f64| {
+            ScalarProperty::from_track(Track {
+                base_value: value,
+                keyframes: (0..count)
+                    .map(|index| crate::project::Keyframe {
+                        time: (index + 1) as f64 / (count + 1) as f64,
+                        value,
+                        interpolation: Interpolation::Named(InterpolationName::Linear),
+                    })
+                    .collect(),
+            })
+        };
         Effect::CameraShake {
             id: "shake".into(),
             timing: ActiveInterval::default(),
-            position_amount: track.clone(),
-            rotation_degrees: track.clone(),
-            scale_amount: track.clone(),
-            frequency: track,
+            position_amount: track(0.1),
+            rotation_degrees: track(1.0),
+            scale_amount: track(0.05),
+            frequency: track(8.0),
             seed: 1,
             attack: 0.0,
             decay: 1.0,
@@ -799,11 +801,7 @@ mod generic_transition_tests {
         };
         let mut errors = Vec::new();
         validate_placement_set(&[placement], 1_200, &mut errors);
-        assert!(
-            !errors
-                .iter()
-                .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
-        );
+        assert!(errors.is_empty(), "{errors:#?}");
 
         let mut errors = Vec::new();
         validate_placement_set(

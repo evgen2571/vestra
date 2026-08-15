@@ -23,7 +23,8 @@ Reports distinguish requested and selected backends, fallback context, adapter
 metadata, and the FFmpeg encoder backend.
 
 The current WGPU implementation has plan mappings for every valid
-schema-version 2 effect, blend mode, post-effect, transition, and preset.
+schema-version 3 effect, blend mode, post-effect, generic transition, and
+preset.
 Compatibility is separate from availability. A compatible plan can still fail
 to obtain an adapter or device, prepare resources, compile a shader, or run.
 `auto` falls back only during preparation. Explicit WGPU and selected WGPU

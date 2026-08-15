@@ -20,6 +20,7 @@ use crate::{Diagnostic, plan::RenderPlan};
 pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
     shapes: Vec<PreparedRasterSource>,
+    texts: Vec<PreparedRasterSource>,
     crops: ByteLruCache<CropKey, RgbaImage>,
     stats: PreparationStats,
     timings: PreparationTimings,
@@ -85,9 +86,19 @@ impl PreparedAssets {
                 PreparedRasterSource::from_pixels(Arc::clone(&shape.pixels), shape.intrinsic_size)
             })
             .collect();
+        let texts = (0..decoded.texts_len())
+            .map(|index| {
+                let prepared = decoded.text(index);
+                PreparedRasterSource::from_pixels(
+                    Arc::clone(&prepared.pixels),
+                    prepared.intrinsic_size,
+                )
+            })
+            .collect();
         Self {
             decoded,
             shapes: prepared_shapes,
+            texts,
             crops: ByteLruCache::new(cache_budget_bytes),
             stats: PreparationStats {
                 cache_budget_bytes,
@@ -134,6 +145,11 @@ impl PreparedAssets {
     #[must_use]
     pub(crate) fn shape_source(&self, shape: usize) -> PreparedRasterSource {
         self.shapes[shape.saturating_sub(self.decoded.image_count())].clone()
+    }
+
+    #[must_use]
+    pub(crate) fn text_source(&self, text: usize) -> PreparedRasterSource {
+        self.texts[text.saturating_sub(self.decoded.image_count() + self.shapes.len())].clone()
     }
 
     #[must_use]

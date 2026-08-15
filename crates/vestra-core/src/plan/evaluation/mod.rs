@@ -53,9 +53,9 @@ pub struct EvaluatedLayer {
 }
 
 #[derive(Clone, Debug)]
-pub struct RasterPresentation<'a> {
+pub struct RasterPresentation {
     pub crop: Crop,
-    pub sizing: &'a CompiledSizing,
+    pub sizing: CompiledSizing,
     pub cacheable_crop: bool,
 }
 
@@ -73,6 +73,9 @@ pub enum EvaluatedSource {
     Shape {
         shape_index: usize,
         sizing: CompiledSizing,
+    },
+    Text {
+        text_index: usize,
     },
     Spectrum2D {
         bands: Vec<f32>,
@@ -104,7 +107,7 @@ pub enum EvaluatedSource {
 
 impl EvaluatedSource {
     #[must_use]
-    pub fn raster_presentation(&self) -> Option<RasterPresentation<'_>> {
+    pub fn raster_presentation(&self) -> Option<RasterPresentation> {
         match self {
             Self::Image {
                 crop,
@@ -113,7 +116,7 @@ impl EvaluatedSource {
                 ..
             } => Some(RasterPresentation {
                 crop: *crop,
-                sizing,
+                sizing: sizing.clone(),
                 cacheable_crop: *cacheable_crop,
             }),
             Self::Shape { sizing, .. } => Some(RasterPresentation {
@@ -123,7 +126,17 @@ impl EvaluatedSource {
                     width: 1.0,
                     height: 1.0,
                 },
-                sizing,
+                sizing: sizing.clone(),
+                cacheable_crop: false,
+            }),
+            Self::Text { .. } => Some(RasterPresentation {
+                crop: Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                sizing: CompiledSizing::Original,
                 cacheable_crop: false,
             }),
             _ => None,
@@ -258,6 +271,9 @@ fn evaluate_layers(
             CompiledVisualSource::Shape { shape_index } => EvaluatedSource::Shape {
                 shape_index: *shape_index,
                 sizing: CompiledSizing::Original,
+            },
+            CompiledVisualSource::Text { text_index } => EvaluatedSource::Text {
+                text_index: *text_index,
             },
             CompiledVisualSource::Spectrum2D {
                 band_signals,
@@ -447,6 +463,9 @@ impl EvaluatedSource {
     /// source. Sources that need an adapter keep that decision centralized.
     #[must_use]
     const fn supports_direct_transform(&self) -> bool {
-        matches!(self, Self::Image { .. } | Self::Group { .. })
+        matches!(
+            self,
+            Self::Image { .. } | Self::Shape { .. } | Self::Text { .. } | Self::Group { .. }
+        )
     }
 }

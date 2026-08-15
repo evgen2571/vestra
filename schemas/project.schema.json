@@ -32,7 +32,8 @@
         "type": {
           "enum": [
             "image",
-            "audio"
+            "audio",
+            "font"
           ]
         }
       },
@@ -2707,6 +2708,9 @@
           "$ref": "#/$defs/shape"
         },
         {
+          "$ref": "#/$defs/text"
+        },
+        {
           "$ref": "#/$defs/group"
         }
       ]
@@ -2898,6 +2902,56 @@
           "type": "object"
         }
       ]
+    },
+    "text": {
+      "additionalProperties": false,
+      "properties": {
+        "align": {
+          "default": "left",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "fill": {
+          "$ref": "#/$defs/colour"
+        },
+        "font": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "font_size": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "letter_spacing": {
+          "type": "number"
+        },
+        "line_spacing": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "max_width": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "text"
+        }
+      },
+      "required": [
+        "type",
+        "text",
+        "font",
+        "font_size",
+        "fill"
+      ],
+      "type": "object"
     },
     "tint_effect": {
       "additionalProperties": false,

@@ -31,7 +31,9 @@ pub(super) fn compile(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    font_indices: &BTreeMap<String, usize>,
     shapes: &mut Vec<crate::project::ShapeSource>,
+    texts: &mut Vec<crate::project::TextSource>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
@@ -79,6 +81,12 @@ pub(super) fn compile(
             let shape_index = image_indices.len() + shapes.len();
             shapes.push(shape.clone());
             CompiledVisualSource::Shape { shape_index }
+        }
+        VisualSource::Text(text) => {
+            let _ = assets::lookup_font(font_indices, &text.font, &clip.id)?;
+            let text_index = image_indices.len() + shapes.len() + texts.len();
+            texts.push(text.clone());
+            CompiledVisualSource::Text { text_index }
         }
         VisualSource::Spectrum2D(spectrum) => {
             compilation.parsed_colour_count += 1;
@@ -197,7 +205,9 @@ pub(super) fn compile(
             },
             validated,
             image_indices,
+            font_indices,
             shapes,
+            texts,
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
@@ -252,7 +262,9 @@ pub(super) fn compile_with_preset(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    font_indices: &BTreeMap<String, usize>,
     shapes: &mut Vec<crate::project::ShapeSource>,
+    texts: &mut Vec<crate::project::TextSource>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
@@ -262,7 +274,9 @@ pub(super) fn compile_with_preset(
         clip,
         validated,
         image_indices,
+        font_indices,
         shapes,
+        texts,
         compilation,
         scalar_signal_interner,
         next_compiled_identity,
@@ -283,7 +297,9 @@ fn compile_group(
     timing: GroupTiming,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    font_indices: &BTreeMap<String, usize>,
     shapes: &mut Vec<crate::project::ShapeSource>,
+    texts: &mut Vec<crate::project::TextSource>,
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
@@ -306,7 +322,9 @@ fn compile_group(
             child,
             validated,
             image_indices,
+            font_indices,
             shapes,
+            texts,
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
@@ -412,6 +430,7 @@ fn compile_transform(
         (
             VisualSource::SolidColor { .. }
             | VisualSource::Shape(_)
+            | VisualSource::Text(_)
             | VisualSource::Spectrum2D(_)
             | VisualSource::ParticleSystem(_),
             None,

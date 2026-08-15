@@ -235,8 +235,8 @@ pub(in crate::wgpu) fn raster(
         solid_or_background: [
             geometry.logical_origin_x as f32,
             geometry.logical_origin_y as f32,
-            0.0,
-            0.0,
+            geometry.raster_effective_width as f32,
+            geometry.raster_effective_height as f32,
         ],
     }
 }

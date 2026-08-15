@@ -7,11 +7,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, cast
 
-from .authoring.assets import AudioAsset, ImageAsset
+from .authoring.assets import AudioAsset, ImageAsset, FontAsset
 from .authoring.builder import ProjectBuilder
 from .authoring.clips import GroupClip, ImageClip, TransitionCapableClip, VisualClip
 from .authoring.values import BlendMode, Color as AuthoringColor
-from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D
+from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D, Text
 from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
@@ -120,6 +120,7 @@ class LoweringContext:
     def __init__(self, builder: ProjectBuilder) -> None:
         self.builder = builder
         self._asset_ids: dict[tuple[str, str], ImageAsset] = {}
+        self._font_asset_ids: dict[str, FontAsset] = {}
         self._audio_asset_ids: dict[str, AudioAsset] = {}
         self._local_ids: dict[tuple[tuple[str, ...], str], str] = {}
         self.layer_clips: dict[Layer, VisualClip] = {}
@@ -268,6 +269,14 @@ class LoweringContext:
             self._asset_ids[source_key] = asset
         return asset
 
+    def font_asset(self, source: Text) -> FontAsset:
+        key = os.path.normpath(source.font)
+        asset = self._font_asset_ids.get(key)
+        if asset is None:
+            asset = self.builder.add_font_asset(source.font)
+            self._font_asset_ids[key] = asset
+        return asset
+
     def audio_asset(self, path: str) -> AudioAsset:
         """Register each normalized audio path once for this snapshot."""
         source_key = os.path.normpath(path)
@@ -385,6 +394,17 @@ def _lower_shape(
         visible=placement.visible,
         opacity=placement.opacity,
         id=native_id,
+    )
+
+
+def _lower_text(
+    context: LoweringContext, layer: Layer, native_id: str, placement: Placement
+) -> VisualClip:
+    source = cast(Text, layer.source)
+    return context.builder.add_text_clip(
+        source=source.to_canonical(), font=context.font_asset(source), start=placement.start,
+        duration=placement.duration, layer=placement.layer, visible=placement.visible,
+        opacity=placement.opacity, id=native_id,
     )
 
 
@@ -521,6 +541,9 @@ register_source(
     _lower_spectrum,
     SourceCapabilities(requires_audio=True, supports_transition_adapter=True),
 )
+register_source(Text, _lower_text, SourceCapabilities(
+    supports_direct_transform=True, supports_direct_transition_endpoint=True,
+))
 
 
 __all__ = [

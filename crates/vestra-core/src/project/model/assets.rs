@@ -14,4 +14,5 @@ pub struct Asset {
 pub enum AssetType {
     Image,
     Audio,
+    Font,
 }

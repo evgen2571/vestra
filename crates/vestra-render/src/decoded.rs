@@ -5,11 +5,12 @@
     reason = "asset decoding preserves machine-readable diagnostics"
 )]
 
-use std::{sync::Arc, time::Instant};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use image::RgbaImage;
 
 use crate::shape_raster::{PreparedShape, raster_dimensions};
+use crate::text::PreparedText;
 use crate::{
     Category, Diagnostic,
     plan::RenderPlan,
@@ -20,6 +21,7 @@ use crate::{
 pub struct DecodedAssets {
     images: Vec<Arc<RgbaImage>>,
     shapes: Vec<PreparedShape>,
+    texts: Vec<PreparedText>,
     stats: PreparationStats,
     timings: PreparationTimings,
 }
@@ -165,6 +167,73 @@ impl DecodedAssets {
             }
             shapes.push(crate::shape_raster::prepare(shape));
         }
+        let mut font_systems = BTreeMap::new();
+        for font in &plan.fonts {
+            font_systems.insert(font.id.clone(), crate::text::load_font(&font.path)?);
+        }
+        let mut texts = Vec::with_capacity(plan.texts.len());
+        for text in &plan.texts {
+            let font_system = font_systems.get_mut(&text.font).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-TEXT-FONT",
+                    Category::Media,
+                    "prepared text has no font asset",
+                    "",
+                )
+            })?;
+            let prepared = crate::text::prepare(text, font_system)?;
+            let pixels = u64::from(prepared.pixels.width())
+                .checked_mul(u64::from(prepared.pixels.height()))
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        "MVP-TEXT-SIZE",
+                        Category::Media,
+                        "prepared text dimensions overflow",
+                        "",
+                    )
+                })?;
+            if pixels > plan.limits.maximum_source_pixels {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-SOURCE-PIXELS",
+                    Category::Media,
+                    "prepared text exceeds configured pixel limit",
+                    "",
+                ));
+            }
+            let bytes = pixels.checked_mul(4).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-TEXT-SIZE",
+                    Category::Media,
+                    "prepared text is too large",
+                    "",
+                )
+            })?;
+            if bytes > plan.limits.maximum_decoded_asset_bytes {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-DECODED-ASSET",
+                    Category::Media,
+                    "prepared text exceeds configured byte limit",
+                    "",
+                ));
+            }
+            decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
+                Diagnostic::error(
+                    "MVP-TEXT-TOTAL-SIZE",
+                    Category::Media,
+                    "prepared text bytes overflow",
+                    "",
+                )
+            })?;
+            if decoded_source_bytes > plan.limits.maximum_total_decoded_bytes {
+                return Err(Diagnostic::error(
+                    "MVP-LIMIT-DECODED-TOTAL",
+                    Category::Media,
+                    "decoded sources exceed configured byte limit",
+                    "",
+                ));
+            }
+            texts.push(prepared);
+        }
         Ok(Arc::new(Self {
             stats: PreparationStats {
                 decoded_image_count: decoded.len(),
@@ -175,6 +244,7 @@ impl DecodedAssets {
             },
             images: decoded,
             shapes,
+            texts,
             timings: PreparationTimings {
                 decode: started.elapsed(),
                 ..PreparationTimings::default()
@@ -195,6 +265,16 @@ impl DecodedAssets {
     #[must_use]
     pub(crate) fn shape(&self, shape: usize) -> &PreparedShape {
         &self.shapes[shape]
+    }
+
+    #[must_use]
+    pub(crate) fn text(&self, text: usize) -> &PreparedText {
+        &self.texts[text]
+    }
+
+    #[must_use]
+    pub(crate) fn texts_len(&self) -> usize {
+        self.texts.len()
     }
 
     #[must_use]

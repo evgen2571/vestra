@@ -40,7 +40,8 @@ impl SourceResources {
         decoded: &DecodedAssets,
         max_texture_dimension_2d: u32,
     ) -> Result<Self, Diagnostic> {
-        let mut textures = Vec::with_capacity(plan.images.len() + plan.shapes.len());
+        let mut textures =
+            Vec::with_capacity(plan.images.len() + plan.shapes.len() + plan.texts.len());
         let mut uploaded_texture_bytes = 0_u64;
         for asset in 0..plan.images.len() {
             let image = decoded.image(asset);
@@ -108,6 +109,59 @@ impl SourceResources {
             }
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("vestra prepared shape"),
+                size: wgpu::Extent3d {
+                    width: image.width(),
+                    height: image.height(),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                image.as_raw(),
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(image.width() * 4),
+                    rows_per_image: Some(image.height()),
+                },
+                wgpu::Extent3d {
+                    width: image.width(),
+                    height: image.height(),
+                    depth_or_array_layers: 1,
+                },
+            );
+            uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            textures.push(PreparedRasterTexture {
+                _texture: texture,
+                view,
+                intrinsic_size: prepared.intrinsic_size,
+            });
+        }
+        for text_index in 0..plan.texts.len() {
+            let prepared = decoded.text(text_index);
+            let image = prepared.pixels.as_ref();
+            if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
+            {
+                return Err(Diagnostic::error(
+                    "WGPU-SOURCE-DIMENSIONS",
+                    Category::Backend,
+                    "prepared text exceeds adapter texture dimensions",
+                    "",
+                ));
+            }
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("vestra prepared text"),
                 size: wgpu::Extent3d {
                     width: image.width(),
                     height: image.height(),

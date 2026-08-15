@@ -295,6 +295,43 @@ class ShapeClip(TransitionCapableClip):
         return data
 
 
+class TextClip(TransitionCapableClip):
+    """A static Text Source with ordinary Layer transform tracks."""
+
+    __slots__ = ("_source", "_font", "_transform")
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("TextClip objects must be created by ProjectBuilder")
+
+    @classmethod
+    def _create(cls, owner: _Owner, identifier: str, source: dict[str, object], font: object, *,
+                start: int | float, duration: int | float, layer: int, visible: bool,
+                opacity: int | float) -> "TextClip":
+        instance = object.__new__(cls)
+        instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
+                             visible=visible, opacity=opacity)
+        instance._source = dict(source)
+        instance._source["font"] = font.id
+        instance._font = font
+        instance._transform = Transform._create(owner)
+        return instance
+
+    @property
+    def source(self) -> dict[str, object]: return self._source
+
+    @property
+    def font(self) -> object: return self._font
+
+    @property
+    def transform(self) -> Transform: return self._transform
+
+    def to_canonical(self) -> dict[str, object]:
+        data = self._canonical_common()
+        data["source"] = self.source
+        data["transform"] = self.transform.to_canonical()
+        return data
+
+
 class ParticleSystemClip(_Clip):
     """A CPU-rendered procedural particle source."""
 
@@ -598,4 +635,4 @@ class GroupClip(TransitionCapableClip):
         return f"GroupClip(id={self.id!r}, clips={len(self.clips)})"
 
 
-VisualClip = ImageClip | SolidColorClip | ShapeClip | ParticleSystemClip | Spectrum2DClip | GroupClip
+VisualClip = ImageClip | SolidColorClip | ShapeClip | TextClip | ParticleSystemClip | Spectrum2DClip | GroupClip

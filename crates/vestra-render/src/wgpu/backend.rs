@@ -884,7 +884,7 @@ fn encode_parameters(
                     intrinsic,
                     presentation.crop,
                     presentation.cacheable_crop,
-                    presentation.sizing,
+                    &presentation.sizing,
                     plan.layers[*layer_index].transform,
                     1.0,
                     crate::plan::ColourTransform::default(),

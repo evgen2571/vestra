@@ -102,6 +102,63 @@ fn validate_with_depth(
             crate::project::VisualSource::Shape(shape) => {
                 validate_shape(shape, &format!("{path}/source"), errors);
             }
+            crate::project::VisualSource::Text(text) => {
+                if text.font.trim().is_empty() {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-FONT",
+                        Category::Semantic,
+                        "text font asset must not be empty",
+                        format!("{path}/source/font"),
+                    ));
+                } else if assets.get(&text.font) != Some(&crate::project::AssetType::Font) {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-FONT",
+                        Category::Semantic,
+                        format!("text source references invalid font asset '{}'", text.font),
+                        format!("{path}/source/font"),
+                    ));
+                }
+                if !super::positive(text.font_size) {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-FONT-SIZE",
+                        Category::Semantic,
+                        "text font_size must be finite and positive",
+                        format!("{path}/source/font_size"),
+                    ));
+                }
+                if crate::project::parse_colour(&text.fill).is_none() {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-FILL",
+                        Category::Semantic,
+                        "text fill must use #RRGGBB or #RRGGBBAA",
+                        format!("{path}/source/fill"),
+                    ));
+                }
+                if text.max_width.is_some_and(|width| !super::positive(width)) {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-MAX-WIDTH",
+                        Category::Semantic,
+                        "text max_width must be finite and positive",
+                        format!("{path}/source/max_width"),
+                    ));
+                }
+                if !super::positive(text.line_spacing) {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-LINE-SPACING",
+                        Category::Semantic,
+                        "text line_spacing must be finite and positive",
+                        format!("{path}/source/line_spacing"),
+                    ));
+                }
+                if !text.letter_spacing.is_finite() {
+                    errors.push(Diagnostic::error(
+                        "MVP-TEXT-LETTER-SPACING",
+                        Category::Semantic,
+                        "text letter_spacing must be finite",
+                        format!("{path}/source/letter_spacing"),
+                    ));
+                }
+            }
             crate::project::VisualSource::Spectrum2D(spectrum) => validate_spectrum2d(
                 spectrum,
                 &format!("{path}/source"),

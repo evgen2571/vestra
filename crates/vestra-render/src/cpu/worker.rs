@@ -66,6 +66,7 @@ pub(super) struct WorkerSnapshot {
 pub(super) struct CpuWorkerCacheBudgets {
     pub(super) crop_cache_budget_bytes: u64,
     pub(super) static_cache_budget_bytes: u64,
+    pub(super) video_cache_budget_bytes: u64,
 }
 
 pub(super) fn run_worker(
@@ -160,6 +161,7 @@ impl CpuWorkerState {
                 decoded,
                 &plan.shapes,
                 cache_budgets.crop_cache_budget_bytes,
+                cache_budgets.video_cache_budget_bytes,
             ),
             effects: compositor::EffectSurfacePool::new(plan.canvas.width, plan.canvas.height),
             compositions: compositor::CompositionSurfacePool::new(),

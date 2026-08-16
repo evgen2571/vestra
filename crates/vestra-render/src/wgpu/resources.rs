@@ -24,8 +24,8 @@ impl FrameResources {
 }
 
 pub(super) struct PreparedRasterTexture {
-    pub(super) _texture: wgpu::Texture,
     pub(super) view: wgpu::TextureView,
+    pub(super) _texture: wgpu::Texture,
     pub(super) intrinsic_size: IntrinsicSize,
 }
 

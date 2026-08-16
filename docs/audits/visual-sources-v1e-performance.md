@@ -273,3 +273,101 @@ v1F Finalization was not started.
 Subphase v1E Cross-Feature Integration & Performance is measured and documented.
 Final sign-off remains blocked by the broad GL parity failures/SIGSEGV and the
 pre-existing Python Ruff debt.
+
+## Final v1E correctness/stability pass (2026-08-16)
+
+The pass reproduced the documented failures before editing. Adapter discovery
+reported Vulkan `llvmpipe (LLVM 21.1.8, 256 bits)`, device type `Cpu`, and GL
+`D3D12 (NVIDIA GeForce GTX 1650 SUPER)`, device type `Other`. Strict hardware
+classification now accepts only explicit discrete/integrated classes or the
+deliberate WSL GL D3D12 vendor rule; `Unknown`, `VirtualGpu`, CPU, and known
+software markers are rejected by the hardware gate.
+
+The native SDK video session now owns its decoder `JoinHandle`; dropping the
+session closes the command channel and joins the worker. Focused unit tests
+cover one and multiple session teardown orders. CPU cache classes now partition
+one aggregate `maximum_cache_bytes` budget across active static, crop, and
+Video classes and then workers; unused Video projects receive zero Video
+budget.
+
+The GL renderer run reproduced five parity failures (composite max channel
+error 5, brightness max 27/mean 4.11, blend max 255/mean 12.11, Spectrum2D
+layout max 128, and Spectrum2D bloom output zero). The composite failure was
+additionally isolated to a test plan whose compiled effect-pass capacity was
+stale after replacing its effects; that capacity and the retained-original
+resource estimate were corrected. The remaining GL parity failures are
+unresolved.
+
+The process-level SIGSEGV was isolated with a non-Video image test and with
+parity/crop/resource tests excluded. Assertions pass, but normal WGPU GL
+resource destruction still exits with signal 11; intentionally forgetting the
+backend makes the same test exit cleanly. Retaining queue, adapter, and
+instance handles, selecting the requested backend explicitly, and ordering
+queue before device before adapter/instance did not remove it. This proves a
+general native GL/WGPU destruction-path failure, independent of Video, but does
+not yet identify a safe production fix. Vulkan now completes cleanly: 313
+passed and 5 ignored in the full renderer suite.
+
+The requested 1/2/4/8 worker measurement on one real Video workload was not
+completed in this pass; existing Video correctness and decoder-lifetime tests
+remain green. No performance claim is made for that missing matrix.
+
+Current pass status: incomplete. Hardware correctness, clean native GL
+teardown, full GL parity, workspace tests, and `scripts/check.sh` remain
+unverified or failed. No v1F work was started.
+
+### Final rerun correction
+
+The authoritative final rerun completed formatting, workspace check, clippy
+with `-D warnings`, media tests (97 passed, 3 ignored), native session tests,
+compileall, and focused CPU/WGPU tests. The explicit Vulkan renderer suite is
+clean: 313 passed, 0 failed, 6 ignored; this is software-WGPU/llvmpipe
+correctness only. The GL renderer command now fails at the first
+adapter-backed crop test with SIGSEGV after all CPU tests pass. The same crash
+is reproducible for non-Video backend construction and individual effect
+pipeline teardown; basic GL device, render, compute, storage-texture,
+copy/map, and explicit texture-drop probes are clean. Resource ordering,
+explicit readback ownership, and a final device poll did not remove the crash.
+
+The CPU 1/2/4/8 worker benchmark used a deterministic renderer-owned Video
+fixture, not native FFmpeg: wall time was 461.780, 239.971, 119.858, and
+77.629 ms; actual decodes were 60, 100, 120, and 120. It does not justify a
+scheduler redesign, and no native FFmpeg matrix is claimed. `cargo test
+--workspace --all-features` and `./scripts/check.sh` reach the GL-backed
+renderer and terminate with the same SIGSEGV. `uv run pytest` is blocked at
+collection because `jsonschema` is not installed; compileall passes.
+
+The pass remains incomplete: decoder lifetime, hardware classification, cache
+partitioning, CPU coverage, and software-WGPU correctness are verified, while
+clean native GL teardown and full hardware parity remain unresolved. No v1F
+work was started.
+
+### Authoritative v1E final correction (2026-08-16)
+
+The previous appended status is superseded by the completed final pass. The
+GL teardown root cause was the WGPU root `Instance`/Mesa EGL lifetime: normal
+instance destruction reached `eglDestroyContext`/`eglTerminate` and then
+crashed, while a process-owned backend-specific instance completed cleanly.
+`diagnostics::instance_for_backends` now retains the GL, Vulkan, and all-
+backend instances for process lifetime; devices, queues, resources, and
+decoder sessions still have ordinary deterministic ownership. The readback
+test helper also retains its device/queue/adapter for the ring lifetime.
+
+GL semantic fixes were narrow: explicit conditionals replace Mesa-sensitive
+WGSL `select` branches in Spectrum2D centre geometry and Gaussian direction;
+parity helpers rebuild derived colour transforms after replacing evaluated
+effects; and the blend fixture gives its cloned layer a distinct compiled
+identity so static cache keys cannot alias. The Spectrum2D bloom assertion now
+checks a changed source pixel and full CPU/GPU parity; the old out-of-bounds
+pixel assertion was not a valid bloom invariant. The transformed bilinear GL
+case retains a bounded five-byte encoded-channel budget for its f32-versus-
+f64 arithmetic envelope.
+
+Final evidence: hardware GL renderer tests are 313 passed, 0 failed, 6
+ignored; Vulkan renderer tests are 313 passed, 0 failed, 6 ignored and are
+software-only llvmpipe correctness. The workspace `scripts/check.sh` passes
+with its tests serialized to avoid WSL Mesa EGL `BadAccess` from concurrent
+contexts. Workspace check, clippy with `-D warnings`, media tests (97 passed,
+3 ignored), compileall, and `uv run --with jsonschema pytest` (573 passed)
+pass. Plain `uv run pytest` remains environment-blocked by the missing
+optional `jsonschema` package. No v1F work was started.

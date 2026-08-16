@@ -44,6 +44,7 @@ pub struct CpuBackend {
     metrics: StagedMetrics,
     worker_timings: PreparationTimings,
     worker_hot_path_timings: CpuHotPathTimings,
+    configured_cache_budget_bytes: u64,
     profiling_enabled: bool,
     profile_reported: bool,
     #[cfg(test)]
@@ -70,15 +71,17 @@ impl CpuBackend {
 
     fn build(plan: &RenderPlan, decoded: Arc<DecodedAssets>, worker_count: usize) -> Self {
         let profiling_enabled = std::env::var_os("VESTRA_CPU_PROFILE").is_some();
+        let class_budgets = cache_class_budgets(plan);
         let worker_cache_budgets = (0..worker_count)
             .map(|worker_id| CpuWorkerCacheBudgets {
-                crop_cache_budget_bytes: worker_budget(
-                    plan.limits.maximum_cache_bytes,
+                crop_cache_budget_bytes: worker_budget(class_budgets.crop, worker_count, worker_id),
+                static_cache_budget_bytes: worker_budget(
+                    class_budgets.static_layers,
                     worker_count,
                     worker_id,
                 ),
-                static_cache_budget_bytes: worker_budget(
-                    plan.limits.maximum_cache_bytes,
+                video_cache_budget_bytes: worker_budget(
+                    class_budgets.video,
                     worker_count,
                     worker_id,
                 ),
@@ -122,6 +125,7 @@ impl CpuBackend {
             },
             worker_timings: PreparationTimings::default(),
             worker_hot_path_timings: CpuHotPathTimings::default(),
+            configured_cache_budget_bytes: plan.limits.maximum_cache_bytes,
             profiling_enabled,
             profile_reported: false,
             #[cfg(test)]
@@ -359,7 +363,8 @@ impl RenderBackend for CpuBackend {
                 snapshots.push(snapshot);
             }
         }
-        let stats = aggregate_snapshots(&snapshots);
+        let mut stats = aggregate_snapshots(&snapshots);
+        stats.cache_budget_bytes = self.configured_cache_budget_bytes;
         self.worker_timings = aggregate_timings(&snapshots);
         self.worker_hot_path_timings = aggregate_hot_path_timings(&snapshots);
         if self.profiling_enabled
@@ -511,6 +516,62 @@ pub(crate) fn worker_budget(total_budget: u64, worker_count: usize, worker_id: u
     let base = total_budget / worker_count as u64;
     let remainder = total_budget % worker_count as u64;
     base + u64::from((worker_id as u64) < remainder)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct CacheClassBudgets {
+    static_layers: u64,
+    crop: u64,
+    video: u64,
+}
+
+fn cache_class_budgets(plan: &RenderPlan) -> CacheClassBudgets {
+    cache_class_budgets_for(
+        plan.limits.maximum_cache_bytes,
+        plan.layers.iter().any(layer_has_non_video_source),
+        plan.layers.iter().any(layer_has_cacheable_crop),
+        plan.video_slot_count() > 0,
+    )
+}
+
+fn cache_class_budgets_for(
+    total_budget: u64,
+    static_active: bool,
+    crop_active: bool,
+    video_active: bool,
+) -> CacheClassBudgets {
+    let class_count =
+        usize::from(static_active) + usize::from(crop_active) + usize::from(video_active);
+    if class_count == 0 {
+        return CacheClassBudgets::default();
+    }
+    let base = total_budget.checked_div(class_count as u64).unwrap_or(0);
+    let remainder = total_budget.saturating_sub(base.saturating_mul(class_count as u64));
+    CacheClassBudgets {
+        static_layers: if static_active { base + remainder } else { 0 },
+        crop: if crop_active { base } else { 0 },
+        video: if video_active { base } else { 0 },
+    }
+}
+
+fn layer_has_cacheable_crop(layer: &vestra_core::plan::CompiledLayer) -> bool {
+    match &layer.source {
+        vestra_core::plan::CompiledVisualSource::Image { cacheable_crop, .. } => *cacheable_crop,
+        vestra_core::plan::CompiledVisualSource::Group(group) => {
+            group.layers.iter().any(layer_has_cacheable_crop)
+        }
+        _ => false,
+    }
+}
+
+fn layer_has_non_video_source(layer: &vestra_core::plan::CompiledLayer) -> bool {
+    match &layer.source {
+        vestra_core::plan::CompiledVisualSource::Video { .. } => false,
+        vestra_core::plan::CompiledVisualSource::Group(group) => {
+            group.layers.iter().any(layer_has_non_video_source)
+        }
+        _ => true,
+    }
 }
 
 fn estimated_frame_bytes(plan: &RenderPlan) -> u64 {

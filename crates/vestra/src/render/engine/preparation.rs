@@ -17,18 +17,35 @@ struct NativeVideoFactory {
     metadata: Arc<BTreeMap<String, vestra_media::VideoMediaInfo>>,
 }
 
-struct NativeVideoSession(
-    std::sync::mpsc::Sender<(
-        f64,
-        std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
-    )>,
-    Arc<Mutex<vestra_render::VideoDecoderMetrics>>,
+type NativeVideoCommand = (
+    f64,
+    std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
 );
+
+struct NativeVideoSession {
+    command_tx: Option<std::sync::mpsc::Sender<NativeVideoCommand>>,
+    metrics: Arc<Mutex<vestra_render::VideoDecoderMetrics>>,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for NativeVideoSession {
+    fn drop(&mut self) {
+        // Closing the last command sender is the decoder thread's shutdown
+        // signal. Join before releasing the session so FFmpeg-owned state is
+        // destroyed on the worker and never outlives the renderer.
+        self.command_tx.take();
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+    }
+}
 
 impl vestra_render::VideoDecoderSession for NativeVideoSession {
     fn frame_at(&mut self, seconds: f64) -> Result<vestra_render::VideoFrame, String> {
         let (reply_tx, reply_rx) = std::sync::mpsc::channel();
-        self.0
+        self.command_tx
+            .as_ref()
+            .ok_or_else(|| "video decoder session ended".to_owned())?
             .send((seconds, reply_tx))
             .map_err(|_| "video decoder session ended".to_owned())?;
         reply_rx
@@ -37,7 +54,10 @@ impl vestra_render::VideoDecoderSession for NativeVideoSession {
     }
 
     fn metrics(&self) -> vestra_render::VideoDecoderMetrics {
-        self.1.lock().map(|metrics| *metrics).unwrap_or_default()
+        self.metrics
+            .lock()
+            .map(|metrics| *metrics)
+            .unwrap_or_default()
     }
 }
 
@@ -47,10 +67,7 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
         asset: &vestra_core::plan::VideoAsset,
         cache_budget_bytes: u64,
     ) -> Result<Box<dyn vestra_render::VideoDecoderSession>, String> {
-        let (command_tx, command_rx) = std::sync::mpsc::channel::<(
-            f64,
-            std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
-        )>();
+        let (command_tx, command_rx) = std::sync::mpsc::channel::<NativeVideoCommand>();
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let metrics = Arc::new(Mutex::new(vestra_render::VideoDecoderMetrics::default()));
         let thread_metrics = Arc::clone(&metrics);
@@ -58,7 +75,7 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
         let asset_id = asset.id.clone();
         let metadata = Arc::clone(&self.metadata);
         let limits = self.limits;
-        std::thread::Builder::new()
+        let join = std::thread::Builder::new()
             .name(format!("vestra-video-decoder-{}", asset.id))
             .spawn(move || {
                 let decoder_result = match metadata.get(&asset_id) {
@@ -109,12 +126,22 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                 }
             })
             .map_err(|error| error.to_string())?;
-        match ready_rx
-            .recv()
-            .map_err(|_| "video decoder failed to start".to_owned())?
-        {
-            Ok(()) => Ok(Box::new(NativeVideoSession(command_tx, metrics))),
-            Err(error) => Err(error),
+        match ready_rx.recv() {
+            Ok(Ok(())) => Ok(Box::new(NativeVideoSession {
+                command_tx: Some(command_tx),
+                metrics,
+                join: Some(join),
+            })),
+            Ok(Err(error)) => {
+                drop(command_tx);
+                let _ = join.join();
+                Err(error)
+            }
+            Err(_) => {
+                drop(command_tx);
+                let _ = join.join();
+                Err("video decoder failed to start".to_owned())
+            }
         }
     }
 }
@@ -597,5 +624,48 @@ pub(super) fn frame_error(prepared: &PreparedState, diagnostic: Diagnostic) -> R
             &prepared.plan,
         ),
         timings: RenderTimings::default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    };
+
+    use super::NativeVideoSession;
+
+    fn session(exited: Arc<AtomicUsize>) -> NativeVideoSession {
+        let (command_tx, command_rx) = mpsc::channel();
+        let join = std::thread::spawn(move || {
+            let _ = command_rx.recv();
+            exited.fetch_add(1, Ordering::SeqCst);
+        });
+        NativeVideoSession {
+            command_tx: Some(command_tx),
+            metrics: Arc::new(Mutex::new(vestra_render::VideoDecoderMetrics::default())),
+            join: Some(join),
+        }
+    }
+
+    #[test]
+    fn native_video_session_drop_closes_and_joins_decoder_thread() {
+        let exited = Arc::new(AtomicUsize::new(0));
+        {
+            let _session = session(Arc::clone(&exited));
+        }
+        assert_eq!(exited.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn multiple_native_video_sessions_join_in_any_drop_order() {
+        let exited = Arc::new(AtomicUsize::new(0));
+        let first = session(Arc::clone(&exited));
+        let second = session(Arc::clone(&exited));
+        drop(second);
+        drop(first);
+        assert_eq!(exited.load(Ordering::SeqCst), 2);
     }
 }

@@ -86,6 +86,17 @@ impl AdapterMetadata {
         {
             return AdapterPerformanceClass::Software;
         }
+        if self.graphics_backend.eq_ignore_ascii_case("gl")
+            && self.adapter_name.starts_with("D3D12 (")
+        {
+            let name = self.adapter_name.to_ascii_lowercase();
+            if name.contains("nvidia") || name.contains("radeon") || name.contains("amd") {
+                return AdapterPerformanceClass::DiscreteGpu;
+            }
+            if name.contains("intel") {
+                return AdapterPerformanceClass::IntegratedGpu;
+            }
+        }
         if self.device_type.eq_ignore_ascii_case("integratedgpu") {
             return AdapterPerformanceClass::IntegratedGpu;
         }
@@ -269,6 +280,23 @@ mod tests {
         assert_eq!(
             metadata("other", "opaque remote GPU").performance_class(),
             AdapterPerformanceClass::Unknown
+        );
+    }
+
+    #[test]
+    fn classifies_wsl_d3d12_nvidia_as_deliberate_hardware() {
+        let metadata = AdapterMetadata {
+            adapter_name: "D3D12 (NVIDIA GeForce GTX 1650 SUPER)".to_owned(),
+            device_type: "other".to_owned(),
+            graphics_backend: "gl".to_owned(),
+            driver_name: String::new(),
+            driver_info: "Mesa".to_owned(),
+            vendor_id: 0,
+            device_id: 0,
+        };
+        assert_eq!(
+            metadata.performance_class(),
+            AdapterPerformanceClass::DiscreteGpu
         );
     }
 }

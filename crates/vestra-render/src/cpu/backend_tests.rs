@@ -81,6 +81,53 @@ struct ColourVideoSession {
     requests: Arc<Mutex<Vec<(String, f64)>>>,
 }
 
+struct WorkerBenchmarkVideoSession {
+    cache: std::collections::BTreeMap<i64, Arc<image::RgbaImage>>,
+    metrics: crate::VideoDecoderMetrics,
+}
+
+struct WorkerBenchmarkVideoFactory;
+
+impl crate::VideoDecoderSession for WorkerBenchmarkVideoSession {
+    fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
+        self.metrics.frame_requests += 1;
+        let key = (seconds * 15.0).round() as i64;
+        let pixels = if let Some(pixels) = self.cache.get(&key) {
+            self.metrics.cache_hits += 1;
+            Arc::clone(pixels)
+        } else {
+            self.metrics.cache_misses += 1;
+            let started = std::time::Instant::now();
+            let pixels = Arc::new(image::RgbaImage::from_fn(320, 180, |x, y| {
+                let value = ((x as i64 * 17 + y as i64 * 31 + key * 13) & 255) as u8;
+                image::Rgba([value, value.wrapping_add(23), value.wrapping_add(47), 255])
+            }));
+            self.metrics.actual_decodes += 1;
+            self.metrics.decode_time_us += started.elapsed().as_micros() as u64;
+            self.cache.insert(key, Arc::clone(&pixels));
+            pixels
+        };
+        Ok(crate::VideoFrame { pts: key, pixels })
+    }
+
+    fn metrics(&self) -> crate::VideoDecoderMetrics {
+        self.metrics
+    }
+}
+
+impl crate::VideoDecoderFactory for WorkerBenchmarkVideoFactory {
+    fn open(
+        &self,
+        _asset: &crate::plan::VideoAsset,
+        _cache_budget_bytes: u64,
+    ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
+        Ok(Box::new(WorkerBenchmarkVideoSession {
+            cache: std::collections::BTreeMap::new(),
+            metrics: crate::VideoDecoderMetrics::default(),
+        }))
+    }
+}
+
 impl crate::VideoDecoderSession for ColourVideoSession {
     fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
         self.requests
@@ -763,6 +810,145 @@ fn worker_budget_partitions_preserve_total_and_differ_by_at_most_one() {
 }
 
 #[test]
+fn cache_budget_partition_covers_static_crop_video_and_tiny_cases() {
+    assert_eq!(
+        cache_class_budgets_for(100, true, false, false),
+        CacheClassBudgets {
+            static_layers: 100,
+            crop: 0,
+            video: 0,
+        }
+    );
+    assert_eq!(
+        cache_class_budgets_for(100, true, true, false),
+        CacheClassBudgets {
+            static_layers: 50,
+            crop: 50,
+            video: 0,
+        }
+    );
+    assert_eq!(
+        cache_class_budgets_for(100, false, false, true),
+        CacheClassBudgets {
+            static_layers: 0,
+            crop: 0,
+            video: 100,
+        }
+    );
+    assert_eq!(
+        cache_class_budgets_for(101, true, true, true),
+        CacheClassBudgets {
+            static_layers: 35,
+            crop: 33,
+            video: 33,
+        }
+    );
+    assert_eq!(
+        cache_class_budgets_for(2, true, true, true),
+        CacheClassBudgets {
+            static_layers: 2,
+            crop: 0,
+            video: 0,
+        }
+    );
+}
+
+#[test]
+#[ignore = "manual release CPU Video worker-count benchmark"]
+fn cpu_video_worker_count_benchmark() {
+    let project = crate::project::Project::from_json(
+        r##"{
+            "schema_version": 3,
+            "output": {
+                "path": "fixture.mp4", "width": 320, "height": 180,
+                "frame_rate": "30/1", "background": "#00000000",
+                "quality": "preview", "audio": false, "duration_mode": "automatic"
+            },
+            "assets": [{"id": "video", "type": "video", "source": "fixture.mp4"}],
+            "visual": {"clips": [{
+                "id": "video-layer", "source": {"type": "video", "asset": "video"},
+                "start": 0, "duration": 4, "layer": 0,
+                "source_start": 0, "playback_rate": 1,
+                "opacity": {"base_value": 1}
+            }]}
+        }"##,
+    )
+    .expect("benchmark project parses");
+    let paths = std::collections::BTreeMap::from([(
+        "video".to_owned(),
+        std::path::PathBuf::from("fixture.mp4"),
+    )]);
+    let durations = std::collections::BTreeMap::from([("video".to_owned(), 4.0)]);
+    let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (320, 180))]);
+    let plan = crate::plan::compile(
+        &crate::plan::PlanCompileInput::new(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+            std::path::Path::new("."),
+            &paths,
+            &std::collections::BTreeMap::new(),
+            1.0,
+            (320, 180),
+            2,
+            &[],
+        )
+        .with_video_durations(&durations)
+        .with_video_dimensions(&dimensions),
+        crate::plan::CompileOptions::default(),
+    )
+    .expect("benchmark project compiles");
+    let frames = (0_u64..120)
+        .map(|number| {
+            crate::plan::evaluate(
+                &plan,
+                &[ScheduledItem(0)],
+                u128::from(number) * 1_000_000_000 / 30,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for worker_count in [1, 2, 4, 8] {
+        let decoded = DecodedAssets::build_with_video_factory(
+            &plan,
+            Some(Arc::new(WorkerBenchmarkVideoFactory)),
+        )
+        .expect("benchmark assets decode");
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, worker_count);
+        let started = std::time::Instant::now();
+        for (number, frame) in frames.iter().enumerate() {
+            if backend.in_flight() == backend.capacity() {
+                backend
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("benchmark poll")
+                    .expect("benchmark completion");
+            }
+            backend
+                .submit_frame(number as u64, frame)
+                .expect("benchmark submission");
+        }
+        while backend.in_flight() > 0 {
+            backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("benchmark drain poll")
+                .expect("benchmark drain completion");
+        }
+        let wall_ms = started.elapsed().as_secs_f64() * 1_000.0;
+        let stats = backend.stats();
+        let staged = backend.staged_metrics();
+        println!(
+            "cpu_video_worker_benchmark workers={worker_count} wall_ms={wall_ms:.3} frame_render_ms={:.3} sessions={} requests={} actual_decodes={} cache_hits={} cache_misses={} decode_ms={:.3}",
+            staged.frame_render_work_duration.as_secs_f64() * 1_000.0,
+            stats.video_decoder_session_count,
+            stats.video_frame_requests,
+            stats.video_actual_decodes,
+            stats.video_cache_hits,
+            stats.video_cache_misses,
+            stats.video_decode_time_us as f64 / 1_000.0,
+        );
+    }
+}
+
+#[test]
 fn multiple_workers_partition_both_cache_classes_without_multiplying_capacity() {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),
@@ -778,22 +964,23 @@ fn multiple_workers_partition_both_cache_classes_without_multiplying_capacity() 
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 4);
 
     assert_eq!(backend.worker_cache_budgets.len(), 4);
-    assert_eq!(
-        backend
-            .worker_cache_budgets
-            .iter()
-            .map(|budget| budget.crop_cache_budget_bytes)
-            .sum::<u64>(),
-        257
-    );
-    assert_eq!(
-        backend
-            .worker_cache_budgets
-            .iter()
-            .map(|budget| budget.static_cache_budget_bytes)
-            .sum::<u64>(),
-        257
-    );
+    let crop_budget = backend
+        .worker_cache_budgets
+        .iter()
+        .map(|budget| budget.crop_cache_budget_bytes)
+        .sum::<u64>();
+    let static_budget = backend
+        .worker_cache_budgets
+        .iter()
+        .map(|budget| budget.static_cache_budget_bytes)
+        .sum::<u64>();
+    let video_budget = backend
+        .worker_cache_budgets
+        .iter()
+        .map(|budget| budget.video_cache_budget_bytes)
+        .sum::<u64>();
+    assert!(crop_budget + static_budget + video_budget <= 257);
+    assert_eq!(video_budget, 0);
     assert_eq!(backend.stats().cache_budget_bytes, 257);
 }
 

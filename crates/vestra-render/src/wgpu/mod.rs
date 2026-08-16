@@ -46,10 +46,7 @@ pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
 /// This is intentionally separate from `probe`, which selects one adapter for
 /// rendering and is therefore insufficient for validation discovery.
 pub fn discover() -> Vec<crate::AdapterMetadata> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        ..wgpu::InstanceDescriptor::default()
-    });
+    let instance = diagnostics::instance_for_backends(wgpu::Backends::all());
     instance
         .enumerate_adapters(wgpu::Backends::all())
         .into_iter()
@@ -75,10 +72,7 @@ pub fn probe() -> Result<crate::AdapterMetadata, crate::Diagnostic> {
     use crate::{Category, Diagnostic};
     use texture_pool::{WORKING_FORMAT, WORKING_TEXTURE_USAGE};
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: diagnostics::requested_backends(),
-        ..wgpu::InstanceDescriptor::default()
-    });
+    let instance = diagnostics::instance_for_backends(diagnostics::requested_backends());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         force_fallback_adapter: diagnostics::environment_present(

@@ -1,6 +1,32 @@
 //! Error-scope handling and environment-derived WGPU backend selection.
 
+use std::sync::OnceLock;
+
 use crate::{Category, Diagnostic};
+
+static ALL_INSTANCE: OnceLock<wgpu::Instance> = OnceLock::new();
+static GL_INSTANCE: OnceLock<wgpu::Instance> = OnceLock::new();
+static VULKAN_INSTANCE: OnceLock<wgpu::Instance> = OnceLock::new();
+
+/// WSL's Mesa/D3D12 GL path is not safe to tear down while the process still
+/// owns WGPU resource state. Keep the small WGPU root instance process-owned;
+/// renderers and devices remain ordinary owned values and are still dropped
+/// deterministically before process exit.
+pub(super) fn instance_for_backends(backends: wgpu::Backends) -> &'static wgpu::Instance {
+    let slot = if backends == wgpu::Backends::GL {
+        &GL_INSTANCE
+    } else if backends == wgpu::Backends::VULKAN {
+        &VULKAN_INSTANCE
+    } else {
+        &ALL_INSTANCE
+    };
+    slot.get_or_init(|| {
+        wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends,
+            ..wgpu::InstanceDescriptor::default()
+        })
+    })
+}
 
 pub(super) fn environment_value(canonical: &str, legacy: &str) -> Option<String> {
     std::env::var(canonical)

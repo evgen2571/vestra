@@ -219,7 +219,7 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
             plan.canvas.height,
             match plan.compilation.effect_pass_count {
                 0 => 0,
-                1 => 1,
+                1 if !super::frame_plan::plan_requires_auxiliary(&plan) => 1,
                 _ => 2,
             },
         )

@@ -33,6 +33,14 @@ pub struct PreparationStats {
     pub decoded_image_count: usize,
     pub decoded_source_bytes: u64,
     pub peak_decoded_bytes: u64,
+    pub video_decoder_session_count: usize,
+    pub video_decoder_open_count: u64,
+    pub video_frame_requests: u64,
+    pub video_actual_decodes: u64,
+    pub video_seek_count: u64,
+    pub video_cache_hits: u64,
+    pub video_cache_misses: u64,
+    pub video_decode_time_us: u64,
     pub bitmap_cache_hits: u64,
     pub bitmap_cache_misses: u64,
     pub bitmap_cache_requests: u64,
@@ -96,6 +104,8 @@ pub struct PreparationStats {
     pub sampler_count: usize,
     pub uploaded_texture_count: usize,
     pub uploaded_texture_bytes: u64,
+    pub video_upload_count: u64,
+    pub video_upload_bytes: u64,
     pub readback_buffer_count: usize,
     pub readback_buffer_bytes: u64,
     pub shader_module_count: usize,
@@ -185,6 +195,14 @@ impl PreparationStats {
         self.decoded_image_count = backend.decoded_image_count;
         self.decoded_source_bytes = backend.decoded_source_bytes;
         self.peak_decoded_bytes = backend.peak_decoded_bytes;
+        self.video_decoder_session_count = backend.video_decoder_session_count;
+        self.video_decoder_open_count = backend.video_decoder_open_count;
+        self.video_frame_requests = backend.video_frame_requests;
+        self.video_actual_decodes = backend.video_actual_decodes;
+        self.video_seek_count = backend.video_seek_count;
+        self.video_cache_hits = backend.video_cache_hits;
+        self.video_cache_misses = backend.video_cache_misses;
+        self.video_decode_time_us = backend.video_decode_time_us;
         self.bitmap_cache_hits = backend.bitmap_cache_hits;
         self.bitmap_cache_misses = backend.bitmap_cache_misses;
         self.bitmap_cache_requests = backend.bitmap_cache_requests;
@@ -214,6 +232,8 @@ impl PreparationStats {
         self.sampler_count = backend.sampler_count;
         self.uploaded_texture_count = backend.uploaded_texture_count;
         self.uploaded_texture_bytes = backend.uploaded_texture_bytes;
+        self.video_upload_count = backend.video_upload_count;
+        self.video_upload_bytes = backend.video_upload_bytes;
         self.readback_buffer_count = backend.readback_buffer_count;
         self.readback_buffer_bytes = backend.readback_buffer_bytes;
         self.shader_module_count = backend.shader_module_count;

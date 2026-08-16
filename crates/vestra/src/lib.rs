@@ -29,6 +29,7 @@ pub use render::{
     BackendFallback, RenderBackendPreference as BackendPreference, RenderEvent,
     RenderFailureContext, RenderFailureStage, RenderObserverControl, RenderTimings,
 };
+
 pub use vestra_core::audio_effect_definition::{
     AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectKind,
     AudioEffectParameterDescriptor, AudioEffectParameterKind, AudioEffectScope,
@@ -40,6 +41,8 @@ pub use vestra_core::effect_definition::{
 pub use vestra_core::plan_audio::MASTER_AUDIO_NYQUIST_HZ;
 pub use vestra_core::project::{AudioEffect, AudioFadeCurve, AudioGainInterpolation};
 pub use vestra_core::{Category, Diagnostic, Severity};
+#[cfg(feature = "wgpu")]
+pub use vestra_render::discover_wgpu_adapters;
 
 /// Probe a video duration for high-level authoring defaults.
 pub fn probe_video_duration(path: &std::path::Path) -> Result<f64, vestra_media::MediaError> {

@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -22,6 +22,7 @@ struct NativeVideoSession(
         f64,
         std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
     )>,
+    Arc<Mutex<vestra_render::VideoDecoderMetrics>>,
 );
 
 impl vestra_render::VideoDecoderSession for NativeVideoSession {
@@ -33,6 +34,10 @@ impl vestra_render::VideoDecoderSession for NativeVideoSession {
         reply_rx
             .recv()
             .map_err(|_| "video decoder session ended".to_owned())?
+    }
+
+    fn metrics(&self) -> vestra_render::VideoDecoderMetrics {
+        self.1.lock().map(|metrics| *metrics).unwrap_or_default()
     }
 }
 
@@ -47,6 +52,8 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
             std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
         )>();
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let metrics = Arc::new(Mutex::new(vestra_render::VideoDecoderMetrics::default()));
+        let thread_metrics = Arc::clone(&metrics);
         let path = asset.path.clone();
         let asset_id = asset.id.clone();
         let metadata = Arc::clone(&self.metadata);
@@ -87,6 +94,17 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                             pixels: frame.pixels.clone(),
                         })
                         .map_err(|error| error.to_string());
+                    if let Ok(mut current) = thread_metrics.lock() {
+                        let metrics = decoder.metrics();
+                        *current = vestra_render::VideoDecoderMetrics {
+                            frame_requests: metrics.frame_requests,
+                            actual_decodes: metrics.actual_decodes,
+                            seeks: metrics.seeks,
+                            cache_hits: metrics.cache_hits,
+                            cache_misses: metrics.cache_misses,
+                            decode_time_us: metrics.decode_time_us,
+                        };
+                    }
                     let _ = reply.send(result);
                 }
             })
@@ -95,7 +113,7 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
             .recv()
             .map_err(|_| "video decoder failed to start".to_owned())?
         {
-            Ok(()) => Ok(Box::new(NativeVideoSession(command_tx))),
+            Ok(()) => Ok(Box::new(NativeVideoSession(command_tx, metrics))),
             Err(error) => Err(error),
         }
     }

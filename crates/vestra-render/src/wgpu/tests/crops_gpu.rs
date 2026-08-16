@@ -41,6 +41,15 @@ struct TimingVideoSession {
     requests: Arc<Mutex<Vec<f64>>>,
 }
 
+struct TransitionVideoFactory {
+    requests: Arc<Mutex<Vec<(String, f64)>>>,
+}
+
+struct TransitionVideoSession {
+    asset_id: String,
+    requests: Arc<Mutex<Vec<(String, f64)>>>,
+}
+
 impl crate::VideoDecoderSession for TimingVideoSession {
     fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
         self.requests.lock().unwrap().push(seconds);
@@ -63,6 +72,38 @@ impl crate::VideoDecoderFactory for TimingVideoFactory {
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(TimingVideoSession {
+            requests: Arc::clone(&self.requests),
+        }))
+    }
+}
+
+impl crate::VideoDecoderSession for TransitionVideoSession {
+    fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
+        self.requests
+            .lock()
+            .unwrap()
+            .push((self.asset_id.clone(), seconds));
+        let base = if self.asset_id == "video-a" { 32 } else { 224 };
+        let value = (base as f64 + seconds * 16.0).round().clamp(0.0, 255.0) as u8;
+        Ok(crate::VideoFrame {
+            pts: (seconds * 4.0).floor() as i64,
+            pixels: Arc::new(image::RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([value, 0, 255 - value, 255]),
+            )),
+        })
+    }
+}
+
+impl crate::VideoDecoderFactory for TransitionVideoFactory {
+    fn open(
+        &self,
+        asset: &crate::plan::VideoAsset,
+        _cache_budget_bytes: u64,
+    ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
+        Ok(Box::new(TransitionVideoSession {
+            asset_id: asset.id.clone(),
             requests: Arc::clone(&self.requests),
         }))
     }
@@ -280,6 +321,115 @@ fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
     }
     assert_eq!(cpu_output, first_cpu);
     assert_eq!(gpu_output, first_gpu);
+}
+
+#[test]
+fn gpu_video_to_video_transition_advances_both_sources_and_matches_cpu() {
+    let project = crate::project::Project::from_json(
+        r##"{
+            "schema_version": 3,
+            "output": {
+                "path": "video-transition.mp4", "width": 1, "height": 1,
+                "frame_rate": "4/1", "background": "#00000000",
+                "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1
+            },
+            "assets": [
+                {"id": "video-a", "type": "video", "source": "a.mp4"},
+                {"id": "video-b", "type": "video", "source": "b.mp4"}
+            ],
+            "visual": {
+                "clips": [
+                    {"id": "video-a", "source": {"type": "video", "asset": "video-a"}, "start": 0, "duration": 0.75, "layer": 0, "opacity": {"base_value": 1}},
+                    {"id": "video-b", "source": {"type": "video", "asset": "video-b"}, "start": 0.25, "duration": 0.75, "layer": 0, "opacity": {"base_value": 1}}
+                ],
+                "transitions": [{
+                    "id": "video-crossfade", "outgoing": "video-a", "incoming": "video-b", "start": 0.25, "duration": 0.5,
+                    "definition": {
+                        "outgoing": {"opacity": {"keyframes": [{"progress": 0, "value": 1, "interpolation": "linear"}, {"progress": 1, "value": 0, "interpolation": "linear"}]}},
+                        "incoming": {"opacity": {"keyframes": [{"progress": 0, "value": 0, "interpolation": "linear"}, {"progress": 1, "value": 1, "interpolation": "linear"}]}}
+                    }
+                }]
+            }
+        }"##,
+    )
+    .expect("Video transition project parses");
+    let paths = std::collections::BTreeMap::from([
+        ("video-a".to_owned(), std::path::PathBuf::from("a.mp4")),
+        ("video-b".to_owned(), std::path::PathBuf::from("b.mp4")),
+    ]);
+    let durations = std::collections::BTreeMap::from([
+        ("video-a".to_owned(), 1.0),
+        ("video-b".to_owned(), 1.0),
+    ]);
+    let dimensions = std::collections::BTreeMap::from([
+        ("video-a".to_owned(), (1, 1)),
+        ("video-b".to_owned(), (1, 1)),
+    ]);
+    let plan = crate::plan::compile(
+        &crate::plan::PlanCompileInput::new(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+            std::path::Path::new("."),
+            &paths,
+            &std::collections::BTreeMap::new(),
+            1.0,
+            (1, 1),
+            4,
+            &[],
+        )
+        .with_video_durations(&durations)
+        .with_video_dimensions(&dimensions),
+        crate::plan::CompileOptions::default(),
+    )
+    .expect("Video transition project compiles");
+    assert_eq!(plan.video_slot_count(), 2);
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let decoded = crate::DecodedAssets::build_with_video_factory(
+        &plan,
+        Some(Arc::new(TransitionVideoFactory {
+            requests: Arc::clone(&requests),
+        })),
+    )
+    .expect("Video transition assets decode");
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    for time in [500_000_000, 750_000_000] {
+        let frame = crate::plan::evaluate(
+            &plan,
+            &[crate::plan::ScheduledItem(0), crate::plan::ScheduledItem(1)],
+            time,
+        );
+        let mut cpu_output = RgbaImage::new(1, 1);
+        let mut gpu_output = RgbaImage::new(1, 1);
+        cpu.render_frame(&frame, &mut cpu_output)
+            .expect("CPU transition frame renders");
+        gpu.render_frame(&frame, &mut gpu_output)
+            .expect("WGPU transition frame renders");
+        let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+        assert!(
+            difference.maximum_absolute_channel_error <= 2,
+            "Video transition parity exceeded tolerance: {difference:?}"
+        );
+    }
+    let requests = requests.lock().unwrap();
+    assert!(requests.iter().any(|(asset, _)| asset == "video-a"));
+    assert!(requests.iter().any(|(asset, _)| asset == "video-b"));
+    assert!(
+        requests
+            .iter()
+            .filter(|(asset, _)| asset == "video-a")
+            .count()
+            > 1
+    );
+    assert!(
+        requests
+            .iter()
+            .filter(|(asset, _)| asset == "video-b")
+            .count()
+            > 1
+    );
 }
 
 #[test]

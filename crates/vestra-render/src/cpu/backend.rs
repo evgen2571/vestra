@@ -462,6 +462,14 @@ fn aggregate_snapshots(snapshots: &[WorkerSnapshot]) -> PreparationStats {
         result.cpu_scratch_bytes_retained += stats.cpu_scratch_bytes_retained;
         result.peak_cache_entries += stats.peak_cache_entries;
         result.cache_peak_bytes += stats.cache_peak_bytes;
+        result.video_decoder_session_count += stats.video_decoder_session_count;
+        result.video_decoder_open_count += stats.video_decoder_open_count;
+        result.video_frame_requests += stats.video_frame_requests;
+        result.video_actual_decodes += stats.video_actual_decodes;
+        result.video_seek_count += stats.video_seek_count;
+        result.video_cache_hits += stats.video_cache_hits;
+        result.video_cache_misses += stats.video_cache_misses;
+        result.video_decode_time_us += stats.video_decode_time_us;
     }
     result.bitmap_cache_hit_rate = (result.bitmap_cache_requests > 0)
         .then(|| result.bitmap_cache_hits as f64 / result.bitmap_cache_requests as f64);

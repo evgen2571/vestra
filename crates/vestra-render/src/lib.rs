@@ -162,7 +162,12 @@ pub use cache::{ByteLruCache, CacheStats};
 pub use cpu::backend::CpuBackend;
 pub use decoded::DecodedAssets;
 pub use metrics::{PreparationStats, PreparationTimings, StagedMetrics};
-pub use video::{VideoDecoderFactory, VideoDecoderSession, VideoFrame};
+pub use video::{VideoDecoderFactory, VideoDecoderMetrics, VideoDecoderSession, VideoFrame};
+
+#[cfg(feature = "wgpu")]
+pub fn discover_wgpu_adapters() -> Vec<AdapterMetadata> {
+    wgpu::discover()
+}
 #[cfg(feature = "wgpu")]
 pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
 

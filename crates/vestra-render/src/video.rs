@@ -6,6 +6,16 @@ use image::RgbaImage;
 
 use crate::plan::VideoAsset;
 
+#[derive(Clone, Copy, Debug, Default, serde::Serialize)]
+pub struct VideoDecoderMetrics {
+    pub frame_requests: u64,
+    pub actual_decodes: u64,
+    pub seeks: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub decode_time_us: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct VideoFrame {
     pub pts: i64,
@@ -14,6 +24,10 @@ pub struct VideoFrame {
 
 pub trait VideoDecoderSession: Send {
     fn frame_at(&mut self, seconds: f64) -> Result<VideoFrame, String>;
+
+    fn metrics(&self) -> VideoDecoderMetrics {
+        VideoDecoderMetrics::default()
+    }
 }
 
 pub trait VideoDecoderFactory: Send + Sync {

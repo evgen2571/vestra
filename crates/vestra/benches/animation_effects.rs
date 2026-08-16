@@ -1,4 +1,4 @@
-use std::{fs, path::Path, time::Instant};
+use std::{fs, path::Path, process::Command, time::Instant};
 
 use vestra::{
     AdapterDeviceType, BackendPreference as RenderBackendPreference, CancellationToken, Editor,
@@ -9,6 +9,20 @@ const WARMUP_RUNS: usize = 5;
 const MEASURED_RUNS: usize = 5;
 
 fn main() {
+    #[cfg(feature = "wgpu")]
+    {
+        println!("WGPU adapter discovery (all backends):");
+        for adapter in vestra::discover_wgpu_adapters() {
+            println!(
+                "  backend={} adapter={:?} device_type={} driver={:?} driver_info={:?}",
+                adapter.graphics_backend.as_str(),
+                adapter.adapter_name,
+                adapter.device_type.as_str(),
+                adapter.driver_name,
+                adapter.driver_info,
+            );
+        }
+    }
     let backend_preference = match std::env::var("VESTRA_BENCH_BACKEND").as_deref() {
         Ok("cpu") | Err(_) => RenderBackendPreference::Cpu,
         Ok("wgpu") => RenderBackendPreference::Wgpu,
@@ -24,15 +38,21 @@ fn main() {
     assert!(measured_runs > 0, "VESTRA_BENCH_SAMPLES must be positive");
     let width = env_u32("VESTRA_BENCH_WIDTH", 720);
     let height = env_u32("VESTRA_BENCH_HEIGHT", 1280);
-    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../")
-        .join(scenario_fixture(&scenario));
     let project_path = output
         .path()
         .join(format!("{scenario}-{width}x{height}.json"));
-    let mut project: serde_json::Value =
+    let mut project = if matches!(
+        scenario.as_str(),
+        "single_video" | "mixed_dynamic" | "dedup_video"
+    ) {
+        create_video_benchmark_project(&scenario, output.path(), width, height)
+    } else {
+        let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../")
+            .join(scenario_fixture(&scenario));
         serde_json::from_slice(&fs::read(&fixture).expect("read benchmark fixture"))
-            .expect("parse benchmark fixture");
+            .expect("parse benchmark fixture")
+    };
     project["output"]["width"] = width.into();
     project["output"]["height"] = height.into();
     if matches!(scenario.as_str(), "basic_colour" | "basic_composition") {
@@ -54,16 +74,24 @@ fn main() {
         project["output"]["duration_mode"] = "explicit".into();
         project["output"]["duration"] = 10.into();
     }
-    let fixture_parent = fixture.parent().expect("fixture parent");
-    for asset in project["assets"].as_array_mut().expect("fixture assets") {
-        let source = asset["source"].as_str().expect("fixture asset source");
-        asset["source"] = fixture_parent
-            .join(source)
-            .canonicalize()
-            .expect("canonical benchmark asset")
-            .to_string_lossy()
-            .into_owned()
-            .into();
+    if !matches!(
+        scenario.as_str(),
+        "single_video" | "mixed_dynamic" | "dedup_video"
+    ) {
+        let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../")
+            .join(scenario_fixture(&scenario));
+        let fixture_parent = fixture.parent().expect("fixture parent");
+        for asset in project["assets"].as_array_mut().expect("fixture assets") {
+            let source = asset["source"].as_str().expect("fixture asset source");
+            asset["source"] = fixture_parent
+                .join(source)
+                .canonicalize()
+                .expect("canonical benchmark asset")
+                .to_string_lossy()
+                .into_owned()
+                .into();
+        }
     }
     fs::write(
         &project_path,
@@ -188,6 +216,37 @@ fn main() {
             adapter.is_software(),
         );
     }
+    println!(
+        "benchmark_environment cpu_model={:?} cpu_logical_threads={} encoder=libx264 preset=ultrafast crf=30 pix_fmt=yuv420p",
+        cpu_model(),
+        std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(1),
+    );
+    println!(
+        "video_metrics sessions={} opens={} frame_requests={} actual_decodes={} seeks={} cache_hits={} cache_misses={} decode_time_us={} uploads={} upload_bytes={}",
+        summary.performance.video_decoder_session_count,
+        summary.performance.video_decoder_open_count,
+        summary.performance.video_frame_requests,
+        summary.performance.video_actual_decodes,
+        summary.performance.video_seek_count,
+        summary.performance.video_cache_hits,
+        summary.performance.video_cache_misses,
+        summary.performance.video_decode_time_us,
+        summary.performance.video_upload_count,
+        summary.performance.video_upload_bytes,
+    );
+    println!(
+        "resource_metrics source_textures={} source_texture_bytes={} uploaded_textures={} uploaded_texture_bytes={} wgpu_working_textures={} wgpu_working_bytes={} peak_decoded_bytes={} staging_bytes={}",
+        summary.performance.source_texture_count,
+        summary.performance.source_texture_bytes,
+        summary.performance.uploaded_texture_count,
+        summary.performance.uploaded_texture_bytes,
+        summary.performance.wgpu_temporary_textures_retained,
+        summary.performance.wgpu_temporary_texture_estimated_bytes,
+        summary.performance.peak_decoded_bytes,
+        summary.performance.estimated_staging_memory_bytes,
+    );
     match adapter_class {
         Some(AdapterDeviceType::Cpu) => println!(
             "Software WGPU adapter benchmark. This result verifies execution and measurement infrastructure; it is not representative of hardware-GPU performance."
@@ -245,7 +304,7 @@ fn main() {
 
 fn scenario_fixture(scenario: &str) -> &'static Path {
     match scenario {
-        "baseline" | "basic_colour" | "basic_composition" => {
+        "baseline" | "basic_colour" | "basic_composition" | "static_heavy" => {
             Path::new("examples/projects/animation-effects.json")
         }
         "gaussian_small" | "gaussian_large" => Path::new("examples/effects/gaussian-blur.json"),
@@ -268,6 +327,103 @@ fn scenario_fixture(scenario: &str) -> &'static Path {
     }
 }
 
+fn create_video_benchmark_project(
+    scenario: &str,
+    directory: &Path,
+    width: u32,
+    height: u32,
+) -> serde_json::Value {
+    let video_a = directory.join("video-a.mkv");
+    create_color_video(&video_a, "0x18304f", width, height, 15);
+    let unused_video = directory.join("video-unused.mkv");
+    create_color_video(&unused_video, "0x442244", width, height, 15);
+    let font = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/assets/VestraTest-Regular.ttf")
+        .canonicalize()
+        .expect("benchmark font");
+    let mut assets = vec![
+        serde_json::json!({
+            "id": "video-a", "type": "video", "source": video_a.canonicalize().expect("video a")
+        }),
+        serde_json::json!({
+        "id": "video-unused", "type": "video", "source": unused_video.canonicalize().expect("unused video")
+        }),
+        serde_json::json!({
+            "id": "font", "type": "font", "source": font
+        }),
+    ];
+    let mut clips = vec![serde_json::json!({
+        "id": "video-a", "source": {"type": "video", "asset": "video-a"},
+        "start": 0, "duration": 3, "source_start": 0, "playback_rate": 0.9,
+        "layer": 0, "opacity": {"base_value": 1},
+        "effects": [{"id": "brightness", "type": "brightness", "amount": {"base_value": 0.05}}]
+    })];
+
+    clips.push(serde_json::json!({
+        "id": "shape", "source": {"type": "shape", "geometry": {"type": "rectangle", "width": 220, "height": 54}, "fill": "#d14f6fff"},
+        "start": 0, "duration": 3, "layer": 1, "opacity": {"base_value": 1}
+    }));
+    clips.push(serde_json::json!({
+        "id": "text", "source": {"type": "text", "text": "Vestra Video", "font": "font", "font_size": 24, "fill": "#ffffffff", "align": "center"},
+        "start": 0, "duration": 3, "layer": 2, "opacity": {"base_value": 1}
+    }));
+
+    if scenario == "dedup_video" {
+        clips.push(serde_json::json!({
+            "id": "unused-slot", "source": {"type": "video", "asset": "video-a"},
+            "start": 2.5, "duration": 0.5, "layer": 3, "opacity": {"base_value": 1}
+        }));
+    }
+
+    let transitions = if scenario == "mixed_dynamic" {
+        let video_b = directory.join("video-b.mkv");
+        create_color_video(&video_b, "0x613b20", width, height, 15);
+        assets.push(serde_json::json!({
+            "id": "video-b", "type": "video", "source": video_b.canonicalize().expect("video b")
+        }));
+        clips.push(serde_json::json!({
+            "id": "video-b", "source": {"type": "video", "asset": "video-b"},
+            "start": 0.8, "duration": 2.2, "source_start": 0.3, "playback_rate": 1.2,
+            "layer": 0, "opacity": {"base_value": 1}
+        }));
+        clips.push(serde_json::json!({
+            "id": "group", "source": {"type": "group", "clips": [{
+                "id": "nested-shape", "source": {"type": "shape", "geometry": {"type": "ellipse", "width": 100, "height": 100}, "fill": "#4fbd8fff"},
+                "start": 0, "duration": 3, "layer": 0, "opacity": {"base_value": 0.8}
+            }], "transitions": []},
+            "start": 0, "duration": 3, "layer": 3, "opacity": {"base_value": 1}
+        }));
+        vec![serde_json::json!({
+            "id": "video-transition", "outgoing": "video-a", "incoming": "video-b", "start": 0.8, "duration": 1,
+            "definition": {"outgoing": {"opacity": {"keyframes": [{"progress": 0, "value": 1, "interpolation": "linear"}, {"progress": 1, "value": 0, "interpolation": "linear"}]}}, "incoming": {"opacity": {"keyframes": [{"progress": 0, "value": 0, "interpolation": "linear"}, {"progress": 1, "value": 1, "interpolation": "linear"}]}}}
+        })]
+    } else {
+        Vec::new()
+    };
+
+    serde_json::json!({
+        "schema_version": 3, "name": format!("{scenario} benchmark"),
+        "output": {"path": "benchmark.mp4", "width": width, "height": height, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 3},
+        "assets": assets, "visual": {"clips": clips, "transitions": transitions, "flashes": [], "post_effects": []}
+    })
+}
+
+fn create_color_video(path: &Path, colour: &str, width: u32, height: u32, frame_rate: u32) {
+    let size = format!("{width}x{height}");
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
+        .arg(format!("color=c={colour}:s={size}:r={frame_rate}"))
+        .args(["-t", "3", "-an", "-c:v", "ffv1"])
+        .arg(path)
+        .status()
+        .expect("run ffmpeg for benchmark video");
+    assert!(
+        status.success(),
+        "ffmpeg failed to create {}",
+        path.display()
+    );
+}
+
 fn env_usize(name: &str, default: usize) -> usize {
     std::env::var(name).map_or(default, |value| {
         value
@@ -282,6 +438,18 @@ fn env_u32(name: &str, default: u32) -> u32 {
             .parse()
             .unwrap_or_else(|_| panic!("{name} must be a positive integer"))
     })
+}
+
+fn cpu_model() -> String {
+    fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|contents| {
+            contents.lines().find_map(|line| {
+                let (key, value) = line.split_once(':')?;
+                (key.trim() == "model name").then(|| value.trim().to_owned())
+            })
+        })
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 fn median(values: impl Iterator<Item = u128>) -> u128 {

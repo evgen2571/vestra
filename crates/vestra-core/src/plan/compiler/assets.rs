@@ -81,6 +81,14 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
                         id: asset.id.clone(),
                         path: path.clone(),
                         duration_seconds: *duration_seconds,
+                        width: validated
+                            .video_dimensions
+                            .and_then(|dimensions| dimensions.get(&asset.id))
+                            .map_or(0, |dimensions| dimensions.0),
+                        height: validated
+                            .video_dimensions
+                            .and_then(|dimensions| dimensions.get(&asset.id))
+                            .map_or(0, |dimensions| dimensions.1),
                     })
             })
         })

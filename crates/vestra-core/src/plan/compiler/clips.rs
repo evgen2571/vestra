@@ -38,6 +38,7 @@ pub(super) fn compile(
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
+    next_video_slot_index: &mut usize,
     effective_visible_window: (u128, u128),
 ) -> Result<CompiledLayer, Diagnostic> {
     let compiled_identity = *next_compiled_identity;
@@ -67,13 +68,29 @@ pub(super) fn compile(
         },
         VisualSource::Video { asset } => CompiledVisualSource::Video {
             asset_index: assets::lookup_video(video_indices, asset, &clip.id)?,
+            video_slot_index: {
+                let slot = *next_video_slot_index;
+                *next_video_slot_index =
+                    (*next_video_slot_index).checked_add(1).ok_or_else(|| {
+                        Diagnostic::error(
+                            "MVP-PLAN-VIDEO-SLOTS",
+                            Category::Internal,
+                            "compiled Video slot count overflows usize",
+                            "",
+                        )
+                    })?;
+                slot
+            },
             source_start: clip.source_start,
             playback_rate: clip.playback_rate,
-            crop: Crop {
-                x: 0.0,
-                y: 0.0,
-                width: 1.0,
-                height: 1.0,
+            crop: match &clip.crop {
+                Some(track) => tracks::compile(track, &clip.id)?,
+                None => Track::new(Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                }),
             },
             sizing: clip
                 .sizing
@@ -228,6 +245,7 @@ pub(super) fn compile(
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
+            next_video_slot_index,
         )?)),
     };
     let effects = clip
@@ -286,6 +304,7 @@ pub(super) fn compile_with_preset(
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
+    next_video_slot_index: &mut usize,
     effective_visible_window: (u128, u128),
 ) -> Result<CompiledLayer, Diagnostic> {
     let mut layer = compile(
@@ -299,6 +318,7 @@ pub(super) fn compile_with_preset(
         compilation,
         scalar_signal_interner,
         next_compiled_identity,
+        next_video_slot_index,
         effective_visible_window,
     )?;
     if let Some(preset) = &clip.preset {
@@ -323,6 +343,7 @@ fn compile_group(
     compilation: &mut CompilationStats,
     scalar_signal_interner: &mut ScalarSignalInterner,
     next_compiled_identity: &mut usize,
+    next_video_slot_index: &mut usize,
 ) -> Result<CompiledComposition, Diagnostic> {
     let duration_nanos = time::to_nanos(timing.duration, "Group")?;
     let visible_start = timing
@@ -349,6 +370,7 @@ fn compile_group(
             compilation,
             scalar_signal_interner,
             next_compiled_identity,
+            next_video_slot_index,
             effective_visible_window,
         )?);
     }

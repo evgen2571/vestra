@@ -45,18 +45,35 @@ pub struct RenderPlan {
 
 impl RenderPlan {
     #[must_use]
-    pub fn video_slot_stride(&self) -> usize {
-        fn visit(layers: &[CompiledLayer], max_identity: &mut usize) {
+    pub fn video_slot_count(&self) -> usize {
+        fn visit(layers: &[CompiledLayer], count: &mut usize) {
             for layer in layers {
-                *max_identity = (*max_identity).max(layer.compiled_identity);
                 if let CompiledVisualSource::Group(composition) = &layer.source {
-                    visit(&composition.layers, max_identity);
+                    visit(&composition.layers, count);
+                } else if matches!(layer.source, CompiledVisualSource::Video { .. }) {
+                    *count = count.saturating_add(1);
                 }
             }
         }
-        let mut max_identity = 0;
-        visit(&self.layers, &mut max_identity);
-        max_identity.saturating_add(1)
+        let mut count = 0;
+        visit(&self.layers, &mut count);
+        count
+    }
+
+    #[must_use]
+    pub fn video_slot_assets(&self) -> Vec<usize> {
+        fn visit(layers: &[CompiledLayer], assets: &mut Vec<usize>) {
+            for layer in layers {
+                match &layer.source {
+                    CompiledVisualSource::Video { asset_index, .. } => assets.push(*asset_index),
+                    CompiledVisualSource::Group(composition) => visit(&composition.layers, assets),
+                    _ => {}
+                }
+            }
+        }
+        let mut assets = Vec::with_capacity(self.video_slot_count());
+        visit(&self.layers, &mut assets);
+        assets
     }
 }
 
@@ -117,6 +134,8 @@ pub struct VideoAsset {
     pub id: String,
     pub path: PathBuf,
     pub duration_seconds: f64,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -211,9 +230,10 @@ pub enum CompiledVisualSource {
     },
     Video {
         asset_index: usize,
+        video_slot_index: usize,
         source_start: f64,
         playback_rate: f64,
-        crop: Crop,
+        crop: Track<Crop>,
         sizing: CompiledSizing,
     },
     SolidColor {

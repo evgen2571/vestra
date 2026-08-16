@@ -21,6 +21,7 @@ pub struct ValidatedProject {
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: BTreeMap<String, f64>,
     pub(crate) video_durations: BTreeMap<String, f64>,
+    pub(crate) video_dimensions: BTreeMap<String, (u32, u32)>,
     pub(crate) video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,
     pub(crate) duration: f64,
     /// The native timeline authority. The schema's seconds value is normalized
@@ -47,6 +48,7 @@ impl ValidatedProject {
             &self.warnings,
         )
         .with_video_durations(&self.video_durations)
+        .with_video_dimensions(&self.video_dimensions)
     }
 
     #[must_use]

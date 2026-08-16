@@ -67,8 +67,13 @@ fn compile_project_result(
     let assets = Box::leak(Box::new(BTreeMap::from([
         ("red".to_owned(), PathBuf::from("/resolved/red.png")),
         ("blue".to_owned(), PathBuf::from("/resolved/blue.png")),
+        ("video-a".to_owned(), PathBuf::from("/resolved/video-a.mp4")),
+        ("video-b".to_owned(), PathBuf::from("/resolved/video-b.mp4")),
     ])));
-    let durations = Box::leak(Box::new(BTreeMap::new()));
+    let durations = Box::leak(Box::new(BTreeMap::from([
+        ("video-a".to_owned(), 2.0),
+        ("video-b".to_owned(), 2.0),
+    ])));
     compile(
         PlanCompileInput::new(
             project,
@@ -80,7 +85,8 @@ fn compile_project_result(
             (24, 1),
             144,
             &[],
-        ),
+        )
+        .with_video_durations(durations),
         CompileOptions::default(),
     )
     .map_err(Box::new)
@@ -108,6 +114,12 @@ fn video_sources_compile_and_evaluate_source_time() {
     clip.source_start = 0.25;
     clip.playback_rate = 2.0;
     clip.duration = 1.0;
+    clip.crop = Some(Track::constant(crate::project::Crop {
+        x: 0.25,
+        y: 0.0,
+        width: 0.5,
+        height: 1.0,
+    }));
 
     let project = Box::leak(Box::new(project));
     let assets = Box::leak(Box::new(BTreeMap::from([
@@ -133,11 +145,95 @@ fn video_sources_compile_and_evaluate_source_time() {
         CompileOptions::default(),
     )
     .expect("video plan");
+    let super::CompiledVisualSource::Video { crop, .. } = &plan.layers[0].source else {
+        panic!("expected compiled video source");
+    };
+    assert_eq!(
+        crop.base_value,
+        crate::project::Crop {
+            x: 0.25,
+            y: 0.0,
+            width: 0.5,
+            height: 1.0,
+        }
+    );
     let frame = evaluate(&plan, &[super::ScheduledItem(0)], 500_000_000).expect("frame");
-    let super::EvaluatedSource::Video { source_time, .. } = frame.layers[0].source else {
+    let super::EvaluatedSource::Video {
+        source_time, crop, ..
+    } = frame.layers[0].source
+    else {
         panic!("expected evaluated video source");
     };
     assert!((source_time - 1.25).abs() < f64::EPSILON);
+    assert_eq!(
+        crop,
+        crate::project::Crop {
+            x: 0.25,
+            y: 0.0,
+            width: 0.5,
+            height: 1.0,
+        }
+    );
+}
+
+#[test]
+fn video_slots_are_compact_and_deterministic_across_assets_and_groups() {
+    let mut project = canonical_project();
+    project.assets.push(Asset {
+        id: "video-a".to_owned(),
+        kind: AssetType::Video,
+        source: "video-a.mp4".to_owned(),
+    });
+    project.assets.push(Asset {
+        id: "video-b".to_owned(),
+        kind: AssetType::Video,
+        source: "video-b.mp4".to_owned(),
+    });
+    let video_clip = |id: &str, asset: &str| {
+        let mut clip = project.visual.clips[0].clone();
+        clip.id = id.to_owned();
+        clip.source = VisualSource::Video {
+            asset: asset.to_owned(),
+        };
+        clip
+    };
+    let mut group = project.visual.clips[0].clone();
+    group.id = "group".to_owned();
+    group.source = VisualSource::Group(Group {
+        clips: vec![video_clip("nested-video", "video-b")],
+        transitions: vec![],
+    });
+    project.visual.clips = vec![
+        project.visual.clips[0].clone(),
+        video_clip("video-a-1", "video-a"),
+        video_clip("video-a-2", "video-a"),
+        group,
+    ];
+    project.visual.transitions.clear();
+    let plan = compile_project(project.clone());
+    let second = compile_project(project);
+    assert_eq!(plan.video_slot_count(), 3);
+    assert_eq!(second.video_slot_count(), 3);
+
+    fn slots(layers: &[super::CompiledLayer], output: &mut Vec<usize>) {
+        for layer in layers {
+            match &layer.source {
+                super::CompiledVisualSource::Video {
+                    video_slot_index, ..
+                } => output.push(*video_slot_index),
+                super::CompiledVisualSource::Group(composition) => {
+                    slots(&composition.layers, output)
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut first_slots = Vec::new();
+    let mut second_slots = Vec::new();
+    slots(&plan.layers, &mut first_slots);
+    slots(&second.layers, &mut second_slots);
+    assert_eq!(first_slots, [0, 1, 2]);
+    assert_eq!(first_slots, second_slots);
 }
 
 #[test]

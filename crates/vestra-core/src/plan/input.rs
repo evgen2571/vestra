@@ -22,6 +22,7 @@ pub struct PlanCompileInput<'a> {
     pub(crate) asset_paths: &'a BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: &'a BTreeMap<String, f64>,
     pub(crate) video_durations: Option<&'a BTreeMap<String, f64>>,
+    pub(crate) video_dimensions: Option<&'a BTreeMap<String, (u32, u32)>>,
     pub(crate) duration: f64,
     pub(crate) frame_rate: (u64, u64),
     pub(crate) frame_count: u64,
@@ -53,6 +54,7 @@ impl<'a> PlanCompileInput<'a> {
             asset_paths,
             audio_durations,
             video_durations: None,
+            video_dimensions: None,
             duration,
             frame_rate,
             frame_count,
@@ -63,6 +65,12 @@ impl<'a> PlanCompileInput<'a> {
     #[must_use]
     pub fn with_video_durations(mut self, durations: &'a BTreeMap<String, f64>) -> Self {
         self.video_durations = Some(durations);
+        self
+    }
+
+    #[must_use]
+    pub fn with_video_dimensions(mut self, dimensions: &'a BTreeMap<String, (u32, u32)>) -> Self {
+        self.video_dimensions = Some(dimensions);
         self
     }
 }

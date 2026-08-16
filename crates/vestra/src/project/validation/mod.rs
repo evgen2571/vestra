@@ -89,6 +89,11 @@ pub(crate) fn preflight(
             asset_paths: assets.paths,
             audio_durations: assets.audio_durations,
             video_durations: assets.video_durations,
+            video_dimensions: assets
+                .video_metadata
+                .iter()
+                .map(|(id, info)| (id.clone(), (info.coded_width, info.coded_height)))
+                .collect(),
             video_metadata: assets.video_metadata,
             duration,
             duration_nanos,

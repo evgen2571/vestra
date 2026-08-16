@@ -27,7 +27,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v19
       - uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Check Rust formatting
-        run: nix develop --command cargo fmt --all -- --check
+        run: nix shell --file ./shell.nix --command cargo fmt --all -- --check
 
   python-format:
     name: Python Format
@@ -55,7 +55,7 @@ jobs:
       - name: Rust and FFmpeg diagnostics
         run: |
           set -euo pipefail
-          nix develop --command bash -euo pipefail -c '
+          nix shell --file ./shell.nix --command bash -euo pipefail -c '
             rustc --version
             cargo --version
             ffmpeg -version | head -1
@@ -65,7 +65,7 @@ jobs:
             done
           '
       - name: Check workspace
-        run: nix develop --command cargo check --workspace --all-features
+        run: nix shell --file ./shell.nix --command cargo check --workspace --all-features
 
   rust-clippy:
     name: Rust Clippy
@@ -77,7 +77,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Run Clippy
         run: >-
-          nix develop --command cargo clippy --workspace --all-targets
+          nix shell --file ./shell.nix --command cargo clippy --workspace --all-targets
           --all-features -- -D warnings
 
   rust-tests:
@@ -91,13 +91,13 @@ jobs:
       - name: Rust and FFmpeg diagnostics
         run: |
           set -euo pipefail
-          nix develop --command bash -euo pipefail -c '
+          nix shell --file ./shell.nix --command bash -euo pipefail -c '
             rustc --version
             ffmpeg -version | head -1
             pkg-config --modversion libavcodec libavformat libavutil libswscale
           '
       - name: Run workspace tests
-        run: nix develop --command cargo test --workspace --all-features
+        run: nix shell --file ./shell.nix --command cargo test --workspace --all-features
 
   python-lint:
     name: Python Lint
@@ -129,7 +129,7 @@ jobs:
           python --version
           uv --version
       - name: Build the native extension in the project environment
-        run: nix develop --command uv sync --locked --extra dev
+        run: nix shell --file ./shell.nix --command uv sync --locked --extra dev
       - name: Run Python tests and compile check
         run: |
           set -euo pipefail
@@ -149,7 +149,7 @@ jobs:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@v6
       - name: Install the locked test environment
-        run: nix develop --command uv sync --locked --extra test
+        run: nix shell --file ./shell.nix --command uv sync --locked --extra test
       - name: Validate checked-in schema and representative projects
         run: .venv/bin/python crates/vestra-cli/tests/schema_validation.py
       - name: Verify generated schema is current
@@ -157,7 +157,7 @@ jobs:
           set -euo pipefail
           schema_tmp_dir=$(mktemp -d)
           trap 'rm -rf "$schema_tmp_dir"' EXIT
-          nix develop --command cargo run -q -p vestra-cli -- \
+          nix shell --file ./shell.nix --command cargo run -q -p vestra-cli -- \
             generate-schema --output "$schema_tmp_dir/project.schema.json"
           cmp "$schema_tmp_dir/project.schema.json" schemas/project.schema.json
 
@@ -175,13 +175,13 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Build the Rust workspace and CLI
         run: |
-          nix develop --command cargo build --workspace --all-features
-          nix develop --command target/debug/ve --help
+          nix shell --file ./shell.nix --command cargo build --workspace --all-features
+          nix shell --file ./shell.nix --command target/debug/ve --help
       - name: Build and import the Python wheel
         run: |
           set -euo pipefail
           rm -rf dist smoke-venv
-          nix develop --command uv build --wheel --out-dir dist
+          nix shell --file ./shell.nix --command uv build --wheel --out-dir dist
           uv venv smoke-venv
           uv pip install --python smoke-venv/bin/python dist/*.whl
           smoke-venv/bin/python -c 'import vestra; from vestra import Image, Rectangle, Ellipse, Circle, Line, Polygon, Text, Video; print(vestra.__version__)'
@@ -197,7 +197,7 @@ jobs:
       - name: Verify software adapter environment
         run: |
           set -euo pipefail
-          nix develop --command bash -euo pipefail -c '
+          nix shell --file ./shell.nix --command bash -euo pipefail -c '
             echo "WGPU SOFTWARE correctness (no hardware claim)"
             vulkaninfo --summary
             scripts/verify-wgpu.sh

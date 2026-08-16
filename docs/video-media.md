@@ -47,16 +47,16 @@ never change timestamp selection.
 Building the native video decoder requires FFmpeg development libraries in
 addition to the FFmpeg/FFprobe runtime tools. The supported native ABI is
 FFmpeg 8.x, matching `ffmpeg-next` 8.x. The repository-supported environment
-is the pinned Nix shell:
+is the repository Nix shell:
 
 ```bash
-nix develop
+nix shell --file ./shell.nix
 ```
 
 It supplies `pkg-config`, the FFmpeg 8 libraries, headers, and runtime tools.
 CI verifies the resulting `libav*` versions with `pkg-config` before building.
 
-The Nix development shell supplies `pkg-config` and its pinned FFmpeg package, which
+The Nix shell supplies `pkg-config` and its selected FFmpeg package, which
 provide the headers, libraries, and pkg-config metadata needed by `ffmpeg-next`.
 
 Frame dimensions, source pixels, RGBA byte counts, and the configured decoded

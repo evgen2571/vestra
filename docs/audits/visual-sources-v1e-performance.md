@@ -77,14 +77,14 @@ Nix/Lavapipe job validates software WGPU correctness separately.
 
 The host validation used FFmpeg `8.0.1-3ubuntu2`, with libavcodec `62.11.100`,
 libavformat `62.3.100`, libavutil `60.8.100`, and libswscale `9.1.100`.
-The repository CI source of truth is the pinned `flake.lock` Nix environment,
+The repository CI source of truth is the `shell.nix` Nix environment,
 which supplies FFmpeg 8, native libav libraries, `pkg-config`, Rust, and
 software Vulkan tools. CI prints these versions before native builds.
 
 ## Reproducible commands
 
 ```bash
-nix develop
+nix shell --file ./shell.nix
 ./scripts/check.sh
 VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu.sh
 VESTRA_WGPU_BACKEND=gl scripts/verify-wgpu-hardware.sh

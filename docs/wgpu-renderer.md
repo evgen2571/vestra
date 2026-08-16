@@ -257,7 +257,7 @@ continue to execute. With `VESTRA_REQUIRE_HARDWARE_WGPU=1`, that software
 adapter decision becomes a failure; with `VESTRA_REQUIRE_WGPU=1`, no compatible
 adapter is also a failure. Device creation and every later backend failure
 always fail. The project-local
-`nix develop .#software-vulkan` shell discovers Lavapipe through Nix's Mesa ICD
+`nix shell --file ./shell.nix` environment discovers Lavapipe through Nix's Mesa ICD
 path and enables strict Vulkan verification.
 
 Adapter-gated tests run with `-- --nocapture` and emit

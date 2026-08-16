@@ -150,6 +150,7 @@ pub mod metrics;
 #[path = "cpu/shapes.rs"]
 pub(crate) mod shape_raster;
 pub(crate) mod text;
+pub mod video;
 #[cfg(feature = "wgpu")]
 mod wgpu;
 
@@ -162,6 +163,7 @@ pub use cache::{ByteLruCache, CacheStats};
 pub use cpu::backend::CpuBackend;
 pub use decoded::DecodedAssets;
 pub use metrics::{PreparationStats, PreparationTimings, StagedMetrics};
+pub use video::{VideoDecoderFactory, VideoDecoderSession, VideoFrame};
 #[cfg(feature = "wgpu")]
 pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
 

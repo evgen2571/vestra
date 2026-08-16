@@ -79,6 +79,14 @@ fn validate_with_depth(
                 path.clone(),
             ));
         }
+        if !super::nonnegative(clip.source_start) || !super::positive(clip.playback_rate) {
+            errors.push(Diagnostic::error(
+                "MVP-CLIP-SOURCE-TIME",
+                Category::Semantic,
+                "source_start must be finite and non-negative; playback_rate must be finite and positive",
+                format!("{path}/source"),
+            ));
+        }
         match &clip.source {
             crate::project::VisualSource::Image { asset }
                 if assets.get(asset) == Some(&crate::project::AssetType::Image) => {}
@@ -86,6 +94,14 @@ fn validate_with_depth(
                 "MVP-SOURCE-ASSET",
                 Category::Semantic,
                 format!("image source references invalid asset '{asset}'"),
+                format!("{path}/source/asset"),
+            )),
+            crate::project::VisualSource::Video { asset }
+                if assets.get(asset) == Some(&crate::project::AssetType::Video) => {}
+            crate::project::VisualSource::Video { asset } => errors.push(Diagnostic::error(
+                "MVP-SOURCE-ASSET",
+                Category::Semantic,
+                format!("video source references invalid asset '{asset}'"),
                 format!("{path}/source/asset"),
             )),
             crate::project::VisualSource::SolidColor { colour }

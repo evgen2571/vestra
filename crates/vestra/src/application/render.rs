@@ -134,11 +134,14 @@ pub(crate) fn prepare_project(
         plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let plan_compile_elapsed_ms = compilation_started.elapsed().as_millis();
-    let prepared = prepare_for_video(plan, request.backend_preference).map_err(|error| {
-        ApplicationRenderError::Render {
-            error: Box::new(error),
-            plan_compile_elapsed_ms,
-        }
+    let prepared = prepare_for_video(
+        plan,
+        request.backend_preference,
+        validated.video_metadata.clone(),
+    )
+    .map_err(|error| ApplicationRenderError::Render {
+        error: Box::new(error),
+        plan_compile_elapsed_ms,
     })?;
     let metadata = PreparedRenderMetadata {
         frame_rate: validated.project.output.frame_rate.display(),

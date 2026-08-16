@@ -4,6 +4,7 @@ from ..authoring.values import Crop, Point, Sizing
 from .base import ParticleAudioReactive, Source, SizingValue
 from .color import Color, SolidColor
 from .image import Image
+from .video import Video
 from .shapes import Circle, Ellipse, Line, Polygon, Rectangle, Shape
 from .text import Text
 from .particles import (
@@ -30,6 +31,7 @@ from .spectrum import (
 
 __all__ = [
     "Image",
+    "Video",
     "Shape",
     "Rectangle",
     "Ellipse",

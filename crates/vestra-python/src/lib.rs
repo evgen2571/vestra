@@ -127,6 +127,13 @@ fn native_version() -> &'static str {
 }
 
 #[pyfunction]
+fn video_duration(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<f64> {
+    let path = conversion::path_from_python(path)?;
+    py.detach(|| vestra::probe_video_duration(&path))
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+}
+
+#[pyfunction]
 fn effect_definitions(py: Python<'_>) -> PyResult<Py<PyAny>> {
     let value = serde_json::to_value(vestra::visual_effect_descriptors().collect::<Vec<_>>())
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
@@ -242,6 +249,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     prepared::register(module)?;
     render::register(module)?;
     module.add_function(wrap_pyfunction!(native_version, module)?)?;
+    module.add_function(wrap_pyfunction!(video_duration, module)?)?;
     module.add_function(wrap_pyfunction!(effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(audio_effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;

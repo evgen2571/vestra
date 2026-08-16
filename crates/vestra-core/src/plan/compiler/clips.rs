@@ -31,6 +31,7 @@ pub(super) fn compile(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    video_indices: &BTreeMap<String, usize>,
     font_indices: &BTreeMap<String, usize>,
     shapes: &mut Vec<crate::project::ShapeSource>,
     texts: &mut Vec<crate::project::TextSource>,
@@ -58,6 +59,21 @@ pub(super) fn compile(
                     width: 1.0,
                     height: 1.0,
                 }),
+            },
+            sizing: clip
+                .sizing
+                .as_ref()
+                .map_or(CompiledSizing::Original, output::compile_sizing),
+        },
+        VisualSource::Video { asset } => CompiledVisualSource::Video {
+            asset_index: assets::lookup_video(video_indices, asset, &clip.id)?,
+            source_start: clip.source_start,
+            playback_rate: clip.playback_rate,
+            crop: Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
             },
             sizing: clip
                 .sizing
@@ -205,6 +221,7 @@ pub(super) fn compile(
             },
             validated,
             image_indices,
+            video_indices,
             font_indices,
             shapes,
             texts,
@@ -262,6 +279,7 @@ pub(super) fn compile_with_preset(
     clip: &Clip,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    video_indices: &BTreeMap<String, usize>,
     font_indices: &BTreeMap<String, usize>,
     shapes: &mut Vec<crate::project::ShapeSource>,
     texts: &mut Vec<crate::project::TextSource>,
@@ -274,6 +292,7 @@ pub(super) fn compile_with_preset(
         clip,
         validated,
         image_indices,
+        video_indices,
         font_indices,
         shapes,
         texts,
@@ -297,6 +316,7 @@ fn compile_group(
     timing: GroupTiming,
     validated: &PlanCompileInput<'_>,
     image_indices: &BTreeMap<String, usize>,
+    video_indices: &BTreeMap<String, usize>,
     font_indices: &BTreeMap<String, usize>,
     shapes: &mut Vec<crate::project::ShapeSource>,
     texts: &mut Vec<crate::project::TextSource>,
@@ -322,6 +342,7 @@ fn compile_group(
             child,
             validated,
             image_indices,
+            video_indices,
             font_indices,
             shapes,
             texts,
@@ -431,6 +452,7 @@ fn compile_transform(
             VisualSource::SolidColor { .. }
             | VisualSource::Shape(_)
             | VisualSource::Text(_)
+            | VisualSource::Video { .. }
             | VisualSource::Spectrum2D(_)
             | VisualSource::ParticleSystem(_),
             None,

@@ -32,6 +32,7 @@
         "type": {
           "enum": [
             "image",
+            "video",
             "audio",
             "font"
           ]
@@ -654,7 +655,10 @@
               "source": {
                 "properties": {
                   "type": {
-                    "const": "image"
+                    "enum": [
+                      "image",
+                      "video"
+                    ]
                   }
                 },
                 "required": [
@@ -706,6 +710,10 @@
         "opacity": {
           "$ref": "#/$defs/opacity_property"
         },
+        "playback_rate": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
         "preset": {
           "$ref": "#/$defs/preset"
         },
@@ -714,6 +722,10 @@
         },
         "source": {
           "$ref": "#/$defs/source"
+        },
+        "source_start": {
+          "minimum": 0,
+          "type": "number"
         },
         "start": {
           "minimum": 0,
@@ -2674,6 +2686,23 @@
             },
             "type": {
               "const": "image"
+            }
+          },
+          "required": [
+            "type",
+            "asset"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "asset": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "video"
             }
           },
           "required": [

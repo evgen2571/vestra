@@ -64,6 +64,26 @@ pub(crate) fn draw_layer(
                 }
             }
         }
+        EvaluatedSource::Video {
+            asset_index,
+            source_time,
+            crop,
+            sizing,
+            ..
+        } => match assets.video_source(*asset_index, *source_time) {
+            Ok(prepared) if layer.transform.is_valid() => draw_raster(
+                canvas,
+                prepared.pixels(),
+                prepared.intrinsic_size(),
+                *crop,
+                false,
+                sizing,
+                layer.transform,
+                opacity,
+                colour_transform,
+            ),
+            Ok(_) | Err(_) => {}
+        },
         EvaluatedSource::Shape { shape_index, .. } => {
             let prepared = assets.shape_source(*shape_index);
             if layer.transform.is_valid() {

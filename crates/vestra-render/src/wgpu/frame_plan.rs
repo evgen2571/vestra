@@ -720,6 +720,14 @@ fn append_layer(
                 parameters_index: *parameter_count,
             })
         }
+        EvaluatedSource::Video { source_index, .. } => {
+            operations.push(GpuOperation::RenderRasterLayer {
+                layer_index,
+                source_index: *source_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            })
+        }
         EvaluatedSource::Shape { shape_index, .. } => {
             operations.push(GpuOperation::RenderRasterLayer {
                 layer_index,

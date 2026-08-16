@@ -1,12 +1,12 @@
 """Typed Python authoring that compiles to the native project schema."""
 
 from .builder import JsonValue, ProjectBuilder
-from .assets import AudioAsset, ImageAsset
+from .assets import AudioAsset, ImageAsset, VideoAsset
 from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack
 from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEffect, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
-from .clips import GroupClip, ImageClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip
+from .clips import GroupClip, ImageClip, VideoClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip
 from .particles import (
     CircleEmitter, ColourLifetimeStop, ParticleAudioReactive, ParticleBlendMode,
     ParticleBurst, ParticleLifetimeStyle, ParticlePrimitive, ParticleSystem, PointEmitter,
@@ -81,6 +81,8 @@ __all__ = [
     "Interpolation",
     "ImageAsset",
     "ImageClip",
+    "VideoAsset",
+    "VideoClip",
     "ShapeClip",
     "GroupClip",
     "ParticleSystemClip", "ParticleSystem", "PointEmitter", "RectangleEmitter", "CircleEmitter",

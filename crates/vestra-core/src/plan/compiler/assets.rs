@@ -5,13 +5,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     Diagnostic,
     plan::PlanCompileInput,
-    plan::{FontAsset, ImageAsset},
+    plan::{FontAsset, ImageAsset, VideoAsset},
     project::Project,
 };
 
 pub(super) struct ImageTable {
     pub(super) images: Vec<ImageAsset>,
     pub(super) indices: BTreeMap<String, usize>,
+    pub(super) videos: Vec<VideoAsset>,
+    pub(super) video_indices: BTreeMap<String, usize>,
     pub(super) fonts: Vec<FontAsset>,
     pub(super) font_indices: BTreeMap<String, usize>,
 }
@@ -19,13 +21,20 @@ pub(super) struct ImageTable {
 /// Keeps the project asset order while omitting unused and non-image assets.
 #[must_use]
 pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> ImageTable {
-    fn collect<'a>(clips: &'a [crate::project::Clip], ids: &mut BTreeSet<&'a str>) {
+    fn collect<'a>(
+        clips: &'a [crate::project::Clip],
+        ids: &mut BTreeSet<&'a str>,
+        video_ids: &mut BTreeSet<&'a str>,
+    ) {
         for clip in clips.iter().filter(|clip| clip.visible) {
             match &clip.source {
                 crate::project::VisualSource::Image { asset } => {
                     ids.insert(asset.as_str());
                 }
-                crate::project::VisualSource::Group(group) => collect(&group.clips, ids),
+                crate::project::VisualSource::Video { asset } => {
+                    video_ids.insert(asset.as_str());
+                }
+                crate::project::VisualSource::Group(group) => collect(&group.clips, ids, video_ids),
                 crate::project::VisualSource::SolidColor { .. }
                 | crate::project::VisualSource::Shape(_)
                 | crate::project::VisualSource::Text(_)
@@ -35,7 +44,8 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
         }
     }
     let mut image_ids = BTreeSet::new();
-    collect(&project.visual.clips, &mut image_ids);
+    let mut video_ids = BTreeSet::new();
+    collect(&project.visual.clips, &mut image_ids, &mut video_ids);
     let images: Vec<_> = project
         .assets
         .iter()
@@ -54,6 +64,31 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
         .iter()
         .enumerate()
         .map(|(index, image)| (image.id.clone(), index))
+        .collect();
+    let videos: Vec<_> = project
+        .assets
+        .iter()
+        .filter(|asset| {
+            matches!(asset.kind, crate::project::AssetType::Video)
+                && video_ids.contains(asset.id.as_str())
+        })
+        .filter_map(|asset| {
+            validated.asset_paths.get(&asset.id).and_then(|path| {
+                validated
+                    .video_durations
+                    .and_then(|durations| durations.get(&asset.id))
+                    .map(|duration_seconds| VideoAsset {
+                        id: asset.id.clone(),
+                        path: path.clone(),
+                        duration_seconds: *duration_seconds,
+                    })
+            })
+        })
+        .collect();
+    let video_indices = videos
+        .iter()
+        .enumerate()
+        .map(|(index, video)| (video.id.clone(), index))
         .collect();
     let mut font_ids = BTreeSet::new();
     fn collect_fonts<'a>(clips: &'a [crate::project::Clip], ids: &mut BTreeSet<&'a str>) {
@@ -90,6 +125,8 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
     ImageTable {
         images,
         indices,
+        videos,
+        video_indices,
         fonts,
         font_indices,
     }
@@ -120,6 +157,21 @@ pub(super) fn lookup_font(
             "MVP-PLAN-FONT",
             crate::Category::Internal,
             format!("validated text clip '{clip_id}' has no font asset"),
+            "",
+        )
+    })
+}
+
+pub(super) fn lookup_video(
+    indices: &BTreeMap<String, usize>,
+    asset: &str,
+    clip_id: &str,
+) -> Result<usize, Diagnostic> {
+    indices.get(asset).copied().ok_or_else(|| {
+        Diagnostic::error(
+            "MVP-PLAN-ASSET",
+            crate::Category::Internal,
+            format!("validated clip '{clip_id}' has no video asset"),
             "",
         )
     })

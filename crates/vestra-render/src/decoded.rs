@@ -12,6 +12,7 @@ use image::RgbaImage;
 
 use crate::shape_raster::{PreparedShape, raster_dimensions};
 use crate::text::PreparedText;
+use crate::video::VideoDecoderFactory;
 use crate::{
     Category, Diagnostic,
     plan::RenderPlan,
@@ -23,12 +24,21 @@ pub struct DecodedAssets {
     images: Vec<Arc<RgbaImage>>,
     shapes: Vec<PreparedShape>,
     texts: Vec<PreparedText>,
+    videos: Vec<crate::plan::VideoAsset>,
+    video_factory: Option<Arc<dyn VideoDecoderFactory>>,
     stats: PreparationStats,
     timings: PreparationTimings,
 }
 
 impl DecodedAssets {
     pub fn build(plan: &RenderPlan) -> Result<Arc<Self>, Diagnostic> {
+        Self::build_with_video_factory(plan, None)
+    }
+
+    pub fn build_with_video_factory(
+        plan: &RenderPlan,
+        video_factory: Option<Arc<dyn VideoDecoderFactory>>,
+    ) -> Result<Arc<Self>, Diagnostic> {
         let started = Instant::now();
         let mut decoded = Vec::with_capacity(plan.images.len());
         let mut decoded_source_bytes = 0_u64;
@@ -228,6 +238,8 @@ impl DecodedAssets {
             images: decoded,
             shapes,
             texts,
+            videos: plan.videos.clone(),
+            video_factory,
             timings: PreparationTimings {
                 decode: started.elapsed(),
                 ..PreparationTimings::default()
@@ -246,6 +258,21 @@ impl DecodedAssets {
     }
 
     #[must_use]
+    pub(crate) fn video_factory(&self) -> Option<Arc<dyn VideoDecoderFactory>> {
+        self.video_factory.clone()
+    }
+
+    #[must_use]
+    pub(crate) fn video_asset(&self, asset: usize) -> Option<&crate::plan::VideoAsset> {
+        self.video_assets().get(asset)
+    }
+
+    fn video_assets(&self) -> &[crate::plan::VideoAsset] {
+        // The immutable plan table is copied into the decoded bundle below.
+        &self.videos
+    }
+
+    #[must_use]
     pub(crate) fn shape(&self, shape: usize) -> &PreparedShape {
         &self.shapes[shape]
     }
@@ -258,6 +285,11 @@ impl DecodedAssets {
     #[must_use]
     pub(crate) fn texts_len(&self) -> usize {
         self.texts.len()
+    }
+
+    #[must_use]
+    pub(crate) fn videos_len(&self) -> usize {
+        self.videos.len()
     }
 
     #[must_use]

@@ -397,6 +397,10 @@ pub struct Clip {
     pub source: VisualSource,
     pub start: f64,
     pub duration: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub source_start: f64,
+    #[serde(default = "default_playback_rate", skip_serializing_if = "is_one")]
+    pub playback_rate: f64,
     pub layer: i32,
     #[serde(default = "default_visible")]
     pub visible: bool,
@@ -435,10 +439,17 @@ const fn default_visible() -> bool {
     true
 }
 
+const fn default_playback_rate() -> f64 {
+    1.0
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum VisualSource {
     Image {
+        asset: String,
+    },
+    Video {
         asset: String,
     },
     SolidColor {
@@ -460,7 +471,11 @@ impl VisualSource {
     pub const fn supports_direct_transform(&self) -> bool {
         matches!(
             self,
-            Self::Image { .. } | Self::Shape(_) | Self::Text(_) | Self::Group(_)
+            Self::Image { .. }
+                | Self::Video { .. }
+                | Self::Shape(_)
+                | Self::Text(_)
+                | Self::Group(_)
         )
     }
 

@@ -1,8 +1,11 @@
 //! Persistent source textures, reusable working textures, and readback state.
 
+use std::sync::Arc;
+
 use crate::{
     Category, Diagnostic, geometry::IntrinsicSize, plan::RenderPlan, render::DecodedAssets,
 };
+use image::RgbaImage;
 
 use super::texture_pool::TexturePool;
 
@@ -39,6 +42,7 @@ impl SourceResources {
         plan: &RenderPlan,
         decoded: &DecodedAssets,
         max_texture_dimension_2d: u32,
+        dynamic_frames: &[Arc<RgbaImage>],
     ) -> Result<Self, Diagnostic> {
         let mut textures =
             Vec::with_capacity(plan.images.len() + plan.shapes.len() + plan.texts.len());
@@ -201,6 +205,57 @@ impl SourceResources {
                 intrinsic_size: prepared.intrinsic_size,
             });
         }
+        for image in dynamic_frames {
+            if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
+            {
+                return Err(Diagnostic::error(
+                    "WGPU-SOURCE-DIMENSIONS",
+                    Category::Backend,
+                    "decoded video frame exceeds adapter texture dimensions",
+                    "",
+                ));
+            }
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("vestra dynamic video source"),
+                size: wgpu::Extent3d {
+                    width: image.width(),
+                    height: image.height(),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                image.as_raw(),
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(image.width() * 4),
+                    rows_per_image: Some(image.height()),
+                },
+                wgpu::Extent3d {
+                    width: image.width(),
+                    height: image.height(),
+                    depth_or_array_layers: 1,
+                },
+            );
+            uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            textures.push(PreparedRasterTexture {
+                _texture: texture,
+                view,
+                intrinsic_size: IntrinsicSize::new(image.width(), image.height()),
+            });
+        }
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("vestra solid source"),
             size: wgpu::Extent3d {
@@ -225,5 +280,51 @@ impl SourceResources {
             },
             uploaded_texture_bytes,
         })
+    }
+
+    pub(super) fn upload_video(
+        &self,
+        queue: &wgpu::Queue,
+        source_index: usize,
+        pixels: &RgbaImage,
+    ) -> Result<(), Diagnostic> {
+        let source = self.raster_textures.get(source_index).ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-VIDEO-SOURCE",
+                Category::Backend,
+                "dynamic video source index is out of range",
+                "",
+            )
+        })?;
+        if source.intrinsic_size.width != pixels.width()
+            || source.intrinsic_size.height != pixels.height()
+        {
+            return Err(Diagnostic::error(
+                "WGPU-VIDEO-DIMENSIONS",
+                Category::Backend,
+                "video frame dimensions changed during rendering",
+                "",
+            ));
+        }
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &source._texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixels.as_raw(),
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(pixels.width() * 4),
+                rows_per_image: Some(pixels.height()),
+            },
+            wgpu::Extent3d {
+                width: pixels.width(),
+                height: pixels.height(),
+                depth_or_array_layers: 1,
+            },
+        );
+        Ok(())
     }
 }

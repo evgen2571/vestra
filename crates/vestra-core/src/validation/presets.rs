@@ -17,6 +17,7 @@ pub(super) fn validate(
     if matches!(
         source,
         VisualSource::SolidColor { .. }
+            | VisualSource::Video { .. }
             | VisualSource::Shape(_)
             | VisualSource::Text(_)
             | VisualSource::Spectrum2D(_)

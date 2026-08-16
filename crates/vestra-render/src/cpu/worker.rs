@@ -52,6 +52,7 @@ pub(super) enum WorkerCompletion {
         worker_id: usize,
         frame_number: u64,
         message: String,
+        code: &'static str,
     },
 }
 
@@ -92,15 +93,22 @@ pub(super) fn run_worker(
                 let render_duration = render_started.elapsed();
                 let panicked = result.is_err();
                 let completion = match result {
-                    Ok(frame) => WorkerCompletion::Frame {
+                    Ok(Ok(frame)) => WorkerCompletion::Frame {
                         worker_id,
                         frame,
                         render_duration,
+                    },
+                    Ok(Err(message)) => WorkerCompletion::Failed {
+                        worker_id,
+                        frame_number,
+                        message,
+                        code: "CPU-VIDEO-DECODE",
                     },
                     Err(_) => WorkerCompletion::Failed {
                         worker_id,
                         frame_number,
                         message: "CPU worker panicked while rendering".to_owned(),
+                        code: "CPU-WORKER-PANIC",
                     },
                 };
                 if completion_tx.send(completion).is_err() {
@@ -171,7 +179,7 @@ impl CpuWorkerState {
         &mut self,
         frame_number: u64,
         frame: &EvaluatedFrame,
-    ) -> CompletedFrame {
+    ) -> Result<CompletedFrame, String> {
         let mut destination = RgbaImage::new(frame.width, frame.height);
         self.full_frame_allocations += 1;
         let insertions_before = self.static_layers.stats().insertions;
@@ -192,10 +200,13 @@ impl CpuWorkerState {
         self.static_cache_population_renders +=
             self.static_layers.stats().insertions - insertions_before;
 
-        CompletedFrame {
+        if let Some(error) = self.assets.take_video_error() {
+            return Err(error);
+        }
+        Ok(CompletedFrame {
             frame_number,
             rgba: destination.into_raw(),
-        }
+        })
     }
 
     pub(super) fn stats(&mut self) -> PreparationStats {

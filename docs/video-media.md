@@ -1,6 +1,6 @@
 # Native video media foundation
 
-`vestra-media` owns the v1D1 video foundation. It uses `ffmpeg-next` 7.1.x
+`vestra-media` owns the v1D1 video foundation. It uses `ffmpeg-next` 8.x
 behind a Vestra API; the rest of the repository does not handle FFmpeg
 contexts or raw frames.
 
@@ -46,21 +46,17 @@ never change timestamp selection.
 
 Building the native video decoder requires FFmpeg development libraries in
 addition to the FFmpeg/FFprobe runtime tools. The supported native ABI is
-FFmpeg 7.1.x. Ubuntu 24.04's stock FFmpeg 6.1 packages are insufficient. For
-an Ubuntu 24.04 development host, use the same FFmpeg 7 package source as CI,
-then install the development packages:
+FFmpeg 8.x, matching `ffmpeg-next` 8.x. Install a repository-supported FFmpeg
+8 development environment with `pkg-config` and the following libraries:
 
 ```bash
-sudo apt-get install software-properties-common
-sudo add-apt-repository ppa:ubuntuhandbook1/ffmpeg7
-sudo apt-get update
 sudo apt-get install ffmpeg pkg-config \
   libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
 ```
 
 CI verifies the resulting `libav*` versions with `pkg-config` before building.
 
-The Nix development shell supplies `pkg-config` and `ffmpeg_7-headless`, which
+The Nix development shell supplies `pkg-config` and its pinned FFmpeg package, which
 provide the headers, libraries, and pkg-config metadata needed by `ffmpeg-next`.
 
 Frame dimensions, source pixels, RGBA byte counts, and the configured decoded

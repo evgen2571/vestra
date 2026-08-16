@@ -327,7 +327,7 @@ to their active interval. Preset timing follows the native preset's clip-local
 active interval. Presets and timeline helpers are deterministic convenience
 operations over the same canonical model as the low-level typed primitives.
 
-It requires Rust 1.85+ and FFmpeg 7.1+ to build. Linux builds additionally need
+It requires Rust 1.85+ and FFmpeg 8.x to build. Linux builds additionally need
 `pkg-config` and the FFmpeg development packages
 `libavcodec-dev`, `libavformat-dev`, `libavutil-dev`, and `libswscale-dev`;
 the `ffmpeg` and `ffprobe` executables remain runtime requirements. The

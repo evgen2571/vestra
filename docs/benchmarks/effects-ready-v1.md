@@ -13,7 +13,7 @@ scenarios are `baseline`, `basic_colour`, `gaussian_small`, `gaussian_large`,
 `global_post`, `impact`, `heavy_impact`, `transitions`, and `combined`.
 
 The strict real-GPU sequence is available as
-`VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 ./scripts/verify-wgpu-phase2.sh`.
+`VESTRA_WGPU_BACKEND=gl VESTRA_RUN_BENCHMARKS=1 ./scripts/verify-wgpu-hardware.sh`.
 It runs Gaussian, glow, sharpen, directional/zoom/motion blur, chromatic
 aberration, vignette, color adjustment, blend modes, combined chains, and
 global post-effects at 320x180, 720x1280, and 1920x1080. It prints the selected

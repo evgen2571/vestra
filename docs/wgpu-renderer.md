@@ -216,15 +216,15 @@ synchronous-compatible depth. Strict verification and the optional benchmark mat
 run with:
 
 ```bash
-VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase3.sh
-VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 \
-  scripts/verify-wgpu-phase3.sh
+VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu.sh
+VESTRA_WGPU_BACKEND=gl VESTRA_RUN_BENCHMARKS=1 \
+  scripts/verify-wgpu-hardware.sh
 ```
 
 The available Vulkan adapter may be Lavapipe/llvmpipe software rendering.
 Software WGPU is useful for smoke, resource-lifecycle, validation, and readback
 checks, but its timings do not demonstrate GPU acceleration and it is not a
-hardware parity result. The phase verification scripts enable
+hardware parity result. The hardware verification script enables
 `VESTRA_REQUIRE_HARDWARE_WGPU=1`, so hardware-conformance parity fails rather
 than being reported as passed on a software adapter.
 
@@ -281,11 +281,11 @@ VESTRA_WGPU_BACKEND=vulkan \
 ```
 
 For hardware-WGPU conformance, use a real GPU and enable the explicit hardware
-requirement. The phase scripts set both strict variables themselves:
+requirement. The hardware script sets both strict variables itself:
 
 ```bash
-VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase2.sh
-VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu-phase3.sh
+VESTRA_WGPU_BACKEND=vulkan scripts/verify-wgpu.sh
+VESTRA_WGPU_BACKEND=gl scripts/verify-wgpu-hardware.sh
 ```
 
 Run adapter-independent checks with:
@@ -341,9 +341,9 @@ value appropriate to its pass.
 Run the strict real-GPU verification sequence with:
 
 ```bash
-VESTRA_WGPU_BACKEND=vulkan ./scripts/verify-wgpu-phase2.sh
-VESTRA_WGPU_BACKEND=vulkan VESTRA_RUN_BENCHMARKS=1 \
-  ./scripts/verify-wgpu-phase2.sh
+VESTRA_WGPU_BACKEND=gl ./scripts/verify-wgpu-hardware.sh
+VESTRA_WGPU_BACKEND=gl VESTRA_RUN_BENCHMARKS=1 \
+  ./scripts/verify-wgpu-hardware.sh
 ```
 
 The script fails if no compatible adapter is available or an adapter-dependent

@@ -15,7 +15,8 @@ echo "A software adapter validates correctness only. This script does not claim 
 cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo check --workspace --benches --all-features
-cargo test --workspace --all-features
+# WSL Mesa's GL implementation permits one active EGL context at a time.
+cargo test --workspace --all-features -- --test-threads=1
 python3 crates/vestra-cli/tests/schema_validation.py
 scripts/verify-public-asset.sh
 

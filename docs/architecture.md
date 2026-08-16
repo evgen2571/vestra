@@ -158,7 +158,9 @@ one `CpuWorkerState` (prepared crop cache, static-layer cache, effect-surface
 pool, and counters), while all workers share immutable decoded assets through
 `Arc<DecodedAssets>`. Worker-local cache budgets are quotient/remainder
 partitions of the configured class budget: all crop caches combined and all
-static-layer caches combined are each bounded by `maximum_cache_bytes`.
+static-layer caches combined are each bounded by `maximum_cache_bytes`. This is
+an aggregate ceiling for each CPU cache class across all workers, not a
+separate allowance per worker.
 Automatic worker selection reserves one logical CPU when possible, applies a
 checked full-frame working-set estimate, and is capped at eight workers. The
 engine remains responsible for bounded staging, cancellation, and ordered
@@ -207,6 +209,8 @@ retained estimated bytes plus pending reservations never exceed the configured
 static-cache budget. For CPU, `maximum_cache_bytes` independently bounds each
 cache class across all worker-local instances: aggregate crop-cache capacity
 and aggregate static-layer-cache capacity each remain at or below that value.
+WGPU's static cache has the same configured ceiling for its own resources; the
+setting is not a physical-VRAM cap.
 WGPU semantics are unchanged; its cache limit remains independent of other
 internal caches and is not a total renderer-memory or physical-VRAM cap.
 
@@ -323,7 +327,7 @@ keyframe has no following segment, so its interpolation is unused and its gain
 holds through the selected clip end.
 Seconds round to the nearest mixer sample, with ties upward for non-negative
 schema times. The master is padded or trimmed to the resolved project length.
-Large generated filtergraphs use a temporary file passed through FFmpeg 7+'s
+Large generated filtergraphs use a temporary file passed through FFmpeg 8+'s
 `-/filter_complex` option once their UTF-8 text exceeds 64 KiB; smaller graphs
 use `-filter_complex`. A render opens at most 128 deduplicated audible source
 paths, checked before FFmpeg starts.

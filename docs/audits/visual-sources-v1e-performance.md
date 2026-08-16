@@ -39,13 +39,12 @@ Device type: `Other` (WGPU-reported)
 Hardware or software: Hardware through WSL D3D12/NVIDIA GL
 Why selected: GL exposes the real NVIDIA adapter; Vulkan exposes CPU llvmpipe.
 
-## Hardware validation status
+## Initial hardware validation attempt (superseded)
 
-FAILED for the complete renderer suite. Focused Video tests passed, but the
-full GL run had broad parity failures and ended with SIGSEGV. The GL benchmark
-did execute on the externally corroborated NVIDIA/D3D12 path, but WGPU reports
-the adapter class as `Other`; those timings are diagnostic hardware-backed
-measurements, not a full correctness or performance sign-off.
+The first complete GL run had broad parity failures and ended with SIGSEGV.
+This exposed the WGPU root-instance teardown issue documented in the final
+correction below; it is retained here as the initial baseline, not the final
+result.
 
 ## Software fallback
 
@@ -369,5 +368,10 @@ software-only llvmpipe correctness. The workspace `scripts/check.sh` passes
 with its tests serialized to avoid WSL Mesa EGL `BadAccess` from concurrent
 contexts. Workspace check, clippy with `-D warnings`, media tests (97 passed,
 3 ignored), compileall, and `uv run --with jsonschema pytest` (573 passed)
-pass. Plain `uv run pytest` remains environment-blocked by the missing
-optional `jsonschema` package. No v1F work was started.
+pass. Plain `uv run pytest` requires the optional `jsonschema` package in the
+environment.
+
+Final v1E hardware result: GL/NVIDIA correctness passed and exited cleanly;
+Vulkan/llvmpipe correctness passed as software-only validation. The retained
+measurements below are evidence for the v1E baseline and are not new v1F
+performance claims.

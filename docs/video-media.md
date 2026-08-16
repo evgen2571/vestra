@@ -1,6 +1,6 @@
 # Native video media foundation
 
-`vestra-media` owns the v1D1 video foundation. It uses `ffmpeg-next` 8.x
+`vestra-media` owns video media I/O. It uses `ffmpeg-next` 8.x
 behind a Vestra API; the rest of the repository does not handle FFmpeg
 contexts or raw frames.
 
@@ -30,7 +30,7 @@ a later seek flushes the decoder so EOF does not poison the session.
 
 Decoded frames copy into an immutable `Arc<image::RgbaImage>` with RGBA8
 straight-alpha pixels. FFmpeg's software scaler handles YUV/RGB conversion;
-v1D1 uses its consistent default color conversion and does not introduce a
+The media layer uses a consistent default color conversion and does not introduce a
 full color-management policy. Pixel dimensions remain coded dimensions.
 Rotation is preserved as metadata and is not applied to pixels. Sample aspect
 ratio is preserved as metadata and does not change the returned raster size.
@@ -46,23 +46,23 @@ never change timestamp selection.
 
 Building the native video decoder requires FFmpeg development libraries in
 addition to the FFmpeg/FFprobe runtime tools. The supported native ABI is
-FFmpeg 8.x, matching `ffmpeg-next` 8.x. Install a repository-supported FFmpeg
-8 development environment with `pkg-config` and the following libraries:
+FFmpeg 8.x, matching `ffmpeg-next` 8.x. The repository-supported environment
+is the pinned Nix shell:
 
 ```bash
-sudo apt-get install ffmpeg pkg-config \
-  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+nix develop
 ```
 
+It supplies `pkg-config`, the FFmpeg 8 libraries, headers, and runtime tools.
 CI verifies the resulting `libav*` versions with `pkg-config` before building.
 
 The Nix development shell supplies `pkg-config` and its pinned FFmpeg package, which
 provide the headers, libraries, and pkg-config metadata needed by `ffmpeg-next`.
 
 Frame dimensions, source pixels, RGBA byte counts, and the configured decoded
-asset limit are checked before allocation. v1D2 exposes this decoder through the
+asset limit are checked before allocation. The public Video source exposes this decoder through the
 project-model `Video` source, Python `Video`/`VideoClip`, and both CPU and WGPU
 render paths. Rendering uses software FFmpeg decode and uploads RGBA frames to
 the WGPU source texture when that backend is selected. Rotation metadata remains
 reported but is not applied to pixels; sample aspect ratio likewise remains
-metadata-only, so coded raster dimensions are the sizing basis for this phase.
+metadata-only, so coded raster dimensions are the sizing basis for this source.

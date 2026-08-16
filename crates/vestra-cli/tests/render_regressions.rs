@@ -45,7 +45,7 @@ fn strict_wgpu_canonical_render_matches_cpu_encoded_frames() {
     let cpu_report: Value = serde_json::from_slice(&cpu.stdout).expect("CPU report JSON");
     let gpu_report: Value = serde_json::from_slice(&gpu.stdout).expect("WGPU report JSON");
     for report in [&cpu_report, &gpu_report] {
-        assert_eq!(report["total_frames"], 60);
+        assert_eq!(report["total_frames"], 144);
         assert_eq!(report["width"], 320);
         assert_eq!(report["height"], 180);
         assert_eq!(report["audio_present"], false);
@@ -53,7 +53,7 @@ fn strict_wgpu_canonical_render_matches_cpu_encoded_frames() {
     assert_eq!(cpu_report["render_backend"], "cpu");
     assert_eq!(gpu_report["requested_render_backend"], "wgpu");
     assert_eq!(gpu_report["render_backend"], "wgpu");
-    assert_eq!(gpu_report["adapter"]["graphics_backend"], "vulkan");
+    assert_eq!(gpu_report["adapter"]["graphics_backend"], "gl");
     assert!(gpu_report.get("backend_fallback").is_none());
     assert!(cpu_output.is_file());
     assert!(gpu_output.is_file());

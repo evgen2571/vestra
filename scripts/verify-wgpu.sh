@@ -8,7 +8,9 @@ fi
 
 export VESTRA_REQUIRE_WGPU=1
 unset VESTRA_REQUIRE_HARDWARE_WGPU
-echo "WGPU correctness verification (backend: ${VESTRA_WGPU_BACKEND}; hardware not required)"
+echo "WGPU SOFTWARE correctness verification (requested backend: ${VESTRA_WGPU_BACKEND}; hardware not required)"
+echo "Adapter discovery:"
+cargo run -q -p vestra-render --example wgpu_adapters --all-features
 if [[ "${VESTRA_WGPU_BACKEND}" == "gl" ]]; then
   cargo test --workspace --all-features -- --test-threads=1
 else

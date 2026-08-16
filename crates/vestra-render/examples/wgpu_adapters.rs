@@ -1,24 +1,20 @@
 fn main() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        ..wgpu::InstanceDescriptor::default()
-    });
-    let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+    let adapters = vestra_render::discover_wgpu_adapters();
     if adapters.is_empty() {
         println!("no WGPU adapters discovered");
         return;
     }
     for adapter in adapters {
-        let info = adapter.get_info();
         println!(
-            "backend={} adapter={:?} device_type={:?} driver={:?} driver_info={:?} vendor={} device={}",
-            info.backend,
-            info.name,
-            info.device_type,
-            info.driver,
-            info.driver_info,
-            info.vendor,
-            info.device,
+            "backend={} adapter={:?} device_type={:?} classification={} driver={:?} driver_info={:?} vendor={} device={}",
+            adapter.graphics_backend,
+            adapter.adapter_name,
+            adapter.device_type,
+            adapter.performance_class().as_str(),
+            adapter.driver_name,
+            adapter.driver_info,
+            adapter.vendor_id,
+            adapter.device_id,
         );
     }
 }

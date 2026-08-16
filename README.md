@@ -2,6 +2,16 @@
 
 `vestra` is a standalone JSON-driven declarative video renderer written in Rust. It accepts one typed-track JSON project format, composites a deterministic timeline of image, solid-colour, procedural, and recursively owned Group layers, and can author an ordered audio timeline of mixer tracks and clips.
 
+The visual Source system includes Image, Shape (Rectangle, rounded Rectangle,
+Ellipse, Circle, Line, and Polygon with fill/stroke), Text, Video, SolidColor,
+Spectrum2D, ParticleSystem, and Groups/nested Compositions. Text uses
+file-backed fonts and supports font size, line and letter spacing,
+alignment, wrapping/max width, and multiline layout. Video supports source
+offsets, positive playback rates, intrinsic duration, PTS-based VFR selection,
+crop, sizing, effects, transitions, Groups, and both CPU and WGPU rendering.
+See [the shape guide](docs/architecture.md), [the text guide](docs/text.md),
+and [the video source guide](docs/video-source.md) for the detailed contracts.
+
 ## Python editing API
 
 For new Python code, use the mutable editor API in `vestra`. `vestra.Project`
@@ -69,7 +79,7 @@ children, parent transforms/effects/opacity/blend, and top-level Image/Group
 transitions. Internal Group transitions, nested flashes/post-effects, named
 compositions, and independent Group canvas sizing remain unsupported.
 
-Phase 9 executes typed schema-version 3 audio mixer timelines. The old
+The engine executes typed schema-version 3 audio mixer timelines. The old
 single global audio placement and schema version 1 are intentionally rejected;
 there is no automatic migration.
 
@@ -327,10 +337,9 @@ to their active interval. Preset timing follows the native preset's clip-local
 active interval. Presets and timeline helpers are deterministic convenience
 operations over the same canonical model as the low-level typed primitives.
 
-It requires Rust 1.85+ and FFmpeg 8.x to build. Linux builds additionally need
-`pkg-config` and the FFmpeg development packages
-`libavcodec-dev`, `libavformat-dev`, `libavutil-dev`, and `libswscale-dev`;
-the `ffmpeg` and `ffprobe` executables remain runtime requirements. The
+It requires the Rust toolchain and FFmpeg 8.x to build. `nix develop` provides
+the pinned Rust, `pkg-config`, FFmpeg development libraries, and runtime
+tools; the `ffmpeg` and `ffprobe` executables remain runtime requirements. The
 supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs
 use formats supported by the Rust `image` crate (including PNG, JPEG, GIF,
 WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV
@@ -394,8 +403,24 @@ Focused effect, transition, preset, and compositing projects render at least
 90 frames. The helper writes predictable CPU preview files below
 `examples/output/`; pass `--skip-existing` only to retain existing files.
 
-`requirements-dev.txt` pins the Python package used by the JSON Schema check;
+`requirements-dev.txt` pins the standalone Python package used by the JSON
+Schema check; the project development environment is locked in `uv.lock`, and
 Rust dependencies are locked in `Cargo.lock`.
+
+## CI and local validation
+
+GitHub Actions runs independent Rust format/check/Clippy/test, Python
+format/lint/test, schema-contract, package/build-smoke, and software-WGPU
+correctness jobs. Rust and native FFmpeg 8 dependencies come from the pinned
+Nix flake; Python jobs use the supported Python version and declared project
+development extras through `uv`. The software-WGPU job uses Lavapipe for
+correctness only and never represents hardware performance. Real hardware
+WGPU validation remains a separate manual or dedicated-runner check through
+`scripts/verify-wgpu-hardware.sh`.
+
+Run the main local gate with `./scripts/check.sh`. To reproduce the native
+environment, use `nix develop`; it provides the Rust toolchain, FFmpeg 8,
+libav development libraries, `pkg-config`, and software Vulkan tools.
 
 ## Rust SDK
 

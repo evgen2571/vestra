@@ -114,7 +114,7 @@ fn explicit_wgpu_mode_never_falls_back_to_cpu_when_no_adapter_is_available() {
         assert_eq!(report["encoder_backend"], "ffmpeg");
         assert_eq!(report["adapter"]["graphics_backend"], "vulkan");
         assert!(report.get("backend_fallback").is_none());
-        assert_eq!(report["total_frames"], 60);
+        assert_eq!(report["total_frames"], 144);
         assert_eq!(report["width"], 320);
         assert_eq!(report["height"], 180);
         assert!(output.is_file());

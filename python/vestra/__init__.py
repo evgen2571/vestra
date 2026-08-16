@@ -50,8 +50,8 @@ from ._native import (
     native_version,
 )
 
-# Mutable high-level editor model. ``ProjectSnapshot`` below remains the
-# immutable native compatibility name used by the legacy package.
+# Mutable high-level editor model. ``ProjectSnapshot`` remains the stable
+# public name for the immutable native project type.
 from .editor import Composition, CompositionLayer, Layer, Project as Project
 from .audio import (
     AudioClip,

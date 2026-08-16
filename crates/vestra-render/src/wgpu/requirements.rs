@@ -147,7 +147,7 @@ impl GpuRequirements {
         let layer_texture_bytes = full_frame_bytes;
         let effect_texture_count = match plan.compilation.effect_pass_count {
             0 => 0,
-            1 => 1,
+            1 if !plan_requires_auxiliary(plan) => 1,
             _ => 2,
         };
         let auxiliary_texture_count = u64::from(plan_requires_auxiliary(plan));

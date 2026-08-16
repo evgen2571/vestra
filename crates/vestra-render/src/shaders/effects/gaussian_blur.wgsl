@@ -14,7 +14,8 @@ fn gaussian(coord: vec2<i32>) -> vec4<f32> {
     for (var offset = -32; offset <= 32; offset = offset + 1) {
         if (abs(offset) <= support) {
             let weight = exp(-0.5 * pow(f32(offset) / sigma, 2.0));
-            let step = select(vec2<i32>(0, offset), vec2<i32>(offset, 0), horizontal);
+            var step = vec2<i32>(0, offset);
+            if (horizontal) { step = vec2<i32>(offset, 0); }
             let pixel = load_edge(source, coord + step);
             accumulated += vec4<f32>(pixel.rgb * pixel.a, pixel.a) * weight;
             total += weight;

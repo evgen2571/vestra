@@ -73,14 +73,20 @@ impl PreparedAssets {
     #[cfg(test)]
     #[must_use]
     pub fn from_decoded(plan: &RenderPlan, decoded: Arc<DecodedAssets>) -> Self {
-        Self::from_decoded_with_cache_budget(decoded, &plan.shapes, plan.limits.maximum_cache_bytes)
+        Self::from_decoded_with_cache_budget(
+            decoded,
+            &plan.shapes,
+            plan.limits.maximum_cache_bytes,
+            plan.limits.maximum_cache_bytes,
+        )
     }
 
     #[must_use]
     pub(super) fn from_decoded_with_cache_budget(
         decoded: Arc<DecodedAssets>,
         shapes: &[vestra_core::project::ShapeSource],
-        cache_budget_bytes: u64,
+        crop_cache_budget_bytes: u64,
+        video_cache_budget_bytes: u64,
     ) -> Self {
         let prepared_shapes = shapes
             .iter()
@@ -99,7 +105,7 @@ impl PreparedAssets {
                 )
             })
             .collect();
-        let video_cache_budget_bytes = cache_budget_bytes
+        let video_cache_budget_bytes = video_cache_budget_bytes
             .checked_div(decoded.videos_len().max(1) as u64)
             .unwrap_or(0);
         Self {
@@ -109,9 +115,9 @@ impl PreparedAssets {
             video_decoders: BTreeMap::new(),
             video_cache_budget_bytes,
             video_error: None,
-            crops: ByteLruCache::new(cache_budget_bytes),
+            crops: ByteLruCache::new(crop_cache_budget_bytes),
             stats: PreparationStats {
-                cache_budget_bytes,
+                cache_budget_bytes: crop_cache_budget_bytes,
                 ..PreparationStats::default()
             },
             timings: PreparationTimings::default(),

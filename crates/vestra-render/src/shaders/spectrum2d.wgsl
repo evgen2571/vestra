@@ -34,8 +34,19 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         if (mapping == 2u) { index = select(params.band_count-1u-visual, visual-params.band_count, visual >= params.band_count); }
         let a = mix(params.style.y, 1.0, clamp(band(index), 0.0, 1.0)); let anchor = params.flags & 3u;
         let bar_left = left + f32(visual)*cell + cell*params.style.x*0.5; let bar_right = left + f32(visual+1u)*cell - cell*params.style.x*0.5;
-        let bar_top = select(bottom - size.y*a, select(top, center-size.y*a*0.5, anchor == 2u), anchor == 1u); let bar_bottom = select(bottom, select(top+size.y*a, center+size.y*a*0.5, anchor == 2u), anchor == 1u);
-        if (a > 0.0 && point.x >= bar_left && point.x < bar_right && point.y >= bar_top && point.y < bar_bottom) { let distance = select(bottom-point.y, select(point.y-top, abs(point.y-center)*2.0, anchor == 2u), anchor == 1u); let band_t = select(0.5, f32(index)/f32(params.band_count-1u), params.band_count > 1u); let t = select(distance/size.y, band_t, (params.flags & 32u) != 0u); result = colour(t); }
+        var bar_top = bottom - size.y * a;
+        var bar_bottom = bottom;
+        var distance = bottom - point.y;
+        if (anchor == 1u) {
+            bar_top = top;
+            bar_bottom = top + size.y * a;
+            distance = point.y - top;
+        } else if (anchor == 2u) {
+            bar_top = center - size.y * a * 0.5;
+            bar_bottom = center + size.y * a * 0.5;
+            distance = abs(point.y - center) * 2.0;
+        }
+        if (a > 0.0 && point.x >= bar_left && point.x < bar_right && point.y >= bar_top && point.y < bar_bottom) { let band_t = select(0.5, f32(index)/f32(params.band_count-1u), params.band_count > 1u); let t = select(distance/size.y, band_t, (params.flags & 32u) != 0u); result = colour(t); }
     }
     textureStore(output, vec2<i32>(id.xy), result);
 }

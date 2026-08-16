@@ -44,12 +44,14 @@ use crate::project::BlendMode;
 /// WGPU owns persistent source and working textures. Each submitted frame owns
 /// its parameter buffer, bind groups, and readback slot until mapping completes.
 pub struct WgpuBackend {
-    context: GpuContext,
-    pipelines: GpuPipelines,
-    frame: FrameResources,
-    sources: SourceResources,
+    // Bind groups retain views, buffers, and pipeline layouts. Drop them
+    // before the resources and layouts they reference, then release the
+    // device context last.
     slots: Vec<FrameSlotResources>,
     readback: ReadbackRing,
+    frame: FrameResources,
+    sources: SourceResources,
+    pipelines: GpuPipelines,
     pipeline_depth: usize,
     resource_estimates: ResourceEstimates,
     last_execution: FrameExecutionMetrics,
@@ -68,9 +70,14 @@ pub struct WgpuBackend {
     video_pts: BTreeMap<usize, i64>,
     video_upload_count: u64,
     video_upload_bytes: u64,
+    // Keep the device and queue after every resource that was created from
+    // them. Rust drops fields in declaration order; resources must outlive
+    // their parent WGPU context.
+    context: GpuContext,
 }
 
 struct FrameSlotResources {
+    bind_groups: FrameBindGroups,
     parameters: FrameParameterArena,
     parameter_buffer: wgpu::Buffer,
     particle_instances: Vec<super::particles::GpuParticleInstance>,
@@ -79,7 +86,6 @@ struct FrameSlotResources {
     particle_uploads: Vec<Option<ParticleUpload>>,
     particle_buffer: Option<wgpu::Buffer>,
     particle_upload_buffer: Option<wgpu::Buffer>,
-    bind_groups: FrameBindGroups,
     uses: u64,
 }
 

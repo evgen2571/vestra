@@ -447,8 +447,18 @@ fn readback_state_error(message: &str) -> Diagnostic {
 mod tests {
     use super::*;
 
-    fn ring_with_mapping_slot() -> Option<(ReadbackRing, SubmissionToken)> {
-        let instance = wgpu::Instance::default();
+    struct ReadbackTestResources {
+        ring: ReadbackRing,
+        token: SubmissionToken,
+        _queue: wgpu::Queue,
+        _device: wgpu::Device,
+        _adapter: wgpu::Adapter,
+    }
+
+    fn ring_with_mapping_slot() -> Option<ReadbackTestResources> {
+        let instance = super::super::diagnostics::instance_for_backends(
+            super::super::diagnostics::requested_backends(),
+        );
         let Some(adapter) =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
         else {
@@ -458,10 +468,14 @@ mod tests {
             eprintln!("WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter callback=readback");
             return None;
         };
-        let (device, _) =
+        let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
                 .expect("adapter was found but device request failed");
-        eprintln!("WGPU_RUNTIME_EXECUTED adapter=available backend=wgpu callback=readback");
+        let info = adapter.get_info();
+        eprintln!(
+            "WGPU_RUNTIME_EXECUTED adapter={:?} backend={:?} device_type={:?} callback=readback",
+            info.name, info.backend, info.device_type
+        );
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback callback test"),
             size: 256,
@@ -472,8 +486,8 @@ mod tests {
         let mut lifecycle = ReadbackStateMachine::new(1);
         let token = lifecycle.acquire(7).expect("acquire test slot");
         lifecycle.mark_mapping(token).expect("mapping state");
-        Some((
-            ReadbackRing {
+        Some(ReadbackTestResources {
+            ring: ReadbackRing {
                 slots: vec![ReadbackSlot {
                     buffer,
                     frame_number: Some(7),
@@ -492,13 +506,16 @@ mod tests {
                 packed_bytes: 4,
                 metrics: ReadbackMetrics::default(),
             },
-            SubmissionToken {
+            token: SubmissionToken {
                 frame_number: 7,
                 slot_index: token.slot_index,
                 generation: token.generation,
                 submission_index: None,
             },
-        ))
+            _queue: queue,
+            _device: device,
+            _adapter: adapter,
+        })
     }
 
     fn enqueue(ring: &mut ReadbackRing, slot: usize, token: SubmissionToken) {
@@ -515,7 +532,12 @@ mod tests {
 
     #[test]
     fn callback_processing_rejects_stale_generation_and_wrong_slot_tokens() {
-        let Some((mut ring, first)) = ring_with_mapping_slot() else {
+        let Some(ReadbackTestResources {
+            mut ring,
+            token: first,
+            ..
+        }) = ring_with_mapping_slot()
+        else {
             return;
         };
         // Simulate a normal completion and reuse of the only slot. The old
@@ -536,7 +558,12 @@ mod tests {
         assert_eq!(ring.slots[0].state, ReadbackState::Mapping);
         assert!(ring.take_ready().is_none());
 
-        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+        let Some(ReadbackTestResources {
+            mut ring,
+            token: current,
+            ..
+        }) = ring_with_mapping_slot()
+        else {
             return;
         };
         enqueue(
@@ -559,7 +586,12 @@ mod tests {
 
     #[test]
     fn callback_processing_rejects_duplicate_wrong_frame_and_post_abort_callbacks() {
-        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+        let Some(ReadbackTestResources {
+            mut ring,
+            token: current,
+            ..
+        }) = ring_with_mapping_slot()
+        else {
             return;
         };
         // A map failure transitions the real slot to Failed. Replaying the
@@ -582,7 +614,12 @@ mod tests {
         assert_eq!(ring.metrics.mapping_failure_count, 1);
         assert_eq!(ring.slots[0].state, ReadbackState::Failed);
 
-        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+        let Some(ReadbackTestResources {
+            mut ring,
+            token: current,
+            ..
+        }) = ring_with_mapping_slot()
+        else {
             return;
         };
         enqueue(
@@ -600,7 +637,12 @@ mod tests {
             "WGPU-READBACK-STATE"
         );
 
-        let Some((mut ring, current)) = ring_with_mapping_slot() else {
+        let Some(ReadbackTestResources {
+            mut ring,
+            token: current,
+            ..
+        }) = ring_with_mapping_slot()
+        else {
             return;
         };
         ring.abort();

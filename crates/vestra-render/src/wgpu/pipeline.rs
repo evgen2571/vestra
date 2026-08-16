@@ -7,12 +7,6 @@ use crate::{
 };
 
 pub(super) struct GpuPipelines {
-    pub(super) _layer_shader: wgpu::ShaderModule,
-    pub(super) _spectrum2d_shader: wgpu::ShaderModule,
-    pub(super) _composite_shader: wgpu::ShaderModule,
-    pub(super) _effect_shaders: Vec<(EffectKernel, wgpu::ShaderModule)>,
-    pub(super) _particle_shader: wgpu::ShaderModule,
-    pub(super) _particle_resolve_shader: wgpu::ShaderModule,
     pub(super) layer: wgpu::ComputePipeline,
     pub(super) spectrum2d: wgpu::ComputePipeline,
     pub(super) composite: wgpu::ComputePipeline,
@@ -25,6 +19,12 @@ pub(super) struct GpuPipelines {
     pub(super) composite_bindings: wgpu::BindGroupLayout,
     pub(super) effect_bindings: wgpu::BindGroupLayout,
     pub(super) particle_bindings: wgpu::BindGroupLayout,
+    pub(super) _layer_shader: wgpu::ShaderModule,
+    pub(super) _spectrum2d_shader: wgpu::ShaderModule,
+    pub(super) _composite_shader: wgpu::ShaderModule,
+    pub(super) _effect_shaders: Vec<(EffectKernel, wgpu::ShaderModule)>,
+    pub(super) _particle_shader: wgpu::ShaderModule,
+    pub(super) _particle_resolve_shader: wgpu::ShaderModule,
 }
 
 impl GpuPipelines {

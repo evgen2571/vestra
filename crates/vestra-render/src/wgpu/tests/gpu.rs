@@ -132,16 +132,18 @@ fn hardware_conformance_policy(
     performance_class: AdapterPerformanceClass,
     require_hardware: bool,
 ) -> Result<bool, &'static str> {
-    if performance_class.is_software() {
-        if require_hardware {
-            Err(
-                "hardware WGPU conformance was explicitly required, but the selected adapter is software",
-            )
-        } else {
-            Ok(false)
-        }
+    if matches!(
+        performance_class,
+        AdapterPerformanceClass::DiscreteGpu | AdapterPerformanceClass::IntegratedGpu
+    ) {
+        return Ok(true);
+    }
+    if require_hardware {
+        Err(
+            "hardware WGPU conformance was explicitly required, but the selected adapter is not proven hardware",
+        )
     } else {
-        Ok(true)
+        Ok(false)
     }
 }
 
@@ -180,5 +182,19 @@ mod tests {
             hardware_conformance_policy(AdapterPerformanceClass::DiscreteGpu, true),
             Ok(true)
         );
+    }
+
+    #[test]
+    fn unknown_adapter_never_satisfies_hardware_conformance() {
+        assert!(hardware_conformance_policy(AdapterPerformanceClass::Unknown, true).is_err());
+        assert_eq!(
+            hardware_conformance_policy(AdapterPerformanceClass::Unknown, false),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn virtual_adapter_is_not_proven_hardware() {
+        assert!(hardware_conformance_policy(AdapterPerformanceClass::VirtualGpu, true).is_err());
     }
 }

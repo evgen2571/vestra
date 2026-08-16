@@ -12,10 +12,12 @@ use super::{
 };
 
 pub(super) struct GpuContext {
-    pub(super) _instance: wgpu::Instance,
-    pub(super) _adapter: wgpu::Adapter,
-    pub(super) device: wgpu::Device,
+    // Rust drops fields in declaration order. Drop the queue before the
+    // device so wgpu-core observes an empty device queue, then release the
+    // device's parent adapter and instance.
     pub(super) queue: wgpu::Queue,
+    pub(super) device: wgpu::Device,
+    pub(super) _adapter: wgpu::Adapter,
     pub(super) adapter_metadata: AdapterMetadata,
     pub(super) adapter_limits: wgpu::Limits,
     pub(super) adapter_request: Duration,
@@ -23,15 +25,21 @@ pub(super) struct GpuContext {
     pub(super) runtime_errors: RuntimeErrorState,
 }
 
+impl Drop for GpuContext {
+    fn drop(&mut self) {
+        // This runs after WgpuBackend's resource fields because the context
+        // is declared last. Drain resource destruction while the device is
+        // still alive, immediately before queue/device teardown.
+        self.device.poll(wgpu::Maintain::Wait);
+    }
+}
+
 impl GpuContext {
     pub(super) fn create(
         plan: &RenderPlan,
         requirements: GpuRequirements,
     ) -> Result<Self, Diagnostic> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: requested_backends(),
-            ..wgpu::InstanceDescriptor::default()
-        });
+        let instance = super::diagnostics::instance_for_backends(requested_backends());
         let adapter_request_started = Instant::now();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -89,10 +97,9 @@ impl GpuContext {
         requirements.validate(&device.limits(), plan)?;
         let runtime_errors = RuntimeErrorState::install(&device);
         Ok(Self {
-            _instance: instance,
-            _adapter: adapter,
-            device,
             queue,
+            device,
+            _adapter: adapter,
             adapter_metadata,
             adapter_limits,
             adapter_request,

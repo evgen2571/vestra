@@ -26,8 +26,8 @@ pub(super) struct WorkingTextureDescriptor {
 }
 
 pub(super) struct WorkingTexture {
-    pub(super) texture: wgpu::Texture,
     pub(super) view: wgpu::TextureView,
+    pub(super) texture: wgpu::Texture,
     pub(super) _descriptor: WorkingTextureDescriptor,
     pub(super) estimated_bytes: u64,
 }
@@ -36,8 +36,8 @@ pub(super) struct WorkingTexture {
 /// It is sampled by composition and never used as a render target after
 /// publication.
 pub(super) struct StaticLayerTexture {
-    pub(super) texture: wgpu::Texture,
     pub(super) view: wgpu::TextureView,
+    pub(super) texture: wgpu::Texture,
     pub(super) estimated_bytes: u64,
 }
 
@@ -107,7 +107,7 @@ impl TexturePool {
             ),
             effect_a: (effect_pass_count > 0)
                 .then(|| create_texture(device, descriptor, "vestra effect A")),
-            effect_b: (effect_pass_count > 1)
+            effect_b: (effect_pass_count > 1 || plan_requires_auxiliary(plan))
                 .then(|| create_texture(device, descriptor, "vestra effect B")),
             auxiliary: plan_requires_auxiliary(plan)
                 .then(|| create_texture(device, descriptor, "vestra retained effect original")),

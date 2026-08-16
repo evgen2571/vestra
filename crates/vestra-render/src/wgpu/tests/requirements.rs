@@ -340,7 +340,10 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
         .expect("glow resource estimates calculate");
     let full_frame = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
         .expect("full frame estimate");
-    assert_eq!(estimates.source_texture_count, plan.images.len() as u64);
+    assert_eq!(
+        estimates.source_texture_count,
+        (plan.images.len() + plan.shapes.len() + plan.texts.len() + plan.video_slot_count()) as u64
+    );
     assert_eq!(estimates.effect_texture_count, 2);
     assert_eq!(estimates.auxiliary_texture_count, 1);
     assert_eq!(estimates.working_texture_count, 7);
@@ -426,4 +429,64 @@ fn group_working_texture_estimates_scale_with_depth_not_group_count() {
         deep.working_texture_bytes - shallow.working_texture_bytes,
         one_texture * 4
     );
+}
+
+#[test]
+fn video_requirements_charge_each_compiled_video_slot_once() {
+    let project = Project::from_json(
+        r##"{
+            "schema_version": 3,
+            "output": {
+                "path": "video-requirements.mp4", "width": 2, "height": 1,
+                "frame_rate": "1/1", "background": "#00000000",
+                "quality": "preview", "audio": false, "duration_mode": "automatic"
+            },
+            "assets": [
+                {"id": "used", "type": "video", "source": "used.mp4"},
+                {"id": "unused", "type": "video", "source": "unused.mp4"}
+            ],
+            "visual": {"clips": [
+                {"id": "first", "source": {"type": "video", "asset": "used"},
+                 "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1}},
+                {"id": "second", "source": {"type": "video", "asset": "used"},
+                 "start": 0, "duration": 1, "layer": 1, "opacity": {"base_value": 1}}
+            ]}
+        }"##,
+    )
+    .expect("video requirements project parses");
+    let paths = std::collections::BTreeMap::from([
+        ("used".to_owned(), std::path::PathBuf::from("used.mp4")),
+        ("unused".to_owned(), std::path::PathBuf::from("unused.mp4")),
+    ]);
+    let durations =
+        std::collections::BTreeMap::from([("used".to_owned(), 1.0), ("unused".to_owned(), 1.0)]);
+    let dimensions = std::collections::BTreeMap::from([("used".to_owned(), (2, 1))]);
+    let image_paths = std::collections::BTreeMap::new();
+    let input = PlanCompileInput::new(
+        &project,
+        vestra_core::validation::ResourceLimits::default(),
+        std::path::Path::new("."),
+        &paths,
+        &image_paths,
+        1.0,
+        (1, 1),
+        1,
+        &[],
+    )
+    .with_video_durations(&durations)
+    .with_video_dimensions(&dimensions);
+    let plan = compile(&input, CompileOptions::default()).expect("video requirements compile");
+    let decoded = crate::DecodedAssets::build(&plan).expect("video requirements decode");
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("video requirements calculate");
+    let estimates = requirements
+        .resource_estimates(256)
+        .expect("video resource estimates calculate");
+    assert_eq!(plan.video_slot_count(), 2);
+    assert_eq!(estimates.source_texture_count, 2);
+    assert_eq!(estimates.source_texture_bytes, 16);
 }

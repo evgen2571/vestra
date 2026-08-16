@@ -196,7 +196,6 @@ pub fn evaluate_with_context(
         plan.canvas.height,
         true,
         plan.images.len() + plan.shapes.len() + plan.texts.len(),
-        plan.video_slot_stride(),
         context,
     )?;
     Ok(EvaluatedFrame {
@@ -236,7 +235,6 @@ fn evaluate_layers(
     height: u32,
     root_composition: bool,
     raster_source_base: usize,
-    video_slot_stride: usize,
     context: &EvaluationContext<'_>,
 ) -> Result<(Vec<EvaluatedLayer>, u64), EvaluationError> {
     let mut layers = Vec::with_capacity(active.len());
@@ -286,17 +284,16 @@ fn evaluate_layers(
             }
             CompiledVisualSource::Video {
                 asset_index,
+                video_slot_index,
                 source_start,
                 playback_rate,
                 crop,
                 sizing,
             } => EvaluatedSource::Video {
                 asset_index: *asset_index,
-                source_index: raster_source_base
-                    + asset_index.saturating_mul(video_slot_stride)
-                    + layer.compiled_identity,
+                source_index: raster_source_base + *video_slot_index,
                 source_time: *source_start + (relative as f64 / 1_000_000_000.0) * *playback_rate,
-                crop: *crop,
+                crop: crop.evaluate(relative),
                 sizing: sizing.clone(),
             },
             CompiledVisualSource::Shape { shape_index } => EvaluatedSource::Shape {
@@ -358,7 +355,6 @@ fn evaluate_layers(
                     height,
                     false,
                     raster_source_base,
-                    video_slot_stride,
                     context,
                 )?;
                 evaluated_track_count += nested_count;

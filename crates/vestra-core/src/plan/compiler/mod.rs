@@ -79,6 +79,7 @@ pub fn compile(
     let mut texts = Vec::new();
     let mut layers = Vec::new();
     let mut next_compiled_identity = 0;
+    let mut next_video_slot_index = 0;
     let mut scalar_signal_interner = ScalarSignalInterner::default();
     let project_duration_nanos = to_nanos(validated.duration, "project")?;
     let mut compilation = CompilationStats {
@@ -104,6 +105,7 @@ pub fn compile(
             &mut compilation,
             &mut scalar_signal_interner,
             &mut next_compiled_identity,
+            &mut next_video_slot_index,
             (0, project_duration_nanos),
         )?);
     }

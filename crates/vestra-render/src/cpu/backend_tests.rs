@@ -8,6 +8,100 @@ use crate::{
 };
 use std::time::Duration;
 
+struct VideoFixtureFactory {
+    frame: crate::VideoFrame,
+}
+
+struct VideoFixtureSession {
+    frame: crate::VideoFrame,
+}
+
+impl crate::VideoDecoderSession for VideoFixtureSession {
+    fn frame_at(&mut self, _seconds: f64) -> Result<crate::VideoFrame, String> {
+        Ok(self.frame.clone())
+    }
+}
+
+impl crate::VideoDecoderFactory for VideoFixtureFactory {
+    fn open(
+        &self,
+        _asset: &crate::plan::VideoAsset,
+        _cache_budget_bytes: u64,
+    ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
+        Ok(Box::new(VideoFixtureSession {
+            frame: self.frame.clone(),
+        }))
+    }
+}
+
+#[test]
+fn cpu_video_renderer_samples_the_authored_crop_from_a_dynamic_frame() {
+    let project = crate::project::Project::from_json(
+        r##"{
+            "schema_version": 3,
+            "output": {
+                "path": "fixture.mp4", "width": 1, "height": 1,
+                "frame_rate": "1/1", "background": "#00000000",
+                "quality": "preview", "audio": false, "duration_mode": "automatic"
+            },
+            "assets": [{"id": "video", "type": "video", "source": "fixture.mp4"}],
+            "visual": {"clips": [{
+                "id": "video-layer", "source": {"type": "video", "asset": "video"},
+                "start": 0, "duration": 1, "layer": 0,
+                "opacity": {"base_value": 1},
+                "crop": {"base_value": {"x": 0.5, "y": 0, "width": 0.5, "height": 1}}
+            }]}
+        }"##,
+    )
+    .expect("video fixture project parses");
+    let asset_paths = std::collections::BTreeMap::from([(
+        "video".to_owned(),
+        std::path::PathBuf::from("fixture.mp4"),
+    )]);
+    let durations = std::collections::BTreeMap::from([("video".to_owned(), 1.0)]);
+    let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (2, 1))]);
+    let plan = crate::plan::compile(
+        &crate::plan::PlanCompileInput::new(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+            std::path::Path::new("."),
+            &asset_paths,
+            &std::collections::BTreeMap::new(),
+            1.0,
+            (1, 1),
+            1,
+            &[],
+        )
+        .with_video_durations(&durations)
+        .with_video_dimensions(&dimensions),
+        crate::plan::CompileOptions::default(),
+    )
+    .expect("video fixture compiles");
+    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let decoded = DecodedAssets::build_with_video_factory(
+        &plan,
+        Some(std::sync::Arc::new(VideoFixtureFactory {
+            frame: crate::VideoFrame {
+                pts: 0,
+                pixels: std::sync::Arc::new(image::RgbaImage::from_fn(2, 1, |x, _| {
+                    if x == 0 {
+                        image::Rgba([255, 0, 0, 255])
+                    } else {
+                        image::Rgba([0, 0, 255, 255])
+                    }
+                })),
+            },
+        })),
+    )
+    .expect("video fixture decodes");
+    let mut backend = CpuBackend::new(&plan, decoded);
+    let mut output = image::RgbaImage::new(1, 1);
+    backend
+        .render_frame(&frame, &mut output)
+        .expect("video fixture renders");
+    assert_eq!(output.get_pixel(0, 0), &image::Rgba([0, 0, 255, 255]));
+}
+
 fn static_frame() -> EvaluatedFrame {
     EvaluatedFrame {
         time: 0,

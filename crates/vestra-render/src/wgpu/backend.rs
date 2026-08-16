@@ -181,6 +181,14 @@ impl WgpuBackend {
         let upload_started = Instant::now();
         let mut video_decoders = BTreeMap::new();
         let mut initial_video_frames = Vec::new();
+        if plan.video_slot_count() > 0 && decoded.video_factory().is_none() {
+            return Err(Diagnostic::error(
+                "WGPU-VIDEO-FACTORY",
+                crate::Category::Media,
+                "compiled video layers require a video decoder factory",
+                "",
+            ));
+        }
         if let Some(factory) = decoded.video_factory() {
             let per_decoder_budget = plan
                 .limits
@@ -198,9 +206,10 @@ impl WgpuBackend {
                 video_decoders.insert(asset_index, decoder);
             }
         }
-        let dynamic_slot_count = plan.videos.len().saturating_mul(plan.video_slot_stride());
-        let dynamic_frames = (0..dynamic_slot_count)
-            .map(|slot| Arc::clone(&initial_video_frames[slot / plan.video_slot_stride().max(1)]))
+        let dynamic_frames = plan
+            .video_slot_assets()
+            .into_iter()
+            .map(|asset| Arc::clone(&initial_video_frames[asset]))
             .collect::<Vec<_>>();
         let sources = SourceResources::create(
             &context.device,

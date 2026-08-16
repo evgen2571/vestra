@@ -85,6 +85,19 @@ impl GpuRequirements {
             })?;
         let max_source_dimension = (0..plan.images.len())
             .flat_map(|asset| [decoded.image(asset).width(), decoded.image(asset).height()])
+            .chain((0..plan.shapes.len()).flat_map(|shape| {
+                let image = decoded.shape(shape).pixels.as_ref();
+                [image.width(), image.height()]
+            }))
+            .chain((0..plan.texts.len()).flat_map(|text| {
+                let image = decoded.text(text).pixels.as_ref();
+                [image.width(), image.height()]
+            }))
+            .chain(
+                plan.videos
+                    .iter()
+                    .flat_map(|video| [video.width, video.height]),
+            )
             .max()
             .unwrap_or(1);
         fn compiled_counts(layers: &[crate::plan::CompiledLayer]) -> (usize, usize) {
@@ -150,23 +163,71 @@ impl GpuRequirements {
                 + auxiliary_texture_count
                 + group_texture_count,
         )?;
-        let source_texture_bytes = (0..plan.images.len()).try_fold(0_u64, |total, asset| {
-            let image = decoded.image(asset);
-            let bytes = u64::from(image.width())
-                .checked_mul(u64::from(image.height()))
+        fn image_bytes(width: u32, height: u32) -> Result<u64, Diagnostic> {
+            u64::from(width)
+                .checked_mul(u64::from(height))
                 .and_then(|value| value.checked_mul(RGBA8_BYTES_PER_PIXEL))
-                .ok_or_else(|| resource_overflow("source texture size overflow"))?;
-            total
-                .checked_add(bytes)
-                .ok_or_else(|| resource_overflow("source texture total overflow"))
-        })?;
+                .ok_or_else(|| resource_overflow("source texture size overflow"))
+        }
+        let mut source_texture_bytes = 0_u64;
+        for asset in 0..plan.images.len() {
+            source_texture_bytes = source_texture_bytes
+                .checked_add(image_bytes(
+                    decoded.image(asset).width(),
+                    decoded.image(asset).height(),
+                )?)
+                .ok_or_else(|| resource_overflow("source texture total overflow"))?;
+        }
+        for shape in 0..plan.shapes.len() {
+            let image = decoded.shape(shape).pixels.as_ref();
+            source_texture_bytes = source_texture_bytes
+                .checked_add(image_bytes(image.width(), image.height())?)
+                .ok_or_else(|| resource_overflow("source texture total overflow"))?;
+        }
+        for text in 0..plan.texts.len() {
+            let image = decoded.text(text).pixels.as_ref();
+            source_texture_bytes = source_texture_bytes
+                .checked_add(image_bytes(image.width(), image.height())?)
+                .ok_or_else(|| resource_overflow("source texture total overflow"))?;
+        }
+        // Validated media dimensions are carried into the compiled asset
+        // table. Missing dimensions are only possible in renderer-internal
+        // tests, where the canvas remains a conservative fallback.
+        for asset in plan.video_slot_assets() {
+            let video = plan
+                .videos
+                .get(asset)
+                .ok_or_else(|| resource_overflow("video slot asset index overflow"))?;
+            let width = if video.width == 0 {
+                plan.canvas.width
+            } else {
+                video.width
+            };
+            let height = if video.height == 0 {
+                plan.canvas.height
+            } else {
+                video.height
+            };
+            source_texture_bytes = source_texture_bytes
+                .checked_add(image_bytes(width, height)?)
+                .ok_or_else(|| resource_overflow("source texture total overflow"))?;
+        }
+        let source_texture_count = u64::try_from(
+            plan.images
+                .len()
+                .checked_add(plan.shapes.len())
+                .and_then(|count| count.checked_add(plan.texts.len()))
+                .and_then(|count| count.checked_add(plan.video_slot_count()))
+                .ok_or_else(|| resource_overflow("source texture count overflow"))?,
+        )
+        .map_err(|_| resource_overflow("source texture count overflow"))?;
         let total_persistent_bytes = source_texture_bytes
             .checked_add(working_texture_bytes)
             .and_then(|value| value.checked_add(copy_bytes))
             .and_then(|value| value.checked_add(parameter_buffer_bytes))
             .ok_or_else(|| resource_overflow("persistent WGPU allocation estimate overflow"))?;
         let resource_estimates = ResourceEstimates {
-            source_texture_count: plan.images.len() as u64,
+            source_texture_count,
             working_texture_count: BASE_WORKING_TEXTURE_COUNT
                 + effect_texture_count
                 + auxiliary_texture_count

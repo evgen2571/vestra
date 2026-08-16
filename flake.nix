@@ -16,7 +16,7 @@
           clippy
           pkg-config
           clang
-          ffmpeg-headless
+          ffmpeg_7-headless
           vulkan-loader
           vulkan-tools
           mesa

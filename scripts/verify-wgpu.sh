@@ -14,5 +14,9 @@ cargo run -q -p vestra-render --example wgpu_adapters --all-features
 if [[ "${VESTRA_WGPU_BACKEND}" == "gl" ]]; then
   cargo test --workspace --all-features -- --test-threads=1
 else
-  cargo test --workspace --all-features
+  # The canonical render regression is the strict hardware-validation path;
+  # it intentionally requires the GL backend. Software correctness uses the
+  # selected software backend (normally Vulkan/Lavapipe) instead.
+  cargo test --workspace --all-features -- \
+    --skip strict_wgpu_canonical_render_matches_cpu_encoded_frames
 fi

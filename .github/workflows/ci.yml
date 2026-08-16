@@ -25,9 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Check Rust formatting
-        run: nix shell --file ./shell.nix --command cargo fmt --all -- --check
+        run: nix develop .#ci --command cargo fmt --all -- --check
 
   python-format:
     name: Python Format
@@ -35,13 +34,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
+      - uses: DeterminateSystems/nix-installer-action@v19
       - name: Check maintained Python format surface
         run: >-
-          uvx --from 'ruff>=0.12,<0.13' ruff format --check
+          nix develop .#ci --command uvx --from 'ruff>=0.12,<0.13'
+          ruff format --check
           python/vestra/sources/base.py python/vestra/sources/__init__.py
 
   rust-check:
@@ -51,21 +48,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-      - name: Rust and FFmpeg diagnostics
+      - name: Verify native build environment
         run: |
           set -euo pipefail
-          nix shell --file ./shell.nix --command bash -euo pipefail -c '
+          nix develop .#ci --command bash -euo pipefail -c '
             rustc --version
             cargo --version
-            ffmpeg -version | head -1
+            command -v ffmpeg
+            ffmpeg_version=$(ffmpeg -version 2>&1)
+            printf "%s\n" "${ffmpeg_version%%$'\n'*}"
             for library in libavcodec libavformat libavutil libswscale; do
               printf "%s=" "$library"
               pkg-config --modversion "$library"
             done
           '
+      - name: Check media crate native dependencies
+        run: nix develop .#ci --command cargo check -p vestra-media --all-features
       - name: Check workspace
-        run: nix shell --file ./shell.nix --command cargo check --workspace --all-features
+        run: nix develop .#ci --command cargo check --workspace --all-features
 
   rust-clippy:
     name: Rust Clippy
@@ -74,10 +74,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Run Clippy
         run: >-
-          nix shell --file ./shell.nix --command cargo clippy --workspace --all-targets
+          nix develop .#ci --command cargo clippy --workspace --all-targets
           --all-features -- -D warnings
 
   rust-tests:
@@ -87,17 +86,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-      - name: Rust and FFmpeg diagnostics
-        run: |
-          set -euo pipefail
-          nix shell --file ./shell.nix --command bash -euo pipefail -c '
-            rustc --version
-            ffmpeg -version | head -1
-            pkg-config --modversion libavcodec libavformat libavutil libswscale
-          '
       - name: Run workspace tests
-        run: nix shell --file ./shell.nix --command cargo test --workspace --all-features
+        run: nix develop .#ci --command cargo test --workspace --all-features
 
   python-lint:
     name: Python Lint
@@ -105,12 +95,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
+      - uses: DeterminateSystems/nix-installer-action@v19
       - name: Lint maintained Python package
-        run: uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra
+        run: nix develop .#ci --command uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra
 
   python-tests:
     name: Python Tests
@@ -119,22 +106,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
-      - name: Python diagnostics
-        run: |
-          python --version
-          uv --version
-      - name: Build the native extension in the project environment
-        run: nix shell --file ./shell.nix --command uv sync --locked --extra dev
-      - name: Run Python tests and compile check
+      - name: Build the native extension and run Python tests
         run: |
           set -euo pipefail
-          .venv/bin/python -m pytest
-          .venv/bin/python -m compileall -q python/vestra
+          nix develop .#ci --command bash -euo pipefail -c '
+            which python
+            python --version
+            which uv
+            uv --version
+            uv sync --locked --extra dev
+            uv run python -c "import vestra"
+            uv run pytest
+            uv run python -m compileall -q python/vestra
+          '
 
   schema-contract:
     name: Schema Contract
@@ -143,23 +127,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
-      - name: Install the locked test environment
-        run: nix shell --file ./shell.nix --command uv sync --locked --extra test
-      - name: Validate checked-in schema and representative projects
-        run: .venv/bin/python crates/vestra-cli/tests/schema_validation.py
-      - name: Verify generated schema is current
+      - name: Validate schema and native package contract
         run: |
           set -euo pipefail
-          schema_tmp_dir=$(mktemp -d)
-          trap 'rm -rf "$schema_tmp_dir"' EXIT
-          nix shell --file ./shell.nix --command cargo run -q -p vestra-cli -- \
-            generate-schema --output "$schema_tmp_dir/project.schema.json"
-          cmp "$schema_tmp_dir/project.schema.json" schemas/project.schema.json
+          nix develop .#ci --command bash -euo pipefail -c '
+            uv sync --locked --extra test
+            uv run python -c "import vestra"
+            uv run python crates/vestra-cli/tests/schema_validation.py
+            schema_tmp_dir=$(mktemp -d)
+            trap "rm -rf \"$schema_tmp_dir\"" EXIT
+            cargo run -q -p vestra-cli -- generate-schema --output "$schema_tmp_dir/project.schema.json"
+            cmp "$schema_tmp_dir/project.schema.json" schemas/project.schema.json
+          '
 
   build-smoke:
     name: Build Smoke
@@ -168,23 +147,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
-      - name: Build the Rust workspace and CLI
-        run: |
-          nix shell --file ./shell.nix --command cargo build --workspace --all-features
-          nix shell --file ./shell.nix --command target/debug/ve --help
-      - name: Build and import the Python wheel
+      - name: Build Rust, CLI, and Python package
         run: |
           set -euo pipefail
-          rm -rf dist smoke-venv
-          nix shell --file ./shell.nix --command uv build --wheel --out-dir dist
-          uv venv smoke-venv
-          uv pip install --python smoke-venv/bin/python dist/*.whl
-          smoke-venv/bin/python -c 'import vestra; from vestra import Image, Rectangle, Ellipse, Circle, Line, Polygon, Text, Video; print(vestra.__version__)'
+          nix develop .#ci --command bash -euo pipefail -c '
+            cargo build --workspace --all-features
+            target/debug/ve --help
+            rm -rf dist smoke-venv
+            uv build --wheel --out-dir dist
+            uv venv smoke-venv
+            uv pip install --python smoke-venv/bin/python dist/*.whl
+            smoke-venv/bin/python -c "import vestra; print(vestra.__version__)"
+          '
 
   wgpu-software-correctness:
     name: WGPU Software Correctness
@@ -193,12 +167,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Verify software adapter environment
         run: |
           set -euo pipefail
-          nix shell --file ./shell.nix --command bash -euo pipefail -c '
+          nix develop .#wgpu-software --command bash -euo pipefail -c '
             echo "WGPU SOFTWARE correctness (no hardware claim)"
+            command -v vulkaninfo
             vulkaninfo --summary
             scripts/verify-wgpu.sh
           '

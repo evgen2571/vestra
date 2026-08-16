@@ -337,7 +337,7 @@ to their active interval. Preset timing follows the native preset's clip-local
 active interval. Presets and timeline helpers are deterministic convenience
 operations over the same canonical model as the low-level typed primitives.
 
-It requires the Rust toolchain and FFmpeg 8.x to build. `nix shell` provides
+It requires the Rust toolchain and FFmpeg 8.x to build. `nix develop` provides
 Rust, `pkg-config`, FFmpeg development libraries, and runtime
 tools; the `ffmpeg` and `ffprobe` executables remain runtime requirements. The
 supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs
@@ -411,17 +411,24 @@ Rust dependencies are locked in `Cargo.lock`.
 
 GitHub Actions runs independent Rust format/check/Clippy/test, Python
 format/lint/test, schema-contract, package/build-smoke, and software-WGPU
-correctness jobs. Rust and native FFmpeg 8 dependencies come from the
-repository's Nix shell; Python jobs use the supported Python version and
-declared project development extras through `uv`. The software-WGPU job uses Lavapipe for
+correctness jobs. Rust, Python 3.13, and native FFmpeg 8 dependencies come from
+the repository's pinned Nix flake; Python jobs use the declared project
+development extras through `uv`. The software-WGPU job uses Lavapipe for
 correctness only and never represents hardware performance. Real hardware
 WGPU validation remains a separate manual or dedicated-runner check through
 `scripts/verify-wgpu-hardware.sh`.
 
-Run the main local gate with `./scripts/check.sh`. To reproduce the native
-environment, use `nix shell --file ./shell.nix`; it provides the Rust toolchain,
-FFmpeg 8,
-libav development libraries, `pkg-config`, and software Vulkan tools.
+Run the main local gate with:
+
+```bash
+nix develop .#ci --command bash -euo pipefail -c \
+  'uv sync --locked --extra dev && ./scripts/check.sh'
+```
+
+Use `nix develop` for the normal developer shell, `nix develop .#ci` for the
+native CI environment, and `nix develop .#wgpu-software` for software-WGPU
+correctness checks. The shells are pinned by `flake.lock`; only the dedicated
+software shell sets Vulkan fallback variables.
 
 ## Rust SDK
 

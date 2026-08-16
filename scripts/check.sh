@@ -15,7 +15,7 @@ if [[ "${VESTRA_WGPU_BACKEND:-}" == "gl" || ( "$is_wsl" == true && -z "${VESTRA_
 else
   cargo test --workspace --all-features
 fi
-python3 crates/vestra-cli/tests/schema_validation.py
+uv run python crates/vestra-cli/tests/schema_validation.py
 schema_tmp_dir=$(mktemp -d)
 trap 'rm -rf "$schema_tmp_dir"' EXIT
 cargo run -q -p vestra-cli -- generate-schema --output "$schema_tmp_dir/project.schema.json"

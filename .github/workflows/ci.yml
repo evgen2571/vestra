@@ -24,7 +24,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ffmpeg libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install --yes ffmpeg pkg-config libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libvulkan1 mesa-vulkan-drivers
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -47,7 +47,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ffmpeg libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install --yes ffmpeg pkg-config libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libvulkan1 mesa-vulkan-drivers
 
       - uses: actions/setup-python@v5
         with:

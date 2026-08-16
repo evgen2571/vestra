@@ -4,8 +4,9 @@
 behind a Vestra API; the rest of the repository does not handle FFmpeg
 contexts or raw frames.
 
-`VideoMediaInfo` is immutable metadata for the first usable video stream in
-stream-index order. Attached-picture streams are skipped. It preserves the
+`VideoMediaInfo` is immutable metadata for the first non-attached-picture video
+stream that opens with a decoder in stream-index order. Attached-picture
+streams and video streams that cannot initialize a decoder are skipped. It preserves the
 stream index, coded dimensions, exact time base, stream and container duration,
 raw start timestamp, normalized source origin, average frame-rate metadata,
 pixel format, sample aspect ratio, and optional `rotate` metadata. Stream
@@ -38,8 +39,21 @@ it is not broadly validated across alpha-capable codecs yet.
 
 The cache is per decoder, keyed by exact raw PTS, and bounded by a byte budget.
 Each RGBA frame is charged as `width * height * 4` with checked arithmetic.
-LRU eviction makes the cache an optimization only; cache misses and hits use
-the same timestamp-selection rule.
+Entries record the next decoded presentation PTS (or the drained stream end),
+so an LRU hit is accepted only when it proves the requested covering interval.
+LRU eviction therefore remains an optimization only; sparse cache contents can
+never change timestamp selection.
+
+Building the native video decoder requires FFmpeg development libraries in
+addition to the FFmpeg/FFprobe runtime tools. On Ubuntu/Debian, install:
+
+```bash
+sudo apt-get install ffmpeg pkg-config \
+  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+```
+
+The Nix development shell supplies `pkg-config` and `ffmpeg-headless`, which
+provide the headers, libraries, and pkg-config metadata needed by `ffmpeg-next`.
 
 Frame dimensions, source pixels, RGBA byte counts, and the configured decoded
 asset limit are checked before allocation. No hardware decode, GPU upload,

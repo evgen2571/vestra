@@ -55,7 +55,7 @@ impl MediaRational {
                 "timestamp overflows i64".to_owned(),
             ));
         }
-        Ok(ticks.round() as i64)
+        Ok(ticks.floor() as i64)
     }
 
     #[must_use]
@@ -227,16 +227,14 @@ impl VideoDecoder {
             return Err(MediaError::VideoTimestampOutOfRange { seconds });
         }
         let target = self.info.seconds_to_timestamp(seconds)?.0;
-        if let (Some(max), Some(cached)) =
-            (self.max_decoded_pts, self.cache.latest_at_or_before(target))
-            && max >= target
-        {
+        let final_end = self.draining.then(|| self.final_timestamp()).flatten();
+        if let Some(cached) = self.cache.covering_at(target, final_end) {
             return Ok(cached);
         }
         if self.max_decoded_pts.is_some_and(|max| target < max) {
             self.seek(target)?;
         }
-        let mut selected = self.cache.latest_at_or_before(target);
+        let mut selected = self.cache.covering_at(target, final_end);
         while let Some(frame) = self.next_frame()? {
             let pts = frame.pts.0;
             self.max_decoded_pts = Some(self.max_decoded_pts.map_or(pts, |old| old.max(pts)));
@@ -249,6 +247,13 @@ impl VideoDecoder {
             }
         }
         selected.ok_or(MediaError::VideoTimestampOutOfRange { seconds })
+    }
+
+    fn final_timestamp(&self) -> Option<i64> {
+        self.info
+            .duration_seconds
+            .and_then(|duration| self.info.seconds_to_timestamp(duration).ok())
+            .map(|timestamp| timestamp.0)
     }
 
     fn seek(&mut self, target: i64) -> Result<(), MediaError> {
@@ -346,6 +351,9 @@ fn select_stream(input: &format::context::Input) -> Option<ffmpeg::format::strea
             && !stream
                 .disposition()
                 .contains(ffmpeg::format::stream::Disposition::ATTACHED_PIC)
+            && ffmpeg::codec::context::Context::from_parameters(stream.parameters())
+                .and_then(|context| context.decoder().video())
+                .is_ok_and(|decoder| decoder.width() > 0 && decoder.height() > 0)
     })
 }
 
@@ -452,8 +460,16 @@ struct FrameCache {
     budget: u64,
     bytes: u64,
     clock: u64,
-    entries: BTreeMap<i64, (Arc<DecodedVideoFrame>, u64, u64)>,
+    entries: BTreeMap<i64, CachedFrame>,
 }
+
+struct CachedFrame {
+    frame: Arc<DecodedVideoFrame>,
+    bytes: u64,
+    last_used: u64,
+    next_pts: Option<i64>,
+}
+
 impl FrameCache {
     fn new(budget: u64) -> Self {
         Self {
@@ -463,16 +479,22 @@ impl FrameCache {
             entries: BTreeMap::new(),
         }
     }
-    fn latest_at_or_before(&mut self, pts: i64) -> Option<Arc<DecodedVideoFrame>> {
+    fn covering_at(&mut self, pts: i64, final_end: Option<i64>) -> Option<Arc<DecodedVideoFrame>> {
         let key = self
             .entries
             .range(..=pts)
             .next_back()
             .map(|(key, _)| *key)?;
-        self.clock = self.clock.saturating_add(1);
         let entry = self.entries.get_mut(&key)?;
-        entry.2 = self.clock;
-        Some(Arc::clone(&entry.0))
+        let covered = entry
+            .next_pts
+            .map_or_else(|| final_end.is_some_and(|end| pts < end), |next| pts < next);
+        if !covered {
+            return None;
+        }
+        self.clock = self.clock.saturating_add(1);
+        entry.last_used = self.clock;
+        Some(Arc::clone(&entry.frame))
     }
     fn insert(&mut self, frame: DecodedVideoFrame) {
         let Ok(bytes) = checked_frame_bytes(frame.width, frame.height)
@@ -484,26 +506,38 @@ impl FrameCache {
             return;
         }
         self.clock = self.clock.saturating_add(1);
-        if let Some((_, old_bytes, _)) = self.entries.remove(&frame.pts.0) {
-            self.bytes = self.bytes.saturating_sub(old_bytes);
+        if let Some(old) = self.entries.remove(&frame.pts.0) {
+            self.bytes = self.bytes.saturating_sub(old.bytes);
         }
         while self.bytes.saturating_add(bytes) > self.budget {
             let Some(key) = self
                 .entries
                 .iter()
-                .min_by_key(|(_, (_, _, used))| *used)
+                .min_by_key(|(_, entry)| entry.last_used)
                 .map(|(key, _)| *key)
             else {
                 break;
             };
-            if let Some((_, old_bytes, _)) = self.entries.remove(&key) {
-                self.bytes = self.bytes.saturating_sub(old_bytes);
+            if let Some(old) = self.entries.remove(&key) {
+                self.bytes = self.bytes.saturating_sub(old.bytes);
             }
         }
         if self.bytes.saturating_add(bytes) <= self.budget {
             self.bytes += bytes;
-            self.entries
-                .insert(frame.pts.0, (Arc::new(frame), bytes, self.clock));
+            if let Some((_, previous)) = self.entries.range_mut(..frame.pts.0).next_back()
+                && previous.next_pts.is_none()
+            {
+                previous.next_pts = Some(frame.pts.0);
+            }
+            self.entries.insert(
+                frame.pts.0,
+                CachedFrame {
+                    frame: Arc::new(frame),
+                    bytes,
+                    last_used: self.clock,
+                    next_pts: None,
+                },
+            );
         }
     }
 }
@@ -521,9 +555,35 @@ mod tests {
             denominator: 30000,
         };
         assert_eq!(rate.seconds_to_ticks(1001.0 / 30000.0).expect("tick"), 1);
+        let ninety_khz = MediaRational {
+            numerator: 1,
+            denominator: 90000,
+        };
+        assert_eq!(ninety_khz.seconds_to_ticks(1.0 / 90000.0).expect("tick"), 1);
         assert!(!rate.ticks_to_seconds(30000).is_nan());
         assert!(rate.seconds_to_ticks(f64::NAN).is_err());
+        assert!(rate.seconds_to_ticks(f64::INFINITY).is_err());
+        assert!(rate.seconds_to_ticks(f64::MAX).is_err());
         assert!(rate.seconds_to_ticks(-1.0).is_err());
+    }
+
+    #[test]
+    fn seconds_to_ticks_floors_without_crossing_a_presentation_boundary() {
+        let time_base = MediaRational {
+            numerator: 1,
+            denominator: 1000,
+        };
+        for (seconds, expected) in [
+            (0.0000, 0),
+            (0.0004, 0),
+            (0.0009, 0),
+            (0.0010, 1),
+            (0.0014, 1),
+            (0.0019, 1),
+            (0.0020, 2),
+        ] {
+            assert_eq!(time_base.seconds_to_ticks(seconds).expect("tick"), expected);
+        }
     }
 
     #[test]
@@ -575,11 +635,37 @@ mod tests {
         cache.insert(image(0));
         cache.insert(image(1));
         assert_eq!(cache.entries.len(), 2);
-        let _ = cache.latest_at_or_before(0);
+        let _ = cache.covering_at(0, Some(1));
         cache.insert(image(2));
         assert!(cache.entries.contains_key(&0));
         assert!(!cache.entries.contains_key(&1));
         assert!(cache.bytes <= 8);
+    }
+
+    #[test]
+    fn sparse_cache_only_hits_when_the_entry_proves_its_covering_interval() {
+        let mut cache = FrameCache::new(8);
+        let image = |value| DecodedVideoFrame {
+            pts: VideoTimestamp(value),
+            width: 1,
+            height: 1,
+            pixels: Arc::new(RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([value as u8, 0, 0, 255]),
+            )),
+        };
+        cache.insert(image(20));
+        cache.insert(image(30));
+        let _ = cache.covering_at(20, Some(30));
+        cache.insert(image(40));
+        assert_eq!(cache.covering_at(35, None), None);
+        assert_eq!(cache.covering_at(35, Some(50)), None);
+        cache.insert(image(50));
+        assert_eq!(
+            cache.covering_at(45, None).map(|frame| frame.pts.0),
+            Some(40)
+        );
     }
 
     #[test]
@@ -610,7 +696,13 @@ mod tests {
         let red = decoder.frame_at(0.1).expect("red");
         let green = decoder.frame_at(1.1).expect("green");
         let blue = decoder.frame_at(2.1).expect("blue");
-        assert!(red.pts < green.pts && green.pts < blue.pts);
+        assert!(
+            red.pts < green.pts && green.pts < blue.pts,
+            "red={:?}, green={:?}, blue={:?}",
+            red.pts,
+            green.pts,
+            blue.pts
+        );
         assert_eq!(*green.pixels.get_pixel(8, 8), image::Rgba([1, 128, 1, 255]));
         assert_eq!(*blue.pixels.get_pixel(8, 8), image::Rgba([0, 0, 255, 255]));
     }
@@ -631,6 +723,23 @@ mod tests {
             *early_after_eof.pixels.get_pixel(8, 8),
             image::Rgba([254, 0, 0, 255])
         );
+    }
+
+    #[test]
+    fn cache_eviction_cannot_change_the_covering_frame() {
+        let (_directory, path) = fixture();
+        let options = VideoDecoderOptions {
+            cache_budget_bytes: 16 * 16 * 4 * 2,
+            ..VideoDecoderOptions::default()
+        };
+        let mut cold = VideoDecoder::open_with_options(&path, options).expect("cold decoder");
+        let expected = cold.frame_at(1.1).expect("cold frame");
+
+        let mut evicted = VideoDecoder::open_with_options(&path, options).expect("decoder");
+        let _ = evicted.frame_at(2.1).expect("later frame");
+        let actual = evicted.frame_at(1.1).expect("frame after eviction");
+        assert_eq!(actual.pts, expected.pts);
+        assert_eq!(actual.pixels.as_raw(), expected.pixels.as_raw());
     }
 
     #[test]
@@ -701,6 +810,40 @@ mod tests {
         assert_eq!(latest_pts_at_or_before(&pts, 450), Some(450));
     }
 
+    #[test]
+    fn real_vfr_fixture_selects_by_decoded_presentation_timestamp() {
+        let (_directory, path) = vfr_fixture();
+        let info = probe_video(&path).expect("metadata");
+        assert_eq!(
+            info.time_base,
+            MediaRational {
+                numerator: 1,
+                denominator: 1000
+            }
+        );
+
+        let mut decoder = VideoDecoder::open(&path).expect("decoder");
+        let red = decoder.frame_at(0.05).expect("red hold");
+        let green = decoder.frame_at(0.20).expect("green hold");
+        let blue = decoder.frame_at(0.60).expect("blue hold");
+        let yellow = decoder.frame_at(0.72).expect("yellow boundary");
+
+        assert_eq!(red.pts, VideoTimestamp(0));
+        assert_eq!(green.pts, VideoTimestamp(120));
+        assert_eq!(blue.pts, VideoTimestamp(440));
+        assert_eq!(yellow.pts, VideoTimestamp(720));
+        assert_pixel_near(red.pixels.get_pixel(8, 8), [255, 0, 0, 255]);
+        assert_pixel_near(green.pixels.get_pixel(8, 8), [0, 128, 0, 255]);
+        assert_pixel_near(blue.pixels.get_pixel(8, 8), [0, 0, 255, 255]);
+        assert_pixel_near(yellow.pixels.get_pixel(8, 8), [255, 255, 0, 255]);
+    }
+
+    fn assert_pixel_near(actual: &image::Rgba<u8>, expected: [u8; 4]) {
+        for (actual, expected) in actual.0.into_iter().zip(expected) {
+            assert!((i16::from(actual) - i16::from(expected)).abs() <= 3);
+        }
+    }
+
     fn latest_pts_at_or_before(pts: &[i64], target: i64) -> Option<i64> {
         pts.iter().copied().fold(None, |current, candidate| {
             selects_latest_pts(current, candidate, target)
@@ -738,6 +881,66 @@ mod tests {
             .arg(&path)
             .status()
             .expect("ffmpeg");
+        assert!(status.success());
+        (directory, path)
+    }
+
+    fn vfr_fixture() -> (TempDir, std::path::PathBuf) {
+        let directory = tempfile::tempdir().expect("directory");
+        for colour in ["red", "green", "blue", "yellow"] {
+            let image = directory.path().join(format!("{colour}.png"));
+            let status = Command::new("ffmpeg")
+                .args([
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    &format!("color=c={colour}:s=16x16:r=10"),
+                    "-frames:v",
+                    "1",
+                ])
+                .arg(&image)
+                .status()
+                .expect("ffmpeg image");
+            assert!(status.success());
+        }
+        let list = directory.path().join("vfr.ffconcat");
+        let red = directory.path().join("red.png");
+        let green = directory.path().join("green.png");
+        let blue = directory.path().join("blue.png");
+        let yellow = directory.path().join("yellow.png");
+        std::fs::write(
+            &list,
+            format!(
+                "ffconcat version 1.0\nfile '{}'\nduration 0.10\nfile '{}'\nduration 0.35\nfile '{}'\nduration 0.25\nfile '{}'\nduration 0.30\n",
+                red.display(),
+                green.display(),
+                blue.display(),
+                yellow.display(),
+            ),
+        )
+        .expect("concat list");
+        let path = directory.path().join("vfr.mkv");
+        let status = Command::new("ffmpeg")
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+            ])
+            .arg("-i")
+            .arg(&list)
+            .args(["-fps_mode", "vfr", "-c:v", "ffv1"])
+            .arg(&path)
+            .status()
+            .expect("ffmpeg vfr");
         assert!(status.success());
         (directory, path)
     }

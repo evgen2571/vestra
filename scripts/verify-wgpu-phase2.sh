@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${VESTRA_WGPU_BACKEND:=vulkan}"
+if [[ -z "${VESTRA_WGPU_BACKEND:-}" ]]; then
+  echo "VESTRA_WGPU_BACKEND must be set after adapter discovery (for example: gl or vulkan)" >&2
+  exit 2
+fi
 export VESTRA_WGPU_BACKEND
 export VESTRA_REQUIRE_WGPU=1
 export VESTRA_REQUIRE_HARDWARE_WGPU=1
@@ -38,7 +41,7 @@ if [[ "${VESTRA_RUN_BENCHMARKS:-0}" == 1 ]]; then
     for scenario in gaussian_large glow sharpen directional_blur zoom_blur motion_blur chromatic_aberration vignette color_adjust blend_modes combined global_post; do
       VESTRA_BENCH_BACKEND=wgpu VESTRA_BENCH_SCENARIO="$scenario" \
         VESTRA_BENCH_WIDTH="$width" VESTRA_BENCH_HEIGHT="$height" \
-        cargo bench -p vestra --bench animation_effects -- --nocapture
+        cargo bench --profile release -p vestra --bench animation_effects -- --nocapture
     done
   done
 fi

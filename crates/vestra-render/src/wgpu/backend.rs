@@ -64,9 +64,10 @@ pub struct WgpuBackend {
     pending_static_layers: PendingStaticLayers,
     temporary_texture_reuses: u64,
     video_decoders: BTreeMap<usize, Box<dyn VideoDecoderSession>>,
+    video_decoder_open_count: u64,
     video_pts: BTreeMap<usize, i64>,
-    #[cfg(test)]
     video_upload_count: u64,
+    video_upload_bytes: u64,
 }
 
 struct FrameSlotResources {
@@ -182,6 +183,7 @@ impl WgpuBackend {
         let pipeline_creation = pipeline_started.elapsed();
         let upload_started = Instant::now();
         let mut video_decoders = BTreeMap::new();
+        let mut video_decoder_open_count = 0;
         let mut initial_video_frames = BTreeMap::new();
         if plan.video_slot_count() > 0 && decoded.video_factory().is_none() {
             return Err(Diagnostic::error(
@@ -208,6 +210,7 @@ impl WgpuBackend {
                         "",
                     )
                 })?;
+                video_decoder_open_count += 1;
                 let mut decoder = factory.open(asset, per_decoder_budget).map_err(|error| {
                     Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
                 })?;
@@ -350,6 +353,7 @@ impl WgpuBackend {
             pending_static_layers: PendingStaticLayers::default(),
             temporary_texture_reuses: 0,
             video_decoders,
+            video_decoder_open_count,
             video_pts: video_slot_assets
                 .iter()
                 .enumerate()
@@ -363,8 +367,8 @@ impl WgpuBackend {
                     )
                 })
                 .collect(),
-            #[cfg(test)]
             video_upload_count: 0,
+            video_upload_bytes: 0,
         })
     }
 
@@ -449,10 +453,8 @@ impl WgpuBackend {
                     if self.video_pts.get(source_index) != Some(&pts) {
                         self.sources
                             .upload_video(&self.context.queue, *source_index, &pixels)?;
-                        #[cfg(test)]
-                        {
-                            self.video_upload_count += 1;
-                        }
+                        self.video_upload_count += 1;
+                        self.video_upload_bytes += pixels.as_raw().len() as u64;
                         self.video_pts.insert(*source_index, pts);
                     }
                 }
@@ -844,6 +846,25 @@ impl RenderBackend for WgpuBackend {
         let readback = self.readback.metrics();
         self.stats.readback_tight_rgba_allocations = readback.tight_rgba_allocations;
         self.stats.readback_repack_bytes = readback.repack_bytes;
+        self.stats.video_decoder_session_count = self.video_decoders.len();
+        self.stats.video_decoder_open_count = self.video_decoder_open_count;
+        self.stats.video_frame_requests = 0;
+        self.stats.video_actual_decodes = 0;
+        self.stats.video_seek_count = 0;
+        self.stats.video_cache_hits = 0;
+        self.stats.video_cache_misses = 0;
+        self.stats.video_decode_time_us = 0;
+        for decoder in self.video_decoders.values() {
+            let metrics = decoder.metrics();
+            self.stats.video_frame_requests += metrics.frame_requests;
+            self.stats.video_actual_decodes += metrics.actual_decodes;
+            self.stats.video_seek_count += metrics.seeks;
+            self.stats.video_cache_hits += metrics.cache_hits;
+            self.stats.video_cache_misses += metrics.cache_misses;
+            self.stats.video_decode_time_us += metrics.decode_time_us;
+        }
+        self.stats.video_upload_count = self.video_upload_count;
+        self.stats.video_upload_bytes = self.video_upload_bytes;
         self.stats.clone()
     }
 

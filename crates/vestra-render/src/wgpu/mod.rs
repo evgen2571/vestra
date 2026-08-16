@@ -42,6 +42,32 @@ mod shader_tests;
 pub use backend::WgpuBackend;
 pub use parity::{FrameDifference, PixelMismatch, compare_rgba};
 
+/// Enumerate every adapter exposed by the requested WGPU instance backends.
+/// This is intentionally separate from `probe`, which selects one adapter for
+/// rendering and is therefore insufficient for validation discovery.
+pub fn discover() -> Vec<crate::AdapterMetadata> {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        ..wgpu::InstanceDescriptor::default()
+    });
+    instance
+        .enumerate_adapters(wgpu::Backends::all())
+        .into_iter()
+        .map(|adapter| {
+            let info = adapter.get_info();
+            crate::AdapterMetadata {
+                adapter_name: info.name,
+                device_type: format!("{:?}", info.device_type).to_lowercase(),
+                graphics_backend: format!("{:?}", info.backend).to_lowercase(),
+                driver_name: info.driver,
+                driver_info: info.driver_info,
+                vendor_id: info.vendor,
+                device_id: info.device,
+            }
+        })
+        .collect()
+}
+
 /// Checks the same adapter-selection policy used by the WGPU renderer without
 /// retaining renderer resources. This is intentionally a capability check,
 /// not render preparation.

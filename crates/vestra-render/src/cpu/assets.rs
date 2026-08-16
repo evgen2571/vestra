@@ -231,6 +231,23 @@ impl PreparedAssets {
         self.stats.cache_peak_bytes = cache.peak_bytes;
         self.stats.cache_evictions = cache.evictions;
         self.stats.cache_oversized_entries_skipped = cache.oversized_entries_skipped;
+        self.stats.video_decoder_session_count = self.video_decoders.len();
+        self.stats.video_decoder_open_count = self.video_decoders.len() as u64;
+        self.stats.video_frame_requests = 0;
+        self.stats.video_actual_decodes = 0;
+        self.stats.video_seek_count = 0;
+        self.stats.video_cache_hits = 0;
+        self.stats.video_cache_misses = 0;
+        self.stats.video_decode_time_us = 0;
+        for decoder in self.video_decoders.values() {
+            let metrics = decoder.metrics();
+            self.stats.video_frame_requests += metrics.frame_requests;
+            self.stats.video_actual_decodes += metrics.actual_decodes;
+            self.stats.video_seek_count += metrics.seeks;
+            self.stats.video_cache_hits += metrics.cache_hits;
+            self.stats.video_cache_misses += metrics.cache_misses;
+            self.stats.video_decode_time_us += metrics.decode_time_us;
+        }
     }
 
     fn with_shared_decode_stats(mut self) -> Self {

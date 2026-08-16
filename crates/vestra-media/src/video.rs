@@ -9,6 +9,7 @@ use std::{
     collections::BTreeMap,
     path::Path,
     sync::{Arc, OnceLock},
+    time::Instant,
 };
 
 use ffmpeg::{
@@ -24,6 +25,16 @@ use vestra_core::validation::ResourceLimits;
 use crate::MediaError;
 
 static FFMPEG_INIT: OnceLock<Result<(), String>> = OnceLock::new();
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VideoDecoderMetrics {
+    pub frame_requests: u64,
+    pub actual_decodes: u64,
+    pub seeks: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub decode_time_us: u64,
+}
 
 /// An exact rational used for media time-base and rate metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -163,6 +174,7 @@ pub struct VideoDecoder {
     pending: Option<DecodedVideoFrame>,
     max_decoded_pts: Option<i64>,
     draining: bool,
+    metrics: VideoDecoderMetrics,
 }
 
 impl VideoDecoder {
@@ -239,6 +251,7 @@ impl VideoDecoder {
             pending: None,
             max_decoded_pts: None,
             draining: false,
+            metrics: VideoDecoderMetrics::default(),
         })
     }
 
@@ -249,6 +262,7 @@ impl VideoDecoder {
 
     /// Select the latest presentation frame whose normalized PTS is `<= seconds`.
     pub fn frame_at(&mut self, seconds: f64) -> Result<Arc<DecodedVideoFrame>, MediaError> {
+        self.metrics.frame_requests += 1;
         if !seconds.is_finite() || seconds < 0.0 {
             return Err(MediaError::InvalidVideoTimestamp(seconds.to_string()));
         }
@@ -262,13 +276,20 @@ impl VideoDecoder {
         let target = self.info.seconds_to_timestamp(seconds)?.0;
         let final_end = self.draining.then(|| self.final_timestamp()).flatten();
         if let Some(cached) = self.cache.covering_at(target, final_end) {
+            self.metrics.cache_hits += 1;
             return Ok(cached);
         }
+        self.metrics.cache_misses += 1;
         if self.max_decoded_pts.is_some_and(|max| target < max) {
             self.seek(target)?;
         }
         let mut selected = self.cache.covering_at(target, final_end);
-        while let Some(frame) = self.next_frame()? {
+        while let Some(frame) = {
+            let started = Instant::now();
+            let frame = self.next_frame()?;
+            self.metrics.decode_time_us += started.elapsed().as_micros() as u64;
+            frame
+        } {
             let pts = frame.pts.0;
             self.max_decoded_pts = Some(self.max_decoded_pts.map_or(pts, |old| old.max(pts)));
             self.cache.insert(frame.clone());
@@ -301,6 +322,7 @@ impl VideoDecoder {
             .seek(micros as i64, ..micros as i64)
             .map_err(|error| MediaError::VideoSeek(error.to_string()))?;
         self.decoder.flush();
+        self.metrics.seeks += 1;
         self.pending = None;
         self.max_decoded_pts = None;
         self.draining = false;
@@ -335,6 +357,7 @@ impl VideoDecoder {
     }
 
     fn convert_frame(&mut self, decoded: &Video) -> Result<DecodedVideoFrame, MediaError> {
+        self.metrics.actual_decodes += 1;
         let pts = decoded
             .timestamp()
             .or_else(|| decoded.pts())
@@ -368,6 +391,11 @@ impl VideoDecoder {
             height,
             pixels: Arc::new(image),
         })
+    }
+
+    #[must_use]
+    pub fn metrics(&self) -> VideoDecoderMetrics {
+        self.metrics
     }
 }
 
@@ -756,6 +784,24 @@ mod tests {
             *early_after_eof.pixels.get_pixel(8, 8),
             image::Rgba([254, 0, 0, 255])
         );
+        let metrics = decoder.metrics();
+        eprintln!(
+            "video_random_access_metrics frame_requests={} actual_decodes={} seeks={} cache_hits={} cache_misses={} decode_time_us={}",
+            metrics.frame_requests,
+            metrics.actual_decodes,
+            metrics.seeks,
+            metrics.cache_hits,
+            metrics.cache_misses,
+            metrics.decode_time_us,
+        );
+        assert_eq!(metrics.frame_requests, 6);
+        assert!(metrics.actual_decodes > 0);
+        // The fixture's cache budget retains every selected frame, so this
+        // sequence is served without a cursor seek. The metric is still
+        // important: a constrained cache is covered by the eviction tests.
+        assert_eq!(metrics.seeks, 0);
+        assert!(metrics.cache_hits > 0);
+        assert!(metrics.cache_misses > 0);
     }
 
     #[test]

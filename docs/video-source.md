@@ -27,6 +27,6 @@ playback, time remapping, interpolation, and automatic Video audio remain
 unsupported.
 
 Video uses the Image sizing and crop model and the ordinary layer transform,
-opacity, blend, effect, group, and transition paths. v1D2 presents the coded
+opacity, blend, effect, group, and transition paths. It presents the coded
 orientation RGBA raster: rotation metadata is preserved but not applied, and
 sample-aspect-ratio metadata remains metadata-only.

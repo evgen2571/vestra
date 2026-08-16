@@ -147,7 +147,7 @@ all active slots. Cancellation-aware polling uses bounded nonblocking progress
 so a device wait cannot delay cleanup indefinitely. There is no zero-copy
 encoder path, hardware video encoding, or windowed preview.
 
-## Phase 3 staged lifecycle
+## Staged WGPU lifecycle
 
 The engine uses one lifecycle for CPU and WGPU video and single-frame operations:
 

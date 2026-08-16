@@ -96,7 +96,7 @@ pub struct VideoMediaInfo {
     pub nominal_frame_rate: Option<MediaRational>,
     pub pixel_format: String,
     pub sample_aspect_ratio: MediaRational,
-    /// Rotation is preserved as metadata; v1D1 returns coded-orientation RGBA.
+    /// Rotation is preserved as metadata; decoding returns coded-orientation RGBA.
     pub rotation_degrees: Option<i32>,
 }
 

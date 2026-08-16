@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cargo fmt --check
+cargo fmt --all -- --check
+cargo check --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 # Mesa's WSL GL implementation permits one active EGL context at a time. Keep
 # ordinary platform runs parallel, and serialize only the affected GL path.

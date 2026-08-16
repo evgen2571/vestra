@@ -38,6 +38,11 @@ crops as virtual integer materializations using the CPU's floor/ceil crop
 bounds. This makes crop sizing and transparent crop-edge sampling match the
 CPU without creating a texture per frame.
 
+Video uses one compact persistent raster slot per compiled Video layer. Decoder
+sessions and initial frames are created only for assets referenced by those
+slots; the initial selected PTS is retained so the first render does not upload
+the same frame again. Later uploads occur only when a layer selects a new PTS.
+
 Both renderers use a top-left origin, positive Y downward, destination pixel
 centres, inverse affine transforms, manual bilinear sampling, and transparent
 out-of-bounds samples. The compute compositor keeps straight RGBA values and

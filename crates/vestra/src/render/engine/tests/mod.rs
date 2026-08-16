@@ -27,6 +27,8 @@ use crate::{
     render::{PreparationStats, PreparationTimings, StagedMetrics},
 };
 
+mod vfr;
+
 struct FailingBackend {
     failure_code: &'static str,
     failure_message: &'static str,

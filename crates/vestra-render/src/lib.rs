@@ -146,7 +146,6 @@ pub mod decoded;
 pub mod effects;
 pub mod geometry;
 pub mod metrics;
-#[cfg(any(feature = "cpu", feature = "wgpu"))]
 #[path = "cpu/shapes.rs"]
 pub(crate) mod shape_raster;
 pub(crate) mod text;

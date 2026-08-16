@@ -65,6 +65,8 @@ pub struct WgpuBackend {
     temporary_texture_reuses: u64,
     video_decoders: BTreeMap<usize, Box<dyn VideoDecoderSession>>,
     video_pts: BTreeMap<usize, i64>,
+    #[cfg(test)]
+    video_upload_count: u64,
 }
 
 struct FrameSlotResources {
@@ -180,7 +182,7 @@ impl WgpuBackend {
         let pipeline_creation = pipeline_started.elapsed();
         let upload_started = Instant::now();
         let mut video_decoders = BTreeMap::new();
-        let mut initial_video_frames = Vec::new();
+        let mut initial_video_frames = BTreeMap::new();
         if plan.video_slot_count() > 0 && decoded.video_factory().is_none() {
             return Err(Diagnostic::error(
                 "WGPU-VIDEO-FACTORY",
@@ -189,27 +191,43 @@ impl WgpuBackend {
                 "",
             ));
         }
+        let video_slot_assets = plan.video_slot_assets();
+        let used_video_assets = used_video_asset_indices(&video_slot_assets);
         if let Some(factory) = decoded.video_factory() {
             let per_decoder_budget = plan
                 .limits
                 .maximum_cache_bytes
-                .checked_div(plan.videos.len().max(1) as u64)
+                .checked_div(used_video_assets.len().max(1) as u64)
                 .unwrap_or(0);
-            for (asset_index, asset) in plan.videos.iter().enumerate() {
+            for asset_index in used_video_assets {
+                let asset = plan.videos.get(asset_index).ok_or_else(|| {
+                    Diagnostic::error(
+                        "WGPU-VIDEO-ASSET",
+                        crate::Category::Media,
+                        "compiled video slot references a missing video asset",
+                        "",
+                    )
+                })?;
                 let mut decoder = factory.open(asset, per_decoder_budget).map_err(|error| {
                     Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
                 })?;
                 let frame = decoder.frame_at(0.0).map_err(|error| {
                     Diagnostic::error("WGPU-VIDEO-DECODE", crate::Category::Media, error, "")
                 })?;
-                initial_video_frames.push(frame.pixels);
+                initial_video_frames.insert(asset_index, (frame.pts, frame.pixels));
                 video_decoders.insert(asset_index, decoder);
             }
         }
-        let dynamic_frames = plan
-            .video_slot_assets()
-            .into_iter()
-            .map(|asset| Arc::clone(&initial_video_frames[asset]))
+        let dynamic_frames = video_slot_assets
+            .iter()
+            .map(|asset| {
+                Arc::clone(
+                    &initial_video_frames
+                        .get(asset)
+                        .expect("compiled video slot asset was prepared")
+                        .1,
+                )
+            })
             .collect::<Vec<_>>();
         let sources = SourceResources::create(
             &context.device,
@@ -332,7 +350,21 @@ impl WgpuBackend {
             pending_static_layers: PendingStaticLayers::default(),
             temporary_texture_reuses: 0,
             video_decoders,
-            video_pts: BTreeMap::new(),
+            video_pts: video_slot_assets
+                .iter()
+                .enumerate()
+                .map(|(slot, asset)| {
+                    (
+                        plan.images.len() + plan.shapes.len() + plan.texts.len() + slot,
+                        initial_video_frames
+                            .get(asset)
+                            .expect("compiled video slot asset was prepared")
+                            .0,
+                    )
+                })
+                .collect(),
+            #[cfg(test)]
+            video_upload_count: 0,
         })
     }
 
@@ -417,6 +449,10 @@ impl WgpuBackend {
                     if self.video_pts.get(source_index) != Some(&pts) {
                         self.sources
                             .upload_video(&self.context.queue, *source_index, &pixels)?;
+                        #[cfg(test)]
+                        {
+                            self.video_upload_count += 1;
+                        }
                         self.video_pts.insert(*source_index, pts);
                     }
                 }
@@ -889,6 +925,10 @@ impl WgpuBackend {
             self.pending_static_layers.reserved_bytes,
         )
     }
+
+    pub(super) fn video_upload_count(&self) -> u64 {
+        self.video_upload_count
+    }
 }
 
 const DEFAULT_PIPELINE_DEPTH: usize = 3;
@@ -1181,10 +1221,19 @@ fn contains_group(layer: &crate::plan::EvaluatedLayer) -> bool {
     matches!(layer.source, crate::plan::EvaluatedSource::Group { .. })
 }
 
+fn used_video_asset_indices(slot_assets: &[usize]) -> BTreeSet<usize> {
+    slot_assets.iter().copied().collect()
+}
+
 #[cfg(test)]
 mod configuration_tests {
     use super::*;
     use crate::render::effects::{CompositeMode, EffectOperation, EffectPass};
+
+    #[test]
+    fn video_decoder_selection_deduplicates_only_compiled_slot_assets() {
+        assert_eq!(used_video_asset_indices(&[2, 2, 0]), BTreeSet::from([0, 2]));
+    }
 
     #[test]
     fn effect_parameter_encodings_use_semantic_typed_layouts() {

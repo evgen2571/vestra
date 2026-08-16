@@ -7,11 +7,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, cast
 
-from .authoring.assets import AudioAsset, ImageAsset, FontAsset
+from .authoring.assets import AudioAsset, ImageAsset, FontAsset, VideoAsset
 from .authoring.builder import ProjectBuilder
-from .authoring.clips import GroupClip, ImageClip, TransitionCapableClip, VisualClip
+from .authoring.clips import GroupClip, ImageClip, VideoClip, TransitionCapableClip, VisualClip
 from .authoring.values import BlendMode, Color as AuthoringColor
-from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D, Text
+from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D, Text, Video
 from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
@@ -120,6 +120,7 @@ class LoweringContext:
     def __init__(self, builder: ProjectBuilder) -> None:
         self.builder = builder
         self._asset_ids: dict[tuple[str, str], ImageAsset] = {}
+        self._video_asset_ids: dict[str, VideoAsset] = {}
         self._font_asset_ids: dict[str, FontAsset] = {}
         self._audio_asset_ids: dict[str, AudioAsset] = {}
         self._local_ids: dict[tuple[tuple[str, ...], str], str] = {}
@@ -174,7 +175,7 @@ class LoweringContext:
 
         if isinstance(layer, CompositionLayer):
             children = self.lower_composition(layer.child, scope=(*scope, layer.id))
-            clip = self.builder.add_group_clip(
+            group_clip = self.builder.add_group_clip(
                 clips=children,
                 start=layer.start,
                 duration=layer.duration,
@@ -183,11 +184,11 @@ class LoweringContext:
                 opacity=layer.opacity.value,
                 id=native_id,
             )
-            self._lower_transitions(layer.child.transitions, clip)
-            _lower_presentation(layer, clip, include_transform=True)
-            _lower_visual_effects(layer.effects, clip.effects)
-            self.layer_clips[layer] = clip
-            return clip
+            self._lower_transitions(layer.child.transitions, group_clip)
+            _lower_presentation(layer, group_clip, include_transform=True)
+            _lower_visual_effects(layer.effects, group_clip.effects)
+            self.layer_clips[layer] = group_clip
+            return group_clip
 
         registered = _REGISTRY.get(type(layer.source))
         if registered is None:
@@ -202,7 +203,7 @@ class LoweringContext:
             layer in self._transition_endpoints
             and not capabilities.supports_direct_transition_endpoint
         )
-        clip = handler(
+        clip: VisualClip = handler(
             self, layer, native_id, Placement.from_layer(layer, neutral=needs_adapter)
         )
         if needs_adapter:
@@ -267,6 +268,14 @@ class LoweringContext:
         if asset is None:
             asset = self.builder.add_image_asset(source.path)
             self._asset_ids[source_key] = asset
+        return asset
+
+    def video_asset(self, source: Video) -> VideoAsset:
+        source_key = os.path.normpath(source.path)
+        asset = self._video_asset_ids.get(source_key)
+        if asset is None:
+            asset = self.builder.add_video_asset(source.path)
+            self._video_asset_ids[source_key] = asset
         return asset
 
     def font_asset(self, source: Text) -> FontAsset:
@@ -365,6 +374,27 @@ def _lower_image(
         opacity=placement.opacity,
         id=native_id,
     )
+
+
+def _lower_video(
+    context: LoweringContext, layer: Layer, native_id: str, placement: Placement
+) -> VisualClip:
+    source = cast(Video, layer.source)
+    crop = source.crop.value if source.crop.active else None
+    clip = context.builder.add_video_clip(
+        source=context.video_asset(source),
+        start=placement.start,
+        duration=placement.duration,
+        source_start=layer.source_start,
+        playback_rate=layer.playback_rate,
+        layer=placement.layer,
+        visible=placement.visible,
+        sizing=source.sizing,
+        crop=crop,
+        opacity=placement.opacity,
+        id=native_id,
+    )
+    return clip
 
 
 def _lower_color(
@@ -504,6 +534,9 @@ def _lower_presentation(
         # Image crop is source-owned but lowered into its native clip track.
         if layer.source.crop.active:
             _lower_crop_property(layer.source.crop, clip.crop)
+    if isinstance(layer.source, Video) and isinstance(clip, VideoClip):
+        if layer.source.crop.active:
+            _lower_crop_property(layer.source.crop, clip.crop)
     if include_transform:
         _lower_transform(layer.transform, clip)
 
@@ -517,6 +550,17 @@ register_source(
         supports_sizing=True,
         supports_crop=True,
         supports_cinematic_preset=True,
+    ),
+)
+register_source(
+    Video,
+    _lower_video,
+    SourceCapabilities(
+        has_intrinsic_duration=True,
+        supports_direct_transform=True,
+        supports_direct_transition_endpoint=True,
+        supports_sizing=True,
+        supports_crop=True,
     ),
 )
 register_source(

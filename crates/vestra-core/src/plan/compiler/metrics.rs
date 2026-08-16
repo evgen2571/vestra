@@ -58,6 +58,7 @@ fn record_layers(compilation: &mut CompilationStats, layers: &[CompiledLayer]) {
                 compilation.image_source_count += 1;
                 compilation.keyframe_count += track_keyframe_count(crop);
             }
+            CompiledVisualSource::Video { .. } => compilation.image_source_count += 1,
             CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
             CompiledVisualSource::Shape { .. } => {}
             CompiledVisualSource::Text { .. } => {}

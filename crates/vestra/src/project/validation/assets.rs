@@ -7,12 +7,14 @@ use crate::{
     Category, Diagnostic,
     project::{Asset, AssetType},
 };
-use vestra_media::probe_audio_duration;
+use vestra_media::{VideoMediaInfo, probe_audio_duration, probe_video};
 
 pub(crate) struct ValidatedAssets {
     pub paths: BTreeMap<String, PathBuf>,
     pub kinds: BTreeMap<String, AssetType>,
     pub audio_durations: BTreeMap<String, f64>,
+    pub video_durations: BTreeMap<String, f64>,
+    pub video_metadata: BTreeMap<String, VideoMediaInfo>,
 }
 
 pub(crate) fn validate(
@@ -23,6 +25,8 @@ pub(crate) fn validate(
     let mut paths = BTreeMap::new();
     let mut kinds = BTreeMap::new();
     let mut audio_durations = BTreeMap::new();
+    let mut video_durations = BTreeMap::new();
+    let mut video_metadata = BTreeMap::new();
     for (index, asset) in assets.iter().enumerate() {
         let pointer = format!("/assets/{index}");
         match super::super::paths::resolve_regular_file(root, &asset.source) {
@@ -50,6 +54,32 @@ pub(crate) fn validate(
                                 "MVP-ASSET-AUDIO",
                                 Category::Media,
                                 format!("invalid audio asset '{}': {error}", asset.id),
+                                format!("{pointer}/source"),
+                            )
+                            .with_related_id(&asset.id),
+                        ),
+                    },
+                    AssetType::Video => match probe_video(&resolved) {
+                        Ok(info) => match info.duration_seconds {
+                            Some(duration) if duration.is_finite() && duration > 0.0 => {
+                                video_durations.insert(asset.id.clone(), duration);
+                                video_metadata.insert(asset.id.clone(), info);
+                            }
+                            _ => errors.push(
+                                Diagnostic::error(
+                                    "MVP-ASSET-VIDEO-DURATION",
+                                    Category::Media,
+                                    format!("video asset '{}' has no finite duration", asset.id),
+                                    format!("{pointer}/source"),
+                                )
+                                .with_related_id(&asset.id),
+                            ),
+                        },
+                        Err(error) => errors.push(
+                            Diagnostic::error(
+                                "MVP-ASSET-VIDEO",
+                                Category::Media,
+                                format!("invalid video asset '{}': {error}", asset.id),
                                 format!("{pointer}/source"),
                             )
                             .with_related_id(&asset.id),
@@ -87,5 +117,7 @@ pub(crate) fn validate(
         paths,
         kinds,
         audio_durations,
+        video_durations,
+        video_metadata,
     }
 }

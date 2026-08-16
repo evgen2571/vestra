@@ -14,7 +14,7 @@ use crate::{
     },
     plan::{CompiledEffect, TemporalDependency},
     project::{
-        ActiveInterval, AudioAnalysisTap as ProjectAudioAnalysisTap,
+        ActiveInterval, Asset, AssetType, AudioAnalysisTap as ProjectAudioAnalysisTap,
         AudioScalarFeature as ProjectAudioScalarFeature, Effect, Group, Interpolation,
         InterpolationName, Keyframe, NormalizedKeyframe, NormalizedTrack, ParticleBurst,
         ParticleEmission, ParticleSystem, Preset, Project, ScalarModifier,
@@ -91,6 +91,53 @@ fn canonical_project() -> Project {
         "../../../../examples/projects/animation-effects.json"
     ))
     .expect("fixture project")
+}
+
+#[test]
+fn video_sources_compile_and_evaluate_source_time() {
+    let mut project = canonical_project();
+    project.assets.push(Asset {
+        id: "video".to_owned(),
+        kind: AssetType::Video,
+        source: "video.mp4".to_owned(),
+    });
+    let clip = &mut project.visual.clips[0];
+    clip.source = VisualSource::Video {
+        asset: "video".to_owned(),
+    };
+    clip.source_start = 0.25;
+    clip.playback_rate = 2.0;
+    clip.duration = 1.0;
+
+    let project = Box::leak(Box::new(project));
+    let assets = Box::leak(Box::new(BTreeMap::from([
+        ("red".to_owned(), PathBuf::from("/resolved/red.png")),
+        ("blue".to_owned(), PathBuf::from("/resolved/blue.png")),
+        ("video".to_owned(), PathBuf::from("/resolved/video.mp4")),
+    ])));
+    let durations = Box::leak(Box::new(BTreeMap::new()));
+    let video_durations = BTreeMap::from([(String::from("video"), 2.0)]);
+    let plan = compile(
+        PlanCompileInput::new(
+            project,
+            ResourceLimits::default(),
+            std::path::Path::new("/projects"),
+            assets,
+            durations,
+            6.0,
+            (24, 1),
+            144,
+            &[],
+        )
+        .with_video_durations(&video_durations),
+        CompileOptions::default(),
+    )
+    .expect("video plan");
+    let frame = evaluate(&plan, &[super::ScheduledItem(0)], 500_000_000).expect("frame");
+    let super::EvaluatedSource::Video { source_time, .. } = frame.layers[0].source else {
+        panic!("expected evaluated video source");
+    };
+    assert!((source_time - 1.25).abs() < f64::EPSILON);
 }
 
 #[test]

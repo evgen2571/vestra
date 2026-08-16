@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ._internal import _IdAllocator, _Owner, _number
-from .assets import ImageAsset
+from .assets import ImageAsset, VideoAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ModulatableScalarTrack, Transform
 from .presets import PresetCollection
@@ -223,6 +223,54 @@ class ImageClip(TransitionCapableClip):
 
     def __repr__(self) -> str:
         return f"ImageClip(id={self.id!r}, source={self.source.id!r})"
+
+
+class VideoClip(ImageClip):
+    """A dynamic raster clip with layer-local source-time mapping."""
+
+    __slots__ = ("_source_start", "_playback_rate")
+    _source_start: float
+    _playback_rate: float
+
+    @classmethod
+    def _create(cls, owner: _Owner, identifier: str, source: VideoAsset, *, start: int | float,  # type: ignore[override]
+                duration: int | float, layer: int, visible: bool, sizing: Sizing | None,
+                crop: Crop | None, opacity: int | float, source_start: int | float,
+                playback_rate: int | float) -> "VideoClip":
+        instance = object.__new__(cls)
+        instance._initialize_image(owner, identifier, cast(ImageAsset, source), start=start, duration=duration, layer=layer,
+                                   visible=visible, sizing=sizing, crop=crop, opacity=opacity)
+        instance._source_start = _timing(source_start, "source_start")
+        instance._playback_rate = _timing(playback_rate, "playback_rate", positive=True)
+        return instance
+
+    @property
+    def source(self) -> VideoAsset:  # type: ignore[override]
+        return cast(VideoAsset, self._source)
+
+    @property
+    def source_start(self) -> float:
+        return self._source_start
+
+    @property
+    def playback_rate(self) -> float:
+        return self._playback_rate
+
+    def to_canonical(self) -> dict[str, object]:
+        data = self._canonical_common()
+        data["source"] = {"type": "video", "asset": self.source.id}
+        data["source_start"] = self.source_start
+        if self.playback_rate != 1.0:
+            data["playback_rate"] = self.playback_rate
+        data["transform"] = self.transform.to_canonical()
+        if self.sizing is not None:
+            data["sizing"] = self.sizing.to_canonical()
+        if self.has_crop:
+            data["crop"] = self.crop.to_canonical()
+        return data
+
+    def __repr__(self) -> str:
+        return f"VideoClip(id={self.id!r}, source={self.source.id!r})"
 
 
 class SolidColorClip(_Clip):
@@ -635,4 +683,4 @@ class GroupClip(TransitionCapableClip):
         return f"GroupClip(id={self.id!r}, clips={len(self.clips)})"
 
 
-VisualClip = ImageClip | SolidColorClip | ShapeClip | TextClip | ParticleSystemClip | Spectrum2DClip | GroupClip
+VisualClip = ImageClip | VideoClip | SolidColorClip | ShapeClip | TextClip | ParticleSystemClip | Spectrum2DClip | GroupClip

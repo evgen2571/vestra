@@ -67,6 +67,13 @@ pub enum EvaluatedSource {
         sizing: CompiledSizing,
         cacheable_crop: bool,
     },
+    Video {
+        asset_index: usize,
+        source_index: usize,
+        source_time: f64,
+        crop: Crop,
+        sizing: CompiledSizing,
+    },
     SolidColor {
         colour: [u8; 4],
     },
@@ -118,6 +125,11 @@ impl EvaluatedSource {
                 crop: *crop,
                 sizing: sizing.clone(),
                 cacheable_crop: *cacheable_crop,
+            }),
+            Self::Video { crop, sizing, .. } => Some(RasterPresentation {
+                crop: *crop,
+                sizing: sizing.clone(),
+                cacheable_crop: false,
             }),
             Self::Shape { sizing, .. } => Some(RasterPresentation {
                 crop: Crop {
@@ -183,6 +195,8 @@ pub fn evaluate_with_context(
         plan.canvas.width,
         plan.canvas.height,
         true,
+        plan.images.len() + plan.shapes.len() + plan.texts.len(),
+        plan.video_slot_stride(),
         context,
     )?;
     Ok(EvaluatedFrame {
@@ -221,6 +235,8 @@ fn evaluate_layers(
     width: u32,
     height: u32,
     root_composition: bool,
+    raster_source_base: usize,
+    video_slot_stride: usize,
     context: &EvaluationContext<'_>,
 ) -> Result<(Vec<EvaluatedLayer>, u64), EvaluationError> {
     let mut layers = Vec::with_capacity(active.len());
@@ -268,6 +284,21 @@ fn evaluate_layers(
             CompiledVisualSource::SolidColor { colour } => {
                 EvaluatedSource::SolidColor { colour: *colour }
             }
+            CompiledVisualSource::Video {
+                asset_index,
+                source_start,
+                playback_rate,
+                crop,
+                sizing,
+            } => EvaluatedSource::Video {
+                asset_index: *asset_index,
+                source_index: raster_source_base
+                    + asset_index.saturating_mul(video_slot_stride)
+                    + layer.compiled_identity,
+                source_time: *source_start + (relative as f64 / 1_000_000_000.0) * *playback_rate,
+                crop: *crop,
+                sizing: sizing.clone(),
+            },
             CompiledVisualSource::Shape { shape_index } => EvaluatedSource::Shape {
                 shape_index: *shape_index,
                 sizing: CompiledSizing::Original,
@@ -326,6 +357,8 @@ fn evaluate_layers(
                     width,
                     height,
                     false,
+                    raster_source_base,
+                    video_slot_stride,
                     context,
                 )?;
                 evaluated_track_count += nested_count;

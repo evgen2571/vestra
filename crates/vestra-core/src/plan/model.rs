@@ -27,6 +27,7 @@ pub struct RenderPlan {
     pub audio_output_enabled: bool,
     pub limits: crate::validation::ResourceLimits,
     pub images: Vec<ImageAsset>,
+    pub videos: Vec<VideoAsset>,
     pub shapes: Vec<crate::project::ShapeSource>,
     pub texts: Vec<crate::project::TextSource>,
     pub fonts: Vec<FontAsset>,
@@ -40,6 +41,23 @@ pub struct RenderPlan {
     pub visual_dependency: TemporalDependency,
     pub compilation: CompilationStats,
     pub warnings: Vec<crate::Diagnostic>,
+}
+
+impl RenderPlan {
+    #[must_use]
+    pub fn video_slot_stride(&self) -> usize {
+        fn visit(layers: &[CompiledLayer], max_identity: &mut usize) {
+            for layer in layers {
+                *max_identity = (*max_identity).max(layer.compiled_identity);
+                if let CompiledVisualSource::Group(composition) = &layer.source {
+                    visit(&composition.layers, max_identity);
+                }
+            }
+        }
+        let mut max_identity = 0;
+        visit(&self.layers, &mut max_identity);
+        max_identity.saturating_add(1)
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -92,6 +110,13 @@ pub struct Canvas {
 pub struct ImageAsset {
     pub id: String,
     pub path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+pub struct VideoAsset {
+    pub id: String,
+    pub path: PathBuf,
+    pub duration_seconds: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -183,6 +208,13 @@ pub enum CompiledVisualSource {
         crop: Track<Crop>,
         sizing: CompiledSizing,
         cacheable_crop: bool,
+    },
+    Video {
+        asset_index: usize,
+        source_start: f64,
+        playback_rate: f64,
+        crop: Crop,
+        sizing: CompiledSizing,
     },
     SolidColor {
         colour: [u8; 4],

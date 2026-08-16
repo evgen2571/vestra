@@ -174,6 +174,25 @@ impl VideoDecoder {
         path: &Path,
         options: VideoDecoderOptions,
     ) -> Result<Self, MediaError> {
+        Self::open_internal(path, options, None)
+    }
+
+    /// Open a decoder using metadata already obtained during application
+    /// preflight. The stream is still opened and configured here, but the
+    /// metadata probe is not repeated.
+    pub fn open_with_info(
+        path: &Path,
+        options: VideoDecoderOptions,
+        info: VideoMediaInfo,
+    ) -> Result<Self, MediaError> {
+        Self::open_internal(path, options, Some(info))
+    }
+
+    fn open_internal(
+        path: &Path,
+        options: VideoDecoderOptions,
+        prepared_info: Option<VideoMediaInfo>,
+    ) -> Result<Self, MediaError> {
         init_ffmpeg()?;
         let input = format::input(path).map_err(|error| open_error(path, error))?;
         let stream = select_stream(&input).ok_or(MediaError::NoVideoStream)?;
@@ -193,7 +212,21 @@ impl VideoDecoder {
             Flags::BILINEAR,
         )
         .map_err(|error| MediaError::VideoPixelConversion(error.to_string()))?;
-        let info = metadata_from_stream(&input, &stream, Some((&decoder, width, height)))?;
+        let info = match prepared_info {
+            Some(info)
+                if info.stream_index == stream.index()
+                    && info.coded_width == width
+                    && info.coded_height == height =>
+            {
+                info
+            }
+            Some(_) => {
+                return Err(MediaError::InvalidVideoMetadata(
+                    "prepared video metadata does not match the opened stream".to_owned(),
+                ));
+            }
+            None => metadata_from_stream(&input, &stream, Some((&decoder, width, height)))?,
+        };
         // Keep the decoder's packet time base aligned with the selected stream.
         decoder.set_packet_time_base(stream.time_base());
         Ok(Self {

@@ -20,6 +20,8 @@ pub struct ValidatedProject {
     pub(crate) base_directory: PathBuf,
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: BTreeMap<String, f64>,
+    pub(crate) video_durations: BTreeMap<String, f64>,
+    pub(crate) video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,
     pub(crate) duration: f64,
     /// The native timeline authority. The schema's seconds value is normalized
     /// once during validation using `seconds_to_nanos`' checked rounding rule.
@@ -44,6 +46,7 @@ impl ValidatedProject {
             self.frame_count,
             &self.warnings,
         )
+        .with_video_durations(&self.video_durations)
     }
 
     #[must_use]

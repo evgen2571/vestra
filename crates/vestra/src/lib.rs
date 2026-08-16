@@ -41,6 +41,17 @@ pub use vestra_core::plan_audio::MASTER_AUDIO_NYQUIST_HZ;
 pub use vestra_core::project::{AudioEffect, AudioFadeCurve, AudioGainInterpolation};
 pub use vestra_core::{Category, Diagnostic, Severity};
 
+/// Probe a video duration for high-level authoring defaults.
+pub fn probe_video_duration(path: &std::path::Path) -> Result<f64, vestra_media::MediaError> {
+    vestra_media::probe_video(path).and_then(|info| {
+        info.duration_seconds.ok_or_else(|| {
+            vestra_media::MediaError::InvalidVideoMetadata(
+                "video has no finite duration".to_owned(),
+            )
+        })
+    })
+}
+
 /// Structured outcome of deterministic project validation.
 #[derive(Clone, Debug)]
 pub struct ValidationReport {

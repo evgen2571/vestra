@@ -55,6 +55,14 @@ class ImageAsset(_Asset):
         return "image"
 
 
+class VideoAsset(_Asset):
+    """A registered video asset, created by ``ProjectBuilder``."""
+
+    @property
+    def kind(self) -> str:
+        return "video"
+
+
 class AudioAsset(_Asset):
     """A registered audio asset, created by ``ProjectBuilder``."""
 

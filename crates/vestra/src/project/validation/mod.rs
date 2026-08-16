@@ -34,6 +34,11 @@ pub(crate) fn preflight(
         &assets.audio_durations,
         &mut errors,
     );
+    validate_video_layers(
+        &canonical.visual.clips,
+        &assets.video_durations,
+        &mut errors,
+    );
     let duration =
         duration::resolve(canonical, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
     let duration_nanos = match seconds_to_nanos(duration) {
@@ -83,6 +88,8 @@ pub(crate) fn preflight(
             base_directory: project.base_directory().to_path_buf(),
             asset_paths: assets.paths,
             audio_durations: assets.audio_durations,
+            video_durations: assets.video_durations,
+            video_metadata: assets.video_metadata,
             duration,
             duration_nanos,
             frame_rate,
@@ -95,6 +102,31 @@ pub(crate) fn preflight(
     PreflightOutcome {
         diagnostics,
         resolved,
+    }
+}
+
+fn validate_video_layers(
+    clips: &[vestra_core::project::Clip],
+    durations: &std::collections::BTreeMap<String, f64>,
+    errors: &mut Vec<Diagnostic>,
+) {
+    for (index, clip) in clips.iter().enumerate() {
+        if let vestra_core::project::VisualSource::Video { asset } = &clip.source
+            && let Some(&duration) = durations.get(asset)
+        {
+            let end = clip.source_start + clip.duration * clip.playback_rate;
+            if clip.source_start >= duration || end > duration + 1e-9 {
+                errors.push(Diagnostic::error(
+                    "MVP-VIDEO-TIMING",
+                    crate::Category::Semantic,
+                    format!("video layer '{}' exceeds available source media", clip.id),
+                    format!("/visual/clips/{index}"),
+                ));
+            }
+        }
+        if let vestra_core::project::VisualSource::Group(group) = &clip.source {
+            validate_video_layers(&group.clips, durations, errors);
+        }
     }
 }
 

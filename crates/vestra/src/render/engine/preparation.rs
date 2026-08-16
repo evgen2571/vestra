@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -10,6 +11,95 @@ use crate::{
 };
 use vestra_core::plan::{PreparedScalarSignals, prepare_scalar_signals};
 use vestra_media::MediaError;
+
+struct NativeVideoFactory {
+    limits: vestra_core::validation::ResourceLimits,
+    metadata: Arc<BTreeMap<String, vestra_media::VideoMediaInfo>>,
+}
+
+struct NativeVideoSession(
+    std::sync::mpsc::Sender<(
+        f64,
+        std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
+    )>,
+);
+
+impl vestra_render::VideoDecoderSession for NativeVideoSession {
+    fn frame_at(&mut self, seconds: f64) -> Result<vestra_render::VideoFrame, String> {
+        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+        self.0
+            .send((seconds, reply_tx))
+            .map_err(|_| "video decoder session ended".to_owned())?;
+        reply_rx
+            .recv()
+            .map_err(|_| "video decoder session ended".to_owned())?
+    }
+}
+
+impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
+    fn open(
+        &self,
+        asset: &vestra_core::plan::VideoAsset,
+        cache_budget_bytes: u64,
+    ) -> Result<Box<dyn vestra_render::VideoDecoderSession>, String> {
+        let (command_tx, command_rx) = std::sync::mpsc::channel::<(
+            f64,
+            std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
+        )>();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let path = asset.path.clone();
+        let asset_id = asset.id.clone();
+        let metadata = Arc::clone(&self.metadata);
+        let limits = self.limits;
+        std::thread::Builder::new()
+            .name(format!("vestra-video-decoder-{}", asset.id))
+            .spawn(move || {
+                let decoder_result = match metadata.get(&asset_id) {
+                    Some(info) => vestra_media::VideoDecoder::open_with_info(
+                        &path,
+                        vestra_media::VideoDecoderOptions {
+                            limits,
+                            cache_budget_bytes,
+                        },
+                        info.clone(),
+                    ),
+                    None => vestra_media::VideoDecoder::open_with_options(
+                        &path,
+                        vestra_media::VideoDecoderOptions {
+                            limits,
+                            cache_budget_bytes,
+                        },
+                    ),
+                };
+                let mut decoder = match decoder_result {
+                    Ok(decoder) => decoder,
+                    Err(error) => {
+                        let _ = ready_tx.send(Err(error.to_string()));
+                        return;
+                    }
+                };
+                let _ = ready_tx.send(Ok(()));
+                while let Ok((seconds, reply)) = command_rx.recv() {
+                    let result = decoder
+                        .frame_at(seconds)
+                        .map(|frame| vestra_render::VideoFrame {
+                            pts: frame.pts.0,
+                            pixels: frame.pixels.clone(),
+                        })
+                        .map_err(|error| error.to_string());
+                    let _ = reply.send(result);
+                }
+            })
+            .map_err(|error| error.to_string())?;
+        match ready_rx
+            .recv()
+            .map_err(|_| "video decoder failed to start".to_owned())?
+        {
+            Ok(()) => Ok(Box::new(NativeVideoSession(command_tx))),
+            Err(error) => Err(error),
+        }
+    }
+}
 
 use super::{
     metrics::milliseconds,
@@ -166,13 +256,15 @@ impl PreparedState {
 pub(crate) fn prepare_for_video(
     plan: RenderPlan,
     preference: RenderBackendPreference,
+    video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,
 ) -> Result<PreparedState, RenderError> {
-    prepare(plan, preference, create_backend)
+    prepare_with_metadata(plan, preference, video_metadata, create_backend)
 }
 
+#[cfg(test)]
 #[allow(
     clippy::result_large_err,
-    reason = "preparation retains structured diagnostics"
+    reason = "test preparation helper preserves structured render diagnostics"
 )]
 pub(crate) fn prepare<P: IntoPreparedPlan>(
     plan: P,
@@ -184,14 +276,41 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
     )
         -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
 ) -> Result<PreparedState, RenderError> {
+    prepare_with_metadata(plan, preference, BTreeMap::new(), build_backend)
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "preparation retains structured diagnostics"
+)]
+pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
+    plan: P,
+    preference: RenderBackendPreference,
+    video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,
+    build_backend: impl FnOnce(
+        RenderBackendPreference,
+        &RenderPlan,
+        &Arc<DecodedAssets>,
+    )
+        -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
+) -> Result<PreparedState, RenderError> {
     let plan = plan.into_prepared_plan();
-    let decoded = DecodedAssets::build(&plan).map_err(|diagnostic| RenderError {
-        diagnostic,
-        warnings: Vec::new(),
-        temporary_removed: true,
-        context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, &plan),
-        timings: RenderTimings::default(),
-    })?;
+    let video_factory: Arc<dyn vestra_render::VideoDecoderFactory> = Arc::new(NativeVideoFactory {
+        limits: plan.limits,
+        metadata: Arc::new(video_metadata),
+    });
+    let decoded = DecodedAssets::build_with_video_factory(&plan, Some(video_factory)).map_err(
+        |diagnostic| RenderError {
+            diagnostic,
+            warnings: Vec::new(),
+            temporary_removed: true,
+            context: RenderFailureContext::before_render(
+                RenderFailureStage::AssetPreparation,
+                &plan,
+            ),
+            timings: RenderTimings::default(),
+        },
+    )?;
     let schedule = ActiveSchedule::compile(&plan);
     let analysis_started = Instant::now();
     let scalar_signals = if plan.audio_analysis_requirements.is_empty() {
@@ -448,7 +567,7 @@ pub(super) fn frame_diagnostic(code: &str, message: &str) -> Diagnostic {
     Diagnostic::error(code, Category::Render, message, "")
 }
 
-/// Lower-level diagnostics cross the SDK frame boundary unchanged.  The SDK
+/// Lower-level diagnostics cross the SDK frame boundary unchanged. The SDK
 /// creates a new diagnostic only for lifecycle and contract failures it owns.
 pub(super) fn frame_error(prepared: &PreparedState, diagnostic: Diagnostic) -> RenderError {
     RenderError {

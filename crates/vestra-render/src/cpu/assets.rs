@@ -3,7 +3,7 @@
     reason = "asset preparation preserves machine-readable diagnostics"
 )]
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use image::RgbaImage;
 
@@ -13,6 +13,7 @@ use crate::render::{
     geometry::{CropBounds, IntrinsicSize, crop_bounds},
     metrics::{PreparationStats, PreparationTimings},
 };
+use crate::video::VideoDecoderSession;
 
 #[cfg(test)]
 use crate::{Diagnostic, plan::RenderPlan};
@@ -21,6 +22,9 @@ pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
     shapes: Vec<PreparedRasterSource>,
     texts: Vec<PreparedRasterSource>,
+    video_decoders: BTreeMap<usize, Box<dyn VideoDecoderSession>>,
+    video_cache_budget_bytes: u64,
+    video_error: Option<String>,
     crops: ByteLruCache<CropKey, RgbaImage>,
     stats: PreparationStats,
     timings: PreparationTimings,
@@ -95,10 +99,16 @@ impl PreparedAssets {
                 )
             })
             .collect();
+        let video_cache_budget_bytes = cache_budget_bytes
+            .checked_div(decoded.videos_len().max(1) as u64)
+            .unwrap_or(0);
         Self {
             decoded,
             shapes: prepared_shapes,
             texts,
+            video_decoders: BTreeMap::new(),
+            video_cache_budget_bytes,
+            video_error: None,
             crops: ByteLruCache::new(cache_budget_bytes),
             stats: PreparationStats {
                 cache_budget_bytes,
@@ -152,6 +162,45 @@ impl PreparedAssets {
         self.texts[text.saturating_sub(self.decoded.image_count() + self.shapes.len())].clone()
     }
 
+    pub(crate) fn video_source(
+        &mut self,
+        asset: usize,
+        source_time: f64,
+    ) -> Result<PreparedRasterSource, String> {
+        let factory = self
+            .decoded
+            .video_factory()
+            .ok_or_else(|| "video decoder provider is not configured".to_owned())?;
+        if !self.video_decoders.contains_key(&asset) {
+            let video = self
+                .decoded
+                .video_asset(asset)
+                .ok_or_else(|| format!("video asset index {asset} is out of range"))?;
+            let decoder = factory.open(video, self.video_cache_budget_bytes)?;
+            self.video_decoders.insert(asset, decoder);
+        }
+        let frame = self
+            .video_decoders
+            .get_mut(&asset)
+            .expect("video decoder inserted above")
+            .frame_at(source_time)
+            .map_err(|error| {
+                let path = self
+                    .decoded
+                    .video_asset(asset)
+                    .map(|video| video.path.display().to_string())
+                    .unwrap_or_else(|| format!("asset index {asset}"));
+                let message = format!("video '{path}' at source time {source_time:.9}: {error}");
+                self.video_error = Some(message.clone());
+                message
+            })?;
+        let intrinsic_size = IntrinsicSize::new(frame.pixels.width(), frame.pixels.height());
+        Ok(PreparedRasterSource::from_pixels(
+            frame.pixels,
+            intrinsic_size,
+        ))
+    }
+
     #[must_use]
     pub fn stats(&mut self) -> &PreparationStats {
         self.sync_cache_stats();
@@ -161,6 +210,10 @@ impl PreparedAssets {
     #[must_use]
     pub fn timings(&self) -> PreparationTimings {
         self.timings
+    }
+
+    pub(crate) fn take_video_error(&mut self) -> Option<String> {
+        self.video_error.take()
     }
 
     fn sync_cache_stats(&mut self) {

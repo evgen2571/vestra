@@ -14,7 +14,7 @@ use bytemuck::Zeroable;
 use image::RgbaImage;
 
 use crate::{
-    Diagnostic,
+    Diagnostic, VideoDecoderSession,
     plan::{EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::{
         AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
@@ -63,6 +63,8 @@ pub struct WgpuBackend {
     static_cache_population_renders: u64,
     pending_static_layers: PendingStaticLayers,
     temporary_texture_reuses: u64,
+    video_decoders: BTreeMap<usize, Box<dyn VideoDecoderSession>>,
+    video_pts: BTreeMap<usize, i64>,
 }
 
 struct FrameSlotResources {
@@ -177,12 +179,36 @@ impl WgpuBackend {
         );
         let pipeline_creation = pipeline_started.elapsed();
         let upload_started = Instant::now();
+        let mut video_decoders = BTreeMap::new();
+        let mut initial_video_frames = Vec::new();
+        if let Some(factory) = decoded.video_factory() {
+            let per_decoder_budget = plan
+                .limits
+                .maximum_cache_bytes
+                .checked_div(plan.videos.len().max(1) as u64)
+                .unwrap_or(0);
+            for (asset_index, asset) in plan.videos.iter().enumerate() {
+                let mut decoder = factory.open(asset, per_decoder_budget).map_err(|error| {
+                    Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
+                })?;
+                let frame = decoder.frame_at(0.0).map_err(|error| {
+                    Diagnostic::error("WGPU-VIDEO-DECODE", crate::Category::Media, error, "")
+                })?;
+                initial_video_frames.push(frame.pixels);
+                video_decoders.insert(asset_index, decoder);
+            }
+        }
+        let dynamic_slot_count = plan.videos.len().saturating_mul(plan.video_slot_stride());
+        let dynamic_frames = (0..dynamic_slot_count)
+            .map(|slot| Arc::clone(&initial_video_frames[slot / plan.video_slot_stride().max(1)]))
+            .collect::<Vec<_>>();
         let sources = SourceResources::create(
             &context.device,
             &context.queue,
             plan,
             &decoded,
             context.adapter_limits.max_texture_dimension_2d,
+            &dynamic_frames,
         )?;
         let mut slots = Vec::with_capacity(pipeline_depth);
         let per_slot_bind_group_count = {
@@ -296,6 +322,8 @@ impl WgpuBackend {
             static_cache_population_renders: 0,
             pending_static_layers: PendingStaticLayers::default(),
             temporary_texture_reuses: 0,
+            video_decoders,
+            video_pts: BTreeMap::new(),
         })
     }
 
@@ -344,6 +372,53 @@ impl WgpuBackend {
         self.staged.backend_completed_frames += 1;
         Some(ready)
     }
+
+    fn upload_video_layers(
+        &mut self,
+        layers: &[crate::plan::EvaluatedLayer],
+    ) -> Result<(), Diagnostic> {
+        for layer in layers {
+            match &layer.source {
+                EvaluatedSource::Video {
+                    asset_index,
+                    source_index,
+                    source_time,
+                    ..
+                } => {
+                    let (pts, pixels) = {
+                        let decoder =
+                            self.video_decoders.get_mut(asset_index).ok_or_else(|| {
+                                Diagnostic::error(
+                                    "WGPU-VIDEO-DECODER",
+                                    crate::Category::Media,
+                                    "video decoder session is missing",
+                                    "",
+                                )
+                            })?;
+                        let frame = decoder.frame_at(*source_time).map_err(|error| {
+                            Diagnostic::error(
+                                "WGPU-VIDEO-DECODE",
+                                crate::Category::Media,
+                                error,
+                                "",
+                            )
+                        })?;
+                        (frame.pts, frame.pixels)
+                    };
+                    if self.video_pts.get(source_index) != Some(&pts) {
+                        self.sources
+                            .upload_video(&self.context.queue, *source_index, &pixels)?;
+                        self.video_pts.insert(*source_index, pts);
+                    }
+                }
+                EvaluatedSource::Group { composition } => {
+                    self.upload_video_layers(&composition.layers)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
 
 impl RenderBackend for WgpuBackend {
@@ -376,6 +451,7 @@ impl RenderBackend for WgpuBackend {
                 "",
             ));
         }
+        self.upload_video_layers(&evaluated.layers)?;
         let has_groups = evaluated.layers.iter().any(contains_group);
         let token = self.readback.acquire(frame_number)?;
         let slot = &mut self.slots[token.slot_index];

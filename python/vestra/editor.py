@@ -18,7 +18,7 @@ from .flashes import FlashCollection
 from .presets import Preset, PresetCollection
 from .properties import BindableScalarProperty, ScalarProperty, Transform
 from .sources import Color as SourceColor
-from .sources import Source
+from .sources import Source, Video
 from .transitions import TransitionCollection
 
 
@@ -103,6 +103,8 @@ class Layer:
         "_name",
         "_start",
         "_duration",
+        "_source_start",
+        "_playback_rate",
         "_z",
         "_visible",
         "_opacity",
@@ -121,6 +123,8 @@ class Layer:
         name: str | None,
         start: int | float,
         duration: int | float,
+        source_start: int | float = 0.0,
+        playback_rate: int | float = 1.0,
         z: int,
         visible: bool,
         opacity: int | float,
@@ -133,6 +137,8 @@ class Layer:
         self._name = name
         self._start = _real(start, "start")
         self._duration = _real(duration, "duration", positive=True)
+        self._source_start = _real(source_start, "source_start")
+        self._playback_rate = _real(playback_rate, "playback_rate", positive=True)
         self._z = _integer(z, "z")
         if not isinstance(visible, bool):
             raise TypeError("visible must be a boolean")
@@ -184,6 +190,22 @@ class Layer:
     @duration.setter
     def duration(self, value: int | float) -> None:
         self._duration = _real(value, "duration", positive=True)
+
+    @property
+    def source_start(self) -> float:
+        return self._source_start
+
+    @source_start.setter
+    def source_start(self, value: int | float) -> None:
+        self._source_start = _real(value, "source_start")
+
+    @property
+    def playback_rate(self) -> float:
+        return self._playback_rate
+
+    @playback_rate.setter
+    def playback_rate(self, value: int | float) -> None:
+        self._playback_rate = _real(value, "playback_rate", positive=True)
 
     @property
     def z(self) -> int:
@@ -330,6 +352,8 @@ class CompositionLayer(Layer):
         *,
         start: int | float = 0,
         duration: int | float | None = None,
+        source_start: int | float = 0.0,
+        playback_rate: int | float = 1.0,
         z: int = 0,
         visible: bool = True,
         opacity: int | float = 1.0,
@@ -341,6 +365,8 @@ class CompositionLayer(Layer):
             source,
             start=start,
             duration=duration,
+            source_start=source_start,
+            playback_rate=playback_rate,
             z=z,
             visible=visible,
             opacity=opacity,
@@ -426,6 +452,8 @@ class Composition:
         *,
         start: int | float = 0,
         duration: int | float | None = None,
+        source_start: int | float = 0.0,
+        playback_rate: int | float = 1.0,
         z: int = 0,
         visible: bool = True,
         opacity: int | float = 1.0,
@@ -436,7 +464,17 @@ class Composition:
         if not isinstance(source, Source):
             raise TypeError("source must be a vestra.sources.Source")
         if duration is None:
-            duration = self._default_duration()
+            if isinstance(source, Video):
+                media_path = Path(source.path)
+                if not media_path.is_absolute():
+                    media_path = self._project._base_directory / media_path
+                media_duration = _native.video_duration(media_path)
+                available = media_duration - _real(source_start, "source_start")
+                if available <= 0.0:
+                    raise ValueError("source_start must be before the video duration")
+                duration = available / _real(playback_rate, "playback_rate", positive=True)
+            else:
+                duration = self._default_duration()
         identifier = _layer_id(id, len(self._layers), self._ids)
         if name is not None and not isinstance(name, str):
             raise TypeError("name must be a string or None")
@@ -451,6 +489,8 @@ class Composition:
             name=name,
             start=start,
             duration=duration,
+            source_start=source_start,
+            playback_rate=playback_rate,
             z=z,
             visible=visible,
             opacity=opacity,

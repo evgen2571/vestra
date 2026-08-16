@@ -56,6 +56,9 @@ The Nix development shell supplies `pkg-config` and `ffmpeg-headless`, which
 provide the headers, libraries, and pkg-config metadata needed by `ffmpeg-next`.
 
 Frame dimensions, source pixels, RGBA byte counts, and the configured decoded
-asset limit are checked before allocation. No hardware decode, GPU upload,
-audio scheduling, project-model Video Source, Python Video API, or renderer
-integration belongs to this phase.
+asset limit are checked before allocation. v1D2 exposes this decoder through the
+project-model `Video` source, Python `Video`/`VideoClip`, and both CPU and WGPU
+render paths. Rendering uses software FFmpeg decode and uploads RGBA frames to
+the WGPU source texture when that backend is selected. Rotation metadata remains
+reported but is not applied to pixels; sample aspect ratio likewise remains
+metadata-only, so coded raster dimensions are the sizing basis for this phase.

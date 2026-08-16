@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._internal import _Owner, _number, _require_owner
-from .clips import GroupClip, ImageClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
+from .clips import GroupClip, ImageClip, VideoClip, ParticleSystemClip, SolidColorClip, Spectrum2DClip
 
 if TYPE_CHECKING:
     from .builder import ProjectBuilder
 
-Clip = ImageClip | SolidColorClip | ParticleSystemClip | Spectrum2DClip | GroupClip
+Clip = ImageClip | VideoClip | SolidColorClip | ParticleSystemClip | Spectrum2DClip | GroupClip
 
 
 class Timeline:

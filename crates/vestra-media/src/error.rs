@@ -42,6 +42,30 @@ pub enum MediaError {
     MissingAudioDuration,
     #[error("invalid audio duration: {0}")]
     InvalidAudioDuration(String),
+    #[error("cannot initialize FFmpeg video support: {0}")]
+    VideoInitialization(String),
+    #[error("cannot open video media '{path}': {message}")]
+    VideoOpen { path: PathBuf, message: String },
+    #[error("media contains no usable video stream")]
+    NoVideoStream,
+    #[error("video stream metadata is invalid: {0}")]
+    InvalidVideoMetadata(String),
+    #[error("invalid video timestamp: {0}")]
+    InvalidVideoTimestamp(String),
+    #[error("video timestamp {seconds} seconds is outside the source interval")]
+    VideoTimestampOutOfRange { seconds: f64 },
+    #[error("video seek failed: {0}")]
+    VideoSeek(String),
+    #[error("video decode failed: {0}")]
+    VideoDecode(String),
+    #[error("video frame timestamp is unavailable")]
+    MissingVideoTimestamp,
+    #[error("video pixel conversion failed: {0}")]
+    VideoPixelConversion(String),
+    #[error("video frame dimensions {width}x{height} exceed configured limits")]
+    VideoFrameLimit { width: u32, height: u32 },
+    #[error("video frame byte count overflows")]
+    VideoFrameByteOverflow,
     #[error("invalid deterministic audio timing: {0}")]
     InvalidAudioTiming(String),
     #[error("unique executable audio sources ({actual}) exceed the supported limit ({maximum})")]

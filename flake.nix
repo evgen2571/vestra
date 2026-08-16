@@ -15,6 +15,7 @@
           rustfmt
           clippy
           pkg-config
+          clang
           ffmpeg-headless
           vulkan-loader
           vulkan-tools

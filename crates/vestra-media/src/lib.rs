@@ -12,6 +12,7 @@ mod ffmpeg;
 mod output;
 mod probe;
 mod sink;
+mod video;
 
 #[cfg(test)]
 mod test_support;
@@ -26,5 +27,9 @@ pub use probe::{
     probe_audio_duration_with,
 };
 pub use sink::{FrameSink, SinkResult};
+pub use video::{
+    DecodedVideoFrame, MediaRational, VideoDecoder, VideoDecoderOptions, VideoMediaInfo,
+    VideoTimestamp, probe_video,
+};
 
 pub use vestra_core::output::EncoderSettings;

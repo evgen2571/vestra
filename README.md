@@ -327,7 +327,14 @@ to their active interval. Preset timing follows the native preset's clip-local
 active interval. Presets and timeline helpers are deterministic convenience
 operations over the same canonical model as the low-level typed primitives.
 
-It requires Rust 1.85+ to build and FFmpeg/FFprobe 7+ at runtime. The supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs use formats supported by the Rust `image` crate (including PNG, JPEG, GIF, WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV and MP3 are practical baseline formats).
+It requires Rust 1.85+ and FFmpeg 7+ to build. Linux builds additionally need
+`pkg-config` and the FFmpeg development packages
+`libavcodec-dev`, `libavformat-dev`, `libavutil-dev`, and `libswscale-dev`;
+the `ffmpeg` and `ffprobe` executables remain runtime requirements. The
+supported output is H.264 MP4 with `yuv420p` video and AAC audio. Image inputs
+use formats supported by the Rust `image` crate (including PNG, JPEG, GIF,
+WebP, BMP, TIFF, and QOI); audio inputs are probed and decoded by FFmpeg (WAV
+and MP3 are practical baseline formats).
 
 ```bash
 cargo build --release -p vestra-cli

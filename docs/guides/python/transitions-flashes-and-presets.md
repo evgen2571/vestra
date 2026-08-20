@@ -20,6 +20,11 @@ The transition interval is in the owning composition's local seconds. The
 endpoints must belong to that composition and have a positive overlap that
 makes sense for the chosen effect.
 
+Image, video, shape, text, and composition layers are direct canonical
+transition endpoints. A Python `Color`/`SolidColor` layer may also be used as
+an endpoint, but Vestra adapts it during lowering. Do not name a canonical
+`solid_color` clip directly in a JSON transition placement.
+
 Add a short root flash when a colour overlay is the right abstraction:
 
 ```python

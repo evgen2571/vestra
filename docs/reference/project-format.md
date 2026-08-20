@@ -21,9 +21,9 @@ not read files or probe media.
 
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
-| `path` | string | yes | Requested output path. |
-| `width`, `height` | integer | yes | Canvas pixels, each at least `2`. |
-| `frame_rate` | positive number or `"N/D"` | yes | Frames per second; rational numerator and denominator are positive. |
+| `path` | string | yes | Requested output path. It must contain a non-whitespace character and end in `.mp4`, case-insensitively. |
+| `width`, `height` | integer | yes | Canvas pixels. Each must be even and in `2..=8192`. |
+| `frame_rate` | positive finite number or `"N/D"` | yes | Frames per second. `N` and `D` are positive decimal integers. Vestra reduces the rate and requires a numerator no greater than `240000` and a denominator no greater than `1000000`. |
 | `background` | color | yes | `#RRGGBB` or `#RRGGBBAA`. |
 | `quality` | enum | yes | `preview`, `balanced`, or `high`. |
 | `audio` | boolean | yes | Output audio policy. |
@@ -56,7 +56,7 @@ contracts.
 | `visible` | boolean | no | `true`. |
 | `sizing` | sizing object | no | Applies to image/video sources. |
 | `crop` | crop track | no | Applies to image/video sources. |
-| `transform` | transform object | conditional | Required for image, video, and group sources. Optional for shape/text; forbidden for solid-color, Spectrum2D, and particle-system sources. |
+| `transform` | transform object | conditional | Required for image sources. The model and semantic validation make it optional for video, shape, text, and group sources; an absent optional transform has canvas presentation. The checked-in schema currently also requires it for video, so schema-valid JSON must include a video transform. Forbidden for solid-color, Spectrum2D, and particle-system sources. |
 | `effects` | array of effect | no | Empty. See [effects](effects.md). |
 | `blend_mode` | enum | no | `normal`; also `add`, `screen`, `multiply`, `overlay`. |
 | `preset` | preset object | no | Omitted. See [presets and flashes](presets-and-flashes.md). |

@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_root"
+
 asset=examples/assets/red.png
 expected_hash=1546bf939a4978f44474165e24607bb3d7542f8c84bd6c522e7249e054f4247a
 actual_hash=$(sha256sum "$asset" | awk '{print $1}')
 
 if [[ "$actual_hash" != "$expected_hash" ]]; then
-  printf 'invalid public example asset %s: expected %s, got %s\n' \
+  printf 'invalid example asset %s: expected %s, got %s\n' \
     "$asset" "$expected_hash" "$actual_hash" >&2
   exit 1
 fi

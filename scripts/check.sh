@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_root"
+
+echo "Checking Rust formatting, build, lints, tests, and schema freshness"
 cargo fmt --all -- --check
 cargo check --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -20,3 +24,4 @@ schema_tmp_dir=$(mktemp -d)
 trap 'rm -rf "$schema_tmp_dir"' EXIT
 cargo run -q -p vestra-cli -- generate-schema --output "$schema_tmp_dir/project.schema.json"
 cmp "$schema_tmp_dir/project.schema.json" schemas/project.schema.json
+echo "Local contributor checks passed"

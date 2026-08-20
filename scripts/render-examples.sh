@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_root"
+
 skip_existing=false
 if [[ "${1:-}" == "--skip-existing" ]]; then
   skip_existing=true

@@ -147,7 +147,7 @@ pub(super) fn lookup(
 ) -> Result<usize, Diagnostic> {
     indices.get(asset).copied().ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-ASSET",
+            "VESTRA-PLAN-ASSET",
             crate::Category::Internal,
             format!("validated clip '{clip_id}' has no image asset"),
             "",
@@ -162,7 +162,7 @@ pub(super) fn lookup_font(
 ) -> Result<usize, Diagnostic> {
     indices.get(asset).copied().ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-FONT",
+            "VESTRA-PLAN-FONT",
             crate::Category::Internal,
             format!("validated text clip '{clip_id}' has no font asset"),
             "",
@@ -177,7 +177,7 @@ pub(super) fn lookup_video(
 ) -> Result<usize, Diagnostic> {
     indices.get(asset).copied().ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-ASSET",
+            "VESTRA-PLAN-ASSET",
             crate::Category::Internal,
             format!("validated clip '{clip_id}' has no video asset"),
             "",

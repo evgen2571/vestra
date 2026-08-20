@@ -61,7 +61,7 @@ def test_build_validate_and_native_round_trip() -> None:
 def test_native_validation_receives_invalid_finite_semantics() -> None:
     report = builder(width=3).validate()
     assert not report.is_valid
-    assert any(item.code == "MVP-OUTPUT-WIDTH" for item in report.diagnostics)
+    assert any(item.code == "VESTRA-OUTPUT-WIDTH" for item in report.diagnostics)
 
 
 def test_duration_modes_are_unambiguous() -> None:

@@ -121,7 +121,7 @@ pub(super) fn operation_backend_metrics(
     if let Some((name, _, _)) = counters.iter().find(|(_, before, after)| after < before) {
         return Err(RenderError {
             diagnostic: Diagnostic::error(
-                "MVP-BACKEND-METRICS",
+                "VESTRA-BACKEND-METRICS",
                 Category::Backend,
                 format!("backend {name} counter moved backwards between operations"),
                 "",

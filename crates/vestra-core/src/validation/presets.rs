@@ -24,7 +24,7 @@ pub(super) fn validate(
             | VisualSource::ParticleSystem(_)
     ) {
         errors.push(Diagnostic::error(
-            "MVP-PRESET-SOURCE",
+            "VESTRA-PRESET-SOURCE",
             Category::Semantic,
             "presets require an image clip",
             path,
@@ -39,7 +39,7 @@ pub(super) fn validate(
     };
     if !intensity.is_finite() || !(0.0..=2.0).contains(&intensity) {
         errors.push(Diagnostic::error(
-            "MVP-PRESET-INTENSITY",
+            "VESTRA-PRESET-INTENSITY",
             Category::Semantic,
             "preset intensity must be finite and in 0..=2",
             format!("{path}/intensity"),

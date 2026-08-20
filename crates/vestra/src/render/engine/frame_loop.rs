@@ -118,7 +118,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                         completed_frames,
                         Some(frame_number),
                         Diagnostic::error(
-                            "MVP-TIMELINE-OVERFLOW",
+                            "VESTRA-TIMELINE-OVERFLOW",
                             Category::Render,
                             "frame timestamp cannot be represented",
                             "",
@@ -136,7 +136,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                         completed_frames,
                         Some(frame_number),
                         Diagnostic::error(
-                            "MVP-EVALUATION",
+                            "VESTRA-EVALUATION",
                             Category::Internal,
                             error.to_string(),
                             "",
@@ -246,7 +246,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
             let cleanup = abort_sink(encoder);
             let diagnostic = with_encoder_cleanup(
                 Diagnostic::error(
-                    "MVP-POLL-STALLED",
+                    "VESTRA-POLL-STALLED",
                     Category::Backend,
                     "backend wait completed without a frame or progress",
                     "",
@@ -324,7 +324,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                     plan.frame_count.checked_sub(1),
                     with_encoder_cleanup(
                         Diagnostic::error(
-                            "MVP-POLL-STALLED",
+                            "VESTRA-POLL-STALLED",
                             Category::Backend,
                             "backend final drain completed without a frame or progress",
                             "",
@@ -415,7 +415,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         let cleanup = abort_sink(encoder);
         let diagnostic = with_encoder_cleanup(
             Diagnostic::error(
-                "MVP-MISSING-FRAME",
+                "VESTRA-MISSING-FRAME",
                 Category::Render,
                 format!(
                     "staged render drained with {} of {} frames written",
@@ -489,7 +489,7 @@ fn run_static<S: FrameSink + ?Sized>(
                 plan,
                 0,
                 Diagnostic::error(
-                    "MVP-TIMELINE-OVERFLOW",
+                    "VESTRA-TIMELINE-OVERFLOW",
                     Category::Render,
                     "frame timestamp cannot be represented",
                     "",
@@ -503,7 +503,12 @@ fn run_static<S: FrameSink + ?Sized>(
                 output,
                 plan,
                 0,
-                Diagnostic::error("MVP-EVALUATION", Category::Internal, error.to_string(), ""),
+                Diagnostic::error(
+                    "VESTRA-EVALUATION",
+                    Category::Internal,
+                    error.to_string(),
+                    "",
+                ),
             )
         })?;
         evaluation += started.elapsed();
@@ -521,7 +526,7 @@ fn run_static<S: FrameSink + ?Sized>(
                     plan,
                     0,
                     Diagnostic::error(
-                        "MVP-FRAME-COMPLETION",
+                        "VESTRA-FRAME-COMPLETION",
                         Category::Backend,
                         "backend did not complete the static frame",
                         "",
@@ -537,7 +542,7 @@ fn run_static<S: FrameSink + ?Sized>(
                 plan,
                 0,
                 Diagnostic::error(
-                    "MVP-BACKEND-CONTRACT",
+                    "VESTRA-BACKEND-CONTRACT",
                     Category::Backend,
                     "backend completed an invalid static frame",
                     "",
@@ -581,7 +586,7 @@ fn run_static<S: FrameSink + ?Sized>(
                     Some(frame_number),
                     with_encoder_cleanup(
                         Diagnostic::error(
-                            "MVP-RENDER-WRITE",
+                            "VESTRA-RENDER-WRITE",
                             Category::Render,
                             error.to_string(),
                             "",
@@ -652,7 +657,7 @@ fn insert_completed(
 ) -> Result<(), Diagnostic> {
     if completed.frame_number >= total_frames {
         return Err(Diagnostic::error(
-            "MVP-FRAME-ORDER",
+            "VESTRA-FRAME-ORDER",
             Category::Render,
             format!(
                 "backend completed impossible frame {}",
@@ -665,7 +670,7 @@ fn insert_completed(
         || ready_frames.contains_key(&completed.frame_number)
     {
         return Err(Diagnostic::error(
-            "MVP-DUPLICATE-FRAME",
+            "VESTRA-DUPLICATE-FRAME",
             Category::Render,
             format!(
                 "backend completed frame {} more than once",
@@ -718,7 +723,12 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
         if let Err(error) = encoder.write_frame(&frame) {
             let cleanup = abort_sink(encoder);
             let diagnostic = with_encoder_cleanup(
-                Diagnostic::error("MVP-RENDER-WRITE", Category::Render, error.to_string(), ""),
+                Diagnostic::error(
+                    "VESTRA-RENDER-WRITE",
+                    Category::Render,
+                    error.to_string(),
+                    "",
+                ),
                 cleanup,
             );
             return Err(cleanup_error(
@@ -812,7 +822,7 @@ fn cancellation<S: FrameSink + ?Sized>(
         attempted_frame,
         with_encoder_cleanup(
             Diagnostic::error(
-                "MVP-CANCELLED",
+                "VESTRA-CANCELLED",
                 Category::Cancellation,
                 "render cancelled",
                 "",
@@ -864,10 +874,10 @@ mod tests {
         insert_completed(&mut ready, completed(0), 0, 3).expect("first completion");
         let duplicate = insert_completed(&mut ready, completed(0), 0, 3)
             .expect_err("duplicate completion rejected");
-        assert_eq!(duplicate.code, "MVP-DUPLICATE-FRAME");
+        assert_eq!(duplicate.code, "VESTRA-DUPLICATE-FRAME");
         let impossible = insert_completed(&mut ready, completed(3), 0, 3)
             .expect_err("impossible completion rejected");
-        assert_eq!(impossible.code, "MVP-FRAME-ORDER");
+        assert_eq!(impossible.code, "VESTRA-FRAME-ORDER");
     }
 
     #[test]
@@ -875,6 +885,6 @@ mod tests {
         let mut ready = BTreeMap::new();
         let error = insert_completed(&mut ready, completed(0), 1, 3)
             .expect_err("already written frame rejected");
-        assert_eq!(error.code, "MVP-DUPLICATE-FRAME");
+        assert_eq!(error.code, "VESTRA-DUPLICATE-FRAME");
     }
 }

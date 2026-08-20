@@ -199,13 +199,13 @@ mod tests {
         let report_path = directory.path().join("report.json");
         let project_path = directory.path().join("project.json");
         let diagnostic = Diagnostic::error(
-            "MVP-PLAN-ASSET",
+            "VESTRA-PLAN-ASSET",
             Category::Internal,
             "validated clip has no image asset",
             "/visual/clips/0",
         );
         let warnings = vec![Diagnostic::warning(
-            "MVP-CLIP-HIDDEN",
+            "VESTRA-CLIP-HIDDEN",
             "clip is invisible",
             "/visual/clips/1",
         )];
@@ -227,8 +227,8 @@ mod tests {
                 .expect("report JSON");
         assert_eq!(report["failure_category"], "plan");
         assert_eq!(report["failure_stage"], "plan_compilation");
-        assert_eq!(report["diagnostics"][0]["code"], "MVP-PLAN-ASSET");
-        assert_eq!(report["warnings"][0]["code"], "MVP-CLIP-HIDDEN");
+        assert_eq!(report["diagnostics"][0]["code"], "VESTRA-PLAN-ASSET");
+        assert_eq!(report["warnings"][0]["code"], "VESTRA-CLIP-HIDDEN");
         assert_eq!(report["timings"]["semantic_validation_ms"], 11);
         assert_eq!(report["timings"]["plan_compile_ms"], 7);
     }
@@ -238,9 +238,9 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let report_path = directory.path().join("report.json");
         let project_path = directory.path().join("project.json");
-        let diagnostic = Diagnostic::error("MVP-RENDER", Category::Render, "render failed", "");
+        let diagnostic = Diagnostic::error("VESTRA-RENDER", Category::Render, "render failed", "");
         let warnings = vec![Diagnostic::warning(
-            "MVP-WGPU-FALLBACK",
+            "VESTRA-WGPU-FALLBACK",
             "WGPU fallback to CPU: injected preparation failure",
             "",
         )];
@@ -274,7 +274,7 @@ mod tests {
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(report_path).expect("read report"))
                 .expect("report JSON");
-        assert_eq!(report["warnings"][0]["code"], "MVP-WGPU-FALLBACK");
+        assert_eq!(report["warnings"][0]["code"], "VESTRA-WGPU-FALLBACK");
         assert_eq!(report["timings"]["plan_compile_ms"], 7);
     }
 }

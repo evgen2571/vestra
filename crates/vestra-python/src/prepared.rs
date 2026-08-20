@@ -531,9 +531,10 @@ impl PyPreparedProject {
         T: Send,
     {
         // A prepared project retains compiled plans, decoded assets, and the
-        // selected backend. Move that state out for one exclusive operation,
-        // then restore it even on render error so successful operations can
-        // reuse the same prepared resources.
+        // selected backend. Move the prepared state out for one exclusive
+        // operation, then restore the slot even on error. The native prepared
+        // lifecycle determines whether the restored state remains reusable or
+        // was invalidated by the failed operation.
         let mut prepared = self.take()?;
         py.detach(|| {
             if let Err(error) = wait_for_prepared_test_barrier() {

@@ -95,7 +95,7 @@ fn wgpu_skip_classification_requires_an_exclusively_unavailable_diagnostic_set()
         "",
     );
     let project_failure = Diagnostic::error(
-        "MVP-ASSET-PATH",
+        "VESTRA-ASSET-PATH",
         Category::Project,
         "missing asset",
         "/assets/0/path",
@@ -796,7 +796,7 @@ fn observer_cancellation_after_submission_invalidates_prepared_project() {
         .expect_err("submitted cancellation invalidates prepared state");
     assert_eq!(
         invalidated.diagnostics()[0].code,
-        "MVP-PREPARED-INVALIDATED"
+        "VESTRA-PREPARED-INVALIDATED"
     );
 }
 
@@ -856,7 +856,7 @@ fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
             .expect_err("exclusive end")
             .diagnostics()[0]
             .code,
-        "MVP-FRAME-RANGE"
+        "VESTRA-FRAME-RANGE"
     );
 }
 
@@ -1062,14 +1062,14 @@ fn project_loading_keeps_relative_paths_and_does_not_preflight() {
 fn unsupported_schema_version_is_rejected() {
     let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let error = vestra::Project::from_json(json, ".").expect_err("schema rejection");
-    assert_eq!(error.diagnostics()[0].code, "MVP-SCHEMA-VERSION");
+    assert_eq!(error.diagnostics()[0].code, "VESTRA-SCHEMA-VERSION");
 }
 
 #[test]
 fn missing_schema_version_is_a_loading_error() {
     let json = r##"{"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let error = vestra::Project::from_json(json, ".").expect_err("version required");
-    assert_eq!(error.diagnostics()[0].code, "MVP-PROJECT-SHAPE");
+    assert_eq!(error.diagnostics()[0].code, "VESTRA-PROJECT-SHAPE");
 }
 
 #[test]
@@ -1162,7 +1162,11 @@ fn render_preflight_checks_the_requested_output_override() {
         ),
     );
     assert!(!report.is_ready());
-    assert!(report.errors().any(|item| item.code == "MVP-OUTPUT-PATH"));
+    assert!(
+        report
+            .errors()
+            .any(|item| item.code == "VESTRA-OUTPUT-PATH")
+    );
 }
 
 #[test]
@@ -1177,10 +1181,10 @@ fn preflight_preserves_pure_warnings_when_asset_resolution_fails() {
     let project = vestra::Project::from_json(json, directory.path()).expect("project");
     let report = Editor::new().preflight(&project, PreflightOptions::for_inspection());
     assert!(!report.is_ready());
-    assert!(report.errors().any(|item| item.code == "MVP-ASSET-PATH"));
+    assert!(report.errors().any(|item| item.code == "VESTRA-ASSET-PATH"));
     assert!(
         report
             .warnings()
-            .any(|item| item.code == "MVP-ASSET-UNUSED")
+            .any(|item| item.code == "VESTRA-ASSET-UNUSED")
     );
 }

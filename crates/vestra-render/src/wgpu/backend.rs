@@ -810,7 +810,7 @@ impl RenderBackend for WgpuBackend {
     fn verify_idle(&self) -> Result<(), Diagnostic> {
         if self.aborted {
             return Err(Diagnostic::error(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 crate::Category::Backend,
                 "WGPU backend was aborted",
                 "",
@@ -818,7 +818,7 @@ impl RenderBackend for WgpuBackend {
         }
         if self.in_flight() != 0 || !self.readback.all_available() {
             return Err(Diagnostic::error(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 crate::Category::Backend,
                 "WGPU backend retained pending readback work after flush",
                 "",

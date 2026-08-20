@@ -73,7 +73,7 @@ pub(super) fn compile(
                 *next_video_slot_index =
                     (*next_video_slot_index).checked_add(1).ok_or_else(|| {
                         Diagnostic::error(
-                            "MVP-PLAN-VIDEO-SLOTS",
+                            "VESTRA-PLAN-VIDEO-SLOTS",
                             Category::Internal,
                             "compiled Video slot count overflows usize",
                             "",
@@ -102,7 +102,7 @@ pub(super) fn compile(
             CompiledVisualSource::SolidColor {
                 colour: parse_colour(colour).ok_or_else(|| {
                     Diagnostic::error(
-                        "MVP-PLAN-COLOUR",
+                        "VESTRA-PLAN-COLOUR",
                         Category::Internal,
                         "validated solid color is invalid",
                         "",
@@ -125,7 +125,7 @@ pub(super) fn compile(
             compilation.parsed_colour_count += 1;
             let colour = parse_colour(&spectrum.colour).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-PLAN-SPECTRUM2D-COLOUR",
+                    "VESTRA-PLAN-SPECTRUM2D-COLOUR",
                     Category::Internal,
                     "validated Spectrum2D colour is invalid",
                     "",
@@ -139,7 +139,7 @@ pub(super) fn compile(
                         value.direction,
                         parse_colour(&value.start_colour).ok_or_else(|| {
                             Diagnostic::error(
-                                "MVP-PLAN-SPECTRUM2D-GRADIENT",
+                                "VESTRA-PLAN-SPECTRUM2D-GRADIENT",
                                 Category::Internal,
                                 "validated Spectrum2D gradient start colour is invalid",
                                 "",
@@ -147,7 +147,7 @@ pub(super) fn compile(
                         })?,
                         parse_colour(&value.end_colour).ok_or_else(|| {
                             Diagnostic::error(
-                                "MVP-PLAN-SPECTRUM2D-GRADIENT",
+                                "VESTRA-PLAN-SPECTRUM2D-GRADIENT",
                                 Category::Internal,
                                 "validated Spectrum2D gradient end colour is invalid",
                                 "",
@@ -163,7 +163,7 @@ pub(super) fn compile(
                     let band =
                         crate::plan::AudioFrequencyBand::new(min_hz, max_hz).map_err(|error| {
                             Diagnostic::error(
-                                "MVP-PLAN-SPECTRUM2D-BAND",
+                                "VESTRA-PLAN-SPECTRUM2D-BAND",
                                 Category::Internal,
                                 error.to_string(),
                                 "",
@@ -179,7 +179,7 @@ pub(super) fn compile(
                                 crate::plan::GainTransform::new(spectrum.sensitivity).map_err(
                                     |error| {
                                         Diagnostic::error(
-                                            "MVP-PLAN-SPECTRUM2D-RESPONSE",
+                                            "VESTRA-PLAN-SPECTRUM2D-RESPONSE",
                                             Category::Internal,
                                             error.to_string(),
                                             "",
@@ -190,7 +190,7 @@ pub(super) fn compile(
                             crate::plan::CompiledSignalTransform::Clamp(
                                 crate::plan::ClampTransform::new(0.0, 1.0).map_err(|error| {
                                     Diagnostic::error(
-                                        "MVP-PLAN-SPECTRUM2D-RESPONSE",
+                                        "VESTRA-PLAN-SPECTRUM2D-RESPONSE",
                                         Category::Internal,
                                         error.to_string(),
                                         "",
@@ -481,7 +481,7 @@ fn compile_transform(
         ) => Ok(canvas_transform()),
         (VisualSource::Group(_), None) => Ok(canvas_transform()),
         (VisualSource::Image { .. }, None) => Err(Diagnostic::error(
-            "MVP-PLAN-TRANSFORM",
+            "VESTRA-PLAN-TRANSFORM",
             Category::Internal,
             format!(
                 "validated image clip '{}' is missing its transform",

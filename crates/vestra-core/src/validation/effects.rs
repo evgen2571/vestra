@@ -76,7 +76,7 @@ pub(super) fn validate_colour_points(
     }) {
         invalid_effect(
             errors,
-            "MVP-COLOR-POINTS",
+            "VESTRA-COLOR-POINTS",
             "color adjustment requires black_point < white_point",
             path,
             "black_point",
@@ -94,7 +94,7 @@ pub(super) fn validate_global(
 ) {
     if effects.len() > maximum_effects {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-POST-EFFECTS",
+            "VESTRA-LIMIT-POST-EFFECTS",
             Category::Semantic,
             "global post-effect chain exceeds the effect limit",
             "/visual/post_effects",
@@ -105,7 +105,7 @@ pub(super) fn validate_global(
         let path = format!("/visual/post_effects/{index}");
         if effect.id().trim().is_empty() || !ids.insert(effect.id()) {
             errors.push(Diagnostic::error(
-                "MVP-POST-EFFECT-ID",
+                "VESTRA-POST-EFFECT-ID",
                 Category::Semantic,
                 "post-effect ids must be non-empty and unique",
                 format!("{path}/id"),
@@ -116,7 +116,7 @@ pub(super) fn validate_global(
             crate::effect_definition::EffectScope::ClipOnly
         ) {
             errors.push(Diagnostic::error(
-                "MVP-POST-EFFECT-SCOPE",
+                "VESTRA-POST-EFFECT-SCOPE",
                 Category::Semantic,
                 "this effect is clip-local and cannot be used as a global post-effect",
                 path.clone(),
@@ -183,7 +183,7 @@ pub(super) fn validate_parameters(
             if parse_colour(colour).is_none() {
                 invalid_effect(
                     errors,
-                    "MVP-TINT-COLOUR",
+                    "VESTRA-TINT-COLOUR",
                     "tint must use #RRGGBB or #RRGGBBAA",
                     path,
                     "colour",
@@ -250,7 +250,7 @@ pub(super) fn validate_parameters(
             if !(2..=32).contains(samples) {
                 invalid_effect(
                     errors,
-                    "MVP-ZOOM-BLUR-SAMPLES",
+                    "VESTRA-ZOOM-BLUR-SAMPLES",
                     "zoom blur samples must be between 2 and 32",
                     path,
                     "samples",
@@ -259,7 +259,7 @@ pub(super) fn validate_parameters(
             if !unit(anchor.x) || !unit(anchor.y) {
                 invalid_effect(
                     errors,
-                    "MVP-ZOOM-BLUR-ANCHOR",
+                    "VESTRA-ZOOM-BLUR-ANCHOR",
                     "zoom blur anchor must be in the unit square",
                     path,
                     "anchor",
@@ -276,7 +276,7 @@ pub(super) fn validate_parameters(
             if parse_colour(colour).is_none() {
                 invalid_effect(
                     errors,
-                    "MVP-GLOW-COLOUR",
+                    "VESTRA-GLOW-COLOUR",
                     "glow colour must use #RRGGBB or #RRGGBBAA",
                     path,
                     "colour",
@@ -324,7 +324,7 @@ pub(super) fn validate_parameters(
             if parse_colour(colour).is_none() {
                 invalid_effect(
                     errors,
-                    "MVP-VIGNETTE-COLOUR",
+                    "VESTRA-VIGNETTE-COLOUR",
                     "vignette colour must use #RRGGBB or #RRGGBBAA",
                     path,
                     "colour",
@@ -438,7 +438,7 @@ pub(super) fn validate_parameters(
             if !nonnegative(*attack) || !positive(*decay) {
                 invalid_effect(
                     errors,
-                    "MVP-SHAKE-ENVELOPE",
+                    "VESTRA-SHAKE-ENVELOPE",
                     "camera shake attack must be non-negative and decay positive",
                     path,
                     "",
@@ -473,7 +473,7 @@ pub(super) fn validate_parameters(
             if !(2..=32).contains(samples) {
                 invalid_effect(
                     errors,
-                    "MVP-MOTION-BLUR-SAMPLES",
+                    "VESTRA-MOTION-BLUR-SAMPLES",
                     "motion blur samples must be between 2 and 32",
                     path,
                     "samples",
@@ -551,7 +551,7 @@ mod tests {
         validate_global(&[camera_shake(0.5)], 2.0, 16, 16, &mut errors, true);
         let diagnostic = errors
             .iter()
-            .find(|diagnostic| diagnostic.code == "MVP-POST-EFFECT-SCOPE")
+            .find(|diagnostic| diagnostic.code == "VESTRA-POST-EFFECT-SCOPE")
             .expect("clip-only global effect diagnostic");
         assert_eq!(
             diagnostic.message,
@@ -651,21 +651,21 @@ mod tests {
                     id: "brightness".to_owned(),
                     amount: scalar(f64::NAN),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::Contrast {
                     id: "contrast".to_owned(),
                     amount: scalar(f64::NAN),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::Saturation {
                     id: "saturation".to_owned(),
                     amount: scalar(f64::NAN),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::Tint {
@@ -673,14 +673,14 @@ mod tests {
                     colour: "red".to_owned(),
                     amount: scalar(0.5),
                 },
-                "MVP-TINT-COLOUR",
+                "VESTRA-TINT-COLOUR",
             ),
             (
                 Effect::GaussianBlur {
                     id: "gaussian".to_owned(),
                     radius: scalar(33.0),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::DirectionalBlur {
@@ -688,7 +688,7 @@ mod tests {
                     radius: scalar(4.0),
                     angle_degrees: scalar(f64::NAN),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::ZoomBlur {
@@ -698,7 +698,7 @@ mod tests {
                     anchor: Point { x: 0.5, y: 0.5 },
                     direction: crate::project::ZoomBlurDirection::Centered,
                 },
-                "MVP-ZOOM-BLUR-SAMPLES",
+                "VESTRA-ZOOM-BLUR-SAMPLES",
             ),
             (
                 Effect::Glow {
@@ -708,7 +708,7 @@ mod tests {
                     intensity: scalar(5.0),
                     colour: "#ff8899".to_owned(),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::ChromaticAberration {
@@ -716,7 +716,7 @@ mod tests {
                     amount: scalar(33.0),
                     angle_degrees: scalar(45.0),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::Vignette {
@@ -726,7 +726,7 @@ mod tests {
                     softness: Track::constant(0.0),
                     colour: "#000000".to_owned(),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::Sharpen {
@@ -734,7 +734,7 @@ mod tests {
                     amount: scalar(1.0),
                     radius: scalar(17.0),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
             (
                 Effect::ColorAdjust {
@@ -744,10 +744,10 @@ mod tests {
                     black_point: Track::constant(0.0),
                     white_point: Track::constant(1.0),
                 },
-                "MVP-TRACK-VALUE",
+                "VESTRA-TRACK-VALUE",
             ),
-            (camera_shake(0.0), "MVP-SHAKE-ENVELOPE"),
-            (motion_blur(1), "MVP-MOTION-BLUR-SAMPLES"),
+            (camera_shake(0.0), "VESTRA-SHAKE-ENVELOPE"),
+            (motion_blur(1), "VESTRA-MOTION-BLUR-SAMPLES"),
         ];
 
         for (effect, expected_code) in &cases {
@@ -779,7 +779,7 @@ mod tests {
             assert_eq!(
                 validation_errors(&color_adjust(value, 1.0))
                     .iter()
-                    .all(|error| error.code != "MVP-TRACK-VALUE"),
+                    .all(|error| error.code != "VESTRA-TRACK-VALUE"),
                 valid,
                 "black_point={value}"
             );
@@ -793,7 +793,7 @@ mod tests {
             assert_eq!(
                 validation_errors(&color_adjust(0.0, value))
                     .iter()
-                    .all(|error| error.code != "MVP-TRACK-VALUE"),
+                    .all(|error| error.code != "VESTRA-TRACK-VALUE"),
                 valid,
                 "white_point={value}"
             );
@@ -815,7 +815,7 @@ mod tests {
         assert!(
             validation_errors(&effect)
                 .iter()
-                .any(|error| error.code == "MVP-KEYFRAME-VALUE")
+                .any(|error| error.code == "VESTRA-KEYFRAME-VALUE")
         );
     }
 }

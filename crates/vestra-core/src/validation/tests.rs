@@ -226,7 +226,7 @@ fn transition_effect_count_combines_authored_and_outgoing_effects() {
         )
         .diagnostics()
         .iter()
-        .any(|diagnostic| diagnostic.code == "MVP-LIMIT-TRANSITION-EFFECTS")
+        .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-TRANSITION-EFFECTS")
     );
 }
 
@@ -262,17 +262,17 @@ fn root_group_transition_endpoints_are_valid_but_procedural_endpoints_are_not() 
         group_clip("group-b", vec![solid_clip("nested", 0.0, 5.0)]),
     ]);
     project.visual.transitions = vec![crossfade("groups", "group-a", "group-b")];
-    assert!(!has(&project, "MVP-TRANSITION-SOURCE"));
+    assert!(!has(&project, "VESTRA-TRANSITION-SOURCE"));
 
     let mut invalid = grouped_project(vec![
         solid_clip("solid", 10.0, 5.0),
         group_clip("group", vec![solid_clip("nested", 0.0, 5.0)]),
     ]);
     invalid.visual.transitions = vec![crossfade("solid-group", "solid", "group")];
-    assert!(has(&invalid, "MVP-TRANSITION-SOURCE"));
+    assert!(has(&invalid, "VESTRA-TRANSITION-SOURCE"));
 
     invalid.visual.transitions = vec![crossfade("nested-id", "nested", "group")];
-    assert!(has(&invalid, "MVP-TRANSITION-CLIP"));
+    assert!(has(&invalid, "VESTRA-TRANSITION-CLIP"));
 }
 
 fn image_clip(id: &str, asset: &str, start: f64, duration: f64) -> Value {
@@ -312,7 +312,7 @@ fn unused_asset_ids(project: &Project) -> Vec<String> {
     validate(project, ResourceLimits::default())
         .diagnostics()
         .iter()
-        .filter(|diagnostic| diagnostic.code == "MVP-ASSET-UNUSED")
+        .filter(|diagnostic| diagnostic.code == "VESTRA-ASSET-UNUSED")
         .filter_map(|diagnostic| diagnostic.related_id.clone())
         .collect()
 }
@@ -365,7 +365,7 @@ fn groups_reject_duplicate_sibling_ids_with_nested_path() {
     let diagnostic = report
         .diagnostics()
         .iter()
-        .find(|diagnostic| diagnostic.code == "MVP-CLIP-ID")
+        .find(|diagnostic| diagnostic.code == "VESTRA-CLIP-ID")
         .expect("duplicate id diagnostic");
     assert_eq!(
         diagnostic.pointer.as_deref(),
@@ -398,7 +398,7 @@ fn group_depth_boundaries_are_explicit() {
         ResourceLimits::default(),
     );
     assert!(report.diagnostics().iter().any(|diagnostic| {
-        diagnostic.code == "MVP-GROUP-DEPTH"
+        diagnostic.code == "VESTRA-GROUP-DEPTH"
             && diagnostic
                 .pointer
                 .as_deref()
@@ -448,7 +448,7 @@ fn over_depth_groups_with_transitions_use_the_bounded_group_walk() {
         report
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-GROUP-DEPTH")
+            .any(|diagnostic| diagnostic.code == "VESTRA-GROUP-DEPTH")
     );
 }
 
@@ -471,7 +471,7 @@ fn nested_groups_count_against_the_clip_limit() {
         validate(&project, limits)
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-CLIPS")
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-CLIPS")
     );
 }
 
@@ -490,7 +490,7 @@ fn nested_particle_validation_reuses_canonical_rules() {
         panic!("particle source")
     };
     system.particle.lifetime = 0.0;
-    assert!(codes(&project).contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+    assert!(codes(&project).contains(&"VESTRA-PARTICLE-LIFETIME".to_owned()));
 }
 
 #[test]
@@ -498,7 +498,7 @@ fn group_rejects_image_only_properties_but_keeps_group_properties_generic() {
     let mut value = group_clip("group", vec![solid_clip("child", 0.0, 1.0)]);
     value["sizing"] = json!({"mode": "fit"});
     let project = grouped_project(vec![value]);
-    assert!(codes(&project).contains(&"MVP-GROUP-PROPERTIES".to_owned()));
+    assert!(codes(&project).contains(&"VESTRA-GROUP-PROPERTIES".to_owned()));
 }
 
 #[test]
@@ -536,7 +536,7 @@ fn aggregate_particle_limits_include_particles_in_sibling_groups() {
         validate(&project, limits)
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES-TOTAL")
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-PARTICLES-TOTAL")
     );
 }
 
@@ -572,8 +572,8 @@ fn particle_system_rejects_invalid_lifetime_and_transform() {
         component_modifiers: Default::default(),
     });
     let codes = codes(&project);
-    assert!(codes.contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
-    assert!(codes.contains(&"MVP-PARTICLE-SYSTEM-TRANSFORM".to_owned()));
+    assert!(codes.contains(&"VESTRA-PARTICLE-LIFETIME".to_owned()));
+    assert!(codes.contains(&"VESTRA-PARTICLE-SYSTEM-TRANSFORM".to_owned()));
 }
 
 #[test]
@@ -584,7 +584,7 @@ fn particle_system_rejects_positive_lifetime_that_quantizes_to_zero() {
         panic!("particle source")
     };
     system.particle.lifetime = 0.000_000_000_1;
-    assert!(codes(&project).contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+    assert!(codes(&project).contains(&"VESTRA-PARTICLE-LIFETIME".to_owned()));
 }
 
 #[test]
@@ -599,7 +599,7 @@ fn particle_system_rejects_quantized_zero_lifetime_with_burst() {
         time: 0.0,
         count: 1,
     }];
-    assert!(codes(&project).contains(&"MVP-PARTICLE-LIFETIME".to_owned()));
+    assert!(codes(&project).contains(&"VESTRA-PARTICLE-LIFETIME".to_owned()));
 }
 
 #[test]
@@ -613,7 +613,7 @@ fn base_lifetime_remains_required_when_a_valid_range_is_present() {
     system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 1.0, max: 3.0 });
     let report = validate(&project, ResourceLimits::default());
     assert!(report.diagnostics().iter().any(|diagnostic| {
-        diagnostic.code == "MVP-PARTICLE-LIFETIME"
+        diagnostic.code == "VESTRA-PARTICLE-LIFETIME"
             && diagnostic.pointer.as_deref() == Some("/visual/clips/0/source/particle/lifetime")
     }));
 }
@@ -631,7 +631,7 @@ fn lifetime_range_is_validated_separately_from_the_base_lifetime() {
     }
     let report = validate(&project, ResourceLimits::default());
     assert!(report.diagnostics().iter().any(|diagnostic| {
-        diagnostic.code == "MVP-PARTICLE-RANGE"
+        diagnostic.code == "VESTRA-PARTICLE-RANGE"
             && diagnostic.pointer.as_deref()
                 == Some("/visual/clips/0/source/particle/lifetime_range")
     }));
@@ -666,7 +666,7 @@ fn particle_live_limit_uses_lifetime_range_maximum_not_its_minimum() {
         validate(&project, limits)
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES")
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-PARTICLES")
     );
 }
 
@@ -702,7 +702,7 @@ fn particle_system_custom_live_limit_is_enforced() {
         validate(&project, limits)
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES")
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-PARTICLES")
     );
 }
 
@@ -716,7 +716,7 @@ fn particle_emitter_accepts_finite_off_canvas_coordinates() {
     system.emitter = crate::project::ParticleEmitter::Point {
         position: crate::domain::Point { x: -3.0, y: 4.0 },
     };
-    assert!(!codes(&project).contains(&"MVP-PARTICLE-NUMERIC".to_owned()));
+    assert!(!codes(&project).contains(&"VESTRA-PARTICLE-NUMERIC".to_owned()));
 }
 
 #[test]
@@ -777,14 +777,14 @@ fn particle_emitters_and_ranges_validate_their_bounds() {
             outer_radius: 0.2,
         };
     }
-    assert!(codes(&project).contains(&"MVP-PARTICLE-EMITTER-RADIUS".to_owned()));
+    assert!(codes(&project).contains(&"VESTRA-PARTICLE-EMITTER-RADIUS".to_owned()));
     if let crate::project::VisualSource::ParticleSystem(system) =
         &mut project.visual.clips[0].source
     {
         system.emitter = crate::project::ParticleEmitter::default();
         system.particle.lifetime_range = Some(crate::project::ScalarRange { min: 3.0, max: 1.0 });
     }
-    assert!(codes(&project).contains(&"MVP-PARTICLE-RANGE".to_owned()));
+    assert!(codes(&project).contains(&"VESTRA-PARTICLE-RANGE".to_owned()));
 }
 
 #[test]
@@ -819,7 +819,7 @@ fn overlapping_particle_clips_consume_aggregate_budget() {
         validate(&project, limits)
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-PARTICLES-TOTAL")
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-PARTICLES-TOTAL")
     );
 }
 
@@ -874,7 +874,7 @@ fn pure_validation_reports_schema_semantics_without_a_backend() {
         report
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-CLIP-ID")
+            .any(|diagnostic| diagnostic.code == "VESTRA-CLIP-ID")
     );
 }
 
@@ -893,7 +893,7 @@ fn master_signal_requires_authored_audio_and_reports_the_source_path() {
     }];
     let report = validate(&project, ResourceLimits::default());
     assert!(report.diagnostics().iter().any(|diagnostic| {
-        diagnostic.code == "MVP-SIGNAL-MASTER-AUDIO"
+        diagnostic.code == "VESTRA-SIGNAL-MASTER-AUDIO"
             && diagnostic.pointer.as_deref()
                 == Some("/visual/clips/0/opacity/modifiers/0/signal/source")
     }));
@@ -908,7 +908,7 @@ fn spectrum2d_requires_authored_audio_during_project_validation() {
     let report = validate(&project, ResourceLimits::default());
 
     assert!(report.diagnostics().iter().any(|diagnostic| {
-        diagnostic.code == "MVP-SPECTRUM2D-MASTER-AUDIO"
+        diagnostic.code == "VESTRA-SPECTRUM2D-MASTER-AUDIO"
             && diagnostic.pointer.as_deref() == Some("/visual/clips/0/source")
     }));
 }
@@ -931,7 +931,7 @@ fn spectrum2d_accepts_authored_audio_during_project_validation() {
         !report
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-SPECTRUM2D-MASTER-AUDIO")
+            .any(|diagnostic| diagnostic.code == "VESTRA-SPECTRUM2D-MASTER-AUDIO")
     );
 }
 
@@ -954,7 +954,7 @@ fn signal_validation_points_to_the_invalid_transform_field() {
 
     let report = validate(&project, ResourceLimits::default());
     assert!(report.diagnostics().iter().any(|diagnostic| {
-        diagnostic.code == "MVP-SIGNAL-TRANSFORM"
+        diagnostic.code == "VESTRA-SIGNAL-TRANSFORM"
             && diagnostic.pointer.as_deref()
                 == Some("/visual/clips/0/opacity/modifiers/0/signal/transforms/0/release")
     }));
@@ -1020,7 +1020,7 @@ fn component_signal_validation_uses_the_component_modifier_array_pointer() {
             validate(&project, ResourceLimits::default())
                 .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "MVP-SIGNAL-BAND"
+                .any(|diagnostic| diagnostic.code == "VESTRA-SIGNAL-BAND"
                     && diagnostic.pointer.as_deref() == Some(expected.as_str()))
         );
     }
@@ -1050,7 +1050,7 @@ fn master_signal_accepts_authored_silence_even_when_output_audio_is_disabled() {
         !validate(&project, ResourceLimits::default())
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-SIGNAL-MASTER-AUDIO")
+            .any(|diagnostic| diagnostic.code == "VESTRA-SIGNAL-MASTER-AUDIO")
     );
 }
 
@@ -1109,8 +1109,8 @@ fn signal_validation_covers_band_and_transform_contracts_at_field_paths() {
                 .diagnostics()
                 .iter()
                 .any(|diagnostic| {
-                    (diagnostic.code == "MVP-SIGNAL-BAND"
-                        || diagnostic.code == "MVP-SIGNAL-TRANSFORM")
+                    (diagnostic.code == "VESTRA-SIGNAL-BAND"
+                        || diagnostic.code == "VESTRA-SIGNAL-TRANSFORM")
                         && diagnostic.pointer.as_deref() == Some(pointer.as_str())
                 },)
         );
@@ -1125,25 +1125,25 @@ fn audio_validation_enforces_ids_assets_and_global_clip_identity() {
     let duplicate_track = project(json!({"tracks": [
         track("music", vec![]), track("music", vec![])
     ]}));
-    assert!(has(&duplicate_track, "MVP-AUDIO-TRACK-ID"));
+    assert!(has(&duplicate_track, "VESTRA-AUDIO-TRACK-ID"));
 
     let duplicate_same_track = project(json!({"tracks": [track("music", vec![
         clip("clip-a", "audio"), clip("clip-a", "audio")
     ])]}));
-    assert!(has(&duplicate_same_track, "MVP-AUDIO-CLIP-ID"));
+    assert!(has(&duplicate_same_track, "VESTRA-AUDIO-CLIP-ID"));
 
     let duplicate_cross_track = project(json!({"tracks": [
         track("music", vec![clip("clip-a", "audio")]),
         track("sfx", vec![clip("clip-a", "audio")])
     ]}));
-    assert!(has(&duplicate_cross_track, "MVP-AUDIO-CLIP-ID"));
+    assert!(has(&duplicate_cross_track, "VESTRA-AUDIO-CLIP-ID"));
 
     let missing_asset =
         project(json!({"tracks": [track("music", vec![clip("clip-a", "missing")])]}));
-    assert!(has(&missing_asset, "MVP-AUDIO-ASSET"));
+    assert!(has(&missing_asset, "VESTRA-AUDIO-ASSET"));
 
     let image_asset = project(json!({"tracks": [track("music", vec![clip("clip-a", "image")])]}));
-    assert!(has(&image_asset, "MVP-AUDIO-ASSET-TYPE"));
+    assert!(has(&image_asset, "VESTRA-AUDIO-ASSET-TYPE"));
 }
 
 #[test]
@@ -1157,11 +1157,11 @@ fn audio_validation_accepts_linear_gain_and_rejects_invalid_gain_at_each_layer()
 
     let negative_track =
         project(json!({"tracks": [json!({"id": "music", "gain": -0.1, "clips": []})]}));
-    assert!(has(&negative_track, "MVP-AUDIO-TRACK-GAIN"));
+    assert!(has(&negative_track, "VESTRA-AUDIO-TRACK-GAIN"));
     let negative_clip = project(json!({"tracks": [json!({"id": "music", "clips": [json!({
         "id": "clip-a", "asset": "audio", "start": 0.0, "trim_start": 0.0, "gain": -0.1
     })]})]}));
-    assert!(has(&negative_clip, "MVP-AUDIO-CLIP-GAIN"));
+    assert!(has(&negative_clip, "VESTRA-AUDIO-CLIP-GAIN"));
 
     let mut non_finite = valid;
     non_finite.audio.as_mut().expect("audio").tracks[0].gain = f64::NAN;
@@ -1170,12 +1170,12 @@ fn audio_validation_accepts_linear_gain_and_rejects_invalid_gain_at_each_layer()
     assert!(
         non_finite_codes
             .iter()
-            .any(|code| code == "MVP-AUDIO-TRACK-GAIN")
+            .any(|code| code == "VESTRA-AUDIO-TRACK-GAIN")
     );
     assert!(
         non_finite_codes
             .iter()
-            .any(|code| code == "MVP-AUDIO-CLIP-GAIN")
+            .any(|code| code == "VESTRA-AUDIO-CLIP-GAIN")
     );
 }
 
@@ -1194,18 +1194,18 @@ fn audio_gain_automation_validates_order_values_and_audibility_independently() {
     ])));
     assert!(accepted(&valid, ResourceLimits::default()));
     for (keyframes, code) in [
-        (json!([]), "MVP-AUDIO-AUTOMATION"),
+        (json!([]), "VESTRA-AUDIO-AUTOMATION"),
         (
             json!([{"time": 0.1, "gain": 1.0}]),
-            "MVP-AUDIO-AUTOMATION-TIME",
+            "VESTRA-AUDIO-AUTOMATION-TIME",
         ),
         (
             json!([{"time": 0.0, "gain": 1.0}, {"time": 0.0, "gain": 1.0}]),
-            "MVP-AUDIO-AUTOMATION-TIME",
+            "VESTRA-AUDIO-AUTOMATION-TIME",
         ),
         (
             json!([{"time": 0.0, "gain": -1.0}]),
-            "MVP-AUDIO-AUTOMATION-GAIN",
+            "VESTRA-AUDIO-AUTOMATION-GAIN",
         ),
     ] {
         assert!(has(&project(automation(keyframes)), code));
@@ -1217,11 +1217,11 @@ fn audio_gain_automation_validates_order_values_and_audibility_independently() {
         .expect("automation")
         .keyframes[0]
         .gain = f64::NAN;
-    assert!(has(&non_finite, "MVP-AUDIO-AUTOMATION-GAIN"));
+    assert!(has(&non_finite, "VESTRA-AUDIO-AUTOMATION-GAIN"));
     let mut muted = project(automation(json!([{"time": 0.1, "gain": 1.0}])));
     muted.audio.as_mut().expect("audio").tracks[0].mute = true;
     muted.output.audio = false;
-    assert!(has(&muted, "MVP-AUDIO-AUTOMATION-TIME"));
+    assert!(has(&muted, "VESTRA-AUDIO-AUTOMATION-TIME"));
 }
 
 #[test]
@@ -1248,7 +1248,7 @@ fn audio_gain_keyframe_limit_is_inclusive() {
         validate(&over, limits)
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "MVP-LIMIT-AUDIO-GAIN-KEYFRAMES")
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-AUDIO-GAIN-KEYFRAMES")
     );
 }
 
@@ -1274,13 +1274,13 @@ fn audio_overlap_and_audibility_flags_do_not_bypass_semantic_validation() {
         })]})]}),
     ] {
         let invalid = project(audio);
-        assert!(has(&invalid, "MVP-AUDIO-ASSET"));
+        assert!(has(&invalid, "VESTRA-AUDIO-ASSET"));
     }
 
     let mut output_disabled =
         project(json!({"tracks": [track("music", vec![clip("clip-a", "missing")])]}));
     output_disabled.output.audio = false;
-    assert!(has(&output_disabled, "MVP-AUDIO-ASSET"));
+    assert!(has(&output_disabled, "VESTRA-AUDIO-ASSET"));
 }
 
 #[test]
@@ -1295,7 +1295,7 @@ fn audio_complexity_limits_are_inclusive_and_deterministic() {
         .collect::<Vec<_>>();
     assert!(has(
         &project(json!({"tracks": tracks})),
-        "MVP-LIMIT-AUDIO-TRACKS"
+        "VESTRA-LIMIT-AUDIO-TRACKS"
     ));
 
     let clips = (0..limits.maximum_audio_clips)
@@ -1310,7 +1310,7 @@ fn audio_complexity_limits_are_inclusive_and_deterministic() {
         .collect::<Vec<_>>();
     assert!(has(
         &project(json!({"tracks": [track("music", clips)]})),
-        "MVP-LIMIT-AUDIO-CLIPS"
+        "VESTRA-LIMIT-AUDIO-CLIPS"
     ));
 }
 
@@ -1330,7 +1330,7 @@ fn audio_effect_ids_are_validated_deterministically_per_collection() {
     assert_eq!(
         codes(&invalid)
             .iter()
-            .filter(|code| *code == "MVP-AUDIO-EFFECT-ID")
+            .filter(|code| *code == "VESTRA-AUDIO-EFFECT-ID")
             .count(),
         6
     );
@@ -1341,7 +1341,7 @@ fn audio_effect_ids_are_validated_deterministically_per_collection() {
             {"id": "track-b", "clips": [{"id": "clip-b", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "same", "type": "parametric_eq", "frequency_hz": 120, "gain_db": 1, "q": 1}]}]}
         ]
     }));
-    assert!(!has(&allowed, "MVP-AUDIO-EFFECT-ID"));
+    assert!(!has(&allowed, "VESTRA-AUDIO-EFFECT-ID"));
 }
 
 #[test]
@@ -1349,14 +1349,14 @@ fn playback_speed_is_clip_only_and_uses_declared_bounds() {
     let valid = project(
         json!({"tracks": [{"id": "track", "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "speed", "type": "playback_speed", "rate": 0.25}]}]}]}),
     );
-    assert!(!has(&valid, "MVP-AUDIO-EFFECT-SCOPE"));
+    assert!(!has(&valid, "VESTRA-AUDIO-EFFECT-SCOPE"));
     let invalid = project(
         json!({"effects": [{"id": "speed", "type": "playback_speed", "rate": 2}], "tracks": [{"id": "track", "effects": [{"id": "speed-track", "type": "playback_speed", "rate": 2}], "clips": []}]}),
     );
     assert_eq!(
         codes(&invalid)
             .iter()
-            .filter(|code| *code == "MVP-AUDIO-EFFECT-SCOPE")
+            .filter(|code| *code == "VESTRA-AUDIO-EFFECT-SCOPE")
             .count(),
         2
     );
@@ -1364,6 +1364,6 @@ fn playback_speed_is_clip_only_and_uses_declared_bounds() {
         let out_of_range = project(json!({
             "tracks": [{"id": "track", "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "effects": [{"id": "speed", "type": "playback_speed", "rate": rate}]}]}]
         }));
-        assert!(has(&out_of_range, "MVP-AUDIO-EFFECT-PARAMETER"));
+        assert!(has(&out_of_range, "VESTRA-AUDIO-EFFECT-PARAMETER"));
     }
 }

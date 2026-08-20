@@ -69,7 +69,7 @@ pub enum LoadError {
 impl LoadError {
     pub(crate) fn read(error: std::io::Error) -> Self {
         Self::Diagnostics(vec![Diagnostic::error(
-            "MVP-PROJECT-READ",
+            "VESTRA-PROJECT-READ",
             crate::Category::Project,
             format!("cannot read project: {error}"),
             "",
@@ -77,7 +77,7 @@ impl LoadError {
     }
     pub(crate) fn write(error: std::io::Error) -> Self {
         Self::Diagnostics(vec![Diagnostic::error(
-            "MVP-PROJECT-WRITE",
+            "VESTRA-PROJECT-WRITE",
             crate::Category::Project,
             format!("cannot save project: {error}"),
             "",
@@ -85,7 +85,7 @@ impl LoadError {
     }
     pub(crate) fn parse(error: serde_json::Error) -> Self {
         Self::Diagnostics(vec![Diagnostic::error(
-            "MVP-PROJECT-SHAPE",
+            "VESTRA-PROJECT-SHAPE",
             crate::Category::Project,
             format!("project does not match the canonical format: {error}"),
             "",
@@ -93,7 +93,7 @@ impl LoadError {
     }
     pub(crate) fn unsupported_schema(version: u32) -> Self {
         Self::Diagnostics(vec![Diagnostic::error(
-            "MVP-SCHEMA-VERSION",
+            "VESTRA-SCHEMA-VERSION",
             crate::Category::Project,
             format!("unsupported project schema version {version}; supported version is 2"),
             "/schema_version",

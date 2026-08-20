@@ -104,7 +104,7 @@ def test_clip_timing_mutations_keep_local_keyframes_and_native_snapshots() -> No
     assert clip.opacity.keyframes[0].time == 2
     assert authored.to_dict()["visual"]["clips"][0]["opacity"]["keyframes"][0]["time"] == 2.0
     report = authored.validate()
-    diagnostic = next(d for d in report.errors if d.code == "MVP-KEYFRAME-TIME")
+    diagnostic = next(d for d in report.errors if d.code == "VESTRA-KEYFRAME-TIME")
     assert diagnostic.pointer == "/visual/clips/0/opacity/keyframes/0/time"
     assert native_before.to_dict()["visual"]["clips"][0]["duration"] == 2.0
 
@@ -116,4 +116,4 @@ def test_native_validation_keeps_invalid_authored_timing_visible(times: tuple[fl
         clip.opacity.keyframe(time=time, value=0.5)
     report = authored.validate()
     assert not report.is_valid
-    assert any(diagnostic.code == "MVP-KEYFRAME-TIME" for diagnostic in report.errors)
+    assert any(diagnostic.code == "VESTRA-KEYFRAME-TIME" for diagnostic in report.errors)

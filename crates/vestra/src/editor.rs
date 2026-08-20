@@ -331,7 +331,7 @@ impl Editor {
             });
             if let Err(error) = vestra_media::check_output(&output, overwrite) {
                 diagnostics.push(Diagnostic::error(
-                    "MVP-OUTPUT-PATH",
+                    "VESTRA-OUTPUT-PATH",
                     crate::Category::Output,
                     error.to_string(),
                     "/output/path",
@@ -339,7 +339,7 @@ impl Editor {
             }
             if let Err(error) = vestra_media::check_ffmpeg_available(None) {
                 diagnostics.push(Diagnostic::error(
-                    "MVP-ENCODER-UNAVAILABLE",
+                    "VESTRA-ENCODER-UNAVAILABLE",
                     crate::Category::Backend,
                     format!("FFmpeg is unavailable: {error}"),
                     "",
@@ -853,7 +853,7 @@ mod tests {
 
     #[test]
     fn editor_error_accessors_cover_every_variant() {
-        let diagnostic = Diagnostic::error("MVP-TEST", crate::Category::Render, "failed", "");
+        let diagnostic = Diagnostic::error("VESTRA-TEST", crate::Category::Render, "failed", "");
         let project = EditorError::Project {
             errors: vec![diagnostic.clone()],
             warnings: Vec::new(),
@@ -861,12 +861,12 @@ mod tests {
         };
         let plan = EditorError::Plan {
             diagnostic: Box::new(diagnostic.clone()),
-            warnings: vec![Diagnostic::warning("MVP-WARN", "warning", "")],
+            warnings: vec![Diagnostic::warning("VESTRA-WARN", "warning", "")],
             timings: crate::RenderTimings::default(),
         };
         let render = EditorError::Render {
             diagnostic: Box::new(Diagnostic::error(
-                "MVP-CANCELLED",
+                "VESTRA-CANCELLED",
                 crate::Category::Cancellation,
                 "cancelled",
                 "",
@@ -916,7 +916,7 @@ mod tests {
             message: "injected pipeline preparation failure".to_owned(),
         });
         let error = crate::render::RenderError {
-            diagnostic: Diagnostic::error("MVP-RENDER", crate::Category::Render, "failed", ""),
+            diagnostic: Diagnostic::error("VESTRA-RENDER", crate::Category::Render, "failed", ""),
             warnings: vec![fallback.clone()],
             temporary_removed: true,
             context: crate::RenderFailureContext {
@@ -991,7 +991,7 @@ mod tests {
     fn prepared_render_failure_retains_renderer_preparation_timing_snapshot() {
         let mut error = EditorError::Render {
             diagnostic: Box::new(Diagnostic::error(
-                "MVP-RENDER",
+                "VESTRA-RENDER",
                 crate::Category::Render,
                 "failed",
                 "",

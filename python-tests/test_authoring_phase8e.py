@@ -128,7 +128,7 @@ def test_snapshots_and_dependent_structures_are_not_hiddenly_repaired() -> None:
     assert native.to_dict() == old_native
     assert builder.transitions.items == old_transitions
     diagnostics = builder.validate().diagnostics
-    assert any(d.code == "MVP-TRANSITION-FIT" for d in diagnostics)
+    assert any(d.code == "VESTRA-TRANSITION-FIT" for d in diagnostics)
 
 
 def test_transactions_ids_and_independent_builder_determinism() -> None:

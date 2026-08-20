@@ -107,7 +107,7 @@ where
     )
     .map_err(|error| RenderError {
         diagnostic: Diagnostic::error(
-            "MVP-OUTPUT-PREPARE",
+            "VESTRA-OUTPUT-PREPARE",
             Category::Output,
             error.to_string(),
             "/output/path",
@@ -146,7 +146,7 @@ where
                 0,
                 None,
                 Diagnostic::error(
-                    "MVP-CANCELLED",
+                    "VESTRA-CANCELLED",
                     Category::Cancellation,
                     "render cancelled by observer",
                     "",
@@ -169,7 +169,7 @@ where
                 0,
                 None,
                 Diagnostic::error(
-                    "MVP-CANCELLED",
+                    "VESTRA-CANCELLED",
                     Category::Cancellation,
                     "render cancelled",
                     "",
@@ -189,7 +189,7 @@ where
                 0,
                 None,
                 Diagnostic::error(
-                    "MVP-BACKEND-START",
+                    "VESTRA-BACKEND-START",
                     Category::Backend,
                     error.to_string(),
                     "",
@@ -215,7 +215,7 @@ where
         // A pre-submission cancellation leaves the staged backend untouched and
         // therefore reusable. Other frame-loop failures may have left backend
         // state uncertain, as may any cancellation after a successful submit.
-        if error.diagnostic.code != "MVP-CANCELLED"
+        if error.diagnostic.code != "VESTRA-CANCELLED"
             || prepared.backend.staged_metrics().submitted_frames > 0
         {
             prepared.invalidate();
@@ -285,14 +285,14 @@ where
         let cleanup = encoder.abort().err().map(|error| error.to_string());
         let diagnostic = match cleanup {
             Some(detail) => Diagnostic::error(
-                "MVP-CANCELLED",
+                "VESTRA-CANCELLED",
                 Category::Cancellation,
                 "render cancelled",
                 "",
             )
             .with_hint(format!("encoder cleanup: {detail}")),
             None => Diagnostic::error(
-                "MVP-CANCELLED",
+                "VESTRA-CANCELLED",
                 Category::Cancellation,
                 "render cancelled",
                 "",
@@ -322,7 +322,7 @@ where
                 RenderFailureStage::EncoderFinalization,
                 completed_frames,
                 None,
-                Diagnostic::error("MVP-ENCODE", Category::Render, error.to_string(), ""),
+                Diagnostic::error("VESTRA-ENCODE", Category::Render, error.to_string(), ""),
             )
         })
         .map_err(|error| {
@@ -342,7 +342,7 @@ where
                 completed_frames,
                 None,
                 Diagnostic::error(
-                    "MVP-SINK-FRAME-COUNT",
+                    "VESTRA-SINK-FRAME-COUNT",
                     Category::Render,
                     format!(
                         "sink accepted {} frames; expected {}",
@@ -364,7 +364,7 @@ where
             let removed = output.cleanup();
             RenderError {
                 diagnostic: Diagnostic::error(
-                    "MVP-OUTPUT-PUBLISH",
+                    "VESTRA-OUTPUT-PUBLISH",
                     Category::Output,
                     error.to_string(),
                     "/output/path",

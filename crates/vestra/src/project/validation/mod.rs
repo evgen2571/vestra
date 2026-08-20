@@ -45,7 +45,7 @@ pub(crate) fn preflight(
         Some(duration_nanos) => duration_nanos,
         None => {
             errors.push(crate::Diagnostic::error(
-                "MVP-TIMELINE-OVERFLOW",
+                "VESTRA-TIMELINE-OVERFLOW",
                 crate::Category::Semantic,
                 "project duration cannot be represented safely",
                 "/output/duration",
@@ -57,7 +57,7 @@ pub(crate) fn preflight(
         Ok(count) => count,
         Err(_) => {
             errors.push(crate::Diagnostic::error(
-                "MVP-TIMELINE-OVERFLOW",
+                "VESTRA-TIMELINE-OVERFLOW",
                 crate::Category::Semantic,
                 "project duration or frame rate cannot be represented safely",
                 "/output",
@@ -122,7 +122,7 @@ fn validate_video_layers(
             let end = clip.source_start + clip.duration * clip.playback_rate;
             if clip.source_start >= duration || end > duration + 1e-9 {
                 errors.push(Diagnostic::error(
-                    "MVP-VIDEO-TIMING",
+                    "VESTRA-VIDEO-TIMING",
                     crate::Category::Semantic,
                     format!("video layer '{}' exceeds available source media", clip.id),
                     format!("/visual/clips/{index}"),
@@ -208,7 +208,7 @@ mod tests {
                 outcome
                     .diagnostics
                     .iter()
-                    .any(|item| item.code == "MVP-LIMIT-TIMELINE"),
+                    .any(|item| item.code == "VESTRA-LIMIT-TIMELINE"),
                 !accepted,
             );
         }
@@ -238,7 +238,7 @@ mod tests {
                 outcome
                     .diagnostics
                     .iter()
-                    .any(|item| item.code == "MVP-LIMIT-TIMELINE"),
+                    .any(|item| item.code == "VESTRA-LIMIT-TIMELINE"),
                 !accepted,
             );
         }
@@ -272,7 +272,7 @@ mod tests {
             explicit_over
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.code == "MVP-AUDIO-AUTOMATION-DURATION")
+                .any(|diagnostic| diagnostic.code == "VESTRA-AUDIO-AUTOMATION-DURATION")
         );
         assert!(
             run(&project(None, source_duration), limits)
@@ -284,7 +284,7 @@ mod tests {
             implicit_over
                 .diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic.code == "MVP-AUDIO-AUTOMATION-DURATION")
+                .any(|diagnostic| diagnostic.code == "VESTRA-AUDIO-AUTOMATION-DURATION")
         );
     }
 
@@ -315,11 +315,9 @@ mod tests {
         for (time, interpolation) in [(0.000_001, "linear"), (0.000_001, "hold")] {
             let outcome = run(&project(time, interpolation), limits);
             assert!(outcome.resolved.is_none());
-            assert!(
-                outcome.diagnostics.iter().any(|diagnostic| {
-                    diagnostic.code == "MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION"
-                })
-            );
+            assert!(outcome.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "VESTRA-AUDIO-AUTOMATION-SAMPLE-RESOLUTION"
+            }));
         }
 
         let nonzero = Project::from_value(
@@ -338,10 +336,9 @@ mod tests {
         let outcome = run(&nonzero, limits);
         assert!(outcome.resolved.is_none());
         assert!(
-            outcome
-                .diagnostics
-                .iter()
-                .any(|diagnostic| { diagnostic.code == "MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION" })
+            outcome.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "VESTRA-AUDIO-AUTOMATION-SAMPLE-RESOLUTION"
+            })
         );
     }
 }

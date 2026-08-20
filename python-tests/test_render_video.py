@@ -189,7 +189,7 @@ def test_callback_failure_after_progress_invalidates_the_native_prepared_state(t
     assert cleanup_error.temporary_removed is True
     with pytest.raises(vestra.FrameRenderError) as raised:
         prepared.render_frame_number(0)
-    assert raised.value.diagnostics[0].code == "MVP-PREPARED-INVALIDATED"
+    assert raised.value.diagnostics[0].code == "VESTRA-PREPARED-INVALIDATED"
 
 
 def test_existing_output_is_preserved_without_overwrite_and_replaced_with_it(tmp_path: Path) -> None:
@@ -238,7 +238,7 @@ def test_callback_cancellation_removes_output_and_invalidates_after_submission(t
     assert list(tmp_path.iterdir()) == []
     with pytest.raises(vestra.FrameRenderError) as invalidated:
         prepared.render_frame_number(0)
-    assert invalidated.value.diagnostics[0].code == "MVP-PREPARED-INVALIDATED"
+    assert invalidated.value.diagnostics[0].code == "VESTRA-PREPARED-INVALIDATED"
 
 
 def test_another_python_thread_can_cancel_while_the_callback_is_active(tmp_path: Path) -> None:

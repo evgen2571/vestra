@@ -110,5 +110,5 @@ fn compile_transform(
 }
 
 fn signal_error(message: String) -> Diagnostic {
-    Diagnostic::error("MVP-SIGNAL-CONTRACT", Category::Internal, message, "")
+    Diagnostic::error("VESTRA-SIGNAL-CONTRACT", Category::Internal, message, "")
 }

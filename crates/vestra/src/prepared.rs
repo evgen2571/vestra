@@ -382,7 +382,7 @@ impl PreparedProject {
             )
             .map_err(|_| {
                 simple_error(
-                    "MVP-TIMELINE-OVERFLOW",
+                    "VESTRA-TIMELINE-OVERFLOW",
                     "frame timestamp cannot be represented",
                 )
             })?,
@@ -394,7 +394,7 @@ impl PreparedProject {
     pub fn render_frame(&mut self, timestamp: Duration) -> Result<Frame, EditorError> {
         if timestamp >= self.report.duration {
             return Err(simple_error(
-                "MVP-FRAME-RANGE",
+                "VESTRA-FRAME-RANGE",
                 "timestamp is outside the prepared timeline",
             ));
         }
@@ -405,13 +405,13 @@ impl PreparedProject {
         )
         .map_err(|_| {
             simple_error(
-                "MVP-TIMELINE-OVERFLOW",
+                "VESTRA-TIMELINE-OVERFLOW",
                 "timestamp cannot be mapped to a frame",
             )
         })?;
         if frame >= self.report.frame_count {
             return Err(simple_error(
-                "MVP-FRAME-RANGE",
+                "VESTRA-FRAME-RANGE",
                 "timestamp is outside the prepared timeline",
             ));
         }
@@ -572,7 +572,7 @@ mod tests {
         assert!(report.adapter().is_none());
         assert_eq!(report.warnings().len(), 1);
         let warning = &report.warnings()[0];
-        assert_eq!(warning.code, "MVP-WGPU-FALLBACK");
+        assert_eq!(warning.code, "VESTRA-WGPU-FALLBACK");
         assert_eq!(warning.severity, crate::Severity::Warning);
         assert_eq!(warning.category, crate::Category::Semantic);
         assert_eq!(

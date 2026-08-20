@@ -12,7 +12,7 @@ pub(super) fn enforce(
 ) {
     if output.width > limits.maximum_width || output.height > limits.maximum_height {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-DIMENSIONS",
+            "VESTRA-LIMIT-DIMENSIONS",
             Category::Semantic,
             "output dimensions exceed configured resource limits",
             "/output",
@@ -21,7 +21,7 @@ pub(super) fn enforce(
     enforce_timeline(frame_count, duration, limits, errors);
     if clips > limits.maximum_clips {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-CLIPS",
+            "VESTRA-LIMIT-CLIPS",
             Category::Semantic,
             "project exceeds the clip limit",
             "/visual/clips",
@@ -37,7 +37,7 @@ pub(crate) fn enforce_timeline(
 ) {
     if duration > limits.maximum_duration_seconds {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-TIMELINE",
+            "VESTRA-LIMIT-TIMELINE",
             Category::Semantic,
             "project duration exceeds the configured resource limit",
             "/output/duration",
@@ -45,7 +45,7 @@ pub(crate) fn enforce_timeline(
     }
     if frame_count > limits.maximum_frames {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-TIMELINE",
+            "VESTRA-LIMIT-TIMELINE",
             Category::Semantic,
             "project frame count exceeds the configured resource limit",
             "/output/frame_rate",

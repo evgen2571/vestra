@@ -112,7 +112,7 @@ def test_preset_timing_remains_authored_for_native_interval_validation(
     preset = builder.to_dict()["visual"]["clips"][0]["preset"]  # type: ignore[index]
     assert preset.get("start", 0.0) == start and preset.get("duration") == duration
     diagnostic = builder.validate().diagnostics[0]
-    assert diagnostic.code == "MVP-EFFECT-INTERVAL" and diagnostic.pointer == pointer
+    assert diagnostic.code == "VESTRA-EFFECT-INTERVAL" and diagnostic.pointer == pointer
 
 
 def test_full_phase8_authoring_project_renders_frames_and_video_with_audio(tmp_path: Path) -> None:

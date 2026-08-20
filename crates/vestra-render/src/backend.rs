@@ -183,7 +183,7 @@ pub trait RenderBackend: Send {
             Ok(())
         } else {
             Err(Diagnostic::error(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 crate::Category::Backend,
                 "backend retained in-flight work after flush",
                 "",

@@ -12,7 +12,7 @@ pub(crate) fn validate_normalized_track<T>(
 ) {
     if track.keyframes.len() < 2 {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-TRACK-COUNT",
+            "VESTRA-TRANSITION-TRACK-COUNT",
             Category::Semantic,
             "normalized transition tracks require at least two keyframes",
             format!("{path}/keyframes"),
@@ -29,7 +29,7 @@ pub(crate) fn validate_normalized_track<T>(
             .is_none_or(|keyframe| keyframe.progress != 1.0)
     {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-TRACK-ANCHOR",
+            "VESTRA-TRANSITION-TRACK-ANCHOR",
             Category::Semantic,
             "normalized transition tracks must start at 0 and end at 1",
             format!("{path}/keyframes"),
@@ -43,7 +43,7 @@ pub(crate) fn validate_normalized_track<T>(
             || previous.is_some_and(|progress| keyframe.progress <= progress)
         {
             errors.push(Diagnostic::error(
-                "MVP-TRANSITION-TRACK-PROGRESS",
+                "VESTRA-TRANSITION-TRACK-PROGRESS",
                 Category::Semantic,
                 "normalized keyframe progress must be finite, inside 0..=1, and strictly increasing",
                 format!("{path}/keyframes/{index}/progress"),
@@ -51,7 +51,7 @@ pub(crate) fn validate_normalized_track<T>(
         }
         if !valid_value(&keyframe.value) {
             errors.push(Diagnostic::error(
-                "MVP-TRANSITION-VALUE",
+                "VESTRA-TRANSITION-VALUE",
                 Category::Semantic,
                 "normalized transition keyframe value is invalid",
                 format!("{path}/keyframes/{index}/value"),
@@ -83,7 +83,7 @@ pub(crate) fn validate_definition(
         && definition.incoming.effects.is_empty()
     {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-EMPTY",
+            "VESTRA-TRANSITION-EMPTY",
             Category::Semantic,
             "transition definition must contain at least one presentation channel",
             path,
@@ -98,7 +98,7 @@ pub(crate) fn validate_definition(
         for (index, effect) in presentation.effects.iter().enumerate() {
             if effect.id().trim().is_empty() || !effect_ids.insert(effect.id()) {
                 errors.push(Diagnostic::error(
-                    "MVP-TRANSITION-EFFECT-ID",
+                    "VESTRA-TRANSITION-EFFECT-ID",
                     Category::Semantic,
                     "transition-local effect ids must be non-empty and unique",
                     format!("{presentation_path}/effects/{index}/id"),
@@ -149,7 +149,7 @@ pub(crate) fn validate_placement(
 ) {
     if placement.id.trim().is_empty() {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-ID",
+            "VESTRA-TRANSITION-ID",
             Category::Semantic,
             "transition id must not be empty",
             format!("{path}/id"),
@@ -157,7 +157,7 @@ pub(crate) fn validate_placement(
     }
     if placement.outgoing.trim().is_empty() || placement.incoming.trim().is_empty() {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-ENDPOINT",
+            "VESTRA-TRANSITION-ENDPOINT",
             Category::Semantic,
             "transition endpoints must not be empty",
             path,
@@ -165,7 +165,7 @@ pub(crate) fn validate_placement(
     }
     if placement.outgoing == placement.incoming {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-SELF",
+            "VESTRA-TRANSITION-SELF",
             Category::Semantic,
             "transition requires two different endpoints",
             path,
@@ -177,7 +177,7 @@ pub(crate) fn validate_placement(
         || placement.duration <= 0.0
     {
         errors.push(Diagnostic::error(
-            "MVP-TRANSITION-TIME",
+            "VESTRA-TRANSITION-TIME",
             Category::Semantic,
             "transition start must be finite and non-negative, and duration must be finite and positive",
             path,
@@ -214,7 +214,7 @@ fn validate_placement_set_at(
         validate_placement(placement, &path, errors);
         if !ids.insert(placement.id.as_str()) {
             errors.push(Diagnostic::error(
-                "MVP-TRANSITION-ID",
+                "VESTRA-TRANSITION-ID",
                 Category::Semantic,
                 "transition placement ids must be unique",
                 format!("{path}/id"),
@@ -369,7 +369,7 @@ fn validate_placement_set_at(
         ] {
             if track_count.is_some_and(|count| count > maximum_keyframes) {
                 errors.push(Diagnostic::error(
-                    "MVP-LIMIT-KEYFRAMES",
+                    "VESTRA-LIMIT-KEYFRAMES",
                     Category::Semantic,
                     "normalized transition track exceeds the keyframe limit",
                     format!("{path}/definition/{name}/keyframes"),
@@ -397,7 +397,7 @@ fn validate_placement_set_at(
         for pair in layer_intervals.windows(2) {
             if pair[1].0 < pair[0].1 {
                 errors.push(Diagnostic::error(
-                    "MVP-TRANSITION-OVERLAP",
+                    "VESTRA-TRANSITION-OVERLAP",
                     Category::Semantic,
                     "transition placements overlap on a layer",
                     format!("{scope_path}/transitions/{}/start", pair[1].2),
@@ -428,7 +428,7 @@ fn validate_touching_channels<T: Copy + PartialEq>(
         for pair in values.windows(2) {
             if pair[0].1 == pair[1].0 && pair[0].3 != pair[1].2 {
                 errors.push(Diagnostic::error(
-                    "MVP-TRANSITION-BOUNDARY",
+                    "VESTRA-TRANSITION-BOUNDARY",
                     Category::Semantic,
                     "touching transition channel values must be continuous",
                     format!("{scope_path}/transitions/{}/definition", pair[1].4),
@@ -454,7 +454,7 @@ fn validate_interpolation(
         || !(0.0..=1.0).contains(&bezier.x2)
     {
         errors.push(Diagnostic::error(
-            "MVP-BEZIER",
+            "VESTRA-BEZIER",
             Category::Semantic,
             "cubic Bézier controls must be finite and have x controls in 0..=1",
             path,
@@ -539,7 +539,7 @@ mod generic_transition_tests {
             &mut errors,
             |_| true,
         );
-        assert_eq!(errors[0].code, "MVP-TRANSITION-TRACK-ANCHOR");
+        assert_eq!(errors[0].code, "VESTRA-TRANSITION-TRACK-ANCHOR");
     }
 
     #[test]
@@ -551,7 +551,7 @@ mod generic_transition_tests {
             &mut errors,
             |_| true,
         );
-        assert_eq!(errors[0].code, "MVP-TRANSITION-TRACK-PROGRESS");
+        assert_eq!(errors[0].code, "VESTRA-TRANSITION-TRACK-PROGRESS");
     }
 
     #[test]
@@ -560,7 +560,7 @@ mod generic_transition_tests {
         validate_normalized_track(&scalar_track(&[(0.0, 1.0)]), "/track", &mut errors, |_| {
             true
         });
-        assert_eq!(errors[0].code, "MVP-TRANSITION-TRACK-COUNT");
+        assert_eq!(errors[0].code, "VESTRA-TRANSITION-TRACK-COUNT");
     }
 
     #[test]
@@ -575,7 +575,7 @@ mod generic_transition_tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-TRANSITION-TRACK-PROGRESS")
+                .any(|error| error.code == "VESTRA-TRANSITION-TRACK-PROGRESS")
         );
     }
 
@@ -591,7 +591,7 @@ mod generic_transition_tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-TRANSITION-TRACK-PROGRESS")
+                .any(|error| error.code == "VESTRA-TRANSITION-TRACK-PROGRESS")
         );
     }
 
@@ -623,7 +623,7 @@ mod generic_transition_tests {
             &mut errors,
             |_| true,
         );
-        assert_eq!(errors[0].code, "MVP-BEZIER");
+        assert_eq!(errors[0].code, "VESTRA-BEZIER");
     }
 
     #[test]
@@ -640,7 +640,7 @@ mod generic_transition_tests {
             "/definition",
             &mut opacity_errors,
         );
-        assert_eq!(opacity_errors[0].code, "MVP-TRANSITION-VALUE");
+        assert_eq!(opacity_errors[0].code, "VESTRA-TRANSITION-VALUE");
     }
 
     #[test]
@@ -668,7 +668,7 @@ mod generic_transition_tests {
             "/definition",
             &mut position_errors,
         );
-        assert_eq!(position_errors[0].code, "MVP-TRANSITION-VALUE");
+        assert_eq!(position_errors[0].code, "VESTRA-TRANSITION-VALUE");
     }
 
     #[test]
@@ -696,7 +696,7 @@ mod generic_transition_tests {
             "/definition",
             &mut errors,
         );
-        assert_eq!(errors[0].code, "MVP-TRANSITION-VALUE");
+        assert_eq!(errors[0].code, "VESTRA-TRANSITION-VALUE");
     }
 
     #[test]
@@ -713,7 +713,7 @@ mod generic_transition_tests {
             "/definition",
             &mut errors,
         );
-        assert_eq!(errors[0].code, "MVP-TRANSITION-VALUE");
+        assert_eq!(errors[0].code, "VESTRA-TRANSITION-VALUE");
     }
 
     #[test]
@@ -727,7 +727,7 @@ mod generic_transition_tests {
             "/definition",
             &mut errors,
         );
-        assert_eq!(errors[0].code, "MVP-TRANSITION-EMPTY");
+        assert_eq!(errors[0].code, "VESTRA-TRANSITION-EMPTY");
     }
 
     #[test]
@@ -745,16 +745,20 @@ mod generic_transition_tests {
             "/transition",
             &mut errors,
         );
-        assert!(errors.iter().any(|error| error.code == "MVP-TRANSITION-ID"));
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-TRANSITION-SELF")
+                .any(|error| error.code == "VESTRA-TRANSITION-ID")
         );
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-TRANSITION-TIME")
+                .any(|error| error.code == "VESTRA-TRANSITION-SELF")
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "VESTRA-TRANSITION-TIME")
         );
     }
 
@@ -779,7 +783,7 @@ mod generic_transition_tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
+                .any(|error| error.code == "VESTRA-LIMIT-KEYFRAMES")
         );
     }
 
@@ -825,7 +829,7 @@ mod generic_transition_tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-LIMIT-KEYFRAMES")
+                .any(|error| error.code == "VESTRA-LIMIT-KEYFRAMES")
         );
     }
 
@@ -843,7 +847,11 @@ mod generic_transition_tests {
         second.start = 2.0;
         let mut errors = Vec::new();
         validate_placement_set(&[first, second], 10, &mut errors);
-        assert!(errors.iter().any(|error| error.code == "MVP-TRANSITION-ID"));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "VESTRA-TRANSITION-ID")
+        );
     }
 
     #[test]
@@ -880,7 +888,7 @@ mod generic_transition_tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-TRANSITION-OVERLAP")
+                .any(|error| error.code == "VESTRA-TRANSITION-OVERLAP")
         );
     }
 }
@@ -979,7 +987,7 @@ fn validate_scope(
                 let transition_count = presentation.effects.len();
                 if authored_count.saturating_add(transition_count) > maximum_effects {
                     errors.push(Diagnostic::error(
-                        "MVP-LIMIT-TRANSITION-EFFECTS",
+                        "VESTRA-LIMIT-TRANSITION-EFFECTS",
                         Category::Semantic,
                         format!(
                             "clip '{endpoint}' has {authored_count} authored effects and transition adds {transition_count}, exceeding maximum_effects_per_clip={maximum_effects}"
@@ -990,14 +998,14 @@ fn validate_scope(
             }
             match clips.get(endpoint.as_str()) {
                 Some(clip) if !clip.visible => errors.push(Diagnostic::error(
-                    "MVP-TRANSITION-HIDDEN",
+                    "VESTRA-TRANSITION-HIDDEN",
                     Category::Semantic,
                     format!("transition cannot reference hidden clip '{endpoint}'"),
                     path.clone(),
                 )),
                 Some(clip) if !clip.source.supports_direct_transition_endpoint() => {
                     errors.push(Diagnostic::error(
-                        "MVP-TRANSITION-SOURCE",
+                        "VESTRA-TRANSITION-SOURCE",
                         Category::Semantic,
                         format!("transition requires image or group clip '{endpoint}'"),
                         path.clone(),
@@ -1015,13 +1023,13 @@ fn validate_scope(
                         .push((placement.start, end));
                 }
                 Some(_) => errors.push(Diagnostic::error(
-                    "MVP-TRANSITION-FIT",
+                    "VESTRA-TRANSITION-FIT",
                     Category::Semantic,
                     "transition interval must fit inside both endpoint lifetimes",
                     path.clone(),
                 )),
                 None => errors.push(Diagnostic::error(
-                    "MVP-TRANSITION-CLIP",
+                    "VESTRA-TRANSITION-CLIP",
                     Category::Semantic,
                     "transition endpoint does not exist",
                     path.clone(),
@@ -1033,7 +1041,7 @@ fn validate_scope(
         ranges.sort_by(|left, right| left.0.total_cmp(&right.0));
         if ranges.windows(2).any(|pair| pair[1].0 < pair[0].1) {
             errors.push(Diagnostic::error(
-                "MVP-TRANSITION-CONFLICT",
+                "VESTRA-TRANSITION-CONFLICT",
                 Category::Semantic,
                 format!("clip '{clip}' has overlapping transitions"),
                 format!("{scope_path}/transitions"),

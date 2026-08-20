@@ -159,7 +159,7 @@ pub(crate) fn prepare_project(
         duration: Duration::from_nanos(u64::try_from(validated.duration_nanos).map_err(|_| {
             ApplicationRenderError::Plan {
                 diagnostic: Diagnostic::error(
-                    "MVP-TIMELINE-OVERFLOW",
+                    "VESTRA-TIMELINE-OVERFLOW",
                     crate::Category::Render,
                     "project duration cannot be represented",
                     "",

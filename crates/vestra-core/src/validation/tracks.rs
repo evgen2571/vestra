@@ -16,7 +16,7 @@ pub(super) fn validate_track<T>(
 ) {
     if track.keyframes.len() > maximum_keyframes {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-KEYFRAMES",
+            "VESTRA-LIMIT-KEYFRAMES",
             Category::Semantic,
             "track exceeds the keyframe limit",
             format!("{path}/keyframes"),
@@ -24,7 +24,7 @@ pub(super) fn validate_track<T>(
     }
     if !valid(&track.base_value) {
         errors.push(Diagnostic::error(
-            "MVP-TRACK-VALUE",
+            "VESTRA-TRACK-VALUE",
             Category::Semantic,
             "track base value is invalid",
             format!("{path}/base_value"),
@@ -37,7 +37,7 @@ pub(super) fn validate_track<T>(
             || previous.is_some_and(|time| keyframe.time <= time)
         {
             errors.push(Diagnostic::error(
-                "MVP-KEYFRAME-TIME",
+                "VESTRA-KEYFRAME-TIME",
                 Category::Semantic,
                 "keyframe times must be finite, strictly increasing, and inside the clip",
                 format!("{path}/keyframes/{index}/time"),
@@ -45,7 +45,7 @@ pub(super) fn validate_track<T>(
         }
         if !valid(&keyframe.value) {
             errors.push(Diagnostic::error(
-                "MVP-KEYFRAME-VALUE",
+                "VESTRA-KEYFRAME-VALUE",
                 Category::Semantic,
                 "keyframe value is invalid",
                 format!("{path}/keyframes/{index}/value"),
@@ -60,7 +60,7 @@ pub(super) fn validate_track<T>(
                 || !(0.0..=1.0).contains(&bezier.x2))
         {
             errors.push(Diagnostic::error(
-                "MVP-BEZIER",
+                "VESTRA-BEZIER",
                 Category::Semantic,
                 "cubic Bézier controls must be finite and have x controls in 0..=1",
                 format!("{path}/keyframes/{index}/interpolation"),

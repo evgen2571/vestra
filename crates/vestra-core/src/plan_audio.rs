@@ -255,7 +255,7 @@ pub fn compile(
                 .map(|clip| {
                     let duration = *audio_durations.get(&clip.asset).ok_or_else(|| {
                         Diagnostic::error(
-                            "MVP-PLAN-AUDIO",
+                            "VESTRA-PLAN-AUDIO",
                             Category::Internal,
                             "validated audio duration is missing",
                             "",
@@ -263,7 +263,7 @@ pub fn compile(
                     })?;
                     let path = asset_paths.get(&clip.asset).ok_or_else(|| {
                         Diagnostic::error(
-                            "MVP-PLAN-AUDIO",
+                            "VESTRA-PLAN-AUDIO",
                             Category::Internal,
                             "validated audio path is missing",
                             "",
@@ -273,7 +273,7 @@ pub fn compile(
                     let selected_samples =
                         seconds_to_samples(selected_duration).ok_or_else(|| {
                             Diagnostic::error(
-                                "MVP-PLAN-AUDIO",
+                                "VESTRA-PLAN-AUDIO",
                                 Category::Internal,
                                 "audio clip duration cannot be represented",
                                 "",
@@ -284,7 +284,7 @@ pub fn compile(
                         .transform_duration_samples(selected_samples)
                         .map_err(|_| {
                             Diagnostic::error(
-                                "MVP-PLAN-AUDIO",
+                                "VESTRA-PLAN-AUDIO",
                                 Category::Internal,
                                 "audio effect duration cannot be represented",
                                 "",

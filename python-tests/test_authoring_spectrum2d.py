@@ -287,7 +287,7 @@ def test_spectrum2d_no_audio_uses_native_diagnostic() -> None:
     project = builder()
     project.add_spectrum2d_clip(start=0, duration=0.2, layer=1)
     report = project.validate()
-    assert "MVP-SPECTRUM2D-MASTER-AUDIO" in {item.code for item in report.diagnostics}
+    assert "VESTRA-SPECTRUM2D-MASTER-AUDIO" in {item.code for item in report.diagnostics}
 
 
 def test_spectrum2d_with_authored_audio_validates() -> None:

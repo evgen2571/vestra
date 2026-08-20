@@ -81,7 +81,7 @@ pub(super) fn compile_transition_placements_with_interner(
     for placement in placements {
         if placement.outgoing == placement.incoming {
             return Err(Diagnostic::error(
-                "MVP-PLAN-TRANSITION-SELF",
+                "VESTRA-PLAN-TRANSITION-SELF",
                 Category::Internal,
                 "generic transition placement cannot target the same layer twice",
                 format!("/visual/transitions/{}/endpoints", placement.id),
@@ -95,7 +95,7 @@ pub(super) fn compile_transition_placements_with_interner(
         ] {
             let Some(&layer_index) = indices.get(layer_id) else {
                 return Err(Diagnostic::error(
-                    "MVP-PLAN-TRANSITION",
+                    "VESTRA-PLAN-TRANSITION",
                     Category::Internal,
                     "validated transition endpoint is missing",
                     format!("/visual/transitions/{}/{}", placement.id, layer_id),
@@ -219,7 +219,7 @@ fn validate_touching_boundaries<T: Copy + PartialEq>(
                     .map(|keyframe| keyframe.value)
         {
             return Err(Diagnostic::error(
-                "MVP-PLAN-TRANSITION-BOUNDARY",
+                "VESTRA-PLAN-TRANSITION-BOUNDARY",
                 Category::Semantic,
                 "touching transition channel values must be continuous",
                 format!("/visual/transitions/{}/definition", pair[1].id),
@@ -235,7 +235,7 @@ fn validate_layer_intervals(intervals: &[TransitionInterval]) -> Result<(), Diag
     for pair in intervals.windows(2) {
         if pair[1].start < pair[0].end {
             return Err(Diagnostic::error(
-                "MVP-PLAN-TRANSITION-OVERLAP",
+                "VESTRA-PLAN-TRANSITION-OVERLAP",
                 Category::Internal,
                 "generic transition participation overlaps on one layer",
                 format!("/visual/transitions/{}", pair[1].id),
@@ -423,7 +423,7 @@ fn aggregate_channel<T: Copy + PartialEq>(
     for segment in segments {
         if segment.track.keyframes.len() < 2 {
             return Err(Diagnostic::error(
-                "MVP-PLAN-TRANSITION-TRACK",
+                "VESTRA-PLAN-TRANSITION-TRACK",
                 Category::Internal,
                 "generic transition track has fewer than two keyframes",
                 format!("/visual/transitions/{}/definition", segment.id),
@@ -431,7 +431,7 @@ fn aggregate_channel<T: Copy + PartialEq>(
         }
         if previous_end.is_some_and(|end| segment.start < end) {
             return Err(Diagnostic::error(
-                "MVP-PLAN-TRANSITION-OVERLAP",
+                "VESTRA-PLAN-TRANSITION-OVERLAP",
                 Category::Internal,
                 "generic transition participation overlaps on one layer",
                 format!("/visual/transitions/{}", segment.id),
@@ -448,7 +448,7 @@ fn aggregate_channel<T: Copy + PartialEq>(
                 .value;
             if previous_value != segment.track.keyframes[0].value {
                 return Err(Diagnostic::error(
-                    "MVP-PLAN-TRANSITION-BOUNDARY",
+                    "VESTRA-PLAN-TRANSITION-BOUNDARY",
                     Category::Semantic,
                     "touching transition channel values must be continuous",
                     format!("/visual/transitions/{}/definition", segment.id),
@@ -941,7 +941,7 @@ mod generic_tests {
         let indices = BTreeMap::from([(String::from("a"), 0), (String::from("b"), 1)]);
         let error = compile_transition_placements(&placements, &indices, &mut layers)
             .expect_err("discontinuous boundary must fail");
-        assert_eq!(error.code, "MVP-PLAN-TRANSITION-BOUNDARY");
+        assert_eq!(error.code, "VESTRA-PLAN-TRANSITION-BOUNDARY");
     }
 
     #[test]

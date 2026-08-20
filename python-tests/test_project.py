@@ -54,7 +54,7 @@ def test_project_errors_and_custom_pathlike(tmp_path: Path) -> None:
         assert error.kind == "project"
         assert isinstance(error.diagnostics, tuple)
         assert isinstance(error.warnings, tuple)
-        assert error.diagnostics[0].code == "MVP-SCHEMA-VERSION"
+        assert error.diagnostics[0].code == "VESTRA-SCHEMA-VERSION"
     else:
         raise AssertionError("unsupported schema was accepted")
 
@@ -64,6 +64,6 @@ def test_project_errors_and_custom_pathlike(tmp_path: Path) -> None:
         assert error.kind == "project"
         assert isinstance(error.diagnostics, tuple)
         assert isinstance(error.warnings, tuple)
-        assert error.diagnostics[0].code == "MVP-PROJECT-SHAPE"
+        assert error.diagnostics[0].code == "VESTRA-PROJECT-SHAPE"
     else:
         raise AssertionError("invalid JSON was accepted")

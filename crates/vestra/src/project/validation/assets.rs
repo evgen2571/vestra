@@ -36,7 +36,7 @@ pub(crate) fn validate(
                         if let Err(error) = image::image_dimensions(&resolved) {
                             errors.push(
                                 Diagnostic::error(
-                                    "MVP-ASSET-IMAGE",
+                                    "VESTRA-ASSET-IMAGE",
                                     Category::Media,
                                     format!("invalid image asset '{}': {error}", asset.id),
                                     format!("{pointer}/source"),
@@ -51,7 +51,7 @@ pub(crate) fn validate(
                         }
                         Err(error) => errors.push(
                             Diagnostic::error(
-                                "MVP-ASSET-AUDIO",
+                                "VESTRA-ASSET-AUDIO",
                                 Category::Media,
                                 format!("invalid audio asset '{}': {error}", asset.id),
                                 format!("{pointer}/source"),
@@ -67,7 +67,7 @@ pub(crate) fn validate(
                             }
                             _ => errors.push(
                                 Diagnostic::error(
-                                    "MVP-ASSET-VIDEO-DURATION",
+                                    "VESTRA-ASSET-VIDEO-DURATION",
                                     Category::Media,
                                     format!("video asset '{}' has no finite duration", asset.id),
                                     format!("{pointer}/source"),
@@ -77,7 +77,7 @@ pub(crate) fn validate(
                         },
                         Err(error) => errors.push(
                             Diagnostic::error(
-                                "MVP-ASSET-VIDEO",
+                                "VESTRA-ASSET-VIDEO",
                                 Category::Media,
                                 format!("invalid video asset '{}': {error}", asset.id),
                                 format!("{pointer}/source"),
@@ -89,7 +89,7 @@ pub(crate) fn validate(
                         if std::fs::metadata(&resolved).is_ok_and(|metadata| metadata.len() == 0) {
                             errors.push(
                                 Diagnostic::error(
-                                    "MVP-ASSET-FONT",
+                                    "VESTRA-ASSET-FONT",
                                     Category::Media,
                                     format!("invalid font asset '{}': file is empty", asset.id),
                                     format!("{pointer}/source"),
@@ -103,7 +103,7 @@ pub(crate) fn validate(
             }
             Err(error) => errors.push(
                 Diagnostic::error(
-                    "MVP-ASSET-PATH",
+                    "VESTRA-ASSET-PATH",
                     Category::Asset,
                     error,
                     format!("{pointer}/source"),

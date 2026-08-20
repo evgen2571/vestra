@@ -36,14 +36,14 @@ pub(super) fn validate(
     let maximum_concurrent = maximum_concurrent_particles(&particle_intervals);
     if maximum_concurrent.is_none() {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-COUNT",
+            "VESTRA-PARTICLE-COUNT",
             Category::Semantic,
             "aggregate particle live-count calculation overflowed",
             "/visual/clips",
         ));
     } else if maximum_concurrent.is_some_and(|count| count > limits.maximum_total_live_particles) {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-PARTICLES-TOTAL",
+            "VESTRA-LIMIT-PARTICLES-TOTAL",
             Category::Semantic,
             "visual clips exceed the configured aggregate live-particle limit",
             "/visual/clips",
@@ -65,7 +65,7 @@ fn validate_with_depth(
         let path = format!("/visual/clips/{index}");
         if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
             errors.push(Diagnostic::error(
-                "MVP-CLIP-ID",
+                "VESTRA-CLIP-ID",
                 Category::Semantic,
                 "clip ids must be non-empty and unique",
                 format!("{path}/id"),
@@ -73,7 +73,7 @@ fn validate_with_depth(
         }
         if !super::positive(clip.duration) || !super::nonnegative(clip.start) {
             errors.push(Diagnostic::error(
-                "MVP-CLIP-TIME",
+                "VESTRA-CLIP-TIME",
                 Category::Semantic,
                 "clip start and duration must be finite with positive duration",
                 path.clone(),
@@ -81,7 +81,7 @@ fn validate_with_depth(
         }
         if !super::nonnegative(clip.source_start) || !super::positive(clip.playback_rate) {
             errors.push(Diagnostic::error(
-                "MVP-CLIP-SOURCE-TIME",
+                "VESTRA-CLIP-SOURCE-TIME",
                 Category::Semantic,
                 "source_start must be finite and non-negative; playback_rate must be finite and positive",
                 format!("{path}/source"),
@@ -91,7 +91,7 @@ fn validate_with_depth(
             crate::project::VisualSource::Image { asset }
                 if assets.get(asset) == Some(&crate::project::AssetType::Image) => {}
             crate::project::VisualSource::Image { asset } => errors.push(Diagnostic::error(
-                "MVP-SOURCE-ASSET",
+                "VESTRA-SOURCE-ASSET",
                 Category::Semantic,
                 format!("image source references invalid asset '{asset}'"),
                 format!("{path}/source/asset"),
@@ -99,7 +99,7 @@ fn validate_with_depth(
             crate::project::VisualSource::Video { asset }
                 if assets.get(asset) == Some(&crate::project::AssetType::Video) => {}
             crate::project::VisualSource::Video { asset } => errors.push(Diagnostic::error(
-                "MVP-SOURCE-ASSET",
+                "VESTRA-SOURCE-ASSET",
                 Category::Semantic,
                 format!("video source references invalid asset '{asset}'"),
                 format!("{path}/source/asset"),
@@ -108,7 +108,7 @@ fn validate_with_depth(
                 if crate::project::parse_colour(colour).is_none() =>
             {
                 errors.push(Diagnostic::error(
-                    "MVP-SOURCE-COLOUR",
+                    "VESTRA-SOURCE-COLOUR",
                     Category::Semantic,
                     "solid color must use #RRGGBB or #RRGGBBAA",
                     format!("{path}/source/colour"),
@@ -121,14 +121,14 @@ fn validate_with_depth(
             crate::project::VisualSource::Text(text) => {
                 if text.font.trim().is_empty() {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-FONT",
+                        "VESTRA-TEXT-FONT",
                         Category::Semantic,
                         "text font asset must not be empty",
                         format!("{path}/source/font"),
                     ));
                 } else if assets.get(&text.font) != Some(&crate::project::AssetType::Font) {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-FONT",
+                        "VESTRA-TEXT-FONT",
                         Category::Semantic,
                         format!("text source references invalid font asset '{}'", text.font),
                         format!("{path}/source/font"),
@@ -136,7 +136,7 @@ fn validate_with_depth(
                 }
                 if !super::positive(text.font_size) {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-FONT-SIZE",
+                        "VESTRA-TEXT-FONT-SIZE",
                         Category::Semantic,
                         "text font_size must be finite and positive",
                         format!("{path}/source/font_size"),
@@ -144,7 +144,7 @@ fn validate_with_depth(
                 }
                 if crate::project::parse_colour(&text.fill).is_none() {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-FILL",
+                        "VESTRA-TEXT-FILL",
                         Category::Semantic,
                         "text fill must use #RRGGBB or #RRGGBBAA",
                         format!("{path}/source/fill"),
@@ -152,7 +152,7 @@ fn validate_with_depth(
                 }
                 if text.max_width.is_some_and(|width| !super::positive(width)) {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-MAX-WIDTH",
+                        "VESTRA-TEXT-MAX-WIDTH",
                         Category::Semantic,
                         "text max_width must be finite and positive",
                         format!("{path}/source/max_width"),
@@ -160,7 +160,7 @@ fn validate_with_depth(
                 }
                 if !super::positive(text.line_spacing) {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-LINE-SPACING",
+                        "VESTRA-TEXT-LINE-SPACING",
                         Category::Semantic,
                         "text line_spacing must be finite and positive",
                         format!("{path}/source/line_spacing"),
@@ -168,7 +168,7 @@ fn validate_with_depth(
                 }
                 if !text.letter_spacing.is_finite() {
                     errors.push(Diagnostic::error(
-                        "MVP-TEXT-LETTER-SPACING",
+                        "VESTRA-TEXT-LETTER-SPACING",
                         Category::Semantic,
                         "text letter_spacing must be finite",
                         format!("{path}/source/letter_spacing"),
@@ -195,7 +195,7 @@ fn validate_with_depth(
                 let child_depth = group_depth.saturating_add(1);
                 if child_depth > MAX_GROUP_NESTING_DEPTH {
                     errors.push(Diagnostic::error(
-                        "MVP-GROUP-DEPTH",
+                        "VESTRA-GROUP-DEPTH",
                         Category::Semantic,
                         "maximum Group nesting depth of 32 exceeded",
                         format!("{path}/source/clips"),
@@ -228,14 +228,14 @@ fn validate_with_depth(
         }
         match (&clip.source, &clip.transform) {
             (crate::project::VisualSource::Image { .. }, None) => errors.push(Diagnostic::error(
-                "MVP-IMAGE-TRANSFORM",
+                "VESTRA-IMAGE-TRANSFORM",
                 Category::Semantic,
                 "image clips require transform tracks",
                 format!("{path}/transform"),
             )),
             (crate::project::VisualSource::SolidColor { .. }, Some(_)) => {
                 errors.push(Diagnostic::error(
-                    "MVP-SOLID-TRANSFORM",
+                    "VESTRA-SOLID-TRANSFORM",
                     Category::Semantic,
                     "solid-color clips cover the canvas and cannot have transform tracks",
                     format!("{path}/transform"),
@@ -243,7 +243,7 @@ fn validate_with_depth(
             }
             (crate::project::VisualSource::Spectrum2D(_), Some(_)) => {
                 errors.push(Diagnostic::error(
-                    "MVP-SPECTRUM2D-TRANSFORM",
+                    "VESTRA-SPECTRUM2D-TRANSFORM",
                     Category::Semantic,
                     "Spectrum2D clips cannot have transform tracks",
                     format!("{path}/transform"),
@@ -251,7 +251,7 @@ fn validate_with_depth(
             }
             (crate::project::VisualSource::ParticleSystem(_), Some(_)) => {
                 errors.push(Diagnostic::error(
-                    "MVP-PARTICLE-SYSTEM-TRANSFORM",
+                    "VESTRA-PARTICLE-SYSTEM-TRANSFORM",
                     Category::Semantic,
                     "ParticleSystem clips cannot have transform tracks",
                     format!("{path}/transform"),
@@ -275,7 +275,7 @@ fn validate_with_depth(
             ] {
                 if present {
                     errors.push(Diagnostic::error(
-                        "MVP-SOLID-PROPERTIES",
+                        "VESTRA-SOLID-PROPERTIES",
                         Category::Semantic,
                         "solid-color clips cannot use image-only properties",
                         format!("{path}/{field}"),
@@ -291,7 +291,7 @@ fn validate_with_depth(
             ] {
                 if present {
                     errors.push(Diagnostic::error(
-                        "MVP-SHAPE-PROPERTIES",
+                        "VESTRA-SHAPE-PROPERTIES",
                         Category::Semantic,
                         "Shape clips cannot use image-specific sizing, crop, or preset properties",
                         format!("{path}/{field}"),
@@ -307,7 +307,7 @@ fn validate_with_depth(
             ] {
                 if present {
                     errors.push(Diagnostic::error(
-                        "MVP-GROUP-PROPERTIES",
+                        "VESTRA-GROUP-PROPERTIES",
                         Category::Semantic,
                         "Group clips cannot use image-specific sizing, crop, or preset properties",
                         format!("{path}/{field}"),
@@ -323,7 +323,7 @@ fn validate_with_depth(
             ] {
                 if present {
                     errors.push(Diagnostic::error(
-                        "MVP-SPECTRUM2D-PROPERTIES",
+                        "VESTRA-SPECTRUM2D-PROPERTIES",
                         Category::Semantic,
                         "Spectrum2D clips cannot use image-specific source properties",
                         format!("{path}/{field}"),
@@ -339,7 +339,7 @@ fn validate_with_depth(
             ] {
                 if present {
                     errors.push(Diagnostic::error(
-                        "MVP-PARTICLE-SYSTEM-PROPERTIES",
+                        "VESTRA-PARTICLE-SYSTEM-PROPERTIES",
                         Category::Semantic,
                         "ParticleSystem clips cannot use image-specific source properties",
                         format!("{path}/{field}"),
@@ -386,7 +386,7 @@ fn validate_with_depth(
         for (effect_index, effect) in clip.effects.iter().enumerate() {
             if clip.effects.len() > limits.maximum_effects_per_clip {
                 errors.push(Diagnostic::error(
-                    "MVP-LIMIT-EFFECTS",
+                    "VESTRA-LIMIT-EFFECTS",
                     Category::Semantic,
                     "clip exceeds the effect limit",
                     format!("{path}/effects"),
@@ -395,7 +395,7 @@ fn validate_with_depth(
             }
             if effect.id().trim().is_empty() || !effect_ids.insert(effect.id().to_owned()) {
                 errors.push(Diagnostic::error(
-                    "MVP-EFFECT-ID",
+                    "VESTRA-EFFECT-ID",
                     Category::Semantic,
                     "effect ids must be non-empty and unique per clip",
                     format!("{path}/effects/{effect_index}/id"),
@@ -449,7 +449,7 @@ fn validate_shape(shape: &crate::project::ShapeSource, path: &str, errors: &mut 
     };
     if !valid_geometry {
         errors.push(Diagnostic::error(
-            "MVP-SHAPE-GEOMETRY",
+            "VESTRA-SHAPE-GEOMETRY",
             Category::Semantic,
             "shape geometry is invalid",
             format!("{path}/geometry"),
@@ -463,7 +463,7 @@ fn validate_shape(shape: &crate::project::ShapeSource, path: &str, errors: &mut 
             && crate::project::parse_colour(colour).is_none()
         {
             errors.push(Diagnostic::error(
-                "MVP-SHAPE-COLOUR",
+                "VESTRA-SHAPE-COLOUR",
                 Category::Semantic,
                 "shape colour must use #RRGGBB or #RRGGBBAA",
                 format!("{path}/{name}"),
@@ -472,7 +472,7 @@ fn validate_shape(shape: &crate::project::ShapeSource, path: &str, errors: &mut 
     }
     if shape.fill.is_none() && shape.stroke.is_none() {
         errors.push(Diagnostic::error(
-            "MVP-SHAPE-STYLE",
+            "VESTRA-SHAPE-STYLE",
             Category::Semantic,
             "shape must have a fill or stroke",
             path,
@@ -483,7 +483,7 @@ fn validate_shape(shape: &crate::project::ShapeSource, path: &str, errors: &mut 
         || (shape.stroke.is_some() && shape.stroke_width <= 0.0)
     {
         errors.push(Diagnostic::error(
-            "MVP-SHAPE-STROKE",
+            "VESTRA-SHAPE-STROKE",
             Category::Semantic,
             "stroke width must be finite and positive when stroke is enabled",
             format!("{path}/stroke_width"),
@@ -554,7 +554,7 @@ fn validate_spectrum2d(
 ) {
     if !has_authored_audio {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-MASTER-AUDIO",
+            "VESTRA-SPECTRUM2D-MASTER-AUDIO",
             Category::Semantic,
             "Spectrum2D requires authored Master audio material",
             path,
@@ -564,7 +564,7 @@ fn validate_spectrum2d(
         .contains(&spectrum.band_count)
     {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-BANDS",
+            "VESTRA-SPECTRUM2D-BANDS",
             Category::Semantic,
             "Spectrum2D band_count must be between 1 and 48",
             format!("{path}/band_count"),
@@ -572,7 +572,7 @@ fn validate_spectrum2d(
     }
     if !spectrum.min_hz.is_finite() || spectrum.min_hz <= 0.0 {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-FREQUENCY",
+            "VESTRA-SPECTRUM2D-FREQUENCY",
             Category::Semantic,
             "Spectrum2D min_hz must be finite and greater than zero",
             format!("{path}/min_hz"),
@@ -580,14 +580,14 @@ fn validate_spectrum2d(
     }
     if !spectrum.max_hz.is_finite() || spectrum.max_hz <= spectrum.min_hz {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-FREQUENCY",
+            "VESTRA-SPECTRUM2D-FREQUENCY",
             Category::Semantic,
             "Spectrum2D max_hz must be finite and greater than min_hz",
             format!("{path}/max_hz"),
         ));
     } else if spectrum.max_hz > crate::plan_audio::master_audio_nyquist_hz() {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-FREQUENCY",
+            "VESTRA-SPECTRUM2D-FREQUENCY",
             Category::Semantic,
             "Spectrum2D max_hz exceeds the Master audio Nyquist frequency",
             format!("{path}/max_hz"),
@@ -595,7 +595,7 @@ fn validate_spectrum2d(
     }
     if !spectrum.sensitivity.is_finite() || spectrum.sensitivity <= 0.0 {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-RESPONSE",
+            "VESTRA-SPECTRUM2D-RESPONSE",
             Category::Semantic,
             "Spectrum2D sensitivity must be finite and greater than zero",
             format!("{path}/sensitivity"),
@@ -607,7 +607,7 @@ fn validate_spectrum2d(
     ] {
         if !value.is_finite() || value < 0.0 {
             errors.push(Diagnostic::error(
-                "MVP-SPECTRUM2D-RESPONSE",
+                "VESTRA-SPECTRUM2D-RESPONSE",
                 Category::Semantic,
                 "Spectrum2D envelope durations must be finite and non-negative",
                 format!("{path}/{field}"),
@@ -622,7 +622,7 @@ fn validate_spectrum2d(
     ] {
         if !value.is_finite() {
             errors.push(Diagnostic::error(
-                "MVP-SPECTRUM2D-LAYOUT",
+                "VESTRA-SPECTRUM2D-LAYOUT",
                 Category::Semantic,
                 "Spectrum2D layout values must be finite",
                 format!("{path}/{field}"),
@@ -641,7 +641,7 @@ fn validate_spectrum2d(
         || spectrum.y + spectrum.height > 1.0
     {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-LAYOUT",
+            "VESTRA-SPECTRUM2D-LAYOUT",
             Category::Semantic,
             "Spectrum2D layout must be a positive rectangle inside normalized canvas bounds",
             path,
@@ -649,7 +649,7 @@ fn validate_spectrum2d(
     }
     if !spectrum.bar_gap_ratio.is_finite() || !(0.0..1.0).contains(&spectrum.bar_gap_ratio) {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-GAP",
+            "VESTRA-SPECTRUM2D-GAP",
             Category::Semantic,
             "Spectrum2D bar_gap_ratio must be finite and in 0..1",
             format!("{path}/bar_gap_ratio"),
@@ -659,7 +659,7 @@ fn validate_spectrum2d(
         || !(0.0..=1.0).contains(&spectrum.min_bar_height_ratio)
     {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-LAYOUT",
+            "VESTRA-SPECTRUM2D-LAYOUT",
             Category::Semantic,
             "Spectrum2D min_bar_height_ratio must be finite and in 0..=1",
             format!("{path}/min_bar_height_ratio"),
@@ -673,7 +673,7 @@ fn validate_spectrum2d(
             ) && spectrum.band_count > crate::project::SPECTRUM2D_MAX_BAND_COUNT
             {
                 errors.push(Diagnostic::error(
-                    "MVP-SPECTRUM2D-LAYOUT",
+                    "VESTRA-SPECTRUM2D-LAYOUT",
                     Category::Semantic,
                     "Spectrum2D center_out band count is invalid",
                     format!("{path}/layout"),
@@ -685,7 +685,7 @@ fn validate_spectrum2d(
                 || !(0.0..1.0).contains(&layout.inner_radius_ratio)
             {
                 errors.push(Diagnostic::error(
-                    "MVP-SPECTRUM2D-LAYOUT",
+                    "VESTRA-SPECTRUM2D-LAYOUT",
                     Category::Semantic,
                     "Spectrum2D radial inner_radius_ratio must be in 0..1",
                     format!("{path}/layout/inner_radius_ratio"),
@@ -697,7 +697,7 @@ fn validate_spectrum2d(
                 || layout.sweep_angle_degrees > 360.0
             {
                 errors.push(Diagnostic::error(
-                    "MVP-SPECTRUM2D-LAYOUT",
+                    "VESTRA-SPECTRUM2D-LAYOUT",
                     Category::Semantic,
                     "Spectrum2D radial angles are invalid",
                     format!("{path}/layout"),
@@ -708,7 +708,7 @@ fn validate_spectrum2d(
                 crate::project::Spectrum2DBandMapping::CenterOut
             ) {
                 errors.push(Diagnostic::error(
-                    "MVP-SPECTRUM2D-LAYOUT",
+                    "VESTRA-SPECTRUM2D-LAYOUT",
                     Category::Semantic,
                     "radial Spectrum2D does not support center_out band mapping",
                     format!("{path}/layout/band_mapping"),
@@ -723,7 +723,7 @@ fn validate_spectrum2d(
         ] {
             if crate::project::parse_colour(colour).is_none() {
                 errors.push(Diagnostic::error(
-                    "MVP-SPECTRUM2D-GRADIENT",
+                    "VESTRA-SPECTRUM2D-GRADIENT",
                     Category::Semantic,
                     "Spectrum2D gradient colours must use #RRGGBB or #RRGGBBAA",
                     format!("{path}/gradient/{field}"),
@@ -733,7 +733,7 @@ fn validate_spectrum2d(
     }
     if crate::project::parse_colour(&spectrum.colour).is_none() {
         errors.push(Diagnostic::error(
-            "MVP-SPECTRUM2D-COLOUR",
+            "VESTRA-SPECTRUM2D-COLOUR",
             Category::Semantic,
             "Spectrum2D colour must use #RRGGBB or #RRGGBBAA",
             format!("{path}/colour"),
@@ -751,7 +751,7 @@ fn validate_particle_system(
 ) -> Option<u64> {
     if !system.emission.rate.is_finite() || system.emission.rate < 0.0 {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-RATE",
+            "VESTRA-PARTICLE-RATE",
             Category::Semantic,
             "particle emission rate must be finite and non-negative",
             format!("{path}/emission/rate"),
@@ -763,7 +763,7 @@ fn validate_particle_system(
         || crate::timeline::seconds_to_nanos(lifetime).is_none_or(|nanos| nanos == 0)
     {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-LIFETIME",
+            "VESTRA-PARTICLE-LIFETIME",
             Category::Semantic,
             "particle lifetime must be finite, greater than zero, and representable as a positive timeline duration",
             format!("{path}/particle/lifetime"),
@@ -785,7 +785,7 @@ fn validate_particle_system(
             || lifetime_nanos.is_none_or(|nanos| nanos == 0))
     {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-RANGE",
+            "VESTRA-PARTICLE-RANGE",
             Category::Semantic,
             "particle lifetime range must be finite, ordered, positive, and representable as positive timeline durations",
             format!("{path}/particle/lifetime_range"),
@@ -815,7 +815,7 @@ fn validate_particle_system(
     for (field, value) in emitter_values {
         if !value.is_finite() {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-NUMERIC",
+                "VESTRA-PARTICLE-NUMERIC",
                 Category::Semantic,
                 "particle emitter coordinates must be finite",
                 format!("{path}/emitter/{field}"),
@@ -826,7 +826,7 @@ fn validate_particle_system(
         for (field, value) in [("size/x", size.x), ("size/y", size.y)] {
             if value < 0.0 {
                 errors.push(Diagnostic::error(
-                    "MVP-PARTICLE-EMITTER-SIZE",
+                    "VESTRA-PARTICLE-EMITTER-SIZE",
                     Category::Semantic,
                     "rectangle emitter size must be non-negative",
                     format!("{path}/emitter/{field}"),
@@ -842,7 +842,7 @@ fn validate_particle_system(
         && (*inner_radius < 0.0 || *outer_radius < 0.0 || inner_radius > outer_radius)
     {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-EMITTER-RADIUS",
+            "VESTRA-PARTICLE-EMITTER-RADIUS",
             Category::Semantic,
             "circle emitter radii must be non-negative and inner_radius <= outer_radius",
             format!("{path}/emitter"),
@@ -861,7 +861,7 @@ fn validate_particle_system(
     ] {
         if !value.is_finite() {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-NUMERIC",
+                "VESTRA-PARTICLE-NUMERIC",
                 Category::Semantic,
                 "particle numeric properties must be finite",
                 format!("{path}/particle/{field}"),
@@ -870,7 +870,7 @@ fn validate_particle_system(
     }
     if !system.particle.size.is_finite() || system.particle.size < 0.0 {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-SIZE",
+            "VESTRA-PARTICLE-SIZE",
             Category::Semantic,
             "particle size must be finite and non-negative",
             format!("{path}/particle/size"),
@@ -890,7 +890,7 @@ fn validate_particle_system(
             && (!valid_range(range) || minimum.is_some_and(|value| range.min < value))
         {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-RANGE",
+                "VESTRA-PARTICLE-RANGE",
                 Category::Semantic,
                 "particle ranges must be finite, ordered, and satisfy their property bounds",
                 format!("{path}/particle/{field}"),
@@ -907,7 +907,7 @@ fn validate_particle_system(
     ] {
         if !value.is_finite() {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-NUMERIC",
+                "VESTRA-PARTICLE-NUMERIC",
                 Category::Semantic,
                 "particle motion properties must be finite",
                 format!("{path}/particle/{field}"),
@@ -922,7 +922,7 @@ fn validate_particle_system(
         || !(0.0..=360.0).contains(&system.particle.direction_spread_degrees)
     {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-MOTION",
+            "VESTRA-PARTICLE-MOTION",
             Category::Semantic,
             "particle speed must be non-negative and direction spread must be in 0..=360 degrees",
             format!("{path}/particle"),
@@ -930,7 +930,7 @@ fn validate_particle_system(
     }
     if !super::unit(system.particle.opacity) {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-OPACITY",
+            "VESTRA-PARTICLE-OPACITY",
             Category::Semantic,
             "particle opacity must be finite and in 0..=1",
             format!("{path}/particle/opacity"),
@@ -938,7 +938,7 @@ fn validate_particle_system(
     }
     if crate::project::parse_colour(&system.particle.colour).is_none() {
         errors.push(Diagnostic::error(
-            "MVP-PARTICLE-COLOUR",
+            "VESTRA-PARTICLE-COLOUR",
             Category::Semantic,
             "particle colour must use #RRGGBB or #RRGGBBAA",
             format!("{path}/particle/colour"),
@@ -953,7 +953,7 @@ fn validate_particle_system(
         for (index, stop) in style.colour.iter().enumerate() {
             if !stop.t.is_finite() || !(0.0..=1.0).contains(&stop.t) || stop.t <= previous {
                 errors.push(Diagnostic::error(
-                    "MVP-PARTICLE-LIFETIME-CURVE",
+                    "VESTRA-PARTICLE-LIFETIME-CURVE",
                     Category::Semantic,
                     "colour lifetime stop positions must be finite, ordered, and in 0..=1",
                     format!("{path}/particle/lifetime_style/colour/{index}/t"),
@@ -961,7 +961,7 @@ fn validate_particle_system(
             }
             if crate::project::parse_colour(&stop.colour).is_none() {
                 errors.push(Diagnostic::error(
-                    "MVP-PARTICLE-LIFETIME-CURVE",
+                    "VESTRA-PARTICLE-LIFETIME-CURVE",
                     Category::Semantic,
                     "colour lifetime stop colour is invalid",
                     format!("{path}/particle/lifetime_style/colour/{index}/colour"),
@@ -994,7 +994,7 @@ fn validate_particle_system(
     for (index, burst) in system.emission.bursts.iter().enumerate() {
         if !burst.time.is_finite() || burst.time < 0.0 {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-BURST-TIME",
+                "VESTRA-PARTICLE-BURST-TIME",
                 Category::Semantic,
                 "particle burst time must be finite and non-negative",
                 format!("{path}/emission/bursts/{index}/time"),
@@ -1002,7 +1002,7 @@ fn validate_particle_system(
         }
         if previous_time.is_some_and(|time| burst.time <= time) {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-BURST-ORDER",
+                "VESTRA-PARTICLE-BURST-ORDER",
                 Category::Semantic,
                 "particle bursts must be strictly ordered by time",
                 format!("{path}/emission/bursts/{index}/time"),
@@ -1016,7 +1016,7 @@ fn validate_particle_system(
             (Some(time_nanos), Ok(count)) => bursts.push((time_nanos, count)),
             _ => {
                 errors.push(Diagnostic::error(
-                    "MVP-PARTICLE-COUNT",
+                    "VESTRA-PARTICLE-COUNT",
                     Category::Semantic,
                     "particle burst count overflowed",
                     format!("{path}/emission/bursts/{index}/count"),
@@ -1068,7 +1068,7 @@ fn validate_particle_system(
     };
     if live_count.is_none_or(|count| count > limits.maximum_live_particles_per_system) {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-PARTICLES",
+            "VESTRA-LIMIT-PARTICLES",
             Category::Semantic,
             "particle system exceeds the configured live-particle limit",
             path,
@@ -1093,7 +1093,7 @@ fn validate_lifetime_scalar_curve(
             || !valid_value(stop.value)
         {
             errors.push(Diagnostic::error(
-                "MVP-PARTICLE-LIFETIME-CURVE",
+                "VESTRA-PARTICLE-LIFETIME-CURVE",
                 Category::Semantic,
                 "lifetime curve stops must have ordered positions in 0..=1 and valid values",
                 format!("{path}/particle/lifetime_style/{name}/{index}"),
@@ -1353,7 +1353,7 @@ mod tests {
         assert!(
             errors(spectrum)
                 .iter()
-                .any(|error| error.code == "MVP-SPECTRUM2D-COLOUR")
+                .any(|error| error.code == "VESTRA-SPECTRUM2D-COLOUR")
         );
     }
 
@@ -1386,7 +1386,7 @@ mod tests {
         let transform = transform_project
             .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "MVP-SPECTRUM2D-TRANSFORM")
+            .find(|diagnostic| diagnostic.code == "VESTRA-SPECTRUM2D-TRANSFORM")
             .expect("Spectrum2D transform diagnostic");
         assert!(!transform.message.contains("solid-color"));
 
@@ -1402,7 +1402,7 @@ mod tests {
         let property = report
             .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "MVP-SPECTRUM2D-PROPERTIES")
+            .find(|diagnostic| diagnostic.code == "VESTRA-SPECTRUM2D-PROPERTIES")
             .expect("Spectrum2D properties diagnostic");
         assert!(!property.message.contains("solid-color"));
     }

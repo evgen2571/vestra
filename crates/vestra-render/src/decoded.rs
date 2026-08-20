@@ -45,7 +45,7 @@ impl DecodedAssets {
         for image_asset in &plan.images {
             let (width, height) = image::image_dimensions(&image_asset.path).map_err(|error| {
                 Diagnostic::error(
-                    "MVP-IMAGE-INSPECT",
+                    "VESTRA-IMAGE-INSPECT",
                     Category::Media,
                     format!("cannot inspect image '{}': {error}", image_asset.id),
                     "",
@@ -55,7 +55,7 @@ impl DecodedAssets {
                 .checked_mul(u64::from(height))
                 .ok_or_else(|| {
                     Diagnostic::error(
-                        "MVP-IMAGE-SIZE",
+                        "VESTRA-IMAGE-SIZE",
                         Category::Media,
                         "source image dimensions overflow",
                         "",
@@ -63,7 +63,7 @@ impl DecodedAssets {
                 })?;
             if pixels > plan.limits.maximum_source_pixels {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-SOURCE-PIXELS",
+                    "VESTRA-LIMIT-SOURCE-PIXELS",
                     Category::Media,
                     "source image exceeds configured pixel limit",
                     "",
@@ -72,7 +72,7 @@ impl DecodedAssets {
             let image = image::open(&image_asset.path)
                 .map_err(|error| {
                     Diagnostic::error(
-                        "MVP-IMAGE-DECODE",
+                        "VESTRA-IMAGE-DECODE",
                         Category::Media,
                         format!("cannot decode image '{}': {error}", image_asset.id),
                         "",
@@ -84,7 +84,7 @@ impl DecodedAssets {
                 .and_then(|pixels| pixels.checked_mul(4))
                 .ok_or_else(|| {
                     Diagnostic::error(
-                        "MVP-IMAGE-SIZE",
+                        "VESTRA-IMAGE-SIZE",
                         Category::Media,
                         "decoded image is too large",
                         "",
@@ -92,7 +92,7 @@ impl DecodedAssets {
                 })?;
             if bytes > plan.limits.maximum_decoded_asset_bytes {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-DECODED-ASSET",
+                    "VESTRA-LIMIT-DECODED-ASSET",
                     Category::Media,
                     "decoded image exceeds configured byte limit",
                     "",
@@ -100,7 +100,7 @@ impl DecodedAssets {
             }
             decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-IMAGE-TOTAL-SIZE",
+                    "VESTRA-IMAGE-TOTAL-SIZE",
                     Category::Media,
                     "decoded image bytes overflow",
                     "",
@@ -108,7 +108,7 @@ impl DecodedAssets {
             })?;
             if decoded_source_bytes > plan.limits.maximum_total_decoded_bytes {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-DECODED-TOTAL",
+                    "VESTRA-LIMIT-DECODED-TOTAL",
                     Category::Media,
                     "decoded images exceed configured byte limit",
                     "",
@@ -120,7 +120,7 @@ impl DecodedAssets {
         for shape in &plan.shapes {
             let (width, height) = raster_dimensions(shape).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-SHAPE-SIZE",
+                    "VESTRA-SHAPE-SIZE",
                     Category::Media,
                     "shape raster dimensions are too large",
                     "",
@@ -130,7 +130,7 @@ impl DecodedAssets {
                 .checked_mul(u64::from(height))
                 .ok_or_else(|| {
                     Diagnostic::error(
-                        "MVP-SHAPE-SIZE",
+                        "VESTRA-SHAPE-SIZE",
                         Category::Media,
                         "shape raster dimensions overflow",
                         "",
@@ -138,7 +138,7 @@ impl DecodedAssets {
                 })?;
             if pixels > plan.limits.maximum_source_pixels {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-SOURCE-PIXELS",
+                    "VESTRA-LIMIT-SOURCE-PIXELS",
                     Category::Media,
                     "shape exceeds configured pixel limit",
                     "",
@@ -146,7 +146,7 @@ impl DecodedAssets {
             }
             let bytes = pixels.checked_mul(4).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-SHAPE-SIZE",
+                    "VESTRA-SHAPE-SIZE",
                     Category::Media,
                     "shape raster is too large",
                     "",
@@ -154,7 +154,7 @@ impl DecodedAssets {
             })?;
             if bytes > plan.limits.maximum_decoded_asset_bytes {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-DECODED-ASSET",
+                    "VESTRA-LIMIT-DECODED-ASSET",
                     Category::Media,
                     "shape exceeds configured byte limit",
                     "",
@@ -162,7 +162,7 @@ impl DecodedAssets {
             }
             decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-SHAPE-TOTAL-SIZE",
+                    "VESTRA-SHAPE-TOTAL-SIZE",
                     Category::Media,
                     "decoded source bytes overflow",
                     "",
@@ -170,7 +170,7 @@ impl DecodedAssets {
             })?;
             if decoded_source_bytes > plan.limits.maximum_total_decoded_bytes {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-DECODED-TOTAL",
+                    "VESTRA-LIMIT-DECODED-TOTAL",
                     Category::Media,
                     "decoded sources exceed configured byte limit",
                     "",
@@ -190,7 +190,7 @@ impl DecodedAssets {
         for text in &plan.texts {
             let font_system = font_systems.get_mut(&text.font).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-TEXT-FONT",
+                    "VESTRA-TEXT-FONT",
                     Category::Media,
                     "prepared text has no font asset",
                     "",
@@ -198,7 +198,7 @@ impl DecodedAssets {
             })?;
             let cache = glyph_caches.get_mut(&text.font).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-TEXT-FONT",
+                    "VESTRA-TEXT-FONT",
                     Category::Media,
                     "prepared text has no font cache",
                     "",
@@ -211,7 +211,7 @@ impl DecodedAssets {
                 .and_then(|pixels| pixels.checked_mul(4))
                 .ok_or_else(|| {
                     Diagnostic::error(
-                        "MVP-TEXT-SIZE",
+                        "VESTRA-TEXT-SIZE",
                         Category::Media,
                         "prepared text bytes overflow",
                         "",
@@ -219,7 +219,7 @@ impl DecodedAssets {
                 })?;
             decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-TEXT-TOTAL-SIZE",
+                    "VESTRA-TEXT-TOTAL-SIZE",
                     Category::Media,
                     "prepared text bytes overflow",
                     "",

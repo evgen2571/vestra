@@ -400,7 +400,7 @@ def test_nested_transition_fit_is_checked_against_local_child_lifetimes() -> Non
 
     report = project.validate()
     assert not report.is_valid
-    assert any(diagnostic.code == "MVP-TRANSITION-FIT" for diagnostic in report.errors)
+    assert any(diagnostic.code == "VESTRA-TRANSITION-FIT" for diagnostic in report.errors)
 
 
 def test_nested_transition_random_access_is_deterministic() -> None:

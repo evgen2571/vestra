@@ -74,7 +74,7 @@ pub mod project {
         };
         let bytes = std::fs::read(&path).map_err(|error| {
             crate::Diagnostic::error(
-                "MVP-PROJECT-READ",
+                "VESTRA-PROJECT-READ",
                 crate::Category::Project,
                 format!("cannot read project: {error}"),
                 "",
@@ -83,7 +83,7 @@ pub mod project {
         let project = Box::leak(Box::new(
             serde_json::from_slice::<Project>(&bytes).map_err(|error| {
                 crate::Diagnostic::error(
-                    "MVP-PROJECT-SHAPE",
+                    "VESTRA-PROJECT-SHAPE",
                     crate::Category::Project,
                     format!("project does not match the canonical format: {error}"),
                     "",
@@ -106,7 +106,7 @@ pub mod project {
             .map(|clip| clip.start + clip.duration)
             .fold(0.0_f64, f64::max);
         let frame_rate = project.output.frame_rate.rational().map_err(|message| {
-            crate::Diagnostic::error("MVP-OUTPUT-FPS", crate::Category::Semantic, message, "")
+            crate::Diagnostic::error("VESTRA-OUTPUT-FPS", crate::Category::Semantic, message, "")
         })?;
         let frame_count = vestra_core::timeline::frame_count(
             vestra_core::timeline::seconds_to_nanos(duration).unwrap_or(0),
@@ -115,7 +115,7 @@ pub mod project {
         )
         .map_err(|_| {
             crate::Diagnostic::error(
-                "MVP-TIMELINE-OVERFLOW",
+                "VESTRA-TIMELINE-OVERFLOW",
                 crate::Category::Semantic,
                 "project duration or frame rate cannot be represented safely",
                 "",
@@ -234,7 +234,7 @@ pub fn probe_backend(preference: RenderBackendPreference) -> BackendProbe {
                 adapter: None,
                 diagnostics: if cpu_probe().is_some() {
                     vec![Diagnostic::warning(
-                        "MVP-WGPU-FALLBACK",
+                        "VESTRA-WGPU-FALLBACK",
                         format!("WGPU fallback to CPU: {}", diagnostic.message),
                         "",
                     )]
@@ -262,7 +262,7 @@ fn wgpu_probe() -> Result<AdapterMetadata, Diagnostic> {
 #[cfg(not(feature = "wgpu"))]
 fn wgpu_probe() -> Result<AdapterMetadata, Diagnostic> {
     Err(Diagnostic::error(
-        "MVP-WGPU-UNAVAILABLE",
+        "VESTRA-WGPU-UNAVAILABLE",
         Category::Backend,
         "WGPU support is not enabled in this build",
         "",
@@ -330,7 +330,7 @@ pub fn create_backend(
             )),
             #[cfg(not(feature = "cpu"))]
             RenderBackendPreference::Auto | RenderBackendPreference::Cpu => Err(Diagnostic::error(
-                "MVP-CPU-UNAVAILABLE",
+                "VESTRA-CPU-UNAVAILABLE",
                 Category::Backend,
                 "CPU support is not enabled in this build",
                 "",
@@ -345,7 +345,7 @@ pub fn create_backend(
         )),
         #[cfg(not(feature = "cpu"))]
         RenderBackendPreference::Cpu => Err(Diagnostic::error(
-            "MVP-CPU-UNAVAILABLE",
+            "VESTRA-CPU-UNAVAILABLE",
             Category::Backend,
             "CPU support is not enabled in this build",
             "",
@@ -357,7 +357,7 @@ pub fn create_backend(
         )),
         #[cfg(not(feature = "wgpu"))]
         RenderBackendPreference::Wgpu => Err(Diagnostic::error(
-            "MVP-WGPU-UNAVAILABLE",
+            "VESTRA-WGPU-UNAVAILABLE",
             Category::Backend,
             "WGPU support is not enabled in this build",
             "",
@@ -391,7 +391,7 @@ pub fn create_backend(
         )),
         #[cfg(all(not(feature = "wgpu"), not(feature = "cpu")))]
         RenderBackendPreference::Auto => Err(Diagnostic::error(
-            "MVP-BACKEND-UNAVAILABLE",
+            "VESTRA-BACKEND-UNAVAILABLE",
             Category::Backend,
             "no renderer backend is enabled in this build",
             "",

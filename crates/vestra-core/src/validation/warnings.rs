@@ -19,7 +19,7 @@ pub(super) fn add_unused_assets(project: &Project, warnings: &mut Vec<Diagnostic
         if !used_assets.contains(asset.id.as_str()) {
             warnings.push(
                 Diagnostic::warning(
-                    "MVP-ASSET-UNUSED",
+                    "VESTRA-ASSET-UNUSED",
                     format!("asset '{}' is never used", asset.id),
                     format!("/assets/{index}"),
                 )

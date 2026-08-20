@@ -449,6 +449,17 @@ fn validate_with_depth(
                         format!("{mask_path}/input/asset"),
                     )),
                 },
+                crate::project::MaskInput::Source { source, .. } => {
+                    validate_owned_mask_source(
+                        source,
+                        assets,
+                        maximum_keyframes_per_track,
+                        limits,
+                        errors,
+                        has_authored_audio,
+                        group_depth,
+                    );
+                }
             }
             super::tracks::validate_scalar_property(
                 &mask.strength,
@@ -512,6 +523,54 @@ fn validate_with_depth(
             );
         }
     }
+}
+
+fn validate_owned_mask_source(
+    source: &crate::project::VisualSource,
+    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
+    maximum_keyframes_per_track: usize,
+    limits: crate::validation::ResourceLimits,
+    errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
+    group_depth: usize,
+) {
+    // Feed the source through the same source/Group validator used by an
+    // ordinary clip. This keeps source-specific validation in one place while
+    // adding no timeline-layer reference semantics to owned masks.
+    let visual = crate::project::Visual {
+        clips: vec![crate::project::Clip {
+            id: "owned-mask-source".to_owned(),
+            source: source.clone(),
+            start: 0.0,
+            duration: 1.0,
+            source_start: 0.0,
+            playback_rate: 1.0,
+            layer: 0,
+            visible: true,
+            sizing: None,
+            crop: None,
+            transform: None,
+            opacity: crate::project::ScalarProperty::from_track(crate::project::Track::constant(
+                1.0,
+            )),
+            effects: Vec::new(),
+            masks: Vec::new(),
+            blend_mode: crate::project::BlendMode::Normal,
+            preset: None,
+        }],
+        transitions: Vec::new(),
+        flashes: Vec::new(),
+        post_effects: Vec::new(),
+    };
+    validate_with_depth(
+        &visual,
+        assets,
+        maximum_keyframes_per_track,
+        limits,
+        errors,
+        has_authored_audio,
+        group_depth,
+    );
 }
 
 fn validate_shape(shape: &crate::project::ShapeSource, path: &str, errors: &mut Vec<Diagnostic>) {

@@ -202,6 +202,9 @@ class ParticleSystem(Source):
         )
         return native
 
+    def to_canonical(self) -> dict[str, object]:
+        return {"type": "particle_system", **self.definition.to_canonical()}
+
     def snapshot(self) -> "ParticleSystem":
         copied = object.__new__(type(self))
         copied.definition = deepcopy(self.definition)

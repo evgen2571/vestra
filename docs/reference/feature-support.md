@@ -18,12 +18,15 @@ not reduced renderer support.
 | Geometric layer masks | `layer.masks` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
 | Image alpha masks | `layer.masks` + `ImageMaskMode.ALPHA` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
 | Image luma masks | `layer.masks` + `ImageMaskMode.LUMA` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
+| Text alpha masks | `layer.masks` + `Text` | `masks` (schema v4) | owned source presentation | supported | supported |
+| Video alpha/luma masks | `layer.masks` + `Video` | `masks` (schema v4) | owner-local source timing | supported | supported |
+| Spectrum2D masks | `layer.masks` + `Spectrum2D` | `masks` (schema v4) | audio-reactive owned source | supported | supported |
+| Particle system masks | `layer.masks` + `ParticleSystem` | `masks` (schema v4) | simulation-local source timing | supported | supported |
+| Group masks | owned `Group` source | `masks` (schema v4) | nested owned composition | supported | supported |
 | Soft feather on masks | `mask.feather` | `masks` (schema v4) | layer-local, output-pixel units | supported | supported |
 | Dynamic mask properties | keyframes, modifiers, signals | `masks` (schema v4) | layer-local transform and coverage | supported | supported |
 | Image crop/sizing as a mask | rejected in mask context | not serialized | use `mask.transform` instead | unsupported in v1 | unsupported in v1 |
 | Composition-space masks | not exposed | not serialized | not supported | unsupported | unsupported |
-| Video masks | not exposed | not serialized | not supported | unsupported | unsupported |
-| Text masks | not exposed | not serialized | not supported | unsupported | unsupported |
 | Track mattes | not exposed | not serialized | not supported | unsupported | unsupported |
 | Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |

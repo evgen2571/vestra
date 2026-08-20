@@ -83,6 +83,9 @@ class Image(Source):
         else:
             raise TypeError("crop must be Crop, CropProperty, or None")
 
+    def to_canonical(self) -> dict[str, object]:
+        return {"type": "image", "asset": self.path}
+
 
 
 __all__ = ["Image"]

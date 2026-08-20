@@ -45,11 +45,35 @@ image_mask = layer.masks.add(
 image_mask.transform.scale = (0.75, 0.75)
 ```
 
+Any supported self-contained source can be owned by a mask. The source is
+rendered normally, then its RGBA result is converted to coverage:
+
+```python
+layer.masks.add(vestra.Text("VESTRA", font="VestraTest-Regular.ttf", font_size=96))
+layer.masks.add(vestra.Video("matte.mp4"), mode=vestra.MaskCoverageMode.LUMA)
+layer.masks.add(vestra.Spectrum2D())
+layer.masks.add(vestra.ParticleSystem())
+layer.masks.add(vestra.Group([
+    vestra.Rectangle(width=900, height=600, fill="#ffffffff"),
+    vestra.Text("VESTRA", font="VestraTest-Regular.ttf", font_size=96),
+]))
+
+owned_group = vestra.Group()
+child = owned_group.add(vestra.Rectangle(width=900, height=600, fill="#ffffffff"))
+child.masks.add(vestra.Circle(radius=240, fill="#ffffffff"))
+layer.masks.add(owned_group)
+```
+
+`MaskCoverageMode` is the generic name; `ImageMaskMode` remains a compatibility
+alias. These are owned source masks, not references to another timeline Layer.
+
 `ALPHA` uses source alpha without thresholding. `LUMA` uses encoded RGB values
 with Rec.709 coefficients (`0.2126R + 0.7152G + 0.0722B`) multiplied by
 source alpha. Image pixels use their intrinsic dimensions before the
-mask-local transform. Image `sizing` and `crop` settings are rejected for mask
-inputs. Use `mask.transform` for placement and scale.
+mask-local transform. Direct Image and Video `sizing` and `crop` settings are
+rejected for mask inputs. Use `mask.transform` for placement and scale; Video
+timing remains owner-layer-local. Group child placements retain their normal
+clip sizing and crop fields.
 
 Coverage starts at `1`. The default operation is `INTERSECT`, so one ordinary
 mask reveals the part of the layer covered by its shape. `REPLACE`, `UNION`,

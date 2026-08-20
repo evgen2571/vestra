@@ -11,7 +11,7 @@ from .authoring.assets import AudioAsset, ImageAsset, FontAsset, VideoAsset
 from .authoring.builder import ProjectBuilder
 from .authoring.clips import GroupClip, ImageClip, VideoClip, TransitionCapableClip, VisualClip
 from .authoring.values import BlendMode, Color as AuthoringColor
-from .sources import Circle, Color, Ellipse, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D, Text, Video
+from .sources import Circle, Color, Ellipse, Group, Image, Line, ParticleSystem, Polygon, Rectangle, Shape, Source, Spectrum2D, Text, Video
 from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
@@ -276,9 +276,42 @@ class LoweringContext:
     def _lower_masks(self, layer: "Layer") -> list[dict[str, object]]:
         result = []
         for mask in layer.masks.items:
-            asset_id = self.image_asset(mask.input).id if isinstance(mask.input, Image) else None
-            result.append(mask.to_canonical(asset_id=asset_id))
+            if isinstance(mask.input, Image):
+                result.append(mask.to_canonical(asset_id=self.image_asset(mask.input).id))
+                continue
+            value = mask.to_canonical()
+            input_value = cast(dict[str, object], value["input"])
+            self._register_mask_input_assets(mask.input, input_value)
+            result.append(value)
         return result
+
+    def _register_mask_input_assets(self, source: Source, input_value: dict[str, object]) -> None:
+        if input_value.get("type") == "image":
+            input_value["asset"] = self.image_asset(cast(Image, source)).id
+            return
+        if input_value.get("type") != "source":
+            return
+        source_value = cast(dict[str, object], input_value["source"])
+        self._register_mask_source_assets(source, source_value)
+
+    def _register_mask_source_assets(self, source: Source, value: dict[str, object]) -> None:
+        """Rewrite asset-bearing leaves in an owned source tree."""
+        if isinstance(source, Image):
+            value["asset"] = self.image_asset(source).id
+        elif isinstance(source, Video):
+            value["asset"] = self.video_asset(source).id
+        elif isinstance(source, Text):
+            value["font"] = self.font_asset(source).id
+        elif isinstance(source, Group):
+            clips = cast(list[dict[str, object]], value.get("clips", []))
+            for child, clip in zip(source.children, clips):
+                child_value = cast(dict[str, object], clip["source"])
+                self._register_mask_source_assets(child.source, child_value)
+                for child_mask, child_mask_value in zip(child.masks.items, clip.get("masks", [])):
+                    self._register_mask_input_assets(
+                        child_mask.input,
+                        cast(dict[str, object], child_mask_value["input"]),
+                    )
 
     def video_asset(self, source: Video) -> VideoAsset:
         source_key = os.path.normpath(source.path)

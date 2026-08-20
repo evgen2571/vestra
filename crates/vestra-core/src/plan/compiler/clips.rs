@@ -271,6 +271,44 @@ pub(super) fn compile(
                         mode: *mode,
                     }
                 }
+                crate::project::MaskInput::Source { source, mode } => {
+                    // Owned mask sources use the normal source compiler. The
+                    // synthetic clip supplies only owner-local timing and
+                    // neutral layer presentation; it is never added to the
+                    // composition schedule.
+                    let mut source_clip = clip.clone();
+                    source_clip.id = format!("{}/mask-source", clip.id);
+                    source_clip.source = (**source).clone();
+                    source_clip.start = 0.0;
+                    source_clip.source_start = 0.0;
+                    source_clip.playback_rate = 1.0;
+                    source_clip.layer = 0;
+                    source_clip.visible = true;
+                    source_clip.sizing = None;
+                    source_clip.crop = None;
+                    source_clip.transform = None;
+                    source_clip.effects.clear();
+                    source_clip.masks.clear();
+                    source_clip.preset = None;
+                    let compiled_source = compile(
+                        &source_clip,
+                        validated,
+                        image_indices,
+                        video_indices,
+                        font_indices,
+                        shapes,
+                        texts,
+                        compilation,
+                        scalar_signal_interner,
+                        next_compiled_identity,
+                        next_video_slot_index,
+                        effective_visible_window,
+                    )?;
+                    crate::plan::CompiledMaskInput::Source {
+                        source: Box::new(compiled_source.source),
+                        mode: *mode,
+                    }
+                }
             };
             Ok(crate::plan::CompiledMask {
                 input,

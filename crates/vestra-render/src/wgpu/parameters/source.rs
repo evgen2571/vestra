@@ -40,6 +40,32 @@ pub(in crate::wgpu) struct MaskParameters {
     pub(in crate::wgpu) feather: f32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub(in crate::wgpu) struct MaskFeatherParameters {
+    pub(in crate::wgpu) canvas_width: u32,
+    pub(in crate::wgpu) canvas_height: u32,
+    pub(in crate::wgpu) _padding: [u32; 2],
+    pub(in crate::wgpu) radius: f32,
+    pub(in crate::wgpu) direction: u32,
+    pub(in crate::wgpu) _padding1: [u32; 2],
+}
+
+pub(in crate::wgpu) fn mask_feather(
+    frame: &EvaluatedFrame,
+    radius: f32,
+    horizontal: bool,
+) -> MaskFeatherParameters {
+    MaskFeatherParameters {
+        canvas_width: frame.width,
+        canvas_height: frame.height,
+        _padding: [0; 2],
+        radius,
+        direction: u32::from(!horizontal),
+        _padding1: [0; 2],
+    }
+}
+
 pub(in crate::wgpu) fn mask(
     frame: &EvaluatedFrame,
     mask: &crate::plan::EvaluatedMask,

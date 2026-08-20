@@ -81,24 +81,16 @@ fn default_feather() -> ScalarProperty {
 }
 
 /// Public feather radius in output pixels. Both renderers use this same cap
-/// and the same nine-tap separable Gaussian-like coverage filter.
+/// and the same three-pass separable box approximation to a Gaussian.
 pub const MAX_MASK_FEATHER_PX: f32 = 256.0;
-pub const MASK_FEATHER_TAP_COUNT: usize = 9;
+pub const MASK_FEATHER_PASSES: usize = 3;
 
+/// Half-width of each box in the three-pass Gaussian approximation.
+/// `radius` remains the authored output-pixel softness, rather than an
+/// implementation-dependent kernel width.
 #[must_use]
-pub fn mask_feather_sample_offset(index: usize, radius: f32) -> f32 {
-    (index as f32 - 4.0) * radius.min(MAX_MASK_FEATHER_PX) / 4.0
-}
-
-#[must_use]
-pub fn mask_feather_weight(index: usize, radius: f32) -> f32 {
-    let radius = radius.min(MAX_MASK_FEATHER_PX);
-    if radius <= 0.0 {
-        return if index == 4 { 1.0 } else { 0.0 };
-    }
-    let sigma = radius / 3.0;
-    let offset = mask_feather_sample_offset(index, radius);
-    (-0.5 * (offset / sigma).powi(2)).exp()
+pub fn mask_feather_box_half_width(radius: f32) -> f32 {
+    radius.clamp(0.0, MAX_MASK_FEATHER_PX) / 3.0
 }
 
 /// Applies one normalized mask operation. Both inputs and the result are

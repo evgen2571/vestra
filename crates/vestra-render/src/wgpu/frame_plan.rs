@@ -27,6 +27,7 @@ pub(super) enum TextureSlot {
     EffectB,
     Auxiliary,
     MaskCoverage,
+    MaskFeather,
     GroupCanvasA(usize),
     GroupCanvasB(usize),
 }
@@ -81,6 +82,16 @@ pub(super) enum GpuOperation {
         destination: TextureSlot,
         result_value: u64,
         parameters_index: u32,
+    },
+    FeatherMask {
+        layer_index: usize,
+        mask_index: usize,
+        source: TextureSlot,
+        expected_source_value: u64,
+        destination: TextureSlot,
+        result_value: u64,
+        parameters_index: u32,
+        horizontal: bool,
     },
     RenderSurfaceLayer {
         layer_index: usize,
@@ -328,6 +339,9 @@ impl GpuFramePlan {
                 | GpuOperation::ApplyMask {
                     parameters_index, ..
                 } => Some(*parameters_index),
+                GpuOperation::FeatherMask {
+                    parameters_index, ..
+                } => Some(*parameters_index),
                 GpuOperation::ResolveParticleLayer { .. } => None,
                 GpuOperation::CopyForEffect { .. }
                 | GpuOperation::StoreStaticLayer { .. }
@@ -415,6 +429,31 @@ impl GpuFramePlan {
                         return Err(invalid(
                             operation_index,
                             "uses an invalid mask coverage dependency",
+                        ));
+                    }
+                    states.insert(*destination, TextureState::written(*result_value));
+                    next_value += 1;
+                }
+                GpuOperation::FeatherMask {
+                    source,
+                    expected_source_value,
+                    destination,
+                    result_value,
+                    ..
+                } => {
+                    if states.get(source).and_then(|state| state.value)
+                        != Some(*expected_source_value)
+                        || !states.get(source).copied().unwrap_or_default().initialized
+                        || !matches!(
+                            destination,
+                            TextureSlot::Auxiliary | TextureSlot::MaskFeather
+                        )
+                        || source == destination
+                        || *result_value != next_value
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "uses an invalid mask feather dependency",
                         ));
                     }
                     states.insert(*destination, TextureState::written(*result_value));
@@ -980,6 +1019,33 @@ fn append_masks(
         *next_value += 1;
         let coverage_source = *layer_result;
         let coverage_source_value = *layer_value;
+        let mut feather_value = *next_value - 1;
+        if mask.feather > 0.0 {
+            let mut feather_source = TextureSlot::Auxiliary;
+            for horizontal in [true, false] {
+                for _ in 0..crate::project::MASK_FEATHER_PASSES {
+                    let feather_destination = if feather_source == TextureSlot::Auxiliary {
+                        TextureSlot::MaskFeather
+                    } else {
+                        TextureSlot::Auxiliary
+                    };
+                    operations.push(GpuOperation::FeatherMask {
+                        layer_index,
+                        mask_index,
+                        source: feather_source,
+                        expected_source_value: feather_value,
+                        destination: feather_destination,
+                        result_value: *next_value,
+                        parameters_index: *parameter_count,
+                        horizontal,
+                    });
+                    *parameter_count += 1;
+                    feather_source = feather_destination;
+                    feather_value = *next_value;
+                    *next_value += 1;
+                }
+            }
+        }
         let destination = match *layer_result {
             TextureSlot::EffectA => TextureSlot::EffectB,
             _ => TextureSlot::EffectA,
@@ -1324,6 +1390,24 @@ pub(super) fn plan_has_masks(plan: &RenderPlan) -> bool {
         })
     }
     layers_have_masks(&plan.layers)
+}
+
+pub(super) fn plan_has_mask_feather(plan: &RenderPlan) -> bool {
+    fn layers_have_feather(layers: &[crate::plan::CompiledLayer]) -> bool {
+        layers.iter().any(|layer| {
+            layer.masks.iter().any(|mask| {
+                mask.feather.authored_track.base_value > 0.0
+                    || !mask.feather.authored_track.keyframes.is_empty()
+                    || mask.feather.has_modifiers()
+            }) || match &layer.source {
+                crate::plan::CompiledVisualSource::Group(composition) => {
+                    layers_have_feather(&composition.layers)
+                }
+                _ => false,
+            }
+        })
+    }
+    layers_have_feather(&plan.layers)
 }
 
 fn invalid(operation_index: usize, message: &str) -> Diagnostic {

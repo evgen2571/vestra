@@ -394,6 +394,10 @@ fn evaluate_layers(
             .masks
             .iter()
             .map(|mask| {
+                // Keep the public evaluation metric aligned with the scalar
+                // properties evaluated below, just as opacity is counted
+                // above. Transform tracks are accounted for by evaluate_tracks.
+                evaluated_track_count += 2;
                 Ok(EvaluatedMask {
                     shape_index: mask.shape_index,
                     operation: mask.operation,

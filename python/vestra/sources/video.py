@@ -46,5 +46,8 @@ class Video(Source):
     def crop(self) -> CropProperty:
         return self._crop
 
+    def to_canonical(self) -> dict[str, object]:
+        return {"type": "video", "asset": self.path}
+
 
 __all__ = ["Video"]

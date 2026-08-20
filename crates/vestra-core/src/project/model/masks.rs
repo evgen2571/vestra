@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Point, ScalarProperty, ShapeSource, Track, Transform};
+use super::{Point, ScalarProperty, ShapeSource, Track, Transform, VisualSource};
 
 /// Ordered coverage operation applied to a layer's accumulated mask coverage.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -13,29 +13,39 @@ pub enum MaskOperation {
     Subtract,
 }
 
-/// The deliberately narrow set of coverage producers supported by layer masks.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+/// Coverage mode shared by every source that can render an owned mask.
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaskInput {
     Shape(ShapeSource),
-    Image { asset: String, mode: ImageMaskMode },
+    Image {
+        asset: String,
+        mode: MaskCoverageMode,
+    },
+    Source {
+        source: Box<VisualSource>,
+        mode: MaskCoverageMode,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum ImageMaskMode {
+pub enum MaskCoverageMode {
     Alpha,
     Luma,
 }
 
+/// Compatibility name retained for schema-v4 and pre-release 0.1 callers.
+pub type ImageMaskMode = MaskCoverageMode;
+
 /// Converts one prepared encoded RGBA pixel into renderer-independent mask
 /// coverage. The RGB values use the prepared image's encoded byte space.
 #[must_use]
-pub fn image_mask_coverage(pixel: [u8; 4], mode: ImageMaskMode) -> f32 {
+pub fn mask_coverage(pixel: [u8; 4], mode: MaskCoverageMode) -> f32 {
     let alpha = f32::from(pixel[3]) / 255.0;
     match mode {
-        ImageMaskMode::Alpha => alpha,
-        ImageMaskMode::Luma => {
+        MaskCoverageMode::Alpha => alpha,
+        MaskCoverageMode::Luma => {
             (0.2126 * f32::from(pixel[0]) / 255.0
                 + 0.7152 * f32::from(pixel[1]) / 255.0
                 + 0.0722 * f32::from(pixel[2]) / 255.0)
@@ -44,8 +54,14 @@ pub fn image_mask_coverage(pixel: [u8; 4], mode: ImageMaskMode) -> f32 {
     }
 }
 
+/// Compatibility wrapper for the original image-mask helper.
+#[must_use]
+pub fn image_mask_coverage(pixel: [u8; 4], mode: ImageMaskMode) -> f32 {
+    mask_coverage(pixel, mode)
+}
+
 /// A layer-owned coverage input.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Mask {
     pub id: String,
@@ -224,6 +240,32 @@ mod tests {
                 json
             );
         }
+    }
+
+    #[test]
+    fn owned_source_mask_inputs_round_trip_without_specialized_variants() {
+        let mut value = mask();
+        value.input = MaskInput::Source {
+            source: Box::new(super::super::VisualSource::Text(super::super::TextSource {
+                text: "VESTRA".to_owned(),
+                font: "font".to_owned(),
+                font_size: 16.0,
+                fill: "#ffffff".to_owned(),
+                align: Default::default(),
+                max_width: None,
+                line_spacing: 1.0,
+                letter_spacing: 0.0,
+            })),
+            mode: MaskCoverageMode::Alpha,
+        };
+        let json = serde_json::to_value(&value).expect("source mask serializes");
+        assert_eq!(json["input"]["type"], "source");
+        assert_eq!(json["input"]["source"]["type"], "text");
+        let decoded: Mask = serde_json::from_value(json.clone()).expect("source mask parses");
+        assert_eq!(
+            serde_json::to_value(decoded).expect("source mask serializes"),
+            json
+        );
     }
 
     #[test]

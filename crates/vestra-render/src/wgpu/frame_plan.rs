@@ -70,6 +70,7 @@ pub(super) enum GpuOperation {
         layer_index: usize,
         mask_index: usize,
         source_index: usize,
+        source_layer: bool,
         state_source: TextureSlot,
         expected_state_value: Option<u64>,
         parameters_index: u32,
@@ -272,29 +273,37 @@ impl GpuFramePlan {
     }
 
     pub(super) fn required_group_depth(plan: &RenderPlan) -> usize {
+        fn source_depth(source: &crate::plan::CompiledVisualSource) -> usize {
+            match source {
+                crate::plan::CompiledVisualSource::Group(composition) => {
+                    1 + composition_depth(composition)
+                }
+                _ => 0,
+            }
+        }
+        fn layer_depth(layer: &crate::plan::CompiledLayer) -> usize {
+            let owned_mask_depth = layer
+                .masks
+                .iter()
+                .map(|mask| match &mask.input {
+                    crate::plan::CompiledMaskInput::Source { source, .. } => {
+                        2 + source_depth(source)
+                    }
+                    _ => 0,
+                })
+                .max()
+                .unwrap_or(0);
+            source_depth(&layer.source).max(owned_mask_depth)
+        }
         fn composition_depth(composition: &crate::plan::CompiledComposition) -> usize {
             composition
                 .layers
                 .iter()
-                .filter_map(|layer| match &layer.source {
-                    crate::plan::CompiledVisualSource::Group(child) => {
-                        Some(1 + composition_depth(child))
-                    }
-                    _ => None,
-                })
+                .map(layer_depth)
                 .max()
                 .unwrap_or(0)
         }
-        plan.layers
-            .iter()
-            .filter_map(|layer| match &layer.source {
-                crate::plan::CompiledVisualSource::Group(composition) => {
-                    Some(1 + composition_depth(composition))
-                }
-                _ => None,
-            })
-            .max()
-            .unwrap_or(0)
+        plan.layers.iter().map(layer_depth).max().unwrap_or(0)
     }
 
     pub(super) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
@@ -387,7 +396,12 @@ impl GpuFramePlan {
                     expected_state_value,
                     ..
                 } => {
-                    if let GpuOperation::RenderMask { source_index, .. } = operation
+                    if let GpuOperation::RenderMask {
+                        source_index,
+                        source_layer,
+                        ..
+                    } = operation
+                        && !source_layer
                         && *source_index >= source_asset_count
                     {
                         return Err(invalid(
@@ -527,8 +541,14 @@ impl GpuFramePlan {
                     destination,
                     value,
                 } => {
-                    if *destination != TextureSlot::Auxiliary
-                        || source == destination
+                    if !matches!(
+                        destination,
+                        TextureSlot::Auxiliary
+                            | TextureSlot::EffectA
+                            | TextureSlot::Layer
+                            | TextureSlot::GroupCanvasA(_)
+                            | TextureSlot::GroupCanvasB(_)
+                    ) || source == destination
                         || !states.get(source).copied().unwrap_or_default().initialized
                         || states.get(source).and_then(|state| state.value) != Some(*value)
                     {
@@ -838,6 +858,8 @@ fn append_layer(
         append_masks(
             layer,
             layer_index,
+            depth,
+            layers,
             &mut layer_result,
             &mut layer_value,
             operations,
@@ -968,6 +990,8 @@ fn append_layer(
     append_masks(
         layer,
         layer_index,
+        depth,
+        layers,
         &mut layer_result,
         &mut layer_value,
         operations,
@@ -999,6 +1023,8 @@ fn append_layer(
 fn append_masks(
     layer: &crate::plan::EvaluatedLayer,
     layer_index: usize,
+    depth: usize,
+    layers: &mut Vec<crate::plan::EvaluatedLayer>,
     layer_result: &mut TextureSlot,
     layer_value: &mut u64,
     operations: &mut Vec<GpuOperation>,
@@ -1006,22 +1032,111 @@ fn append_masks(
     next_value: &mut u64,
     mask_state_value: &mut Option<u64>,
 ) {
+    fn source_group_depth(source: &crate::plan::EvaluatedSource) -> usize {
+        fn layer_depth(layer: &crate::plan::EvaluatedLayer) -> usize {
+            let source_depth = source_group_depth(&layer.source);
+            let mask_depth = layer
+                .masks
+                .iter()
+                .filter_map(|mask| match &mask.input {
+                    crate::plan::EvaluatedMaskInput::Source { source, .. } => {
+                        Some(1 + source_group_depth(source))
+                    }
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0);
+            source_depth.max(mask_depth)
+        }
+        fn composition_depth(composition: &crate::plan::EvaluatedComposition) -> usize {
+            composition
+                .layers
+                .iter()
+                .map(layer_depth)
+                .max()
+                .unwrap_or(0)
+        }
+        match source {
+            crate::plan::EvaluatedSource::Group { composition } => {
+                1 + composition_depth(composition)
+            }
+            _ => 0,
+        }
+    }
     for (mask_index, mask) in layer.masks.iter().enumerate() {
+        let saved_layer_destination = if matches!(
+            &mask.input,
+            crate::plan::EvaluatedMaskInput::Source { source, .. }
+                if matches!(source.as_ref(), crate::plan::EvaluatedSource::Group { .. })
+        ) {
+            TextureSlot::GroupCanvasB(
+                depth
+                    + source_group_depth(match &mask.input {
+                        crate::plan::EvaluatedMaskInput::Source { source, .. } => source,
+                        _ => unreachable!(),
+                    })
+                    + 1,
+            )
+        } else {
+            TextureSlot::EffectA
+        };
+        let saved_layer_for_source =
+            matches!(&mask.input, crate::plan::EvaluatedMaskInput::Source { .. })
+                && *layer_result == TextureSlot::Layer;
+        let saved_layer_value = *layer_value;
+        if saved_layer_for_source {
+            operations.push(GpuOperation::CopyForEffect {
+                source: TextureSlot::Layer,
+                destination: saved_layer_destination,
+                value: saved_layer_value,
+            });
+        }
+        let (source_index, source_layer) = match &mask.input {
+            crate::plan::EvaluatedMaskInput::Source { source, mode: _ } => {
+                let source_layer_index = layers.len();
+                append_mask_source(
+                    &crate::plan::EvaluatedLayer {
+                        compiled_layer_index: usize::MAX,
+                        content_dependency: crate::plan::TemporalDependency::Dynamic,
+                        source: (**source).clone(),
+                        transform: mask.transform,
+                        opacity: 1.0,
+                        effects: Vec::new(),
+                        masks: Vec::new(),
+                        colour_transform: crate::plan::ColourTransform::default(),
+                        blend_mode: crate::project::BlendMode::Normal,
+                    },
+                    depth + 1,
+                    operations,
+                    layers,
+                    parameter_count,
+                    next_value,
+                );
+                (source_layer_index, true)
+            }
+            crate::plan::EvaluatedMaskInput::Shape { shape_index } => (*shape_index, false),
+            crate::plan::EvaluatedMaskInput::Image { asset_index, .. } => (*asset_index, false),
+        };
         operations.push(GpuOperation::RenderMask {
             layer_index,
             mask_index,
-            source_index: match mask.input {
-                crate::plan::EvaluatedMaskInput::Shape { shape_index } => shape_index,
-                crate::plan::EvaluatedMaskInput::Image { asset_index, .. } => asset_index,
-            },
+            source_index,
+            source_layer,
             state_source: TextureSlot::MaskCoverage,
             expected_state_value: *mask_state_value,
             parameters_index: *parameter_count,
         });
         *parameter_count += 1;
         *next_value += 1;
+        if saved_layer_for_source {
+            operations.push(GpuOperation::CopyForEffect {
+                source: saved_layer_destination,
+                destination: TextureSlot::Layer,
+                value: saved_layer_value,
+            });
+        }
         let coverage_source = *layer_result;
-        let coverage_source_value = *layer_value;
+        let coverage_source_value = saved_layer_value;
         let mut feather_value = *next_value - 1;
         if mask.feather > 0.0 {
             let mut feather_source = TextureSlot::Auxiliary;
@@ -1078,6 +1193,129 @@ fn append_masks(
         *parameter_count += 1;
         *mask_state_value = Some(*next_value);
         *next_value += 1;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_mask_source(
+    layer: &crate::plan::EvaluatedLayer,
+    depth: usize,
+    operations: &mut Vec<GpuOperation>,
+    layers: &mut Vec<crate::plan::EvaluatedLayer>,
+    parameter_count: &mut u32,
+    next_value: &mut u64,
+) {
+    let layer_index = layers.len();
+    layers.push(layer.clone());
+    match &layer.source {
+        EvaluatedSource::Group { composition } => {
+            let mut group_canvas = TextureSlot::GroupCanvasA(depth);
+            operations.push(GpuOperation::ClearCanvas {
+                destination: group_canvas,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+            let mut group_value = *next_value - 1;
+            for child in &composition.layers {
+                append_layer(
+                    child,
+                    group_canvas,
+                    depth + 1,
+                    operations,
+                    layers,
+                    parameter_count,
+                    next_value,
+                    &mut group_canvas,
+                    &mut group_value,
+                    &BTreeSet::new(),
+                    &BTreeSet::new(),
+                );
+            }
+            operations.push(GpuOperation::RenderSurfaceLayer {
+                layer_index,
+                source: group_canvas,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+        }
+        EvaluatedSource::Image { asset_index, .. } => {
+            operations.push(GpuOperation::RenderRasterLayer {
+                layer_index,
+                source_index: *asset_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+        }
+        EvaluatedSource::Video { source_index, .. } => {
+            operations.push(GpuOperation::RenderRasterLayer {
+                layer_index,
+                source_index: *source_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+        }
+        EvaluatedSource::Shape { shape_index, .. }
+        | EvaluatedSource::Text {
+            text_index: shape_index,
+        } => {
+            operations.push(GpuOperation::RenderRasterLayer {
+                layer_index,
+                source_index: *shape_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+        }
+        EvaluatedSource::SolidColor { .. } => {
+            operations.push(GpuOperation::RenderSolidLayer {
+                layer_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+        }
+        EvaluatedSource::Spectrum2D { .. } => {
+            operations.push(GpuOperation::RenderSpectrum2DLayer {
+                layer_index,
+                destination: TextureSlot::Layer,
+                parameters_index: *parameter_count,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+        }
+        EvaluatedSource::ParticleSystem { system, .. } => {
+            let blend_mode = system.blend_mode;
+            let destination = match blend_mode {
+                crate::project::ParticleBlendMode::Normal => TextureSlot::ParticleAccumulation,
+                crate::project::ParticleBlendMode::Additive => TextureSlot::Layer,
+            };
+            operations.push(GpuOperation::RenderParticleLayer {
+                layer_index,
+                destination,
+                parameters_index: *parameter_count,
+                instance_offset: 0,
+                instance_count: 0,
+                blend_mode,
+            });
+            *parameter_count += 1;
+            *next_value += 1;
+            if matches!(blend_mode, crate::project::ParticleBlendMode::Normal) {
+                operations.push(GpuOperation::ResolveParticleLayer {
+                    source: TextureSlot::ParticleAccumulation,
+                    destination: TextureSlot::Layer,
+                });
+                *next_value += 1;
+            }
+        }
     }
 }
 

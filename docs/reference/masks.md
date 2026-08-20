@@ -30,22 +30,29 @@ evolving and has not become a stable external compatibility boundary. Image
 mask inputs therefore do not trigger a version bump; schema 3 loading remains
 supported.
 
-The supported geometric inputs are `Rectangle`, `Ellipse`, `Circle`, and
-`Polygon`. `Line` remains a visible shape source but is rejected as a mask
-input. Image inputs use `alpha` coverage or `luma` coverage. Luma is computed
+Masks consume coverage produced by owned sources. The supported geometric
+inputs are `Rectangle`, `Ellipse`, `Circle`, and `Polygon`. `Line` remains a
+visible shape source but is rejected as a mask input. Text, Video, Spectrum2D,
+ParticleSystem, SolidColor, and Group sources use the same source model when
+owned by a mask; an existing timeline Layer is never accepted as a mask.
+Sources use `alpha` coverage or `luma` coverage. Luma is computed
 from encoded RGB values as `0.2126R + 0.7152G + 0.0722B`, then multiplied by
 source alpha. Images start at their intrinsic pixel dimensions, centered by the
 default normalized `(0.5, 0.5)` position and anchor, before the mask-local
 transform is applied. A different-sized image is therefore sampled against its
 own intrinsic rectangle; it is not implicitly resized to the layer canvas.
-Image `sizing` and `crop` values are not supported in mask context and are
-rejected during Python authoring. Use `mask.transform` to position, scale, or
-rotate the intrinsic image mask.
-`feather` applies a smooth Gaussian-like coverage blur measured
+Direct Image and Video `sizing` and `crop` values are not supported in mask
+context and are rejected during Python authoring. Use `mask.transform` to
+position, scale, or rotate the intrinsic source mask. Video frame timing still
+follows the owning layer's local time.
+`mode=None` selects the source-appropriate default (`alpha`). Explicit invalid
+modes are authoring errors. `feather` applies a smooth Gaussian-like coverage blur measured
 in output pixels. It supports fractional values, is limited to `0 .. 256` px,
 and treats coverage outside the canvas as zero. A value of `0` preserves
 hard-mask behavior.
 Feathering filters coverage before inversion, operation combination, and
 strength interpolation. Image pixels use their intrinsic dimensions before the
 mask-local transform; the owning layer transform moves the image mask with the
-layer. Text/video inputs, composition masks, and track mattes are deferred.
+layer. Track mattes and composition-space masks are separate, unsupported
+features; an owned Group is rendered as a self-contained precomposition before
+coverage extraction.

@@ -21,6 +21,23 @@ pub(super) struct ImageTable {
 /// Keeps the project asset order while omitting unused and non-image assets.
 #[must_use]
 pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> ImageTable {
+    fn collect_source<'a>(
+        source: &'a crate::project::VisualSource,
+        ids: &mut BTreeSet<&'a str>,
+        video_ids: &mut BTreeSet<&'a str>,
+    ) {
+        match source {
+            crate::project::VisualSource::Image { asset } => {
+                ids.insert(asset.as_str());
+            }
+            crate::project::VisualSource::Video { asset } => {
+                video_ids.insert(asset.as_str());
+            }
+            crate::project::VisualSource::Group(group) => collect(&group.clips, ids, video_ids),
+            _ => {}
+        }
+    }
+
     fn collect<'a>(
         clips: &'a [crate::project::Clip],
         ids: &mut BTreeSet<&'a str>,
@@ -28,8 +45,14 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
     ) {
         for clip in clips.iter().filter(|clip| clip.visible) {
             for mask in &clip.masks {
-                if let crate::project::MaskInput::Image { asset, .. } = &mask.input {
-                    ids.insert(asset.as_str());
+                match &mask.input {
+                    crate::project::MaskInput::Image { asset, .. } => {
+                        ids.insert(asset.as_str());
+                    }
+                    crate::project::MaskInput::Source { source, .. } => {
+                        collect_source(source, ids, video_ids);
+                    }
+                    crate::project::MaskInput::Shape(_) => {}
                 }
             }
             match &clip.source {
@@ -104,8 +127,26 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
         .map(|(index, video)| (video.id.clone(), index))
         .collect();
     let mut font_ids = BTreeSet::new();
+    fn collect_font_source<'a>(
+        source: &'a crate::project::VisualSource,
+        ids: &mut BTreeSet<&'a str>,
+    ) {
+        match source {
+            crate::project::VisualSource::Text(text) => {
+                ids.insert(text.font.as_str());
+            }
+            crate::project::VisualSource::Group(group) => collect_fonts(&group.clips, ids),
+            _ => {}
+        }
+    }
+
     fn collect_fonts<'a>(clips: &'a [crate::project::Clip], ids: &mut BTreeSet<&'a str>) {
         for clip in clips.iter().filter(|clip| clip.visible) {
+            for mask in &clip.masks {
+                if let crate::project::MaskInput::Source { source, .. } = &mask.input {
+                    collect_font_source(source, ids);
+                }
+            }
             match &clip.source {
                 crate::project::VisualSource::Text(text) => {
                     ids.insert(text.font.as_str());

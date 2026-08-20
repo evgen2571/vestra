@@ -104,6 +104,22 @@ impl GpuRequirements {
             )
             .max()
             .unwrap_or(1);
+        fn source_group_count(source: &crate::plan::CompiledVisualSource) -> usize {
+            match source {
+                crate::plan::CompiledVisualSource::Group(composition) => {
+                    1 + compiled_counts(&composition.layers).1
+                }
+                _ => 0,
+            }
+        }
+        fn source_layer_count(source: &crate::plan::CompiledVisualSource) -> usize {
+            1 + match source {
+                crate::plan::CompiledVisualSource::Group(composition) => {
+                    compiled_counts(&composition.layers).0
+                }
+                _ => 0,
+            }
+        }
         fn compiled_counts(layers: &[crate::plan::CompiledLayer]) -> (usize, usize) {
             layers
                 .iter()
@@ -114,22 +130,61 @@ impl GpuRequirements {
                         }
                         _ => (0, 0),
                     };
+                    let owned_groups = layer
+                        .masks
+                        .iter()
+                        .filter_map(|mask| match &mask.input {
+                            crate::plan::CompiledMaskInput::Source { source, .. } => {
+                                Some(source_group_count(source))
+                            }
+                            _ => None,
+                        })
+                        .sum::<usize>();
+                    let owned_layers = layer
+                        .masks
+                        .iter()
+                        .filter_map(|mask| match &mask.input {
+                            crate::plan::CompiledMaskInput::Source { source, .. } => {
+                                Some(source_layer_count(source))
+                            }
+                            _ => None,
+                        })
+                        .sum::<usize>();
                     (
-                        layer_count + 1 + nested_layers,
+                        layer_count + 1 + nested_layers + owned_layers,
                         group_count
                             + usize::from(matches!(
                                 &layer.source,
                                 crate::plan::CompiledVisualSource::Group(_)
                             ))
-                            + nested_groups,
+                            + nested_groups
+                            + owned_groups,
                     )
                 })
+        }
+        fn source_mask_count(source: &crate::plan::CompiledVisualSource) -> usize {
+            match source {
+                crate::plan::CompiledVisualSource::Group(composition) => {
+                    compiled_mask_count(&composition.layers)
+                }
+                _ => 0,
+            }
         }
         fn compiled_mask_count(layers: &[crate::plan::CompiledLayer]) -> usize {
             layers
                 .iter()
                 .map(|layer| {
                     layer.masks.len()
+                        + layer
+                            .masks
+                            .iter()
+                            .filter_map(|mask| match &mask.input {
+                                crate::plan::CompiledMaskInput::Source { source, .. } => {
+                                    Some(source_mask_count(source))
+                                }
+                                _ => None,
+                            })
+                            .sum::<usize>()
                         + match &layer.source {
                             crate::plan::CompiledVisualSource::Group(composition) => {
                                 compiled_mask_count(&composition.layers)

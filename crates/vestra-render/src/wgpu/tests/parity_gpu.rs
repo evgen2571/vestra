@@ -230,7 +230,7 @@ fn shape_feather_parity_project(radius: f64, transformed: bool) -> crate::projec
             .insert("transform".to_owned(), transform);
     }
     serde_json::from_value(json!({
-        "schema_version": 3,
+        "schema_version": 4,
         "output": {
             "path": "shape-feather-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#000000", "quality": "preview",
@@ -259,7 +259,7 @@ fn gpu_shape_feather_matches_cpu_at_small_medium_large_and_fractional_radii() {
 
 fn image_mask_parity_project(mode: &str, masks: Value) -> crate::project::Project {
     serde_json::from_value(json!({
-        "schema_version": 3,
+        "schema_version": 4,
         "output": {
             "path": "image-mask-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#000000", "quality": "preview",

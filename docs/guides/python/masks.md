@@ -37,12 +37,19 @@ layer.masks.add(
     mode=vestra.ImageMaskMode.LUMA,
     feather=12,
 )
+image_mask = layer.masks.add(
+    vestra.Image("alpha.png"),
+    mode=vestra.ImageMaskMode.ALPHA,
+    feather=8,
+)
+image_mask.transform.scale = (0.75, 0.75)
 ```
 
 `ALPHA` uses source alpha without thresholding. `LUMA` uses encoded RGB values
 with Rec.709 coefficients (`0.2126R + 0.7152G + 0.0722B`) multiplied by
 source alpha. Image pixels use their intrinsic dimensions before the
-mask-local transform.
+mask-local transform. Image `sizing` and `crop` settings are rejected for mask
+inputs. Use `mask.transform` for placement and scale.
 
 Coverage starts at `1`. The default operation is `INTERSECT`, so one ordinary
 mask reveals the part of the layer covered by its shape. `REPLACE`, `UNION`,

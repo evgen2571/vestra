@@ -33,6 +33,12 @@ class Mask:
             raise TypeError("mask input must be a Shape or Image")
         if isinstance(source, Line):
             raise TypeError("Line is not supported as a mask input")
+        if isinstance(source, Image) and (source.sizing is not None or source.crop.active):
+            raise ValueError(
+                "Image masks currently use intrinsic image dimensions. "
+                "Image sizing/crop settings are not supported in mask context; "
+                "use mask.transform to position and scale the mask."
+            )
         if isinstance(source, Shape) and mode is not None:
             raise TypeError("mode is only valid for Image mask inputs")
         if isinstance(source, Image):
@@ -54,7 +60,7 @@ class Mask:
     @property
     def id(self) -> str: return self._id
     @property
-    def input(self) -> Shape: return self._input
+    def input(self) -> Shape | Image: return self._input
     @property
     def operation(self) -> MaskOperation: return self._operation
     @operation.setter

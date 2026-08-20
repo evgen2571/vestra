@@ -1868,6 +1868,17 @@ fn mask_properties_classify_static_and_dynamic_content() {
         TemporalDependency::Static
     );
 
+    let mut image_mask = mask.clone();
+    image_mask.input = crate::project::MaskInput::Image {
+        asset: "red".to_owned(),
+        mode: crate::project::ImageMaskMode::Luma,
+    };
+    project.visual.clips[0].masks = vec![image_mask.clone()];
+    assert_eq!(
+        compile_project(project.clone()).layers[0].content_dependency,
+        TemporalDependency::Static
+    );
+
     let dynamic = |mut mask: crate::project::Mask| {
         mask.transform
             .position
@@ -1882,6 +1893,21 @@ fn mask_properties_classify_static_and_dynamic_content() {
         mask
     };
     for mask in [
+        {
+            let mut value = image_mask.clone();
+            value
+                .transform
+                .position
+                .keyframes
+                .push(crate::project::Keyframe {
+                    time: 1.0,
+                    value: crate::project::Point { x: 0.7, y: 0.5 },
+                    interpolation: crate::project::Interpolation::Named(
+                        crate::project::InterpolationName::Linear,
+                    ),
+                });
+            value
+        },
         dynamic(mask.clone()),
         {
             let mut value = mask.clone();

@@ -434,6 +434,21 @@ fn validate_with_depth(
                     }
                     validate_shape(shape, &format!("{mask_path}/input"), errors);
                 }
+                crate::project::MaskInput::Image { asset, .. } => match assets.get(asset) {
+                    Some(crate::project::AssetType::Image) => {}
+                    Some(_) => errors.push(Diagnostic::error(
+                        "VESTRA-MASK-ASSET",
+                        Category::Semantic,
+                        "image mask asset must reference an image asset",
+                        format!("{mask_path}/input/asset"),
+                    )),
+                    None => errors.push(Diagnostic::error(
+                        "VESTRA-MASK-ASSET",
+                        Category::Semantic,
+                        "image mask asset does not exist",
+                        format!("{mask_path}/input/asset"),
+                    )),
+                },
             }
             super::tracks::validate_scalar_property(
                 &mask.strength,

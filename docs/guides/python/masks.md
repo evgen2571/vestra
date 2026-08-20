@@ -1,4 +1,4 @@
-# Geometric masks
+# Layer masks
 
 A mask belongs to a layer. It is separate from the layer's effects and is
 applied after effects, before final opacity and blending.
@@ -27,7 +27,22 @@ to manage the collection. Supported inputs are `Rectangle`, `Ellipse`,
 `Circle`, and `Polygon` shape objects. Shapes still need a fill or stroke,
 just as they do when used as visible sources.
 `Line` remains available as a visible shape source but is not a supported mask
-input in this phase.
+input.
+
+The normal `Image` source can also provide static image coverage:
+
+```python
+layer.masks.add(
+    vestra.Image("gradient.png"),
+    mode=vestra.ImageMaskMode.LUMA,
+    feather=12,
+)
+```
+
+`ALPHA` uses source alpha without thresholding. `LUMA` uses encoded RGB values
+with Rec.709 coefficients (`0.2126R + 0.7152G + 0.0722B`) multiplied by
+source alpha. Image pixels use their intrinsic dimensions before the
+mask-local transform.
 
 Coverage starts at `1`. The default operation is `INTERSECT`, so one ordinary
 mask reveals the part of the layer covered by its shape. `REPLACE`, `UNION`,
@@ -45,10 +60,10 @@ layer opacity runs after masks.
 Groups are maskable layers, so a group mask clips the already-composited group
 result.
 
-Feather is a nine-tap separable Gaussian-like coverage filter. Its radius is
-measured in output pixels, sigma is `feather / 3`, fractional values are kept,
-the maximum is `256`, and samples outside the canvas have zero coverage. It
-filters coverage before inversion, operation combination, and strength
-interpolation. Static masks remain cacheable; animated, modifier-driven, or
-signal-driven mask properties make the owning layer dynamic. Image masks,
-composition masks, and track mattes are not supported.
+Feather applies a smooth Gaussian-like coverage blur measured in output
+pixels. Values from `0` through `256` px are supported, fractional values are
+kept, and samples outside the canvas have zero coverage. It filters coverage
+before inversion, operation combination, and strength interpolation. Static
+masks remain cacheable; animated, modifier-driven, or signal-driven mask
+properties make the owning layer dynamic. Composition masks and track mattes
+are not supported.

@@ -29,7 +29,7 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
 
 `validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
 
-Layers expose an ordered geometric mask collection:
+Layers expose an ordered mask collection:
 
 ```python
 mask = layer.masks.add(shape, operation=MaskOperation.INTERSECT, id=None, feather=12)
@@ -40,7 +40,8 @@ layer.masks.clear()
 
 `Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, `feather`, and
 `transform`. Supported inputs are the existing `Rectangle`, `Ellipse`,
-`Circle`, and `Polygon` shape authoring objects. `strength`, `feather`, and
+`Circle`, and `Polygon` shape authoring objects, or the normal `Image` source
+with `mode=ImageMaskMode.ALPHA` or `ImageMaskMode.LUMA`. `strength`, `feather`, and
 transform properties support the normal keyframes, modifiers, and signal
 bindings. Masks are applied after layer effects and before final
 opacity/blending.

@@ -259,11 +259,21 @@ pub(super) fn compile(
         .masks
         .iter()
         .map(|mask| {
-            let crate::project::MaskInput::Shape(shape) = &mask.input;
-            let shape_index = image_indices.len() + shapes.len();
-            shapes.push(shape.clone());
+            let input = match &mask.input {
+                crate::project::MaskInput::Shape(shape) => {
+                    let shape_index = image_indices.len() + shapes.len();
+                    shapes.push(shape.clone());
+                    crate::plan::CompiledMaskInput::Shape { shape_index }
+                }
+                crate::project::MaskInput::Image { asset, mode } => {
+                    crate::plan::CompiledMaskInput::Image {
+                        asset_index: assets::lookup(image_indices, asset, &clip.id)?,
+                        mode: *mode,
+                    }
+                }
+            };
             Ok(crate::plan::CompiledMask {
-                shape_index,
+                input,
                 operation: mask.operation,
                 invert: mask.invert,
                 strength: super::signals::compile_property(

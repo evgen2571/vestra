@@ -186,6 +186,7 @@ class LoweringContext:
             )
             self._lower_transitions(layer.child.transitions, group_clip)
             _lower_presentation(layer, group_clip, include_transform=True)
+            group_clip._set_masks(self._lower_masks(layer))
             _lower_visual_effects(layer.effects, group_clip.effects)
             self.layer_clips[layer] = group_clip
             return group_clip
@@ -219,11 +220,13 @@ class LoweringContext:
                 id=native_id,
             )
             _lower_presentation(layer, outer, include_transform=True)
+            outer._set_masks(self._lower_masks(layer))
             clip = outer
         else:
             _lower_presentation(
                 layer, clip, include_transform=capabilities.supports_direct_transform
             )
+            clip._set_masks(self._lower_masks(layer))
         _lower_visual_effects(layer.effects, clip.effects)
         _lower_preset(layer, clip)
         self.layer_clips[layer] = clip
@@ -269,6 +272,13 @@ class LoweringContext:
             asset = self.builder.add_image_asset(source.path)
             self._asset_ids[source_key] = asset
         return asset
+
+    def _lower_masks(self, layer: "Layer") -> list[dict[str, object]]:
+        result = []
+        for mask in layer.masks.items:
+            asset_id = self.image_asset(mask.input).id if isinstance(mask.input, Image) else None
+            result.append(mask.to_canonical(asset_id=asset_id))
+        return result
 
     def video_asset(self, source: Video) -> VideoAsset:
         source_key = os.path.normpath(source.path)
@@ -539,7 +549,6 @@ def _lower_presentation(
             _lower_crop_property(layer.source.crop, clip.crop)
     if include_transform:
         _lower_transform(layer.transform, clip)
-    clip._set_masks([mask.to_canonical() for mask in layer.masks.items])
 
 
 register_source(

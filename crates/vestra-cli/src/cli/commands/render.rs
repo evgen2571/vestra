@@ -41,6 +41,8 @@ pub(super) fn run(
     if let Err(error) = ctrlc::set_handler(move || cancellation_flag.cancel()) {
         tracing::warn!(error = %error, "interrupt handler unavailable");
     }
+    // Human progress owns presentation state for the whole render. Engine
+    // callbacks remain unthrottled; only terminal redraws are rate-limited.
     let mut human_progress = (progress == ProgressFormat::Human).then(HumanProgress::new);
     let editor = Editor::new();
     let outcome = {
@@ -49,7 +51,7 @@ pub(super) fn run(
                 .as_mut()
                 .expect("human progress state exists")
                 .update(&event),
-            ProgressFormat::Json => crate::output::write_progress(progress, &event),
+            ProgressFormat::Json => crate::output::progress::write_json_progress(&event),
             ProgressFormat::None => {}
         };
         match editor.load_project(&project) {
@@ -132,7 +134,6 @@ pub(super) fn run(
         }) => {
             tracing::debug!(
                 category = diagnostic.category.as_str(),
-                code = %diagnostic.code,
                 "render command failed"
             );
             if let Some(path) = report.as_deref()
@@ -169,7 +170,6 @@ pub(super) fn run(
             }
             tracing::debug!(
                 category = diagnostic.category.as_str(),
-                code = %diagnostic.code,
                 stage = %context.stage.as_str(),
                 "render command failed"
             );
@@ -191,7 +191,7 @@ pub(super) fn run(
                         .as_mut()
                         .expect("human progress state exists")
                         .update(&failed),
-                    ProgressFormat::Json => crate::output::write_progress(progress, &failed),
+                    ProgressFormat::Json => crate::output::progress::write_json_progress(&failed),
                     ProgressFormat::None => {}
                 }
             }
@@ -235,7 +235,10 @@ fn print_success_for_progress<T: serde::Serialize>(
     data: T,
     human: &str,
 ) -> ExitCode {
-    if progress == ProgressFormat::Json {
+    // JSON progress plus human results keeps the established split stream.
+    // With JSON results, both raw events and the final envelope form JSONL on
+    // stdout, while tracing stays on stderr.
+    if progress == ProgressFormat::Json && format == ResultFormat::Human {
         print_success_stderr(command, format, data, human)
     } else {
         print_success(command, format, data, human)
@@ -249,7 +252,7 @@ fn print_failure_for_progress(
     errors: Vec<Diagnostic>,
     warnings: Vec<Diagnostic>,
 ) -> ExitCode {
-    if progress == ProgressFormat::Json {
+    if progress == ProgressFormat::Json && format == ResultFormat::Human {
         print_failure_stderr(command, format, errors, warnings)
     } else {
         print_failure(command, format, errors, warnings)

@@ -84,6 +84,57 @@ fn canonical_example_renders_an_h264_frame_sequence() {
 }
 
 #[test]
+fn none_progress_does_not_suppress_debug_logs_or_the_command_result() {
+    let workspace = TempDir::new().expect("workspace");
+    let output = workspace.path().join("no-progress.mp4");
+    let result = command()
+        .args([
+            "-vv",
+            "render",
+            "tests/fixtures/wgpu-small-rgba.json",
+            "--render-backend",
+            "cpu",
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "none",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(result.status.success());
+    assert!(String::from_utf8_lossy(&result.stdout).contains("render completed"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains(" DEBUG "));
+    assert!(!String::from_utf8_lossy(&result.stderr).contains("Rendering"));
+}
+
+#[test]
+fn redirected_human_progress_is_clean_and_sparse() {
+    let workspace = TempDir::new().expect("workspace");
+    let output = workspace.path().join("human-progress.mp4");
+    let result = command()
+        .args([
+            "render",
+            "tests/fixtures/wgpu-small-rgba.json",
+            "--render-backend",
+            "cpu",
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "human",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(result.status.success());
+    let progress = String::from_utf8_lossy(&result.stderr);
+    assert!(!progress.contains("\x1b["));
+    assert!(!progress.contains('\r'));
+    assert!(
+        progress.lines().count() <= 5,
+        "progress was not sparse: {progress}"
+    );
+}
+
+#[test]
 fn json_progress_keeps_stdout_parseable_and_moves_result_to_stderr() {
     let workspace = TempDir::new().expect("workspace");
     let output = workspace.path().join("progress.mp4");
@@ -112,4 +163,39 @@ fn json_progress_keeps_stdout_parseable_and_moves_result_to_stderr() {
         serde_json::from_str::<Value>(line).expect("progress line is JSON");
     }
     assert!(String::from_utf8_lossy(&result.stderr).contains("render completed"));
+}
+
+#[test]
+fn json_progress_and_json_results_share_a_jsonl_stdout_stream() {
+    let workspace = TempDir::new().expect("workspace");
+    let output = workspace.path().join("progress-jsonl.mp4");
+    let result = command()
+        .args([
+            "render",
+            "tests/fixtures/wgpu-small-rgba.json",
+            "--render-backend",
+            "cpu",
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "json",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("render runs");
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let lines: Vec<Value> = String::from_utf8_lossy(&result.stdout)
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("each stdout line is JSON"))
+        .collect();
+    assert!(lines.iter().any(|line| line["type"] == "started"));
+    assert!(lines.iter().any(|line| line["status"] == "success"));
+    assert!(!String::from_utf8_lossy(&result.stderr).contains("render completed"));
+    assert!(!String::from_utf8_lossy(&result.stderr).contains("result_schema_version"));
 }

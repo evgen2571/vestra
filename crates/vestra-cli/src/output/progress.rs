@@ -6,8 +6,12 @@ use std::{
 
 use vestra::RenderEvent;
 
-const REFRESH_INTERVAL: Duration = Duration::from_millis(100);
+// Interactive redraws can be frequent because they overwrite one line. A
+// redirected stream must stay useful without producing one record per frame.
+const TTY_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
+const NON_TTY_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 const EMA_WEIGHT: f64 = 0.35;
+const MIN_SPEED_SAMPLES: u8 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProgressFormat {
@@ -115,6 +119,7 @@ pub(crate) struct HumanProgress {
     started: Option<Instant>,
     last_update: Option<Instant>,
     last_sample: Option<(u64, Instant)>,
+    valid_samples: u8,
     speed: Option<f64>,
 }
 
@@ -125,6 +130,7 @@ impl HumanProgress {
             started: None,
             last_update: None,
             last_sample: None,
+            valid_samples: 0,
             speed: None,
         }
     }
@@ -135,6 +141,7 @@ impl HumanProgress {
             self.started = Some(now);
             self.last_update = None;
             self.last_sample = Some((event.frame, now));
+            self.valid_samples = 0;
             self.speed = None;
             self.output
                 .write_progress("Rendering", !self.output.interactive);
@@ -145,17 +152,26 @@ impl HumanProgress {
         {
             let elapsed = now.saturating_duration_since(previous_time);
             if let Some(sample) = rolling_fps(event.frame, previous_frame, elapsed) {
-                self.speed = Some(self.speed.map_or(sample, |current| {
-                    current.mul_add(1.0 - EMA_WEIGHT, sample * EMA_WEIGHT)
-                }));
+                self.valid_samples = self.valid_samples.saturating_add(1);
+                if speed_warmed_up(self.valid_samples) {
+                    self.speed = Some(self.speed.map_or(sample, |current| {
+                        current.mul_add(1.0 - EMA_WEIGHT, sample * EMA_WEIGHT)
+                    }));
+                }
             }
             self.last_sample = Some((event.frame, now));
         }
         let important = matches!(event.kind.as_str(), "started" | "completed" | "failed");
         if !important
-            && self
-                .last_update
-                .is_some_and(|last| now.saturating_duration_since(last) < REFRESH_INTERVAL)
+            && self.last_update.is_some_and(|last| {
+                !refresh_due(
+                    self.output.interactive,
+                    last,
+                    now,
+                    TTY_REFRESH_INTERVAL,
+                    NON_TTY_REFRESH_INTERVAL,
+                )
+            })
         {
             return;
         }
@@ -212,14 +228,11 @@ impl HumanProgress {
             )
         };
         if compact {
-            let eta = self
-                .speed
-                .filter(|fps| *fps > 0.0 && event.total_frames > event.frame)
-                .map(|fps| {
-                    format_duration(duration_from_seconds(
-                        (event.total_frames - event.frame) as f64 / fps,
-                    ))
-                })
+            if event.kind == "completed" {
+                return format!("{percent:.1}% {}/{}", event.frame, event.total_frames);
+            }
+            let eta = eta_for(self.speed, event.frame, event.total_frames)
+                .map(format_duration)
                 .unwrap_or_else(|| "--".to_owned());
             return format!(
                 "{percent:.1}% {}/{} ETA {eta}",
@@ -229,12 +242,15 @@ impl HumanProgress {
         let speed = self
             .speed
             .map_or_else(|| "-- fps".to_owned(), |fps| format!("{fps:.1} fps"));
-        let eta = match (self.speed, event.total_frames > event.frame) {
-            (Some(fps), true) if fps > 0.0 => format_duration(duration_from_seconds(
-                (event.total_frames - event.frame) as f64 / fps,
-            )),
-            _ => "--".to_owned(),
-        };
+        let eta = eta_for(self.speed, event.frame, event.total_frames)
+            .map(format_duration)
+            .unwrap_or_else(|| "--".to_owned());
+        if event.kind == "completed" {
+            return format!(
+                "{bar}{percent:.1}% · {}/{} · {speed}",
+                event.frame, event.total_frames
+            );
+        }
         format!(
             "{bar}{percent:.1}% · {}/{} · {speed} · ETA {eta}",
             event.frame, event.total_frames
@@ -246,14 +262,39 @@ fn duration_from_seconds(seconds: f64) -> Duration {
     Duration::from_secs_f64(seconds.min(Duration::MAX.as_secs_f64()))
 }
 
-pub fn write_progress(format: ProgressFormat, event: &RenderEvent) {
-    match format {
-        ProgressFormat::None => {}
-        ProgressFormat::Json => match serde_json::to_string(event) {
-            Ok(value) => println!("{value}"),
-            Err(error) => tracing::warn!(error = %error, "cannot serialize progress event"),
-        },
-        ProgressFormat::Human => HumanProgress::new().update(event),
+fn speed_warmed_up(valid_samples: u8) -> bool {
+    valid_samples >= MIN_SPEED_SAMPLES
+}
+
+fn eta_for(speed: Option<f64>, frame: u64, total_frames: u64) -> Option<Duration> {
+    let fps = speed.filter(|fps| fps.is_finite() && *fps > 0.0)?;
+    if total_frames <= frame {
+        return None;
+    }
+    Some(duration_from_seconds((total_frames - frame) as f64 / fps))
+}
+
+fn refresh_due(
+    interactive: bool,
+    last: Instant,
+    now: Instant,
+    tty_interval: Duration,
+    non_tty_interval: Duration,
+) -> bool {
+    now.saturating_duration_since(last)
+        >= if interactive {
+            tty_interval
+        } else {
+            non_tty_interval
+        }
+}
+
+pub fn write_json_progress(event: &RenderEvent) {
+    // JSON progress is the raw engine event stream. Derived presentation state
+    // such as the local FPS estimate and ETA must not change its schema.
+    match serde_json::to_string(event) {
+        Ok(value) => println!("{value}"),
+        Err(error) => tracing::warn!(error = %error, "cannot serialize progress event"),
     }
 }
 
@@ -268,7 +309,7 @@ fn percentage(frame: u64, total_frames: u64) -> f64 {
 fn rolling_fps(frame: u64, previous_frame: u64, elapsed: Duration) -> Option<f64> {
     let frames = frame.saturating_sub(previous_frame);
     let seconds = elapsed.as_secs_f64();
-    (frames >= 1 && seconds > 0.0).then_some(frames as f64 / seconds)
+    (frames >= 1 && seconds.is_finite() && seconds > 0.0).then_some(frames as f64 / seconds)
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -286,7 +327,7 @@ fn format_duration(duration: Duration) -> String {
 mod tests {
     use std::time::Duration;
 
-    use super::{format_duration, percentage, rolling_fps};
+    use super::{eta_for, format_duration, percentage, refresh_due, rolling_fps, speed_warmed_up};
 
     #[test]
     fn percentage_clamps_invalid_frame_counts() {
@@ -309,5 +350,48 @@ mod tests {
         assert_eq!(rolling_fps(10, 5, Duration::from_secs(2)), Some(2.5));
         assert_eq!(rolling_fps(5, 5, Duration::ZERO), None);
         assert_eq!(rolling_fps(4, 5, Duration::from_secs(1)), None);
+    }
+
+    #[test]
+    fn speed_requires_three_valid_samples() {
+        assert!(!speed_warmed_up(0));
+        assert!(!speed_warmed_up(2));
+        assert!(speed_warmed_up(3));
+    }
+
+    #[test]
+    fn eta_requires_positive_finite_speed_and_remaining_frames() {
+        assert_eq!(eta_for(None, 2, 10), None);
+        assert_eq!(eta_for(Some(f64::NAN), 2, 10), None);
+        assert_eq!(eta_for(Some(f64::INFINITY), 2, 10), None);
+        assert_eq!(eta_for(Some(0.0), 2, 10), None);
+        assert_eq!(eta_for(Some(10.0), 10, 10), None);
+        assert_eq!(eta_for(Some(10.0), 5, 10), Some(Duration::from_millis(500)));
+    }
+
+    #[test]
+    fn refresh_policy_is_frequent_on_tty_and_sparse_when_redirected() {
+        let last = std::time::Instant::now();
+        assert!(refresh_due(
+            true,
+            last,
+            last + Duration::from_millis(100),
+            Duration::from_millis(100),
+            Duration::from_secs(2),
+        ));
+        assert!(!refresh_due(
+            false,
+            last,
+            last + Duration::from_millis(100),
+            Duration::from_millis(100),
+            Duration::from_secs(2),
+        ));
+        assert!(refresh_due(
+            false,
+            last,
+            last + Duration::from_secs(2),
+            Duration::from_millis(100),
+            Duration::from_secs(2),
+        ));
     }
 }

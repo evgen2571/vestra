@@ -451,6 +451,9 @@ impl PreparedProject {
         mut emit: impl FnMut(RenderEvent) -> crate::RenderObserverControl,
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        // Preparation owns reusable decoders, caches, and backend state. The
+        // operation can still fail during encoding or publication, so metrics
+        // and failure context are captured per execution below.
         let operation_started = Instant::now();
         let render_request = application::RenderRequest {
             output_override: Some(request.output),

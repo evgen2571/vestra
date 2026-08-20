@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "name": "Animation and effects",
   "output": {
     "path": "../output/animation-effects.mp4",

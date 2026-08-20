@@ -1031,7 +1031,7 @@ fn encode_parameters(
                     .raster_presentation()
                     .expect("raster frame operation must reference a raster source");
                 let intrinsic = sources.raster_textures[*source_index].intrinsic_size;
-                arena.push(&parameters::raster(
+                let parameters = parameters::raster(
                     frame,
                     intrinsic,
                     presentation.crop,
@@ -1040,7 +1040,34 @@ fn encode_parameters(
                     plan.layers[*layer_index].transform,
                     1.0,
                     crate::plan::ColourTransform::default(),
-                ))?;
+                );
+                arena.push(&parameters)?;
+            }
+            GpuOperation::RenderMask {
+                layer_index,
+                mask_index,
+                source_index,
+                ..
+            } => {
+                let mask = &plan.layers[*layer_index].masks[*mask_index];
+                let intrinsic = sources.raster_textures[*source_index].intrinsic_size;
+                let mut parameters = parameters::raster(
+                    frame,
+                    intrinsic,
+                    crate::domain::Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &crate::plan::CompiledSizing::Original,
+                    mask.transform,
+                    1.0,
+                    crate::plan::ColourTransform::default(),
+                );
+                parameters.header[3] = 3;
+                arena.push(&parameters)?;
             }
             GpuOperation::RenderSurfaceLayer { layer_index, .. } => {
                 let crate::plan::EvaluatedSource::Group { .. } = &plan.layers[*layer_index].source
@@ -1222,6 +1249,32 @@ fn encode_parameters(
                     ));
                 }
                 parameters::push_effect_parameters(arena, parameters)?;
+            }
+            GpuOperation::ApplyMask {
+                layer_index,
+                mask_index,
+                ..
+            } => {
+                let encoded = parameters::mask(
+                    frame,
+                    &plan.layers[*layer_index].masks[*mask_index],
+                    plan.layers[*layer_index].transform,
+                    *mask_index == 0,
+                );
+                arena.push(&encoded)?;
+            }
+            GpuOperation::UpdateMaskCoverage {
+                layer_index,
+                mask_index,
+                ..
+            } => {
+                let encoded = parameters::mask(
+                    frame,
+                    &plan.layers[*layer_index].masks[*mask_index],
+                    plan.layers[*layer_index].transform,
+                    *mask_index == 0,
+                );
+                arena.push(&encoded)?;
             }
             GpuOperation::CopyForEffect { .. }
             | GpuOperation::ResolveParticleLayer { .. }

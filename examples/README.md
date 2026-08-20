@@ -18,6 +18,7 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 | `transitions/` | Crossfade and directional-push transitions. |
 | `presets/` | Timeline presets and flashes. |
 | `compositing/` | Blend modes and global post-effects. |
+| `python/high-level/11_masks.py` | Layer-owned geometric masks and mask coverage. |
 | `projects/` | Complete projects, including animation and audio mixing. |
 | `particles/` | Deterministic ParticleSystem configurations, including audio-reactive appearance. |
 | `python/high-level/` | The normal `Project`, `Composition`, `Layer`, and source API, including shape and text rendering. |

@@ -51,6 +51,7 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
             },
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],

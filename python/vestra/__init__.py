@@ -122,6 +122,7 @@ from .effects import (
     ZoomBlur,
     ZoomBlurDirection,
 )
+from .masks import Mask, MaskCollection, MaskOperation
 from .authoring.values import BlendMode, Crop, CubicBezier, Interpolation, Point
 
 # Keep the native type available under its stable public snapshot name.
@@ -174,6 +175,9 @@ __all__ = [
     "Point",
     "Crop",
     "BlendMode",
+    "Mask",
+    "MaskCollection",
+    "MaskOperation",
     "PreflightOptions",
     "ValidationReport",
     "PreflightReport",

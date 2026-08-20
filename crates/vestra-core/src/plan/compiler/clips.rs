@@ -255,6 +255,26 @@ pub(super) fn compile(
             effects::compile_timed(effect, &clip.id, clip.duration, scalar_signal_interner)
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let masks = clip
+        .masks
+        .iter()
+        .map(|mask| {
+            let crate::project::MaskInput::Shape(shape) = &mask.input;
+            let shape_index = image_indices.len() + shapes.len();
+            shapes.push(shape.clone());
+            Ok(crate::plan::CompiledMask {
+                shape_index,
+                operation: mask.operation,
+                invert: mask.invert,
+                strength: mask.strength,
+                transform: compile_transform_tracks(
+                    &mask.transform,
+                    &clip.id,
+                    scalar_signal_interner,
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
     Ok(CompiledLayer {
         compiled_identity,
         id: clip.id.clone(),
@@ -284,6 +304,7 @@ pub(super) fn compile(
         )?,
         opacity_contributions: Vec::new(),
         effects,
+        masks,
         blend_mode: clip.blend_mode,
         content_dependency: crate::plan::TemporalDependency::Static,
     })
@@ -443,33 +464,9 @@ fn compile_transform(
     scalar_signal_interner: &mut ScalarSignalInterner,
 ) -> Result<CompiledTransformTracks, Diagnostic> {
     match (&clip.source, &clip.transform) {
-        (_, Some(transform)) => Ok(CompiledTransformTracks {
-            position: tracks::compile(&transform.position, &clip.id)?,
-            position_x_modifiers: super::signals::compile_modifiers(
-                &transform.component_modifiers.position_x,
-                scalar_signal_interner,
-            )?,
-            position_y_modifiers: super::signals::compile_modifiers(
-                &transform.component_modifiers.position_y,
-                scalar_signal_interner,
-            )?,
-            anchor: tracks::compile(&transform.anchor, &clip.id)?,
-            scale: tracks::compile(&transform.scale, &clip.id)?,
-            scale_x_modifiers: super::signals::compile_modifiers(
-                &transform.component_modifiers.scale_x,
-                scalar_signal_interner,
-            )?,
-            scale_y_modifiers: super::signals::compile_modifiers(
-                &transform.component_modifiers.scale_y,
-                scalar_signal_interner,
-            )?,
-            rotation_degrees: super::signals::compile_property(
-                &transform.rotation_degrees,
-                &clip.id,
-                ScalarPropertyTarget::RotationDegrees.constraint(),
-                scalar_signal_interner,
-            )?,
-        }),
+        (_, Some(transform)) => {
+            compile_transform_tracks(transform, &clip.id, scalar_signal_interner)
+        }
         (
             VisualSource::SolidColor { .. }
             | VisualSource::Shape(_)
@@ -490,6 +487,40 @@ fn compile_transform(
             "",
         )),
     }
+}
+
+fn compile_transform_tracks(
+    transform: &crate::project::Transform,
+    id: &str,
+    scalar_signal_interner: &mut ScalarSignalInterner,
+) -> Result<CompiledTransformTracks, Diagnostic> {
+    Ok(CompiledTransformTracks {
+        position: tracks::compile(&transform.position, id)?,
+        position_x_modifiers: super::signals::compile_modifiers(
+            &transform.component_modifiers.position_x,
+            scalar_signal_interner,
+        )?,
+        position_y_modifiers: super::signals::compile_modifiers(
+            &transform.component_modifiers.position_y,
+            scalar_signal_interner,
+        )?,
+        anchor: tracks::compile(&transform.anchor, id)?,
+        scale: tracks::compile(&transform.scale, id)?,
+        scale_x_modifiers: super::signals::compile_modifiers(
+            &transform.component_modifiers.scale_x,
+            scalar_signal_interner,
+        )?,
+        scale_y_modifiers: super::signals::compile_modifiers(
+            &transform.component_modifiers.scale_y,
+            scalar_signal_interner,
+        )?,
+        rotation_degrees: super::signals::compile_property(
+            &transform.rotation_degrees,
+            id,
+            ScalarPropertyTarget::RotationDegrees.constraint(),
+            scalar_signal_interner,
+        )?,
+    })
 }
 
 pub(super) fn canvas_transform() -> CompiledTransformTracks {

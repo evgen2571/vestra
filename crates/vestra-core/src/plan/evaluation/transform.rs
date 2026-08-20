@@ -143,6 +143,7 @@ mod tests {
             opacity: CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
             effects: vec![],
+            masks: vec![],
             blend_mode: BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         }

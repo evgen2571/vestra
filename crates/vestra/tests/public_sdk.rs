@@ -1066,7 +1066,7 @@ fn unsupported_schema_version_is_rejected() {
     assert!(
         error.diagnostics()[0]
             .message
-            .contains("supported version is 3")
+            .contains("supported versions are 3 and 4")
     );
 }
 
@@ -1094,7 +1094,7 @@ fn file_loading_uses_its_parent_and_round_trips_without_relocating_paths() {
     project.save(&copy).expect("save project");
     let saved = std::fs::read_to_string(copy).expect("read copy");
     assert!(saved.contains("assets/image.png"));
-    assert!(saved.contains("\"schema_version\":3"));
+    assert!(saved.contains("\"schema_version\":4"));
 }
 
 #[test]

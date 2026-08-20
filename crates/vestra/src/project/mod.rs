@@ -62,12 +62,14 @@ impl Project {
     }
 
     fn from_canonical(
-        canonical: CanonicalProject,
+        mut canonical: CanonicalProject,
         base_directory: PathBuf,
         source_path: Option<PathBuf>,
         parse_elapsed: Duration,
     ) -> Result<Self, LoadError> {
-        if canonical.schema_version != 3 {
+        if canonical.schema_version == 3 {
+            canonical.schema_version = 4;
+        } else if canonical.schema_version != 4 {
             return Err(LoadError::unsupported_schema(canonical.schema_version));
         }
         Ok(Self {

@@ -7,7 +7,7 @@
 
 use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 
-use super::frame_plan::{GpuFramePlan, plan_requires_auxiliary};
+use super::frame_plan::{GpuFramePlan, plan_has_masks, plan_requires_auxiliary};
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
 const BASE_WORKING_TEXTURE_COUNT: u64 = 4;
@@ -21,11 +21,13 @@ pub(super) struct ResourceEstimates {
     pub(super) working_texture_count: u64,
     pub(super) effect_texture_count: u64,
     pub(super) auxiliary_texture_count: u64,
+    pub(super) mask_coverage_texture_count: u64,
     pub(super) source_texture_bytes: u64,
     pub(super) canvas_texture_bytes: u64,
     pub(super) layer_texture_bytes: u64,
     pub(super) effect_texture_bytes: u64,
     pub(super) auxiliary_texture_bytes: u64,
+    pub(super) mask_coverage_texture_bytes: u64,
     pub(super) working_texture_bytes: u64,
     pub(super) readback_buffer_bytes: u64,
     pub(super) parameter_buffer_bytes: u64,
@@ -121,14 +123,33 @@ impl GpuRequirements {
                     )
                 })
         }
+        fn compiled_mask_count(layers: &[crate::plan::CompiledLayer]) -> usize {
+            layers
+                .iter()
+                .map(|layer| {
+                    layer.masks.len()
+                        + match &layer.source {
+                            crate::plan::CompiledVisualSource::Group(composition) => {
+                                compiled_mask_count(&composition.layers)
+                            }
+                            _ => 0,
+                        }
+                })
+                .sum()
+        }
         let (compiled_layer_count, compiled_group_count) = compiled_counts(&plan.layers);
+        let compiled_mask_count = compiled_mask_count(&plan.layers);
         let parameter_record_count = u32::try_from(compiled_layer_count)
             .ok()
             .and_then(|count| count.checked_mul(2))
             .and_then(|count| {
                 u32::try_from(plan.compilation.effect_pass_count)
                     .ok()
-                    .and_then(|passes| count.checked_add(passes))
+                    .and_then(|passes| {
+                        u32::try_from(compiled_mask_count)
+                            .ok()
+                            .and_then(|masks| count.checked_add(passes + masks * 3))
+                    })
             })
             .and_then(|count| {
                 u32::try_from(compiled_group_count)
@@ -145,12 +166,19 @@ impl GpuRequirements {
         let canvas_texture_bytes =
             estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2)?;
         let layer_texture_bytes = full_frame_bytes;
-        let effect_texture_count = match plan.compilation.effect_pass_count {
-            0 => 0,
-            1 if !plan_requires_auxiliary(plan) => 1,
-            _ => 2,
+        let requires_auxiliary = plan_requires_auxiliary(plan);
+        let has_masks = plan_has_masks(plan);
+        let effect_texture_count = if requires_auxiliary {
+            2
+        } else {
+            match plan.compilation.effect_pass_count {
+                0 => 0,
+                1 => 1,
+                _ => 2,
+            }
         };
-        let auxiliary_texture_count = u64::from(plan_requires_auxiliary(plan));
+        let auxiliary_texture_count = u64::from(requires_auxiliary);
+        let mask_coverage_texture_count = u64::from(has_masks);
         let group_texture_count = u64::try_from(GpuFramePlan::required_group_depth(plan))
             .ok()
             .and_then(|depth| depth.checked_mul(2))
@@ -161,6 +189,7 @@ impl GpuRequirements {
             BASE_WORKING_TEXTURE_COUNT
                 + effect_texture_count
                 + auxiliary_texture_count
+                + mask_coverage_texture_count
                 + group_texture_count,
         )?;
         fn image_bytes(width: u32, height: u32) -> Result<u64, Diagnostic> {
@@ -231,9 +260,11 @@ impl GpuRequirements {
             working_texture_count: BASE_WORKING_TEXTURE_COUNT
                 + effect_texture_count
                 + auxiliary_texture_count
+                + mask_coverage_texture_count
                 + group_texture_count,
             effect_texture_count,
             auxiliary_texture_count,
+            mask_coverage_texture_count,
             source_texture_bytes,
             canvas_texture_bytes,
             layer_texture_bytes,
@@ -246,6 +277,11 @@ impl GpuRequirements {
                 plan.canvas.width,
                 plan.canvas.height,
                 auxiliary_texture_count,
+            )?,
+            mask_coverage_texture_bytes: estimated_texture_bytes(
+                plan.canvas.width,
+                plan.canvas.height,
+                mask_coverage_texture_count,
             )?,
             working_texture_bytes,
             readback_buffer_bytes: copy_bytes,

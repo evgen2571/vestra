@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "output": {"path": "expanded.mp4", "width": 64, "height": 64, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1.0},
   "assets": [],
   "visual": {"clips": [{"id": "particles", "source": {"type": "particle_system", "seed": 11, "emitter": {"type": "rectangle", "center": {"x": 0.5, "y": 0.0}, "size": {"x": 1.0, "y": 0.1}}, "emission": {"rate": 18.0}, "particle": {"lifetime": 2.0, "lifetime_range": {"min": 1.5, "max": 2.0}, "initial_velocity": {"x": 0.0, "y": 0.0}, "acceleration": {"x": 0.0, "y": 0.08}, "size": 0.012, "size_range": {"min": 0.006, "max": 0.018}, "speed": 0.15, "speed_range": {"min": 0.1, "max": 0.2}, "direction_degrees": 90.0, "direction_spread_degrees": 6.0, "colour": "#b8ddff", "primitive": "disc", "blend_mode": "normal"}}, "start": 0.0, "duration": 1.0, "layer": 1, "visible": true, "opacity": {"base_value": 1.0}, "effects": []}], "transitions": [], "flashes": [], "post_effects": []}

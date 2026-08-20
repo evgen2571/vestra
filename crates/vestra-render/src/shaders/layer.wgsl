@@ -44,7 +44,9 @@ fn transformed_colour(pixel: vec4<f32>) -> vec4<f32> {
     let rgb = round(clamp(vec3<f32>(dot(params.colour_row0.xyz, pixel.rgb), dot(params.colour_row1.xyz, pixel.rgb), dot(params.colour_row2.xyz, pixel.rgb)) + params.colour_offset.xyz, vec3<f32>(0.0), vec3<f32>(255.0)));
     return vec4<f32>(rgb, pixel.a * params.effective.z);
 }
-fn write_pixel(coord: vec2<i32>, pixel: vec4<f32>) { textureStore(output, coord, clamp(pixel / 255.0, vec4<f32>(0.0), vec4<f32>(1.0))); }
+fn write_pixel(coord: vec2<i32>, pixel: vec4<f32>) {
+    textureStore(output, coord, clamp(pixel / 255.0, vec4<f32>(0.0), vec4<f32>(1.0)));
+}
 @compute @workgroup_size(8, 8)
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas_width || id.y >= params.canvas_height) { return; }
@@ -54,7 +56,9 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     let point = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
     let mapped = vec2<f32>(dot(params.inverse_row0.xyz, vec3<f32>(point, 1.0)), dot(params.inverse_row1.xyz, vec3<f32>(point, 1.0)));
     let local_origin = params.solid_or_background.xy;
-    if (mapped.x < local_origin.x || mapped.y < local_origin.y || mapped.x >= local_origin.x + params.solid_or_background.z || mapped.y >= local_origin.y + params.solid_or_background.w) { write_pixel(coord, vec4<f32>(0.0)); return; }
+    if (mapped.x < local_origin.x || mapped.y < local_origin.y || mapped.x >= local_origin.x + params.solid_or_background.z || mapped.y >= local_origin.y + params.solid_or_background.w) {
+        write_pixel(coord, vec4<f32>(0.0)); return;
+    }
     let local = mapped - local_origin;
     let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + local / params.solid_or_background.zw * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
     write_pixel(coord, transformed_colour(bilinear(source_position)));

@@ -66,6 +66,9 @@ impl CompositionSurfacePool {
 
 pub(crate) struct EffectSurfacePool {
     surfaces: [RgbaImage; SURFACE_COUNT],
+    mask_local_surface: RgbaImage,
+    mask_surface: RgbaImage,
+    mask_coverage: Vec<f32>,
     current_slot: usize,
     original_slot: Option<usize>,
     temporary_slots: [Option<usize>; 2],
@@ -79,6 +82,9 @@ impl EffectSurfacePool {
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
             surfaces: std::array::from_fn(|_| RgbaImage::new(width, height)),
+            mask_local_surface: RgbaImage::new(width, height),
+            mask_surface: RgbaImage::new(width, height),
+            mask_coverage: vec![1.0; (width as usize) * (height as usize)],
             current_slot: 0,
             original_slot: None,
             temporary_slots: [None; 2],
@@ -91,6 +97,9 @@ impl EffectSurfacePool {
     pub(super) fn resize(&mut self, width: u32, height: u32) {
         if self.surfaces[0].width() != width || self.surfaces[0].height() != height {
             self.surfaces = std::array::from_fn(|_| RgbaImage::new(width, height));
+            self.mask_local_surface = RgbaImage::new(width, height);
+            self.mask_surface = RgbaImage::new(width, height);
+            self.mask_coverage = vec![1.0; (width as usize) * (height as usize)];
             self.current_slot = 0;
             self.original_slot = None;
             self.temporary_slots = [None; 2];
@@ -100,6 +109,55 @@ impl EffectSurfacePool {
 
     pub(super) fn current(&mut self) -> &mut RgbaImage {
         &mut self.surfaces[self.current_slot]
+    }
+
+    pub(super) fn mask_local_surface(&mut self) -> &mut RgbaImage {
+        &mut self.mask_local_surface
+    }
+
+    pub(super) fn reset_mask_coverage(&mut self) {
+        self.mask_coverage.fill(1.0);
+    }
+
+    pub(super) fn combine_mask_coverage(
+        &mut self,
+        operation: crate::project::MaskOperation,
+        invert: bool,
+        strength: f32,
+    ) {
+        for (coverage, pixel) in self
+            .mask_coverage
+            .iter_mut()
+            .zip(self.mask_surface.pixels())
+        {
+            *coverage = crate::project::apply_mask_operation(
+                *coverage,
+                f32::from(pixel[3]) / 255.0,
+                operation,
+                invert,
+                strength,
+            );
+        }
+    }
+
+    pub(super) fn apply_mask_coverage(&mut self) {
+        let current_slot = self.current_slot;
+        let (surfaces, coverage) = (&mut self.surfaces, &self.mask_coverage);
+        for (pixel, coverage) in surfaces[current_slot].pixels_mut().zip(coverage) {
+            pixel[3] = (f32::from(pixel[3]) * coverage).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+
+    pub(super) fn compose_mask_surface(&mut self, transform: crate::animation::Transform2D) {
+        for pixel in self.mask_surface.pixels_mut() {
+            *pixel = image::Rgba([0, 0, 0, 0]);
+        }
+        super::raster::draw_surface(
+            &mut self.mask_surface,
+            &self.mask_local_surface,
+            transform,
+            crate::plan::ColourTransform::default(),
+        );
     }
 
     pub(super) fn clear(&mut self) {

@@ -37,6 +37,7 @@ and backend contracts.
 ### Reference
 
 - [Project format](reference/project-format.md)
+- [Geometric masks](reference/masks.md)
 - [Python API](reference/python-api.md)
 - [Rust SDK](reference/rust-sdk.md)
 - [CLI](reference/cli.md)

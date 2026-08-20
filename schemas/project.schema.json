@@ -708,6 +708,12 @@
         "layer": {
           "type": "integer"
         },
+        "masks": {
+          "items": {
+            "$ref": "#/$defs/mask"
+          },
+          "type": "array"
+        },
         "opacity": {
           "$ref": "#/$defs/opacity_property"
         },
@@ -1357,6 +1363,45 @@
           "type": "object"
         }
       ]
+    },
+    "mask": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/$defs/shape"
+        },
+        "invert": {
+          "default": false,
+          "type": "boolean"
+        },
+        "operation": {
+          "default": "intersect",
+          "enum": [
+            "replace",
+            "intersect",
+            "union",
+            "subtract"
+          ]
+        },
+        "strength": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "transform": {
+          "$ref": "#/$defs/transform"
+        }
+      },
+      "required": [
+        "id",
+        "input"
+      ],
+      "type": "object"
     },
     "motion_blur_effect": {
       "additionalProperties": false,
@@ -3482,7 +3527,7 @@
       "$ref": "#/$defs/output"
     },
     "schema_version": {
-      "const": 3
+      "const": 4
     },
     "visual": {
       "$ref": "#/$defs/visual"

@@ -148,12 +148,93 @@ fn static_frame() -> EvaluatedFrame {
             },
             opacity: 0.75,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: Vec::new(),
         evaluated_track_count: 0,
     }
+}
+
+#[test]
+fn mask_operations_are_planned_after_effects_in_declared_order() {
+    let mut frame = static_frame();
+    frame.layers[0].source = EvaluatedSource::Shape {
+        shape_index: 0,
+        sizing: crate::plan::CompiledSizing::Original,
+    };
+    frame.layers[0].effects = vec![crate::plan::EvaluatedEffect::Brightness { amount: 0.1 }];
+    let transform = crate::animation::Transform2D::identity(
+        crate::domain::Point { x: 0.5, y: 0.5 },
+        crate::domain::Point { x: 0.5, y: 0.5 },
+    );
+    frame.layers[0].masks = vec![
+        crate::plan::EvaluatedMask {
+            shape_index: 1,
+            operation: crate::project::MaskOperation::Intersect,
+            invert: false,
+            strength: 1.0,
+            transform,
+        },
+        crate::plan::EvaluatedMask {
+            shape_index: 2,
+            operation: crate::project::MaskOperation::Replace,
+            invert: false,
+            strength: 1.0,
+            transform,
+        },
+    ];
+
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(3).expect("mask frame plan validates");
+    let positions = plan
+        .operations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, operation)| match operation {
+            GpuOperation::RenderRasterLayer { .. }
+            | GpuOperation::ApplyEffect { .. }
+            | GpuOperation::RenderMask { .. }
+            | GpuOperation::ApplyMask { .. }
+            | GpuOperation::UpdateMaskCoverage { .. }
+            | GpuOperation::CompositeLayer { .. } => Some((index, operation)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        positions[0].1,
+        GpuOperation::RenderRasterLayer { .. }
+    ));
+    assert!(matches!(positions[1].1, GpuOperation::ApplyEffect { .. }));
+    assert!(matches!(
+        positions[2].1,
+        GpuOperation::RenderMask { mask_index: 0, .. }
+    ));
+    assert!(matches!(
+        positions[3].1,
+        GpuOperation::ApplyMask { mask_index: 0, .. }
+    ));
+    assert!(matches!(
+        positions[4].1,
+        GpuOperation::UpdateMaskCoverage { mask_index: 0, .. }
+    ));
+    assert!(matches!(
+        positions[5].1,
+        GpuOperation::RenderMask { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[6].1,
+        GpuOperation::ApplyMask { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[7].1,
+        GpuOperation::UpdateMaskCoverage { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[8].1,
+        GpuOperation::CompositeLayer { .. }
+    ));
 }
 
 #[test]
@@ -174,6 +255,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         },
         opacity: 1.0,
         effects: Vec::new(),
+        masks: Vec::new(),
         colour_transform: crate::plan::ColourTransform::default(),
         blend_mode: crate::project::BlendMode::Normal,
     };
@@ -188,6 +270,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         transform,
         opacity: 1.0,
         effects: Vec::new(),
+        masks: Vec::new(),
         colour_transform: crate::plan::ColourTransform::default(),
         blend_mode: crate::project::BlendMode::Normal,
     };
@@ -207,6 +290,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
             },
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -328,6 +412,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
                         },
                         opacity: 1.0,
                         effects: Vec::new(),
+                        masks: Vec::new(),
                         colour_transform: crate::plan::ColourTransform::default(),
                         blend_mode: crate::project::BlendMode::Normal,
                     }],
@@ -335,6 +420,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
             },
             opacity: 1.0,
             effects,
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -650,6 +736,7 @@ fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
             },
             opacity: 1.0,
             effects: vec![EvaluatedEffect::GaussianBlur { radius: 2.0 }],
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1027,6 +1114,7 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
             },
             opacity: 0.75,
             effects: vec![crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 }],
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Screen,
         }],
@@ -1144,6 +1232,7 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
                     amount: 0.25,
                 },
             ],
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1188,6 +1277,7 @@ fn compiler_fused_colour_transform_is_one_wgpu_operation() {
             },
             opacity: 1.0,
             effects: vec![EvaluatedEffect::ColourTransform { transform }],
+            masks: Vec::new(),
             colour_transform: transform,
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1239,6 +1329,7 @@ fn chained_multipass_effects_retain_and_validate_their_original_values() {
                     radius: 2.0,
                 },
             ],
+            masks: Vec::new(),
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Overlay,
         }],

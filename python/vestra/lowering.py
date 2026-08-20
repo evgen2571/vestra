@@ -539,6 +539,7 @@ def _lower_presentation(
             _lower_crop_property(layer.source.crop, clip.crop)
     if include_transform:
         _lower_transform(layer.transform, clip)
+    clip._set_masks([mask.to_canonical() for mask in layer.masks.items])
 
 
 register_source(

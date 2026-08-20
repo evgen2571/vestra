@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "name": "Chromatic aberration",
   "output": {
     "path": "../output/chromatic-aberration.mp4",

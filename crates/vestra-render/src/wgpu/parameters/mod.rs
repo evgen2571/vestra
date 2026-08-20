@@ -13,8 +13,8 @@ pub(super) use effects::{
     VignetteParameters, ZoomBlurParameters, effect_parameters,
 };
 pub(super) use source::{
-    LayerParameters, ParticleParameters, Spectrum2DParameters, particles, raster, spectrum2d,
-    surface,
+    LayerParameters, MaskParameters, ParticleParameters, Spectrum2DParameters, mask, particles,
+    raster, spectrum2d, surface,
 };
 
 const fn max_parameter_size(left: usize, right: usize) -> u64 {
@@ -40,5 +40,6 @@ pub(super) const PARAMETER_RECORD_BYTES: u64 = {
     size = max_parameter_size(size, std::mem::size_of::<ColorAdjustParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<Spectrum2DParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<ParticleParameters>()) as usize;
+    size = max_parameter_size(size, std::mem::size_of::<MaskParameters>()) as usize;
     size as u64
 };

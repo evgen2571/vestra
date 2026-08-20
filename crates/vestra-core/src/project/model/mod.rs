@@ -8,6 +8,7 @@ mod assets;
 mod audio;
 mod colour;
 mod effects;
+mod masks;
 mod output;
 mod presets;
 mod project;
@@ -25,6 +26,7 @@ pub use audio::{
 };
 pub use colour::parse_colour;
 pub use effects::{Effect, ZoomBlurDirection};
+pub use masks::{Mask, MaskInput, MaskOperation, apply_mask_operation};
 pub use output::{DurationMode, FrameRate, Output, Quality};
 pub use presets::Preset;
 pub use project::Project;

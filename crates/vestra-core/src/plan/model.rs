@@ -166,10 +166,20 @@ pub struct CompiledLayer {
     /// populate one contributor instead of a transition variant.
     pub opacity_contributions: Vec<Track<f64>>,
     pub effects: Vec<TimedEffect>,
+    pub masks: Vec<CompiledMask>,
     pub blend_mode: crate::project::BlendMode,
     /// Whether this layer's rendered content can vary while it is active.
     /// Timeline activity itself is deliberately not part of this classification.
     pub content_dependency: TemporalDependency,
+}
+
+#[derive(Clone, Debug)]
+pub struct CompiledMask {
+    pub shape_index: usize,
+    pub operation: crate::project::MaskOperation,
+    pub invert: bool,
+    pub strength: f64,
+    pub transform: CompiledTransformTracks,
 }
 
 /// Backend-independent compiled children of a Group. The schedule and

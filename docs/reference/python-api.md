@@ -29,6 +29,20 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
 
 `validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
 
+Layers expose an ordered geometric mask collection:
+
+```python
+mask = layer.masks.add(shape, operation=MaskOperation.INTERSECT, id=None)
+layer.masks.items
+layer.masks.remove(mask_or_id)
+layer.masks.clear()
+```
+
+`Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, and static
+`transform`. Supported inputs are the existing `Rectangle`, `Ellipse`,
+`Circle`, and `Polygon` shape authoring objects. Masks are applied after layer
+effects and before final opacity/blending.
+
 `ProjectBuilder(*, width, height, frame_rate, output_path, duration=None, duration_mode=None, background="#000000", quality=Quality.BALANCED, base_directory=".", name=None, metadata=None, output_audio=False)` owns advanced canonical assets, visual clips, tracks, effects, transitions, flashes and audio. `build()` creates a native snapshot; `validate()` has the same semantic-only meaning.
 
 ## Native runtime

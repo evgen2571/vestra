@@ -39,6 +39,7 @@ fn static_frame(
                 },
                 opacity: 1.0,
                 effects: Vec::new(),
+                masks: Vec::new(),
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
             })
@@ -77,6 +78,7 @@ fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available
             },
             opacity: 0.75,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Screen,
         }],
@@ -133,6 +135,7 @@ fn gpu_in_flight_static_cache_population_reserves_one_key_when_an_adapter_is_ava
             },
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],

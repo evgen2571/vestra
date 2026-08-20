@@ -25,5 +25,6 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 
 `assets/red.png`, `green.png`, and `blue.png` are shared image fixtures.
 `assets/tone.wav` is the shared audio fixture used by audio and signal
-examples. `python/authoring/video-source.py` intentionally requires a user
-supplied `examples/assets/clip.mp4`; it is not part of the bulk render run.
+examples. `python/high-level/09_video_source.py` intentionally requires a
+user-supplied `examples/assets/clip.mp4`; it is not part of the bulk render
+run.

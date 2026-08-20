@@ -72,10 +72,15 @@ fi
 run_workspace_tests() {
   echo "Running general workspace correctness tests without strict WGPU flags"
   if [[ "$selected_backend" == "gl" ]]; then
-    VESTRA_WGPU_BACKEND="$backend" \
+    env -u VESTRA_REQUIRE_WGPU \
+      -u VESTRA_REQUIRE_HARDWARE_WGPU \
+      VESTRA_WGPU_BACKEND="$backend" \
       cargo test --workspace --all-features -- --test-threads=1
   else
-    VESTRA_WGPU_BACKEND="$backend" cargo test --workspace --all-features
+    env -u VESTRA_REQUIRE_WGPU \
+      -u VESTRA_REQUIRE_HARDWARE_WGPU \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test --workspace --all-features
   fi
 }
 

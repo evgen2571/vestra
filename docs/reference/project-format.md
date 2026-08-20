@@ -56,7 +56,7 @@ contracts.
 | `visible` | boolean | no | `true`. |
 | `sizing` | sizing object | no | Applies to image/video sources. |
 | `crop` | crop track | no | Applies to image/video sources. |
-| `transform` | transform object | conditional | Required for image sources. The model and semantic validation make it optional for video, shape, text, and group sources; an absent optional transform has canvas presentation. The checked-in schema currently also requires it for video, so schema-valid JSON must include a video transform. Forbidden for solid-color, Spectrum2D, and particle-system sources. |
+| `transform` | transform object | conditional | Required for image sources. Optional for video, shape, text, and group sources; an absent optional transform has canvas presentation. Forbidden for solid-color, Spectrum2D, and particle-system sources. |
 | `effects` | array of effect | no | Empty. See [effects](effects.md). |
 | `blend_mode` | enum | no | `normal`; also `add`, `screen`, `multiply`, `overlay`. |
 | `preset` | preset object | no | Omitted. See [presets and flashes](presets-and-flashes.md). |

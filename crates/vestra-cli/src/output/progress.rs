@@ -92,6 +92,9 @@ impl Write for TerminalWriter {
             .lock()
             .map_err(|_| io::Error::other("terminal progress mutex poisoned"))?;
         let mut stderr = io::stderr().lock();
+        // Tracing shares stderr with the active progress line. Clear, write,
+        // and redraw under the same state lock so a log record cannot be
+        // joined to the progress text.
         if state.active && self.output.interactive {
             write!(stderr, "\r\x1b[2K")?;
         }
@@ -136,6 +139,9 @@ impl HumanProgress {
     }
 
     pub(crate) fn update(&mut self, event: &RenderEvent) {
+        // Engine events remain unthrottled; only this terminal presentation is
+        // rate-limited. FPS and ETA are local monotonic-clock estimates and do
+        // not become part of the raw JSON event stream.
         let now = Instant::now();
         if event.kind == "started" {
             self.started = Some(now);

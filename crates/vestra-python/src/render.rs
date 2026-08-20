@@ -572,17 +572,27 @@ impl CallbackState {
             return RenderObserverControl::Cancel;
         }
         if event.kind == "completed" {
+            // Native completion is emitted only after the temporary output has
+            // been published. The Python callback cannot affect that outcome,
+            // so filtering it preserves the historical callback contract and
+            // avoids presenting a post-publication event as cancellable.
             return RenderObserverControl::Continue;
         }
         let Some(callback) = self.callback.as_ref() else {
             return RenderObserverControl::Continue;
         };
         CALLBACK_PYTHON_ATTACHMENTS.fetch_add(1, Ordering::Relaxed);
+        // Rendering runs detached from Python so decoding, composition, and
+        // encoding do not monopolize the interpreter. Reattach only for the
+        // callback, where Python owns the callable and any exception it raises.
         let result = Python::attach(|py| {
             let snapshot = Py::new(py, PyRenderEvent::from(event))?;
             callback.bind(py).call1((snapshot,)).map(|_| ())
         });
         if let Err(error) = result {
+            // The native observer turns callback failure into cancellation at
+            // the next engine boundary. Keep the original Python exception for
+            // the caller; native cleanup is attached as secondary context.
             self.first_error = Some(error);
             self.disabled = true;
             RenderObserverControl::Cancel
@@ -637,6 +647,9 @@ pub(crate) fn render_one_shot(
     let request = request.inner.clone();
     let cancellation =
         cancellation.map_or_else(NativeCancellationToken::new, |token| token.inner.clone());
+    // The one-shot path follows the same rule as prepared operations: native
+    // rendering is detached, while callbacks briefly reattach the interpreter
+    // in CallbackState::observe.
     let invocation = py.detach(|| {
         NATIVE_RENDER_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
         let mut state = CallbackState::new(progress);

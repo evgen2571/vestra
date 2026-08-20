@@ -81,6 +81,9 @@ impl AdapterPerformanceClass {
 impl AdapterMetadata {
     #[must_use]
     pub fn performance_class(&self) -> AdapterPerformanceClass {
+        // Only explicit discrete/integrated classifications count as proven
+        // hardware. Unknown and virtual classifications stay conservative so
+        // incomplete metadata never becomes a hardware claim.
         if [
             self.adapter_name.as_str(),
             self.driver_name.as_str(),

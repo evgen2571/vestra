@@ -63,6 +63,9 @@ impl OutputTarget {
     }
 
     pub fn publish(&self) -> Result<(), MediaError> {
+        // Encoding stays in the sibling temporary file until FFmpeg has
+        // finalized successfully. Renaming only then prevents a failed or
+        // cancelled render from replacing the destination with partial data.
         tracing::debug!(output = %self.final_path.display(), "output publication started");
         fs::rename(&self.temporary_path, &self.final_path)
             .map_err(MediaError::Publication)

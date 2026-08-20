@@ -125,6 +125,9 @@ impl GpuContext {
         );
         requirements.validate(&device.limits(), plan)?;
         let runtime_errors = RuntimeErrorState::install(&device);
+        // Report the adapter as selected only after device creation and
+        // plan-specific limit validation succeed. A discovered candidate is
+        // not yet a usable render context.
         tracing::info!(
             backend = %adapter_metadata.graphics_backend,
             adapter = %adapter_metadata.adapter_name,

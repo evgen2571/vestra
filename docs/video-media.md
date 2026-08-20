@@ -1,5 +1,7 @@
 # Native video media foundation
 
+> Current source behavior is documented in [docs/reference/sources/video.md](reference/sources/video.md). This page retains implementation detail.
+
 `vestra-media` owns video media I/O. It uses `ffmpeg-next` 8.x
 behind a Vestra API; the rest of the repository does not handle FFmpeg
 contexts or raw frames.

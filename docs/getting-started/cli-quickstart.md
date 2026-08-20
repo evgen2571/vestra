@@ -91,5 +91,6 @@ to examine the loaded project and its assets:
 cargo run -q -p vestra-cli -- inspect solid.json
 ```
 
-See the [documentation index](../index.md) for future CLI guides and the next
-project-format reference.
+Continue with the [CLI rendering guide](../guides/cli/rendering.md) and the
+[logging and progress guide](../guides/cli/logging-and-progress.md). See the
+[documentation index](../index.md) for the current learning path.

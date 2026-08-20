@@ -1063,6 +1063,11 @@ fn unsupported_schema_version_is_rejected() {
     let json = r##"{"schema_version":2,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##;
     let error = vestra::Project::from_json(json, ".").expect_err("schema rejection");
     assert_eq!(error.diagnostics()[0].code, "VESTRA-SCHEMA-VERSION");
+    assert!(
+        error.diagnostics()[0]
+            .message
+            .contains("supported version is 3")
+    );
 }
 
 #[test]

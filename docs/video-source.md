@@ -1,5 +1,7 @@
 # Video Source
 
+> Superseded current reference: see [docs/reference/sources/video.md](reference/sources/video.md).
+
 `Video` is a visual source backed by the native FFmpeg media foundation. Its
 audio is not imported automatically.
 

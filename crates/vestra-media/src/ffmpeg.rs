@@ -215,6 +215,15 @@ impl FfmpegSink {
         pipe_stdin: bool,
         pipe_progress: bool,
     ) -> Result<Self, MediaError> {
+        tracing::debug!(
+            program = "ffmpeg",
+            stage = "encode",
+            output = %output.display(),
+            width = settings.width,
+            height = settings.height,
+            frame_count = settings.frame_count,
+            "encoder process spawning"
+        );
         let mut child = command
             .args(["-movflags", "+faststart"])
             .arg(output)
@@ -234,6 +243,16 @@ impl FfmpegSink {
                 program: "FFmpeg",
                 source,
             })?;
+        tracing::info!(
+            program = "ffmpeg",
+            stage = "encode",
+            output = %output.display(),
+            codec = "libx264",
+            width = settings.width,
+            height = settings.height,
+            frame_count = settings.frame_count,
+            "encoder initialized"
+        );
         let stdin = if pipe_stdin {
             match child.stdin.take() {
                 Some(stdin) => Some(stdin),

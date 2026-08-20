@@ -80,6 +80,29 @@ impl GpuContext {
             vendor_id: info.vendor,
             device_id: info.device,
         };
+        let performance_class = adapter_metadata.performance_class();
+        tracing::info!(
+            backend = %adapter_metadata.graphics_backend,
+            adapter = %adapter_metadata.adapter_name,
+            device_type = %adapter_metadata.device_type,
+            driver = %adapter_metadata.driver_name,
+            driver_info = %adapter_metadata.driver_info,
+            vendor_id = adapter_metadata.vendor_id,
+            device_id = adapter_metadata.device_id,
+            hardware = !performance_class.is_software(),
+            classification = performance_class.as_str(),
+            "WGPU adapter selected"
+        );
+        if performance_class.is_software() {
+            tracing::warn!(
+                backend = %adapter_metadata.graphics_backend,
+                adapter = %adapter_metadata.adapter_name,
+                device_type = %adapter_metadata.device_type,
+                hardware = false,
+                classification = performance_class.as_str(),
+                "software WGPU adapter selected"
+            );
+        }
         let adapter_limits = adapter.limits();
         let requested_limits = requirements.requested_device_limits(plan, &adapter_limits)?;
         let device_request_started = Instant::now();
@@ -94,6 +117,12 @@ impl GpuContext {
         ))
         .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
         let device_request = device_request_started.elapsed();
+        tracing::debug!(
+            backend = %adapter_metadata.graphics_backend,
+            adapter = %adapter_metadata.adapter_name,
+            elapsed_ms = device_request.as_millis(),
+            "GPU device initialized"
+        );
         requirements.validate(&device.limits(), plan)?;
         let runtime_errors = RuntimeErrorState::install(&device);
         Ok(Self {

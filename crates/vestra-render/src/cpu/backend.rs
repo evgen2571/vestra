@@ -71,6 +71,11 @@ impl CpuBackend {
 
     fn build(plan: &RenderPlan, decoded: Arc<DecodedAssets>, worker_count: usize) -> Self {
         let profiling_enabled = std::env::var_os("VESTRA_CPU_PROFILE").is_some();
+        tracing::info!(
+            worker_count,
+            profiling = profiling_enabled,
+            "CPU renderer selected"
+        );
         let class_budgets = cache_class_budgets(plan);
         let worker_cache_budgets = (0..worker_count)
             .map(|worker_id| CpuWorkerCacheBudgets {

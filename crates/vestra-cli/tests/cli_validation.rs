@@ -128,6 +128,23 @@ fn schema_failure_remains_visible_under_restrictive_rust_log() {
 }
 
 #[test]
+fn render_failure_is_presented_once_without_duplicate_error_log() {
+    let result = common::command()
+        .args([
+            "render",
+            "examples/projects/does-not-exist.json",
+            "--progress",
+            "none",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert_eq!(stderr.matches("MVP-PROJECT-READ").count(), 1);
+    assert!(!stderr.contains(" ERROR ve::cli::commands"));
+}
+
+#[test]
 fn canonical_project_validates_and_rejects_a_version_field() {
     let project = "examples/projects/animation-effects.json";
     let valid = common::command()

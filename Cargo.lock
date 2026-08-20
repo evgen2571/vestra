@@ -2781,6 +2781,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
  "vestra-core",
  "vestra-media",
  "vestra-render",
@@ -2824,6 +2825,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
  "uuid",
  "vestra-core",
  "vestra-render",
@@ -2852,6 +2854,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tiny-skia",
+ "tracing",
  "vestra-core",
  "wgpu",
 ]

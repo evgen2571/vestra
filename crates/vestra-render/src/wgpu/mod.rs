@@ -52,7 +52,7 @@ pub fn discover() -> Vec<crate::AdapterMetadata> {
         .into_iter()
         .map(|adapter| {
             let info = adapter.get_info();
-            crate::AdapterMetadata {
+            let metadata = crate::AdapterMetadata {
                 adapter_name: info.name,
                 device_type: format!("{:?}", info.device_type).to_lowercase(),
                 graphics_backend: format!("{:?}", info.backend).to_lowercase(),
@@ -60,7 +60,21 @@ pub fn discover() -> Vec<crate::AdapterMetadata> {
                 driver_info: info.driver_info,
                 vendor_id: info.vendor,
                 device_id: info.device,
-            }
+            };
+            let class = metadata.performance_class();
+            tracing::debug!(
+                backend = %metadata.graphics_backend,
+                adapter = %metadata.adapter_name,
+                device_type = %metadata.device_type,
+                driver = %metadata.driver_name,
+                driver_info = %metadata.driver_info,
+                vendor_id = metadata.vendor_id,
+                device_id = metadata.device_id,
+                hardware = !class.is_software(),
+                classification = class.as_str(),
+                "WGPU adapter discovered"
+            );
+            metadata
         })
         .collect()
 }

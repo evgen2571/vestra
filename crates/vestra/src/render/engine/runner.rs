@@ -276,6 +276,7 @@ where
     // legitimate progress callback even when no later frame-loop iteration
     // occurs.
     if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+        tracing::info!(stage = "render", "render cancellation requested");
         prepared.backend.abort();
         // Frame submission has already completed, so aborting the backend may
         // leave it permanently unusable. Keep the public prepared lifecycle in
@@ -327,6 +328,11 @@ where
         .map_err(|error| {
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
+    tracing::debug!(
+        elapsed_ms = finish_started.elapsed().as_millis(),
+        stage = "encode",
+        "encoder finalization completed"
+    );
     if sink_result.frames_written != plan.frame_count {
         return Err(failure_with_context(
             cleanup_error(
@@ -379,6 +385,11 @@ where
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
+    tracing::debug!(
+        elapsed_ms = timings.output_publish_ms,
+        stage = "output_publication",
+        "output finalization completed"
+    );
     let frame_render = if prepared.backend.kind() == RenderBackendKind::Cpu {
         prepared.backend.staged_metrics().frame_render_work_duration
     } else {

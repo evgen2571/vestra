@@ -31,13 +31,13 @@ pub(crate) fn init(verbosity: u8) -> Result<(), Box<dyn std::error::Error + Send
 fn selected_filter(verbosity: u8, environment_filter: Option<&str>) -> String {
     environment_filter.map_or_else(
         || {
-            match verbosity {
+            let level = match verbosity {
                 0 => "warn",
                 1 => "info",
                 2 => "debug",
                 _ => "trace",
-            }
-            .to_owned()
+            };
+            format!("{level},wgpu_core=warn,wgpu_hal=warn")
         },
         ToOwned::to_owned,
     )
@@ -224,11 +224,16 @@ mod tests {
 
     #[test]
     fn selected_filter_uses_verbosity_when_environment_is_absent() {
-        assert_eq!(selected_filter(0, None), "warn");
-        assert_eq!(selected_filter(1, None), "info");
-        assert_eq!(selected_filter(2, None), "debug");
-        assert_eq!(selected_filter(3, None), "trace");
-        assert_eq!(selected_filter(4, None), "trace");
+        for (verbosity, level) in [(0, "warn"), (1, "info"), (2, "debug"), (3, "trace")] {
+            assert_eq!(
+                selected_filter(verbosity, None),
+                format!("{level},wgpu_core=warn,wgpu_hal=warn")
+            );
+        }
+        assert_eq!(
+            selected_filter(4, None),
+            "trace,wgpu_core=warn,wgpu_hal=warn"
+        );
     }
 
     #[test]

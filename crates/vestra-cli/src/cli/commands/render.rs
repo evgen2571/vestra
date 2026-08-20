@@ -58,12 +58,12 @@ pub(super) fn run(
     };
     match outcome {
         Ok(data) => {
-            tracing::info!(
+            tracing::debug!(
                 actual_backend = data.render_backend,
                 output = %data.output.display(),
                 total_frames = data.total_frames,
                 elapsed_ms = data.elapsed_ms,
-                "render completed"
+                "render command completed"
             );
             let warnings = data.warnings.clone();
             if let Some(path) = report.as_deref()
@@ -88,7 +88,7 @@ pub(super) fn run(
             warnings,
             timings,
         }) => {
-            tracing::error!(error_count = errors.len(), "render failed");
+            tracing::debug!(error_count = errors.len(), "render command failed");
             if let Err(message) = write_failure_report(
                 report.as_deref(),
                 "render",
@@ -116,11 +116,10 @@ pub(super) fn run(
             warnings,
             timings,
         }) => {
-            tracing::error!(
+            tracing::debug!(
                 category = diagnostic.category.as_str(),
                 code = %diagnostic.code,
-                error = %diagnostic.message,
-                "render failed"
+                "render command failed"
             );
             if let Some(path) = report.as_deref()
                 && let Err(report_error) =
@@ -150,11 +149,11 @@ pub(super) fn run(
             temporary_removed,
             timings,
         }) => {
-            tracing::error!(
+            tracing::debug!(
                 category = diagnostic.category.as_str(),
                 code = %diagnostic.code,
-                error = %diagnostic.message,
-                "render failed"
+                stage = %context.stage.as_str(),
+                "render command failed"
             );
             if matches!(
                 diagnostic.category,

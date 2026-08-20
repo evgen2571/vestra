@@ -30,8 +30,7 @@ pub(super) fn run(project: PathBuf, format: ResultFormat) -> ExitCode {
                 warnings: report.warnings().cloned().collect(),
             },
             "project is valid",
-        );
-        ExitCode::SUCCESS
+        )
     } else {
         print_failure(
             "validate",

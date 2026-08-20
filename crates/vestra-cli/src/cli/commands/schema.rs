@@ -11,11 +11,14 @@ use vestra::{
 pub(super) fn run(output: PathBuf) -> ExitCode {
     match generate(&output) {
         Ok(()) => {
-            eprintln!("generated {}", output.display());
+            println!("generated {}", output.display());
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("schema generation failed: {error}");
+            eprintln!(
+                "schema generation failed: {error} (output: {})",
+                output.display()
+            );
             ExitCode::FAILURE
         }
     }

@@ -12,7 +12,7 @@ pub fn write_progress(format: ProgressFormat, event: &RenderEvent) {
         ProgressFormat::None => {}
         ProgressFormat::Json => match serde_json::to_string(event) {
             Ok(value) => println!("{value}"),
-            Err(error) => eprintln!("warning: cannot serialize progress event: {error}"),
+            Err(error) => tracing::warn!(error = %error, "cannot serialize progress event"),
         },
         ProgressFormat::Human => match event.progress {
             Some(progress) => eprintln!(

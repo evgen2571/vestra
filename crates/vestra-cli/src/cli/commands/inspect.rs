@@ -13,8 +13,7 @@ pub(super) fn run(project: PathBuf, preview: bool, format: ResultFormat) -> Exit
     };
     match outcome {
         Ok(inspection) => {
-            print_success("inspect", format, inspection, "project inspection complete");
-            ExitCode::SUCCESS
+            print_success("inspect", format, inspection, "project inspection complete")
         }
         Err(error) => print_failure(
             "inspect",

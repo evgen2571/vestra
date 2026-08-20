@@ -30,10 +30,15 @@ pub(super) fn run(
     backend_preference: RenderBackendPreference,
 ) -> ExitCode {
     let began = Instant::now();
+    tracing::info!(
+        project = %project.display(),
+        requested_backend = backend_preference.as_str(),
+        "render started"
+    );
     let cancellation = CancellationToken::new();
     let cancellation_flag = cancellation.clone();
     if let Err(error) = ctrlc::set_handler(move || cancellation_flag.cancel()) {
-        eprintln!("warning: interrupt handler unavailable: {error}");
+        tracing::warn!(error = %error, "interrupt handler unavailable");
     }
     let mut emit = |event: RenderEvent| write_progress(progress, &event);
     let editor = Editor::new();
@@ -53,6 +58,13 @@ pub(super) fn run(
     };
     match outcome {
         Ok(data) => {
+            tracing::info!(
+                actual_backend = data.render_backend,
+                output = %data.output.display(),
+                total_frames = data.total_frames,
+                elapsed_ms = data.elapsed_ms,
+                "render completed"
+            );
             let warnings = data.warnings.clone();
             if let Some(path) = report.as_deref()
                 && let Err(error) = write_success_report(path, "render", &data)
@@ -69,14 +81,14 @@ pub(super) fn run(
                     warnings,
                 );
             }
-            print_success("render", format, data, "render completed");
-            ExitCode::SUCCESS
+            print_success("render", format, data, "render completed")
         }
         Err(EditorError::Project {
             errors,
             warnings,
             timings,
         }) => {
+            tracing::error!(error_count = errors.len(), "render failed");
             if let Err(message) = write_failure_report(
                 report.as_deref(),
                 "render",
@@ -104,6 +116,12 @@ pub(super) fn run(
             warnings,
             timings,
         }) => {
+            tracing::error!(
+                category = diagnostic.category.as_str(),
+                code = %diagnostic.code,
+                error = %diagnostic.message,
+                "render failed"
+            );
             if let Some(path) = report.as_deref()
                 && let Err(report_error) =
                     write_plan_failure_report(path, &project, &diagnostic, &warnings, &timings)
@@ -132,6 +150,12 @@ pub(super) fn run(
             temporary_removed,
             timings,
         }) => {
+            tracing::error!(
+                category = diagnostic.category.as_str(),
+                code = %diagnostic.code,
+                error = %diagnostic.message,
+                "render failed"
+            );
             if matches!(
                 diagnostic.category,
                 Category::Backend | Category::Render | Category::Cancellation

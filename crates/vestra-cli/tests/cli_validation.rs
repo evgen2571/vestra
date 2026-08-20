@@ -11,6 +11,123 @@ fn canonical_binary_is_ve() {
 }
 
 #[test]
+fn verbose_json_results_keep_logs_off_stdout() {
+    let output = common::command()
+        .args([
+            "-v",
+            "validate",
+            "examples/projects/animation-effects.json",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("verbose validate runs");
+
+    assert!(output.status.success());
+    let result: Value = serde_json::from_slice(&output.stdout).expect("stdout remains JSON");
+    assert_eq!(result["status"], "success");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(" INFO ve::cli::commands command started command=validate"));
+}
+
+#[test]
+fn default_verbosity_hides_info_and_v_enables_it() {
+    let default = common::command()
+        .args(["validate", "examples/projects/animation-effects.json"])
+        .output()
+        .expect("default validate runs");
+    assert!(default.status.success());
+    assert!(!String::from_utf8_lossy(&default.stderr).contains("command started"));
+
+    let verbose = common::command()
+        .args(["-v", "validate", "examples/projects/animation-effects.json"])
+        .output()
+        .expect("verbose validate runs");
+    assert!(verbose.status.success());
+    assert!(
+        String::from_utf8_lossy(&verbose.stderr)
+            .contains(" INFO ve::cli::commands command started command=validate")
+    );
+}
+
+#[test]
+fn double_verbose_enables_debug_and_explicit_rust_log_overrides_cli_verbosity() {
+    let debug = common::command()
+        .args([
+            "-vv",
+            "validate",
+            "examples/projects/animation-effects.json",
+        ])
+        .output()
+        .expect("debug validate runs");
+    assert!(debug.status.success());
+    assert!(
+        String::from_utf8_lossy(&debug.stderr)
+            .contains(" DEBUG ve::cli::commands logging configured verbosity=2")
+    );
+
+    let overridden = common::command()
+        .env("RUST_LOG", "warn")
+        .args([
+            "-vvv",
+            "validate",
+            "examples/projects/animation-effects.json",
+        ])
+        .output()
+        .expect("filtered validate runs");
+    assert!(overridden.status.success());
+    let stderr = String::from_utf8_lossy(&overridden.stderr);
+    assert!(!stderr.contains(" INFO "));
+    assert!(!stderr.contains(" DEBUG "));
+    assert!(!stderr.contains(" TRACE "));
+}
+
+#[test]
+fn redirected_verbose_stderr_is_ansi_free() {
+    let output = common::command()
+        .args(["-v", "validate", "examples/projects/animation-effects.json"])
+        .output()
+        .expect("verbose validate runs");
+    assert!(output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("\x1b["));
+}
+
+#[test]
+fn schema_success_result_is_stdout_only() {
+    let workspace = TempDir::new().expect("temporary output directory");
+    let output_path = workspace.path().join("project.schema.json");
+    let output = common::command()
+        .args(["-v", "generate-schema", "--output"])
+        .arg(&output_path)
+        .output()
+        .expect("schema generation runs");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("generated {}\n", output_path.display())
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains(" INFO ve::cli::commands"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("generated "));
+}
+
+#[test]
+fn schema_failure_remains_visible_under_restrictive_rust_log() {
+    let workspace = TempDir::new().expect("temporary output directory");
+    let output_path = workspace.path().join("missing").join("schema.json");
+    let output = common::command()
+        .env("RUST_LOG", "some_other_target=debug")
+        .args(["generate-schema", "--output"])
+        .arg(&output_path)
+        .output()
+        .expect("schema generation runs");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("schema generation failed:"));
+    assert!(stderr.contains("No such file or directory") || stderr.contains("cannot find"));
+    assert!(!stderr.contains("ERROR ve::cli::commands"));
+}
+
+#[test]
 fn canonical_project_validates_and_rejects_a_version_field() {
     let project = "examples/projects/animation-effects.json";
     let valid = common::command()

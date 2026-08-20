@@ -1,6 +1,6 @@
 # Project format
 
-This is the canonical schema-v3 JSON format. The checked-in [JSON
+This is the canonical schema-v4 JSON format. The checked-in [JSON
 Schema](../../schemas/project.schema.json) defines the complete structural
 shape. Rust semantic validation adds current engine invariants, and preflight
 checks assets, media, tools, output paths, and requested backends. Objects
@@ -11,7 +11,7 @@ not read files or probe media.
 
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
-| `schema_version` | integer | yes | Exactly `3`. |
+| `schema_version` | integer | yes | Current format is `4`; Vestra accepts valid schema-`3` projects and normalizes them to `4`. |
 | `name` | string | no | Omitted when absent. |
 | `metadata` | non-null JSON value | no | Omitted when absent. |
 | `output` | object | yes | Output contract below. |
@@ -58,10 +58,17 @@ contracts.
 | `crop` | crop track | no | Applies to image/video sources. |
 | `transform` | transform object | conditional | Required for image sources. Optional for video, shape, text, and group sources; an absent optional transform has canvas presentation. Forbidden for solid-color, Spectrum2D, and particle-system sources. |
 | `effects` | array of effect | no | Empty. See [effects](effects.md). |
+| `masks` | array of geometric mask | no | Empty; ordered layer-owned coverage inputs. See [masks](masks.md). |
 | `blend_mode` | enum | no | `normal`; also `add`, `screen`, `multiply`, `overlay`. |
 | `preset` | preset object | no | Omitted. See [presets and flashes](presets-and-flashes.md). |
 
 ## Timing, transform, groups, and bindings
+
+Each mask has an `id`, a narrow shape `input`, `operation` (`replace`,
+`intersect`, `union`, or `subtract`, default `intersect`), `invert` (default
+`false`), `strength` (default `1`), and a static mask-local `transform`.
+Mask transforms are local to the owning layer and follow its presentation
+transform. Only existing shape geometry inputs are supported in schema v4.
 
 Track objects contain a required `base_value` and optional `keyframes`. A
 keyframe has `time`, `value`, and `interpolation`; time is local seconds.

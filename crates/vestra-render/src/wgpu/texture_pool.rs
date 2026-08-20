@@ -8,7 +8,7 @@
 
 use crate::plan::RenderPlan;
 
-use super::frame_plan::{GpuFramePlan, TextureSlot, plan_requires_auxiliary};
+use super::frame_plan::{GpuFramePlan, TextureSlot, plan_has_masks, plan_requires_auxiliary};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
@@ -82,6 +82,7 @@ pub(super) struct TexturePool {
     effect_a: Option<WorkingTexture>,
     effect_b: Option<WorkingTexture>,
     auxiliary: Option<WorkingTexture>,
+    mask_coverage: Option<WorkingTexture>,
     group_canvas_a: Vec<WorkingTexture>,
     group_canvas_b: Vec<WorkingTexture>,
 }
@@ -105,12 +106,14 @@ impl TexturePool {
                 descriptor,
                 "vestra particle premultiplied accumulation",
             ),
-            effect_a: (effect_pass_count > 0)
+            effect_a: (effect_pass_count > 0 || plan_requires_auxiliary(plan))
                 .then(|| create_texture(device, descriptor, "vestra effect A")),
             effect_b: (effect_pass_count > 1 || plan_requires_auxiliary(plan))
                 .then(|| create_texture(device, descriptor, "vestra effect B")),
             auxiliary: plan_requires_auxiliary(plan)
                 .then(|| create_texture(device, descriptor, "vestra retained effect original")),
+            mask_coverage: plan_has_masks(plan)
+                .then(|| create_texture(device, descriptor, "vestra mask coverage state")),
             group_canvas_a: (0..group_depth)
                 .map(|depth| {
                     create_texture(
@@ -150,6 +153,10 @@ impl TexturePool {
                 .auxiliary
                 .as_ref()
                 .expect("effect plan requires prepared Auxiliary texture"),
+            TextureSlot::MaskCoverage => self
+                .mask_coverage
+                .as_ref()
+                .expect("mask plan requires prepared coverage state"),
             TextureSlot::GroupCanvasA(depth) => self
                 .group_canvas_a
                 .get(depth)
@@ -179,6 +186,10 @@ impl TexturePool {
                 .as_ref()
                 .map_or(0, |texture| texture.estimated_bytes)
             + self
+                .mask_coverage
+                .as_ref()
+                .map_or(0, |texture| texture.estimated_bytes)
+            + self
                 .group_canvas_a
                 .iter()
                 .map(|texture| texture.estimated_bytes)
@@ -202,11 +213,16 @@ impl TexturePool {
         self.auxiliary.is_some()
     }
 
+    pub(super) fn has_mask_coverage(&self) -> bool {
+        self.mask_coverage.is_some()
+    }
+
     pub(super) fn texture_count(&self) -> usize {
         4 + self.group_canvas_a.len() * 2
             + usize::from(self.effect_a.is_some())
             + usize::from(self.effect_b.is_some())
             + usize::from(self.auxiliary.is_some())
+            + usize::from(self.mask_coverage.is_some())
     }
 
     pub(super) fn group_depth(&self) -> usize {

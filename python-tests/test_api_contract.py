@@ -152,8 +152,8 @@ def test_every_preflight_constructor_preserves_its_exposed_state(tmp_path: Path)
 
 
 def test_from_dict_accepts_general_mappings() -> None:
-    assert vestra.ProjectSnapshot.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 3
-    assert vestra.ProjectSnapshot.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 3
+    assert vestra.ProjectSnapshot.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 4
+    assert vestra.ProjectSnapshot.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 4
 
     class DeterministicMapping(Mapping[str, object]):
         def __init__(self, values: dict[str, object]) -> None:

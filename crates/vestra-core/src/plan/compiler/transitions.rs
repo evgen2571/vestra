@@ -537,6 +537,7 @@ mod generic_tests {
             opacity: CompiledScalarProperty::authored(Track::new(0.8)),
             opacity_contributions: Vec::new(),
             effects: Vec::new(),
+            masks: Vec::new(),
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         }

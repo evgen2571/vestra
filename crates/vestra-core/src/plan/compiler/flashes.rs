@@ -91,6 +91,7 @@ pub(super) fn compile(
         opacity: CompiledScalarProperty::authored(opacity),
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
+        masks: Vec::new(),
         blend_mode: BlendMode::Normal,
         content_dependency: crate::plan::TemporalDependency::Static,
     })

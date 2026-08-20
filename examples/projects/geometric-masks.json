@@ -1,0 +1,59 @@
+{
+  "schema_version": 4,
+  "name": "Geometric masks",
+  "output": {
+    "path": "../output/geometric-masks.mp4",
+    "width": 320,
+    "height": 180,
+    "frame_rate": 30,
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 1
+  },
+  "assets": [],
+  "visual": {
+    "clips": [
+      {
+        "id": "masked-card",
+        "source": {
+          "type": "shape",
+          "geometry": {"type": "rectangle", "width": 320, "height": 180},
+          "fill": "#e84a5f"
+        },
+        "start": 0,
+        "duration": 1,
+        "layer": 0,
+        "opacity": {"base_value": 1},
+        "masks": [
+          {
+            "id": "ellipse-window",
+            "input": {
+              "type": "shape",
+              "geometry": {"type": "ellipse", "width": 180, "height": 120},
+              "fill": "#ffffff"
+            },
+            "operation": "intersect",
+            "invert": false,
+            "strength": 1
+          },
+          {
+            "id": "ellipse-hole",
+            "input": {
+              "type": "shape",
+              "geometry": {"type": "ellipse", "width": 64, "height": 48},
+              "fill": "#ffffff"
+            },
+            "operation": "subtract",
+            "invert": false,
+            "strength": 1
+          }
+        ]
+      }
+    ],
+    "transitions": [],
+    "flashes": [],
+    "post_effects": []
+  }
+}

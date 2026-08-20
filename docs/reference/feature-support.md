@@ -15,6 +15,7 @@ not reduced renderer support.
 | Spectrum2D | supported through authoring/source wrappers | `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | not fully verified |
 | Particle system | supported | `particle_system` | adapter-mediated | supported | not fully verified |
 | Nested composition | `CompositionLayer` | `group` | direct | supported | supported |
+| Geometric layer masks | `layer.masks` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
 | Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |

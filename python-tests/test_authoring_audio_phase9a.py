@@ -36,7 +36,7 @@ def test_audio_timeline_is_ordered_and_round_trips() -> None:
     assert [track.id for track in project_builder.audio.tracks] == ["music", "ambience"]
     assert [clip.id for clip in music.clips] == [first.id, second.id]
     data = project_builder.to_dict()
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     assert data["output"]["audio"] is False  # type: ignore[index]
     assert data["audio"]["tracks"][0]["clips"][1]["start"] == 0.25  # type: ignore[index]
     project = project_builder.build()

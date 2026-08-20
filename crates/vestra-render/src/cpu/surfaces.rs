@@ -66,6 +66,8 @@ impl CompositionSurfacePool {
 
 pub(crate) struct EffectSurfacePool {
     surfaces: [RgbaImage; SURFACE_COUNT],
+    mask_local_surface: RgbaImage,
+    mask_surface: RgbaImage,
     current_slot: usize,
     original_slot: Option<usize>,
     temporary_slots: [Option<usize>; 2],
@@ -79,6 +81,8 @@ impl EffectSurfacePool {
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
             surfaces: std::array::from_fn(|_| RgbaImage::new(width, height)),
+            mask_local_surface: RgbaImage::new(width, height),
+            mask_surface: RgbaImage::new(width, height),
             current_slot: 0,
             original_slot: None,
             temporary_slots: [None; 2],
@@ -91,6 +95,8 @@ impl EffectSurfacePool {
     pub(super) fn resize(&mut self, width: u32, height: u32) {
         if self.surfaces[0].width() != width || self.surfaces[0].height() != height {
             self.surfaces = std::array::from_fn(|_| RgbaImage::new(width, height));
+            self.mask_local_surface = RgbaImage::new(width, height);
+            self.mask_surface = RgbaImage::new(width, height);
             self.current_slot = 0;
             self.original_slot = None;
             self.temporary_slots = [None; 2];
@@ -100,6 +106,26 @@ impl EffectSurfacePool {
 
     pub(super) fn current(&mut self) -> &mut RgbaImage {
         &mut self.surfaces[self.current_slot]
+    }
+
+    pub(super) fn mask_surface(&mut self) -> &mut RgbaImage {
+        &mut self.mask_surface
+    }
+
+    pub(super) fn mask_local_surface(&mut self) -> &mut RgbaImage {
+        &mut self.mask_local_surface
+    }
+
+    pub(super) fn compose_mask_surface(&mut self, transform: crate::animation::Transform2D) {
+        for pixel in self.mask_surface.pixels_mut() {
+            *pixel = image::Rgba([0, 0, 0, 0]);
+        }
+        super::raster::draw_surface(
+            &mut self.mask_surface,
+            &self.mask_local_surface,
+            transform,
+            crate::plan::ColourTransform::default(),
+        );
     }
 
     pub(super) fn clear(&mut self) {

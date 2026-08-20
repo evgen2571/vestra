@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "name": "Sparks with Bloom",
   "output": {"path": "particle-bloom.mp4", "width": 64, "height": 64, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1.0},
   "assets": [],

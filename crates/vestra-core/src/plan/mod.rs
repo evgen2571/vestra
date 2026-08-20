@@ -17,7 +17,8 @@ pub use effect_passes::{
     compiled_effect_pass_requirements, effect_pass_plan,
 };
 pub use evaluation::{
-    EvaluatedComposition, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
+    EvaluatedComposition, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMask,
+    EvaluatedSource,
 };
 pub use evaluation::{evaluate, evaluate_effect, evaluate_with_context};
 pub use input::PlanCompileInput;

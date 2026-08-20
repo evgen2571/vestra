@@ -414,6 +414,8 @@ pub struct Clip {
     #[serde(default)]
     pub effects: Vec<Effect>,
     #[serde(default)]
+    pub masks: Vec<super::Mask>,
+    #[serde(default)]
     pub blend_mode: BlendMode,
     #[serde(default, deserialize_with = "optional_non_null")]
     pub preset: Option<Preset>,
@@ -808,7 +810,7 @@ mod particle_tests {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Transform {
     pub position: Track<Point>,
@@ -824,7 +826,7 @@ fn zero_track() -> ScalarProperty {
     ScalarProperty::from_track(Track::constant(0.0))
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TransformComponentModifiers {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

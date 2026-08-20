@@ -12,7 +12,7 @@ ve CLI ───────────┘          │
 
 The ordinary render path is `Project` load or lowering, semantic validation, target-specific preflight, plan and resource preparation, backend selection, frame and audio execution, temporary encoding, finalization, and publication. Loading and validation deliberately leave asset paths unresolved. Preflight resolves them and probes media. That separation lets a caller validate canonical JSON without touching the machine, while render operations can report environment failures before they start a frame loop.
 
-`vestra-core` owns the canonical schema-v3 model, semantic validation, checked time and frame conversions, plan compilation, frame-time evaluation, animation, signal definitions, and effect/audio-effect descriptors. `vestra-render` consumes evaluated work; it must not reinterpret public project rules. CPU and WGPU are two implementations of the same prepared plan, not two project evaluators.
+`vestra-core` owns the canonical schema-v4 model (including v3 compatibility), semantic validation, checked time and frame conversions, plan compilation, frame-time evaluation, animation, signal definitions, and effect/audio-effect descriptors. `vestra-render` consumes evaluated work; it must not reinterpret public project rules. CPU and WGPU are two implementations of the same prepared plan, not two project evaluators.
 
 `vestra-media` owns the boundary where paths become media. It probes and decodes assets, builds and executes audio work, receives rendered RGBA frames through a sink, finalizes temporary encoder output, and publishes the requested file. A successful frame loop is therefore not a successful render until publication succeeds.
 

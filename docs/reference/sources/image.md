@@ -1,15 +1,18 @@
 # Image source
 
-`vestra.sources.Image(path, sizing=None, crop=None)` references a raster image.
-The path is a non-empty string or path-like value. The canonical source tag is
-`image`; asset loading and decode happen during preflight or preparation.
+`Image(path, *, sizing=None, crop=None)` accepts a non-empty `str` or
+`PathLike[str]`. Its canonical source is `{"type":"image","asset":...}`
+after lowering. Relative paths resolve against the project base directory only
+during preflight/preparation; they remain relative in serialized projects.
 
-The source is placed by its layer's `start` and `duration`. `sizing` controls
-intrinsic-to-canvas placement and `crop` controls the source crop. Layer
-transform, opacity, blend mode, animation, effects, transitions, and image-only
-presets are owned by the layer or its collections.
+`sizing` is `None`, `"original"`, `"fit"`, `"cover"`, or a `Sizing` value.
+`Sizing` additionally represents the canonical `scale` and `stretch` forms.
+`crop` is `None`, `Crop`, or `CropProperty`; it remains mutable and may be
+animated through the property API. Intrinsic dimensions are obtained from the
+asset, not authored on `Image`.
 
-Image sources are supported by the canonical model, high-level Python, CPU,
-and WGPU paths. A missing or unreadable asset is an environment/preflight
-error. See [effects](../effects.md), [transitions](../transitions.md), and
-[backends](../backends.md).
+Layer `start` and `duration` place the image on the project timeline. Layers
+own transform, opacity, blend mode, scalar animation, effects, and transition
+placement. Images support direct transform and transition endpoints. Canonical
+JSON, high-level Python, CPU, and WGPU have image paths. Missing or unreadable
+assets fail preflight rather than constructor validation.

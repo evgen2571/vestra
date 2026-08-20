@@ -54,7 +54,7 @@ canonical collections.
 Python raises type/value/ownership errors for malformed typed calls. Native
 parsing accepts schema-v1 dictionaries. Native validation intentionally reports
 semantic errors such as keyframe range/order, transition fit or hidden
-participants, and preset `VESTRA-EFFECT-INTERVAL` timing. Preflight reports media
+participants, and preset `MVP-EFFECT-INTERVAL` timing. Preflight reports media
 and backend availability; rendering reports FFmpeg and safe-publication errors.
 
 ## Integration and examples

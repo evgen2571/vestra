@@ -45,9 +45,9 @@ them. Automatic duration is native code: it uses the greatest visual end and,
 after media probing, an enabled audio end. Asset existence, image decoding,
 audio probing, trim duration, and FFmpeg compatibility remain outside Python.
 
-Relevant native diagnostics include `VESTRA-ASSET-*`, `VESTRA-AUDIO-ASSET`,
-`VESTRA-AUDIO-ASSET-TYPE`, `VESTRA-AUDIO-SETTINGS`, `VESTRA-CLIP-*`,
-`VESTRA-DURATION-EMPTY`, and `VESTRA-DURATION-TRUNCATED`.
+Relevant native diagnostics include `MVP-ASSET-*`, `MVP-AUDIO-ASSET`,
+`MVP-AUDIO-ASSET-TYPE`, `MVP-AUDIO-SETTINGS`, `MVP-CLIP-*`,
+`MVP-DURATION-EMPTY`, and `MVP-DURATION-TRUNCATED`.
 
 ## Authoring rules
 

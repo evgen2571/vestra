@@ -1,6 +1,6 @@
 # WGPU renderer
 
-> Current backend selection and reporting are summarized in [docs/reference/backends.md](reference/backends.md). This page retains implementation and validation history.
+> Current backend selection and reporting are summarized in [docs/reference/backends.md](../../reference/backends.md). This page retains implementation and validation history.
 
 The renderer consumes the same compiled plan, decoded assets, and
 `EvaluatedFrame` as CPU:
@@ -210,7 +210,7 @@ switch to CPU.
 
 The SDK preserves an originating renderer diagnostic unchanged, including its
 backend category, code, severity, pointer, hint, and related identifier. SDK-only
-lifecycle failures use distinct `VESTRA-*` diagnostics. Device loss invalidates the
+lifecycle failures use distinct `MVP-*` diagnostics. Device loss invalidates the
 prepared backend; there is no automatic recovery or backend re-preparation.
 
 `VESTRA_WGPU_IN_FLIGHT=1 cargo test --workspace --all-features` exercises the

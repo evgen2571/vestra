@@ -13,7 +13,12 @@ discovery. `--render-backend wgpu` or `BackendPreference.WGPU` chooses Vestra's
 renderer. The selected adapter and its device classification are reported
 separately when available.
 
+`VESTRA_WGPU_IN_FLIGHT` is an internal implementation tuning variable. It sets
+the WGPU pipeline depth, defaults to `3`, accepts only integers `1` through
+`3`, and produces a backend diagnostic for an invalid value. It is not normal
+user configuration. `VESTRA_CPU_PROFILE` is development-only profiling control.
+
 `VESTRA_REQUIRE_WGPU`, `VESTRA_REQUIRE_HARDWARE_WGPU`, and
-`VESTRA_WGPU_FORCE_FALLBACK` are test or verification controls used by the
-repository, not normal project configuration. `VESTRA_*` benchmark variables
-are likewise development-only.
+`VESTRA_WGPU_FORCE_FALLBACK` are test or verification controls. The
+`VESTRA_ANALYSIS_BENCH_*`, `VESTRA_BENCH_*`, and `VESTRA_PHASE10_BENCH*`
+families are benchmark/test controls. None are supported project configuration.

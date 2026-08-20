@@ -66,7 +66,7 @@ Use the default `auto` choice unless you need a specific backend. `cpu` is the
 most predictable option for a first render. `wgpu` selects a WGPU adapter, but
 WGPU does not by itself mean hardware acceleration. The selected adapter and
 any fallback are reported by the render result. Hardware validation is covered
-in later development documentation.
+in the [GPU validation guide](docs/development/gpu-validation.md).
 
 ## Documentation
 
@@ -84,6 +84,9 @@ task. Useful entry points include:
 - [Feature support matrix](docs/reference/feature-support.md)
 - [CLI reference](docs/reference/cli.md)
 - [Backend reference](docs/reference/backends.md)
+- [Signals reference](docs/reference/signals.md)
+- [Troubleshooting](docs/troubleshooting/rendering.md)
+- [Development documentation](docs/development/architecture/overview.md)
 - [Canonical project schema](schemas/project.schema.json)
 - [Runnable examples](examples/)
 

@@ -1,37 +1,20 @@
 # Audio
 
-The canonical model has an optional `audio` timeline. It contains master
-`effects` and ordered `tracks`. A track has `id`, `mute`, `gain`, `effects`, and
-`clips`. A clip identifies an audio asset and has `start`, `trim_start`,
-optional `trim_end`, `gain`, optional `gain_automation`, `fade_in`, `fade_out`,
-fade curves, `mute`, and effects.
+The optional canonical `audio` object has ordered `tracks` and master `effects`. A track has `id`, `mute=false`, `gain=1`, effects, and clips. A clip has an id, asset/source, `start`, `trim_start`, optional `trim_end`, `gain=1`, `mute=false`, fades, optional gain automation, and effects.
 
-## Time domains
-
-| Field | Domain |
+| Field | Time domain |
 | --- | --- |
 | `start` | Project timeline seconds. |
-| `trim_start`, `trim_end` | Source-media positions in seconds. |
+| `trim_start`, `trim_end` | Source-media seconds. |
 | `fade_in`, `fade_out` | Durations relative to the selected clip. |
-| Gain automation `time` | Clip-local seconds. |
-| Crossfade overlap | Project timeline overlap derived from clip placement and source trims. |
+| Gain-automation keyframe `time` | Clip-local seconds. |
 
-Gain defaults to `1.0`; `mute` defaults to `false`; fades default to `0.0`;
-fade curves default to `linear`. Gain interpolation is `linear` or `hold`.
-`trim_end`, when present, must be after `trim_start`. Audio validation checks
-asset identity, timing, automation duration and ordering, effect scope, and
-media availability during preflight.
+Fades default to 0 and their curves to `linear`. Gain automation uses `linear` or `hold` interpolation. `trim_end` must follow `trim_start`; validation also checks ids, assets, timing, automation order/duration, effect scope, and media availability during preflight.
 
-## Effects and exposure
+| Type | Parameters | Scope and duration |
+| --- | --- | --- |
+| `parametric_eq` | `frequency_hz` >0 through 24000, `gain_db` -24..24, `q` >0 through 100 | clip, track, master; preserves duration |
+| `bass_boost` | `gain_db=6` from 0..24, `frequency_hz=100` from 20..250 | clip, track, master; preserves duration |
+| `playback_speed` | `rate` 0.25..4 | clip only; transforms duration |
 
-The current audio effect catalog is `parametric_eq`, `bass_boost`, and
-`playback_speed`. `ParametricEq` has `frequency_hz`, `gain_db`, and `q`.
-`BassBoost` has `gain_db` and `frequency_hz`, with descriptor defaults.
-`PlaybackSpeed` has `rate`. Effects have scope rules. The Python API exposes
-the same concepts through `AudioEffectStack` and the `ParametricEq`,
-`BassBoost`, and `PlaybackSpeed` classes.
-
-Audio analysis is prepared before signal-driven rendering. `output.audio`
-controls whether authored audio is published. The high-level Python `None`
-policy follows whether the project contains clips; explicit `True` or `False`
-overrides it.
+Effects execute in stack order. High-level Python exposes `ParametricEq`, `BassBoost`, `PlaybackSpeed`, and `AudioEffectStack`; advanced canonical authoring uses the same descriptor catalog. Audio analysis is prepared before signal-driven visuals. `output.audio` controls publication; the high-level `None` policy follows whether clips exist, while an explicit boolean overrides it.

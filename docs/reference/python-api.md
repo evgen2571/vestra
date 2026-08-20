@@ -19,6 +19,11 @@ High-level projects provide `validate()`, `prepare(backend="auto")`,
 `render_frame(seconds)`, and `snapshot(output=...)`. `validate()` returns a
 `ValidationReport` and does not inspect the environment. See [backends](backends.md).
 
+`Project(size, fps, duration, ...)` creates the high-level editing graph.
+`Composition.add(source, start=0, duration=None, z=0, id=None, ...)` returns a
+`Layer`; `Composition.group(...)` creates a `CompositionLayer`. `snapshot()`
+lowers the mutable graph to an immutable `ProjectSnapshot`.
+
 ## Advanced canonical authoring
 
 `vestra.authoring.ProjectBuilder` owns canonical assets, clips, tracks,
@@ -44,6 +49,11 @@ Prepared rendering must use `PreparedVideoRenderRequest`; `RenderRequest`
 belongs to one-shot `Editor.render`. A cancelled render raises
 `vestra.CancelledError`, a subclass of `RenderError`, rather than returning a
 successful `RenderResult`.
+
+Key native entry points are `ProjectSnapshot.load(path)`,
+`ProjectSnapshot.from_json(json, base_directory=".")`, `Editor.validate`,
+`Editor.preflight`, `Editor.prepare`, and `Editor.render`. A prepared snapshot
+reuses its resources through frame methods and prepared video rendering.
 
 ## Reports and errors
 

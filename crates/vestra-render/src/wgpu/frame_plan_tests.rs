@@ -198,6 +198,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
             GpuOperation::RenderRasterLayer { .. }
             | GpuOperation::ApplyEffect { .. }
             | GpuOperation::RenderMask { .. }
+            | GpuOperation::FeatherMask { .. }
             | GpuOperation::ApplyMask { .. }
             | GpuOperation::UpdateMaskCoverage { .. }
             | GpuOperation::CompositeLayer { .. } => Some((index, operation)),
@@ -227,14 +228,56 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
     ));
     assert!(matches!(
         positions[6].1,
-        GpuOperation::ApplyMask { mask_index: 1, .. }
+        GpuOperation::FeatherMask {
+            horizontal: true,
+            ..
+        }
     ));
     assert!(matches!(
         positions[7].1,
-        GpuOperation::UpdateMaskCoverage { mask_index: 1, .. }
+        GpuOperation::FeatherMask {
+            horizontal: true,
+            ..
+        }
     ));
     assert!(matches!(
         positions[8].1,
+        GpuOperation::FeatherMask {
+            horizontal: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        positions[9].1,
+        GpuOperation::FeatherMask {
+            horizontal: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        positions[10].1,
+        GpuOperation::FeatherMask {
+            horizontal: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        positions[11].1,
+        GpuOperation::FeatherMask {
+            horizontal: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        positions[12].1,
+        GpuOperation::ApplyMask { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[13].1,
+        GpuOperation::UpdateMaskCoverage { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[14].1,
         GpuOperation::CompositeLayer { .. }
     ));
 }

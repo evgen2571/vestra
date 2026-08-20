@@ -1066,7 +1066,13 @@ fn encode_parameters(
                     1.0,
                     crate::plan::ColourTransform::default(),
                 );
-                parameters.header[3] = 3;
+                parameters.header[3] = match mask.input {
+                    crate::plan::EvaluatedMaskInput::Shape { .. } => 3,
+                    crate::plan::EvaluatedMaskInput::Image { mode, .. } => match mode {
+                        crate::project::ImageMaskMode::Alpha => 3,
+                        crate::project::ImageMaskMode::Luma => 4,
+                    },
+                };
                 arena.push(&parameters)?;
             }
             GpuOperation::FeatherMask {

@@ -1,4 +1,4 @@
-"""Layer-owned geometric mask authoring handles."""
+"""Layer-owned mask authoring handles."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from enum import Enum
 from typing import cast
 
 from .properties import BindableScalarProperty, Transform
-from .sources import Line, Shape
+from .sources import Image, Line, Shape
 
 
 class MaskOperation(str, Enum):
@@ -16,22 +16,35 @@ class MaskOperation(str, Enum):
     SUBTRACT = "subtract"
 
 
-class Mask:
-    __slots__ = ("_id", "_input", "_operation", "_invert", "_strength", "_feather", "_transform")
+class ImageMaskMode(str, Enum):
+    ALPHA = "alpha"
+    LUMA = "luma"
 
-    def __init__(self, identifier: str, source: Shape, operation: MaskOperation, *, feather: int | float = 0.0) -> None:
+
+class Mask:
+    __slots__ = ("_id", "_input", "_mode", "_operation", "_invert", "_strength", "_feather", "_transform")
+
+    def __init__(self, identifier: str, source: Shape | Image, operation: MaskOperation, *, feather: int | float = 0.0, mode: ImageMaskMode | str | None = None) -> None:
         if not isinstance(identifier, str):
             raise TypeError("mask id must be a string")
         if not identifier or identifier.isspace():
             raise ValueError("mask id must not be empty or whitespace-only")
-        if not isinstance(source, Shape):
-            raise TypeError("mask input must be a Shape")
+        if not isinstance(source, (Shape, Image)):
+            raise TypeError("mask input must be a Shape or Image")
         if isinstance(source, Line):
             raise TypeError("Line is not supported as a mask input")
+        if isinstance(source, Shape) and mode is not None:
+            raise TypeError("mode is only valid for Image mask inputs")
+        if isinstance(source, Image):
+            try:
+                mode = ImageMaskMode(mode or ImageMaskMode.ALPHA)
+            except ValueError as error:
+                raise ValueError("image mask mode must be 'alpha' or 'luma'") from error
         if not isinstance(operation, MaskOperation):
             raise TypeError("operation must be MaskOperation")
         self._id = identifier
-        self._input = cast(Shape, source.snapshot())
+        self._input = cast(Shape | Image, source.snapshot())
+        self._mode = mode
         self._operation = operation
         self._invert = False
         self._strength = BindableScalarProperty(1.0, minimum=0.0, maximum=1.0)
@@ -73,7 +86,7 @@ class Mask:
     @property
     def transform(self) -> Transform: return self._transform
 
-    def to_canonical(self) -> dict[str, object]:
+    def to_canonical(self, *, asset_id: str | None = None) -> dict[str, object]:
         scale = self.transform.scale.to_canonical()
         scale.pop("bindings", None)
         transform = {
@@ -98,7 +111,13 @@ class Mask:
                 for name, bindings in components.items()
                 if bindings
             }
-        return {"id": self.id, "input": self.input.to_canonical(), "operation": self.operation.value,
+        if isinstance(self.input, Image):
+            if asset_id is None or self._mode is None:
+                raise ValueError("image mask lowering requires a registered asset")
+            input_value: dict[str, object] = {"type": "image", "asset": asset_id, "mode": self._mode.value}
+        else:
+            input_value = self.input.to_canonical()
+        return {"id": self.id, "input": input_value, "operation": self.operation.value,
                 "invert": self.invert, "strength": self.strength.to_canonical(),
                 "feather": self.feather.to_canonical(), "transform": transform}
 
@@ -110,8 +129,9 @@ class MaskCollection:
         self._ids: set[str] = set()
     @property
     def items(self) -> tuple[Mask, ...]: return tuple(self._items)
-    def add(self, source: Shape, *, operation: MaskOperation = MaskOperation.INTERSECT,
-            id: str | None = None, feather: int | float = 0.0) -> Mask:
+    def add(self, source: Shape | Image, *, operation: MaskOperation = MaskOperation.INTERSECT,
+            id: str | None = None, feather: int | float = 0.0,
+            mode: ImageMaskMode | str | None = None) -> Mask:
         if id is None:
             number = 1
             while f"mask-{number}" in self._ids:
@@ -120,7 +140,7 @@ class MaskCollection:
         else:
             identifier = id
         if identifier in self._ids: raise ValueError(f"duplicate mask id: {identifier!r}")
-        mask = Mask(identifier, source, operation, feather=feather)
+        mask = Mask(identifier, source, operation, feather=feather, mode=mode)
         self._items.append(mask)
         self._ids.add(identifier)
         return mask
@@ -137,4 +157,4 @@ class MaskCollection:
         self._ids.clear()
 
 
-__all__ = ["Mask", "MaskCollection", "MaskOperation"]
+__all__ = ["ImageMaskMode", "Mask", "MaskCollection", "MaskOperation"]

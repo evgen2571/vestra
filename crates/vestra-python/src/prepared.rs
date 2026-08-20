@@ -530,6 +530,10 @@ impl PyPreparedProject {
     where
         T: Send,
     {
+        // A prepared project retains compiled plans, decoded assets, and the
+        // selected backend. Move that state out for one exclusive operation,
+        // then restore it even on render error so successful operations can
+        // reuse the same prepared resources.
         let mut prepared = self.take()?;
         py.detach(|| {
             if let Err(error) = wait_for_prepared_test_barrier() {
@@ -551,6 +555,9 @@ impl PyPreparedProject {
         T: Send,
     {
         let mut prepared = self.take()?;
+        // The exclusive prepared slot stays owned by this native operation
+        // while Python is detached; callbacks reattach only around Python
+        // invocation, then the slot is restored before returning.
         py.detach(|| {
             if let Err(error) = wait_for_prepared_test_barrier() {
                 self.restore(prepared)?;

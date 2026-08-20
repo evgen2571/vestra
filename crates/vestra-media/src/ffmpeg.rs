@@ -448,6 +448,9 @@ impl FrameSink for FfmpegSink {
         if self.state != SinkState::Active {
             return Err(MediaError::InvalidSinkState);
         }
+        // EOF is part of the encoder protocol: FFmpeg flushes delayed frames
+        // only after stdin closes, and publication must wait for process
+        // finalization and its status check.
         drop(self.stdin.take());
         let status = match self
             .child

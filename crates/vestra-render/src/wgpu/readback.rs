@@ -79,6 +79,9 @@ impl ReadbackRing {
         packed_bytes: u64,
         slot_count: usize,
     ) -> Result<Self, Diagnostic> {
+        // Readback buffers are device-local staging resources. Keep one slot
+        // per pipeline position so asynchronous submissions do not create
+        // device buffers per frame.
         let packed_bytes = usize::try_from(packed_bytes).map_err(|_| {
             readback_size_error("packed frame bytes do not fit the host address space")
         })?;
@@ -220,6 +223,10 @@ impl ReadbackRing {
                 }
                 match completion.result {
                     Ok(()) => {
+                        // Mapping completion is the synchronization point at
+                        // which the copy is safe to read. WGPU rows may include
+                        // alignment padding, so repack into the tight RGBA
+                        // layout expected by the backend-neutral frame type.
                         let mapped = slot.buffer.slice(..).get_mapped_range();
                         let repack_started = Instant::now();
                         let mut packed = vec![0_u8; self.packed_bytes];

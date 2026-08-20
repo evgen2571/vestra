@@ -13,6 +13,9 @@ pub(super) fn operation_backend_metrics(
     after: &crate::render::PreparationStats,
     plan: &RenderPlan,
 ) -> Result<(), RenderError> {
+    // Backend counters belong to the prepared backend and accumulate across
+    // operations. Snapshotting before and after keeps this report scoped to
+    // the current render instead of leaking prior work.
     let counters = [
         (
             "command submission",

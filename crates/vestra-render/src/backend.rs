@@ -71,6 +71,11 @@ impl AdapterPerformanceClass {
     pub const fn is_software(self) -> bool {
         matches!(self, Self::Software | Self::Cpu)
     }
+
+    #[must_use]
+    pub const fn is_proven_hardware(self) -> bool {
+        matches!(self, Self::DiscreteGpu | Self::IntegratedGpu)
+    }
 }
 
 impl AdapterMetadata {

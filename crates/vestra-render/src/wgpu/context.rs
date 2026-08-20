@@ -81,7 +81,7 @@ impl GpuContext {
             device_id: info.device,
         };
         let performance_class = adapter_metadata.performance_class();
-        tracing::info!(
+        tracing::debug!(
             backend = %adapter_metadata.graphics_backend,
             adapter = %adapter_metadata.adapter_name,
             device_type = %adapter_metadata.device_type,
@@ -89,18 +89,18 @@ impl GpuContext {
             driver_info = %adapter_metadata.driver_info,
             vendor_id = adapter_metadata.vendor_id,
             device_id = adapter_metadata.device_id,
-            hardware = !performance_class.is_software(),
+            hardware = performance_class.is_proven_hardware(),
             classification = performance_class.as_str(),
-            "WGPU adapter selected"
+            "WGPU adapter candidate selected"
         );
         if performance_class.is_software() {
-            tracing::warn!(
+            tracing::debug!(
                 backend = %adapter_metadata.graphics_backend,
                 adapter = %adapter_metadata.adapter_name,
                 device_type = %adapter_metadata.device_type,
                 hardware = false,
                 classification = performance_class.as_str(),
-                "software WGPU adapter selected"
+                "software WGPU adapter candidate selected"
             );
         }
         let adapter_limits = adapter.limits();
@@ -125,6 +125,18 @@ impl GpuContext {
         );
         requirements.validate(&device.limits(), plan)?;
         let runtime_errors = RuntimeErrorState::install(&device);
+        tracing::info!(
+            backend = %adapter_metadata.graphics_backend,
+            adapter = %adapter_metadata.adapter_name,
+            device_type = %adapter_metadata.device_type,
+            driver = %adapter_metadata.driver_name,
+            driver_info = %adapter_metadata.driver_info,
+            vendor_id = adapter_metadata.vendor_id,
+            device_id = adapter_metadata.device_id,
+            hardware = performance_class.is_proven_hardware(),
+            classification = performance_class.as_str(),
+            "WGPU adapter selected"
+        );
         Ok(Self {
             queue,
             device,

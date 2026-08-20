@@ -197,4 +197,14 @@ mod tests {
     fn virtual_adapter_is_not_proven_hardware() {
         assert!(hardware_conformance_policy(AdapterPerformanceClass::VirtualGpu, true).is_err());
     }
+
+    #[test]
+    fn only_gpu_performance_classes_are_proven_hardware() {
+        assert!(AdapterPerformanceClass::DiscreteGpu.is_proven_hardware());
+        assert!(AdapterPerformanceClass::IntegratedGpu.is_proven_hardware());
+        assert!(!AdapterPerformanceClass::Cpu.is_proven_hardware());
+        assert!(!AdapterPerformanceClass::Software.is_proven_hardware());
+        assert!(!AdapterPerformanceClass::VirtualGpu.is_proven_hardware());
+        assert!(!AdapterPerformanceClass::Unknown.is_proven_hardware());
+    }
 }

@@ -7,8 +7,9 @@ use std::{
 };
 
 use crate::output::{
-    ProgressFormat, ResultFormat, print_failure, print_success, write_command_failure_report,
-    write_plan_failure_report, write_progress, write_render_failure_report, write_success_report,
+    HumanProgress, ProgressFormat, ResultFormat, print_failure, print_failure_stderr,
+    print_success, print_success_stderr, write_command_failure_report, write_plan_failure_report,
+    write_render_failure_report, write_success_report,
 };
 use vestra::{
     BackendPreference as RenderBackendPreference, CancellationToken, Category, Diagnostic, Editor,
@@ -40,21 +41,31 @@ pub(super) fn run(
     if let Err(error) = ctrlc::set_handler(move || cancellation_flag.cancel()) {
         tracing::warn!(error = %error, "interrupt handler unavailable");
     }
-    let mut emit = |event: RenderEvent| write_progress(progress, &event);
+    let mut human_progress = (progress == ProgressFormat::Human).then(HumanProgress::new);
     let editor = Editor::new();
-    let outcome = match editor.load_project(&project) {
-        Ok(loaded) => editor.render(
-            &loaded,
-            RenderRequest {
-                output,
-                overwrite,
-                preview,
-                backend: backend_preference,
-            },
-            &mut emit,
-            &cancellation,
-        ),
-        Err(error) => Err(error),
+    let outcome = {
+        let mut emit = |event: RenderEvent| match progress {
+            ProgressFormat::Human => human_progress
+                .as_mut()
+                .expect("human progress state exists")
+                .update(&event),
+            ProgressFormat::Json => crate::output::write_progress(progress, &event),
+            ProgressFormat::None => {}
+        };
+        match editor.load_project(&project) {
+            Ok(loaded) => editor.render(
+                &loaded,
+                RenderRequest {
+                    output,
+                    overwrite,
+                    preview,
+                    backend: backend_preference,
+                },
+                &mut emit,
+                &cancellation,
+            ),
+            Err(error) => Err(error),
+        }
     };
     match outcome {
         Ok(data) => {
@@ -69,7 +80,8 @@ pub(super) fn run(
             if let Some(path) = report.as_deref()
                 && let Err(error) = write_success_report(path, "render", &data)
             {
-                return print_failure(
+                return print_failure_for_progress(
+                    progress,
                     "render",
                     format,
                     vec![Diagnostic::error(
@@ -81,7 +93,7 @@ pub(super) fn run(
                     warnings,
                 );
             }
-            print_success("render", format, data, "render completed")
+            print_success_for_progress(progress, "render", format, data, "render completed")
         }
         Err(EditorError::Project {
             errors,
@@ -107,9 +119,11 @@ pub(super) fn run(
                     message,
                     "",
                 ));
-                return print_failure("render", format, all_errors, warnings);
+                return print_failure_for_progress(
+                    progress, "render", format, all_errors, warnings,
+                );
             }
-            print_failure("render", format, errors, warnings)
+            print_failure_for_progress(progress, "render", format, errors, warnings)
         }
         Err(EditorError::Plan {
             diagnostic,
@@ -125,7 +139,8 @@ pub(super) fn run(
                 && let Err(report_error) =
                     write_plan_failure_report(path, &project, &diagnostic, &warnings, &timings)
             {
-                return print_failure(
+                return print_failure_for_progress(
+                    progress,
                     "render",
                     format,
                     vec![
@@ -140,7 +155,7 @@ pub(super) fn run(
                     warnings,
                 );
             }
-            print_failure("render", format, vec![*diagnostic], warnings)
+            print_failure_for_progress(progress, "render", format, vec![*diagnostic], warnings)
         }
         Err(EditorError::Render {
             diagnostic,
@@ -149,6 +164,9 @@ pub(super) fn run(
             temporary_removed,
             timings,
         }) => {
+            if let Some(progress) = human_progress.as_mut() {
+                progress.finish_failure();
+            }
             tracing::debug!(
                 category = diagnostic.category.as_str(),
                 code = %diagnostic.code,
@@ -159,7 +177,7 @@ pub(super) fn run(
                 diagnostic.category,
                 Category::Backend | Category::Render | Category::Cancellation
             ) {
-                emit(RenderEvent {
+                let failed = RenderEvent {
                     event_schema_version: 1,
                     kind: "failed".to_owned(),
                     frame: context.completed_frames,
@@ -167,7 +185,15 @@ pub(super) fn run(
                     progress: context.progress,
                     output_path: context.output_path.clone(),
                     warnings: Some(warnings.clone()),
-                });
+                };
+                match progress {
+                    ProgressFormat::Human => human_progress
+                        .as_mut()
+                        .expect("human progress state exists")
+                        .update(&failed),
+                    ProgressFormat::Json => crate::output::write_progress(progress, &failed),
+                    ProgressFormat::None => {}
+                }
             }
             if let Some(path) = report.as_deref()
                 && let Err(report_error) = write_render_failure_report(
@@ -181,7 +207,8 @@ pub(super) fn run(
                     &timings,
                 )
             {
-                return print_failure(
+                return print_failure_for_progress(
+                    progress,
                     "render",
                     format,
                     vec![
@@ -196,8 +223,36 @@ pub(super) fn run(
                     warnings,
                 );
             }
-            print_failure("render", format, vec![*diagnostic], warnings)
+            print_failure_for_progress(progress, "render", format, vec![*diagnostic], warnings)
         }
+    }
+}
+
+fn print_success_for_progress<T: serde::Serialize>(
+    progress: ProgressFormat,
+    command: &'static str,
+    format: ResultFormat,
+    data: T,
+    human: &str,
+) -> ExitCode {
+    if progress == ProgressFormat::Json {
+        print_success_stderr(command, format, data, human)
+    } else {
+        print_success(command, format, data, human)
+    }
+}
+
+fn print_failure_for_progress(
+    progress: ProgressFormat,
+    command: &'static str,
+    format: ResultFormat,
+    errors: Vec<Diagnostic>,
+    warnings: Vec<Diagnostic>,
+) -> ExitCode {
+    if progress == ProgressFormat::Json {
+        print_failure_stderr(command, format, errors, warnings)
+    } else {
+        print_failure(command, format, errors, warnings)
     }
 }
 

@@ -70,7 +70,7 @@ pub fn discover() -> Vec<crate::AdapterMetadata> {
                 driver_info = %metadata.driver_info,
                 vendor_id = metadata.vendor_id,
                 device_id = metadata.device_id,
-                hardware = !class.is_software(),
+                hardware = class.is_proven_hardware(),
                 classification = class.as_str(),
                 "WGPU adapter discovered"
             );

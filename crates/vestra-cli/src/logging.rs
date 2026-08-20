@@ -20,9 +20,10 @@ pub(crate) fn init(verbosity: u8) -> Result<(), Box<dyn std::error::Error + Send
     let environment_filter = std::env::var("RUST_LOG").ok();
     let filter = EnvFilter::try_new(selected_filter(verbosity, environment_filter.as_deref()))?;
 
+    let output = crate::output::progress::terminal_output();
     tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .with_writer(std::io::stderr)
+        .with_writer(move || output.writer())
         .with_ansi(std::io::stderr().is_terminal())
         .event_format(TerminalEventFormatter)
         .try_init()

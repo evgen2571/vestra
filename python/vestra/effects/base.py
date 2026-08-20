@@ -267,12 +267,14 @@ class Effect:
         return tuple(self._properties.items())
 
     def to_canonical(self) -> dict[str, object]:
+        from ..properties.lowering import lower_scalar_property
+
         data: dict[str, object] = {"type": self.type}
         if self.id is not None:
             data["id"] = self.id
         data.update(self._values)
         for name, property_value in self._properties.items():
-            data[name] = property_value.to_canonical()
+            data[name] = lower_scalar_property(property_value)
         active = data.pop("active_interval", None)
         if isinstance(active, ActiveInterval):
             data.update(active.to_canonical())

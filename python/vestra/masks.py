@@ -6,7 +6,8 @@ from enum import Enum
 from typing import cast
 
 from .properties import BindableScalarProperty, Transform
-from .sources import Image, Line, Shape
+from .properties.lowering import lower_scalar_property, lower_transform
+from .sources import Color, Group, Image, ParticleSystem, Shape, Source, Spectrum2D, Text, Video
 
 
 class MaskOperation(str, Enum):
@@ -16,40 +17,48 @@ class MaskOperation(str, Enum):
     SUBTRACT = "subtract"
 
 
-class ImageMaskMode(str, Enum):
+class MaskCoverageMode(str, Enum):
     ALPHA = "alpha"
     LUMA = "luma"
+
+
+ImageMaskMode = MaskCoverageMode
+MaskSource = Shape | Image | Color | Text | Video | Spectrum2D | ParticleSystem | Group
 
 
 class Mask:
     __slots__ = ("_id", "_input", "_mode", "_operation", "_invert", "_strength", "_feather", "_transform")
 
-    def __init__(self, identifier: str, source: Shape | Image, operation: MaskOperation, *, feather: int | float = 0.0, mode: ImageMaskMode | str | None = None) -> None:
+    def __init__(self, identifier: str, source: MaskSource, operation: MaskOperation, *, feather: int | float = 0.0, mode: MaskCoverageMode | str | None = None) -> None:
         if not isinstance(identifier, str):
             raise TypeError("mask id must be a string")
         if not identifier or identifier.isspace():
             raise ValueError("mask id must not be empty or whitespace-only")
-        if not isinstance(source, (Shape, Image)):
-            raise TypeError("mask input must be a Shape or Image")
-        if isinstance(source, Line):
-            raise TypeError("Line is not supported as a mask input")
+        if not isinstance(source, (Shape, Image, Color, Text, Video, Spectrum2D, ParticleSystem, Group)):
+            raise TypeError("mask input must be a supported owned Source")
         if isinstance(source, Image) and (source.sizing is not None or source.crop.active):
             raise ValueError(
                 "Image masks currently use intrinsic image dimensions. "
                 "Image sizing/crop settings are not supported in mask context; "
                 "use mask.transform to position and scale the mask."
             )
+        if isinstance(source, Video) and (source.sizing is not None or source.crop.active):
+            raise ValueError(
+                "Video masks currently use the source's intrinsic dimensions. "
+                "Video sizing/crop settings are not supported in mask context; "
+                "use mask.transform to position and scale the mask."
+            )
         if isinstance(source, Shape) and mode is not None:
-            raise TypeError("mode is only valid for Image mask inputs")
-        if isinstance(source, Image):
+            raise TypeError("mode is only valid for non-Shape source masks")
+        if isinstance(source, Source):
             try:
-                mode = ImageMaskMode(mode or ImageMaskMode.ALPHA)
+                mode = MaskCoverageMode(MaskCoverageMode.ALPHA if mode is None else mode)
             except ValueError as error:
-                raise ValueError("image mask mode must be 'alpha' or 'luma'") from error
+                raise ValueError("mask coverage mode must be 'alpha' or 'luma'") from error
         if not isinstance(operation, MaskOperation):
             raise TypeError("operation must be MaskOperation")
         self._id = identifier
-        self._input = cast(Shape | Image, source.snapshot())
+        self._input = cast(MaskSource, source.snapshot())
         self._mode = mode
         self._operation = operation
         self._invert = False
@@ -60,7 +69,7 @@ class Mask:
     @property
     def id(self) -> str: return self._id
     @property
-    def input(self) -> Shape | Image: return self._input
+    def input(self) -> MaskSource: return self._input
     @property
     def operation(self) -> MaskOperation: return self._operation
     @operation.setter
@@ -92,40 +101,30 @@ class Mask:
     @property
     def transform(self) -> Transform: return self._transform
 
-    def to_canonical(self, *, asset_id: str | None = None) -> dict[str, object]:
-        scale = self.transform.scale.to_canonical()
-        scale.pop("bindings", None)
-        transform = {
-            "position": self.transform.position.to_canonical(),
-            "anchor": self.transform.anchor.to_canonical(),
-            "scale": scale,
-            "rotation_degrees": self.transform.rotation_degrees.to_canonical(),
-        }
-        uniform_scale_bindings = list(self.transform.scale.bindings)
-        components = {
-            "position_x": self.transform.position_x.bindings,
-            "position_y": self.transform.position_y.bindings,
-            "scale_x": tuple(uniform_scale_bindings) + self.transform.scale_x.bindings,
-            "scale_y": tuple(uniform_scale_bindings) + self.transform.scale_y.bindings,
-        }
-        if any(components.values()):
-            transform["component_modifiers"] = {
-                name: [
-                    {"operation": binding.operation, "signal": binding.signal.to_canonical()}
-                    for binding in bindings
-                ]
-                for name, bindings in components.items()
-                if bindings
-            }
+    def to_canonical(self, *, asset_id: str | None = None, owner_duration: float | None = None) -> dict[str, object]:
+        transform = lower_transform(self.transform)
         if isinstance(self.input, Image):
-            if asset_id is None or self._mode is None:
-                raise ValueError("image mask lowering requires a registered asset")
-            input_value: dict[str, object] = {"type": "image", "asset": asset_id, "mode": self._mode.value}
-        else:
+            if self._mode is None:
+                raise ValueError("image mask lowering requires a coverage mode")
+            input_value: dict[str, object] = {
+                "type": "image",
+                "asset": self.input.path if asset_id is None else asset_id,
+                "mode": self._mode.value,
+            }
+        elif isinstance(self.input, Shape):
             input_value = self.input.to_canonical()
+        else:
+            source_value = (
+                self.input.to_canonical(inherited_duration=owner_duration)
+                if isinstance(self.input, Group)
+                else self.input.to_canonical()
+            )
+            if isinstance(self.input, Color):
+                source_value = {"type": "solid_color", "colour": source_value}
+            input_value = {"type": "source", "source": source_value, "mode": self._mode.value}
         return {"id": self.id, "input": input_value, "operation": self.operation.value,
-                "invert": self.invert, "strength": self.strength.to_canonical(),
-                "feather": self.feather.to_canonical(), "transform": transform}
+                "invert": self.invert, "strength": lower_scalar_property(self.strength),
+                "feather": lower_scalar_property(self.feather), "transform": transform}
 
 
 class MaskCollection:
@@ -135,9 +134,9 @@ class MaskCollection:
         self._ids: set[str] = set()
     @property
     def items(self) -> tuple[Mask, ...]: return tuple(self._items)
-    def add(self, source: Shape | Image, *, operation: MaskOperation = MaskOperation.INTERSECT,
+    def add(self, source: MaskSource, *, operation: MaskOperation = MaskOperation.INTERSECT,
             id: str | None = None, feather: int | float = 0.0,
-            mode: ImageMaskMode | str | None = None) -> Mask:
+            mode: MaskCoverageMode | str | None = None) -> Mask:
         if id is None:
             number = 1
             while f"mask-{number}" in self._ids:
@@ -163,4 +162,4 @@ class MaskCollection:
         self._ids.clear()
 
 
-__all__ = ["ImageMaskMode", "Mask", "MaskCollection", "MaskOperation"]
+__all__ = ["ImageMaskMode", "MaskCoverageMode", "Mask", "MaskCollection", "MaskOperation"]

@@ -203,6 +203,24 @@ class Spectrum2D(Source):
     def lowering_kwargs(self) -> dict[str, object]:
         return dict(self._overrides)
 
+    def to_canonical(self) -> dict[str, object]:
+        data: dict[str, object] = {
+            "type": "spectrum2d", "band_count": self.band_count,
+            "min_hz": self.min_hz, "max_hz": self.max_hz,
+            "sensitivity": self.sensitivity, "attack_seconds": self.attack_seconds,
+            "release_seconds": self.release_seconds, "x": self.x, "y": self.y,
+            "width": self.width, "height": self.height,
+            "bar_gap_ratio": self.bar_gap_ratio, "colour": self.colour,
+            "min_bar_height_ratio": self.min_bar_height_ratio,
+        }
+        if not (isinstance(self.layout, Spectrum2DLinearLayout)
+                and self.layout.anchor == "bottom"
+                and self.layout.band_mapping == "forward"):
+            data["layout"] = self.layout.to_canonical()
+        if self.gradient is not None:
+            data["gradient"] = self.gradient.to_canonical()
+        return data
+
 
 
 

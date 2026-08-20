@@ -46,33 +46,53 @@ pub struct RenderPlan {
 impl RenderPlan {
     #[must_use]
     pub fn video_slot_count(&self) -> usize {
-        fn visit(layers: &[CompiledLayer], count: &mut usize) {
+        fn visit_source(source: &CompiledVisualSource, count: &mut usize) {
+            match source {
+                CompiledVisualSource::Video { .. } => *count = count.saturating_add(1),
+                CompiledVisualSource::Group(composition) => {
+                    visit_layers(&composition.layers, count)
+                }
+                _ => {}
+            }
+        }
+        fn visit_layers(layers: &[CompiledLayer], count: &mut usize) {
             for layer in layers {
-                if let CompiledVisualSource::Group(composition) = &layer.source {
-                    visit(&composition.layers, count);
-                } else if matches!(layer.source, CompiledVisualSource::Video { .. }) {
-                    *count = count.saturating_add(1);
+                visit_source(&layer.source, count);
+                for mask in &layer.masks {
+                    if let CompiledMaskInput::Source { source, .. } = &mask.input {
+                        visit_source(source, count);
+                    }
                 }
             }
         }
         let mut count = 0;
-        visit(&self.layers, &mut count);
+        visit_layers(&self.layers, &mut count);
         count
     }
 
     #[must_use]
     pub fn video_slot_assets(&self) -> Vec<usize> {
-        fn visit(layers: &[CompiledLayer], assets: &mut Vec<usize>) {
+        fn visit_source(source: &CompiledVisualSource, assets: &mut Vec<usize>) {
+            match source {
+                CompiledVisualSource::Video { asset_index, .. } => assets.push(*asset_index),
+                CompiledVisualSource::Group(composition) => {
+                    visit_layers(&composition.layers, assets)
+                }
+                _ => {}
+            }
+        }
+        fn visit_layers(layers: &[CompiledLayer], assets: &mut Vec<usize>) {
             for layer in layers {
-                match &layer.source {
-                    CompiledVisualSource::Video { asset_index, .. } => assets.push(*asset_index),
-                    CompiledVisualSource::Group(composition) => visit(&composition.layers, assets),
-                    _ => {}
+                visit_source(&layer.source, assets);
+                for mask in &layer.masks {
+                    if let CompiledMaskInput::Source { source, .. } = &mask.input {
+                        visit_source(source, assets);
+                    }
                 }
             }
         }
         let mut assets = Vec::with_capacity(self.video_slot_count());
-        visit(&self.layers, &mut assets);
+        visit_layers(&self.layers, &mut assets);
         assets
     }
 }
@@ -183,14 +203,18 @@ pub struct CompiledMask {
     pub transform: CompiledTransformTracks,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum CompiledMaskInput {
     Shape {
         shape_index: usize,
     },
     Image {
         asset_index: usize,
-        mode: crate::project::ImageMaskMode,
+        mode: crate::project::MaskCoverageMode,
+    },
+    Source {
+        source: Box<CompiledVisualSource>,
+        mode: crate::project::MaskCoverageMode,
     },
 }
 

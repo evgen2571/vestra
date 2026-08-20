@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 import struct
+import subprocess
 import zlib
 from pathlib import Path
 from typing import get_type_hints
@@ -13,6 +15,7 @@ from vestra import (
     Circle,
     Crossfade,
     Ellipse,
+    Group,
     Image,
     ImageMaskMode,
     Line,
@@ -20,10 +23,13 @@ from vestra import (
     Polygon,
     Project,
     Rectangle,
-    Shape,
+    Text,
+    Video,
+    MaskCoverageMode,
 )
 from vestra.effects import GaussianBlur
-from vestra.authoring.values import Crop, Sizing
+from vestra.authoring.values import BlendMode, Crop, Sizing
+from vestra.sources import ParticleSystem, Spectrum2D
 
 ROOT = Path(__file__).resolve().parents[1]
 _UNAVAILABLE_WGPU_CODES = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
@@ -46,9 +52,9 @@ def _write_rgba_png(path: Path, width: int, height: int, pixels: list[tuple[int,
     )
 
 
-def _render(project: Project, backend: str) -> bytes:
+def _render(project: Project, backend: str, *, seconds: float = 0.0) -> bytes:
     try:
-        return project.render_frame(0, backend=backend).to_bytes()
+        return project.render_frame(seconds, backend=backend).to_bytes()
     except Exception as error:
         if (
             backend == "wgpu"
@@ -65,6 +71,21 @@ def _wgpu_environment_unavailable(error: Exception) -> bool:
         return all(getattr(diagnostic, "code", "") in _UNAVAILABLE_WGPU_CODES for diagnostic in diagnostics)
     message = str(error).lower()
     return "no compatible adapter" in message or "adapter request returned no compatible adapter" in message
+
+
+def _write_two_frame_video(path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg is required for video mask coverage")
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y",
+            "-f", "lavfi", "-i", "color=c=black:s=16x16:r=1:d=1",
+            "-f", "lavfi", "-i", "color=c=white:s=16x16:r=1:d=1",
+            "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0,format=yuv420p",
+            "-frames:v", "2", str(path),
+        ],
+        check=True,
+    )
 
 
 def test_layer_masks_are_owned_and_lowered() -> None:
@@ -112,9 +133,188 @@ def test_image_masks_reuse_normal_image_source_and_lower_modes() -> None:
         layer.masks.add(Image("bad.png"), mode="threshold")
 
 
-def test_mask_input_annotation_includes_shape_and_image() -> None:
+def test_image_mask_mode_none_defaults_but_falsey_explicit_values_fail() -> None:
+    project = Project(size=(2, 2), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"))
+
+    defaulted = layer.masks.add(Image("default.png"), mode=None)
+    assert defaulted.to_canonical(asset_id="image-000001")["input"]["mode"] == "alpha"
+
+    with pytest.raises(ValueError):
+        layer.masks.add(Image("empty.png"), mode="")
+    with pytest.raises(ValueError):
+        layer.masks.add(Image("invalid.png"), mode="threshold")
+
+
+def test_text_is_an_owned_source_mask() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    mask = layer.masks.add(Text("VESTRA", font="font.ttf", font_size=16))
+
+    assert mask.input.text == "VESTRA"
+    input_value = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]
+    assert input_value["type"] == "source"
+    assert input_value["mode"] == "alpha"
+    assert input_value["source"]["type"] == "text"
+    assert input_value["source"]["text"] == "VESTRA"
+    assert input_value["source"]["font"] == "font-000001"
+
+
+def test_text_mask_uses_text_alpha_as_cpu_coverage() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    layer.masks.add(
+        Text("V", font=str(ROOT / "tests" / "assets" / "VestraTest-Regular.ttf"), font_size=24),
+        operation=MaskOperation.REPLACE,
+    )
+
+    pixels = _render(project, "cpu")
+    assert any(pixel[0] == 0 for pixel in (pixels[index:index + 4] for index in range(0, len(pixels), 4)))
+    assert any(0 < pixel[0] < 255 for pixel in (pixels[index:index + 4] for index in range(0, len(pixels), 4)))
+
+
+def test_text_mask_cpu_wgpu_parity() -> None:
+    def make_project() -> Project:
+        project = Project(size=(32, 32), fps=1, duration=1)
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        layer.masks.add(
+            Text("V", font=str(ROOT / "tests" / "assets" / "VestraTest-Regular.ttf"), font_size=24),
+            operation=MaskOperation.REPLACE,
+        )
+        return project
+
+    cpu = _render(make_project(), "cpu")
+    gpu = _render(make_project(), "wgpu")
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_video_and_particle_masks_lower_through_their_normal_source_models() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    layer.masks.add(Video("matte.mp4"), mode=MaskCoverageMode.LUMA)
+    layer.masks.add(ParticleSystem(rate=1, seed=7))
+
+    masks = project.snapshot().to_dict()["visual"]["clips"][0]["masks"]
+    assert masks[0]["input"]["source"] == {"type": "video", "asset": "video-000001"}
+    assert masks[0]["input"]["mode"] == "luma"
+    assert masks[1]["input"]["source"]["type"] == "particle_system"
+
+
+def test_video_mask_uses_owner_local_time_and_cpu_wgpu_parity(tmp_path: Path) -> None:
+    video_path = tmp_path / "matte.mp4"
+    _write_two_frame_video(video_path)
+
+    def make_project() -> Project:
+        project = Project(size=(16, 16), fps=1, duration=3, base_directory=tmp_path)
+        layer = project.root.add(
+            Rectangle(width=16, height=16, fill="#ff0000"), start=1, duration=2,
+        )
+        layer.masks.add(
+            Video(video_path), mode=MaskCoverageMode.LUMA,
+            operation=MaskOperation.REPLACE,
+        )
+        return project
+
+    at_owner_start = _render(make_project(), "cpu")
+    assert max(at_owner_start[0::4]) == 0
+    cpu = _render(make_project(), "cpu", seconds=2)
+    gpu = _render(make_project(), "wgpu", seconds=2)
+    assert max(cpu[0::4]) == 255
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_spectrum_mask_reuses_audio_analysis_and_cpu_wgpu_parity() -> None:
+    def make_project() -> Project:
+        project = Project(size=(32, 32), fps=1, duration=1, base_directory=ROOT)
+        project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        layer.masks.add(
+            Spectrum2D(band_count=8), operation=MaskOperation.REPLACE,
+        )
+        return project
+
+    cpu = _render(make_project(), "cpu")
+    gpu = _render(make_project(), "wgpu")
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_particle_mask_reuses_seeded_source_rendering_and_cpu_wgpu_parity() -> None:
+    def make_project() -> Project:
+        project = Project(size=(32, 32), fps=1, duration=1)
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        layer.masks.add(
+            ParticleSystem(rate=2, seed=7), operation=MaskOperation.REPLACE,
+        )
+        return project
+
+    cpu = _render(make_project(), "cpu")
+    gpu = _render(make_project(), "wgpu")
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_group_source_mask_recursively_registers_assets_and_renders() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    layer.masks.add(
+        Group([
+            Rectangle(width=32, height=32, fill="#ffffff"),
+            Text("V", font=str(ROOT / "tests" / "assets" / "VestraTest-Regular.ttf"), font_size=24),
+            Image(ROOT / "tests" / "assets" / "wgpu-small-rgba.png"),
+        ]),
+        operation=MaskOperation.REPLACE,
+    )
+
+    snapshot = project.snapshot().to_dict()
+    source = snapshot["visual"]["clips"][0]["masks"][0]["input"]["source"]
+    assert source["type"] == "group"
+    assert [clip["source"]["type"] for clip in source["clips"]] == ["shape", "text", "image"]
+    assert any(asset["type"] == "font" for asset in snapshot["assets"])
+    assert any(asset["type"] == "image" for asset in snapshot["assets"])
+    rendered = project.render_frame(0, backend="cpu").to_bytes()
+    assert any(pixel[0] == 255 for pixel in (rendered[index:index + 4] for index in range(0, len(rendered), 4)))
+    gpu = _render(project, "wgpu")
+    assert max(abs(left - right) for left, right in zip(rendered, gpu)) <= 3
+
+
+def test_group_source_mask_cpu_wgpu_parity() -> None:
+    def make_project() -> Project:
+        project = Project(size=(32, 32), fps=1, duration=1)
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        layer.masks.add(
+            Group([
+                Rectangle(width=20, height=20, fill="#ffffff"),
+                Ellipse(width=10, height=10, fill="#000000"),
+            ]),
+            operation=MaskOperation.REPLACE,
+        )
+        return project
+
+    cpu = _render(make_project(), "cpu")
+    gpu = _render(make_project(), "wgpu")
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_group_source_mask_supports_child_masks() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    group = Group()
+    child = group.add(Rectangle(width=32, height=32, fill="#ffffff"))
+    child.masks.add(Rectangle(width=12, height=32, fill="#ffffff"), operation=MaskOperation.REPLACE)
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    source = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]
+    assert source["clips"][0]["masks"][0]["input"]["type"] == "shape"
+    rendered = project.render_frame(0, backend="cpu").to_bytes()
+    assert any(rendered[index] == 255 for index in range(0, len(rendered), 4))
+    assert any(rendered[index] == 0 for index in range(0, len(rendered), 4))
+    gpu = _render(project, "wgpu")
+    assert max(abs(left - right) for left, right in zip(rendered, gpu)) <= 3
+
+
+def test_mask_input_annotation_includes_supported_owned_sources() -> None:
     annotation = get_type_hints(type(layer_mask_probe()).input.fget)["return"]
-    assert annotation == Shape | Image
+    assert Text in annotation.__args__
+    assert Video in annotation.__args__
 
 
 def layer_mask_probe() -> object:
@@ -136,6 +336,15 @@ def test_image_mask_rejects_unsupported_sizing_and_crop(image: Image, message: s
     layer = project.root.add(Rectangle(width=4, height=4, fill="#ff0000"))
     with pytest.raises(ValueError, match=message):
         layer.masks.add(image)
+
+
+def test_video_mask_rejects_unsupported_sizing_and_crop() -> None:
+    project = Project(size=(4, 4), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=4, height=4, fill="#ff0000"))
+    with pytest.raises(ValueError, match="sizing"):
+        layer.masks.add(Video("mask.mp4", sizing=Sizing.fit()))
+    with pytest.raises(ValueError, match="crop"):
+        layer.masks.add(Video("mask.mp4", crop=Crop(0.25, 0, 0.5, 1)))
 
 
 @pytest.mark.parametrize(
@@ -296,14 +505,99 @@ def test_mask_ids_reject_whitespace_and_non_strings() -> None:
         layer.masks.add(Circle(radius=4, fill="#ffffff"), id=42)  # type: ignore[arg-type]
 
 
-def test_line_is_not_a_supported_mask_input() -> None:
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_line_mask_uses_rendered_stroke_coverage(backend: str) -> None:
     project = Project(size=(32, 32), fps=1, duration=1)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    layer.masks.add(Line(start=(4, 4), end=(28, 28), stroke="#ffffff", stroke_width=3))
 
-    with pytest.raises((TypeError, ValueError), match="Line|line|mask"):
-        layer.masks.add(
-            Line(start=(0, 0), end=(8, 8), stroke="#ffffff", stroke_width=1)
-        )
+    pixels = _render(project, backend)
+    diagonal = (16 * 32 + 16) * 4
+    off_stroke = (16 * 32 + 4) * 4
+    assert pixels[diagonal] > 0
+    assert pixels[off_stroke] == 0
+
+
+def test_group_mask_omitted_child_duration_inherits_owner_duration() -> None:
+    project = Project(size=(32, 32), fps=1, duration=5)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=5)
+    group = Group([Rectangle(width=32, height=32, fill="#ffffff")])
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    for time in (0.5, 2.0, 4.5):
+        pixels = _render(project, "cpu", seconds=time)
+        assert pixels[(16 * 32 + 16) * 4] == 255
+
+    child_clip = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]
+    assert child_clip["duration"] == 5.0
+
+
+def test_group_mask_explicit_child_timing_remains_local_and_clipped() -> None:
+    project = Project(size=(32, 32), fps=1, duration=5)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=5)
+    group = Group()
+    group.add(Rectangle(width=32, height=32, fill="#ffffff"), start=1, duration=2)
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    assert _render(project, "cpu", seconds=0.5)[(16 * 32 + 16) * 4] == 0
+    assert _render(project, "cpu", seconds=2.0)[(16 * 32 + 16) * 4] == 255
+    assert _render(project, "cpu", seconds=3.5)[(16 * 32 + 16) * 4] == 0
+
+
+def test_group_child_presentation_lowers_to_normal_clip_fields() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=2)
+    group = Group()
+    child = group.add(Rectangle(width=8, height=8, fill="#ffffff"))
+    child.transform.position = (0.25, 0.5)
+    child.transform.rotation = 15
+    child.opacity = 0.5
+    child.blend_mode = BlendMode.SCREEN
+    child.effects.add(GaussianBlur(radius=1))
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    clip = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]
+    assert clip["transform"]["position"]["base_value"] == {"x": 0.25, "y": 0.5}
+    assert clip["transform"]["rotation_degrees"]["base_value"] == 15.0
+    assert clip["opacity"]["base_value"] == 0.5
+    assert clip["blend_mode"] == "screen"
+    assert clip["effects"][0]["type"] == "gaussian_blur"
+
+
+def test_group_child_bindings_use_canonical_modifiers() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=2)
+    group = Group()
+    child = group.add(Rectangle(width=8, height=8, fill="#ffffff"))
+    signal = project.audio.signal.rms()
+    child.opacity.bind(signal, operation="replace")
+    child.transform.rotation.bind(signal, operation="add")
+    child.transform.scale.bind(signal, operation="multiply")
+    child.transform.position_x.bind(signal, operation="add")
+    child.effects.add(GaussianBlur(radius=1)).radius.bind(signal, operation="replace")
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    clip = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]
+    assert clip["opacity"]["modifiers"][0]["operation"] == "replace"
+    assert clip["transform"]["rotation_degrees"]["modifiers"][0]["operation"] == "add"
+    assert clip["transform"]["component_modifiers"]["scale_x"] == clip["transform"]["component_modifiers"]["scale_y"]
+    assert clip["transform"]["component_modifiers"]["position_x"][0]["operation"] == "add"
+    assert clip["effects"][0]["radius"]["modifiers"][0]["operation"] == "replace"
+
+
+def test_mask_scalar_and_rotation_bindings_use_canonical_modifiers() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=2)
+    mask = layer.masks.add(Rectangle(width=12, height=12, fill="#ffffff"))
+    signal = project.audio.signal.rms()
+    mask.strength.bind(signal, operation="replace")
+    mask.feather.bind(signal, operation="add")
+    mask.transform.rotation.bind(signal, operation="multiply")
+
+    canonical = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]
+    assert canonical["strength"]["modifiers"][0]["operation"] == "replace"
+    assert canonical["feather"]["modifiers"][0]["operation"] == "add"
+    assert canonical["transform"]["rotation_degrees"]["modifiers"][0]["operation"] == "multiply"
 
 
 @pytest.mark.parametrize("backend", ["cpu", "wgpu"])
@@ -574,6 +868,57 @@ def test_mask_uniform_scale_signal_is_evaluated_at_render_time() -> None:
         AudioGainKeyframe(0, 0),
         AudioGainKeyframe(0.5, 1),
     ])
+    quiet = project.render_frame(0, backend="cpu").to_bytes()
+    loud = project.render_frame(0.75, backend="cpu").to_bytes()
+    assert quiet != loud
+
+
+def test_group_child_opacity_signal_is_evaluated_at_render_time() -> None:
+    project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    group = Group()
+    child = group.add(Rectangle(width=20, height=20, fill="#ffffff"))
+    child.opacity.bind(
+        project.audio.signal.rms().remap(input=(0, 1), output=(0.1, 1.0)),
+        operation="replace",
+    )
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+    project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+
+    quiet = project.render_frame(0, backend="cpu").to_bytes()
+    loud = project.render_frame(0.75, backend="cpu").to_bytes()
+    assert quiet != loud
+
+
+def test_group_child_uniform_scale_signal_cpu_wgpu_parity() -> None:
+    def make_project() -> Project:
+        project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        group = Group()
+        child = group.add(Rectangle(width=12, height=4, fill="#ffffff"))
+        child.transform.scale.bind(
+            project.audio.signal.rms().remap(input=(0, 1), output=(0.5, 1.5)),
+            operation="replace",
+        )
+        layer.masks.add(group, operation=MaskOperation.REPLACE)
+        project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        return project
+
+    cpu = _render(make_project(), "cpu", seconds=0.75)
+    gpu = _render(make_project(), "wgpu", seconds=0.75)
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_mask_strength_signal_is_evaluated_at_render_time() -> None:
+    project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    mask = layer.masks.add(Rectangle(width=20, height=20, fill="#ffffff"), operation=MaskOperation.REPLACE)
+    mask.strength.bind(
+        project.audio.signal.rms().remap(input=(0, 1), output=(0.1, 1.0)),
+        operation="replace",
+    )
+    project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+
     quiet = project.render_frame(0, backend="cpu").to_bytes()
     loud = project.render_frame(0.75, backend="cpu").to_bytes()
     assert quiet != loud

@@ -186,7 +186,17 @@ fn compose_layers(
                 }
                 effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
             }
-            apply_masks(surfaces, assets, layer, timings, profiling_enabled);
+            apply_masks(
+                surfaces,
+                assets,
+                layer,
+                compositions,
+                static_layers,
+                depth,
+                stats,
+                timings,
+                profiling_enabled,
+            );
             let bytes = u64::from(width) * u64::from(height) * 4;
             if let Some(cached) =
                 static_layers.insert_with(layer.compiled_layer_index, bytes, || {
@@ -247,7 +257,17 @@ fn compose_layers(
             timings.source_rasterization += started.elapsed();
         }
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
-        apply_masks(surfaces, assets, layer, timings, profiling_enabled);
+        apply_masks(
+            surfaces,
+            assets,
+            layer,
+            compositions,
+            static_layers,
+            depth,
+            stats,
+            timings,
+            profiling_enabled,
+        );
         let started = profiling_enabled.then(Instant::now);
         blend_surface(
             canvas,
@@ -332,7 +352,17 @@ fn render_group(
     if !direct_colour_path {
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
     }
-    apply_masks(surfaces, assets, layer, timings, profiling_enabled);
+    apply_masks(
+        surfaces,
+        assets,
+        layer,
+        compositions,
+        static_layers,
+        depth,
+        stats,
+        timings,
+        profiling_enabled,
+    );
     if layer.content_dependency == TemporalDependency::Static {
         let bytes = u64::from(width) * u64::from(height) * 4;
         if let Some(cached) = static_layers.insert_with(layer.compiled_layer_index, bytes, || {
@@ -426,6 +456,10 @@ fn apply_masks(
     surfaces: &mut EffectSurfacePool,
     assets: &mut PreparedAssets,
     layer: &EvaluatedLayer,
+    compositions: &mut CompositionSurfacePool,
+    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    depth: usize,
+    stats: &mut ComposeStats,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
 ) {
@@ -438,7 +472,7 @@ fn apply_masks(
         for pixel in surfaces.mask_local_surface().pixels_mut() {
             *pixel = Rgba([0, 0, 0, 0]);
         }
-        match mask.input {
+        match mask.input.clone() {
             EvaluatedMaskInput::Shape { shape_index } => {
                 let mask_layer = EvaluatedLayer {
                     compiled_layer_index: usize::MAX,
@@ -485,6 +519,65 @@ fn apply_masks(
                 for pixel in surfaces.mask_local_surface().pixels_mut() {
                     let coverage = crate::project::image_mask_coverage(pixel.0, mode);
                     pixel[3] = (coverage * 255.0).round().clamp(0.0, 255.0) as u8;
+                }
+            }
+            EvaluatedMaskInput::Source { source, mode } => {
+                let mask_layer = EvaluatedLayer {
+                    compiled_layer_index: usize::MAX,
+                    content_dependency: TemporalDependency::Dynamic,
+                    source: (*source).clone(),
+                    transform: mask.transform,
+                    opacity: 1.0,
+                    effects: Vec::new(),
+                    masks: Vec::new(),
+                    colour_transform: ColourTransform::default(),
+                    blend_mode: crate::project::BlendMode::Normal,
+                };
+                if let EvaluatedSource::Group { composition } = &mask_layer.source {
+                    let owner_surface = surfaces.current().clone();
+                    let mut group_surface = RgbaImage::new(
+                        surfaces.mask_local_surface().width(),
+                        surfaces.mask_local_surface().height(),
+                    );
+                    for pixel in group_surface.pixels_mut() {
+                        *pixel = Rgba([0, 0, 0, 0]);
+                    }
+                    compose_layers(
+                        &composition.layers,
+                        group_surface.width(),
+                        group_surface.height(),
+                        &mut group_surface,
+                        assets,
+                        surfaces,
+                        compositions,
+                        static_layers,
+                        timings,
+                        profiling_enabled,
+                        depth + 1,
+                        stats,
+                    );
+                    crate::cpu::raster::draw_surface(
+                        surfaces.mask_local_surface(),
+                        &group_surface,
+                        mask.transform,
+                        ColourTransform::default(),
+                    );
+                    surfaces.begin_from(&owner_surface);
+                } else {
+                    super::raster::draw_layer(
+                        surfaces.mask_local_surface(),
+                        assets,
+                        &mask_layer,
+                        1.0,
+                        ColourTransform::default(),
+                        timings,
+                        profiling_enabled,
+                    );
+                }
+                for pixel in surfaces.mask_local_surface().pixels_mut() {
+                    pixel[3] = (crate::project::mask_coverage(pixel.0, mode) * 255.0)
+                        .round()
+                        .clamp(0.0, 255.0) as u8;
                 }
             }
         }

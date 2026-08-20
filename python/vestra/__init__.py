@@ -65,7 +65,23 @@ from .audio import (
     ParametricEq,
     PlaybackSpeed,
 )
-from .sources import Circle, Ellipse, Image, Line, Polygon, Rectangle, Shape, Source, Text, Video
+from .sources import (
+    Circle,
+    Color,
+    Ellipse,
+    Group,
+    GroupChild,
+    Image,
+    Line,
+    ParticleSystem,
+    Polygon,
+    Rectangle,
+    Shape,
+    Source,
+    Spectrum2D,
+    Text,
+    Video,
+)
 from .flashes import Flash, FlashCollection
 from .presets import Preset, PresetCollection
 from .transitions import (
@@ -122,7 +138,7 @@ from .effects import (
     ZoomBlur,
     ZoomBlurDirection,
 )
-from .masks import ImageMaskMode, Mask, MaskCollection, MaskOperation
+from .masks import ImageMaskMode, Mask, MaskCollection, MaskCoverageMode, MaskOperation
 from .authoring.values import BlendMode, Crop, CubicBezier, Interpolation, Point
 
 # Keep the native type available under its stable public snapshot name.
@@ -151,6 +167,9 @@ __all__ = [
     "Layer",
     "Source",
     "Image",
+    "Group",
+    "GroupChild",
+    "Color",
     "Video",
     "Shape",
     "Rectangle",
@@ -159,6 +178,8 @@ __all__ = [
     "Line",
     "Polygon",
     "Text",
+    "Spectrum2D",
+    "ParticleSystem",
     "ScalarProperty",
     "BindableScalarProperty",
     "BindablePointProperty",
@@ -179,6 +200,7 @@ __all__ = [
     "MaskCollection",
     "MaskOperation",
     "ImageMaskMode",
+    "MaskCoverageMode",
     "PreflightOptions",
     "ValidationReport",
     "PreflightReport",

@@ -128,6 +128,7 @@ pub(super) struct FrameBindGroups {
     particle_resolve: wgpu::BindGroup,
     raster_layers: Vec<wgpu::BindGroup>,
     mask_raster_layers: Vec<wgpu::BindGroup>,
+    mask_raster_source_layer: Option<wgpu::BindGroup>,
     surface_layers: Vec<(TextureSlot, wgpu::BindGroup)>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
@@ -231,6 +232,17 @@ impl FrameBindGroups {
             } else {
                 Vec::new()
             };
+        let mask_raster_source_layer =
+            (frame.working.has_auxiliary() && frame.working.has_mask_coverage()).then(|| {
+                mask_raster_group(
+                    device,
+                    &pipelines.mask_raster_bindings,
+                    &frame.working.get(TextureSlot::Layer).view,
+                    &frame.working.get(TextureSlot::MaskCoverage).view,
+                    &frame.working.get(TextureSlot::Auxiliary).view,
+                    parameters,
+                )
+            });
         let surface_layers = frame
             .working
             .composition_slots()
@@ -346,6 +358,7 @@ impl FrameBindGroups {
         }
         let persistent_created = sources.raster_textures.len()
             + 5
+            + usize::from(mask_raster_source_layer.is_some())
             + clear_group_canvases.len()
             + surface_layers.len()
             + composites.len()
@@ -360,6 +373,7 @@ impl FrameBindGroups {
             particle_resolve,
             raster_layers,
             mask_raster_layers,
+            mask_raster_source_layer,
             surface_layers,
             composites,
             effects,
@@ -389,6 +403,17 @@ impl FrameBindGroups {
                 "WGPU-FRAME-PLAN",
                 crate::Category::Backend,
                 format!("GPU mask operation references missing raster bind group {source_index}"),
+                "",
+            )
+        })
+    }
+
+    fn mask_raster_source_layer(&self) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.mask_raster_source_layer.as_ref().ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-FRAME-PLAN",
+                crate::Category::Backend,
+                "GPU mask source operation is unavailable",
                 "",
             )
         })
@@ -720,13 +745,18 @@ pub(super) fn encode_and_submit(
             }
             GpuOperation::RenderMask {
                 source_index,
+                source_layer,
                 parameters_index,
                 ..
             } => {
                 dispatch(
                     &mut encoder,
                     &pipelines.mask_raster,
-                    bind_groups.mask_raster_layer(*source_index)?,
+                    if *source_layer {
+                        bind_groups.mask_raster_source_layer()?
+                    } else {
+                        bind_groups.mask_raster_layer(*source_index)?
+                    },
                     parameters.offset(*parameters_index)?,
                     width,
                     height,

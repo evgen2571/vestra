@@ -428,8 +428,33 @@ impl WgpuBackend {
         &mut self,
         layers: &[crate::plan::EvaluatedLayer],
     ) -> Result<(), Diagnostic> {
+        fn collect<'a>(
+            layer: &'a crate::plan::EvaluatedLayer,
+            output: &mut Vec<&'a crate::plan::EvaluatedSource>,
+        ) {
+            output.push(&layer.source);
+            if let crate::plan::EvaluatedSource::Group { composition } = &layer.source {
+                for child in &composition.layers {
+                    collect(child, output);
+                }
+            }
+            for mask in &layer.masks {
+                if let crate::plan::EvaluatedMaskInput::Source { source, .. } = &mask.input {
+                    output.push(source);
+                    if let crate::plan::EvaluatedSource::Group { composition } = source.as_ref() {
+                        for child in &composition.layers {
+                            collect(child, output);
+                        }
+                    }
+                }
+            }
+        }
+        let mut sources = Vec::new();
         for layer in layers {
-            match &layer.source {
+            collect(layer, &mut sources);
+        }
+        for source in sources {
+            match source {
                 EvaluatedSource::Video {
                     asset_index,
                     source_index,
@@ -463,9 +488,6 @@ impl WgpuBackend {
                         self.video_upload_bytes += pixels.as_raw().len() as u64;
                         self.video_pts.insert(*source_index, pts);
                     }
-                }
-                EvaluatedSource::Group { composition } => {
-                    self.upload_video_layers(&composition.layers)?;
                 }
                 _ => {}
             }
@@ -1047,10 +1069,15 @@ fn encode_parameters(
                 layer_index,
                 mask_index,
                 source_index,
+                source_layer,
                 ..
             } => {
                 let mask = &plan.layers[*layer_index].masks[*mask_index];
-                let intrinsic = sources.raster_textures[*source_index].intrinsic_size;
+                let intrinsic = if *source_layer {
+                    crate::render::geometry::IntrinsicSize::new(frame.width, frame.height)
+                } else {
+                    sources.raster_textures[*source_index].intrinsic_size
+                };
                 let mut parameters = parameters::raster(
                     frame,
                     intrinsic,
@@ -1062,7 +1089,14 @@ fn encode_parameters(
                     },
                     false,
                     &crate::plan::CompiledSizing::Original,
-                    mask.transform,
+                    if *source_layer {
+                        crate::animation::Transform2D::identity(
+                            crate::domain::Point { x: 0.5, y: 0.5 },
+                            crate::domain::Point { x: 0.5, y: 0.5 },
+                        )
+                    } else {
+                        mask.transform
+                    },
                     1.0,
                     crate::plan::ColourTransform::default(),
                 );
@@ -1071,6 +1105,10 @@ fn encode_parameters(
                     crate::plan::EvaluatedMaskInput::Image { mode, .. } => match mode {
                         crate::project::ImageMaskMode::Alpha => 3,
                         crate::project::ImageMaskMode::Luma => 4,
+                    },
+                    crate::plan::EvaluatedMaskInput::Source { mode, .. } => match mode {
+                        crate::project::MaskCoverageMode::Alpha => 3,
+                        crate::project::MaskCoverageMode::Luma => 4,
                     },
                 };
                 arena.push(&parameters)?;

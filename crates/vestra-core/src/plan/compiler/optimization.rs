@@ -239,6 +239,19 @@ fn is_static_identity_transform_contribution(
 
 fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
     let mut dependency = TemporalDependency::Static;
+    let source_dependency = |source: &crate::plan::CompiledVisualSource| match source {
+        crate::plan::CompiledVisualSource::Video { .. }
+        | crate::plan::CompiledVisualSource::Spectrum2D { .. }
+        | crate::plan::CompiledVisualSource::ParticleSystem(_) => TemporalDependency::Dynamic,
+        crate::plan::CompiledVisualSource::Group(composition) => composition.dependency,
+        _ => TemporalDependency::Static,
+    };
+    let owned_source_dynamic = layer.masks.iter().any(|mask| match &mask.input {
+        crate::plan::CompiledMaskInput::Source { source, .. } => {
+            source_dependency(source) == TemporalDependency::Dynamic
+        }
+        _ => false,
+    });
     for dynamic in [
         matches!(
             &layer.source,
@@ -277,21 +290,22 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
             .effects
             .iter()
             .any(|effect| effect.dependency == TemporalDependency::Dynamic),
-        layer.masks.iter().any(|mask| {
-            !static_track(&mask.strength.authored_track)
-                || mask.strength.has_modifiers()
-                || !static_track(&mask.feather.authored_track)
-                || mask.feather.has_modifiers()
-                || !static_track(&mask.transform.position)
-                || !static_track(&mask.transform.anchor)
-                || !static_track(&mask.transform.scale)
-                || !mask.transform.position_x_modifiers.is_empty()
-                || !mask.transform.position_y_modifiers.is_empty()
-                || !mask.transform.scale_x_modifiers.is_empty()
-                || !mask.transform.scale_y_modifiers.is_empty()
-                || !static_track(&mask.transform.rotation_degrees.authored_track)
-                || mask.transform.rotation_degrees.has_modifiers()
-        }),
+        owned_source_dynamic
+            || layer.masks.iter().any(|mask| {
+                !static_track(&mask.strength.authored_track)
+                    || mask.strength.has_modifiers()
+                    || !static_track(&mask.feather.authored_track)
+                    || mask.feather.has_modifiers()
+                    || !static_track(&mask.transform.position)
+                    || !static_track(&mask.transform.anchor)
+                    || !static_track(&mask.transform.scale)
+                    || !mask.transform.position_x_modifiers.is_empty()
+                    || !mask.transform.position_y_modifiers.is_empty()
+                    || !mask.transform.scale_x_modifiers.is_empty()
+                    || !mask.transform.scale_y_modifiers.is_empty()
+                    || !static_track(&mask.transform.rotation_degrees.authored_track)
+                    || mask.transform.rotation_degrees.has_modifiers()
+            }),
     ] {
         if dynamic {
             dependency = dependency.combine(TemporalDependency::Dynamic);

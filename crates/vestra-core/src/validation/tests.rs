@@ -154,7 +154,7 @@ fn masks_validate_ids_geometry_strength_and_dynamic_transform() {
 }
 
 #[test]
-fn masks_reject_line_geometry_without_rejecting_general_shapes() {
+fn masks_accept_line_geometry_as_rendered_coverage() {
     let project = masked_project(serde_json::json!([{
         "id": "line-mask",
         "input": {
@@ -164,11 +164,7 @@ fn masks_reject_line_geometry_without_rejecting_general_shapes() {
             "stroke_width": 2.0
         }
     }]));
-    assert!(
-        codes(&project)
-            .iter()
-            .any(|code| code == "VESTRA-MASK-SHAPE")
-    );
+    assert!(!has(&project, "VESTRA-MASK-SHAPE"));
 }
 
 fn grouped_project(clips: Vec<Value>) -> Project {
@@ -416,6 +412,43 @@ fn unused_asset_warning_traverses_group_descendants() {
 fn unused_asset_warning_preserves_flat_project_behavior() {
     let used = asset_usage_project(vec![image_clip("root", "image-a", 0.0, 1.0)]);
     assert_eq!(unused_asset_ids(&used), vec!["image-b"]);
+}
+
+#[test]
+fn unused_asset_warning_traverses_owned_source_masks() {
+    let project: Project = serde_json::from_value(json!({
+        "schema_version": 4,
+        "output": {
+            "path": "out.mp4", "width": 2, "height": 2,
+            "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
+            "audio": false, "duration_mode": "explicit", "duration": 1.0
+        },
+        "assets": [
+            {"id": "font-a", "type": "font", "source": "font-a.ttf"},
+            {"id": "image-a", "type": "image", "source": "image-a.png"},
+            {"id": "image-unused", "type": "image", "source": "image-unused.png"}
+        ],
+        "visual": {"clips": [{
+            "id": "owner", "source": {"type": "solid_color", "colour": "#ffffff"},
+            "start": 0.0, "duration": 1.0, "layer": 0,
+            "opacity": {"base_value": 1.0}, "masks": [{
+                "id": "owned", "input": {"type": "source", "mode": "alpha",
+                    "source": {"type": "group", "clips": [
+                        {"id": "text", "source": {"type": "text", "text": "Vestra",
+                            "font": "font-a", "font_size": 12.0, "fill": "#ffffff"},
+                            "start": 0.0, "duration": 1.0, "layer": 0,
+                            "opacity": {"base_value": 1.0}},
+                        {"id": "image", "source": {"type": "image", "asset": "image-a"},
+                            "start": 0.0, "duration": 1.0, "layer": 1,
+                            "opacity": {"base_value": 1.0}}
+                    ]}},
+                "operation": "replace"
+            }]
+        }]}
+    }))
+    .expect("owned source mask project");
+
+    assert_eq!(unused_asset_ids(&project), vec!["image-unused"]);
 }
 
 #[test]

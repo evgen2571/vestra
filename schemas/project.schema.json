@@ -1478,6 +1478,29 @@
             "mode"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "alpha",
+                "luma"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/source"
+            },
+            "type": {
+              "const": "source"
+            }
+          },
+          "required": [
+            "type",
+            "source",
+            "mode"
+          ],
+          "type": "object"
         }
       ]
     },

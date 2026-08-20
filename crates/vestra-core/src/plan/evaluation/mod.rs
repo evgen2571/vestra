@@ -63,14 +63,18 @@ pub struct EvaluatedMask {
     pub transform: Transform2D,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum EvaluatedMaskInput {
     Shape {
         shape_index: usize,
     },
     Image {
         asset_index: usize,
-        mode: crate::project::ImageMaskMode,
+        mode: crate::project::MaskCoverageMode,
+    },
+    Source {
+        source: Box<EvaluatedSource>,
+        mode: crate::project::MaskCoverageMode,
     },
 }
 
@@ -286,107 +290,17 @@ fn evaluate_layers(
             context,
             &mut evaluated_track_count,
         )?;
-        let source = match &layer.source {
-            CompiledVisualSource::Image {
-                asset_index,
-                crop,
-                sizing,
-                cacheable_crop,
-            } => {
-                evaluated_track_count += 1;
-                EvaluatedSource::Image {
-                    asset_index: *asset_index,
-                    crop: crop.evaluate(relative),
-                    sizing: sizing.clone(),
-                    cacheable_crop: *cacheable_crop,
-                }
-            }
-            CompiledVisualSource::SolidColor { colour } => {
-                EvaluatedSource::SolidColor { colour: *colour }
-            }
-            CompiledVisualSource::Video {
-                asset_index,
-                video_slot_index,
-                source_start,
-                playback_rate,
-                crop,
-                sizing,
-            } => EvaluatedSource::Video {
-                asset_index: *asset_index,
-                source_index: raster_source_base + *video_slot_index,
-                source_time: *source_start + (relative as f64 / 1_000_000_000.0) * *playback_rate,
-                crop: crop.evaluate(relative),
-                sizing: sizing.clone(),
-            },
-            CompiledVisualSource::Shape { shape_index } => EvaluatedSource::Shape {
-                shape_index: *shape_index,
-                sizing: CompiledSizing::Original,
-            },
-            CompiledVisualSource::Text { text_index } => EvaluatedSource::Text {
-                text_index: *text_index,
-            },
-            CompiledVisualSource::Spectrum2D {
-                band_signals,
-                x,
-                y,
-                width,
-                height,
-                bar_gap_ratio,
-                min_bar_height_ratio,
-                layout,
-                gradient,
-                colour,
-            } => EvaluatedSource::Spectrum2D {
-                bands: band_signals
-                    .iter()
-                    .map(|signal| context.sample_scalar(*signal, root_project_time))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .map(|amplitude| amplitude.clamp(0.0, 1.0) as f32)
-                    .collect(),
-                x: *x,
-                y: *y,
-                width: *width,
-                height: *height,
-                bar_gap_ratio: *bar_gap_ratio,
-                min_bar_height_ratio: *min_bar_height_ratio,
-                layout: layout.clone(),
-                gradient: *gradient,
-                colour: *colour,
-            },
-            CompiledVisualSource::ParticleSystem(system) => {
-                let appearance =
-                    system.evaluate_appearance_at(relative, root_project_time, context)?;
-                EvaluatedSource::ParticleSystem {
-                    system: system.clone(),
-                    time_nanos: relative,
-                    appearance,
-                }
-            }
-            CompiledVisualSource::Group(composition) => {
-                let nested_active = composition
-                    .schedule
-                    .active_at_time(&composition.layers, relative);
-                let (nested_layers, nested_count) = evaluate_layers(
-                    &composition.layers,
-                    &nested_active,
-                    relative,
-                    root_project_time,
-                    frame_rate,
-                    width,
-                    height,
-                    false,
-                    raster_source_base,
-                    context,
-                )?;
-                evaluated_track_count += nested_count;
-                EvaluatedSource::Group {
-                    composition: EvaluatedComposition {
-                        layers: nested_layers,
-                    },
-                }
-            }
-        };
+        let source = evaluate_source(
+            &layer.source,
+            relative,
+            root_project_time,
+            frame_rate,
+            width,
+            height,
+            raster_source_base,
+            context,
+            &mut evaluated_track_count,
+        )?;
         let mut effects = layer
             .effects
             .iter()
@@ -410,12 +324,33 @@ fn evaluate_layers(
                 // above. Transform tracks are accounted for by evaluate_tracks.
                 evaluated_track_count += 2;
                 Ok(EvaluatedMask {
-                    input: match mask.input {
+                    input: match &mask.input {
                         crate::plan::CompiledMaskInput::Shape { shape_index } => {
-                            EvaluatedMaskInput::Shape { shape_index }
+                            EvaluatedMaskInput::Shape {
+                                shape_index: *shape_index,
+                            }
                         }
                         crate::plan::CompiledMaskInput::Image { asset_index, mode } => {
-                            EvaluatedMaskInput::Image { asset_index, mode }
+                            EvaluatedMaskInput::Image {
+                                asset_index: *asset_index,
+                                mode: *mode,
+                            }
+                        }
+                        crate::plan::CompiledMaskInput::Source { source, mode } => {
+                            EvaluatedMaskInput::Source {
+                                source: Box::new(evaluate_source(
+                                    &source,
+                                    relative,
+                                    root_project_time,
+                                    frame_rate,
+                                    width,
+                                    height,
+                                    raster_source_base,
+                                    context,
+                                    &mut evaluated_track_count,
+                                )?),
+                                mode: *mode,
+                            }
                         }
                     },
                     operation: mask.operation,
@@ -533,6 +468,117 @@ fn evaluate_layers(
         });
     }
     Ok((layers, evaluated_track_count))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate_source(
+    source: &CompiledVisualSource,
+    relative: u128,
+    root_project_time: u128,
+    frame_rate: (u64, u64),
+    width: u32,
+    height: u32,
+    raster_source_base: usize,
+    context: &EvaluationContext<'_>,
+    evaluated_track_count: &mut u64,
+) -> Result<EvaluatedSource, EvaluationError> {
+    Ok(match source {
+        CompiledVisualSource::Image {
+            asset_index,
+            crop,
+            sizing,
+            cacheable_crop,
+        } => {
+            *evaluated_track_count += 1;
+            EvaluatedSource::Image {
+                asset_index: *asset_index,
+                crop: crop.evaluate(relative),
+                sizing: sizing.clone(),
+                cacheable_crop: *cacheable_crop,
+            }
+        }
+        CompiledVisualSource::SolidColor { colour } => {
+            EvaluatedSource::SolidColor { colour: *colour }
+        }
+        CompiledVisualSource::Video {
+            asset_index,
+            video_slot_index,
+            source_start,
+            playback_rate,
+            crop,
+            sizing,
+        } => EvaluatedSource::Video {
+            asset_index: *asset_index,
+            source_index: raster_source_base + *video_slot_index,
+            source_time: *source_start + (relative as f64 / 1_000_000_000.0) * *playback_rate,
+            crop: crop.evaluate(relative),
+            sizing: sizing.clone(),
+        },
+        CompiledVisualSource::Shape { shape_index } => EvaluatedSource::Shape {
+            shape_index: *shape_index,
+            sizing: CompiledSizing::Original,
+        },
+        CompiledVisualSource::Text { text_index } => EvaluatedSource::Text {
+            text_index: *text_index,
+        },
+        CompiledVisualSource::Spectrum2D {
+            band_signals,
+            x,
+            y,
+            width,
+            height,
+            bar_gap_ratio,
+            min_bar_height_ratio,
+            layout,
+            gradient,
+            colour,
+        } => EvaluatedSource::Spectrum2D {
+            bands: band_signals
+                .iter()
+                .map(|signal| context.sample_scalar(*signal, root_project_time))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .map(|amplitude| amplitude.clamp(0.0, 1.0) as f32)
+                .collect(),
+            x: *x,
+            y: *y,
+            width: *width,
+            height: *height,
+            bar_gap_ratio: *bar_gap_ratio,
+            min_bar_height_ratio: *min_bar_height_ratio,
+            layout: layout.clone(),
+            gradient: *gradient,
+            colour: *colour,
+        },
+        CompiledVisualSource::ParticleSystem(system) => EvaluatedSource::ParticleSystem {
+            system: system.clone(),
+            time_nanos: relative,
+            appearance: system.evaluate_appearance_at(relative, root_project_time, context)?,
+        },
+        CompiledVisualSource::Group(composition) => {
+            let nested_active = composition
+                .schedule
+                .active_at_time(&composition.layers, relative);
+            let (nested_layers, nested_count) = evaluate_layers(
+                &composition.layers,
+                &nested_active,
+                relative,
+                root_project_time,
+                frame_rate,
+                width,
+                height,
+                false,
+                raster_source_base,
+                context,
+            )?;
+            *evaluated_track_count += nested_count;
+            EvaluatedSource::Group {
+                composition: EvaluatedComposition {
+                    layers: nested_layers,
+                },
+            }
+        }
+    })
 }
 
 fn sample_root_time(

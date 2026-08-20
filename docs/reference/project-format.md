@@ -58,7 +58,7 @@ contracts.
 | `crop` | crop track | no | Applies to image/video sources. |
 | `transform` | transform object | conditional | Required for image sources. Optional for video, shape, text, and group sources; an absent optional transform has canvas presentation. Forbidden for solid-color, Spectrum2D, and particle-system sources. |
 | `effects` | array of effect | no | Empty. See [effects](effects.md). |
-| `masks` | array of geometric mask | no | Empty; ordered layer-owned coverage inputs. See [masks](masks.md). |
+| `masks` | array of shape or image masks | no | Empty; ordered layer-owned coverage inputs. See [masks](masks.md). |
 | `blend_mode` | enum | no | `normal`; also `add`, `screen`, `multiply`, `overlay`. |
 | `preset` | preset object | no | Omitted. See [presets and flashes](presets-and-flashes.md). |
 
@@ -69,7 +69,8 @@ Each mask has an `id`, a narrow shape `input`, `operation` (`replace`,
 `false`), `strength` (default `1`), `feather` (default `0`), and a mask-local
 `transform`. These use the normal tracks, modifiers, and signal bindings.
 Mask transforms are local to the owning layer and follow its presentation
-transform. Only existing shape geometry inputs are supported in schema v4.
+transform. Inputs may be shapes or image assets interpreted as `alpha` or
+`luma` coverage.
 
 Track objects contain a required `base_value` and optional `keyframes`. A
 keyframe has `time`, `value`, and `interpolation`; time is local seconds.

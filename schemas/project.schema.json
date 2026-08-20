@@ -1398,7 +1398,7 @@
           "type": "string"
         },
         "input": {
-          "$ref": "#/$defs/shape"
+          "$ref": "#/$defs/mask_input"
         },
         "invert": {
           "default": false,
@@ -1449,6 +1449,37 @@
         "input"
       ],
       "type": "object"
+    },
+    "mask_input": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/shape"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "asset": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "mode": {
+              "enum": [
+                "alpha",
+                "luma"
+              ]
+            },
+            "type": {
+              "const": "image"
+            }
+          },
+          "required": [
+            "type",
+            "asset",
+            "mode"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "motion_blur_effect": {
       "additionalProperties": false,

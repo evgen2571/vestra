@@ -146,9 +146,11 @@ impl GpuRequirements {
                 u32::try_from(plan.compilation.effect_pass_count)
                     .ok()
                     .and_then(|passes| {
-                        u32::try_from(compiled_mask_count)
-                            .ok()
-                            .and_then(|masks| count.checked_add(passes + masks * 3))
+                        u32::try_from(compiled_mask_count).ok().and_then(|masks| {
+                            let mask_records = masks
+                                .checked_mul(3 + crate::project::MASK_FEATHER_PASSES as u32 * 2)?;
+                            count.checked_add(passes + mask_records)
+                        })
                     })
             })
             .and_then(|count| {

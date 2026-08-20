@@ -13,16 +13,38 @@ pub enum MaskOperation {
     Subtract,
 }
 
-/// The deliberately narrow set of coverage producers supported by geometric masks.
-/// Future image and rendered-layer inputs can extend this enum without changing
-/// ownership or stack semantics.
+/// The deliberately narrow set of coverage producers supported by layer masks.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaskInput {
     Shape(ShapeSource),
+    Image { asset: String, mode: ImageMaskMode },
 }
 
-/// A layer-owned geometric coverage input.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageMaskMode {
+    Alpha,
+    Luma,
+}
+
+/// Converts one prepared encoded RGBA pixel into renderer-independent mask
+/// coverage. The RGB values use the prepared image's encoded byte space.
+#[must_use]
+pub fn image_mask_coverage(pixel: [u8; 4], mode: ImageMaskMode) -> f32 {
+    let alpha = f32::from(pixel[3]) / 255.0;
+    match mode {
+        ImageMaskMode::Alpha => alpha,
+        ImageMaskMode::Luma => {
+            (0.2126 * f32::from(pixel[0]) / 255.0
+                + 0.7152 * f32::from(pixel[1]) / 255.0
+                + 0.0722 * f32::from(pixel[2]) / 255.0)
+                * alpha
+        }
+    }
+}
+
+/// A layer-owned coverage input.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Mask {
@@ -182,6 +204,55 @@ mod tests {
         assert_eq!(
             serde_json::to_value(decoded).expect("mask serializes"),
             value
+        );
+    }
+
+    #[test]
+    fn image_mask_inputs_round_trip_with_alpha_and_luma_modes() {
+        for mode in [ImageMaskMode::Alpha, ImageMaskMode::Luma] {
+            let mut value = mask();
+            value.input = MaskInput::Image {
+                asset: "mask-image".to_owned(),
+                mode,
+            };
+            let json = serde_json::to_value(&value).expect("image mask serializes");
+            assert_eq!(json["input"]["type"], "image");
+            assert_eq!(json["input"]["asset"], "mask-image");
+            let decoded: Mask = serde_json::from_value(json.clone()).expect("image mask parses");
+            assert_eq!(
+                serde_json::to_value(decoded).expect("image mask serializes"),
+                json
+            );
+        }
+    }
+
+    #[test]
+    fn image_mask_coverage_uses_rec709_encoded_rgb_times_alpha() {
+        assert_eq!(
+            image_mask_coverage([12, 34, 56, 0], ImageMaskMode::Alpha),
+            0.0
+        );
+        assert_eq!(
+            image_mask_coverage([12, 34, 56, 255], ImageMaskMode::Alpha),
+            1.0
+        );
+        assert!(
+            (image_mask_coverage([12, 34, 56, 128], ImageMaskMode::Alpha) - 128.0 / 255.0).abs()
+                < 1e-6
+        );
+        assert_eq!(
+            image_mask_coverage([0, 0, 0, 255], ImageMaskMode::Luma),
+            0.0
+        );
+        assert_eq!(
+            image_mask_coverage([255, 255, 255, 0], ImageMaskMode::Luma),
+            0.0
+        );
+        assert!((image_mask_coverage([255, 0, 0, 255], ImageMaskMode::Luma) - 0.2126).abs() < 1e-6);
+        assert!(
+            (image_mask_coverage([0, 255, 0, 128], ImageMaskMode::Luma) - 0.7152 * (128.0 / 255.0))
+                .abs()
+                < 1e-6
         );
     }
 

@@ -1010,7 +1010,10 @@ fn append_masks(
         operations.push(GpuOperation::RenderMask {
             layer_index,
             mask_index,
-            source_index: mask.shape_index,
+            source_index: match mask.input {
+                crate::plan::EvaluatedMaskInput::Shape { shape_index } => shape_index,
+                crate::plan::EvaluatedMaskInput::Image { asset_index, .. } => asset_index,
+            },
             state_source: TextureSlot::MaskCoverage,
             expected_state_value: *mask_state_value,
             parameters_index: *parameter_count,

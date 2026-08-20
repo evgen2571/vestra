@@ -175,12 +175,23 @@ pub struct CompiledLayer {
 
 #[derive(Clone, Debug)]
 pub struct CompiledMask {
-    pub shape_index: usize,
+    pub input: CompiledMaskInput,
     pub operation: crate::project::MaskOperation,
     pub invert: bool,
     pub strength: CompiledScalarProperty,
     pub feather: CompiledScalarProperty,
     pub transform: CompiledTransformTracks,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CompiledMaskInput {
+    Shape {
+        shape_index: usize,
+    },
+    Image {
+        asset_index: usize,
+        mode: crate::project::ImageMaskMode,
+    },
 }
 
 /// Backend-independent compiled children of a Group. The schedule and

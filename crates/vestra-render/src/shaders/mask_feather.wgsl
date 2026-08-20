@@ -20,15 +20,12 @@ fn blur(coord: vec2<i32>) -> f32 {
     let first = i32(floor(center - half_width - 0.5));
     let last = i32(ceil(center + half_width + 0.5));
     var value = 0.0;
-    for (var sample = -256; sample <= 256; sample = sample + 1) {
-        let index = first + sample;
-        if (index >= first && index < last) {
-            let overlap = min(f32(index) + 0.5, center + half_width + 0.5)
-                - max(f32(index) - 0.5, center - half_width - 0.5);
-            if (overlap > 0.0) {
-                let sample_coord = select(vec2<i32>(index, coord.y), vec2<i32>(coord.x, index), params.direction != 0u);
-                value += coverage(sample_coord) * overlap;
-            }
+    for (var index = first; index < last; index = index + 1) {
+        let overlap = min(f32(index) + 0.5, center + half_width + 0.5)
+            - max(f32(index) - 0.5, center - half_width - 0.5);
+        if (overlap > 0.0) {
+            let sample_coord = select(vec2<i32>(index, coord.y), vec2<i32>(coord.x, index), params.direction != 0u);
+            value += coverage(sample_coord) * overlap;
         }
     }
     return value / extent;

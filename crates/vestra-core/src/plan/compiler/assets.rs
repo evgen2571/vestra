@@ -27,6 +27,11 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
         video_ids: &mut BTreeSet<&'a str>,
     ) {
         for clip in clips.iter().filter(|clip| clip.visible) {
+            for mask in &clip.masks {
+                if let crate::project::MaskInput::Image { asset, .. } = &mask.input {
+                    ids.insert(asset.as_str());
+                }
+            }
             match &clip.source {
                 crate::project::VisualSource::Image { asset } => {
                     ids.insert(asset.as_str());

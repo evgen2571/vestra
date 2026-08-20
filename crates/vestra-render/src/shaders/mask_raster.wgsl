@@ -45,5 +45,9 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (mapped.x < local_origin.x || mapped.y < local_origin.y || mapped.x >= local_origin.x + params.solid_or_background.z || mapped.y >= local_origin.y + params.solid_or_background.w) { write_mask(coord, vec4<f32>(0.0)); return; }
     let local = mapped - local_origin;
     let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + local / params.solid_or_background.zw * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
-    write_mask(coord, transformed_colour(bilinear(source_position)));
+    let sampled = transformed_colour(bilinear(source_position));
+    let luma = (0.2126 * sampled.r + 0.7152 * sampled.g + 0.0722 * sampled.b) / 255.0;
+    let luma_coverage = luma * sampled.a / 255.0;
+    let coverage = select(sampled.a / 255.0, luma_coverage, params.mode == 4u);
+    write_mask(coord, vec4<f32>(0.0, 0.0, 0.0, coverage * 255.0));
 }

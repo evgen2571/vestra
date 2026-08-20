@@ -55,12 +55,23 @@ pub struct EvaluatedLayer {
 
 #[derive(Clone, Debug)]
 pub struct EvaluatedMask {
-    pub shape_index: usize,
+    pub input: EvaluatedMaskInput,
     pub operation: crate::project::MaskOperation,
     pub invert: bool,
     pub strength: f32,
     pub feather: f32,
     pub transform: Transform2D,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum EvaluatedMaskInput {
+    Shape {
+        shape_index: usize,
+    },
+    Image {
+        asset_index: usize,
+        mode: crate::project::ImageMaskMode,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -399,7 +410,14 @@ fn evaluate_layers(
                 // above. Transform tracks are accounted for by evaluate_tracks.
                 evaluated_track_count += 2;
                 Ok(EvaluatedMask {
-                    shape_index: mask.shape_index,
+                    input: match mask.input {
+                        crate::plan::CompiledMaskInput::Shape { shape_index } => {
+                            EvaluatedMaskInput::Shape { shape_index }
+                        }
+                        crate::plan::CompiledMaskInput::Image { asset_index, mode } => {
+                            EvaluatedMaskInput::Image { asset_index, mode }
+                        }
+                    },
                     operation: mask.operation,
                     invert: mask.invert,
                     strength: mask

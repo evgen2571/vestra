@@ -3,8 +3,8 @@ use std::{sync::Arc, time::Instant};
 use image::{Rgba, RgbaImage};
 
 use crate::plan::{
-    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
-    TemporalDependency,
+    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMaskInput,
+    EvaluatedSource, TemporalDependency,
 };
 use crate::{
     blend::blend_surface,
@@ -438,29 +438,56 @@ fn apply_masks(
         for pixel in surfaces.mask_local_surface().pixels_mut() {
             *pixel = Rgba([0, 0, 0, 0]);
         }
-        let mask_layer = EvaluatedLayer {
-            compiled_layer_index: usize::MAX,
-            content_dependency: TemporalDependency::Static,
-            source: EvaluatedSource::Shape {
-                shape_index: mask.shape_index,
-                sizing: crate::plan::CompiledSizing::Original,
-            },
-            transform: mask.transform,
-            opacity: 1.0,
-            effects: Vec::new(),
-            masks: Vec::new(),
-            colour_transform: ColourTransform::default(),
-            blend_mode: crate::project::BlendMode::Normal,
-        };
-        super::raster::draw_layer(
-            surfaces.mask_local_surface(),
-            assets,
-            &mask_layer,
-            1.0,
-            ColourTransform::default(),
-            timings,
-            profiling_enabled,
-        );
+        match mask.input {
+            EvaluatedMaskInput::Shape { shape_index } => {
+                let mask_layer = EvaluatedLayer {
+                    compiled_layer_index: usize::MAX,
+                    content_dependency: TemporalDependency::Static,
+                    source: EvaluatedSource::Shape {
+                        shape_index,
+                        sizing: crate::plan::CompiledSizing::Original,
+                    },
+                    transform: mask.transform,
+                    opacity: 1.0,
+                    effects: Vec::new(),
+                    masks: Vec::new(),
+                    colour_transform: ColourTransform::default(),
+                    blend_mode: crate::project::BlendMode::Normal,
+                };
+                super::raster::draw_layer(
+                    surfaces.mask_local_surface(),
+                    assets,
+                    &mask_layer,
+                    1.0,
+                    ColourTransform::default(),
+                    timings,
+                    profiling_enabled,
+                );
+            }
+            EvaluatedMaskInput::Image { asset_index, mode } => {
+                let prepared = assets.raster_source(asset_index);
+                super::raster::draw_raster(
+                    surfaces.mask_local_surface(),
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    crate::domain::Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &crate::plan::CompiledSizing::Original,
+                    mask.transform,
+                    1.0,
+                    ColourTransform::default(),
+                );
+                for pixel in surfaces.mask_local_surface().pixels_mut() {
+                    let coverage = crate::project::image_mask_coverage(pixel.0, mode);
+                    pixel[3] = (coverage * 255.0).round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
         surfaces.compose_mask_surface(layer.transform);
         surfaces.feather_mask_surface(mask.feather);
         surfaces.combine_mask_coverage(mask.operation, mask.invert, mask.strength);

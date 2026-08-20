@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,8 @@ from vestra import (
     Circle,
     Crossfade,
     Ellipse,
+    Image,
+    ImageMaskMode,
     Line,
     MaskOperation,
     Polygon,
@@ -16,6 +19,8 @@ from vestra import (
     Rectangle,
 )
 from vestra.effects import GaussianBlur
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _render(project: Project, backend: str) -> bytes:
@@ -55,6 +60,41 @@ def test_layer_masks_are_owned_and_lowered() -> None:
     assert [mask.id for mask in layer.masks.items] == ["outer"]
     layer.masks.clear()
     assert layer.masks.items == ()
+
+
+def test_image_masks_reuse_normal_image_source_and_lower_modes() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    alpha = layer.masks.add(Image("alpha.png"), mode=ImageMaskMode.ALPHA, id="alpha")
+    luma = layer.masks.add(Image("luma.png"), mode="luma", id="luma")
+    masks = project.snapshot().to_dict()["visual"]["clips"][0]["masks"]
+    assert masks[0]["input"] == {"type": "image", "asset": "image-000001", "mode": "alpha"}
+    assert masks[1]["input"] == {"type": "image", "asset": "image-000002", "mode": "luma"}
+    assert alpha.input.path == "alpha.png"
+    assert luma.input.path == "luma.png"
+    with pytest.raises(TypeError):
+        layer.masks.add(Rectangle(width=4, height=4, fill="#ffffff"), mode=ImageMaskMode.ALPHA)
+    with pytest.raises(ValueError):
+        layer.masks.add(Image("bad.png"), mode="threshold")
+
+
+def test_image_masks_render_on_cpu_and_wgpu() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1, base_directory=ROOT)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    layer.masks.add(
+        Image("examples/assets/green.png"),
+        mode=ImageMaskMode.ALPHA,
+        feather=4,
+    )
+    layer.masks.add(
+        Image("examples/assets/blue.png"),
+        mode=ImageMaskMode.LUMA,
+        operation=MaskOperation.UNION,
+    )
+    cpu = _render(project, "cpu")
+    assert len(cpu) == 32 * 32 * 4
+    gpu = _render(project, "wgpu")
+    assert len(gpu) == len(cpu)
 
 
 def test_masks_expose_dynamic_scalar_properties() -> None:

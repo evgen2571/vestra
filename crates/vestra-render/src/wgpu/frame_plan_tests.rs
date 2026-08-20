@@ -171,7 +171,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
     );
     frame.layers[0].masks = vec![
         crate::plan::EvaluatedMask {
-            shape_index: 1,
+            input: crate::plan::EvaluatedMaskInput::Shape { shape_index: 1 },
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
             strength: 1.0,
@@ -179,7 +179,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
             transform,
         },
         crate::plan::EvaluatedMask {
-            shape_index: 2,
+            input: crate::plan::EvaluatedMaskInput::Shape { shape_index: 2 },
             operation: crate::project::MaskOperation::Replace,
             invert: false,
             strength: 1.0,

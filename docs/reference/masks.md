@@ -1,7 +1,7 @@
 # Masks reference
 
 The canonical clip field is `masks`, an ordered array of layer-owned mask
-objects. Each object has an `id`, a shape `input`, an `operation`, `invert`,
+objects. Each object has an `id`, an input, an `operation`, `invert`,
 scalar properties `strength` and `feather`, and a transform. These properties
 use the normal track, modifier, and signal machinery.
 
@@ -28,10 +28,17 @@ before normalizing the in-memory project to version 4.
 
 The supported geometric inputs are `Rectangle`, `Ellipse`, `Circle`, and
 `Polygon`. `Line` remains a visible shape source but is rejected as a mask
-input. `feather` is a non-negative Gaussian-like coverage radius in output
-pixels. It uses nine taps per separable pass, with sigma equal to `feather / 3`,
-clamps at `256` output pixels, preserves fractional values, and treats samples
-outside the canvas as zero. A value of `0` preserves hard-mask behavior.
+input. Image inputs use `alpha` coverage or `luma` coverage. Luma is computed
+from encoded RGB values as `0.2126R + 0.7152G + 0.0722B`, then multiplied by
+source alpha. Images start at their intrinsic pixel dimensions, centered by the
+default normalized `(0.5, 0.5)` position and anchor, before the mask-local
+transform is applied. A different-sized image is therefore sampled against its
+own intrinsic rectangle; it is not implicitly resized to the layer canvas.
+`feather` applies a smooth Gaussian-like coverage blur measured
+in output pixels. It supports fractional values, is limited to `0 .. 256` px,
+and treats coverage outside the canvas as zero. A value of `0` preserves
+hard-mask behavior.
 Feathering filters coverage before inversion, operation combination, and
-strength interpolation. Image alpha/luma inputs, text/video inputs,
-composition masks, and track mattes are deferred.
+strength interpolation. Image pixels use their intrinsic dimensions before the
+mask-local transform; the owning layer transform moves the image mask with the
+layer. Text/video inputs, composition masks, and track mattes are deferred.

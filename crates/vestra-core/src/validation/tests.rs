@@ -132,6 +132,13 @@ fn masks_validate_ids_geometry_strength_and_dynamic_transform() {
     assert!(codes.iter().any(|code| code == "VESTRA-SHAPE-GEOMETRY"));
 
     let project = masked_project(json!([{
+        "id": "oversized-feather",
+        "input": {"type": "shape", "geometry": {"type": "ellipse", "width": 16.0, "height": 16.0}, "fill": "#ffffff"},
+        "feather": 257.0
+    }]));
+    assert!(has(&project, "VESTRA-MASK-FEATHER"));
+
+    let project = masked_project(json!([{
         "id": "animated",
         "input": {"type": "shape", "geometry": {"type": "rectangle", "width": 16.0, "height": 16.0}, "fill": "#ffffff"},
         "transform": {

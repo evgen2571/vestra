@@ -143,40 +143,49 @@ impl EffectSurfacePool {
         }
     }
 
-    /// Applies the deterministic nine-sample coverage filter used by the WGPU
-    /// mask shaders. Samples outside the canvas are transparent, so feathering
-    /// cannot wrap around the opposite edge.
+    /// Applies the shared nine-tap separable coverage filter. Samples outside
+    /// the canvas are transparent, so feathering cannot wrap around an edge.
     pub(super) fn feather_mask_surface(&mut self, radius: f32) {
-        let radius = radius.round().clamp(0.0, 256.0) as i32;
-        if radius == 0 {
+        if radius <= 0.0 {
             return;
         }
-        let width = self.mask_surface.width() as i32;
-        let height = self.mask_surface.height() as i32;
+        let width = self.mask_surface.width() as usize;
+        let height = self.mask_surface.height() as usize;
+        let mut horizontal_weights = [0.0_f32; crate::project::MASK_FEATHER_TAP_COUNT];
+        let mut weight_sum = 0.0;
+        for (index, weight) in horizontal_weights.iter_mut().enumerate() {
+            *weight = crate::project::mask_feather_weight(index, radius);
+            weight_sum += *weight;
+        }
+        for weight in &mut horizontal_weights {
+            *weight /= weight_sum;
+        }
         for y in 0..height {
             for x in 0..width {
                 let mut value = 0.0;
-                for dy in [-radius, 0, radius] {
-                    for dx in [-radius, 0, radius] {
-                        let sample_x = x + dx;
-                        let sample_y = y + dy;
-                        if (0..width).contains(&sample_x) && (0..height).contains(&sample_y) {
-                            value += f32::from(
-                                self.mask_surface
-                                    .get_pixel(sample_x as u32, sample_y as u32)[3],
-                            ) / 255.0;
-                        }
-                    }
+                for (index, weight) in horizontal_weights.iter().enumerate() {
+                    let position =
+                        x as f32 + crate::project::mask_feather_sample_offset(index, radius);
+                    value += *weight * Self::sample_mask_alpha(&self.mask_surface, position, y);
                 }
-                self.mask_feather_scratch[(y * width + x) as usize] = value / 9.0;
+                self.mask_feather_scratch[y * width + x] = value;
             }
         }
-        for (pixel, value) in self
-            .mask_surface
-            .pixels_mut()
-            .zip(&self.mask_feather_scratch)
-        {
-            pixel[3] = (value * 255.0).round().clamp(0.0, 255.0) as u8;
+        for y in 0..height {
+            for x in 0..width {
+                let mut value = 0.0;
+                for (index, weight) in horizontal_weights.iter().enumerate() {
+                    let position =
+                        y as f32 + crate::project::mask_feather_sample_offset(index, radius);
+                    value += *weight
+                        * Self::sample_scratch(&self.mask_feather_scratch, width, position, x);
+                }
+                self.mask_surface.put_pixel(
+                    x as u32,
+                    y as u32,
+                    Rgba([0, 0, 0, (value * 255.0).round().clamp(0.0, 255.0) as u8]),
+                );
+            }
         }
     }
 
@@ -204,6 +213,36 @@ impl EffectSurfacePool {
         for pixel in self.current().pixels_mut() {
             *pixel = Rgba([0, 0, 0, 0]);
         }
+    }
+
+    fn sample_mask_alpha(surface: &RgbaImage, position: f32, row: usize) -> f32 {
+        let base = position.floor() as i32;
+        let fraction = position - base as f32;
+        let left = if (0..surface.width() as i32).contains(&base) {
+            f32::from(surface.get_pixel(base as u32, row as u32)[3]) / 255.0
+        } else {
+            0.0
+        };
+        let right = if (0..surface.width() as i32).contains(&(base + 1)) {
+            f32::from(surface.get_pixel((base + 1) as u32, row as u32)[3]) / 255.0
+        } else {
+            0.0
+        };
+        left + (right - left) * fraction
+    }
+
+    fn sample_scratch(scratch: &[f32], width: usize, position: f32, column: usize) -> f32 {
+        let base = position.floor() as i32;
+        let fraction = position - base as f32;
+        let sample = |row: i32| {
+            if (0..(scratch.len() / width) as i32).contains(&row) {
+                scratch[row as usize * width + column]
+            } else {
+                0.0
+            }
+        };
+        let top = sample(base);
+        top + (sample(base + 1) - top) * fraction
     }
 
     /// Starts one effect plan. `Original` aliases the current surface until a
@@ -525,5 +564,23 @@ mod tests {
         pool.feather_mask_surface(1.0);
         assert!(pool.mask_surface.get_pixel(0, 0)[3] < 255);
         assert!(pool.mask_surface.get_pixel(4, 0)[3] < 1);
+    }
+
+    #[test]
+    fn mask_feather_has_a_smooth_monotonic_edge() {
+        let mut pool = EffectSurfacePool::new(9, 1);
+        pool.mask_surface.put_pixel(4, 0, Rgba([0, 0, 0, 255]));
+        pool.feather_mask_surface(3.0);
+        let values = (0..9)
+            .map(|x| f32::from(pool.mask_surface.get_pixel(x, 0)[3]) / 255.0)
+            .collect::<Vec<_>>();
+        assert!(values[0] < values[1]);
+        assert!(values[1] < values[2]);
+        assert!(values[2] < values[3]);
+        assert!(values[3] < values[4]);
+        assert!(values[4] > values[5]);
+        assert!(values[5] > values[6]);
+        assert!(values[6] > values[7]);
+        assert!(values[7] > values[8]);
     }
 }

@@ -37,14 +37,18 @@ coverage unchanged; `strength=1` applies the selected operation completely.
 
 `strength` and `feather` are scalar properties and support the normal
 keyframes, modifiers, and signal bindings. Mask transforms use the existing
-transform properties and are local to the owning layer. The layer transform
+transform properties and are local to the owning layer. Uniform bindings such
+as `mask.transform.scale.bind(signal)` lower to the same `scale_x` and
+`scale_y` component modifiers used by layer transforms. The layer transform
 moves the layer and its attached mask together. Effects run before masks, and
 layer opacity runs after masks.
 Groups are maskable layers, so a group mask clips the already-composited group
 result.
 
-Feather is measured in output pixels and filters coverage before inversion,
-operation combination, and strength interpolation. Static masks remain
-cacheable; animated, modifier-driven, or signal-driven mask properties make
-the owning layer dynamic. Image masks, composition masks, and track mattes are
-not supported.
+Feather is a nine-tap separable Gaussian-like coverage filter. Its radius is
+measured in output pixels, sigma is `feather / 3`, fractional values are kept,
+the maximum is `256`, and samples outside the canvas have zero coverage. It
+filters coverage before inversion, operation combination, and strength
+interpolation. Static masks remain cacheable; animated, modifier-driven, or
+signal-driven mask properties make the owning layer dynamic. Image masks,
+composition masks, and track mattes are not supported.

@@ -4,7 +4,17 @@ import os
 
 import pytest
 
-from vestra import Circle, Crossfade, Ellipse, Line, MaskOperation, Polygon, Project, Rectangle
+from vestra import (
+    AudioGainKeyframe,
+    Circle,
+    Crossfade,
+    Ellipse,
+    Line,
+    MaskOperation,
+    Polygon,
+    Project,
+    Rectangle,
+)
 from vestra.effects import GaussianBlur
 
 
@@ -58,6 +68,22 @@ def test_masks_expose_dynamic_scalar_properties() -> None:
     assert canonical["strength"]["keyframes"][0]["value"] == 0.25
     assert canonical["feather"]["base_value"] == 8.0
     assert canonical["feather"]["keyframes"][0]["value"] == 16.0
+
+
+def test_uniform_mask_scale_binding_lowers_to_both_components() -> None:
+    project = Project(size=(32, 32), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    mask = layer.masks.add(Ellipse(width=20, height=20, fill="#ffffff"))
+    mask.transform.scale.bind(
+        project.audio.signal.rms().remap(input=(0, 1), output=(0.2, 2.0)),
+        operation="replace",
+    )
+
+    canonical = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]
+    scale = canonical["transform"]["scale"]
+    modifiers = canonical["transform"]["component_modifiers"]
+    assert "bindings" not in scale
+    assert modifiers["scale_x"] == modifiers["scale_y"]
 def test_generated_mask_ids_skip_removed_ids() -> None:
     project = Project(size=(32, 32), fps=1, duration=1)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
@@ -239,6 +265,7 @@ def test_transformed_mask_cpu_wgpu_parity_is_tight_when_wgpu_is_available() -> N
         mask.transform.position = (0.63, 0.47)
         mask.transform.scale = (1.3, 0.8)
         mask.transform.rotation_degrees.value = 20.0
+        mask.feather.value = 7.75
         return project.render_frame(0, backend=backend).to_bytes()
 
     cpu = render("cpu")
@@ -298,3 +325,69 @@ def test_mask_invert_strength_and_polygon_coverage() -> None:
     pixels = project.render_frame(0, backend="cpu").to_bytes()
     assert pixels[center : center + 3] == bytes((255, 0, 0))
     assert pixels[corner : corner + 3] == bytes((0, 0, 0))
+
+
+def test_dynamic_mask_properties_change_rendered_output() -> None:
+    def project_with_mask() -> tuple[Project, object]:
+        project = Project(size=(32, 32), fps=2, duration=1)
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        return project, layer
+
+    project, layer = project_with_mask()
+    position = layer.masks.add(Rectangle(width=8, height=32, fill="#ffffff"))
+    position.transform.position.keyframe(0, (0.25, 0.5))
+    position.transform.position.keyframe(0.5, (0.75, 0.5))
+    assert project.render_frame(0, backend="cpu").to_bytes() != project.render_frame(
+        0.5, backend="cpu"
+    ).to_bytes()
+
+    project, layer = project_with_mask()
+    scale = layer.masks.add(Ellipse(width=8, height=8, fill="#ffffff"))
+    scale.transform.scale.keyframe(0, (0.5, 0.5))
+    scale.transform.scale.keyframe(0.5, (2.0, 2.0))
+    assert project.render_frame(0, backend="cpu").to_bytes() != project.render_frame(
+        0.5, backend="cpu"
+    ).to_bytes()
+
+    project, layer = project_with_mask()
+    rotation = layer.masks.add(Rectangle(width=20, height=4, fill="#ffffff"))
+    rotation.transform.rotation_degrees.keyframe(0, 0)
+    rotation.transform.rotation_degrees.keyframe(0.5, 45)
+    assert project.render_frame(0, backend="cpu").to_bytes() != project.render_frame(
+        0.5, backend="cpu"
+    ).to_bytes()
+
+    project, layer = project_with_mask()
+    strength = layer.masks.add(Rectangle(width=8, height=8, fill="#ffffff"))
+    strength.operation = MaskOperation.REPLACE
+    strength.strength.keyframe(0, 0)
+    strength.strength.keyframe(0.5, 1)
+    assert project.render_frame(0, backend="cpu").to_bytes() != project.render_frame(
+        0.5, backend="cpu"
+    ).to_bytes()
+
+    project, layer = project_with_mask()
+    feather = layer.masks.add(Rectangle(width=12, height=12, fill="#ffffff"))
+    feather.feather.keyframe(0, 0)
+    feather.feather.keyframe(0.5, 8)
+    assert project.render_frame(0, backend="cpu").to_bytes() != project.render_frame(
+        0.5, backend="cpu"
+    ).to_bytes()
+
+
+def test_mask_uniform_scale_signal_is_evaluated_at_render_time() -> None:
+    project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    mask = layer.masks.add(Ellipse(width=20, height=20, fill="#ffffff"))
+    mask.transform.scale.bind(
+        project.audio.signal.rms().remap(input=(0, 1), output=(0.2, 2.0)),
+        operation="replace",
+    )
+    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip.set_gain_automation([
+        AudioGainKeyframe(0, 0),
+        AudioGainKeyframe(0.5, 1),
+    ])
+    quiet = project.render_frame(0, backend="cpu").to_bytes()
+    loud = project.render_frame(0.75, backend="cpu").to_bytes()
+    assert quiet != loud

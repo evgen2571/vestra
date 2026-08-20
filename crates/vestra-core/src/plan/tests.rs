@@ -1853,6 +1853,106 @@ fn compiler_separates_static_clip_content_from_timeline_and_transition_animation
 }
 
 #[test]
+fn mask_properties_classify_static_and_dynamic_content() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.clips.remove(0);
+    let mask: crate::project::Mask = serde_json::from_value(serde_json::json!({
+        "id": "mask",
+        "input": {"type": "shape", "geometry": {"type": "ellipse", "width": 20.0, "height": 12.0}, "fill": "#ffffff"}
+    }))
+    .expect("mask fixture");
+    project.visual.clips[0].masks = vec![mask.clone()];
+    assert_eq!(
+        compile_project(project.clone()).layers[0].content_dependency,
+        TemporalDependency::Static
+    );
+
+    let dynamic = |mut mask: crate::project::Mask| {
+        mask.transform
+            .position
+            .keyframes
+            .push(crate::project::Keyframe {
+                time: 1.0,
+                value: crate::project::Point { x: 0.7, y: 0.5 },
+                interpolation: crate::project::Interpolation::Named(
+                    crate::project::InterpolationName::Linear,
+                ),
+            });
+        mask
+    };
+    for mask in [
+        dynamic(mask.clone()),
+        {
+            let mut value = mask.clone();
+            value
+                .transform
+                .scale
+                .keyframes
+                .push(crate::project::Keyframe {
+                    time: 1.0,
+                    value: crate::project::Point { x: 1.5, y: 1.5 },
+                    interpolation: crate::project::Interpolation::Named(
+                        crate::project::InterpolationName::Linear,
+                    ),
+                });
+            value
+        },
+        {
+            let mut value = mask.clone();
+            value
+                .strength
+                .track
+                .keyframes
+                .push(crate::project::Keyframe {
+                    time: 1.0,
+                    value: 0.5,
+                    interpolation: crate::project::Interpolation::Named(
+                        crate::project::InterpolationName::Linear,
+                    ),
+                });
+            value
+        },
+        {
+            let mut value = mask.clone();
+            value
+                .feather
+                .track
+                .keyframes
+                .push(crate::project::Keyframe {
+                    time: 1.0,
+                    value: 8.0,
+                    interpolation: crate::project::Interpolation::Named(
+                        crate::project::InterpolationName::Linear,
+                    ),
+                });
+            value
+        },
+        {
+            let mut value = mask.clone();
+            let signal = ScalarSignal {
+                source: ScalarSignalSource::Audio {
+                    tap: ProjectAudioAnalysisTap::Master,
+                    feature: ProjectAudioScalarFeature::Rms,
+                },
+                transforms: vec![],
+            };
+            value.strength.modifiers.push(ScalarModifier {
+                operation: ProjectScalarModifierOperation::Multiply,
+                signal,
+            });
+            value
+        },
+    ] {
+        project.visual.clips[0].masks = vec![mask];
+        assert_eq!(
+            compile_project(project.clone()).layers[0].content_dependency,
+            TemporalDependency::Dynamic
+        );
+    }
+}
+
+#[test]
 fn compiler_classifies_whole_visual_activity_conservatively() {
     let mut project = canonical_project();
     project.visual.transitions.clear();

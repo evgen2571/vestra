@@ -13,7 +13,7 @@ pub enum MaskOperation {
     Subtract,
 }
 
-/// The deliberately narrow set of coverage producers supported by Subphase 1.
+/// The deliberately narrow set of coverage producers supported by geometric masks.
 /// Future image and rendered-layer inputs can extend this enum without changing
 /// ownership or stack semantics.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -37,7 +37,10 @@ pub struct Mask {
         deserialize_with = "deserialize_scalar_property"
     )]
     pub strength: ScalarProperty,
-    #[serde(default = "default_feather")]
+    #[serde(
+        default = "default_feather",
+        deserialize_with = "deserialize_scalar_property"
+    )]
     pub feather: ScalarProperty,
     #[serde(default = "default_transform")]
     pub transform: Transform,
@@ -75,6 +78,27 @@ fn default_transform() -> Transform {
 
 fn default_feather() -> ScalarProperty {
     ScalarProperty::from_track(Track::constant(0.0))
+}
+
+/// Public feather radius in output pixels. Both renderers use this same cap
+/// and the same nine-tap separable Gaussian-like coverage filter.
+pub const MAX_MASK_FEATHER_PX: f32 = 256.0;
+pub const MASK_FEATHER_TAP_COUNT: usize = 9;
+
+#[must_use]
+pub fn mask_feather_sample_offset(index: usize, radius: f32) -> f32 {
+    (index as f32 - 4.0) * radius.min(MAX_MASK_FEATHER_PX) / 4.0
+}
+
+#[must_use]
+pub fn mask_feather_weight(index: usize, radius: f32) -> f32 {
+    let radius = radius.min(MAX_MASK_FEATHER_PX);
+    if radius <= 0.0 {
+        return if index == 4 { 1.0 } else { 0.0 };
+    }
+    let sigma = radius / 3.0;
+    let offset = mask_feather_sample_offset(index, radius);
+    (-0.5 * (offset / sigma).powi(2)).exp()
 }
 
 /// Applies one normalized mask operation. Both inputs and the result are
@@ -180,5 +204,17 @@ mod tests {
         }))
         .expect("mask with feather parses");
         assert_eq!(decoded.feather.track.base_value, 12.5);
+    }
+
+    #[test]
+    fn feather_accepts_numeric_scalar_shorthand() {
+        let decoded: Mask = serde_json::from_value(serde_json::json!({
+            "id": "m",
+            "input": {"type": "shape", "geometry": {"type": "ellipse", "width": 10.0, "height": 20.0}, "fill": "#ffffff"},
+            "feather": 12.5
+        }))
+        .expect("numeric feather shorthand parses");
+        assert_eq!(decoded.feather.track.base_value, 12.5);
+        assert!(decoded.feather.track.keyframes.is_empty());
     }
 }

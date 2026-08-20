@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import struct
+import zlib
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
@@ -17,20 +20,51 @@ from vestra import (
     Polygon,
     Project,
     Rectangle,
+    Shape,
 )
 from vestra.effects import GaussianBlur
+from vestra.authoring.values import Crop, Sizing
 
 ROOT = Path(__file__).resolve().parents[1]
+_UNAVAILABLE_WGPU_CODES = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
+
+
+def _write_rgba_png(path: Path, width: int, height: int, pixels: list[tuple[int, int, int, int]]) -> None:
+    rows = b"".join(
+        b"\x00" + bytes(channel for pixel in pixels[row * width : (row + 1) * width] for channel in pixel)
+        for row in range(height)
+    )
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
 
 
 def _render(project: Project, backend: str) -> bytes:
     try:
         return project.render_frame(0, backend=backend).to_bytes()
     except Exception as error:
-        if backend == "wgpu" and os.environ.get("VESTRA_REQUIRE_WGPU") != "1":
-            if "adapter" in str(error).lower() or "wgpu" in str(error).lower():
-                pytest.skip("no compatible WGPU adapter")
+        if (
+            backend == "wgpu"
+            and os.environ.get("VESTRA_REQUIRE_WGPU") != "1"
+            and _wgpu_environment_unavailable(error)
+        ):
+            pytest.skip("no compatible WGPU adapter")
         raise
+
+
+def _wgpu_environment_unavailable(error: Exception) -> bool:
+    diagnostics = getattr(error, "diagnostics", ())
+    if diagnostics:
+        return all(getattr(diagnostic, "code", "") in _UNAVAILABLE_WGPU_CODES for diagnostic in diagnostics)
+    message = str(error).lower()
+    return "no compatible adapter" in message or "adapter request returned no compatible adapter" in message
 
 
 def test_layer_masks_are_owned_and_lowered() -> None:
@@ -76,6 +110,120 @@ def test_image_masks_reuse_normal_image_source_and_lower_modes() -> None:
         layer.masks.add(Rectangle(width=4, height=4, fill="#ffffff"), mode=ImageMaskMode.ALPHA)
     with pytest.raises(ValueError):
         layer.masks.add(Image("bad.png"), mode="threshold")
+
+
+def test_mask_input_annotation_includes_shape_and_image() -> None:
+    annotation = get_type_hints(type(layer_mask_probe()).input.fget)["return"]
+    assert annotation == Shape | Image
+
+
+def layer_mask_probe() -> object:
+    project = Project(size=(2, 2), fps=1, duration=1)
+    return project.root.add(Rectangle(width=2, height=2, fill="#ff0000")).masks.add(
+        Circle(radius=1, fill="#ffffff")
+    )
+
+
+@pytest.mark.parametrize(
+    ("image", "message"),
+    [
+        (Image("mask.png", sizing=Sizing.fit()), "sizing"),
+        (Image("mask.png", crop=Crop(0.25, 0, 0.5, 1)), "crop"),
+    ],
+)
+def test_image_mask_rejects_unsupported_sizing_and_crop(image: Image, message: str) -> None:
+    project = Project(size=(4, 4), fps=1, duration=1)
+    layer = project.root.add(Rectangle(width=4, height=4, fill="#ff0000"))
+    with pytest.raises(ValueError, match=message):
+        layer.masks.add(image)
+
+
+@pytest.mark.parametrize(
+    ("mode", "pixels", "expected"),
+    [
+        (ImageMaskMode.ALPHA, [(255, 0, 0, 0), (255, 0, 0, 64), (255, 0, 0, 128), (255, 0, 0, 255)], [0, 64, 128, 255]),
+        (ImageMaskMode.LUMA, [(0, 0, 0, 255), (255, 255, 255, 255), (128, 128, 128, 255), (255, 0, 0, 255)], [0, 255, 128, 54]),
+    ],
+)
+def test_image_masks_produce_rendered_pixel_coverage(tmp_path: Path, mode: ImageMaskMode, pixels: list[tuple[int, int, int, int]], expected: list[int]) -> None:
+    image_path = tmp_path / "mask.png"
+    _write_rgba_png(image_path, 2, 2, pixels)
+    project = Project(size=(2, 2), fps=1, duration=1, base_directory=tmp_path)
+    layer = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"))
+    layer.masks.add(Image(image_path), mode=mode, operation=MaskOperation.REPLACE)
+
+    rendered = project.render_frame(0, backend="cpu").to_bytes()
+    assert [rendered[index * 4] for index in range(4)] == expected
+    assert all(rendered[index * 4 + 1 : index * 4 + 3] == bytes((0, 0)) for index in range(4))
+
+
+def test_image_luma_rendering_covers_primary_colours_and_transparent_white(tmp_path: Path) -> None:
+    pixels = [
+        (0, 0, 0, 255),
+        (255, 255, 255, 255),
+        (128, 128, 128, 255),
+        (255, 0, 0, 255),
+        (0, 255, 0, 255),
+        (0, 0, 255, 255),
+        (255, 255, 255, 0),
+        (255, 255, 255, 255),
+    ]
+    image_path = tmp_path / "luma.png"
+    _write_rgba_png(image_path, 4, 2, pixels)
+    project = Project(size=(4, 2), fps=1, duration=1, base_directory=tmp_path)
+    layer = project.root.add(Rectangle(width=4, height=2, fill="#ff0000"))
+    layer.masks.add(Image(image_path), mode=ImageMaskMode.LUMA, operation=MaskOperation.REPLACE)
+
+    rendered = project.render_frame(0, backend="cpu").to_bytes()
+    coverage = [rendered[index * 4] for index in range(8)]
+    assert coverage[0] == 0
+    assert coverage[1] == 255
+    assert 126 <= coverage[2] <= 130
+    assert 53 <= coverage[3] <= 55
+    assert coverage[4] > coverage[3] > coverage[5]
+    assert coverage[6] == 0
+    assert coverage[7] == 255
+
+
+def test_mixed_shape_and_image_masks_preserve_order(tmp_path: Path) -> None:
+    image_path = tmp_path / "mask.png"
+    _write_rgba_png(image_path, 2, 2, [(255, 255, 255, 255), (255, 255, 255, 0)] * 2)
+    project = Project(size=(2, 2), fps=1, duration=1, base_directory=tmp_path)
+    layer = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"))
+    layer.masks.add(Image(image_path), mode=ImageMaskMode.ALPHA, operation=MaskOperation.REPLACE)
+    layer.masks.add(Rectangle(width=2, height=2, fill="#ffffff"), operation=MaskOperation.INTERSECT)
+
+    rendered = project.render_frame(0, backend="cpu").to_bytes()
+    assert rendered[:3] == bytes((255, 0, 0))
+    assert rendered[4:7] == bytes((0, 0, 0))
+
+
+def test_group_image_mask_clips_composed_result_and_keeps_child_masks_independent(tmp_path: Path) -> None:
+    image_path = tmp_path / "group-mask.png"
+    _write_rgba_png(image_path, 2, 2, [(255, 255, 255, 255)] * 4)
+    project = Project(size=(4, 4), fps=1, duration=1, base_directory=tmp_path)
+    group = project.root.group(duration=1)
+    child = group.add(Rectangle(width=4, height=4, fill="#00ff00"), duration=1)
+    child.masks.add(Rectangle(width=2, height=4, fill="#ffffff"))
+    group.masks.add(Image(image_path), mode=ImageMaskMode.ALPHA, operation=MaskOperation.REPLACE)
+
+    rendered = project.render_frame(0, backend="cpu").to_bytes()
+    assert rendered[(2 * 4 + 1) * 4 : (2 * 4 + 1) * 4 + 3] == bytes((0, 255, 0))
+    assert rendered[(0 * 4 + 0) * 4 : (0 * 4 + 0) * 4 + 3] == bytes((0, 0, 0))
+    assert rendered[(2 * 4 + 3) * 4 : (2 * 4 + 3) * 4 + 3] == bytes((0, 0, 0))
+
+
+def test_one_image_asset_is_registered_once_for_visible_and_mask_uses(tmp_path: Path) -> None:
+    image_path = tmp_path / "shared.png"
+    _write_rgba_png(image_path, 1, 1, [(255, 0, 0, 255)])
+    project = Project(size=(2, 2), fps=1, duration=1, base_directory=tmp_path)
+    image = Image(image_path)
+    layer = project.root.add(image)
+    layer.masks.add(image, mode=ImageMaskMode.ALPHA)
+    layer.masks.add(image, mode=ImageMaskMode.LUMA)
+
+    assets = project.snapshot().to_dict()["assets"]
+    assert len(assets) == 1
 
 
 def test_image_masks_render_on_cpu_and_wgpu() -> None:
@@ -168,9 +316,8 @@ def test_geometric_masks_clip_layer_coverage(backend: str) -> None:
     try:
         pixels = project.render_frame(0, backend=backend).to_bytes()
     except Exception as error:
-        if backend == "wgpu" and os.environ.get("VESTRA_REQUIRE_WGPU") != "1":
-            if "adapter" in str(error).lower() or "wgpu" in str(error).lower():
-                pytest.skip("no compatible WGPU adapter")
+        if backend == "wgpu" and os.environ.get("VESTRA_REQUIRE_WGPU") != "1" and _wgpu_environment_unavailable(error):
+            pytest.skip("no compatible WGPU adapter")
         raise
 
     center = (16 * 32 + 16) * 4
@@ -312,7 +459,7 @@ def test_transformed_mask_cpu_wgpu_parity_is_tight_when_wgpu_is_available() -> N
     try:
         wgpu = render("wgpu")
     except Exception as error:
-        if os.environ.get("VESTRA_REQUIRE_WGPU") != "1" and "adapter" in str(error).lower():
+        if os.environ.get("VESTRA_REQUIRE_WGPU") != "1" and _wgpu_environment_unavailable(error):
             pytest.skip("no compatible WGPU adapter")
         raise
     differences = [abs(left - right) for left, right in zip(cpu, wgpu)]
@@ -329,9 +476,8 @@ def test_mask_local_transform_moves_coverage_with_the_layer(backend: str) -> Non
     try:
         pixels = project.render_frame(0, backend=backend).to_bytes()
     except Exception as error:
-        if backend == "wgpu" and os.environ.get("VESTRA_REQUIRE_WGPU") != "1":
-            if "adapter" in str(error).lower() or "wgpu" in str(error).lower():
-                pytest.skip("no compatible WGPU adapter")
+        if backend == "wgpu" and os.environ.get("VESTRA_REQUIRE_WGPU") != "1" and _wgpu_environment_unavailable(error):
+            pytest.skip("no compatible WGPU adapter")
         raise
 
     left = (16 * 32 + 16) * 4

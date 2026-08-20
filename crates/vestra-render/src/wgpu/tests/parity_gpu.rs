@@ -1,6 +1,6 @@
 //! Adapter-dependent CPU/WGPU parity tests.
 
-use std::sync::Arc;
+use std::{fs, sync::Arc};
 
 use super::{
     compare_rgba,
@@ -201,11 +201,212 @@ fn render_project_parity(
     gpu.render_frame(&frame, &mut gpu_output)
         .expect("Vulkan WGPU Group frame renders");
     let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), tolerance);
+    eprintln!("renderer parity: {difference:?}");
     assert!(
         difference.maximum_absolute_channel_error <= tolerance,
         "Group parity exceeded tolerance {tolerance}: {difference:?}"
     );
     Some(gpu_output)
+}
+
+fn shape_feather_parity_project(radius: f64, transformed: bool) -> crate::project::Project {
+    let transform = transformed.then(|| {
+        json!({
+            "position": {"base_value": {"x": 0.63, "y": 0.47}},
+            "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+            "scale": {"base_value": {"x": 1.3, "y": 0.8}},
+            "rotation_degrees": {"base_value": 20.0}
+        })
+    });
+    let mut mask = json!({
+        "id": "feather", "input": {
+            "type": "shape", "geometry": {"type": "ellipse", "width": 18.0, "height": 12.0},
+            "fill": "#ffffff"
+        }, "feather": {"base_value": radius}
+    });
+    if let Some(transform) = transform {
+        mask.as_object_mut()
+            .expect("shape feather mask is an object")
+            .insert("transform".to_owned(), transform);
+    }
+    serde_json::from_value(json!({
+        "schema_version": 3,
+        "output": {
+            "path": "shape-feather-parity.mp4", "width": 32, "height": 32,
+            "frame_rate": "24/1", "background": "#000000", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 1.0
+        },
+        "assets": [],
+        "visual": {
+            "clips": [{
+                "id": "layer", "source": {"type": "solid_color", "colour": "#ff0000"},
+                "start": 0.0, "duration": 1.0, "layer": 0,
+                "opacity": {"base_value": 1.0}, "masks": [mask]
+            }],
+            "transitions": [], "flashes": [], "post_effects": []
+        }
+    }))
+    .expect("shape feather parity project parses")
+}
+
+#[test]
+fn gpu_shape_feather_matches_cpu_at_small_medium_large_and_fractional_radii() {
+    for radius in [4.0_f64, 16.0, 64.0, 7.75] {
+        let transformed = (radius - 7.75).abs() < f64::EPSILON;
+        render_project_parity(shape_feather_parity_project(radius, transformed), 0, 2);
+    }
+}
+
+fn image_mask_parity_project(mode: &str, masks: Value) -> crate::project::Project {
+    serde_json::from_value(json!({
+        "schema_version": 3,
+        "output": {
+            "path": "image-mask-parity.mp4", "width": 32, "height": 32,
+            "frame_rate": "24/1", "background": "#000000", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 1.0
+        },
+        "assets": [{"id": "mask-image", "type": "image", "source": "mask.png"}],
+        "visual": {
+            "clips": [{
+                "id": "layer", "source": {"type": "solid_color", "colour": "#ff0000"},
+                "start": 0.0, "duration": 1.0, "layer": 0,
+                "opacity": {"base_value": 1.0}, "masks": masks
+            }],
+            "transitions": [], "flashes": [], "post_effects": []
+        }
+    }))
+    .unwrap_or_else(|error| panic!("{mode} image mask parity project parses: {error}"))
+}
+
+fn run_image_mask_parity(case: &str, mode: &str, masks: Value, pixels: Vec<u8>) {
+    let directory = std::env::temp_dir().join(format!("vestra-image-mask-{}", std::process::id()));
+    fs::create_dir_all(&directory).expect("image mask parity directory creates");
+    let image_path = directory.join("mask.png");
+    RgbaImage::from_raw(8, 8, pixels)
+        .expect("image mask parity pixels have the expected size")
+        .save(&image_path)
+        .expect("image mask parity image saves");
+    let project_path = directory.join(format!("{case}.json"));
+    let project = image_mask_parity_project(mode, masks);
+    let mut project_value = serde_json::to_value(&project).expect("project serializes");
+    fn remove_nulls(value: &mut Value) {
+        match value {
+            Value::Object(object) => {
+                object.retain(|_, value| !value.is_null());
+                for value in object.values_mut() {
+                    remove_nulls(value);
+                }
+            }
+            Value::Array(values) => {
+                for value in values {
+                    remove_nulls(value);
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+        }
+    }
+    remove_nulls(&mut project_value);
+    fs::write(
+        &project_path,
+        serde_json::to_vec(&project_value).expect("project value serializes"),
+    )
+    .expect("image mask parity project saves");
+
+    let validated = load_and_validate(
+        &project_path,
+        &ValidationOptions {
+            check_backend: false,
+            ..ValidationOptions::default()
+        },
+    )
+    .unwrap_or_else(|error| panic!("{case} image mask project validates: {error:?}"));
+    let plan = compile(&validated, CompileOptions::default()).expect("image mask parity compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("image mask parity assets decode");
+    let frame = crate::plan::evaluate(&plan, &active_items_at(&plan, 0), 0);
+    let mut cpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut gpu_output = RgbaImage::new(frame.width, frame.height);
+    let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    cpu.render_frame(&frame, &mut cpu_output)
+        .expect("CPU image mask frame renders");
+    gpu.render_frame(&frame, &mut gpu_output)
+        .expect("WGPU image mask frame renders");
+    let difference = compare_rgba(cpu_output.as_raw(), gpu_output.as_raw(), 2);
+    eprintln!("{case} {mode} image-mask parity: {difference:?}");
+    assert!(
+        difference.maximum_absolute_channel_error <= 2
+            && difference.pixels_exceeding_tolerance == 0,
+        "{case} {mode} image mask parity exceeded tolerance: {difference:?}"
+    );
+    let _ = fs::remove_dir_all(directory);
+}
+
+#[test]
+fn gpu_image_masks_match_cpu_for_alpha_luma_and_transformed_feathered_cases() {
+    let mut alpha = Vec::with_capacity(8 * 8 * 4);
+    let mut luma = Vec::with_capacity(8 * 8 * 4);
+    for y in 0..8 {
+        for x in 0..8 {
+            let alpha_value = (x * 32 + y * 4).min(255) as u8;
+            alpha.extend_from_slice(&[255, 0, 0, alpha_value]);
+            let colour = match (x + y) % 4 {
+                0 => [255, 0, 0],
+                1 => [0, 255, 0],
+                2 => [0, 0, 255],
+                _ => [128, 128, 128],
+            };
+            luma.extend_from_slice(&[colour[0], colour[1], colour[2], 255]);
+        }
+    }
+    let transform = json!({
+        "position": {"base_value": {"x": 0.63, "y": 0.47}},
+        "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+        "scale": {"base_value": {"x": 1.3, "y": 0.8}},
+        "rotation_degrees": {"base_value": 20.0}
+    });
+    let alpha_mask = json!({
+        "id": "alpha", "input": {"type": "image", "asset": "mask-image", "mode": "alpha"},
+        "operation": "replace", "invert": true, "strength": {"base_value": 0.73},
+        "feather": {"base_value": 7.75}, "transform": transform
+    });
+    let luma_mask = json!({
+        "id": "luma", "input": {"type": "image", "asset": "mask-image", "mode": "luma"},
+        "operation": "replace", "feather": {"base_value": 16.0}, "transform": transform
+    });
+    run_image_mask_parity(
+        "alpha-transformed-feathered",
+        "alpha",
+        json!([alpha_mask]),
+        alpha,
+    );
+    run_image_mask_parity(
+        "luma-transformed-feathered",
+        "luma",
+        json!([luma_mask]),
+        luma,
+    );
+    let mixed_shape = json!({
+        "id": "shape", "input": {
+            "type": "shape", "geometry": {"type": "rectangle", "width": 28.0, "height": 28.0},
+            "fill": "#ffffff"
+        }, "operation": "intersect"
+    });
+    run_image_mask_parity(
+        "mixed-image-and-shape",
+        "alpha",
+        json!([alpha_mask.clone(), mixed_shape]),
+        {
+            let mut pixels = Vec::with_capacity(8 * 8 * 4);
+            for y in 0..8 {
+                for x in 0..8 {
+                    pixels.extend_from_slice(&[255, 0, 0, (x * 32 + y * 4).min(255) as u8]);
+                }
+            }
+            pixels
+        },
+    );
 }
 
 fn assert_particle_group_plan_targets_group_canvas(project: &crate::project::Project) {

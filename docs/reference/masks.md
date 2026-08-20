@@ -25,6 +25,10 @@ Inversion happens before the operation. The supported operations are
 Schema version 4 is the current emitted project format. Vestra accepts valid
 schema version 3 projects and treats their omitted masks as an empty list
 before normalizing the in-memory project to version 4.
+Vestra keeps schema 4 for Masks v1 because the 0.1 project language is still
+evolving and has not become a stable external compatibility boundary. Image
+mask inputs therefore do not trigger a version bump; schema 3 loading remains
+supported.
 
 The supported geometric inputs are `Rectangle`, `Ellipse`, `Circle`, and
 `Polygon`. `Line` remains a visible shape source but is rejected as a mask
@@ -34,6 +38,9 @@ source alpha. Images start at their intrinsic pixel dimensions, centered by the
 default normalized `(0.5, 0.5)` position and anchor, before the mask-local
 transform is applied. A different-sized image is therefore sampled against its
 own intrinsic rectangle; it is not implicitly resized to the layer canvas.
+Image `sizing` and `crop` values are not supported in mask context and are
+rejected during Python authoring. Use `mask.transform` to position, scale, or
+rotate the intrinsic image mask.
 `feather` applies a smooth Gaussian-like coverage blur measured
 in output pixels. It supports fractional values, is limited to `0 .. 256` px,
 and treats coverage outside the canvas as zero. A value of `0` preserves

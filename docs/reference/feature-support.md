@@ -18,6 +18,13 @@ not reduced renderer support.
 | Geometric layer masks | `layer.masks` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
 | Image alpha masks | `layer.masks` + `ImageMaskMode.ALPHA` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
 | Image luma masks | `layer.masks` + `ImageMaskMode.LUMA` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
+| Soft feather on masks | `mask.feather` | `masks` (schema v4) | layer-local, output-pixel units | supported | supported |
+| Dynamic mask properties | keyframes, modifiers, signals | `masks` (schema v4) | layer-local transform and coverage | supported | supported |
+| Image crop/sizing as a mask | rejected in mask context | not serialized | use `mask.transform` instead | unsupported in v1 | unsupported in v1 |
+| Composition-space masks | not exposed | not serialized | not supported | unsupported | unsupported |
+| Video masks | not exposed | not serialized | not supported | unsupported | unsupported |
+| Text masks | not exposed | not serialized | not supported | unsupported | unsupported |
+| Track mattes | not exposed | not serialized | not supported | unsupported | unsupported |
 | Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |

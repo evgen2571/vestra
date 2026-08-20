@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn mask_round_trips_as_a_narrow_shape_input() {
+    fn mask_round_trips_with_shape_input() {
         let value = serde_json::to_value(mask()).expect("mask serializes");
         assert_eq!(value["input"]["type"], "shape");
         let decoded: Mask = serde_json::from_value(value.clone()).expect("mask parses");

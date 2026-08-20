@@ -13,6 +13,7 @@ pub(super) struct GpuPipelines {
     pub(super) mask: wgpu::ComputePipeline,
     pub(super) mask_raster: wgpu::ComputePipeline,
     pub(super) mask_coverage: wgpu::ComputePipeline,
+    pub(super) mask_feather: wgpu::ComputePipeline,
     pub(super) effects: Vec<(EffectKernel, wgpu::ComputePipeline)>,
     pub(super) particle_normal: wgpu::RenderPipeline,
     pub(super) particle_resolve: wgpu::ComputePipeline,
@@ -30,6 +31,7 @@ pub(super) struct GpuPipelines {
     pub(super) _mask_shader: wgpu::ShaderModule,
     pub(super) _mask_raster_shader: wgpu::ShaderModule,
     pub(super) _mask_coverage_shader: wgpu::ShaderModule,
+    pub(super) _mask_feather_shader: wgpu::ShaderModule,
     pub(super) _effect_shaders: Vec<(EffectKernel, wgpu::ShaderModule)>,
     pub(super) _particle_shader: wgpu::ShaderModule,
     pub(super) _particle_resolve_shader: wgpu::ShaderModule,
@@ -69,6 +71,11 @@ impl GpuPipelines {
             device,
             "vestra mask raster shader",
             include_str!("../shaders/mask_raster.wgsl"),
+        );
+        let mask_feather_shader = shader(
+            device,
+            "vestra mask feather shader",
+            include_str!("../shaders/mask_feather.wgsl"),
         );
         let particle_shader = shader(
             device,
@@ -222,6 +229,12 @@ impl GpuPipelines {
             &mask_coverage_shader,
             &effect_bindings,
         );
+        let mask_feather = pipeline(
+            device,
+            "vestra mask feather pipeline",
+            &mask_feather_shader,
+            &effect_bindings,
+        );
         let effect_shaders = supported_kernels()
             .map(|kernel| (kernel, shader(device, kernel.label(), kernel.source())))
             .collect::<Vec<_>>();
@@ -241,6 +254,7 @@ impl GpuPipelines {
             _mask_shader: mask_shader,
             _mask_raster_shader: mask_raster_shader,
             _mask_coverage_shader: mask_coverage_shader,
+            _mask_feather_shader: mask_feather_shader,
             _particle_shader: particle_shader,
             _particle_resolve_shader: particle_resolve_shader,
             _effect_shaders: effect_shaders,
@@ -250,6 +264,7 @@ impl GpuPipelines {
             mask,
             mask_raster,
             mask_coverage,
+            mask_feather,
             particle_normal,
             particle_resolve,
             particle_resolve_bindings,

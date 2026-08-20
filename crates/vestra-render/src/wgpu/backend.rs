@@ -1069,6 +1069,15 @@ fn encode_parameters(
                 parameters.header[3] = 3;
                 arena.push(&parameters)?;
             }
+            GpuOperation::FeatherMask {
+                layer_index,
+                mask_index,
+                horizontal,
+                ..
+            } => {
+                let radius = plan.layers[*layer_index].masks[*mask_index].feather;
+                arena.push(&parameters::mask_feather(frame, radius, *horizontal))?;
+            }
             GpuOperation::RenderSurfaceLayer { layer_index, .. } => {
                 let crate::plan::EvaluatedSource::Group { .. } = &plan.layers[*layer_index].source
                 else {

@@ -8,7 +8,9 @@
 
 use crate::plan::RenderPlan;
 
-use super::frame_plan::{GpuFramePlan, TextureSlot, plan_has_masks, plan_requires_auxiliary};
+use super::frame_plan::{
+    GpuFramePlan, TextureSlot, plan_has_mask_feather, plan_has_masks, plan_requires_auxiliary,
+};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
@@ -83,6 +85,7 @@ pub(super) struct TexturePool {
     effect_b: Option<WorkingTexture>,
     auxiliary: Option<WorkingTexture>,
     mask_coverage: Option<WorkingTexture>,
+    mask_feather: Option<WorkingTexture>,
     group_canvas_a: Vec<WorkingTexture>,
     group_canvas_b: Vec<WorkingTexture>,
 }
@@ -114,6 +117,8 @@ impl TexturePool {
                 .then(|| create_texture(device, descriptor, "vestra retained effect original")),
             mask_coverage: plan_has_masks(plan)
                 .then(|| create_texture(device, descriptor, "vestra mask coverage state")),
+            mask_feather: plan_has_mask_feather(plan)
+                .then(|| create_texture(device, descriptor, "vestra mask feather scratch")),
             group_canvas_a: (0..group_depth)
                 .map(|depth| {
                     create_texture(
@@ -157,6 +162,10 @@ impl TexturePool {
                 .mask_coverage
                 .as_ref()
                 .expect("mask plan requires prepared coverage state"),
+            TextureSlot::MaskFeather => self
+                .mask_feather
+                .as_ref()
+                .expect("feather plan requires prepared mask scratch"),
             TextureSlot::GroupCanvasA(depth) => self
                 .group_canvas_a
                 .get(depth)
@@ -190,6 +199,10 @@ impl TexturePool {
                 .as_ref()
                 .map_or(0, |texture| texture.estimated_bytes)
             + self
+                .mask_feather
+                .as_ref()
+                .map_or(0, |texture| texture.estimated_bytes)
+            + self
                 .group_canvas_a
                 .iter()
                 .map(|texture| texture.estimated_bytes)
@@ -217,12 +230,17 @@ impl TexturePool {
         self.mask_coverage.is_some()
     }
 
+    pub(super) fn has_mask_feather(&self) -> bool {
+        self.mask_feather.is_some()
+    }
+
     pub(super) fn texture_count(&self) -> usize {
         4 + self.group_canvas_a.len() * 2
             + usize::from(self.effect_a.is_some())
             + usize::from(self.effect_b.is_some())
             + usize::from(self.auxiliary.is_some())
             + usize::from(self.mask_coverage.is_some())
+            + usize::from(self.mask_feather.is_some())
     }
 
     pub(super) fn group_depth(&self) -> usize {

@@ -5,7 +5,7 @@ struct Params {
     operation: u32,
     invert: u32,
     strength: f32,
-    _padding: u32,
+    feather: f32,
 };
 @group(0) @binding(0) var source: texture_2d<f32>;
 @group(0) @binding(1) var mask: texture_2d<f32>;
@@ -26,7 +26,7 @@ fn coverage_texel(coord: vec2<i32>) -> f32 {
     if (coord.x < 0 || coord.y < 0 || coord.x >= i32(params.canvas.x) || coord.y >= i32(params.canvas.y)) {
         return 0.0;
     }
-    return textureLoad(mask, coord, 0).g;
+    return textureLoad(mask, coord, 0).a;
 }
 
 fn bilinear_coverage(position: vec2<f32>) -> f32 {
@@ -46,6 +46,10 @@ fn bilinear_coverage(position: vec2<f32>) -> f32 {
     return mix(top, bottom, fraction.y);
 }
 
+fn feathered_coverage(position: vec2<f32>) -> f32 {
+    return bilinear_coverage(position);
+}
+
 @compute @workgroup_size(8, 8)
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas.x || id.y >= params.canvas.y) { return; }
@@ -55,7 +59,7 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         dot(params.inverse_row0.xyz, vec3<f32>(point, 1.0)),
         dot(params.inverse_row1.xyz, vec3<f32>(point, 1.0)),
     );
-    let value = bilinear_coverage(local);
+    let value = feathered_coverage(local);
     let previous = textureLoad(mask, coord, 0);
     let first = (params.operation & 4u) != 0u;
     var current = previous.g;

@@ -289,6 +289,9 @@ impl FrameBindGroups {
             if frame.working.has_mask_coverage() {
                 slots.push(TextureSlot::MaskCoverage);
             }
+            if frame.working.has_mask_feather() {
+                slots.push(TextureSlot::MaskFeather);
+            }
             for source in slots.iter().copied() {
                 for destination in slots.iter().copied() {
                     if source == destination {
@@ -915,6 +918,25 @@ pub(super) fn encode_and_submit(
                 dispatch(
                     &mut encoder,
                     &pipelines.mask,
+                    group,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
+            }
+            GpuOperation::FeatherMask {
+                source,
+                destination,
+                parameters_index,
+                ..
+            } => {
+                let group = bind_groups.effect(*source, *destination, None)?;
+                dispatch(
+                    &mut encoder,
+                    &pipelines.mask_feather,
                     group,
                     parameters.offset(*parameters_index)?,
                     width,

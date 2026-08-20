@@ -15,51 +15,13 @@ pub(super) fn evaluate(
     context: &EvaluationContext<'_>,
     evaluated_track_count: &mut u64,
 ) -> Result<Transform2D, EvaluationError> {
-    *evaluated_track_count += 4;
-    let position = layer.transform.position.evaluate(authored_time);
-    let scale = layer.transform.scale.evaluate(authored_time);
-    let mut transform = Transform2D {
-        position: crate::domain::Point {
-            x: ScalarPropertyConstraint::Finite.apply(CompiledScalarProperty::apply_modifiers(
-                position.x,
-                &layer.transform.position_x_modifiers,
-                project_time,
-                context,
-            )?)?,
-            y: ScalarPropertyConstraint::Finite.apply(CompiledScalarProperty::apply_modifiers(
-                position.y,
-                &layer.transform.position_y_modifiers,
-                project_time,
-                context,
-            )?)?,
-        },
-        anchor: layer.transform.anchor.evaluate(authored_time),
-        scale: crate::domain::Point {
-            x: ScalarPropertyConstraint::PositiveFloor {
-                minimum: MIN_POSITIVE_PROPERTY_VALUE,
-            }
-            .apply(CompiledScalarProperty::apply_modifiers(
-                scale.x,
-                &layer.transform.scale_x_modifiers,
-                project_time,
-                context,
-            )?)?,
-            y: ScalarPropertyConstraint::PositiveFloor {
-                minimum: MIN_POSITIVE_PROPERTY_VALUE,
-            }
-            .apply(CompiledScalarProperty::apply_modifiers(
-                scale.y,
-                &layer.transform.scale_y_modifiers,
-                project_time,
-                context,
-            )?)?,
-        },
-        rotation_radians: layer
-            .transform
-            .rotation_degrees
-            .evaluate(authored_time, project_time, context)?
-            .to_radians(),
-    };
+    let mut transform = evaluate_tracks(
+        &layer.transform,
+        authored_time,
+        project_time,
+        context,
+        evaluated_track_count,
+    )?;
     for contribution in &layer.transform_contributions {
         if authored_time < contribution.start || authored_time >= contribution.end {
             continue;
@@ -73,6 +35,60 @@ pub(super) fn evaluate(
         transform.scale.y *= scale.y;
         transform.rotation_radians += contribution.rotation_radians_offset.evaluate(authored_time);
     }
+    Ok(transform)
+}
+
+pub(super) fn evaluate_tracks(
+    tracks: &crate::plan::CompiledTransformTracks,
+    authored_time: u128,
+    project_time: u128,
+    context: &EvaluationContext<'_>,
+    evaluated_track_count: &mut u64,
+) -> Result<Transform2D, EvaluationError> {
+    *evaluated_track_count += 4;
+    let position = tracks.position.evaluate(authored_time);
+    let scale = tracks.scale.evaluate(authored_time);
+    let mut transform = Transform2D {
+        position: crate::domain::Point {
+            x: ScalarPropertyConstraint::Finite.apply(CompiledScalarProperty::apply_modifiers(
+                position.x,
+                &tracks.position_x_modifiers,
+                project_time,
+                context,
+            )?)?,
+            y: ScalarPropertyConstraint::Finite.apply(CompiledScalarProperty::apply_modifiers(
+                position.y,
+                &tracks.position_y_modifiers,
+                project_time,
+                context,
+            )?)?,
+        },
+        anchor: tracks.anchor.evaluate(authored_time),
+        scale: crate::domain::Point {
+            x: ScalarPropertyConstraint::PositiveFloor {
+                minimum: MIN_POSITIVE_PROPERTY_VALUE,
+            }
+            .apply(CompiledScalarProperty::apply_modifiers(
+                scale.x,
+                &tracks.scale_x_modifiers,
+                project_time,
+                context,
+            )?)?,
+            y: ScalarPropertyConstraint::PositiveFloor {
+                minimum: MIN_POSITIVE_PROPERTY_VALUE,
+            }
+            .apply(CompiledScalarProperty::apply_modifiers(
+                scale.y,
+                &tracks.scale_y_modifiers,
+                project_time,
+                context,
+            )?)?,
+        },
+        rotation_radians: tracks
+            .rotation_degrees
+            .evaluate(authored_time, project_time, context)?
+            .to_radians(),
+    };
     if !transform.position.x.is_finite()
         || !transform.position.y.is_finite()
         || !transform.scale.x.is_finite()

@@ -13,7 +13,7 @@ pub enum MaskOperation {
     Subtract,
 }
 
-/// The deliberately narrow set of coverage producers supported by Subphase 1.
+/// The deliberately narrow set of coverage producers supported by geometric masks.
 /// Future image and rendered-layer inputs can extend this enum without changing
 /// ownership or stack semantics.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -32,14 +32,38 @@ pub struct Mask {
     pub operation: MaskOperation,
     #[serde(default)]
     pub invert: bool,
-    #[serde(default = "default_strength")]
-    pub strength: f64,
+    #[serde(
+        default = "default_strength",
+        deserialize_with = "deserialize_scalar_property"
+    )]
+    pub strength: ScalarProperty,
+    #[serde(
+        default = "default_feather",
+        deserialize_with = "deserialize_scalar_property"
+    )]
+    pub feather: ScalarProperty,
     #[serde(default = "default_transform")]
     pub transform: Transform,
 }
 
-const fn default_strength() -> f64 {
-    1.0
+fn default_strength() -> ScalarProperty {
+    ScalarProperty::from_track(Track::constant(1.0))
+}
+
+fn deserialize_scalar_property<'de, D>(deserializer: D) -> Result<ScalarProperty, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum ScalarOrProperty {
+        Scalar(f64),
+        Property(ScalarProperty),
+    }
+    match ScalarOrProperty::deserialize(deserializer)? {
+        ScalarOrProperty::Scalar(value) => Ok(ScalarProperty::from_track(Track::constant(value))),
+        ScalarOrProperty::Property(property) => Ok(property),
+    }
 }
 
 fn default_transform() -> Transform {
@@ -50,6 +74,23 @@ fn default_transform() -> Transform {
         rotation_degrees: ScalarProperty::from_track(Track::constant(0.0)),
         component_modifiers: Default::default(),
     }
+}
+
+fn default_feather() -> ScalarProperty {
+    ScalarProperty::from_track(Track::constant(0.0))
+}
+
+/// Public feather radius in output pixels. Both renderers use this same cap
+/// and the same three-pass separable box approximation to a Gaussian.
+pub const MAX_MASK_FEATHER_PX: f32 = 256.0;
+pub const MASK_FEATHER_PASSES: usize = 3;
+
+/// Half-width of each box in the three-pass Gaussian approximation.
+/// `radius` remains the authored output-pixel softness, rather than an
+/// implementation-dependent kernel width.
+#[must_use]
+pub fn mask_feather_box_half_width(radius: f32) -> f32 {
+    radius.clamp(0.0, MAX_MASK_FEATHER_PX) / 3.0
 }
 
 /// Applies one normalized mask operation. Both inputs and the result are
@@ -95,7 +136,8 @@ mod tests {
             }),
             operation: MaskOperation::Intersect,
             invert: false,
-            strength: 1.0,
+            strength: default_strength(),
+            feather: default_feather(),
             transform: default_transform(),
         }
     }
@@ -141,5 +183,30 @@ mod tests {
             serde_json::to_value(decoded).expect("mask serializes"),
             value
         );
+    }
+
+    #[test]
+    fn feather_defaults_to_zero_and_round_trips_as_a_scalar_property() {
+        let value = serde_json::to_value(mask()).expect("mask serializes");
+        assert_eq!(value["feather"]["base_value"], 0.0);
+        let decoded: Mask = serde_json::from_value(serde_json::json!({
+            "id": "m",
+            "input": value["input"].clone(),
+            "feather": {"base_value": 12.5}
+        }))
+        .expect("mask with feather parses");
+        assert_eq!(decoded.feather.track.base_value, 12.5);
+    }
+
+    #[test]
+    fn feather_accepts_numeric_scalar_shorthand() {
+        let decoded: Mask = serde_json::from_value(serde_json::json!({
+            "id": "m",
+            "input": {"type": "shape", "geometry": {"type": "ellipse", "width": 10.0, "height": 20.0}, "fill": "#ffffff"},
+            "feather": 12.5
+        }))
+        .expect("numeric feather shorthand parses");
+        assert_eq!(decoded.feather.track.base_value, 12.5);
+        assert!(decoded.feather.track.keyframes.is_empty());
     }
 }

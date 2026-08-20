@@ -462,6 +462,7 @@ fn apply_masks(
             profiling_enabled,
         );
         surfaces.compose_mask_surface(layer.transform);
+        surfaces.feather_mask_surface(mask.feather);
         surfaces.combine_mask_coverage(mask.operation, mask.invert, mask.strength);
     }
     surfaces.apply_mask_coverage();

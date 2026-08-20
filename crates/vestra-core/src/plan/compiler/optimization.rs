@@ -277,6 +277,21 @@ fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
             .effects
             .iter()
             .any(|effect| effect.dependency == TemporalDependency::Dynamic),
+        layer.masks.iter().any(|mask| {
+            !static_track(&mask.strength.authored_track)
+                || mask.strength.has_modifiers()
+                || !static_track(&mask.feather.authored_track)
+                || mask.feather.has_modifiers()
+                || !static_track(&mask.transform.position)
+                || !static_track(&mask.transform.anchor)
+                || !static_track(&mask.transform.scale)
+                || !mask.transform.position_x_modifiers.is_empty()
+                || !mask.transform.position_y_modifiers.is_empty()
+                || !mask.transform.scale_x_modifiers.is_empty()
+                || !mask.transform.scale_y_modifiers.is_empty()
+                || !static_track(&mask.transform.rotation_degrees.authored_track)
+                || mask.transform.rotation_degrees.has_modifiers()
+        }),
     ] {
         if dynamic {
             dependency = dependency.combine(TemporalDependency::Dynamic);

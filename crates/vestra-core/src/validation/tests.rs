@@ -121,7 +121,7 @@ fn shape_mask(id: &str, width: f64, strength: f64) -> Value {
 }
 
 #[test]
-fn masks_validate_ids_geometry_strength_and_static_transform() {
+fn masks_validate_ids_geometry_strength_and_dynamic_transform() {
     let project = masked_project(json!([
         shape_mask("duplicate", 16.0, 2.0),
         shape_mask("duplicate", 0.0, 1.0),
@@ -130,6 +130,13 @@ fn masks_validate_ids_geometry_strength_and_static_transform() {
     assert!(codes.iter().any(|code| code == "VESTRA-MASK-ID"));
     assert!(codes.iter().any(|code| code == "VESTRA-MASK-STRENGTH"));
     assert!(codes.iter().any(|code| code == "VESTRA-SHAPE-GEOMETRY"));
+
+    let project = masked_project(json!([{
+        "id": "oversized-feather",
+        "input": {"type": "shape", "geometry": {"type": "ellipse", "width": 16.0, "height": 16.0}, "fill": "#ffffff"},
+        "feather": 257.0
+    }]));
+    assert!(has(&project, "VESTRA-MASK-FEATHER"));
 
     let project = masked_project(json!([{
         "id": "animated",
@@ -143,7 +150,7 @@ fn masks_validate_ids_geometry_strength_and_static_transform() {
             "rotation_degrees": {"base_value": 0.0, "keyframes": []}
         }
     }]));
-    assert!(has(&project, "VESTRA-MASK-STATIC-TRANSFORM"));
+    assert!(!has(&project, "VESTRA-MASK-STATIC-TRANSFORM"));
 }
 
 #[test]

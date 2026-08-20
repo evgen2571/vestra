@@ -22,6 +22,30 @@ fn combine(current: f32, value: f32) -> f32 {
     return clamp(current + (combined - current) * clamp(params.strength, 0.0, 1.0), 0.0, 1.0);
 }
 
+fn coverage_texel(coord: vec2<i32>) -> f32 {
+    if (coord.x < 0 || coord.y < 0 || coord.x >= i32(params.canvas.x) || coord.y >= i32(params.canvas.y)) {
+        return 0.0;
+    }
+    return textureLoad(mask, coord, 0).g;
+}
+
+fn bilinear_coverage(position: vec2<f32>) -> f32 {
+    let adjusted = position - vec2<f32>(0.5);
+    let base = vec2<i32>(floor(adjusted));
+    let fraction = adjusted - vec2<f32>(base);
+    let top = mix(
+        coverage_texel(base),
+        coverage_texel(base + vec2<i32>(1, 0)),
+        fraction.x,
+    );
+    let bottom = mix(
+        coverage_texel(base + vec2<i32>(0, 1)),
+        coverage_texel(base + vec2<i32>(1, 1)),
+        fraction.x,
+    );
+    return mix(top, bottom, fraction.y);
+}
+
 @compute @workgroup_size(8, 8)
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas.x || id.y >= params.canvas.y) { return; }
@@ -31,19 +55,7 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         dot(params.inverse_row0.xyz, vec3<f32>(point, 1.0)),
         dot(params.inverse_row1.xyz, vec3<f32>(point, 1.0)),
     );
-    let local_coord = vec2<i32>(floor(local));
-    let safe_coord = clamp(
-        local_coord,
-        vec2<i32>(0, 0),
-        vec2<i32>(i32(params.canvas.x) - 1, i32(params.canvas.y) - 1),
-    );
-    let value = select(
-        0.0,
-        textureLoad(mask, safe_coord, 0).a,
-        local_coord.x >= 0 && local_coord.y >= 0
-            && local_coord.x < i32(params.canvas.x)
-            && local_coord.y < i32(params.canvas.y),
-    );
+    let value = bilinear_coverage(local);
     let previous = textureLoad(mask, coord, 0);
     let first = (params.operation & 4u) != 0u;
     var current = previous.g;

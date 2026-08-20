@@ -8,8 +8,8 @@ layers, and sources, then render it through the CPU or WGPU backend.
 
 - A high-level Python editing API built around `Project`, `Composition`,
   `Layer`, and `Source`.
-- A canonical schema version 3 for projects that can be validated and rendered
-  with the `ve` CLI.
+- A canonical schema version 4 for projects that can be validated and rendered
+  with the `ve` CLI. Valid schema-3 projects remain supported as legacy input.
 - Sources for solid colours, images, video, shapes, text, particles, and other
   current project features.
 - CPU rendering and WGPU rendering through the same project and render model.
@@ -58,7 +58,8 @@ ve render project.json --output quickstart.mp4 --overwrite
 ```
 
 The [CLI quickstart](docs/getting-started/cli-quickstart.md) includes a tiny
-schema version 3 project you can copy and run.
+schema version 4 project you can copy and run. Valid schema-3 projects remain
+loadable as legacy input.
 
 ## Rendering backends
 

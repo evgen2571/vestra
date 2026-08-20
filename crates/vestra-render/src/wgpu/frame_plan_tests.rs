@@ -158,6 +158,86 @@ fn static_frame() -> EvaluatedFrame {
 }
 
 #[test]
+fn mask_operations_are_planned_after_effects_in_declared_order() {
+    let mut frame = static_frame();
+    frame.layers[0].source = EvaluatedSource::Shape {
+        shape_index: 0,
+        sizing: crate::plan::CompiledSizing::Original,
+    };
+    frame.layers[0].effects = vec![crate::plan::EvaluatedEffect::Brightness { amount: 0.1 }];
+    let transform = crate::animation::Transform2D::identity(
+        crate::domain::Point { x: 0.5, y: 0.5 },
+        crate::domain::Point { x: 0.5, y: 0.5 },
+    );
+    frame.layers[0].masks = vec![
+        crate::plan::EvaluatedMask {
+            shape_index: 1,
+            operation: crate::project::MaskOperation::Intersect,
+            invert: false,
+            strength: 1.0,
+            transform,
+        },
+        crate::plan::EvaluatedMask {
+            shape_index: 2,
+            operation: crate::project::MaskOperation::Replace,
+            invert: false,
+            strength: 1.0,
+            transform,
+        },
+    ];
+
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(3).expect("mask frame plan validates");
+    let positions = plan
+        .operations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, operation)| match operation {
+            GpuOperation::RenderRasterLayer { .. }
+            | GpuOperation::ApplyEffect { .. }
+            | GpuOperation::RenderMask { .. }
+            | GpuOperation::ApplyMask { .. }
+            | GpuOperation::UpdateMaskCoverage { .. }
+            | GpuOperation::CompositeLayer { .. } => Some((index, operation)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        positions[0].1,
+        GpuOperation::RenderRasterLayer { .. }
+    ));
+    assert!(matches!(positions[1].1, GpuOperation::ApplyEffect { .. }));
+    assert!(matches!(
+        positions[2].1,
+        GpuOperation::RenderMask { mask_index: 0, .. }
+    ));
+    assert!(matches!(
+        positions[3].1,
+        GpuOperation::ApplyMask { mask_index: 0, .. }
+    ));
+    assert!(matches!(
+        positions[4].1,
+        GpuOperation::UpdateMaskCoverage { mask_index: 0, .. }
+    ));
+    assert!(matches!(
+        positions[5].1,
+        GpuOperation::RenderMask { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[6].1,
+        GpuOperation::ApplyMask { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[7].1,
+        GpuOperation::UpdateMaskCoverage { mask_index: 1, .. }
+    ));
+    assert!(matches!(
+        positions[8].1,
+        GpuOperation::CompositeLayer { .. }
+    ));
+}
+
+#[test]
 fn nested_groups_use_isolated_depth_indexed_composition_targets() {
     let transform = crate::animation::Transform2D::identity(
         crate::domain::Point { x: 0.5, y: 0.5 },

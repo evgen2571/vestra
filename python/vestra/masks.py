@@ -7,7 +7,7 @@ from math import isfinite
 from typing import cast
 
 from .properties import Transform
-from .sources import Shape
+from .sources import Line, Shape
 
 
 class MaskOperation(str, Enum):
@@ -21,10 +21,14 @@ class Mask:
     __slots__ = ("_id", "_input", "_operation", "_invert", "_strength", "_transform")
 
     def __init__(self, identifier: str, source: Shape, operation: MaskOperation) -> None:
-        if not identifier:
-            raise ValueError("mask id must not be empty")
+        if not isinstance(identifier, str):
+            raise TypeError("mask id must be a string")
+        if not identifier or identifier.isspace():
+            raise ValueError("mask id must not be empty or whitespace-only")
         if not isinstance(source, Shape):
             raise TypeError("mask input must be a Shape")
+        if isinstance(source, Line):
+            raise TypeError("Line is not supported as a mask input")
         if not isinstance(operation, MaskOperation):
             raise TypeError("operation must be MaskOperation")
         self._id = identifier
@@ -80,7 +84,13 @@ class MaskCollection:
     @property
     def items(self) -> tuple[Mask, ...]: return tuple(self._items)
     def add(self, source: Shape, *, operation: MaskOperation = MaskOperation.INTERSECT, id: str | None = None) -> Mask:
-        identifier = f"mask-{len(self._items) + 1}" if id is None else id
+        if id is None:
+            number = 1
+            while f"mask-{number}" in self._ids:
+                number += 1
+            identifier = f"mask-{number}"
+        else:
+            identifier = id
         if identifier in self._ids: raise ValueError(f"duplicate mask id: {identifier!r}")
         mask = Mask(identifier, source, operation)
         self._items.append(mask)

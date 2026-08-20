@@ -28,6 +28,10 @@ before normalizing the in-memory project to version 4.
 
 The supported geometric inputs are `Rectangle`, `Ellipse`, `Circle`, and
 `Polygon`. `Line` remains a visible shape source but is rejected as a mask
-input. `feather` is measured in output pixels and defaults to `0`, preserving
-hard-mask behavior. Image alpha/luma inputs, text/video inputs, composition
-masks, and track mattes are deferred.
+input. `feather` is a non-negative Gaussian-like coverage radius in output
+pixels. It uses nine taps per separable pass, with sigma equal to `feather / 3`,
+clamps at `256` output pixels, preserves fractional values, and treats samples
+outside the canvas as zero. A value of `0` preserves hard-mask behavior.
+Feathering filters coverage before inversion, operation combination, and
+strength interpolation. Image alpha/luma inputs, text/video inputs,
+composition masks, and track mattes are deferred.

@@ -428,7 +428,7 @@ fn validate_with_depth(
                         errors.push(Diagnostic::error(
                             "VESTRA-MASK-SHAPE",
                             Category::Semantic,
-                            "Line geometry is not supported as a Subphase 1 mask input",
+                            "Line geometry is not supported as a mask input",
                             format!("{mask_path}/input/geometry"),
                         ));
                     }
@@ -465,9 +465,28 @@ fn validate_with_depth(
                 &format!("{mask_path}/feather"),
                 maximum_keyframes_per_track,
                 errors,
-                |value| value.is_finite() && *value >= 0.0,
+                |value| {
+                    value.is_finite()
+                        && (0.0..=f64::from(crate::project::MAX_MASK_FEATHER_PX)).contains(value)
+                },
                 has_authored_audio,
             );
+            if !mask.feather.track.base_value.is_finite()
+                || !(0.0..=f64::from(crate::project::MAX_MASK_FEATHER_PX))
+                    .contains(&mask.feather.track.base_value)
+                || mask.feather.track.keyframes.iter().any(|keyframe| {
+                    !keyframe.value.is_finite()
+                        || !(0.0..=f64::from(crate::project::MAX_MASK_FEATHER_PX))
+                            .contains(&keyframe.value)
+                })
+            {
+                errors.push(Diagnostic::error(
+                    "VESTRA-MASK-FEATHER",
+                    Category::Semantic,
+                    "mask feather must be finite and between 0 and 256 output pixels",
+                    format!("{mask_path}/feather"),
+                ));
+            }
             validate_transform(
                 &mask.transform,
                 clip.duration,

@@ -66,7 +66,8 @@ contracts.
 
 Each mask has an `id`, a narrow shape `input`, `operation` (`replace`,
 `intersect`, `union`, or `subtract`, default `intersect`), `invert` (default
-`false`), `strength` (default `1`), and a static mask-local `transform`.
+`false`), `strength` (default `1`), `feather` (default `0`), and a mask-local
+`transform`. These use the normal tracks, modifiers, and signal bindings.
 Mask transforms are local to the owning layer and follow its presentation
 transform. Only existing shape geometry inputs are supported in schema v4.
 

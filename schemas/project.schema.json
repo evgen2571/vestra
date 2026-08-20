@@ -1373,6 +1373,7 @@
           },
           "oneOf": [
             {
+              "maximum": 256.0,
               "minimum": 0.0,
               "type": "number"
             },

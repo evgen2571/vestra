@@ -35,7 +35,7 @@ class Mask:
         self._operation = operation
         self._invert = False
         self._strength = BindableScalarProperty(1.0, minimum=0.0, maximum=1.0)
-        self._feather = BindableScalarProperty(feather, minimum=0.0)
+        self._feather = BindableScalarProperty(feather, minimum=0.0, maximum=256.0)
         self._transform = Transform()
 
     @property
@@ -74,17 +74,20 @@ class Mask:
     def transform(self) -> Transform: return self._transform
 
     def to_canonical(self) -> dict[str, object]:
+        scale = self.transform.scale.to_canonical()
+        scale.pop("bindings", None)
         transform = {
             "position": self.transform.position.to_canonical(),
             "anchor": self.transform.anchor.to_canonical(),
-            "scale": self.transform.scale.to_canonical(),
+            "scale": scale,
             "rotation_degrees": self.transform.rotation_degrees.to_canonical(),
         }
+        uniform_scale_bindings = list(self.transform.scale.bindings)
         components = {
             "position_x": self.transform.position_x.bindings,
             "position_y": self.transform.position_y.bindings,
-            "scale_x": self.transform.scale_x.bindings,
-            "scale_y": self.transform.scale_y.bindings,
+            "scale_x": tuple(uniform_scale_bindings) + self.transform.scale_x.bindings,
+            "scale_y": tuple(uniform_scale_bindings) + self.transform.scale_y.bindings,
         }
         if any(components.values()):
             transform["component_modifiers"] = {

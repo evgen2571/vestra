@@ -26,7 +26,10 @@ pub use audio::{
 };
 pub use colour::parse_colour;
 pub use effects::{Effect, ZoomBlurDirection};
-pub use masks::{Mask, MaskInput, MaskOperation, apply_mask_operation};
+pub use masks::{
+    MASK_FEATHER_TAP_COUNT, MAX_MASK_FEATHER_PX, Mask, MaskInput, MaskOperation,
+    apply_mask_operation, mask_feather_sample_offset, mask_feather_weight,
+};
 pub use output::{DurationMode, FrameRate, Output, Quality};
 pub use presets::Preset;
 pub use project::Project;

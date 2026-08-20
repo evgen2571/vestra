@@ -275,7 +275,10 @@ pub(super) fn compile(
                 feather: super::signals::compile_property(
                     &mask.feather,
                     &format!("{}/mask-feather", clip.id),
-                    ScalarPropertyConstraint::NonNegative,
+                    ScalarPropertyConstraint::ClosedRange {
+                        min: 0.0,
+                        max: f64::from(crate::project::MAX_MASK_FEATHER_PX),
+                    },
                     scalar_signal_interner,
                 )?,
                 transform: compile_transform_tracks(

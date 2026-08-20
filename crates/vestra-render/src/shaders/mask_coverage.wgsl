@@ -47,21 +47,28 @@ fn bilinear_coverage(position: vec2<f32>) -> f32 {
 }
 
 fn feathered_coverage(position: vec2<f32>) -> f32 {
-    let radius = clamp(params.feather, 0.0, 64.0);
+    let radius = clamp(params.feather, 0.0, 256.0);
     if (radius <= 0.0) { return bilinear_coverage(position); }
-    let step_x = vec2<f32>(params.inverse_row0.x, params.inverse_row1.x) * radius;
-    let step_y = vec2<f32>(params.inverse_row0.y, params.inverse_row1.y) * radius;
-    return (
-        bilinear_coverage(position - step_x - step_y)
-        + bilinear_coverage(position - step_x)
-        + bilinear_coverage(position - step_x + step_y)
-        + bilinear_coverage(position - step_y)
-        + bilinear_coverage(position)
-        + bilinear_coverage(position + step_y)
-        + bilinear_coverage(position + step_x - step_y)
-        + bilinear_coverage(position + step_x)
-        + bilinear_coverage(position + step_x + step_y)
-    ) / 9.0;
+    let step_x = vec2<f32>(params.inverse_row0.x, params.inverse_row1.x);
+    let step_y = vec2<f32>(params.inverse_row0.y, params.inverse_row1.y);
+    let sigma = radius / 3.0;
+    var total = 0.0;
+    var weight_total = 0.0;
+    for (var y = -4; y <= 4; y++) {
+        let offset_y = f32(y) * radius / 4.0;
+        let weight_y = exp(-0.5 * pow(offset_y / sigma, 2.0));
+        var horizontal = 0.0;
+        var horizontal_weight = 0.0;
+        for (var x = -4; x <= 4; x++) {
+            let offset_x = f32(x) * radius / 4.0;
+            let weight_x = exp(-0.5 * pow(offset_x / sigma, 2.0));
+            horizontal += weight_x * bilinear_coverage(position + step_y * offset_y + step_x * offset_x);
+            horizontal_weight += weight_x;
+        }
+        total += weight_y * horizontal / horizontal_weight;
+        weight_total += weight_y;
+    }
+    return total / weight_total;
 }
 
 @compute @workgroup_size(8, 8)

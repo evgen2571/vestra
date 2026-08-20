@@ -20,8 +20,8 @@ The workspace has six crates:
 | `vestra-python` | PyO3 native bindings for the SDK | `crates/vestra-python/src/`, `python/vestra/_native.pyi` |
 | `vestra-cli` | `ve` Clap surface, logging, terminal/JSON output, progress, reports and exit behavior | `crates/vestra-cli/src/`, `crates/vestra-cli/tests/` |
 
-The pre-existing repository has 8,691 lines in `docs/**/*.md`; `README.md` is
-660 lines. A previous validation snapshot estimated the broader documentation
+The pre-existing repository had approximately 8,276 lines in `docs/**/*.md`;
+`README.md` was 660 lines. A previous validation snapshot estimated the broader documentation
 material at about 9,566 lines because it included audit/data material. The
 important fact is the shape of the tree: current-intent pages and phase/audit
 records share the same top-level area, and there is no reader-oriented
@@ -135,7 +135,7 @@ rewriting their conclusions.
 | Existing files | Classification | Target |
 | --- | --- | --- |
 | `docs/audits/effects-ready-v1.tsv`, `phase3.tsv`, `phase4.tsv`, `phase-f.tsv` | `GENERATED_OR_DATA` | `history/audits/` or `history/benchmarks/` after identifying their producer |
-| `docs/audits/phase5-finalization.md`, `phase6a.md`, `phase6b.md`, `phase6c.md`, `phase7a.md`, `phase7a0.md`, `phase7b.md`, `phase7c.md`, `phase8.md`, `phase8-authoring-conformance.md`, `phase8a.md`, `phase8b.md`, `phase8c-a.md`, `phase8c-b.md`, `phase8c-c.md`, `phase8c-d.md`, `phase8c-e.md`, `phase9a.md`, `phase9b.md`, `phase9c.md`, `phase9d.md`, `phase10a.md`, `phase10b.md`, `phase10c.md`, `phase10d.md` | `ARCHIVE_MIGRATION` | `history/audits/` |
+| `docs/audits/phase5-finalization.md`, `phase6a.md`, `phase6b.md`, `phase6c.md`, `phase7a.md`, `phase7a0.md`, `phase7b.md`, `phase7c.md`, `phase8.md`, `phase8-authoring-conformance.md`, `phase8a.md`, `phase8b.md`, `phase8c-a.md`, `phase8c-b.md`, `phase8c-c.md`, `phase8c-d.md`, `phase8c-e.md`, `phase9a.md`, `phase9b.md`, `phase9c.md`, `phase9d.md`, `phase10a.md`, `phase10b.md`, `phase10c.md`, `phase10d.md` | `ARCHIVE_AUDIT` | `history/audits/` |
 | `docs/audits/cpu-alpha-composition-2026-08-13.md`, `cpu-chromatic-aberration-2026-08-13.md`, `cpu-color-adjust-lut-2026-08-12.md`, `cpu-gaussian-bloom-algorithm-2026-08-13.md`, `cpu-gaussian-kernel-2026-08-12.md`, `cpu-rasterization-2026-08-12.md`, `cpu-sharpen-isolation-color-adjust-2026-08-12.md`, `cpu-source-raster-stage2-2026-08-13.md`, `cpu-zoom-blur-2026-08-12.md`, `cpu-zoom-blur-stage2-2026-08-13.md`, `multicore-cpu-renderer.md`, `static-visual-fast-path.md` | `ARCHIVE_BENCHMARK` | `history/benchmarks/` or `history/audits/`, retaining the distinction between measured results and implementation review |
 | `docs/audits/performance-baseline-2026-08-12.md`, `performance-phase-final-2026-08-13.md` | `ARCHIVE_BENCHMARK` | `history/benchmarks/` |
 | `docs/audits/procedural-signal-audio-modulation.md`, `spectrum2d-foundation.md`, `spectrum2d-layouts-styles-v1.md`, `visual-sources-v1e-performance.md` | `ARCHIVE_AUDIT` | `history/audits/`, with any raw benchmark data kept beside the report |
@@ -248,9 +248,9 @@ appears once here.
 | `docs/audits/performance-baseline-2026-08-12.md` | `ARCHIVE_BENCHMARK` |
 | `docs/audits/performance-phase-final-2026-08-13.md` | `ARCHIVE_BENCHMARK` |
 | `docs/audits/phase-f.tsv` | `GENERATED_OR_DATA` |
-| `docs/audits/phase10a.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase10b.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase10c.md` | `ARCHIVE_MIGRATION` |
+| `docs/audits/phase10a.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase10b.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase10c.md` | `ARCHIVE_AUDIT` |
 | `docs/audits/phase10d-effect-results.json` | `GENERATED_OR_DATA` |
 | `docs/audits/phase10d-layer-results.json` | `GENERATED_OR_DATA` |
 | `docs/audits/phase10d-layer25-results.json` | `GENERATED_OR_DATA` |
@@ -259,30 +259,30 @@ appears once here.
 | `docs/audits/phase10d-random-results.json` | `GENERATED_OR_DATA` |
 | `docs/audits/phase10d-repeated-results.json` | `GENERATED_OR_DATA` |
 | `docs/audits/phase10d-results.json` | `GENERATED_OR_DATA` |
-| `docs/audits/phase10d.md` | `ARCHIVE_MIGRATION` |
+| `docs/audits/phase10d.md` | `ARCHIVE_AUDIT` |
 | `docs/audits/phase3.tsv` | `GENERATED_OR_DATA` |
 | `docs/audits/phase4.tsv` | `GENERATED_OR_DATA` |
-| `docs/audits/phase5-finalization.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase6a.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase6b.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase6c.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase7a.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase7a0.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase7b.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase7c.md` | `ARCHIVE_MIGRATION` |
+| `docs/audits/phase5-finalization.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase6a.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase6b.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase6c.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase7a.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase7a0.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase7b.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase7c.md` | `ARCHIVE_AUDIT` |
 | `docs/audits/phase8-authoring-conformance.md` | `ARCHIVE_AUDIT` |
-| `docs/audits/phase8.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8a.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8b.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8c-a.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8c-b.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8c-c.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8c-d.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase8c-e.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase9a.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase9b.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase9c.md` | `ARCHIVE_MIGRATION` |
-| `docs/audits/phase9d.md` | `ARCHIVE_MIGRATION` |
+| `docs/audits/phase8.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8a.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8b.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8c-a.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8c-b.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8c-c.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8c-d.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase8c-e.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase9a.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase9b.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase9c.md` | `ARCHIVE_AUDIT` |
+| `docs/audits/phase9d.md` | `ARCHIVE_AUDIT` |
 | `docs/audits/procedural-signal-audio-modulation-benchmarks.json` | `GENERATED_OR_DATA` |
 | `docs/audits/procedural-signal-audio-modulation.md` | `ARCHIVE_AUDIT` |
 | `docs/audits/spectrum2d-foundation-benchmarks.json` | `GENERATED_OR_DATA` |

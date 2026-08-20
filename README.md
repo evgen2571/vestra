@@ -76,6 +76,9 @@ task. Useful entry points include:
 - [Installation](docs/getting-started/installation.md)
 - [Python quickstart](docs/getting-started/python-quickstart.md)
 - [CLI quickstart](docs/getting-started/cli-quickstart.md)
+- [Authoring model](docs/concepts/authoring-model.md)
+- [Python rendering guide](docs/guides/python/rendering-and-preparation.md)
+- [CLI rendering guide](docs/guides/cli/rendering.md)
 - [Canonical project schema](schemas/project.schema.json)
 - [Runnable examples](examples/)
 

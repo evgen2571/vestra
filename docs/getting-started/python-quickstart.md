@@ -62,6 +62,7 @@ runtime from the [installation guide](installation.md).
 
 ## Next steps
 
-Return to the [documentation index](../index.md) for the next guides. The
-existing repository examples show how to add images, video, shapes, text,
-effects, transitions, and audio after this first render.
+Continue with [projects and compositions](../guides/python/projects-and-compositions.md),
+then use the [sources and layers guide](../guides/python/sources-and-layers.md)
+to build a larger edit. The Python guides cover animation, effects,
+transitions, audio, nesting, and preparation.

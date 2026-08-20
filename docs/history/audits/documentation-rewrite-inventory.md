@@ -123,7 +123,8 @@ phase deliberately does not make one.
 | `crates/vestra/src/project/validated.rs` diagnostic message | Unsupported projects are told the supported version is 2. | The same loader rejects values other than 3; schema and tests use 3. | Product/source defect to fix separately. Record now; do not change in this documentation phase. |
 
 The last item is code, not documentation, but it is a direct source/documentation
-inconsistency and must be resolved before publishing a project-format reference.
+inconsistency. Resolve the schema-version diagnostic inconsistency before
+`reference/project-format.md` is finalized as normative documentation.
 
 ## Historical material classification
 

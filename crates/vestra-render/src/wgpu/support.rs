@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn current_advanced_transition_preset_and_post_effect_plan_does_not_force_cpu_fallback() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/effects-ready-v1.json"),
+            std::path::Path::new("examples/projects/effects-ready.json"),
             &ValidationOptions {
                 check_backend: false,
                 ..ValidationOptions::default()
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn unused_unsupported_kernel_does_not_disable_wgpu_validation() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/effects-ready-v1.json"),
+            std::path::Path::new("examples/projects/effects-ready.json"),
             &ValidationOptions {
                 check_backend: false,
                 ..ValidationOptions::default()

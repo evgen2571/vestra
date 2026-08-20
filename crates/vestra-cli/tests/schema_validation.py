@@ -126,6 +126,35 @@ image_without_transform = copy.deepcopy(project)
 image_without_transform["visual"]["clips"][0].pop("transform")
 assert errors(image_without_transform), "image clips require transforms"
 
+video_without_transform = copy.deepcopy(project)
+video_without_transform["assets"][0]["type"] = "video"
+video_without_transform["visual"]["clips"][0]["source"] = {"type": "video", "asset": "red"}
+video_without_transform["visual"]["clips"][0].pop("transform")
+assert not errors(video_without_transform), "video clips may omit transforms"
+video_with_transform = copy.deepcopy(video_without_transform)
+video_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert not errors(video_with_transform), "video clips may include transforms"
+
+shape_without_transform = copy.deepcopy(solid_colour)
+shape_without_transform["visual"]["clips"][0]["source"] = {
+    "type": "shape",
+    "geometry": {"type": "rectangle", "width": 10, "height": 10},
+}
+assert not errors(shape_without_transform), "shape clips may omit transforms"
+shape_with_transform = copy.deepcopy(shape_without_transform)
+shape_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert not errors(shape_with_transform), "shape clips may include transforms"
+
+text_without_transform = copy.deepcopy(solid_colour)
+text_without_transform["assets"] = [{"id": "font", "type": "font", "source": "font.ttf"}]
+text_without_transform["visual"]["clips"][0]["source"] = {
+    "type": "text", "text": "Vestra", "font": "font", "font_size": 12, "fill": "#ffffff",
+}
+assert not errors(text_without_transform), "text clips may omit transforms"
+text_with_transform = copy.deepcopy(text_without_transform)
+text_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
+assert not errors(text_with_transform), "text clips may include transforms"
+
 solid_with_transform = copy.deepcopy(solid_colour)
 solid_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert errors(solid_with_transform), "solid colours must not accept transforms"

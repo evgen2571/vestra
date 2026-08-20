@@ -1,8 +1,8 @@
 {
   "schema_version": 3,
-  "name": "Effects-ready v1",
+  "name": "Effects showcase",
   "output": {
-    "path": "../output/effects-ready-v1.mp4",
+    "path": "../output/effects-ready.mp4",
     "width": 720,
     "height": 1280,
     "frame_rate": 30,

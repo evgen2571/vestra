@@ -1,5 +1,9 @@
 # Contributing
 
-Keep changes small and preserve crate boundaries. Use CodeGraph first when an unfamiliar subsystem is involved, then use targeted source/test inspection. Run formatting and relevant checks before proposing a change. Public Rust/Python APIs, stubs, canonical JSON, schema, CLI contracts, reports, time conversions, and diagnostics are compatibility-sensitive.
+Start with the smallest change that makes the intended behavior true. Preserve the current crate boundaries: canonical model and semantics in core, pixels/resources in render, FFmpeg and output paths in media, orchestration in the SDK, and presentation in CLI/Python. Use CodeGraph for an unfamiliar execution path, then inspect the named source and tests rather than searching the whole tree by habit.
 
-Keep CPU and WGPU semantics aligned, place FFmpeg/process details in media I/O, and update tests and current documentation with a public contract change. Use [testing](testing.md) and [GPU validation](gpu-validation.md) for commands and hardware policy.
+Several interfaces are compatibility-sensitive: public Rust and Python APIs, `_native.pyi`, canonical JSON/schema, CLI options and reports, diagnostics, time/frame/sample conversion and published output behavior. A source/effect/transition change usually needs model, compiler/evaluator, CPU, WGPU, Python/lowering, schema and reference work. Do not claim CPU/WGPU parity from matching dispatch arms alone.
+
+Keep media and process details behind `vestra-media`; callers should ask the SDK to preflight and render rather than reimplementing FFmpeg checks. Keep validation and preflight distinct. Semantic `validate()` does not read assets, while render-target preflight may.
+
+Before proposing a change, run formatting plus focused checks and use the relevant broader command from [Testing](testing.md). Recheck generated schema, public exports/stubs and current CLI help when those contracts change. Hardware WGPU claims require the procedure in [GPU validation](gpu-validation.md). Update current documentation in the same change when user-visible behavior changes, and inspect the final diff for accidental unrelated edits.

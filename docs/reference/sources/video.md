@@ -1,18 +1,18 @@
 # Video source
 
-`Video(path, *, sizing=None, crop=None)` accepts a non-empty string path.
-Its canonical tag is `video`; path resolution, dimensions, duration, and decode
-readiness belong to preflight/preparation. `sizing` and `crop` have the same
-contract as [Image](image.md): `original`, `fit`, `cover`, or `Sizing` for the
-additional scale/stretch forms, plus a mutable `CropProperty`.
+```python
+Video(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", "cover"] | None = None,
+      crop: Crop | CropProperty | None = None)
+```
 
-The visual layer supplies project-timeline `start` and `duration`. Canonical
-video clips additionally carry source trim and playback settings where authored
-through the canonical builder. Source-media duration and coded dimensions are
-not constructor arguments and must be probed. Layer transform, animation,
-effects, and transitions apply as for images; video is a direct transition
-endpoint.
+`path` must be a non-empty text path. `sizing` and `crop` have the exact [Image](image.md) contract, including `Sizing.scale`/`Sizing.stretch` and normalized `Crop`. The high-level constructor does not accept source trim or playback rate: those belong to the layer placement.
 
-CPU and WGPU render paths consume decoded video frames, subject to FFmpeg,
-codec, and media availability. The public limitation is operational: a valid
-path can still fail preflight for an unsupported stream or missing media tool.
+```python
+composition.add(video, *, start=0, duration=None, source_start=0.0,
+                playback_rate=1.0, z=0, visible=True, opacity=1.0,
+                id=None, name=None, blend_mode=BlendMode.NORMAL)
+```
+
+`start` and `duration` are project or owning-composition local seconds. `source_start` is source-media seconds and may be zero; `playback_rate` is a finite positive multiplier. If `duration=None`, a `Video` layer probes the file immediately to derive the available media duration after `source_start`, divided by playback rate. Provide `duration` to avoid that authoring-time probe. Canonical video clips carry this placement timing; coded duration and dimensions remain media facts gathered by preflight/preparation.
+
+Video is a direct transform and transition endpoint. CPU and WGPU consume decoded frames after media preparation. A valid path can still fail preflight for unsupported/corrupt media, missing tools or an unavailable decoder.

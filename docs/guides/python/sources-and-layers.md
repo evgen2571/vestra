@@ -23,6 +23,11 @@ classes such as `Rectangle`, `Ellipse`, `Circle`, `Line`, and `Polygon`.
 `Text` requires an explicit font file. Image and video sources can carry
 sizing and crop properties.
 
+`Color`/`SolidColor` fills the canvas in canonical JSON, so it has no direct
+canonical transform or transition endpoint. In Python, its layer can still be
+transformed or used in a transition. The authoring API supplies the needed
+presentation wrapper when it lowers the project.
+
 Configure the returned layer for the edit:
 
 ```python

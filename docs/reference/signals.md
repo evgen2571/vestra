@@ -10,7 +10,9 @@ returns a new `ScalarSignal`; it does not mutate the input.
 | `signal.peak()` | `peak` | Master peak value. |
 | `signal.band(min_hz, max_hz)` | `band_energy` | Master band energy in Hz. `0 <= min_hz < max_hz <= 24000`. `band_energy` is an alias. |
 
-The canonical signal begins with `{"source":{"type":"audio","tap":"master","feature":...}}`.
+The canonical signal has `source.type` set to `audio`, `source.tap` set to
+`master`, and `source.feature` set to an `rms`, `peak`, or `band_energy`
+feature object.
 The optional `transforms` array preserves call order.
 
 | Method | Canonical transform | Validation |
@@ -24,7 +26,7 @@ The optional `transforms` array preserves call order.
 Signals are evaluated in project-timeline time from master audio. Preparation
 must obtain usable audio analysis; an audio-less project cannot satisfy a signal
 binding. Bind a signal to a `BindableScalarProperty` with
-`property.bind(signal, operation=...)`. The operations are `replace`, `add`,
+`property.bind(signal, operation="replace")`. The operations are `replace`, `add`,
 and `multiply`: replace supplies the signal value, add adds it to the property
 value, and multiply multiplies the property value by it. The target property
 still enforces its own range after evaluation.

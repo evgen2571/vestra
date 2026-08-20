@@ -1,5 +1,25 @@
 # GPU validation
 
-WGPU selection is not hardware validation. Discover adapters first with `cargo run -p vestra-render --example wgpu_adapters --all-features`, identify a discrete or integrated adapter, select its graphics backend, then run validation and report requested backend, actual graphics backend, adapter name, and hardware/software classification.
+WGPU execution is not hardware-GPU validation. A WGPU backend can select a software CPU adapter. Every hardware result must name the requested graphics API, actual graphics backend, adapter name and device classification reported by Vestra/WGPU.
 
-In WSL, Vulkan can resolve to llvmpipe while GL/GLES resolves through D3D12 to NVIDIA hardware. Do not use llvmpipe as a hardware result. After discovery, `VESTRA_WGPU_BACKEND=gl scripts/verify-wgpu-hardware.sh` requires a classified hardware adapter. `scripts/verify-wgpu.sh` is software correctness validation only. Software adapters can test fallback correctness, never hardware performance.
+1. Discover adapters:
+
+   ```bash
+   cargo run -p vestra-render --example wgpu_adapters --all-features
+   ```
+
+2. Read the `backend=`, adapter and `classification=` fields. A `discrete_gpu` or `integrated_gpu` classification is a hardware candidate. `cpu`/software classifications are not.
+3. Choose the graphics API that exposes the hardware adapter and set it with `VESTRA_WGPU_BACKEND`, or let strict hardware verification select the first discovered hardware backend.
+4. Run the appropriate mode and retain its discovery output with the test result.
+
+```bash
+./scripts/verify-wgpu.sh --list
+VESTRA_WGPU_BACKEND=vulkan ./scripts/verify-wgpu.sh --software
+VESTRA_WGPU_BACKEND=gl ./scripts/verify-wgpu.sh --hardware
+```
+
+`--software` selects the first discovered backend when none is requested and makes no hardware claim. It runs the general workspace suite without strict WGPU flags, then scopes `VESTRA_REQUIRE_WGPU=1` to renderer tests that need an adapter. `--hardware` rejects the selected backend unless discovery reports a `discrete_gpu` or `integrated_gpu`. It runs the general workspace suite without strict hardware assumptions, then scopes `VESTRA_REQUIRE_WGPU=1` and `VESTRA_REQUIRE_HARDWARE_WGPU=1` to adapter-dependent renderer tests and the strict CLI render regression. When no backend is supplied, `--hardware` selects the first discovered proven-hardware backend. It reports the selected discovery record before testing.
+
+On some WSL installations, `vulkan` exposes llvmpipe while `gl`/GLES reaches NVIDIA through D3D12. That is an environment-specific result, not a universal rule. Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available, then trust adapter discovery. Set Vestra's `VESTRA_WGPU_BACKEND=gl` when the discovered GL path exposes the required hardware. Vestra does not read `WGPU_BACKEND` as a backend-selection variable.
+
+llvmpipe and Lavapipe are useful software fallback/correctness adapters. They cannot support a hardware-performance or hardware-correctness claim. If discovery exposes only software adapters, report hardware validation as blocked. User selection details are in [Backends](../reference/backends.md).

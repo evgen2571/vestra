@@ -1406,4 +1406,142 @@ mod tests {
             .expect("Spectrum2D properties diagnostic");
         assert!(!property.message.contains("solid-color"));
     }
+
+    #[test]
+    fn transform_rules_match_each_visual_source_capability() {
+        let template: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../examples/projects/animation-effects.json"
+        ))
+        .expect("fixture project");
+        let transform = template["visual"]["clips"][0]["transform"].clone();
+
+        for (name, source, assets, transform_present, expected_code) in [
+            (
+                "image without transform",
+                serde_json::json!({"type": "image", "asset": "image"}),
+                serde_json::json!([{"id": "image", "type": "image", "source": "image.png"}]),
+                false,
+                Some("VESTRA-IMAGE-TRANSFORM"),
+            ),
+            (
+                "image with transform",
+                serde_json::json!({"type": "image", "asset": "image"}),
+                serde_json::json!([{"id": "image", "type": "image", "source": "image.png"}]),
+                true,
+                None,
+            ),
+            (
+                "video without transform",
+                serde_json::json!({"type": "video", "asset": "video"}),
+                serde_json::json!([{"id": "video", "type": "video", "source": "video.mp4"}]),
+                false,
+                None,
+            ),
+            (
+                "video with transform",
+                serde_json::json!({"type": "video", "asset": "video"}),
+                serde_json::json!([{"id": "video", "type": "video", "source": "video.mp4"}]),
+                true,
+                None,
+            ),
+            (
+                "shape without transform",
+                serde_json::json!({"type": "shape", "geometry": {"type": "rectangle", "width": 1, "height": 1}}),
+                serde_json::json!([]),
+                false,
+                None,
+            ),
+            (
+                "shape with transform",
+                serde_json::json!({"type": "shape", "geometry": {"type": "rectangle", "width": 1, "height": 1}}),
+                serde_json::json!([]),
+                true,
+                None,
+            ),
+            (
+                "text without transform",
+                serde_json::json!({"type": "text", "text": "Vestra", "font": "font", "font_size": 12, "fill": "#ffffff"}),
+                serde_json::json!([{"id": "font", "type": "font", "source": "font.ttf"}]),
+                false,
+                None,
+            ),
+            (
+                "text with transform",
+                serde_json::json!({"type": "text", "text": "Vestra", "font": "font", "font_size": 12, "fill": "#ffffff"}),
+                serde_json::json!([{"id": "font", "type": "font", "source": "font.ttf"}]),
+                true,
+                None,
+            ),
+            (
+                "group without transform",
+                serde_json::json!({"type": "group", "clips": []}),
+                serde_json::json!([]),
+                false,
+                None,
+            ),
+            (
+                "group with transform",
+                serde_json::json!({"type": "group", "clips": []}),
+                serde_json::json!([]),
+                true,
+                None,
+            ),
+            (
+                "solid color with transform",
+                serde_json::json!({"type": "solid_color", "colour": "#112233"}),
+                serde_json::json!([]),
+                true,
+                Some("VESTRA-SOLID-TRANSFORM"),
+            ),
+            (
+                "spectrum2d with transform",
+                serde_json::json!({"type": "spectrum2d"}),
+                serde_json::json!([]),
+                true,
+                Some("VESTRA-SPECTRUM2D-TRANSFORM"),
+            ),
+            (
+                "particle system with transform",
+                serde_json::json!({"type": "particle_system"}),
+                serde_json::json!([]),
+                true,
+                Some("VESTRA-PARTICLE-SYSTEM-TRANSFORM"),
+            ),
+        ] {
+            let mut project = template.clone();
+            project["assets"] = assets;
+            project["visual"]["clips"] = serde_json::json!([{
+                "id": "clip",
+                "source": source,
+                "start": 0,
+                "duration": 1,
+                "layer": 0,
+                "opacity": {"base_value": 1},
+            }]);
+            project["visual"]["transitions"] = serde_json::json!([]);
+            project["visual"]["flashes"] = serde_json::json!([]);
+            project["visual"]["post_effects"] = serde_json::json!([]);
+            if transform_present {
+                project["visual"]["clips"][0]["transform"] = transform.clone();
+            }
+
+            let project = serde_json::from_value::<crate::project::Project>(project)
+                .expect("transform matrix fixture parses");
+            let report =
+                crate::validation::validate(&project, crate::validation::ResourceLimits::default());
+            let transform_errors = report
+                .diagnostics()
+                .iter()
+                .filter(|diagnostic| {
+                    diagnostic.pointer.as_deref() == Some("/visual/clips/0/transform")
+                })
+                .map(|diagnostic| diagnostic.code.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                transform_errors.as_slice(),
+                expected_code.as_slice(),
+                "{name}"
+            );
+        }
+    }
 }

@@ -1,20 +1,21 @@
 # Effects
 
-Visual effects are ordered canonical objects with `id`, `type`, and descriptor parameters. Python classes in `vestra.effects` lower to that form. The Rust descriptor catalog supplies Python metadata and generated-schema branches. Scalar-property parameters accept keyframes and signal bindings; plain tracks accept keyframes but not signal bindings.
+Visual effects are ordered canonical objects with `id`, `type` and descriptor parameters. Python classes in `vestra.effects` lower to them. The Rust descriptor catalog supplies canonical validation and generated-schema branches. No visual-effect constructor has an implicit parameter default unless the table says so: required values must be supplied. A scalar property accepts a number or `ScalarProperty` and may use keyframes/signal bindings; a plain track accepts keyframes but not signal bindings.
 
-| Canonical type | Parameters | Scope |
+| Python class / canonical type | Required parameters and limits | Scope |
 | --- | --- | --- |
-| `brightness`, `contrast`, `saturation` | `amount`, finite scalar | clip/global |
-| `tint` | `colour`, `amount` 0..1 | clip/global |
-| `gaussian_blur` | `radius` 0..32 px | clip/global |
-| `directional_blur` | `radius` 0..32 px, finite `angle_degrees` | clip/global |
-| `zoom_blur` | `radius` 0..32 px, `samples` integer 2..32, normalized `anchor`, `direction` `centered`/`inward`/`outward`, default `centered` | clip/global |
-| `glow`, `bloom` | `threshold` 0..1, `radius` 0..32 px, `intensity` 0..4; glow also has `colour` | clip/global |
-| `chromatic_aberration` | `amount` 0..32 px, finite `angle_degrees` | clip/global |
-| `vignette` | `amount` 0..1, `radius` 0..2, `softness` >0 through 2, `colour` | clip/global |
-| `sharpen` | `amount` 0..4, `radius` 0..16 px | clip/global |
-| `color_adjust` | `exposure` -8..8, `gamma` >0 through 8, `black_point` 0..<1, `white_point` >0..1 | clip/global |
-| `camera_shake` | optional `active_interval`; non-negative position/rotation/scale, positive `frequency`, u64 `seed`, non-negative `attack`, positive `decay` | clip only |
-| `motion_blur` | non-negative `intensity`, `shutter_angle` 0..360 degrees, `max_radius` 0..32 px, `samples` integer 2..32 | clip only |
+| `Brightness`, `Contrast`, `Saturation` | `amount`: finite scalar. | clip/global |
+| `Tint` | `colour`, `amount`: 0..1 scalar. | clip/global |
+| `GaussianBlur` | `radius`: 0..32 px scalar. | clip/global |
+| `DirectionalBlur` | `radius`: 0..32 px scalar, `angle_degrees`: finite scalar. | clip/global |
+| `ZoomBlur` | `radius`: 0..32 px scalar, `samples`: integer 2..32, `anchor`: normalized point, `direction=ZoomBlurDirection.CENTERED` (`centered`, `inward`, `outward`). | clip/global |
+| `Glow` | `threshold`: 0..1, `radius`: 0..32 px, `intensity`: 0..4 scalars, `colour`. | clip/global |
+| `Bloom` | `threshold`: 0..1, `radius`: 0..32 px, `intensity`: 0..4 scalars. | clip/global |
+| `ChromaticAberration` | `amount`: 0..32 px scalar, `angle_degrees`: finite scalar. | clip/global |
+| `Vignette` | `amount`: 0..1 scalar, `radius`: 0..2 scalar, `softness`: plain track in `(0, 2]`, `colour`. | clip/global |
+| `Sharpen` | `amount`: 0..4 scalar, `radius`: 0..16 px scalar. | clip/global |
+| `ColorAdjust` | `exposure`: -8..8 scalar, `gamma`: `(0, 8]` scalar, `black_point`: plain track `[0, 1)`, `white_point`: plain track `(0, 1]`. | clip/global |
+| `CameraShake` | `position_amount`, `rotation_degrees`, `scale_amount`: non-negative scalars; `frequency`: positive scalar; `seed`: unsigned integer; `attack`: non-negative seconds; `decay`: positive seconds; `active_interval=ActiveInterval()`. | clip only |
+| `MotionBlur` | `intensity`: non-negative scalar, `shutter_angle`: 0..360 degrees scalar, `max_radius`: 0..32 px scalar, `samples`: integer 2..32. | clip only |
 
-Numbers must be finite. Parameters without a stated default are required. Stack order is execution order. Validation rejects duplicate ids, bad scopes/ranges, malformed tracks, and invalid active intervals. CPU and WGPU implement this catalog through their effect-pass paths; exact parity for a particular effect beyond covered renderer tests is not fully verified.
+Numbers must be finite. Stack order is execution order. The canonical form uses each class's snake-case type such as `gaussian_blur`; color values are canonical `#RRGGBB`/`#RRGGBBAA`. CPU and WGPU both have catalog effect-pass paths. Exact visual parity for each effect beyond covered renderer tests is not fully verified.

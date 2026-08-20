@@ -4,16 +4,16 @@ High-level Python uses `CompositionLayer`. The canonical JSON model uses a
 visual source with type `group`. These are two names for two authoring layers,
 not two unrelated runtime concepts.
 
-`Composition.group(start=..., duration=..., z=..., id=...)` creates a parent
-placement with a child composition. Child layer times are local to the child.
+`Composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
+opacity=1, id=None, blend_mode=BlendMode.NORMAL)` creates a parent placement
+with a child composition. Child layer times are local to the child.
 The group start and duration are local to the parent. Child transforms are
 evaluated in the child, then the parent placement applies its placement and
 transform.
 
 Transitions connect layers owned by one composition. A child composition can
 therefore contain its own transitions. Current tests cover nested transition
-compilation; do not treat the old claim that internal Group transitions are
-unsupported as current behavior. Endpoints must be owned by the same
+compilation. Endpoints must be owned by the same
 composition and satisfy the transition's timing and fit constraints.
 
 Groups serialize inside the canonical visual tree. Recursive nesting is

@@ -161,7 +161,7 @@ def test_checked_in_particle_examples_are_schema_and_native_valid() -> None:
 
 
 def test_audio_reactive_python_example_authors_valid_audio_material() -> None:
-    namespace = runpy.run_path(str(ROOT / "examples/python/10_particles.py"))
+    namespace = runpy.run_path(str(ROOT / "examples/python/authoring/10_particles.py"))
     data = namespace["project"].to_dict()
     assert not list(VALIDATOR.iter_errors(data))
     assert data["assets"] == [

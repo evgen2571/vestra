@@ -1,23 +1,28 @@
 # Feature support
 
-This matrix summarizes current implementation evidence. `supported` means
-there is a public path and renderer/test evidence. `limited` means the feature
-has explicit constraints. `not verified` is deliberately not a support claim.
+This matrix summarizes current implementation evidence. `supported` means a
+public path plus implementation/test evidence. `not fully verified` is
+deliberately not a parity claim. Media preflight is an operational requirement,
+not reduced renderer support.
 
-| Feature | High-level Python | Canonical JSON | CPU | WGPU |
-| --- | --- | --- | --- | --- |
-| Image | supported | `image` | supported | supported |
-| Video | supported | `video` | supported with media preflight | supported with media preflight |
-| Solid color | `Color`/`SolidColor` | `solid_color` | supported | supported |
-| Shape | supported | `shape` | supported | supported |
-| Text | supported with a font path | `text` | supported with font availability | supported with font availability |
-| Spectrum2D | supported through authoring/source wrappers | `spectrum2d` | supported with prepared audio analysis | source dispatch exists; full parity not verified |
-| Particle system | supported | `particle_system` | supported | render path exists; full parity not verified |
-| Nested composition | `CompositionLayer` | `group` | supported | supported |
-| Visual effects | supported catalog | effect descriptors | catalog effect-pass path | catalog effect-pass path; full per-effect parity not verified |
-| Transitions | supported catalog | transition placements | supported | supported; full visual parity not verified |
-| Audio clips | supported | `audio` | supported with media preflight | audio is prepared alongside the selected render path |
+| Feature | Python authoring | Canonical JSON | Presentation and transition endpoint | CPU | WGPU |
+| --- | --- | --- | --- | --- | --- |
+| Image | supported | `image` | direct | supported | supported |
+| Video | supported | `video` | direct | supported, requires media preflight | supported, requires media preflight |
+| Solid color | `Color`/`SolidColor` | `solid_color` | adapter-mediated | supported | supported |
+| Shape | supported | `shape` | direct | supported | supported |
+| Text | supported, requires a font path | `text` | direct | supported, requires font preparation | supported, requires font preparation |
+| Spectrum2D | supported through authoring/source wrappers | `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | not fully verified |
+| Particle system | supported | `particle_system` | adapter-mediated | supported | not fully verified |
+| Nested composition | `CompositionLayer` | `group` | direct | supported | supported |
+| Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |
+| Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
+| Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |
 
 CPU and WGPU dispatch are not enough by themselves to prove identical behavior.
 The exact source, effect, transition, audio, and backend pages state constraints
 where the current tests do not establish parity.
+
+`direct` means the canonical clip itself can carry ordinary presentation and be
+a transition endpoint. `adapter-mediated` means the high-level Python API can
+provide that presentation, while the canonical source cannot carry it directly.

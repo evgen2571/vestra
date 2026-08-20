@@ -19,12 +19,13 @@ def main() -> None:
     )
     reveal.transform.scale.keyframe(0, (0.15, 0.15))
     reveal.transform.scale.keyframe(1, (1.0, 1.0))
-    layer.masks.add(
+    image_luma = layer.masks.add(
         Image(str(ROOT / "examples/assets/green.png")),
         mode=ImageMaskMode.LUMA,
         feather=4,
         id="image-luma",
     )
+    image_luma.transform.scale = (0.75, 0.75)
 
     report = project.validate()
     if not report.is_valid:

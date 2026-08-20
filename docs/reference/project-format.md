@@ -19,6 +19,12 @@ not read files or probe media.
 | `visual` | object | yes | Root visual composition. |
 | `audio` | object | no | Audio timeline; omitted when absent. |
 
+Schema version 4 remains the evolving, pre-release project language for this
+0.1 SDK. Vestra therefore keeps additive Masks v1 fields, including the image
+`MaskInput` variant, in schema 4 rather than treating them as a stable external
+compatibility boundary. The loader still accepts schema 3 and normalizes it to
+4. A future stable format will make a deliberate version-boundary decision.
+
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
 | `path` | string | yes | Requested output path. It must contain a non-whitespace character and end in `.mp4`, case-insensitively. |
@@ -64,7 +70,7 @@ contracts.
 
 ## Timing, transform, groups, and bindings
 
-Each mask has an `id`, a narrow shape `input`, `operation` (`replace`,
+Each mask has an `id`, a shape or image `input`, `operation` (`replace`,
 `intersect`, `union`, or `subtract`, default `intersect`), `invert` (default
 `false`), `strength` (default `1`), `feather` (default `0`), and a mask-local
 `transform`. These use the normal tracks, modifiers, and signal bindings.

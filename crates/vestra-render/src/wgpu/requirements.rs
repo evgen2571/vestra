@@ -7,7 +7,9 @@
 
 use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
 
-use super::frame_plan::{GpuFramePlan, plan_has_masks, plan_requires_auxiliary};
+use super::frame_plan::{
+    GpuFramePlan, plan_has_mask_feather, plan_has_masks, plan_requires_auxiliary,
+};
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
 const BASE_WORKING_TEXTURE_COUNT: u64 = 4;
@@ -181,6 +183,7 @@ impl GpuRequirements {
         };
         let auxiliary_texture_count = u64::from(requires_auxiliary);
         let mask_coverage_texture_count = u64::from(has_masks);
+        let mask_feather_texture_count = u64::from(plan_has_mask_feather(plan));
         let group_texture_count = u64::try_from(GpuFramePlan::required_group_depth(plan))
             .ok()
             .and_then(|depth| depth.checked_mul(2))
@@ -192,6 +195,7 @@ impl GpuRequirements {
                 + effect_texture_count
                 + auxiliary_texture_count
                 + mask_coverage_texture_count
+                + mask_feather_texture_count
                 + group_texture_count,
         )?;
         fn image_bytes(width: u32, height: u32) -> Result<u64, Diagnostic> {
@@ -263,6 +267,7 @@ impl GpuRequirements {
                 + effect_texture_count
                 + auxiliary_texture_count
                 + mask_coverage_texture_count
+                + mask_feather_texture_count
                 + group_texture_count,
             effect_texture_count,
             auxiliary_texture_count,

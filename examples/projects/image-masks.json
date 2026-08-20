@@ -1,0 +1,47 @@
+{
+  "schema_version": 4,
+  "name": "Image masks",
+  "output": {
+    "path": "../output/image-masks.mp4",
+    "width": 320,
+    "height": 180,
+    "frame_rate": 30,
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 1
+  },
+  "assets": [
+    {"id": "green-mask", "type": "image", "source": "../assets/green.png"}
+  ],
+  "visual": {
+    "clips": [
+      {
+        "id": "masked-card",
+        "source": {"type": "solid_color", "colour": "#e84a5f"},
+        "start": 0,
+        "duration": 1,
+        "layer": 0,
+        "opacity": {"base_value": 1},
+        "masks": [
+          {
+            "id": "image-luma",
+            "input": {"type": "image", "asset": "green-mask", "mode": "luma"},
+            "operation": "replace",
+            "feather": {"base_value": 8},
+            "transform": {
+              "position": {"base_value": {"x": 0.5, "y": 0.5}},
+              "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+              "scale": {"base_value": {"x": 0.75, "y": 0.75}},
+              "rotation_degrees": {"base_value": 0}
+            }
+          }
+        ]
+      }
+    ],
+    "transitions": [],
+    "flashes": [],
+    "post_effects": []
+  }
+}

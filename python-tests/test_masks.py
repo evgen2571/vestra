@@ -32,7 +32,8 @@ def test_layer_masks_are_owned_and_lowered() -> None:
     assert [mask.id for mask in layer.masks.items] == ["outer", "hole"]
     masks = project.snapshot().to_dict()["visual"]["clips"][0]["masks"]
     assert masks[0]["operation"] == "replace"
-    assert masks[0]["strength"] == 0.75
+    assert masks[0]["strength"]["base_value"] == 0.75
+    assert masks[0]["feather"]["base_value"] == 0.0
     assert masks[1]["operation"] == "subtract"
 
     with pytest.raises(ValueError):
@@ -46,6 +47,17 @@ def test_layer_masks_are_owned_and_lowered() -> None:
     assert layer.masks.items == ()
 
 
+def test_masks_expose_dynamic_scalar_properties() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    mask = layer.masks.add(Ellipse(width=20, height=20, fill="#ffffff"), feather=8)
+    mask.strength.keyframe(1, 0.25)
+    mask.feather.keyframe(1, 16)
+    mask.transform.position.keyframe(1, (0.7, 0.5))
+    canonical = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]
+    assert canonical["strength"]["keyframes"][0]["value"] == 0.25
+    assert canonical["feather"]["base_value"] == 8.0
+    assert canonical["feather"]["keyframes"][0]["value"] == 16.0
 def test_generated_mask_ids_skip_removed_ids() -> None:
     project = Project(size=(32, 32), fps=1, duration=1)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))

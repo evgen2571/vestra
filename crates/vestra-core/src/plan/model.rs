@@ -178,7 +178,8 @@ pub struct CompiledMask {
     pub shape_index: usize,
     pub operation: crate::project::MaskOperation,
     pub invert: bool,
-    pub strength: f64,
+    pub strength: CompiledScalarProperty,
+    pub feather: CompiledScalarProperty,
     pub transform: CompiledTransformTracks,
 }
 

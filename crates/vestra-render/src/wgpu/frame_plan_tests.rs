@@ -175,6 +175,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
             strength: 1.0,
+            feather: 0.0,
             transform,
         },
         crate::plan::EvaluatedMask {
@@ -182,6 +183,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
             operation: crate::project::MaskOperation::Replace,
             invert: false,
             strength: 1.0,
+            feather: 4.0,
             transform,
         },
     ];

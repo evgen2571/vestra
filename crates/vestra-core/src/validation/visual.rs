@@ -435,7 +435,23 @@ fn validate_with_depth(
                     validate_shape(shape, &format!("{mask_path}/input"), errors);
                 }
             }
-            if !super::unit(mask.strength) {
+            super::tracks::validate_scalar_property(
+                &mask.strength,
+                clip.duration,
+                &format!("{mask_path}/strength"),
+                maximum_keyframes_per_track,
+                errors,
+                |value| super::unit(*value),
+                has_authored_audio,
+            );
+            if !super::unit(mask.strength.track.base_value)
+                || mask
+                    .strength
+                    .track
+                    .keyframes
+                    .iter()
+                    .any(|keyframe| !super::unit(keyframe.value))
+            {
                 errors.push(Diagnostic::error(
                     "VESTRA-MASK-STRENGTH",
                     Category::Semantic,
@@ -443,6 +459,15 @@ fn validate_with_depth(
                     format!("{mask_path}/strength"),
                 ));
             }
+            super::tracks::validate_scalar_property(
+                &mask.feather,
+                clip.duration,
+                &format!("{mask_path}/feather"),
+                maximum_keyframes_per_track,
+                errors,
+                |value| value.is_finite() && *value >= 0.0,
+                has_authored_audio,
+            );
             validate_transform(
                 &mask.transform,
                 clip.duration,
@@ -451,23 +476,6 @@ fn validate_with_depth(
                 errors,
                 has_authored_audio,
             );
-            if !mask.transform.position.keyframes.is_empty()
-                || !mask.transform.anchor.keyframes.is_empty()
-                || !mask.transform.scale.keyframes.is_empty()
-                || !mask.transform.rotation_degrees.track.keyframes.is_empty()
-                || !mask.transform.component_modifiers.position_x.is_empty()
-                || !mask.transform.component_modifiers.position_y.is_empty()
-                || !mask.transform.component_modifiers.scale_x.is_empty()
-                || !mask.transform.component_modifiers.scale_y.is_empty()
-                || !mask.transform.rotation_degrees.modifiers.is_empty()
-            {
-                errors.push(Diagnostic::error(
-                    "VESTRA-MASK-STATIC-TRANSFORM",
-                    Category::Semantic,
-                    "mask transforms must use static base values in Subphase 1",
-                    format!("{mask_path}/transform"),
-                ));
-            }
         }
     }
 }

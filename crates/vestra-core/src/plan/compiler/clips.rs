@@ -266,7 +266,18 @@ pub(super) fn compile(
                 shape_index,
                 operation: mask.operation,
                 invert: mask.invert,
-                strength: mask.strength,
+                strength: super::signals::compile_property(
+                    &mask.strength,
+                    &format!("{}/mask-strength", clip.id),
+                    ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
+                    scalar_signal_interner,
+                )?,
+                feather: super::signals::compile_property(
+                    &mask.feather,
+                    &format!("{}/mask-feather", clip.id),
+                    ScalarPropertyConstraint::NonNegative,
+                    scalar_signal_interner,
+                )?,
                 transform: compile_transform_tracks(
                     &mask.transform,
                     &clip.id,

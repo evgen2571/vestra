@@ -39,15 +39,21 @@ before rendering. The immutable runtime SDK exposes the same split through
 ## Render requests and events
 
 A render request supplies an output path, overwrite policy, preview choice, and
-backend preference. A progress callback receives events for the start of the
-render, frame progress, and completion. The result includes the output path,
-timing data, requested backend, selected backend, and adapter information when
-the backend provides it.
+backend preference. Native Rust render observers can receive `started`,
+`progress`, and `completed` events. Python progress callbacks receive only
+`started` and `progress`: the binding filters `completed` because it is emitted
+after successful output publication, when a Python callback can no longer
+affect the render. The result includes the output path, timing data, requested
+backend, selected backend, and adapter information when the backend provides
+it.
 
 Cancellation is cooperative. Pass a `CancellationToken` to the native or
 Python runtime operation and request cancellation from the controlling code.
 Rust returns a render error marked as cancelled. Python raises
 `vestra.CancelledError`; cancellation is not a successful `RenderResult`.
+That is separate from a Python callback exception. Vestra stops the render,
+then re-raises the original callback exception. If native cleanup reports an
+error, Vestra attaches it to that exception as `render_cleanup_error`.
 
 ## Publication
 

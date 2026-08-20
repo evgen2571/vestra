@@ -1,76 +1,55 @@
 # Python API
 
-The normal Python entry point is the mutable high-level `vestra.Project`.
-Advanced users can author the canonical model with
-`vestra.authoring.ProjectBuilder`. Runtime control uses the immutable
-`ProjectSnapshot` and `Editor` types.
+`vestra.Project` is the normal mutable authoring API. `vestra.authoring.ProjectBuilder` is the advanced canonical authoring API. Runtime control uses immutable native `ProjectSnapshot` (`vestra._native.Project`) and `Editor`.
 
 ## High-level authoring
 
-`Project(size, fps, duration, ...)` owns `root`, an `AudioTimeline`, and output
-policy. `Composition.add(source, start=0, duration=None, z=0, id=None, ...)`
-creates a `Layer`. `Composition.group(...)` creates a `CompositionLayer` whose
-`child` composition has child-local timing. Sources are exported from
-`vestra.sources`, including `Image`, `Video`, `Color`/`SolidColor`, `Shape`,
-`Text`, `Spectrum2D`, and `ParticleSystem` where the package exports them.
+```python
+Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
+        duration: float | None = None, background="#000000", quality=Quality.BALANCED,
+        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None)
 
-High-level projects provide `validate()`, `prepare(backend="auto")`,
-`render(output, backend="auto", overwrite=False, preview=False, ...)`,
-`render_frame(seconds)`, and `snapshot(output=...)`. `validate()` returns a
-`ValidationReport` and does not inspect the environment. See [backends](backends.md).
+composition.add(source, *, start=0, duration=None, source_start=0.0,
+                playback_rate=1.0, z=0, visible=True, opacity=1.0,
+                id=None, name=None, blend_mode=BlendMode.NORMAL) -> Layer
+composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
+                  opacity=1, id=None, blend_mode=BlendMode.NORMAL) -> CompositionLayer
+```
 
-`Project(size, fps, duration, ...)` creates the high-level editing graph.
-`Composition.add(source, start=0, duration=None, z=0, id=None, ...)` returns a
-`Layer`; `Composition.group(...)` creates a `CompositionLayer`. `snapshot()`
-lowers the mutable graph to an immutable `ProjectSnapshot`.
+`size` has positive integer width/height; `fps` is an integer, `(numerator, denominator)` pair or `FrameRate`; explicit `duration` is positive seconds. `root` is the top-level `Composition`; a `CompositionLayer.child` is another composition with child-local timing. `add` copies its `Source`; `duration=None` uses the owning duration except for `Video`, where it probes media to derive the usable source duration. `source_start` is source-media seconds and `playback_rate` is positive.
 
-## Advanced canonical authoring
+```python
+project.snapshot(*, output=None) -> ProjectSnapshot
+project.validate() -> ValidationReport
+project.prepare(*, backend="auto") -> PreparedProject
+project.render_frame(seconds, *, backend="auto") -> Frame
+project.render(output, *, backend="auto", overwrite=False, preview=False,
+               progress=None, cancellation=None) -> RenderResult
+```
 
-`vestra.authoring.ProjectBuilder` owns canonical assets, clips, tracks,
-effects, transitions, flashes, presets, and audio. Its `to_dict()` and
-`to_json()` output the project format described in [Project format](project-format.md).
-It is supported advanced authoring, not a deprecated API.
+`validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
 
-## Runtime and rendering
+`ProjectBuilder(*, width, height, frame_rate, output_path, duration=None, duration_mode=None, background="#000000", quality=Quality.BALANCED, base_directory=".", name=None, metadata=None, output_audio=False)` owns advanced canonical assets, visual clips, tracks, effects, transitions, flashes and audio. `build()` creates a native snapshot; `validate()` has the same semantic-only meaning.
 
-| Type | Contract |
+## Native runtime
+
+| Type | Exact construction or methods |
 | --- | --- |
-| `ProjectSnapshot` | Immutable native project. Load with `load`, `from_json`, or `from_dict`; serialize with `to_json`, `to_dict`, and `save`. |
-| `Editor` | `validate`, `preflight`, `inspect`, `prepare`, and one-shot `render`. |
-| `PrepareOptions` | Optional `backend` preference. |
-| `PreparedProject` | Reusable prepared runtime. Renders frames by number, nanoseconds, or seconds, and renders video with `PreparedVideoRenderRequest`. |
-| `RenderRequest` | One-shot request for `Editor.render`: output, backend, overwrite, and preview. |
-| `PreparedVideoRenderRequest` | Prepared render request: output and overwrite. |
-| `RenderEvent` | Callback event with schema version, kind, frame, total frames, progress, output path, and warnings. |
-| `RenderResult` | Successful publication summary with backend, adapter, timing, frame, audio, and output data. |
-| `CancellationToken` | Cooperative cancellation flag. |
+| `ProjectSnapshot` | `load(path)`, `from_json(text, *, base_directory=None)`, `from_dict(data, *, base_directory=None)`, `to_json()`, `to_dict()`, `save(path)`. |
+| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, progress=None, cancellation=None)`. |
+| `PrepareOptions` | `PrepareOptions(*, backend=None)`. |
+| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, progress=None, cancellation=None)`. |
+| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
+| `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for `PreparedProject.render_video`. |
+| `CancellationToken` | `CancellationToken()`, `cancel()`, read-only `is_cancelled`. |
 
-Prepared rendering must use `PreparedVideoRenderRequest`; `RenderRequest`
-belongs to one-shot `Editor.render`. A cancelled render raises
-`vestra.CancelledError`, a subclass of `RenderError`, rather than returning a
-successful `RenderResult`.
+`RenderEvent` exposes `schema_version`, `kind`, `frame`, `total_frames`, `progress`, `output_path` and `warnings`. Python `progress` callbacks receive only `started` and `progress` events. Native Rust observers also receive `completed`, after successful output publication. A successful `RenderResult` exposes output dimensions/timing, selected/requested backend, fallback, adapter, warnings, detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a cancelled operation does not return a `RenderResult`.
 
-Key native entry points are `ProjectSnapshot.load(path)`,
-`ProjectSnapshot.from_json(json, base_directory=".")`, `Editor.validate`,
-`Editor.preflight`, `Editor.prepare`, and `Editor.render`. A prepared snapshot
-reuses its resources through frame methods and prepared video rendering.
+If a Python progress callback raises, Vestra stops the native render and
+re-raises the original Python exception. No `RenderResult` is returned. If
+cleanup reports a native error, it is attached as
+`error.render_cleanup_error`; it does not replace the callback exception.
 
 ## Reports and errors
 
-`ValidationReport` has `is_valid`, `diagnostics`, `errors`, and `warnings`.
-`PreflightReport` adds `is_ready`. Native failures include `ProjectError`,
-`PreparationError`, `FrameRenderError`, `RenderError`, and
-`PreparedProjectBusyError`. `Diagnostic` exposes `code`, `category`, `severity`,
-`message`, `pointer`, `related_id`, and `hint`.
-
-## Public enum values
-
-`BackendPreference` is `AUTO`, `CPU`, or `WGPU`. `BackendKind` reports `CPU` or
-`WGPU`; adapter metadata reports device type and graphics backend separately.
-`RenderFailureStage` reports output preparation, asset preparation, encoder
-startup, frame composition/write, encoder finalization, output publication, or
-cancellation.
-
-The runtime names above are exported by `vestra` and typed in
-`python/vestra/_native.pyi`. The high-level names and canonical builder types
-are defined in the Python package modules.
+`ValidationReport` has `is_valid`, `diagnostics`, `errors` and `warnings`; `PreflightReport` adds `is_ready`. `Diagnostic` has `code`, `category`, `severity`, `message`, `pointer`, `related_id` and `hint`. Native runtime errors include `ProjectError`, `PreparationError`, `FrameRenderError`, `RenderError` and `PreparedProjectBusyError`. `BackendPreference` is `AUTO`, `CPU` or `WGPU`; `BackendKind` reports `CPU` or `WGPU`. The exact exported native declarations are in `python/vestra/_native.pyi`.

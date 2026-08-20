@@ -33,13 +33,20 @@ frame = prepared.render_frame_seconds(0.5)
 
 Use `RenderRequest` with `Editor.render(...)` for one-shot rendering. Prepared
 rendering uses `PreparedVideoRenderRequest`, which contains the output path and
-overwrite policy. A callback receives `RenderEvent` values. The returned
-`RenderResult` reports the requested and selected backend and may include
-adapter information. A requested WGPU backend does not by itself prove
-hardware rendering, so inspect the actual result.
+overwrite policy. A callback receives `RenderEvent` values with `kind` set to
+`started` or `progress`. Python does not receive the native `completed` event,
+which occurs after output publication. The returned `RenderResult` reports the
+requested and selected backend and may include adapter information. A requested
+WGPU backend does not by itself prove hardware rendering, so inspect the actual
+result.
 
 Cancellation raises `vestra.CancelledError` from Python render operations. It
 does not return a successful `RenderResult`.
+
+If the progress callback raises, Vestra stops rendering and re-raises that same
+Python exception. It does not convert it to `RenderError` or return a result.
+If native cleanup also reports an error, it is attached to the original
+exception as `render_cleanup_error`.
 
 Preparation is the point where validation, preflight, plan compilation, media
 and audio analysis, and renderer setup become ready for evaluation. Keep

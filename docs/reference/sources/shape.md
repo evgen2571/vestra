@@ -5,7 +5,7 @@ not use normalized coordinates. Normalized points exist elsewhere in Vestra,
 including particle emitters and selected effect parameters.
 
 Python exports `Rectangle`, `Ellipse`, `Circle`, `Line`, and `Polygon`; all
-lower to `{"type":"shape","geometry":...}`. Each shape needs a fill or a
+lower to a `{"type":"shape"}` source with the geometry listed below. Each shape needs a fill or a
 stroke. Colours are canonical `#RRGGBB`/`#RRGGBBAA`; `stroke_width` defaults to
 `0`, cannot be negative, and must be positive when a stroke is enabled.
 

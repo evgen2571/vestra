@@ -1,88 +1,133 @@
 # Project format
 
-This page documents the current canonical JSON project format. The checked-in
-[JSON Schema](../../schemas/project.schema.json) describes structure. Rust
-deserialization and semantic validation impose additional rules.
+This is the canonical schema-v3 JSON format. The checked-in [JSON
+Schema](../../schemas/project.schema.json) defines the complete structural
+shape. Rust semantic validation adds current engine invariants, and preflight
+checks assets, media, tools, output paths, and requested backends. Objects
+reject unknown fields. Parsing with `Project.from_json` or `from_value` does
+not read files or probe media.
 
-## Version and top-level object
+## Project and output
 
-`schema_version` is `3`. The loader rejects another version with
-`VESTRA-SCHEMA-VERSION`. Objects reject unknown fields. `Project.from_json` and
-`Project.from_value` parse JSON only. They do not read assets or probe media.
-
-| Field | Type | Required | Meaning |
+| Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
-| `schema_version` | integer | yes | Must be `3`. |
-| `name` | string or null | no | Optional project name. |
-| `metadata` | JSON value or null | no | User metadata retained by the model. |
-| `output` | object | yes | Canvas, frame rate, encoding, duration, and audio policy. |
-| `assets` | array | yes | Named image, video, audio, or font assets. |
-| `visual` | object | yes | Visual clips, flashes, and transitions. |
-| `audio` | object or omitted | no | Audio tracks and master effects. |
+| `schema_version` | integer | yes | Exactly `3`. |
+| `name` | string | no | Omitted when absent. |
+| `metadata` | non-null JSON value | no | Omitted when absent. |
+| `output` | object | yes | Output contract below. |
+| `assets` | array of asset | yes | May be empty. |
+| `visual` | object | yes | Root visual composition. |
+| `audio` | object | no | Audio timeline; omitted when absent. |
 
-## Output
+| Field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `path` | string | yes | Requested output path. |
+| `width`, `height` | integer | yes | Canvas pixels, each at least `2`. |
+| `frame_rate` | positive number or `"N/D"` | yes | Frames per second; rational numerator and denominator are positive. |
+| `background` | color | yes | `#RRGGBB` or `#RRGGBBAA`. |
+| `quality` | enum | yes | `preview`, `balanced`, or `high`. |
+| `audio` | boolean | yes | Output audio policy. |
+| `duration_mode` | enum | yes | `automatic` or `explicit`. |
+| `duration` | positive number | conditional | Seconds. Required by semantic validation for `explicit`; absent for `automatic`. |
 
-`output` contains `path`, positive `width` and `height`, `frame_rate`,
-`background`, `quality`, `audio`, and `duration_mode`. `quality` is
-`preview`, `balanced`, or `high`. `duration_mode` is `automatic` or
-`explicit`; explicit duration requires `duration` and automatic duration
-derives the usable timeline. Frame rates may be a positive number or a reduced
-`N/D` string, within the implementation's supported range.
+## Assets and visual composition
 
-## Assets and visual content
+| Field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `id` | non-empty string | yes | Unique within the asset collection. |
+| `type` | enum | yes | `image`, `video`, `audio`, or `font`. |
+| `source` | non-empty string | yes | Resolved relative to the project base directory during preflight. |
 
-An asset is `{ "id", "type", "source" }`, where `type` is `image`, `video`,
-`audio`, or `font`. `source` is a path or media identity interpreted relative
-to the project base directory during preflight.
+`visual` is the root composition. Its `clips` array is required; optional
+`transitions`, `flashes`, and `post_effects` default to empty arrays. See
+[transitions](transitions.md) and [effects](effects.md) for their dedicated
+contracts.
 
-Visual clips use a tagged `source` object. Current source tags are `image`,
-`video`, `solid_color`, `shape`, `text`, `spectrum2d`, `particle_system`, and
-`group`. A clip has an id, start, duration, layer, visibility and presentation
-properties. Groups contain nested visual clips and represent canonical nested
-composition content. `visual.flashes` and `visual.transitions` hold their
-respective placement objects.
+| Clip field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `id` | non-empty string | yes | Unique among sibling clips. |
+| `source` | tagged source object | yes | Tags: `image`, `video`, `solid_color`, `shape`, `text`, `spectrum2d`, `particle_system`, `group`. See [Sources](sources/image.md). |
+| `start` | non-negative number | yes | Owning composition's local seconds. |
+| `duration` | positive number | yes | Owning composition's local seconds. |
+| `layer` | integer | yes | Local stacking order. |
+| `opacity` | scalar property | yes | Base value plus optional animation and signal modifiers. |
+| `source_start` | non-negative number | no | `0`; source-media seconds. |
+| `playback_rate` | positive number | no | `1`; source-time rate. |
+| `visible` | boolean | no | `true`. |
+| `sizing` | sizing object | no | Applies to image/video sources. |
+| `crop` | crop track | no | Applies to image/video sources. |
+| `transform` | transform object | conditional | Required for image, video, and group sources. Optional for shape/text; forbidden for solid-color, Spectrum2D, and particle-system sources. |
+| `effects` | array of effect | no | Empty. See [effects](effects.md). |
+| `blend_mode` | enum | no | `normal`; also `add`, `screen`, `multiply`, `overlay`. |
+| `preset` | preset object | no | Omitted. See [presets and flashes](presets-and-flashes.md). |
 
-| Visual clip field | Type | Notes |
-| --- | --- | --- |
-| `id` | string | Unique in its owning visual group. |
-| `source` | tagged object | See [Sources](sources/image.md). |
-| `start`, `duration` | seconds | Project or owning-group local timeline; duration is positive. |
-| `layer` | integer | Compositing order. |
-| presentation | objects/properties | Opacity, transform, effects, and animation use their dedicated canonical forms. |
+## Timing, transform, groups, and bindings
 
-Groups hold nested visual clips with their own local timeline. Effects are
-ordered `id`/`type` objects. Transitions connect sibling endpoints and use a
-generic definition; signals appear in bindable scalar-property modifiers. See
-[effects](effects.md), [transitions](transitions.md), and [signals](signals.md).
+Track objects contain a required `base_value` and optional `keyframes`. A
+keyframe has `time`, `value`, and `interpolation`; time is local seconds.
+Interpolation is a named mode or a `cubic_bezier` object. Scalar properties
+extend scalar tracks with ordered `modifiers`.
+
+| Transform field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `position` | point track | yes | Finite canvas coordinates. |
+| `anchor` | point track | yes | Normalized anchor position. |
+| `scale` | point track | yes | Positive X/Y scale. |
+| `rotation_degrees` | scalar property | no | `0`; finite degrees. |
+| `component_modifiers` | object | no | Empty; optional `position_x`, `position_y`, `scale_x`, `scale_y` modifier arrays. |
+
+| Group field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `type` | literal | yes | `group`. |
+| `clips` | array of clip | yes | Child-local timeline and layer ordering. |
+| `transitions` | array of transition placement | no | Empty. See [nested compositions](nested-compositions.md) and [transitions](transitions.md). |
+
+| Binding field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `base_value` | number | yes | Authored scalar before animation/modifiers. |
+| `keyframes` | array | no | Empty; each item has `time`, `value`, `interpolation`. |
+| `modifiers` | array | no | Empty; applied in declaration order after authored animation. |
+| `modifiers[].operation` | enum | yes | `replace`, `add`, or `multiply`. |
+| `modifiers[].signal` | object | yes | `source.type` is `audio`, `source.tap` is `master`, and `source.feature` is `rms`, `peak`, or `band_energy`; optional `transforms` preserve order. See [signals](signals.md). |
 
 ## Audio
 
-An audio timeline has `effects` and `tracks`. A track has an id, `mute`, `gain`,
-`effects`, and `clips`. A clip identifies an audio asset and has `start`,
-`trim_start`, optional `trim_end`, `gain`, optional `gain_automation`, fades,
-fade curves, mute, and effects. See [audio](audio.md) for the time domains and
-effect catalog.
+| Audio field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `tracks` | array of track | yes | May be empty. |
+| `effects` | array of audio effect | no | Empty; master scope. See [audio](audio.md). |
+
+| Track field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `id` | string | yes | Track identifier. |
+| `clips` | array of audio clip | yes | May be empty. |
+| `mute` | boolean | no | `false`. |
+| `gain` | non-negative number | no | `1`. |
+| `effects` | array of audio effect | no | Empty; track scope. See [audio](audio.md). |
+
+| Audio clip field | Type | Required | Default / unit / notes |
+| --- | --- | --- | --- |
+| `id` | string | yes | Clip identifier. |
+| `asset` | string | yes | References an audio asset. |
+| `start` | non-negative number | yes | Project seconds. |
+| `trim_start` | non-negative number | yes | Source-media seconds. |
+| `trim_end` | non-negative number | no | Source-media seconds; semantic validation checks ordering. |
+| `gain` | non-negative number | no | `1`. |
+| `gain_automation` | object | no | Keyframes use clip-local seconds; see [audio](audio.md). |
+| `fade_in`, `fade_out` | non-negative number | no | `0`; seconds. |
+| `fade_in_curve`, `fade_out_curve` | enum | no | `linear`; `linear` or `equal_power`. |
+| `mute` | boolean | no | `false`. |
+| `effects` | array of audio effect | no | Empty; clip scope. See [audio](audio.md). |
 
 ## Validation layers
 
-JSON Schema checks shape, required fields, types, tagged variants, and many
-ranges. Canonical semantic validation checks relationships such as unique
-ids, timing, endpoint ownership, effect scopes, and cross-field constraints.
-Environment preflight then resolves files, probes media, checks FFmpeg and
-output readiness, and checks the requested renderer where applicable. A
-schema-valid document can still fail semantic validation or preflight.
+JSON Schema provides machine-readable structural validation: field names,
+types, tags, and basic ranges. Canonical semantic validation checks cross-field
+and engine invariants such as IDs, timing, endpoint ownership, effect scope,
+and project relationships. Preflight then resolves assets and media, checks the
+environment and output target, and verifies the requested backend. A
+schema-valid project can fail either later layer.
 
-## Schema generation
-
-`schemas/project.schema.json` is a hybrid checked-in artifact. Its base
-definitions come from the schema template. `ve generate-schema` then updates
-the Spectrum2D Nyquist bound and rebuilds visual and audio effect branches from
-the Rust descriptor catalogs. The repository checks the generated result
-against the checked-in schema.
-
-## Compatibility
-
-This page records the current public serialization contract. The project JSON,
-Python and Rust APIs, CLI output, and diagnostic/report schemas are
-compatibility-sensitive. No stronger semantic-version guarantee is asserted
-here.
+`ve generate-schema` updates descriptor-derived effect branches and the
+Spectrum2D Nyquist bound in `schemas/project.schema.json`. Repository checks
+compare the generated output with that checked-in artifact.

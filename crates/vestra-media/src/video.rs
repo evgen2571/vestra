@@ -150,17 +150,25 @@ impl Default for VideoDecoderOptions {
 
 /// Probe one deterministic usable video stream without retaining a decoder session.
 pub fn probe_video(path: &Path) -> Result<VideoMediaInfo, MediaError> {
+    tracing::debug!(input = %path.display(), "media probe started");
     init_ffmpeg()?;
     let ictx = format::input(path).map_err(|error| open_error(path, error))?;
     let stream = select_stream(&ictx).ok_or(MediaError::NoVideoStream)?;
     let context = ffmpeg::codec::context::Context::from_parameters(stream.parameters())
         .map_err(decode_error)?;
     let decoder = context.decoder().video().map_err(decode_error)?;
-    metadata_from_stream(
+    let info = metadata_from_stream(
         &ictx,
         &stream,
         Some((&decoder, decoder.width(), decoder.height())),
-    )
+    )?;
+    tracing::debug!(
+        input = %path.display(),
+        width = info.coded_width,
+        height = info.coded_height,
+        "media probe completed"
+    );
+    Ok(info)
 }
 
 /// A reusable mutable decoder session. Create one per future CPU worker.
@@ -241,6 +249,12 @@ impl VideoDecoder {
         };
         // Keep the decoder's packet time base aligned with the selected stream.
         decoder.set_packet_time_base(stream.time_base());
+        tracing::debug!(
+            input = %path.display(),
+            width,
+            height,
+            "decoder initialized"
+        );
         Ok(Self {
             input,
             decoder,

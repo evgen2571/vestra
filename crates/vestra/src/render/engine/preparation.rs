@@ -356,6 +356,10 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
             timings: RenderTimings::default(),
         },
     )?;
+    tracing::debug!(
+        elapsed_ms = decoded.timings().decode.as_millis(),
+        "media preparation completed"
+    );
     let schedule = ActiveSchedule::compile(&plan);
     let analysis_started = Instant::now();
     let scalar_signals = if plan.audio_analysis_requirements.is_empty() {
@@ -378,6 +382,12 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
     } else {
         analysis_started.elapsed()
     };
+    if !audio_analysis_duration.is_zero() {
+        tracing::debug!(
+            elapsed_ms = audio_analysis_duration.as_millis(),
+            "audio preparation completed"
+        );
+    }
     let (backend, backend_fallback) =
         build_backend(preference, &plan, &decoded).map_err(|diagnostic| RenderError {
             diagnostic,
@@ -392,6 +402,20 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
                 ..RenderTimings::default()
             },
         })?;
+    tracing::info!(
+        requested_backend = preference.as_str(),
+        actual_backend = backend.kind().as_str(),
+        "render backend selected"
+    );
+    if let Some(fallback) = backend_fallback.as_ref() {
+        tracing::warn!(
+            requested_backend = preference.as_str(),
+            actual_backend = backend.kind().as_str(),
+            stage = %fallback.stage,
+            reason = %fallback.message,
+            "render backend fallback"
+        );
+    }
     let preparation_timings = crate::render::PreparationTimings {
         decode: decoded.timings().decode,
         ..backend.timings()

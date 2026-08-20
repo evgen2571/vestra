@@ -134,6 +134,12 @@ pub(crate) fn prepare_project(
         plan_compile_elapsed_ms: compilation_started.elapsed().as_millis(),
     })?;
     let plan_compile_elapsed_ms = compilation_started.elapsed().as_millis();
+    tracing::debug!(
+        elapsed_ms = plan_compile_elapsed_ms,
+        layers = validated.visual_counts().0,
+        total_frames = validated.frame_count,
+        "render plan compilation completed"
+    );
     let prepared = prepare_for_video(
         plan,
         request.backend_preference,

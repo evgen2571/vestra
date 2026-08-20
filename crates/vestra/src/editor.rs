@@ -415,6 +415,10 @@ impl Editor {
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
+        tracing::debug!(
+            elapsed_ms = validation_elapsed.as_millis(),
+            "project validation completed"
+        );
         let preflight_started = Instant::now();
         let (options, backend, preview) = match target {
             InternalPreparationTarget::Public(options) => (
@@ -434,6 +438,12 @@ impl Editor {
         };
         let outcome = self.run_preflight(project, &validation, &options);
         let preflight_elapsed = preflight_started.elapsed();
+        tracing::debug!(
+            requested_backend = backend.as_str(),
+            elapsed_ms = preflight_elapsed.as_millis(),
+            diagnostics = outcome.report.diagnostics.len(),
+            "render preflight completed"
+        );
         let warnings = Self::operation_warnings(&outcome.report.diagnostics);
         #[cfg(test)]
         let warnings = {
@@ -542,6 +552,11 @@ impl Editor {
         mut emit: impl FnMut(RenderEvent) -> crate::RenderObserverControl,
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        tracing::info!(
+            requested_backend = request.backend.as_str(),
+            preview = request.preview,
+            "render preparation started"
+        );
         let coordinated =
             self.prepare_internal(project, InternalPreparationTarget::OneShot(&request))?;
         let operation_started = coordinated.started;
@@ -555,6 +570,22 @@ impl Editor {
         let mut prepared = coordinated.prepared;
         let mut warnings = prepared.preparation_warnings().to_vec();
         let operation_preparation = prepared.preparation_timings();
+        let metadata = prepared.result_metadata();
+        tracing::info!(
+            requested_backend = request.backend.as_str(),
+            actual_backend = prepared.selected_backend().as_str(),
+            width = metadata.width,
+            height = metadata.height,
+            total_frames = metadata.frame_count,
+            duration = metadata.duration.as_secs_f64(),
+            elapsed_ms = coordinated.started.elapsed().as_millis(),
+            "render preparation completed"
+        );
+        tracing::info!(
+            actual_backend = prepared.selected_backend().as_str(),
+            total_frames = metadata.frame_count,
+            "render execution started"
+        );
         let mut summary =
             match application::render_prepared_project(&mut prepared, render_request, &mut emit) {
                 Ok(summary) => summary,
@@ -588,6 +619,13 @@ impl Editor {
         summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
         summary.timings.total_ms = summary.timings.operation_total_ms;
         summary.elapsed_ms = summary.timings.operation_total_ms;
+        tracing::info!(
+            actual_backend = summary.render_backend.as_str(),
+            total_frames = summary.frame_count,
+            elapsed_ms = summary.elapsed_ms,
+            output = %summary.output_path.display(),
+            "render execution completed"
+        );
         warnings = prepared.preparation_warnings().to_vec();
         if let Some(fallback) = summary.backend_fallback.as_ref() {
             warnings.push(crate::render::backend_fallback_warning(fallback));

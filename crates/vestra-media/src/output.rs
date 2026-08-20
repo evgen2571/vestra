@@ -51,6 +51,11 @@ impl OutputTarget {
             .unwrap_or("output");
         let temporary_path =
             path.with_file_name(format!(".{stem}.vestra-{}.tmp.mp4", Uuid::new_v4()));
+        tracing::debug!(
+            output = %path.display(),
+            temporary_output = %temporary_path.display(),
+            "temporary output created"
+        );
         Ok(Self {
             final_path: path,
             temporary_path,
@@ -58,7 +63,12 @@ impl OutputTarget {
     }
 
     pub fn publish(&self) -> Result<(), MediaError> {
-        fs::rename(&self.temporary_path, &self.final_path).map_err(MediaError::Publication)
+        tracing::debug!(output = %self.final_path.display(), "output publication started");
+        fs::rename(&self.temporary_path, &self.final_path)
+            .map_err(MediaError::Publication)
+            .inspect(|()| {
+                tracing::info!(output = %self.final_path.display(), "output published");
+            })
     }
 
     #[must_use]

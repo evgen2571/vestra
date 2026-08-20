@@ -5,4 +5,5 @@ fn main() -> ExitCode {
 }
 
 mod cli;
+mod logging;
 mod output;

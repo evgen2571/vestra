@@ -17,7 +17,7 @@ pub fn print_success<T: Serialize>(
     format: ResultFormat,
     data: T,
     human: &str,
-) {
+) -> ExitCode {
     match format {
         ResultFormat::Human => println!("{human}"),
         ResultFormat::Json => match serde_json::to_string(&ResultEnvelope {
@@ -27,9 +27,13 @@ pub fn print_success<T: Serialize>(
             data,
         }) {
             Ok(value) => println!("{value}"),
-            Err(error) => eprintln!("MVP-INTERNAL-SERIALIZE: cannot serialize result: {error}"),
+            Err(error) => {
+                eprintln!("cannot serialize command result: {error}");
+                return ExitCode::FAILURE;
+            }
         },
     }
+    ExitCode::SUCCESS
 }
 
 pub fn print_failure(
@@ -55,7 +59,10 @@ pub fn print_failure(
             data: FailureEnvelope { errors, warnings },
         }) {
             Ok(value) => println!("{value}"),
-            Err(error) => eprintln!("MVP-INTERNAL-SERIALIZE: cannot serialize failure: {error}"),
+            Err(error) => {
+                eprintln!("cannot serialize command failure: {error}");
+                return ExitCode::FAILURE;
+            }
         },
     }
     ExitCode::from(exit)
@@ -138,5 +145,26 @@ mod tests {
             3
         );
         assert_eq!(exit_for_errors(&[error(Category::Cancellation)]), 130);
+    }
+
+    #[test]
+    fn failed_command_result_serialization_is_a_fatal_output_error() {
+        struct Failing;
+
+        impl Serialize for Failing {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(<S::Error as serde::ser::Error>::custom(
+                    "test serialization failure",
+                ))
+            }
+        }
+
+        assert_eq!(
+            print_success("test", ResultFormat::Json, Failing, "unused"),
+            ExitCode::FAILURE
+        );
     }
 }

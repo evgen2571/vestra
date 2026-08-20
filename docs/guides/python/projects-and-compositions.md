@@ -35,6 +35,11 @@ The child layers use child-local seconds. The group's `start` and `duration`
 are parent-local. Use nesting to keep a reusable scene or coordinated set of
 layers together, not as a substitute for ordinary layer placement.
 
-Validate before an expensive render, especially after changing timing or
-media paths. When a project has no explicit duration, non-video layers need a
-composition duration from the project or an explicit layer duration.
+`project.validate()` checks canonical project semantics only. It does not read
+media paths or check FFmpeg, the output path, or renderer availability. Use the
+lower-level `Editor.preflight()` when those environment checks are needed. The
+CLI `ve validate` command performs its validation preflight and therefore has a
+stronger environment-dependent meaning.
+
+When a project has no explicit duration, non-video layers need a composition
+duration from the project or an explicit layer duration.

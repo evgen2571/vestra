@@ -52,8 +52,10 @@ between child siblings is placed in that child's local timeline.
 
 ## Audio time
 
-High-level audio clips also use project seconds for `start`, trim positions,
-fades, and gain automation. Audio and visual evaluation meet on the project
+Audio uses several related time domains. A clip's `start` is a project-timeline
+position. `trim_start` and `trim_end` are positions in the source audio.
+`fade_in` and `fade_out` are durations on the selected clip. Gain-automation
+keyframes use clip-local time. Audio and visual evaluation meet on the project
 timeline. Audio analysis signals are sampled while that timeline is evaluated;
 they are control data, not a second playback clock.
 

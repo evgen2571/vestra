@@ -14,16 +14,23 @@ author
 ```
 
 `Project.render(...)` performs this flow for a normal one-shot render. It
-creates a canonical snapshot, validates the project and its resources, prepares
-the render plan, and sends the resulting frames and audio to the output
-encoder.
+creates a canonical snapshot, runs semantic validation and environment
+preflight, prepares the render plan, and sends the resulting frames and audio
+to the output encoder.
 
 ## Validation and preparation
 
-Validation checks project structure, semantic constraints, assets, and output
-requirements. Preparation resolves the work needed before frame evaluation,
-including media and audio analysis and renderer setup. A preparation failure
-does not mean that a frame was rendered successfully.
+`Editor.validate(project)` checks canonical project structure and semantic
+constraints. It does not read assets, run FFmpeg, inspect the output path, or
+initialize a renderer. `Editor.preflight(project, options)` performs the
+environment-dependent checks for a selected operation, including assets/media,
+FFmpeg, output readiness, and backend availability where applicable.
+
+Preparation runs semantic validation and preflight before resolving media and
+audio analysis, compiling the plan, and setting up the renderer. A preparation
+failure does not mean that a frame was rendered successfully. The CLI
+`ve validate` command uses the validation preflight target, so it can report
+environment failures that SDK/Python `project.validate()` does not inspect.
 
 Advanced Python code can call `project.validate()` or `project.prepare()`
 before rendering. The immutable runtime SDK exposes the same split through
@@ -39,7 +46,8 @@ the backend provides it.
 
 Cancellation is cooperative. Pass a `CancellationToken` to the native or
 Python runtime operation and request cancellation from the controlling code.
-The result is then a cancellation outcome, not a completed publication.
+Rust returns a render error marked as cancelled. Python raises
+`vestra.CancelledError`; cancellation is not a successful `RenderResult`.
 
 ## Publication
 

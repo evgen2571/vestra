@@ -1,5 +1,7 @@
 # Project format
 
+> Superseded current reference: see [docs/reference/project-format.md](../reference/project-format.md).
+
 `vestra` accepts one JSON project format, described by
 [`schemas/project.schema.json`](../../schemas/project.schema.json). Project
 objects carry a required `schema_version` field. Version `3` is the only

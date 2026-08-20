@@ -95,7 +95,7 @@ impl LoadError {
         Self::Diagnostics(vec![Diagnostic::error(
             "VESTRA-SCHEMA-VERSION",
             crate::Category::Project,
-            format!("unsupported project schema version {version}; supported version is 2"),
+            format!("unsupported project schema version {version}; supported version is 3"),
             "/schema_version",
         )])
     }

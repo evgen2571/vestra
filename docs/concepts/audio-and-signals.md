@@ -4,9 +4,11 @@ Audio playback and audio-derived control data are related, but they are not
 the same thing.
 
 The high-level project owns an `AudioTimeline`. It contains tracks, and tracks
-contain path-based audio clips placed on project time. Clips have trim points,
-gain, fades, optional gain automation, and clip-scoped effects. Tracks and the
-master timeline can have their own gain and effects too.
+contain path-based audio clips. A clip's `start` is on the project timeline;
+`trim_start` and `trim_end` address source-media positions; fades are clip
+durations; and gain-automation keyframes are clip-local. Clips have gain,
+fades, optional gain automation, and clip-scoped effects. Tracks and the master
+timeline can have their own gain and effects too.
 
 An audio signal is a scalar description of analysis data. `project.audio.signal`
 can create RMS, peak, or frequency-band signals. Signal methods such as

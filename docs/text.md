@@ -1,5 +1,7 @@
 # Text Sources
 
+> Superseded current reference: see [docs/reference/sources/text.md](reference/sources/text.md).
+
 `Text` is a static visual Source. It requires a file-backed TTF or OTF font
 asset so the same font data is used on every machine:
 

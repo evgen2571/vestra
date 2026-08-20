@@ -1,5 +1,7 @@
 # ParticleSystem authoring
 
+> Superseded current reference: see [docs/reference/sources/particle-system.md](reference/sources/particle-system.md).
+
 `ParticleSystem` is a renderer-independent procedural visual source. It is
 authored as a normal Python object, serialized into the project schema, and
 evaluated by the existing CPU renderer.

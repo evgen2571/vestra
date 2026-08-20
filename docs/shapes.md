@@ -1,5 +1,7 @@
 # Primitive Shape Sources
 
+> Superseded current reference: see [docs/reference/sources/shape.md](reference/sources/shape.md).
+
 Vestra supports static, source-local procedural Shapes as ordinary visual
 Sources. Their geometry and style are fixed for v1B; position, scale, rotation,
 anchor, opacity, effects, blends, Groups, and transitions remain Layer-owned.

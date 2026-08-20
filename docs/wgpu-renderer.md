@@ -1,5 +1,7 @@
 # WGPU renderer
 
+> Current backend selection and reporting are summarized in [docs/reference/backends.md](reference/backends.md). This page retains implementation and validation history.
+
 The renderer consumes the same compiled plan, decoded assets, and
 `EvaluatedFrame` as CPU:
 

@@ -30,20 +30,31 @@ the [rendering guide](guides/cli/rendering.md) and
 ## Need exact behavior?
 
 The checked-in [project schema](../schemas/project.schema.json) is the current
-machine-readable project schema. Exact project-format and API contracts are
-documented separately from this learning path.
+machine-readable project schema. The [reference](reference/project-format.md)
+pages document the exact project, API, CLI, feature, source, audio, diagnostic,
+and backend contracts.
+
+### Reference
+
+- [Project format](reference/project-format.md)
+- [Python API](reference/python-api.md)
+- [Rust SDK](reference/rust-sdk.md)
+- [CLI](reference/cli.md)
+- [Feature support](reference/feature-support.md)
+- [Diagnostics](reference/diagnostics.md)
+- [Environment variables](reference/environment-variables.md)
+- [Sources](reference/sources/image.md), [effects](reference/effects.md), [transitions](reference/transitions.md), [audio](reference/audio.md), and [backends](reference/backends.md)
 
 ## Something is failing?
 
 Use the diagnostics printed by `ve validate` or `ve render`, then check the
-repository tests and current development guidance. Troubleshooting pages will
-cover common environment and media failures separately.
+repository tests and the [diagnostics reference](reference/diagnostics.md).
 
 ## Understanding or extending the engine?
 
 The [backend concept](concepts/rendering-backends.md) explains the user-visible
-CPU and WGPU choices. Development pages cover the Rust workspace, media
-dependencies, and GPU validation.
+CPU and WGPU choices. The [backend reference](reference/backends.md) records
+selection and reporting semantics.
 
 ## Looking for old implementation reports?
 

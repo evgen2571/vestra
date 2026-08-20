@@ -28,6 +28,8 @@ Presets are reusable values for supported image layers. A layer can have one
 cinematic preset at a time. Presets do not replace ordinary transforms or
 effects.
 
-The high-level API lowers all of these descriptors into the canonical project
-before rendering. Their authored ownership stays distinct even when the final
-frame combines them.
+Before the first keyframe, a track evaluates to its base value. Between
+keyframes it interpolates, and after the final keyframe it holds that final
+value. The high-level API lowers all of these descriptors into the canonical
+project before rendering. Their authored ownership stays distinct even when
+the final frame combines them.

@@ -29,8 +29,12 @@ clip.effects.add(PlaybackSpeed(1.05))
 project.audio.effects.add(BassBoost(gain_db=3.0, frequency_hz=120.0))
 ```
 
-Audio uses the same project seconds as visual timing. Use
-`project.audio.crossfade(outgoing, incoming)` only after the clips overlap and
-the outgoing clip has an explicit trim end. `project.render(...)` includes
+Audio uses project seconds for clip placement, but not every field is in that
+domain. `start` is project time. `trim_start` and `trim_end` are source-media
+positions. `fade_in` and `fade_out` are clip-relative durations. Gain
+automation keyframe times are clip-local.
+
+Use `project.audio.crossfade(outgoing, incoming)` only after the clips overlap
+and the outgoing clip has an explicit trim end. `project.render(...)` includes
 authored audio when the output-audio policy permits it. `None` follows whether
 the project contains audio clips; set `True` or `False` to choose explicitly.

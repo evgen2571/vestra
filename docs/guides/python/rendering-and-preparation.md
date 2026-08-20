@@ -31,11 +31,15 @@ prepared = editor.prepare(
 frame = prepared.render_frame_seconds(0.5)
 ```
 
-Use `RenderRequest` and `prepared.render_video(...)` when you need explicit
-render options, progress callbacks, or cancellation. A callback receives
-`RenderEvent` values. The returned `RenderResult` reports the requested and
-selected backend and may include adapter information. A requested WGPU backend
-does not by itself prove hardware rendering, so inspect the actual result.
+Use `RenderRequest` with `Editor.render(...)` for one-shot rendering. Prepared
+rendering uses `PreparedVideoRenderRequest`, which contains the output path and
+overwrite policy. A callback receives `RenderEvent` values. The returned
+`RenderResult` reports the requested and selected backend and may include
+adapter information. A requested WGPU backend does not by itself prove
+hardware rendering, so inspect the actual result.
+
+Cancellation raises `vestra.CancelledError` from Python render operations. It
+does not return a successful `RenderResult`.
 
 Preparation is the point where validation, preflight, plan compilation, media
 and audio analysis, and renderer setup become ready for evaluation. Keep

@@ -79,6 +79,11 @@ task. Useful entry points include:
 - [Authoring model](docs/concepts/authoring-model.md)
 - [Python rendering guide](docs/guides/python/rendering-and-preparation.md)
 - [CLI rendering guide](docs/guides/cli/rendering.md)
+- [Project format reference](docs/reference/project-format.md)
+- [Python API reference](docs/reference/python-api.md)
+- [Feature support matrix](docs/reference/feature-support.md)
+- [CLI reference](docs/reference/cli.md)
+- [Backend reference](docs/reference/backends.md)
 - [Canonical project schema](schemas/project.schema.json)
 - [Runnable examples](examples/)
 
@@ -92,7 +97,6 @@ uv sync --locked --extra dev
 ./scripts/check.sh
 ```
 
-See the [development documentation](docs/index.md) for the current navigation
-as more contributor and reference pages are added. Historical implementation
-reports live under [`docs/history/`](docs/history/) and are not current product
-documentation.
+See the [documentation index](docs/index.md) for the current navigation.
+Historical implementation reports live under [`docs/history/`](docs/history/)
+and are not current product documentation.

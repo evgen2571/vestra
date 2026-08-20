@@ -15,9 +15,11 @@ layer.opacity.keyframe(0, 0.0)
 layer.opacity.keyframe(0.5, 1.0)
 ```
 
-The base value applies outside the animated track. Each keyframe can use an
-`Interpolation` value or a `CubicBezier` easing curve. Keep keyframe times
-non-negative and ordered in the time space of the property owner.
+Before the first keyframe, the base value applies. Between keyframes, Vestra
+interpolates using the segment's ending keyframe interpolation. At and after
+the final keyframe, Vestra holds the final keyframe value. Each keyframe can
+use an `Interpolation` value or a `CubicBezier` easing curve. Keep keyframe
+times non-negative and ordered in the time space of the property owner.
 
 Animation can be combined with effects and signal bindings. For a signal,
 decide whether the signal should replace, add to, or multiply the base and

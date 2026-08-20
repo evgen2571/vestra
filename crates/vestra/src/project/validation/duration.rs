@@ -27,7 +27,7 @@ pub(super) fn resolve(
             let duration = visual_end.max(audio_end.unwrap_or(0.0));
             if !super::positive(duration) {
                 errors.push(Diagnostic::error(
-                    "MVP-DURATION-EMPTY",
+                    "VESTRA-DURATION-EMPTY",
                     Category::Semantic,
                     "automatic-duration project needs positive visual, flash, or audio content",
                     "/output/duration_mode",
@@ -40,7 +40,7 @@ pub(super) fn resolve(
         DurationMode::Explicit => {
             let Some(duration) = project.output.duration else {
                 errors.push(Diagnostic::error(
-                    "MVP-DURATION-EXPLICIT",
+                    "VESTRA-DURATION-EXPLICIT",
                     Category::Internal,
                     "validated explicit duration is missing",
                     "/output/duration",
@@ -49,7 +49,7 @@ pub(super) fn resolve(
             };
             if visual_end > duration || audio_end.is_some_and(|end| end > duration) {
                 warnings.push(Diagnostic::warning(
-                    "MVP-DURATION-TRUNCATED",
+                    "VESTRA-DURATION-TRUNCATED",
                     "content after explicit project duration will be clipped",
                     "/output/duration",
                 ));

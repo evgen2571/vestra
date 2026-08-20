@@ -148,7 +148,7 @@ impl CpuBackend {
     fn check_healthy(&self) -> Result<(), Diagnostic> {
         if self.aborted {
             return Err(Self::diagnostic(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 "CPU backend was aborted",
             ));
         }
@@ -345,14 +345,14 @@ impl RenderBackend for CpuBackend {
     fn verify_idle(&self) -> Result<(), Diagnostic> {
         if self.aborted {
             Err(Self::diagnostic(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 "CPU backend was aborted",
             ))
         } else if self.in_flight() == 0 {
             Ok(())
         } else {
             Err(Self::diagnostic(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 "CPU backend retained worker work after flush",
             ))
         }

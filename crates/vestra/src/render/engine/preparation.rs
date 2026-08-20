@@ -274,7 +274,7 @@ impl PreparedState {
         }
         Err(RenderError {
             diagnostic: Diagnostic::error(
-                "MVP-PREPARED-INVALIDATED",
+                "VESTRA-PREPARED-INVALIDATED",
                 Category::Render,
                 "prepared render state was invalidated by an earlier render failure",
                 "",
@@ -443,7 +443,7 @@ fn signal_preparation_error(
 ) -> RenderError {
     RenderError {
         diagnostic: Diagnostic::error(
-            "MVP-SIGNAL-PREPARATION",
+            "VESTRA-SIGNAL-PREPARATION",
             Category::Render,
             error.to_string(),
             "",
@@ -463,7 +463,7 @@ fn analysis_error(
     decoded: &Arc<DecodedAssets>,
     error: MediaError,
 ) -> RenderError {
-    let code = "MVP-AUDIO-ANALYSIS";
+    let code = "VESTRA-AUDIO-ANALYSIS";
     RenderError {
         diagnostic: Diagnostic::error(code, Category::Media, error.to_string(), ""),
         warnings: Vec::new(),
@@ -489,7 +489,7 @@ pub(crate) fn render_prepared_frame(
         return Err(frame_error(
             prepared,
             frame_diagnostic(
-                "MVP-FRAME-RANGE",
+                "VESTRA-FRAME-RANGE",
                 "frame number is outside the prepared timeline",
             ),
         ));
@@ -512,7 +512,7 @@ pub(crate) fn render_prepared_frame(
         frame_error(
             prepared,
             frame_diagnostic(
-                "MVP-TIMELINE-OVERFLOW",
+                "VESTRA-TIMELINE-OVERFLOW",
                 "frame timestamp cannot be represented",
             ),
         )
@@ -523,7 +523,7 @@ pub(crate) fn render_prepared_frame(
             |error| {
                 frame_error(
                     prepared,
-                    frame_diagnostic("MVP-EVALUATION", &error.to_string()),
+                    frame_diagnostic("VESTRA-EVALUATION", &error.to_string()),
                 )
             },
         )?;
@@ -541,7 +541,7 @@ pub(crate) fn render_prepared_frame(
             return Err(frame_error(
                 prepared,
                 frame_diagnostic(
-                    "MVP-FRAME-COMPLETION",
+                    "VESTRA-FRAME-COMPLETION",
                     "backend did not complete the submitted frame",
                 ),
             ));
@@ -558,7 +558,7 @@ pub(crate) fn render_prepared_frame(
         return Err(frame_error(
             prepared,
             frame_diagnostic(
-                "MVP-FRAME-COMPLETION",
+                "VESTRA-FRAME-COMPLETION",
                 "backend completed an unexpected frame",
             ),
         ));
@@ -576,7 +576,7 @@ pub(crate) fn render_prepared_frame(
             return Err(frame_error(
                 prepared,
                 frame_diagnostic(
-                    "MVP-FRAME-COMPLETION",
+                    "VESTRA-FRAME-COMPLETION",
                     "backend retained an unexpected completion",
                 ),
             ));
@@ -624,7 +624,7 @@ fn validate_completed_frame(
         Ok(())
     } else {
         Err(Diagnostic::error(
-            "MVP-BACKEND-CONTRACT",
+            "VESTRA-BACKEND-CONTRACT",
             Category::Backend,
             "backend completed a frame with an invalid RGBA8 byte layout",
             "",

@@ -87,7 +87,7 @@ pub(super) fn run(
                     "render",
                     format,
                     vec![Diagnostic::error(
-                        "MVP-REPORT-WRITE",
+                        "VESTRA-REPORT-WRITE",
                         Category::Output,
                         format!("cannot write report: {error}"),
                         "",
@@ -116,7 +116,7 @@ pub(super) fn run(
             ) {
                 let mut all_errors = errors.clone();
                 all_errors.push(Diagnostic::error(
-                    "MVP-REPORT-WRITE",
+                    "VESTRA-REPORT-WRITE",
                     Category::Output,
                     message,
                     "",
@@ -147,7 +147,7 @@ pub(super) fn run(
                     vec![
                         *diagnostic.clone(),
                         Diagnostic::error(
-                            "MVP-REPORT-WRITE",
+                            "VESTRA-REPORT-WRITE",
                             Category::Output,
                             format!("cannot write report: {report_error}"),
                             "",
@@ -214,7 +214,7 @@ pub(super) fn run(
                     vec![
                         *diagnostic,
                         Diagnostic::error(
-                            "MVP-REPORT-WRITE",
+                            "VESTRA-REPORT-WRITE",
                             Category::Output,
                             format!("cannot write report: {report_error}"),
                             "",

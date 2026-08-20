@@ -166,7 +166,7 @@ mod tests {
     use super::*;
 
     fn error(category: Category) -> Diagnostic {
-        Diagnostic::error("MVP-TEST", category, "test failure", "")
+        Diagnostic::error("VESTRA-TEST", category, "test failure", "")
     }
 
     #[test]

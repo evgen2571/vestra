@@ -13,7 +13,7 @@ use crate::{
 pub fn to_nanos(value: f64, id: &str) -> Result<u128, Diagnostic> {
     seconds_to_nanos(value).ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-TIME",
+            "VESTRA-PLAN-TIME",
             Category::Internal,
             format!("validated item '{id}' has invalid time"),
             "",
@@ -26,7 +26,7 @@ pub fn first_frame_at_or_after(nanos: u128, rate: (u64, u64)) -> Result<u64, Dia
     let denominator = NANOS_PER_SECOND.saturating_mul(u128::from(rate.1));
     numerator.div_ceil(denominator).try_into().map_err(|_| {
         Diagnostic::error(
-            "MVP-PLAN-FRAME-RANGE",
+            "VESTRA-PLAN-FRAME-RANGE",
             Category::Internal,
             "validated timeline cannot be represented as a frame index",
             "",

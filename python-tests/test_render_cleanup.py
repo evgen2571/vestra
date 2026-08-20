@@ -41,4 +41,4 @@ def test_encoder_failure_preserves_structured_render_context(
     assert list(path for path in tmp_path.iterdir() if path != fake_bin) == []
     with pytest.raises(vestra.FrameRenderError) as invalidated:
         prepared.render_frame_number(0)
-    assert invalidated.value.diagnostics[0].code == "MVP-PREPARED-INVALIDATED"
+    assert invalidated.value.diagnostics[0].code == "VESTRA-PREPARED-INVALIDATED"

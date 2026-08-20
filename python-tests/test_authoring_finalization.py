@@ -122,7 +122,7 @@ def test_explicit_duration_retains_native_truncation_warning() -> None:
     authored.add_solid_color_clip(colour="#000000", start=0, duration=2, layer=0)
     report = vestra.Editor().inspect(authored.build())
     assert report.output.duration == 1.0
-    assert any(warning.code == "MVP-DURATION-TRUNCATED" for warning in report.warnings)
+    assert any(warning.code == "VESTRA-DURATION-TRUNCATED" for warning in report.warnings)
 
 
 def test_crop_and_audio_nodes_are_stable_and_failed_updates_are_transactional() -> None:

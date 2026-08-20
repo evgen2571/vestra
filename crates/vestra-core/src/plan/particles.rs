@@ -516,7 +516,7 @@ pub(super) fn compile_with_signals(
         .filter(|nanos| *nanos > 0)
         .ok_or_else(|| {
             Diagnostic::error(
-                "MVP-PLAN-PARTICLE-LIFETIME",
+                "VESTRA-PLAN-PARTICLE-LIFETIME",
                 Category::Internal,
                 "validated particle lifetime must be representable as a positive timeline duration",
                 "",
@@ -530,7 +530,7 @@ pub(super) fn compile_with_signals(
             Ok(CompiledParticleBurst {
                 time_nanos: timeline::seconds_to_nanos(burst.time).ok_or_else(|| {
                     Diagnostic::error(
-                        "MVP-PLAN-PARTICLE-BURST-TIME",
+                        "VESTRA-PLAN-PARTICLE-BURST-TIME",
                         Category::Internal,
                         "validated particle burst time cannot be represented safely",
                         "",
@@ -538,7 +538,7 @@ pub(super) fn compile_with_signals(
                 })?,
                 count: u64::try_from(burst.count).map_err(|_| {
                     Diagnostic::error(
-                        "MVP-PLAN-PARTICLE-BURST-COUNT",
+                        "VESTRA-PLAN-PARTICLE-BURST-COUNT",
                         Category::Internal,
                         "validated particle burst count cannot be represented safely",
                         "",
@@ -550,7 +550,7 @@ pub(super) fn compile_with_signals(
     let burst_count =
         maximum_overlapping_burst_count(&bursts, lifetime_nanos).ok_or_else(|| {
             Diagnostic::error(
-                "MVP-PLAN-PARTICLE-COUNT",
+                "VESTRA-PLAN-PARTICLE-COUNT",
                 Category::Internal,
                 "particle burst count overflowed",
                 "",
@@ -563,7 +563,7 @@ pub(super) fn compile_with_signals(
         .and_then(|value| u64::try_from(value).ok())
         .ok_or_else(|| {
             Diagnostic::error(
-                "MVP-PLAN-PARTICLE-COUNT",
+                "VESTRA-PLAN-PARTICLE-COUNT",
                 Category::Internal,
                 "particle live-count calculation overflowed",
                 "",
@@ -571,7 +571,7 @@ pub(super) fn compile_with_signals(
         })?;
     let maximum_live_particles = continuous_live.checked_add(burst_count).ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-PARTICLE-COUNT",
+            "VESTRA-PLAN-PARTICLE-COUNT",
             Category::Internal,
             "particle live-count calculation overflowed",
             "",
@@ -596,7 +596,7 @@ pub(super) fn compile_with_signals(
         opacity: system.particle.opacity,
         colour: parse_colour(&system.particle.colour).ok_or_else(|| {
             Diagnostic::error(
-                "MVP-PLAN-PARTICLE-COLOUR",
+                "VESTRA-PLAN-PARTICLE-COLOUR",
                 Category::Internal,
                 "validated particle colour is invalid",
                 "",
@@ -683,7 +683,7 @@ where
         let (t, value) = get(stop);
         if !t.is_finite() || !(0.0..=1.0).contains(&t) || t <= previous || !value.is_finite() {
             return Err(Diagnostic::error(
-                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                "VESTRA-PLAN-PARTICLE-LIFETIME-CURVE",
                 Category::Internal,
                 format!("invalid {name} lifetime curve stop"),
                 "",
@@ -691,7 +691,7 @@ where
         }
         if name == "size" && value < 0.0 {
             return Err(Diagnostic::error(
-                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                "VESTRA-PLAN-PARTICLE-LIFETIME-CURVE",
                 Category::Internal,
                 "size lifetime multipliers must be non-negative",
                 "",
@@ -699,7 +699,7 @@ where
         }
         if name == "opacity" && !(0.0..=1.0).contains(&value) {
             return Err(Diagnostic::error(
-                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                "VESTRA-PLAN-PARTICLE-LIFETIME-CURVE",
                 Category::Internal,
                 "opacity lifetime multipliers must be in 0..=1",
                 "",
@@ -723,7 +723,7 @@ fn compile_colour_curve(
     for stop in stops {
         if !stop.t.is_finite() || !(0.0..=1.0).contains(&stop.t) || stop.t <= previous {
             return Err(Diagnostic::error(
-                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                "VESTRA-PLAN-PARTICLE-LIFETIME-CURVE",
                 Category::Internal,
                 "invalid colour lifetime curve stop",
                 "",
@@ -731,7 +731,7 @@ fn compile_colour_curve(
         }
         let colour = parse_colour(&stop.colour).ok_or_else(|| {
             Diagnostic::error(
-                "MVP-PLAN-PARTICLE-LIFETIME-CURVE",
+                "VESTRA-PLAN-PARTICLE-LIFETIME-CURVE",
                 Category::Internal,
                 "invalid colour lifetime curve colour",
                 "",
@@ -846,7 +846,7 @@ fn normalize_rate(rate: f64) -> Result<u64, Diagnostic> {
     let scaled = rate * RATE_SCALE as f64;
     if !rate.is_finite() || rate < 0.0 || !scaled.is_finite() || scaled > u64::MAX as f64 {
         return Err(Diagnostic::error(
-            "MVP-PLAN-PARTICLE-RATE",
+            "VESTRA-PLAN-PARTICLE-RATE",
             Category::Internal,
             "validated particle rate cannot be represented safely",
             "",
@@ -1339,7 +1339,7 @@ mod tests {
             result
                 .expect_err("zero-nanosecond lifetime must be rejected")
                 .code,
-            "MVP-PLAN-PARTICLE-LIFETIME"
+            "VESTRA-PLAN-PARTICLE-LIFETIME"
         );
     }
 
@@ -1366,7 +1366,7 @@ mod tests {
             result
                 .expect_err("zero-nanosecond lifetime must be rejected")
                 .code,
-            "MVP-PLAN-PARTICLE-LIFETIME"
+            "VESTRA-PLAN-PARTICLE-LIFETIME"
         );
     }
 
@@ -1969,7 +1969,10 @@ mod tests {
             },
             crate::project::parse_colour,
         );
-        assert_eq!(result.unwrap_err().code, "MVP-PLAN-PARTICLE-LIFETIME-CURVE");
+        assert_eq!(
+            result.unwrap_err().code,
+            "VESTRA-PLAN-PARTICLE-LIFETIME-CURVE"
+        );
     }
 
     #[test]

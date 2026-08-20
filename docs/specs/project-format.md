@@ -166,7 +166,7 @@ along-bar gradients, and analysis-index-based across-band gradients are
 supported. Their frequency bands are logarithmically spaced and smoothed by
 attack/release durations; ordinary clip opacity, blend mode, and visual effects
 apply. A project containing Spectrum2D requires authored Master audio and
-reports `MVP-SPECTRUM2D-MASTER-AUDIO` when it is absent.
+reports `VESTRA-SPECTRUM2D-MASTER-AUDIO` when it is absent.
 
 The typed Python authoring API also provides eight authoring-time presets:
 `classic` (balanced bottom bars), `dense` (more bands and tighter spacing),

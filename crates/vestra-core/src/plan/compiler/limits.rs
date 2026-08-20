@@ -31,7 +31,7 @@ pub(super) fn enforce_active_layer_limit(
             active += 1;
             if active > maximum_active_layers {
                 return Err(Diagnostic::error(
-                    "MVP-LIMIT-ACTIVE-LAYERS",
+                    "VESTRA-LIMIT-ACTIVE-LAYERS",
                     Category::Semantic,
                     "project exceeds the simultaneously active layer limit",
                     "/visual/clips",

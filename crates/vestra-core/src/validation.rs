@@ -122,7 +122,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
     output::validate(&project.output, &mut errors);
     if let Err(message) = project.output.frame_rate.rational() {
         errors.push(Diagnostic::error(
-            "MVP-OUTPUT-FPS",
+            "VESTRA-OUTPUT-FPS",
             Category::Semantic,
             message,
             "/output/frame_rate",
@@ -167,7 +167,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         Ok(count) => count,
         Err(_) => {
             errors.push(Diagnostic::error(
-                "MVP-TIMELINE-OVERFLOW",
+                "VESTRA-TIMELINE-OVERFLOW",
                 Category::Semantic,
                 "project duration or frame rate cannot be represented safely",
                 "/output",

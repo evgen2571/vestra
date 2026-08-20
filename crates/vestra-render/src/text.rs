@@ -23,7 +23,7 @@ pub(crate) struct PreparedText {
 pub(crate) fn load_font(font_path: &Path) -> Result<FontSystem, Diagnostic> {
     let bytes = std::fs::read(font_path).map_err(|error| {
         Diagnostic::error(
-            "MVP-TEXT-FONT",
+            "VESTRA-TEXT-FONT",
             Category::Media,
             format!("cannot read font: {error}"),
             "",
@@ -34,7 +34,7 @@ pub(crate) fn load_font(font_path: &Path) -> Result<FontSystem, Diagnostic> {
     let font_system = FontSystem::new_with_locale_and_db("en-US".to_owned(), database);
     if font_system.db().faces().next().is_none() {
         return Err(Diagnostic::error(
-            "MVP-TEXT-FONT",
+            "VESTRA-TEXT-FONT",
             Category::Media,
             "font contains no supported faces",
             "",
@@ -52,7 +52,7 @@ pub(crate) fn prepare(
 ) -> Result<PreparedText, Diagnostic> {
     let colour = parse_colour(&source.fill).ok_or_else(|| {
         Diagnostic::error(
-            "MVP-TEXT-FILL",
+            "VESTRA-TEXT-FILL",
             Category::Internal,
             "validated text fill is invalid",
             "",
@@ -65,7 +65,7 @@ pub(crate) fn prepare(
         .and_then(|face| face.families.first().map(|family| family.0.clone()))
         .ok_or_else(|| {
             Diagnostic::error(
-                "MVP-TEXT-FONT",
+                "VESTRA-TEXT-FONT",
                 Category::Media,
                 "font contains no supported faces",
                 "",
@@ -165,7 +165,7 @@ fn finite_metric(value: f64, name: &str) -> Result<f32, Diagnostic> {
         Ok(value)
     } else {
         Err(Diagnostic::error(
-            "MVP-TEXT-SIZE",
+            "VESTRA-TEXT-SIZE",
             Category::Media,
             format!("text {name} is too large for the layout engine"),
             "",
@@ -208,7 +208,7 @@ impl RasterBounds {
             .filter(|&value| value > 0)
             .ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-TEXT-SIZE",
+                    "VESTRA-TEXT-SIZE",
                     Category::Media,
                     "text raster width is invalid",
                     "",
@@ -221,7 +221,7 @@ impl RasterBounds {
             .filter(|&value| value > 0)
             .ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-TEXT-SIZE",
+                    "VESTRA-TEXT-SIZE",
                     Category::Media,
                     "text raster height is invalid",
                     "",
@@ -241,7 +241,7 @@ fn validate_raster_allocation(
         .checked_mul(u64::from(height))
         .ok_or_else(|| {
             Diagnostic::error(
-                "MVP-TEXT-SIZE",
+                "VESTRA-TEXT-SIZE",
                 Category::Media,
                 "prepared text dimensions overflow",
                 "",
@@ -249,7 +249,7 @@ fn validate_raster_allocation(
         })?;
     if pixels > limits.maximum_source_pixels {
         return Err(Diagnostic::error(
-            "MVP-LIMIT-SOURCE-PIXELS",
+            "VESTRA-LIMIT-SOURCE-PIXELS",
             Category::Media,
             "prepared text exceeds configured pixel limit",
             "",
@@ -257,7 +257,7 @@ fn validate_raster_allocation(
     }
     let bytes = pixels.checked_mul(4).ok_or_else(|| {
         Diagnostic::error(
-            "MVP-TEXT-SIZE",
+            "VESTRA-TEXT-SIZE",
             Category::Media,
             "prepared text is too large",
             "",
@@ -265,7 +265,7 @@ fn validate_raster_allocation(
     })?;
     if bytes > limits.maximum_decoded_asset_bytes {
         return Err(Diagnostic::error(
-            "MVP-LIMIT-DECODED-ASSET",
+            "VESTRA-LIMIT-DECODED-ASSET",
             Category::Media,
             "prepared text exceeds configured byte limit",
             "",
@@ -276,7 +276,7 @@ fn validate_raster_allocation(
         .is_none_or(|total| total > limits.maximum_total_decoded_bytes)
     {
         return Err(Diagnostic::error(
-            "MVP-LIMIT-DECODED-TOTAL",
+            "VESTRA-LIMIT-DECODED-TOTAL",
             Category::Media,
             "decoded sources exceed configured byte limit",
             "",
@@ -305,7 +305,7 @@ mod tests {
 
         let error = validate_raster_allocation(2, 2, 0, &limits).expect_err("limit must reject");
 
-        assert_eq!(error.code, "MVP-LIMIT-SOURCE-PIXELS");
+        assert_eq!(error.code, "VESTRA-LIMIT-SOURCE-PIXELS");
     }
 
     #[test]
@@ -317,14 +317,14 @@ mod tests {
 
         let error = validate_raster_allocation(1, 2, 0, &limits).expect_err("limit must reject");
 
-        assert_eq!(error.code, "MVP-LIMIT-DECODED-TOTAL");
+        assert_eq!(error.code, "VESTRA-LIMIT-DECODED-TOTAL");
     }
 
     #[test]
     fn unrepresentable_font_size_is_rejected_without_layout_allocation() {
         let error = finite_metric(f64::MAX, "font size").expect_err("metric must reject");
 
-        assert_eq!(error.code, "MVP-TEXT-SIZE");
+        assert_eq!(error.code, "VESTRA-TEXT-SIZE");
     }
 
     #[test]
@@ -380,6 +380,6 @@ mod tests {
         let error = prepare(&source, &mut font_system, &mut cache, 0, &limits)
             .expect_err("source limit must reject raster");
 
-        assert_eq!(error.code, "MVP-LIMIT-SOURCE-PIXELS");
+        assert_eq!(error.code, "VESTRA-LIMIT-SOURCE-PIXELS");
     }
 }

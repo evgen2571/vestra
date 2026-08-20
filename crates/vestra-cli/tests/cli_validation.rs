@@ -140,7 +140,7 @@ fn render_failure_is_presented_once_without_duplicate_error_log() {
         .expect("render runs");
     assert!(!result.status.success());
     let stderr = String::from_utf8_lossy(&result.stderr);
-    assert_eq!(stderr.matches("MVP-PROJECT-READ").count(), 1);
+    assert_eq!(stderr.matches("VESTRA-PROJECT-READ").count(), 1);
     assert!(!stderr.contains(" ERROR ve::cli::commands"));
 }
 
@@ -158,10 +158,10 @@ fn verbose_render_failure_keeps_legacy_code_only_in_user_diagnostic() {
         .expect("render runs");
     assert!(!result.status.success());
     let stderr = String::from_utf8_lossy(&result.stderr);
-    assert_eq!(stderr.matches("MVP-PROJECT-READ").count(), 1);
+    assert_eq!(stderr.matches("VESTRA-PROJECT-READ").count(), 1);
     for line in stderr.lines().filter(|line| line.contains(" DEBUG ")) {
         assert!(
-            !line.contains("MVP-"),
+            !line.contains("VESTRA-"),
             "structured log leaked a code: {line}"
         );
     }
@@ -228,7 +228,7 @@ fn canonical_project_validates_and_rejects_a_version_field() {
         .output()
         .expect("null validation runs");
     assert_eq!(null_result.status.code(), Some(3));
-    assert!(String::from_utf8_lossy(&null_result.stderr).contains("MVP-PROJECT-SHAPE"));
+    assert!(String::from_utf8_lossy(&null_result.stderr).contains("VESTRA-PROJECT-SHAPE"));
 }
 
 #[test]
@@ -306,7 +306,7 @@ fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
         .output()
         .expect("validate runs");
     assert_eq!(bad_fade.status.code(), Some(3));
-    assert!(String::from_utf8_lossy(&bad_fade.stderr).contains("MVP-FLASH-FADES"));
+    assert!(String::from_utf8_lossy(&bad_fade.stderr).contains("VESTRA-FLASH-FADES"));
 
     let mut hidden_transition = original;
     hidden_transition["visual"]["clips"][0]["visible"] = false.into();
@@ -324,7 +324,9 @@ fn canonical_validation_rejects_typed_track_and_flash_timing_errors() {
         .output()
         .expect("validate runs");
     assert_eq!(hidden_transition.status.code(), Some(3));
-    assert!(String::from_utf8_lossy(&hidden_transition.stderr).contains("MVP-TRANSITION-HIDDEN"));
+    assert!(
+        String::from_utf8_lossy(&hidden_transition.stderr).contains("VESTRA-TRANSITION-HIDDEN")
+    );
 }
 
 #[test]
@@ -358,53 +360,57 @@ fn canonical_validation_rejects_focused_invalid_projects() {
         {"time": 1.2, "value": {"x": 0.5, "y": 0.5}, "interpolation": "linear"},
         {"time": 0.6, "value": {"x": 0.4, "y": 0.5}, "interpolation": "linear"}
     ]);
-    assert_invalid!("unsorted-keyframes", unsorted, "MVP-KEYFRAME-TIME");
+    assert_invalid!("unsorted-keyframes", unsorted, "VESTRA-KEYFRAME-TIME");
 
     let mut duplicate_time = original.clone();
     duplicate_time["visual"]["clips"][0]["transform"]["position"]["keyframes"][1]["time"] =
         0.6.into();
-    assert_invalid!("duplicate-keyframes", duplicate_time, "MVP-KEYFRAME-TIME");
+    assert_invalid!(
+        "duplicate-keyframes",
+        duplicate_time,
+        "VESTRA-KEYFRAME-TIME"
+    );
 
     let mut outside_duration = original.clone();
     outside_duration["visual"]["clips"][0]["transform"]["position"]["keyframes"][0]["time"] =
         3.into();
-    assert_invalid!("outside-keyframe", outside_duration, "MVP-KEYFRAME-TIME");
+    assert_invalid!("outside-keyframe", outside_duration, "VESTRA-KEYFRAME-TIME");
 
     let mut zero_scale = original.clone();
     zero_scale["visual"]["clips"][0]["transform"]["scale"]["base_value"]["x"] = 0.into();
-    assert_invalid!("zero-scale", zero_scale, "MVP-TRACK-VALUE");
+    assert_invalid!("zero-scale", zero_scale, "VESTRA-TRACK-VALUE");
 
     let mut negative_scale = original.clone();
     negative_scale["visual"]["clips"][0]["transform"]["scale"]["base_value"]["x"] = (-1).into();
-    assert_invalid!("negative-scale", negative_scale, "MVP-TRACK-VALUE");
+    assert_invalid!("negative-scale", negative_scale, "VESTRA-TRACK-VALUE");
 
     let mut opacity = original.clone();
     opacity["visual"]["clips"][0]["opacity"]["base_value"] = 2.into();
-    assert_invalid!("opacity-range", opacity, "MVP-TRACK-VALUE");
+    assert_invalid!("opacity-range", opacity, "VESTRA-TRACK-VALUE");
 
     let mut duplicate_effect = original.clone();
     duplicate_effect["visual"]["clips"][0]["effects"] = serde_json::json!([
         {"id": "same", "type": "brightness", "amount": {"base_value": 0.1}},
         {"id": "same", "type": "contrast", "amount": {"base_value": 1.1}}
     ]);
-    assert_invalid!("duplicate-effect", duplicate_effect, "MVP-EFFECT-ID");
+    assert_invalid!("duplicate-effect", duplicate_effect, "VESTRA-EFFECT-ID");
 
     let mut invalid_bezier = original.clone();
     invalid_bezier["visual"]["clips"][0]["transform"]["position"]["keyframes"][1]["interpolation"] =
         serde_json::json!({"type": "cubic_bezier", "x1": -0.1, "y1": 0.0, "x2": 1.2, "y2": 1.0});
-    assert_invalid!("invalid-bezier", invalid_bezier, "MVP-BEZIER");
+    assert_invalid!("invalid-bezier", invalid_bezier, "VESTRA-BEZIER");
 
     let mut missing_transition = original.clone();
     missing_transition["visual"]["transitions"][0]["incoming"] = "missing".into();
     assert_invalid!(
         "missing-transition-clip",
         missing_transition,
-        "MVP-TRANSITION-CLIP"
+        "VESTRA-TRANSITION-CLIP"
     );
 
     let mut long_transition = original.clone();
     long_transition["visual"]["transitions"][0]["duration"] = 3.into();
-    assert_invalid!("long-transition", long_transition, "MVP-TRANSITION-FIT");
+    assert_invalid!("long-transition", long_transition, "VESTRA-TRANSITION-FIT");
 
     let mut invalid_solid = original.clone();
     invalid_solid["visual"]["clips"] = serde_json::json!([{
@@ -412,7 +418,11 @@ fn canonical_validation_rejects_focused_invalid_projects() {
         "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1}
     }]);
     invalid_solid["visual"]["transitions"] = serde_json::json!([]);
-    assert_invalid!("invalid-solid-colour", invalid_solid, "MVP-SOURCE-COLOUR");
+    assert_invalid!(
+        "invalid-solid-colour",
+        invalid_solid,
+        "VESTRA-SOURCE-COLOUR"
+    );
 
     let mut solid_image_properties = original.clone();
     solid_image_properties["visual"]["clips"] = serde_json::json!([{
@@ -424,7 +434,7 @@ fn canonical_validation_rejects_focused_invalid_projects() {
     assert_invalid!(
         "solid-image-properties",
         solid_image_properties,
-        "MVP-SOLID-PROPERTIES"
+        "VESTRA-SOLID-PROPERTIES"
     );
 
     let mut solid_transition = original.clone();
@@ -437,12 +447,16 @@ fn canonical_validation_rejects_focused_invalid_projects() {
     assert_invalid!(
         "solid-transition",
         solid_transition,
-        "MVP-TRANSITION-SOURCE"
+        "VESTRA-TRANSITION-SOURCE"
     );
 
     let mut unknown_top_level = original.clone();
     unknown_top_level["unknown"] = true.into();
-    assert_invalid!("unknown-top-level", unknown_top_level, "MVP-PROJECT-SHAPE");
+    assert_invalid!(
+        "unknown-top-level",
+        unknown_top_level,
+        "VESTRA-PROJECT-SHAPE"
+    );
 
     let mut excessive_clips = original;
     excessive_clips["assets"] = serde_json::json!([]);
@@ -459,5 +473,5 @@ fn canonical_validation_rejects_focused_invalid_projects() {
             })
             .collect(),
     );
-    assert_invalid!("excessive-clips", excessive_clips, "MVP-LIMIT-CLIPS");
+    assert_invalid!("excessive-clips", excessive_clips, "VESTRA-LIMIT-CLIPS");
 }

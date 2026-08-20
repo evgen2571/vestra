@@ -18,7 +18,7 @@ fn validate_effects(
         let definition = effect.definition();
         if !definition.scopes.contains(&scope) {
             errors.push(Diagnostic::error(
-                "MVP-AUDIO-EFFECT-SCOPE",
+                "VESTRA-AUDIO-EFFECT-SCOPE",
                 Category::Semantic,
                 format!(
                     "audio effect `{}` is not supported at {scope:?} scope",
@@ -59,7 +59,7 @@ fn validate_effects(
             };
             if !parameter.accepts_number(value) {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-EFFECT-PARAMETER",
+                    "VESTRA-AUDIO-EFFECT-PARAMETER",
                     Category::Semantic,
                     format!(
                         "audio effect `{}` parameter `{}` is outside its declared range",
@@ -118,7 +118,7 @@ pub(crate) fn validate(
                     Ok(samples) => samples,
                     Err(_) => {
                         errors.push(Diagnostic::error(
-                            "MVP-AUDIO-DURATION",
+                            "VESTRA-AUDIO-DURATION",
                             Category::Semantic,
                             "audio effect duration cannot be represented safely",
                             &path,
@@ -133,7 +133,7 @@ pub(crate) fn validate(
                 || clip.fade_in + clip.fade_out > processed_duration + 1e-9
             {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-CLIP-SOURCE",
+                    "VESTRA-AUDIO-CLIP-SOURCE",
                     Category::Semantic,
                     "audio clip trim exceeds source duration or fades exceed processed clip duration",
                     path,
@@ -147,7 +147,7 @@ pub(crate) fn validate(
                     .is_some_and(|keyframe| keyframe.time > processed_duration + 1e-9)
             }) {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-AUTOMATION-DURATION",
+                    "VESTRA-AUDIO-AUTOMATION-DURATION",
                     Category::Semantic,
                     "audio gain automation exceeds the processed clip duration",
                     format!("{path}/gain_automation/keyframes"),
@@ -163,7 +163,7 @@ pub(crate) fn validate(
                     };
                     if previous.is_some_and(|previous| sample <= previous) {
                         errors.push(Diagnostic::error(
-                            "MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION",
+                            "VESTRA-AUDIO-AUTOMATION-SAMPLE-RESOLUTION",
                             Category::Semantic,
                             format!(
                                 "gain automation keyframe {keyframe_index} at {} seconds resolves to the same 48 kHz mixer sample as the preceding keyframe",
@@ -243,7 +243,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|error| error.code == "MVP-AUDIO-EFFECT-PARAMETER")
+                .any(|error| error.code == "VESTRA-AUDIO-EFFECT-PARAMETER")
         );
     }
 
@@ -258,7 +258,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error.code == "MVP-AUDIO-EFFECT-PARAMETER")
+                .filter(|error| error.code == "VESTRA-AUDIO-EFFECT-PARAMETER")
                 .count(),
             3
         );

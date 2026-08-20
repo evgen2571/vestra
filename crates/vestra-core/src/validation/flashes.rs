@@ -10,7 +10,7 @@ pub(super) fn validate(flashes: &[crate::project::Flash], errors: &mut Vec<Diagn
         let path = format!("/visual/flashes/{index}");
         if flash.id.trim().is_empty() || !ids.insert(&flash.id) {
             errors.push(Diagnostic::error(
-                "MVP-FLASH-ID",
+                "VESTRA-FLASH-ID",
                 Category::Semantic,
                 "flash ids must be non-empty and unique",
                 format!("{path}/id"),
@@ -18,7 +18,7 @@ pub(super) fn validate(flashes: &[crate::project::Flash], errors: &mut Vec<Diagn
         }
         if !super::nonnegative(flash.start) || !super::positive(flash.duration) {
             errors.push(Diagnostic::error(
-                "MVP-FLASH-TIME",
+                "VESTRA-FLASH-TIME",
                 Category::Semantic,
                 "flash start and duration must be finite with positive duration",
                 path.clone(),
@@ -26,7 +26,7 @@ pub(super) fn validate(flashes: &[crate::project::Flash], errors: &mut Vec<Diagn
         }
         if !super::unit(flash.opacity) || parse_colour(&flash.colour).is_none() {
             errors.push(Diagnostic::error(
-                "MVP-FLASH-PROPERTIES",
+                "VESTRA-FLASH-PROPERTIES",
                 Category::Semantic,
                 "flash opacity or colour is invalid",
                 path.clone(),
@@ -37,7 +37,7 @@ pub(super) fn validate(flashes: &[crate::project::Flash], errors: &mut Vec<Diagn
             || flash.fade_in + flash.fade_out > flash.duration
         {
             errors.push(Diagnostic::error(
-                "MVP-FLASH-FADES",
+                "VESTRA-FLASH-FADES",
                 Category::Semantic,
                 "flash fades must be finite, non-negative, and fit within duration",
                 path,

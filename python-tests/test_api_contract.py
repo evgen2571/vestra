@@ -125,7 +125,7 @@ def test_project_error_has_complete_base_contract(tmp_path: Path) -> None:
     assert isinstance(error.diagnostics, tuple)
     assert isinstance(error.warnings, tuple)
     assert error.warnings == ()
-    assert error.diagnostics[0].code == "MVP-PROJECT-READ"
+    assert error.diagnostics[0].code == "VESTRA-PROJECT-READ"
 
 
 def test_preflight_options_keep_every_exposed_argument(tmp_path: Path) -> None:

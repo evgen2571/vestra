@@ -45,7 +45,7 @@ The public-coordinator regression
 `prepared::tests::editor_prepare_deduplicates_fallback_warning_and_keeps_its_report_immutable`
 uses `Editor::prepare(... Auto)` with a narrow test-only preflight/backend seam.
 It proves selected CPU retention, no adapter, matching fallback metadata, one
-`MVP-WGPU-FALLBACK` diagnostic with its complete structured identity, stable
+`VESTRA-WGPU-FALLBACK` diagnostic with its complete structured identity, stable
 warning order, and an unchanged `PreparationReport` after both a frame and a
 video operation.
 

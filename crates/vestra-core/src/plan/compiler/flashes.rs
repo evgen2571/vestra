@@ -21,7 +21,7 @@ pub(super) fn compile(
     let duration_nanos = to_nanos(flash.duration, &flash.id)?;
     let colour = parse_colour(&flash.colour).ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-FLASH",
+            "VESTRA-PLAN-FLASH",
             crate::Category::Internal,
             "validated flash has invalid colour",
             "",

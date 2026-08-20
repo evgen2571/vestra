@@ -985,7 +985,7 @@ impl RenderBackend for MockStagedBackend {
             Ok(())
         } else {
             Err(Diagnostic::error(
-                "MVP-BACKEND-NOT-IDLE",
+                "VESTRA-BACKEND-NOT-IDLE",
                 Category::Backend,
                 "mock backend retained pending work",
                 "",
@@ -1181,9 +1181,9 @@ fn malformed_wgpu_completion_invalidates_the_prepared_backend() {
     .expect("prepared WGPU seam");
 
     let error = render_prepared_frame(&mut prepared, 0).expect_err("invalid backend output");
-    assert_eq!(error.diagnostic.code, "MVP-BACKEND-CONTRACT");
+    assert_eq!(error.diagnostic.code, "VESTRA-BACKEND-CONTRACT");
     let later = render_prepared_frame(&mut prepared, 0).expect_err("state invalidated");
-    assert_eq!(later.diagnostic.code, "MVP-PREPARED-INVALIDATED");
+    assert_eq!(later.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }
 
 #[test]
@@ -1215,7 +1215,7 @@ fn frame_failures_preserve_complete_backend_diagnostics() {
     assert_eq!(error.diagnostic.related_id.as_deref(), Some("frame-100"));
     assert_eq!(error.diagnostic.message, "injected device loss");
     let later = render_prepared_frame(&mut prepared, 0).expect_err("invalidated state");
-    assert_eq!(later.diagnostic.code, "MVP-PREPARED-INVALIDATED");
+    assert_eq!(later.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }
 
 #[test]
@@ -1321,7 +1321,7 @@ fn idle_failure_prevents_publication_and_invalidates_prepared_state() {
         },
     )
     .expect_err("idle failure invalidates the prepared state");
-    assert_eq!(next.diagnostic.code, "MVP-PREPARED-INVALIDATED");
+    assert_eq!(next.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }
 
 #[test]
@@ -1360,7 +1360,7 @@ fn already_cancelled_operation_keeps_prepared_backend_reusable() {
         },
     )
     .expect_err("already-cancelled operation stops before submit");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert_eq!(aborts.load(Ordering::Relaxed), 0);
     let fresh = RenderOptions {
         output_override: Some(workspace.path().join("fresh.mp4")),
@@ -1440,7 +1440,7 @@ fn prepared_state_rejects_reuse_after_submission_failure() {
         },
     )
     .expect_err("invalidated state cannot be silently rebuilt");
-    assert_eq!(second.diagnostic.code, "MVP-PREPARED-INVALIDATED");
+    assert_eq!(second.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }
 
 #[test]
@@ -1474,7 +1474,7 @@ fn output_precheck_failure_leaves_prepared_state_ready() {
         },
     )
     .expect_err("output failure happens before renderer submission");
-    assert_eq!(error.diagnostic.code, "MVP-OUTPUT-PREPARE");
+    assert_eq!(error.diagnostic.code, "VESTRA-OUTPUT-PREPARE");
 
     let corrected = RenderOptions {
         output_override: Some(workspace.path().join("recovered.mp4")),
@@ -1525,7 +1525,7 @@ fn encoder_startup_failure_leaves_prepared_state_ready() {
         },
     )
     .expect_err("encoder startup fails before submission");
-    assert_eq!(error.diagnostic.code, "MVP-BACKEND-START");
+    assert_eq!(error.diagnostic.code, "VESTRA-BACKEND-START");
 
     render_prepared_with_sink(
         &mut prepared,
@@ -1712,7 +1712,7 @@ fn preparation_fallback_is_retained_on_later_render_failure() {
 
     assert_eq!(error.diagnostic.code, "MOCK-SUBMIT");
     assert_eq!(error.warnings.len(), 1);
-    assert_eq!(error.warnings[0].code, "MVP-WGPU-FALLBACK");
+    assert_eq!(error.warnings[0].code, "VESTRA-WGPU-FALLBACK");
     assert_eq!(
         error.warnings[0].message,
         "WGPU fallback to CPU: injected pipeline preparation failure"
@@ -1754,7 +1754,7 @@ fn engine_rejects_a_sink_frame_count_mismatch_before_publication() {
         },
     )
     .expect_err("short sink result rejects publication");
-    assert_eq!(error.diagnostic.code, "MVP-SINK-FRAME-COUNT");
+    assert_eq!(error.diagnostic.code, "VESTRA-SINK-FRAME-COUNT");
     assert!(!output.exists());
 }
 
@@ -1936,7 +1936,7 @@ fn asynchronous_backend_failure_uses_the_backend_frame_identity() {
 fn sink_write_failure_aborts_renderer_and_sink_without_publishing() {
     let (error, probe, backend_aborts, output) =
         run_failure_with_recording_sink(MockMode::Normal, Some(0), false);
-    assert_eq!(error.diagnostic.code, "MVP-RENDER-WRITE");
+    assert_eq!(error.diagnostic.code, "VESTRA-RENDER-WRITE");
     assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
     assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
     assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
@@ -1985,7 +1985,7 @@ fn cancellation_aborts_the_sink_and_keeps_cleanup_failure_as_a_hint() {
         },
     )
     .expect_err("cancellation propagates");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert_eq!(probe.abort_count.load(Ordering::Relaxed), 1);
     assert_eq!(probe.finish_count.load(Ordering::Relaxed), 0);
     assert_eq!(backend_aborts.load(Ordering::Relaxed), 0);
@@ -2013,7 +2013,7 @@ fn engine_propagates_submit_poll_missing_and_flush_failures() {
         run_failure_case(MockMode::MissingCompletion)
             .diagnostic
             .code,
-        "MVP-POLL-STALLED"
+        "VESTRA-POLL-STALLED"
     );
     assert_eq!(
         run_failure_case(MockMode::FlushFailure).diagnostic.code,
@@ -2027,7 +2027,7 @@ fn engine_rejects_duplicate_mock_completion() {
         run_failure_case(MockMode::DuplicateCompletion)
             .diagnostic
             .code,
-        "MVP-DUPLICATE-FRAME"
+        "VESTRA-DUPLICATE-FRAME"
     );
 }
 
@@ -2058,7 +2058,7 @@ fn engine_cancellation_stops_before_mock_submission() {
         },
     )
     .expect_err("cancellation propagates");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
 }
 
 #[test]
@@ -2090,7 +2090,7 @@ fn engine_cancellation_after_submission_discards_in_flight_work() {
         },
     )
     .expect_err("in-flight cancellation propagates");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert!(written.lock().expect("mock metrics lock").is_empty());
     assert!(!output.exists());
 }
@@ -2129,7 +2129,7 @@ fn engine_cancellation_during_final_drain_discards_polled_frame() {
         },
     )
     .expect_err("final-drain cancellation propagates");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert!(written.lock().expect("mock metrics lock").is_empty());
     assert!(!output.exists());
 }
@@ -2178,7 +2178,7 @@ fn observer_cancellation_stops_ready_queue_drain_before_another_frame_write() {
         },
     )
     .expect_err("observer cancellation must stop ready queue draining");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert_eq!(*written.lock().expect("mock metrics lock"), vec![0]);
     assert_eq!(*sink_probe.frames.lock().expect("sink lock"), vec![0]);
     assert_eq!(sink_probe.finish_count.load(Ordering::Relaxed), 0);
@@ -2230,7 +2230,7 @@ fn callback_token_cancellation_stops_ready_queue_drain_before_another_frame_writ
         },
     )
     .expect_err("callback token cancellation must stop ready queue draining");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert_eq!(*written.lock().expect("mock metrics lock"), vec![0]);
     assert_eq!(*sink_probe.frames.lock().expect("sink lock"), vec![0]);
     assert_eq!(sink_probe.finish_count.load(Ordering::Relaxed), 0);
@@ -2277,7 +2277,7 @@ fn cancellation_after_frame_loop_stops_before_encoder_finalization() {
         },
     )
     .expect_err("cancellation before finalization must stop the operation");
-    assert_eq!(error.diagnostic.code, "MVP-CANCELLED");
+    assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert!(error.temporary_removed);
     assert_eq!(backend_aborts.load(Ordering::Relaxed), 1);
     assert_eq!(sink_probe.finish_count.load(Ordering::Relaxed), 0);
@@ -2292,5 +2292,5 @@ fn cancellation_after_frame_loop_stops_before_encoder_finalization() {
     );
     let later = render_prepared_frame(&mut prepared, 0)
         .expect_err("post-submission cancellation invalidates prepared state");
-    assert_eq!(later.diagnostic.code, "MVP-PREPARED-INVALIDATED");
+    assert_eq!(later.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }

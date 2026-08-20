@@ -104,7 +104,7 @@ keyframe, and all three single-keyframe states. They also prove that times are
 clip-local: moving a clip preserves its canonical keyframe time, shifts the
 project-time evaluation, and does not mutate an already-built project. Reducing
 a clip duration likewise preserves an out-of-range keyframe in canonical data;
-native validation reports `MVP-KEYFRAME-TIME` at
+native validation reports `VESTRA-KEYFRAME-TIME` at
 `/visual/clips/0/opacity/keyframes/0/time`.
 
 The interpolation test samples ease-in/out behavior at 0.25, away from the

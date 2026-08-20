@@ -109,9 +109,9 @@ fn cancel_static_ffmpeg(
     prepared.invalidate();
     let cleanup = encoder.abort().err().map(|error| error.to_string());
     let diagnostic = match cleanup {
-        Some(detail) => Diagnostic::error("MVP-CANCELLED", Category::Cancellation, message, "")
+        Some(detail) => Diagnostic::error("VESTRA-CANCELLED", Category::Cancellation, message, "")
             .with_hint(format!("encoder cleanup: {detail}")),
-        None => Diagnostic::error("MVP-CANCELLED", Category::Cancellation, message, ""),
+        None => Diagnostic::error("VESTRA-CANCELLED", Category::Cancellation, message, ""),
     };
     cleanup_error(
         output,
@@ -161,7 +161,7 @@ pub(super) fn render_static_ffmpeg(
     )
     .map_err(|error| RenderError {
         diagnostic: Diagnostic::error(
-            "MVP-OUTPUT-PREPARE",
+            "VESTRA-OUTPUT-PREPARE",
             Category::Output,
             error.to_string(),
             "/output/path",
@@ -179,7 +179,7 @@ pub(super) fn render_static_ffmpeg(
         let removed = output.cleanup();
         return Err(RenderError {
             diagnostic: Diagnostic::error(
-                "MVP-CANCELLED",
+                "VESTRA-CANCELLED",
                 Category::Cancellation,
                 "render cancelled",
                 "",
@@ -205,7 +205,7 @@ pub(super) fn render_static_ffmpeg(
             frame_error(
                 prepared,
                 frame_diagnostic(
-                    "MVP-BACKEND-CONTRACT",
+                    "VESTRA-BACKEND-CONTRACT",
                     "backend completed a frame with an invalid RGBA8 byte layout",
                 ),
             )
@@ -218,7 +218,7 @@ pub(super) fn render_static_ffmpeg(
             RenderFailureStage::OutputPreparation,
             0,
             None,
-            Diagnostic::error("MVP-STATIC-PNG", Category::Output, error.to_string(), ""),
+            Diagnostic::error("VESTRA-STATIC-PNG", Category::Output, error.to_string(), ""),
         ));
     }
     let mut encoder =
@@ -233,7 +233,7 @@ pub(super) fn render_static_ffmpeg(
                     0,
                     None,
                     Diagnostic::error(
-                        "MVP-BACKEND-START",
+                        "VESTRA-BACKEND-START",
                         Category::Backend,
                         error.to_string(),
                         "",
@@ -307,7 +307,7 @@ pub(super) fn render_static_ffmpeg(
                     &output,
                     &plan,
                     reported_frames,
-                    Diagnostic::error("MVP-ENCODE", Category::Render, error.to_string(), ""),
+                    Diagnostic::error("VESTRA-ENCODE", Category::Render, error.to_string(), ""),
                 );
                 // Match the generic path: a write-stage failure invalidates
                 // prepared backend state, while encoder finalization happens
@@ -328,7 +328,7 @@ pub(super) fn render_static_ffmpeg(
             completed_frames,
             None,
             Diagnostic::error(
-                "MVP-SINK-FRAME-COUNT",
+                "VESTRA-SINK-FRAME-COUNT",
                 Category::Render,
                 "static FFmpeg frame count differs from the plan",
                 "",
@@ -386,7 +386,7 @@ pub(super) fn render_static_ffmpeg(
             plan.frame_count,
             None,
             Diagnostic::error(
-                "MVP-OUTPUT-PUBLISH",
+                "VESTRA-OUTPUT-PUBLISH",
                 Category::Output,
                 error.to_string(),
                 "",
@@ -476,7 +476,7 @@ mod tests {
             &output,
             &plan,
             0,
-            Diagnostic::error("MVP-ENCODE", Category::Render, "forced failure", ""),
+            Diagnostic::error("VESTRA-ENCODE", Category::Render, "forced failure", ""),
         );
 
         assert_eq!(error.context.stage, RenderFailureStage::FrameWrite);
@@ -489,7 +489,7 @@ mod tests {
             &output,
             &plan,
             u64::MAX,
-            Diagnostic::error("MVP-ENCODE", Category::Render, "forced failure", ""),
+            Diagnostic::error("VESTRA-ENCODE", Category::Render, "forced failure", ""),
         );
         assert_eq!(
             bounded.context.stage,

@@ -74,7 +74,7 @@ fn automatic_mode_records_structured_wgpu_fallback_when_no_adapter_is_available(
                 .as_array()
                 .expect("warning list")
                 .iter()
-                .any(|warning| warning["code"] == "MVP-WGPU-FALLBACK")
+                .any(|warning| warning["code"] == "VESTRA-WGPU-FALLBACK")
         );
     } else {
         assert_eq!(report["render_backend"], "wgpu");

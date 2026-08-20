@@ -68,7 +68,7 @@ pub fn compile(
         effective_dimensions(project.output.width, project.output.height, options.preview);
     let background = parse_colour(&project.output.background).ok_or_else(|| {
         Diagnostic::error(
-            "MVP-PLAN-BACKGROUND",
+            "VESTRA-PLAN-BACKGROUND",
             Category::Internal,
             "validated background is invalid",
             "/output/background",

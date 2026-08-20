@@ -102,7 +102,7 @@ use without incorrectly claiming a stable negative assertion mechanism.
    invalidates `PreparedProject`, aborts the operation-local encoder, and
    removes the temporary output. It neither finalizes the encoder nor publishes
    the final output. Later prepared operations return
-   `MVP-PREPARED-INVALIDATED`. Only a passing check finalizes the encoder and
+   `VESTRA-PREPARED-INVALIDATED`. Only a passing check finalizes the encoder and
    renames the temporary output.
 5. Only after publication does it emit `completed`. Its observer result is
    ignored because the operation is already terminal.
@@ -118,8 +118,8 @@ render emits `started` then `completed`. Warnings are carried by
 | Failure/cancellation point | Submission occurred | Reusable | Later SDK result |
 | --- | ---: | ---: | --- |
 | Before submission | No | Yes, where supported | Normal later operation |
-| During or after frame work | Yes | No | `MVP-PREPARED-INVALIDATED` |
-| Final pre-finalization checkpoint | Yes | No | `MVP-PREPARED-INVALIDATED` |
+| During or after frame work | Yes | No | `VESTRA-PREPARED-INVALIDATED` |
+| Final pre-finalization checkpoint | Yes | No | `VESTRA-PREPARED-INVALIDATED` |
 | After publication / `completed` observation | Operation already succeeded | Yes unless another failure exists | Published success |
 
 The final pre-finalization case is deliberately conservative: native frame
@@ -138,7 +138,7 @@ and encoder finalization. The deterministic tests cover cancellation with a
 ready queue, cancellation at the final checkpoint through idle verification,
 temporary cleanup, no final output, and prepared-state reuse versus
 invalidation based on whether submission began. The final-checkpoint regression
-then invokes the same prepared state and observes `MVP-PREPARED-INVALIDATED`.
+then invokes the same prepared state and observes `VESTRA-PREPARED-INVALIDATED`.
 
 `completed` is intentionally post-publication. Its observer result is ignored.
 Returning `Cancel` cannot remove an already renamed output, replace success
@@ -157,7 +157,7 @@ exact non-rollback contract.
 | `cargo test -p video-editor` | passed: 58 unit, 2 export, 31 public SDK tests |
 | `cargo test -p video-editor --test public_sdk` | passed: 31 tests |
 | `cargo test -p video-editor --test public_exports` | passed: 2 tests |
-| focused staged lifecycle and observer tests | passed, including final pre-finalization cancellation and subsequent `MVP-PREPARED-INVALIDATED` |
+| focused staged lifecycle and observer tests | passed, including final pre-finalization cancellation and subsequent `VESTRA-PREPARED-INVALIDATED` |
 
 ## Readiness verdict
 

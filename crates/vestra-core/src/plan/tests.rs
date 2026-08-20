@@ -719,7 +719,7 @@ fn nested_compositions_enforce_active_layer_limits_independently() {
         CompileOptions::default(),
     )
     .expect_err("nested active-layer limit must not be bypassed");
-    assert_eq!(error.code, "MVP-LIMIT-ACTIVE-LAYERS");
+    assert_eq!(error.code, "VESTRA-LIMIT-ACTIVE-LAYERS");
 }
 
 #[test]
@@ -796,7 +796,7 @@ fn nested_active_layer_limit_counts_only_partial_overlap_before_group_end() {
         },
     )
     .expect_err("peak overlap must exceed limit 1");
-    assert_eq!(error.code, "MVP-LIMIT-ACTIVE-LAYERS");
+    assert_eq!(error.code, "VESTRA-LIMIT-ACTIVE-LAYERS");
     compile_project_with_limits(
         project,
         ResourceLimits {

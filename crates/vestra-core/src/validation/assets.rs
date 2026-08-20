@@ -15,7 +15,7 @@ pub(super) fn validate(
         let pointer = format!("/assets/{index}");
         if asset.id.trim().is_empty() {
             errors.push(Diagnostic::error(
-                "MVP-ASSET-ID",
+                "VESTRA-ASSET-ID",
                 Category::Semantic,
                 "asset id must not be empty",
                 format!("{pointer}/id"),
@@ -24,7 +24,7 @@ pub(super) fn validate(
         if !ids.insert(asset.id.clone()) {
             errors.push(
                 Diagnostic::error(
-                    "MVP-ASSET-DUPLICATE",
+                    "VESTRA-ASSET-DUPLICATE",
                     Category::Semantic,
                     format!("duplicate asset id '{}'", asset.id),
                     format!("{pointer}/id"),
@@ -34,7 +34,7 @@ pub(super) fn validate(
         }
         if asset.source.trim().is_empty() {
             errors.push(Diagnostic::error(
-                "MVP-ASSET-PATH",
+                "VESTRA-ASSET-PATH",
                 Category::Asset,
                 "asset source must not be empty",
                 format!("{pointer}/source"),

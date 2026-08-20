@@ -10,7 +10,7 @@ pub(super) fn validate(
 ) -> f64 {
     if !timing.start.is_finite() || timing.start < 0.0 || timing.start >= owner_duration {
         errors.push(Diagnostic::error(
-            "MVP-EFFECT-INTERVAL",
+            "VESTRA-EFFECT-INTERVAL",
             Category::Semantic,
             "active interval start must be finite and lie within its owner",
             format!("{path}/start"),
@@ -20,7 +20,7 @@ pub(super) fn validate(
     let duration = timing.duration.unwrap_or(owner_duration - timing.start);
     if !duration.is_finite() || duration <= 0.0 || timing.start + duration > owner_duration {
         errors.push(Diagnostic::error(
-            "MVP-EFFECT-INTERVAL",
+            "VESTRA-EFFECT-INTERVAL",
             Category::Semantic,
             "active interval duration must be finite, positive, and fit within its owner",
             format!("{path}/duration"),

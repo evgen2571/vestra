@@ -30,7 +30,7 @@ pub(super) fn compile(
         crate::project::Effect::Tint { colour, amount, .. } => crate::plan::CompiledEffect::Tint {
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
+                    "VESTRA-PLAN-EFFECT-COLOUR",
                     Category::Internal,
                     "validated tint color is invalid",
                     "",
@@ -78,7 +78,7 @@ pub(super) fn compile(
             intensity: scalar!(intensity, ScalarPropertyTarget::GlowIntensity),
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
+                    "VESTRA-PLAN-EFFECT-COLOUR",
                     Category::Internal,
                     "validated glow color is invalid",
                     "",
@@ -118,7 +118,7 @@ pub(super) fn compile(
             softness: super::tracks::compile(softness, id)?,
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
-                    "MVP-PLAN-EFFECT-COLOUR",
+                    "VESTRA-PLAN-EFFECT-COLOUR",
                     Category::Internal,
                     "validated vignette color is invalid",
                     "",

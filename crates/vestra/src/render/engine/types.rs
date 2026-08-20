@@ -51,7 +51,7 @@ pub struct BackendFallback {
 
 pub(crate) fn backend_fallback_warning(fallback: &BackendFallback) -> Diagnostic {
     Diagnostic::warning(
-        "MVP-WGPU-FALLBACK",
+        "VESTRA-WGPU-FALLBACK",
         format!("WGPU fallback to CPU: {}", fallback.message),
         "",
     )

@@ -18,7 +18,7 @@ pub(super) fn validate(
     };
     if audio.tracks.len() > limits.maximum_audio_tracks {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-AUDIO-TRACKS",
+            "VESTRA-LIMIT-AUDIO-TRACKS",
             Category::Semantic,
             "audio timeline exceeds the track limit",
             "/audio/tracks",
@@ -44,7 +44,7 @@ pub(super) fn validate(
         );
         if track.id.trim().is_empty() || !track_ids.insert(track.id.clone()) {
             errors.push(Diagnostic::error(
-                "MVP-AUDIO-TRACK-ID",
+                "VESTRA-AUDIO-TRACK-ID",
                 Category::Semantic,
                 "audio track id must be unique and non-empty",
                 format!("{path}/id"),
@@ -52,7 +52,7 @@ pub(super) fn validate(
         }
         if !nonnegative(track.gain) {
             errors.push(Diagnostic::error(
-                "MVP-AUDIO-TRACK-GAIN",
+                "VESTRA-AUDIO-TRACK-GAIN",
                 Category::Semantic,
                 "audio track gain must be finite and non-negative",
                 format!("{path}/gain"),
@@ -69,7 +69,7 @@ pub(super) fn validate(
             );
             if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-CLIP-ID",
+                    "VESTRA-AUDIO-CLIP-ID",
                     Category::Semantic,
                     "audio clip id must be unique and non-empty",
                     format!("{clip_path}/id"),
@@ -78,25 +78,25 @@ pub(super) fn validate(
             match assets.get(&clip.asset) {
                 Some(AssetType::Audio) => {}
                 Some(AssetType::Image) => errors.push(Diagnostic::error(
-                    "MVP-AUDIO-ASSET-TYPE",
+                    "VESTRA-AUDIO-ASSET-TYPE",
                     Category::Semantic,
                     "audio clip must reference an audio asset",
                     format!("{clip_path}/asset"),
                 )),
                 Some(AssetType::Font) => errors.push(Diagnostic::error(
-                    "MVP-AUDIO-ASSET-TYPE",
+                    "VESTRA-AUDIO-ASSET-TYPE",
                     Category::Semantic,
                     "audio clip must reference an audio asset",
                     format!("{clip_path}/asset"),
                 )),
                 Some(AssetType::Video) => errors.push(Diagnostic::error(
-                    "MVP-AUDIO-ASSET-TYPE",
+                    "VESTRA-AUDIO-ASSET-TYPE",
                     Category::Semantic,
                     "audio clip must reference an audio asset",
                     format!("{clip_path}/asset"),
                 )),
                 None => errors.push(Diagnostic::error(
-                    "MVP-AUDIO-ASSET",
+                    "VESTRA-AUDIO-ASSET",
                     Category::Semantic,
                     format!("undeclared audio asset '{}'", clip.asset),
                     format!("{clip_path}/asset"),
@@ -109,7 +109,7 @@ pub(super) fn validate(
                     .is_none_or(|end| end.is_finite() && end > clip.trim_start)
             {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-CLIP-TIMING",
+                    "VESTRA-AUDIO-CLIP-TIMING",
                     Category::Semantic,
                     "audio clip start and trims are invalid",
                     &clip_path,
@@ -117,7 +117,7 @@ pub(super) fn validate(
             }
             if !nonnegative(clip.gain) {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-CLIP-GAIN",
+                    "VESTRA-AUDIO-CLIP-GAIN",
                     Category::Semantic,
                     "audio clip gain must be finite and non-negative",
                     format!("{clip_path}/gain"),
@@ -125,7 +125,7 @@ pub(super) fn validate(
             }
             if !nonnegative(clip.fade_in) || !nonnegative(clip.fade_out) {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-CLIP-FADE",
+                    "VESTRA-AUDIO-CLIP-FADE",
                     Category::Semantic,
                     "audio clip fades must be finite and non-negative",
                     &clip_path,
@@ -135,7 +135,7 @@ pub(super) fn validate(
                 total_gain_keyframes += automation.keyframes.len();
                 if automation.keyframes.is_empty() {
                     errors.push(Diagnostic::error(
-                        "MVP-AUDIO-AUTOMATION",
+                        "VESTRA-AUDIO-AUTOMATION",
                         Category::Semantic,
                         "audio gain automation must contain at least one keyframe",
                         format!("{clip_path}/gain_automation/keyframes"),
@@ -149,11 +149,11 @@ pub(super) fn validate(
                         || (keyframe_index == 0 && keyframe.time != 0.0)
                         || previous.is_some_and(|time| keyframe.time <= time)
                     {
-                        errors.push(Diagnostic::error("MVP-AUDIO-AUTOMATION-TIME", Category::Semantic, "audio gain keyframe times must be finite, start at zero, and strictly increase", format!("{keyframe_path}/time")));
+                        errors.push(Diagnostic::error("VESTRA-AUDIO-AUTOMATION-TIME", Category::Semantic, "audio gain keyframe times must be finite, start at zero, and strictly increase", format!("{keyframe_path}/time")));
                     }
                     if !nonnegative(keyframe.gain) {
                         errors.push(Diagnostic::error(
-                            "MVP-AUDIO-AUTOMATION-GAIN",
+                            "VESTRA-AUDIO-AUTOMATION-GAIN",
                             Category::Semantic,
                             "audio gain keyframe gain must be finite and non-negative",
                             format!("{keyframe_path}/gain"),
@@ -166,7 +166,7 @@ pub(super) fn validate(
     }
     if total > limits.maximum_audio_clips {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-AUDIO-CLIPS",
+            "VESTRA-LIMIT-AUDIO-CLIPS",
             Category::Semantic,
             "audio timeline exceeds the clip limit",
             "/audio/tracks",
@@ -174,7 +174,7 @@ pub(super) fn validate(
     }
     if total_gain_keyframes > limits.maximum_audio_gain_keyframes {
         errors.push(Diagnostic::error(
-            "MVP-LIMIT-AUDIO-GAIN-KEYFRAMES",
+            "VESTRA-LIMIT-AUDIO-GAIN-KEYFRAMES",
             Category::Semantic,
             "audio gain automation exceeds the project keyframe limit",
             "/audio/tracks",
@@ -197,14 +197,14 @@ fn validate_audio_effects(
         };
         if id.trim().is_empty() {
             errors.push(Diagnostic::error(
-                "MVP-AUDIO-EFFECT-ID",
+                "VESTRA-AUDIO-EFFECT-ID",
                 Category::Semantic,
                 "audio effect ID must not be empty",
                 format!("{path}/{index}/id"),
             ));
         } else if !ids.insert(id) {
             errors.push(Diagnostic::error(
-                "MVP-AUDIO-EFFECT-ID",
+                "VESTRA-AUDIO-EFFECT-ID",
                 Category::Semantic,
                 "audio effect IDs must be unique within their collection",
                 format!("{path}/{index}/id"),
@@ -213,7 +213,7 @@ fn validate_audio_effects(
         let definition = effect.definition();
         if !audio_effect_supports_scope(definition, scope) {
             errors.push(Diagnostic::error(
-                "MVP-AUDIO-EFFECT-SCOPE",
+                "VESTRA-AUDIO-EFFECT-SCOPE",
                 Category::Semantic,
                 format!(
                     "audio effect `{}` is not supported at {scope:?} scope",
@@ -254,7 +254,7 @@ fn validate_audio_effects(
             };
             if !parameter.accepts_number(value) {
                 errors.push(Diagnostic::error(
-                    "MVP-AUDIO-EFFECT-PARAMETER",
+                    "VESTRA-AUDIO-EFFECT-PARAMETER",
                     Category::Semantic,
                     format!(
                         "audio effect `{}` parameter `{}` is outside its declared range",

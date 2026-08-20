@@ -79,9 +79,9 @@ impl ReadbackRing {
         packed_bytes: u64,
         slot_count: usize,
     ) -> Result<Self, Diagnostic> {
-        // Readback buffers are device-local staging resources. Keep one slot
-        // per pipeline position so asynchronous submissions do not create
-        // device buffers per frame.
+        // Readback buffers are reusable GPU-to-CPU staging resources. Keep one
+        // slot per pipeline position so asynchronous submissions do not
+        // allocate a new buffer for every frame.
         let packed_bytes = usize::try_from(packed_bytes).map_err(|_| {
             readback_size_error("packed frame bytes do not fit the host address space")
         })?;

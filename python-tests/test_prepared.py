@@ -145,12 +145,12 @@ def test_frame_numbers_and_timestamps_validate_before_rendering() -> None:
         value.render_frame_number(2**80)
     with pytest.raises(vestra.FrameRenderError) as raised:
         value.render_frame_number(1)
-    assert raised.value.diagnostics[0].code == "MVP-FRAME-RANGE"
+    assert raised.value.diagnostics[0].code == "VESTRA-FRAME-RANGE"
     assert value.render_frame_number(0).frame_number == 0
 
     with pytest.raises(vestra.FrameRenderError) as raised:
         value.render_frame_number(2**64 - 1)
-    assert raised.value.diagnostics[0].code == "MVP-FRAME-RANGE"
+    assert raised.value.diagnostics[0].code == "VESTRA-FRAME-RANGE"
 
     with pytest.raises(ValueError):
         value.render_frame_ns(-1)
@@ -160,7 +160,7 @@ def test_frame_numbers_and_timestamps_validate_before_rendering() -> None:
         value.render_frame_ns(2**130)
     with pytest.raises(vestra.FrameRenderError) as raised:
         value.render_frame_ns(value.preparation_report.duration_ns)
-    assert raised.value.diagnostics[0].code == "MVP-FRAME-RANGE"
+    assert raised.value.diagnostics[0].code == "VESTRA-FRAME-RANGE"
     assert value.render_frame_number(0).frame_number == 0
 
 

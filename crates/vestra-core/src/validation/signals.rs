@@ -17,7 +17,7 @@ pub(super) fn validate_modifiers(
             crate::project::ScalarSignalSource::Audio { feature, .. } => {
                 if !has_authored_audio {
                     errors.push(Diagnostic::error(
-                        "MVP-SIGNAL-MASTER-AUDIO",
+                        "VESTRA-SIGNAL-MASTER-AUDIO",
                         Category::Semantic,
                         "Master audio signal requires authored audio material",
                         format!("{path}/source"),
@@ -32,7 +32,7 @@ pub(super) fn validate_modifiers(
                         "max_hz"
                     };
                     errors.push(Diagnostic::error(
-                        "MVP-SIGNAL-BAND",
+                        "VESTRA-SIGNAL-BAND",
                         Category::Semantic,
                         error.to_string(),
                         format!("{path}/source/feature/{field}"),
@@ -74,7 +74,7 @@ pub(super) fn validate_modifiers(
             if let Err(error) = result {
                 let (field, message) = invalid_transform_field(transform, &error);
                 errors.push(Diagnostic::error(
-                    "MVP-SIGNAL-TRANSFORM",
+                    "VESTRA-SIGNAL-TRANSFORM",
                     Category::Semantic,
                     message,
                     format!("{transform_path}/{field}"),

@@ -25,6 +25,8 @@ Schema version 4 is the current emitted project format. Vestra accepts valid
 schema version 3 projects and treats their omitted masks as an empty list
 before normalizing the in-memory project to version 4.
 
-Only shape inputs are supported in this phase. Feather, dynamic properties,
+The supported geometric inputs are `Rectangle`, `Ellipse`, `Circle`, and
+`Polygon`. `Line` remains a visible shape source but is rejected as a mask
+input. Feather, dynamic properties,
 image alpha/luma inputs, text/video inputs, composition masks, and track mattes
 are deferred.

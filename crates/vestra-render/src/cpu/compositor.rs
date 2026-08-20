@@ -186,7 +186,7 @@ fn compose_layers(
                 }
                 effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
             }
-            apply_masks(surfaces, assets, layer);
+            apply_masks(surfaces, assets, layer, timings, profiling_enabled);
             let bytes = u64::from(width) * u64::from(height) * 4;
             if let Some(cached) =
                 static_layers.insert_with(layer.compiled_layer_index, bytes, || {
@@ -247,7 +247,7 @@ fn compose_layers(
             timings.source_rasterization += started.elapsed();
         }
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
-        apply_masks(surfaces, assets, layer);
+        apply_masks(surfaces, assets, layer, timings, profiling_enabled);
         let started = profiling_enabled.then(Instant::now);
         blend_surface(
             canvas,
@@ -332,7 +332,7 @@ fn render_group(
     if !direct_colour_path {
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
     }
-    apply_masks(surfaces, assets, layer);
+    apply_masks(surfaces, assets, layer, timings, profiling_enabled);
     if layer.content_dependency == TemporalDependency::Static {
         let bytes = u64::from(width) * u64::from(height) * 4;
         if let Some(cached) = static_layers.insert_with(layer.compiled_layer_index, bytes, || {
@@ -426,13 +426,14 @@ fn apply_masks(
     surfaces: &mut EffectSurfacePool,
     assets: &mut PreparedAssets,
     layer: &EvaluatedLayer,
+    timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
 ) {
     if layer.masks.is_empty() {
         return;
     }
-    let width = surfaces.current().width();
-    let height = surfaces.current().height();
-    let mut coverage = vec![1.0_f32; (width as usize) * (height as usize)];
+    let started = profiling_enabled.then(Instant::now);
+    surfaces.reset_mask_coverage();
     for mask in &layer.masks {
         for pixel in surfaces.mask_local_surface().pixels_mut() {
             *pixel = Rgba([0, 0, 0, 0]);
@@ -451,31 +452,21 @@ fn apply_masks(
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
-        let mut timings = CpuHotPathTimings::default();
         super::raster::draw_layer(
             surfaces.mask_local_surface(),
             assets,
             &mask_layer,
             1.0,
             ColourTransform::default(),
-            &mut timings,
-            false,
+            timings,
+            profiling_enabled,
         );
         surfaces.compose_mask_surface(layer.transform);
-        for (index, pixel) in surfaces.mask_surface().pixels().enumerate() {
-            coverage[index] = crate::project::apply_mask_operation(
-                coverage[index],
-                f32::from(pixel[3]) / 255.0,
-                mask.operation,
-                mask.invert,
-                mask.strength,
-            );
-        }
+        surfaces.combine_mask_coverage(mask.operation, mask.invert, mask.strength);
     }
-    for (index, pixel) in surfaces.current().pixels_mut().enumerate() {
-        pixel[3] = (f32::from(pixel[3]) * coverage[index])
-            .round()
-            .clamp(0.0, 255.0) as u8;
+    surfaces.apply_mask_coverage();
+    if let Some(started) = started {
+        timings.transform_sampling += started.elapsed();
     }
 }
 

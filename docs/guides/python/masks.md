@@ -20,6 +20,8 @@ hole.invert = False
 to manage the collection. Supported inputs are `Rectangle`, `Ellipse`,
 `Circle`, and `Polygon` shape objects. Shapes still need a fill or stroke,
 just as they do when used as visible sources.
+`Line` remains available as a visible shape source but is not a supported mask
+input in this phase.
 
 Coverage starts at `1`. The default operation is `INTERSECT`, so one ordinary
 mask reveals the part of the layer covered by its shape. `REPLACE`, `UNION`,

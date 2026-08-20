@@ -146,6 +146,24 @@ fn masks_validate_ids_geometry_strength_and_static_transform() {
     assert!(has(&project, "VESTRA-MASK-STATIC-TRANSFORM"));
 }
 
+#[test]
+fn masks_reject_line_geometry_without_rejecting_general_shapes() {
+    let project = masked_project(serde_json::json!([{
+        "id": "line-mask",
+        "input": {
+            "type": "shape",
+            "geometry": {"type": "line", "start": {"x": 0.0, "y": 0.0}, "end": {"x": 8.0, "y": 8.0}},
+            "stroke": "#ffffff",
+            "stroke_width": 2.0
+        }
+    }]));
+    assert!(
+        codes(&project)
+            .iter()
+            .any(|code| code == "VESTRA-MASK-SHAPE")
+    );
+}
+
 fn grouped_project(clips: Vec<Value>) -> Project {
     let mut value = serde_json::json!({
         "schema_version": 3,

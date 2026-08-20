@@ -70,6 +70,13 @@ fn static_encoder_failure(
     } else {
         (RenderFailureStage::EncoderFinalization, None)
     };
+    tracing::warn!(
+        stage = stage.as_str(),
+        completed_frames,
+        total_frames = plan.frame_count,
+        code = %diagnostic.code,
+        "static render failed"
+    );
     cleanup_error(
         output,
         plan,
@@ -88,6 +95,11 @@ fn cancel_static_ffmpeg(
     completed_frames: u64,
     message: &'static str,
 ) -> RenderError {
+    tracing::info!(
+        stage = "render",
+        completed_frames,
+        "static render cancelled"
+    );
     // The static template frame has already been submitted/rendered before the
     // FFmpeg loop starts. Match the normal staged-render lifecycle: any
     // cancellation from this point invalidates the prepared backend.
@@ -161,6 +173,7 @@ pub(super) fn render_static_ffmpeg(
         || emit(events::started(plan.frame_count, &output.final_path))
             == RenderObserverControl::Cancel
     {
+        tracing::info!(stage = "render", "static render cancelled before encoding");
         let removed = output.cleanup();
         return Err(RenderError {
             diagnostic: Diagnostic::error(
@@ -384,6 +397,12 @@ pub(super) fn render_static_ffmpeg(
         total_ms: milliseconds(started.elapsed()),
         ..RenderTimings::default()
     };
+    tracing::info!(
+        stage = "render",
+        total_frames = plan.frame_count,
+        elapsed_ms = timings.total_ms,
+        "static render completed"
+    );
     let _ = emit(events::completed(
         plan.frame_count,
         &output.final_path,

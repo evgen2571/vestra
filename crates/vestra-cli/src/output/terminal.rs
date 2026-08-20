@@ -36,6 +36,30 @@ pub fn print_success<T: Serialize>(
     ExitCode::SUCCESS
 }
 
+pub(crate) fn print_success_stderr<T: Serialize>(
+    command: &'static str,
+    format: ResultFormat,
+    data: T,
+    human: &str,
+) -> ExitCode {
+    match format {
+        ResultFormat::Human => eprintln!("{human}"),
+        ResultFormat::Json => match serde_json::to_string(&ResultEnvelope {
+            result_schema_version: 1,
+            status: "success",
+            command,
+            data,
+        }) {
+            Ok(value) => eprintln!("{value}"),
+            Err(error) => {
+                eprintln!("cannot serialize command result: {error}");
+                return ExitCode::FAILURE;
+            }
+        },
+    }
+    ExitCode::SUCCESS
+}
+
 pub fn print_failure(
     command: &'static str,
     format: ResultFormat,
@@ -59,6 +83,38 @@ pub fn print_failure(
             data: FailureEnvelope { errors, warnings },
         }) {
             Ok(value) => println!("{value}"),
+            Err(error) => {
+                eprintln!("cannot serialize command failure: {error}");
+                return ExitCode::FAILURE;
+            }
+        },
+    }
+    ExitCode::from(exit)
+}
+
+pub(crate) fn print_failure_stderr(
+    command: &'static str,
+    format: ResultFormat,
+    errors: Vec<Diagnostic>,
+    warnings: Vec<Diagnostic>,
+) -> ExitCode {
+    let exit = exit_for_errors(&errors);
+    match format {
+        ResultFormat::Human => {
+            for warning in &warnings {
+                eprintln!("{}: {}", warning.code, warning.message);
+            }
+            for error in &errors {
+                eprintln!("{}: {}", error.code, error.message);
+            }
+        }
+        ResultFormat::Json => match serde_json::to_string(&ResultEnvelope {
+            result_schema_version: 1,
+            status: "failure",
+            command,
+            data: FailureEnvelope { errors, warnings },
+        }) {
+            Ok(value) => eprintln!("{value}"),
             Err(error) => {
                 eprintln!("cannot serialize command failure: {error}");
                 return ExitCode::FAILURE;

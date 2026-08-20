@@ -82,3 +82,34 @@ fn canonical_example_renders_an_h264_frame_sequence() {
     assert!(report.get("backend_fallback").is_none());
     assert!(output.is_file());
 }
+
+#[test]
+fn json_progress_keeps_stdout_parseable_and_moves_result_to_stderr() {
+    let workspace = TempDir::new().expect("workspace");
+    let output = workspace.path().join("progress.mp4");
+    let result = command()
+        .args([
+            "render",
+            "tests/fixtures/wgpu-small-rgba.json",
+            "--render-backend",
+            "cpu",
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+            "--progress",
+            "json",
+        ])
+        .output()
+        .expect("render runs");
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let progress = String::from_utf8_lossy(&result.stdout);
+    assert!(progress.lines().count() >= 2);
+    for line in progress.lines() {
+        serde_json::from_str::<Value>(line).expect("progress line is JSON");
+    }
+    assert!(String::from_utf8_lossy(&result.stderr).contains("render completed"));
+}

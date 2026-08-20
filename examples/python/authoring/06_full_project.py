@@ -1,4 +1,4 @@
-"""A complete public Phase 8 authoring example (run from the repository root)."""
+"""A complete advanced-authoring example, run from the repository root."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ from vestra import FrameRate
 from vestra.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
 
 
-root = Path(__file__).resolve().parents[2]
+root = Path(__file__).resolve().parents[3]
 builder = ProjectBuilder(
     width=320, height=180, frame_rate=FrameRate(30, 1), output_path="full-project.mp4",
     duration=2.5, base_directory=root,

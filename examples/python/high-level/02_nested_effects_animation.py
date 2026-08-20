@@ -25,6 +25,9 @@ def main() -> None:
     card.transform.scale.keyframe(1.5, 1.0)
     card.effects.add(Brightness(0.1))
     card.effects.add(Bloom(threshold=0.5, radius=2.0, intensity=0.3))
+    report = project.validate()
+    if not report.is_valid:
+        raise SystemExit("nested composition project validation failed")
     snapshot = project.snapshot()
     print(snapshot.to_dict()["visual"]["clips"][0]["source"]["clips"][0]["id"])
 

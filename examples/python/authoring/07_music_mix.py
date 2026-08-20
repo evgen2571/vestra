@@ -1,10 +1,11 @@
-"""Build, inspect, prepare, and render a small schema-v2 music mix."""
+"""Build, inspect, prepare, and render a small audio-timeline mix."""
 from pathlib import Path
+import tempfile
 
 from vestra import BackendPreference, Editor, FrameRate, PrepareOptions, PreparedVideoRenderRequest
 from vestra.authoring import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, ProjectBuilder
 
-root = Path(__file__).resolve().parents[2]
+root = Path(__file__).resolve().parents[3]
 builder = ProjectBuilder(
     width=320, height=180, frame_rate=FrameRate(30, 1), output_path="music-mix.mp4",
     duration=3.0, output_audio=True, base_directory=root,
@@ -33,5 +34,8 @@ editor = Editor()
 inspection = editor.inspect(project)
 assert inspection.audio is not None and inspection.audio.track_count == 2
 prepared = editor.prepare(project, PrepareOptions(backend=BackendPreference.CPU))
-result = prepared.render_video(PreparedVideoRenderRequest(root / "examples/output/music-mix.mp4", overwrite=True))
-assert result.audio_present
+with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
+    result = prepared.render_video(
+        PreparedVideoRenderRequest(Path(directory) / "music-mix.mp4", overwrite=True)
+    )
+    assert result.audio_present

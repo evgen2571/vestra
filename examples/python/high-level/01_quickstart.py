@@ -34,7 +34,7 @@ def main() -> None:
     if not report.is_valid:
         raise SystemExit("project validation failed")
     if args.output is None:
-        with tempfile.TemporaryDirectory(prefix="vestra-v2-") as directory:
+        with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
             result = project.render(Path(directory) / "quickstart.mp4", backend="cpu")
             print(f"backend={result.selected_backend} output={result.output_path}")
     else:

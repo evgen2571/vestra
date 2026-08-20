@@ -53,7 +53,18 @@ fn strict_wgpu_canonical_render_matches_cpu_encoded_frames() {
     assert_eq!(cpu_report["render_backend"], "cpu");
     assert_eq!(gpu_report["requested_render_backend"], "wgpu");
     assert_eq!(gpu_report["render_backend"], "wgpu");
-    assert_eq!(gpu_report["adapter"]["graphics_backend"], "gl");
+    let requested_graphics_backend = std::env::var("VESTRA_WGPU_BACKEND")
+        .expect("strict WGPU regression requires VESTRA_WGPU_BACKEND")
+        .to_ascii_lowercase();
+    let requested_graphics_backend = if requested_graphics_backend == "gles" {
+        "gl"
+    } else {
+        requested_graphics_backend.as_str()
+    };
+    assert_eq!(
+        gpu_report["adapter"]["graphics_backend"],
+        requested_graphics_backend
+    );
     assert!(gpu_report.get("backend_fallback").is_none());
     assert!(cpu_output.is_file());
     assert!(gpu_output.is_file());

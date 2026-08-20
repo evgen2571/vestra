@@ -198,7 +198,7 @@ fn phase10_preparation_matrix() {
         measure_preparation(
             &directory,
             "mixed-layers-10",
-            "effects-ready-v1.json",
+            "effects-ready.json",
             1920,
             1080,
         ),
@@ -356,18 +356,11 @@ fn phase10_release_matrix() {
             30,
             None,
         ),
-        ("short-mixed", "effects-ready-v1.json", 1920, 1080, 30, None),
-        (
-            "long-combined",
-            "effects-ready-v1.json",
-            1920,
-            1080,
-            180,
-            None,
-        ),
+        ("short-mixed", "effects-ready.json", 1920, 1080, 30, None),
+        ("long-combined", "effects-ready.json", 1920, 1080, 180, None),
         (
             "chromatic-focused",
-            "effects-ready-v1.json",
+            "effects-ready.json",
             1280,
             720,
             100,
@@ -455,9 +448,7 @@ fn write_fixture(
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples")
         .join(match fixture {
-            "audio-static-mix.json" | "animation-effects.json" | "effects-ready-v1.json" => {
-                "projects"
-            }
+            "audio-static-mix.json" | "animation-effects.json" | "effects-ready.json" => "projects",
             "color-adjust.json" => "effects",
             "global-post-effects.json" => "compositing",
             "heavy-impact.json" => "presets",

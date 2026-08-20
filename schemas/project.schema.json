@@ -624,41 +624,12 @@
       "additionalProperties": false,
       "allOf": [
         {
-          "else": {
-            "else": {
-              "not": {
-                "required": [
-                  "transform"
-                ]
-              }
-            },
-            "if": {
-              "properties": {
-                "source": {
-                  "properties": {
-                    "type": {
-                      "const": "group"
-                    }
-                  },
-                  "required": [
-                    "type"
-                  ]
-                }
-              },
-              "required": [
-                "source"
-              ]
-            }
-          },
           "if": {
             "properties": {
               "source": {
                 "properties": {
                   "type": {
-                    "enum": [
-                      "image",
-                      "video"
-                    ]
+                    "const": "image"
                   }
                 },
                 "required": [
@@ -674,6 +645,36 @@
             "required": [
               "transform"
             ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "solid_color",
+                      "spectrum2d",
+                      "particle_system"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "transform"
+              ]
+            }
           }
         }
       ],
@@ -3456,7 +3457,7 @@
       "type": "object"
     }
   },
-  "$id": "https://example.invalid/video-editor/project.schema.json",
+  "$id": "https://example.invalid/vestra/project.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {

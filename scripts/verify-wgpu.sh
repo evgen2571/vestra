@@ -12,7 +12,7 @@ usage:
   [VESTRA_WGPU_BACKEND=BACKEND] scripts/verify-wgpu.sh --hardware
 
 --list reports every adapter that Vestra/WGPU can discover.
---software requires an explicitly selected supported backend and verifies WGPU
+--software selects the first discovered backend when unset and verifies WGPU
 correctness without making a hardware claim.
 --hardware selects the first discovered hardware backend when unset, or checks
 the requested backend. It rejects every non-discrete/non-integrated adapter.
@@ -38,18 +38,17 @@ if [[ "$mode" != "--software" && "$mode" != "--hardware" ]]; then
 fi
 
 backend=${VESTRA_WGPU_BACKEND:-}
-if [[ -z "$backend" && "$mode" == "--hardware" ]]; then
-  backend=$(sed -nE 's/^backend=([^ ]+) .*classification=(discrete_gpu|integrated_gpu) .*/\1/p' <<<"$adapters" | sed -n '1p')
+if [[ -z "$backend" ]]; then
+  if [[ "$mode" == "--hardware" ]]; then
+    backend=$(sed -nE 's/^backend=([^ ]+) .*classification=(discrete_gpu|integrated_gpu) .*/\1/p' <<<"$adapters" | sed -n '1p')
+  else
+    backend=$(sed -nE 's/^backend=([^ ]+) .*/\1/p' <<<"$adapters" | sed -n '1p')
+  fi
   if [[ -z "$backend" ]]; then
-    echo "hardware validation unavailable: discovery found no proven hardware adapter" >&2
+    echo "${mode#--} validation unavailable: discovery found no usable adapter" >&2
     exit 1
   fi
-  export VESTRA_WGPU_BACKEND="$backend"
-  echo "Selected hardware backend: $backend"
-fi
-if [[ -z "$backend" ]]; then
-  echo "VESTRA_WGPU_BACKEND must name a discovered backend for $mode" >&2
-  exit 2
+  echo "Selected ${mode#--} backend: $backend"
 fi
 
 backend=${backend,,}
@@ -70,37 +69,71 @@ if [[ -z "$selected_adapter" ]]; then
   exit 1
 fi
 
+run_workspace_tests() {
+  echo "Running general workspace correctness tests without strict WGPU flags"
+  if [[ "$selected_backend" == "gl" ]]; then
+    VESTRA_WGPU_BACKEND="$backend" \
+      cargo test --workspace --all-features -- --test-threads=1
+  else
+    VESTRA_WGPU_BACKEND="$backend" cargo test --workspace --all-features
+  fi
+}
+
+run_targeted_wgpu_tests() {
+  local hardware_requirement=${1:-0}
+  if [[ "$hardware_requirement" == "1" && "$selected_backend" == "gl" ]]; then
+    VESTRA_REQUIRE_WGPU=1 \
+      VESTRA_REQUIRE_HARDWARE_WGPU=1 \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture --test-threads=1
+  elif [[ "$hardware_requirement" == "1" ]]; then
+    VESTRA_REQUIRE_WGPU=1 \
+      VESTRA_REQUIRE_HARDWARE_WGPU=1 \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture
+  elif [[ "$selected_backend" == "gl" ]]; then
+    env -u VESTRA_REQUIRE_HARDWARE_WGPU \
+      VESTRA_REQUIRE_WGPU=1 \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture --test-threads=1
+  else
+    env -u VESTRA_REQUIRE_HARDWARE_WGPU \
+      VESTRA_REQUIRE_WGPU=1 \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture
+  fi
+}
+
 if [[ "$mode" == "--hardware" ]]; then
   selected_adapter=$(grep -E "^backend=${selected_backend} .*classification=(discrete_gpu|integrated_gpu) " <<<"$adapters" | sed -n '1p' || true)
   if [[ -z "$selected_adapter" ]]; then
     echo "hardware validation unavailable: '$backend' has no proven hardware adapter" >&2
     exit 1
   fi
-  export VESTRA_REQUIRE_HARDWARE_WGPU=1
-  export VESTRA_REQUIRE_WGPU=1
   echo "Hardware adapter candidate: $selected_adapter"
-  echo "Running serialized workspace correctness tests"
+  run_workspace_tests
+  echo "Running strict hardware adapter-dependent renderer tests"
+  run_targeted_wgpu_tests 1
+  echo "Running strict hardware CLI render regression"
   if [[ "$selected_backend" == "gl" ]]; then
-    cargo test --workspace --all-features -- --test-threads=1
+    VESTRA_REQUIRE_WGPU=1 \
+      VESTRA_REQUIRE_HARDWARE_WGPU=1 \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test -p vestra-cli --test render_regressions --all-features \
+        strict_wgpu_canonical_render_matches_cpu_encoded_frames -- --nocapture --test-threads=1
   else
-    echo "Skipping the GL-specific encoded-render regression for backend '$backend'"
-    cargo test --workspace --all-features -- \
-      --test-threads=1 \
-      --skip strict_wgpu_canonical_render_matches_cpu_encoded_frames
+    VESTRA_REQUIRE_WGPU=1 \
+      VESTRA_REQUIRE_HARDWARE_WGPU=1 \
+      VESTRA_WGPU_BACKEND="$backend" \
+      cargo test -p vestra-cli --test render_regressions --all-features \
+        strict_wgpu_canonical_render_matches_cpu_encoded_frames -- --nocapture
   fi
-  echo "Running strict hardware adapter-dependent tests"
-  cargo test --lib -p vestra-render --all-features gpu_ -- --nocapture --test-threads=1
   echo "Hardware WGPU verification passed for backend '$backend'"
   exit 0
 fi
 
-export VESTRA_REQUIRE_WGPU=1
-unset VESTRA_REQUIRE_HARDWARE_WGPU
-echo "WGPU software correctness verification using: $selected_adapter"
-if [[ "$selected_backend" == "gl" ]]; then
-  cargo test --workspace --all-features -- --test-threads=1
-else
-  cargo test --workspace --all-features -- \
-    --skip strict_wgpu_canonical_render_matches_cpu_encoded_frames
-fi
+echo "Software WGPU correctness validation using: $selected_adapter"
+run_workspace_tests
+echo "Running targeted WGPU tests with a software adapter permitted"
+run_targeted_wgpu_tests 0
 echo "Software-safe WGPU verification passed for backend '$backend'"

@@ -127,9 +127,11 @@ pub(super) struct FrameBindGroups {
     particle_layer: wgpu::BindGroup,
     particle_resolve: wgpu::BindGroup,
     raster_layers: Vec<wgpu::BindGroup>,
+    mask_raster_layers: Vec<wgpu::BindGroup>,
     surface_layers: Vec<(TextureSlot, wgpu::BindGroup)>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
+    masks: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     persistent_created: usize,
 }
 
@@ -210,6 +212,25 @@ impl FrameBindGroups {
                 )
             })
             .collect::<Vec<_>>();
+        let mask_raster_layers =
+            if frame.working.has_auxiliary() && frame.working.has_mask_coverage() {
+                sources
+                    .raster_textures
+                    .iter()
+                    .map(|source| {
+                        mask_raster_group(
+                            device,
+                            &pipelines.mask_raster_bindings,
+                            &source.view,
+                            &frame.working.get(TextureSlot::MaskCoverage).view,
+                            &frame.working.get(TextureSlot::Auxiliary).view,
+                            parameters,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
         let surface_layers = frame
             .working
             .composition_slots()
@@ -256,7 +277,7 @@ impl FrameBindGroups {
             }
         }
         let mut effects = Vec::new();
-        if frame.working.has_effects() {
+        if frame.working.has_effects() || frame.working.has_auxiliary() {
             let mut slots = frame.working.composition_slots().collect::<Vec<_>>();
             slots.extend([TextureSlot::Layer, TextureSlot::EffectA]);
             if frame.working.has_effect_b() {
@@ -264,6 +285,9 @@ impl FrameBindGroups {
             }
             if frame.working.has_auxiliary() {
                 slots.push(TextureSlot::Auxiliary);
+            }
+            if frame.working.has_mask_coverage() {
+                slots.push(TextureSlot::MaskCoverage);
             }
             for source in slots.iter().copied() {
                 for destination in slots.iter().copied() {
@@ -291,12 +315,39 @@ impl FrameBindGroups {
                 }
             }
         }
+        let mut masks = Vec::new();
+        if frame.working.has_auxiliary() {
+            let mut slots = vec![TextureSlot::Layer, TextureSlot::EffectA];
+            if frame.working.has_effect_b() {
+                slots.push(TextureSlot::EffectB);
+            }
+            for source in slots.iter().copied() {
+                for destination in slots.iter().copied() {
+                    if source == destination {
+                        continue;
+                    }
+                    masks.push((
+                        source,
+                        destination,
+                        mask_group(
+                            device,
+                            &pipelines.mask_bindings,
+                            &frame.working.get(source).view,
+                            &frame.working.get(TextureSlot::Auxiliary).view,
+                            &frame.working.get(destination).view,
+                            parameters,
+                        ),
+                    ));
+                }
+            }
+        }
         let persistent_created = sources.raster_textures.len()
             + 5
             + clear_group_canvases.len()
             + surface_layers.len()
             + composites.len()
-            + effects.len();
+            + effects.len()
+            + masks.len();
         Self {
             clear_canvas_a,
             clear_group_canvases,
@@ -305,9 +356,11 @@ impl FrameBindGroups {
             particle_layer,
             particle_resolve,
             raster_layers,
+            mask_raster_layers,
             surface_layers,
             composites,
             effects,
+            masks,
             persistent_created,
         }
     }
@@ -322,6 +375,17 @@ impl FrameBindGroups {
                 "WGPU-FRAME-PLAN",
                 crate::Category::Backend,
                 format!("GPU frame operation references missing raster bind group {source_index}"),
+                "",
+            )
+        })
+    }
+
+    fn mask_raster_layer(&self, source_index: usize) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.mask_raster_layers.get(source_index).ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-FRAME-PLAN",
+                crate::Category::Backend,
+                format!("GPU mask operation references missing raster bind group {source_index}"),
                 "",
             )
         })
@@ -400,6 +464,27 @@ impl FrameBindGroups {
                     format!(
                         "missing cached effect bind group for {source:?}->{destination:?} with auxiliary {auxiliary:?}"
                     ),
+                    "",
+                )
+            })
+    }
+
+    fn mask(
+        &self,
+        source: TextureSlot,
+        destination: TextureSlot,
+    ) -> Result<&wgpu::BindGroup, Diagnostic> {
+        self.masks
+            .iter()
+            .find(|(cached_source, cached_destination, _)| {
+                *cached_source == source && *cached_destination == destination
+            })
+            .map(|(_, _, group)| group)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-BIND-GROUP",
+                    crate::Category::Backend,
+                    format!("missing cached mask bind group for {source:?}->{destination:?}"),
                     "",
                 )
             })
@@ -630,6 +715,23 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
             }
+            GpuOperation::RenderMask {
+                source_index,
+                parameters_index,
+                ..
+            } => {
+                dispatch(
+                    &mut encoder,
+                    &pipelines.mask_raster,
+                    bind_groups.mask_raster_layer(*source_index)?,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
+            }
             GpuOperation::RenderSurfaceLayer {
                 source,
                 destination,
@@ -803,6 +905,47 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
                 metrics.bind_group_cache_hits += 1;
             }
+            GpuOperation::ApplyMask {
+                source,
+                destination,
+                parameters_index,
+                ..
+            } => {
+                let group = bind_groups.mask(*source, *destination)?;
+                dispatch(
+                    &mut encoder,
+                    &pipelines.mask,
+                    group,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
+            }
+            GpuOperation::UpdateMaskCoverage {
+                source,
+                parameters_index,
+                ..
+            } => {
+                let group = bind_groups.effect(
+                    *source,
+                    TextureSlot::MaskCoverage,
+                    Some(TextureSlot::Auxiliary),
+                )?;
+                dispatch(
+                    &mut encoder,
+                    &pipelines.mask_coverage,
+                    group,
+                    parameters.offset(*parameters_index)?,
+                    width,
+                    height,
+                );
+                metrics.compute_passes += 1;
+                metrics.dispatches += 1;
+                metrics.bind_group_cache_hits += 1;
+            }
             GpuOperation::CopyForReadback { source, .. } => {
                 encoder.copy_texture_to_buffer(
                     wgpu::ImageCopyTexture {
@@ -855,6 +998,38 @@ fn effect_group<'a>(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(auxiliary),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(output),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: parameter_binding(parameters),
+            },
+        ],
+    })
+}
+
+fn mask_group<'a>(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    source: &'a wgpu::TextureView,
+    mask: &'a wgpu::TextureView,
+    output: &'a wgpu::TextureView,
+    parameters: &'a wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vestra mask operation"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(mask),
             },
             wgpu::BindGroupEntry {
                 binding: 2,
@@ -921,6 +1096,38 @@ fn layer_group<'a>(
             },
             wgpu::BindGroupEntry {
                 binding: 2,
+                resource: parameter_binding(parameters),
+            },
+        ],
+    })
+}
+
+fn mask_raster_group<'a>(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    source: &'a wgpu::TextureView,
+    state: &'a wgpu::TextureView,
+    output: &'a wgpu::TextureView,
+    parameters: &'a wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vestra mask raster operation"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(state),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(output),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
                 resource: parameter_binding(parameters),
             },
         ],

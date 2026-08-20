@@ -10,6 +10,9 @@ pub(super) struct GpuPipelines {
     pub(super) layer: wgpu::ComputePipeline,
     pub(super) spectrum2d: wgpu::ComputePipeline,
     pub(super) composite: wgpu::ComputePipeline,
+    pub(super) mask: wgpu::ComputePipeline,
+    pub(super) mask_raster: wgpu::ComputePipeline,
+    pub(super) mask_coverage: wgpu::ComputePipeline,
     pub(super) effects: Vec<(EffectKernel, wgpu::ComputePipeline)>,
     pub(super) particle_normal: wgpu::RenderPipeline,
     pub(super) particle_resolve: wgpu::ComputePipeline,
@@ -17,19 +20,24 @@ pub(super) struct GpuPipelines {
     pub(super) layer_bindings: wgpu::BindGroupLayout,
     pub(super) spectrum2d_bindings: wgpu::BindGroupLayout,
     pub(super) composite_bindings: wgpu::BindGroupLayout,
+    pub(super) mask_bindings: wgpu::BindGroupLayout,
+    pub(super) mask_raster_bindings: wgpu::BindGroupLayout,
     pub(super) effect_bindings: wgpu::BindGroupLayout,
     pub(super) particle_bindings: wgpu::BindGroupLayout,
     pub(super) _layer_shader: wgpu::ShaderModule,
     pub(super) _spectrum2d_shader: wgpu::ShaderModule,
     pub(super) _composite_shader: wgpu::ShaderModule,
+    pub(super) _mask_shader: wgpu::ShaderModule,
+    pub(super) _mask_raster_shader: wgpu::ShaderModule,
+    pub(super) _mask_coverage_shader: wgpu::ShaderModule,
     pub(super) _effect_shaders: Vec<(EffectKernel, wgpu::ShaderModule)>,
     pub(super) _particle_shader: wgpu::ShaderModule,
     pub(super) _particle_resolve_shader: wgpu::ShaderModule,
 }
 
 impl GpuPipelines {
-    pub(super) const BASE_SHADER_MODULE_COUNT: usize = 5;
-    pub(super) const BASE_PIPELINE_COUNT: usize = 5;
+    pub(super) const BASE_SHADER_MODULE_COUNT: usize = 8;
+    pub(super) const BASE_PIPELINE_COUNT: usize = 8;
 
     pub(super) fn create(device: &wgpu::Device) -> Self {
         let layer_shader = shader(
@@ -46,6 +54,21 @@ impl GpuPipelines {
             device,
             "vestra composite shader",
             include_str!("../shaders/composite_normal.wgsl"),
+        );
+        let mask_shader = shader(
+            device,
+            "vestra mask shader",
+            include_str!("../shaders/mask.wgsl"),
+        );
+        let mask_coverage_shader = shader(
+            device,
+            "vestra mask coverage shader",
+            include_str!("../shaders/mask_coverage.wgsl"),
+        );
+        let mask_raster_shader = shader(
+            device,
+            "vestra mask raster shader",
+            include_str!("../shaders/mask_raster.wgsl"),
         );
         let particle_shader = shader(
             device,
@@ -101,6 +124,31 @@ impl GpuPipelines {
                     },
                 ],
             });
+        let mask_bindings = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("vestra mask texture bindings"),
+            entries: &[
+                sampled(0),
+                sampled(1),
+                storage_texture(2),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    ..uniform
+                },
+            ],
+        });
+        let mask_raster_bindings =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("vestra mask raster bindings"),
+                entries: &[
+                    sampled(0),
+                    sampled(1),
+                    storage_texture(2),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        ..uniform
+                    },
+                ],
+            });
         let layer = pipeline(
             device,
             "vestra layer pipeline",
@@ -118,6 +166,13 @@ impl GpuPipelines {
             "vestra composite pipeline",
             &composite_shader,
             &composite_bindings,
+        );
+        let mask = pipeline(device, "vestra mask pipeline", &mask_shader, &mask_bindings);
+        let mask_raster = pipeline(
+            device,
+            "vestra mask raster pipeline",
+            &mask_raster_shader,
+            &mask_raster_bindings,
         );
         let particle_bindings = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("vestra particle bindings"),
@@ -161,6 +216,12 @@ impl GpuPipelines {
                 },
             ],
         });
+        let mask_coverage = pipeline(
+            device,
+            "vestra mask coverage pipeline",
+            &mask_coverage_shader,
+            &effect_bindings,
+        );
         let effect_shaders = supported_kernels()
             .map(|kernel| (kernel, shader(device, kernel.label(), kernel.source())))
             .collect::<Vec<_>>();
@@ -177,12 +238,18 @@ impl GpuPipelines {
             _layer_shader: layer_shader,
             _spectrum2d_shader: spectrum2d_shader,
             _composite_shader: composite_shader,
+            _mask_shader: mask_shader,
+            _mask_raster_shader: mask_raster_shader,
+            _mask_coverage_shader: mask_coverage_shader,
             _particle_shader: particle_shader,
             _particle_resolve_shader: particle_resolve_shader,
             _effect_shaders: effect_shaders,
             layer,
             spectrum2d,
             composite,
+            mask,
+            mask_raster,
+            mask_coverage,
             particle_normal,
             particle_resolve,
             particle_resolve_bindings,
@@ -190,6 +257,8 @@ impl GpuPipelines {
             layer_bindings,
             spectrum2d_bindings,
             composite_bindings,
+            mask_bindings,
+            mask_raster_bindings,
             effect_bindings,
             particle_bindings,
         }

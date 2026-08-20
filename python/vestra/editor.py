@@ -14,6 +14,7 @@ from .authoring.values import BlendMode, DurationMode, Quality, color_to_canonic
 from .lowering import LoweringContext
 from .audio import AudioTimeline
 from .effects import EffectStack
+from .masks import MaskCollection
 from .flashes import FlashCollection
 from .presets import Preset, PresetCollection
 from .properties import BindableScalarProperty, ScalarProperty, Transform
@@ -111,6 +112,7 @@ class Layer:
         "_transform",
         "_blend_mode",
         "_effects",
+        "_masks",
         "_presets",
     )
 
@@ -151,6 +153,7 @@ class Layer:
             raise TypeError("blend_mode must be BlendMode")
         self._blend_mode = blend_mode
         self._effects = EffectStack("layer")
+        self._masks = MaskCollection()
         self._presets = PresetCollection(self)
 
     @property
@@ -274,6 +277,10 @@ class Layer:
     def effects(self) -> EffectStack:
         """The ordered visual effects applied after source adaptation."""
         return self._effects
+
+    @property
+    def masks(self) -> MaskCollection:
+        return self._masks
 
     @property
     def presets(self) -> PresetCollection:

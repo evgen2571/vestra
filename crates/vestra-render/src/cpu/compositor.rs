@@ -186,6 +186,7 @@ fn compose_layers(
                 }
                 effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
             }
+            apply_masks(surfaces, assets, layer);
             let bytes = u64::from(width) * u64::from(height) * 4;
             if let Some(cached) =
                 static_layers.insert_with(layer.compiled_layer_index, bytes, || {
@@ -246,6 +247,7 @@ fn compose_layers(
             timings.source_rasterization += started.elapsed();
         }
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
+        apply_masks(surfaces, assets, layer);
         let started = profiling_enabled.then(Instant::now);
         blend_surface(
             canvas,
@@ -330,6 +332,7 @@ fn render_group(
     if !direct_colour_path {
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
     }
+    apply_masks(surfaces, assets, layer);
     if layer.content_dependency == TemporalDependency::Static {
         let bytes = u64::from(width) * u64::from(height) * 4;
         if let Some(cached) = static_layers.insert_with(layer.compiled_layer_index, bytes, || {
@@ -411,11 +414,69 @@ fn composite_cached_surface(
 
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
     matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+        && layer.masks.is_empty()
         && !matches!(layer.source, EvaluatedSource::ParticleSystem { .. })
         && layer
             .effects
             .iter()
             .all(EvaluatedEffect::is_basic_colour_effect)
+}
+
+fn apply_masks(
+    surfaces: &mut EffectSurfacePool,
+    assets: &mut PreparedAssets,
+    layer: &EvaluatedLayer,
+) {
+    if layer.masks.is_empty() {
+        return;
+    }
+    let width = surfaces.current().width();
+    let height = surfaces.current().height();
+    let mut coverage = vec![1.0_f32; (width as usize) * (height as usize)];
+    for mask in &layer.masks {
+        for pixel in surfaces.mask_local_surface().pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
+        }
+        let mask_layer = EvaluatedLayer {
+            compiled_layer_index: usize::MAX,
+            content_dependency: TemporalDependency::Static,
+            source: EvaluatedSource::Shape {
+                shape_index: mask.shape_index,
+                sizing: crate::plan::CompiledSizing::Original,
+            },
+            transform: mask.transform,
+            opacity: 1.0,
+            effects: Vec::new(),
+            masks: Vec::new(),
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        };
+        let mut timings = CpuHotPathTimings::default();
+        super::raster::draw_layer(
+            surfaces.mask_local_surface(),
+            assets,
+            &mask_layer,
+            1.0,
+            ColourTransform::default(),
+            &mut timings,
+            false,
+        );
+        surfaces.compose_mask_surface(layer.transform);
+        for (index, pixel) in surfaces.mask_surface().pixels().enumerate() {
+            coverage[index] = crate::project::apply_mask_operation(
+                coverage[index],
+                f32::from(pixel[3]) / 255.0,
+                mask.operation,
+                mask.invert,
+                mask.strength,
+            );
+        }
+    }
+    for (index, pixel) in surfaces.current().pixels_mut().enumerate() {
+        pixel[3] = (f32::from(pixel[3]) * coverage[index])
+            .round()
+            .clamp(0.0, 255.0) as u8;
+    }
 }
 
 /// Test helper that keeps the compositor assertions on the production blur path.
@@ -477,6 +538,7 @@ mod tests {
             transform: identity_transform(),
             opacity,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode,
         }
@@ -555,6 +617,7 @@ mod tests {
             },
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }
@@ -574,6 +637,7 @@ mod tests {
             transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }
@@ -595,6 +659,7 @@ mod tests {
             opacity: 1.0,
             colour_transform: ColourTransform::from_effects(effects.clone()),
             effects,
+            masks: Vec::new(),
             blend_mode: crate::project::BlendMode::Normal,
         }
     }
@@ -778,6 +843,7 @@ mod tests {
             transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
@@ -807,6 +873,7 @@ mod tests {
                                 ),
                                 opacity: 1.0,
                                 effects: Vec::new(),
+                                masks: Vec::new(),
                                 colour_transform: ColourTransform::default(),
                                 blend_mode: crate::project::BlendMode::Normal,
                             },
@@ -819,6 +886,7 @@ mod tests {
                 ),
                 opacity: 0.5,
                 effects: Vec::new(),
+                masks: Vec::new(),
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
             }],
@@ -876,6 +944,7 @@ mod tests {
                 transform: identity_transform(),
                 opacity: 1.0,
                 effects: Vec::new(),
+                masks: Vec::new(),
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
             }],
@@ -1103,6 +1172,7 @@ mod tests {
             transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
@@ -1138,6 +1208,7 @@ mod tests {
             transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
@@ -1403,6 +1474,7 @@ mod tests {
             transform: identity_transform(),
             opacity: 1.0,
             effects: vec![EvaluatedEffect::Brightness { amount: 0.1 }],
+            masks: Vec::new(),
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };

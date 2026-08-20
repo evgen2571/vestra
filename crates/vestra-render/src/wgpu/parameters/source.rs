@@ -28,6 +28,59 @@ pub(in crate::wgpu) struct LayerParameters {
     pub(in crate::wgpu) solid_or_background: [f32; 4],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub(in crate::wgpu) struct MaskParameters {
+    pub(in crate::wgpu) canvas: [u32; 4],
+    pub(in crate::wgpu) inverse_row0: [f32; 4],
+    pub(in crate::wgpu) inverse_row1: [f32; 4],
+    pub(in crate::wgpu) operation: u32,
+    pub(in crate::wgpu) invert: u32,
+    pub(in crate::wgpu) strength: f32,
+    pub(in crate::wgpu) _padding: u32,
+}
+
+pub(in crate::wgpu) fn mask(
+    frame: &EvaluatedFrame,
+    mask: &crate::plan::EvaluatedMask,
+    layer_transform: Transform2D,
+    first: bool,
+) -> MaskParameters {
+    let (sine, cosine) = layer_transform.rotation_radians.sin_cos();
+    let inverse_x = cosine / layer_transform.scale.x;
+    let inverse_xy = sine / layer_transform.scale.x;
+    let inverse_yx = -sine / layer_transform.scale.y;
+    let inverse_y = cosine / layer_transform.scale.y;
+    let position_x = layer_transform.position.x * f64::from(frame.width);
+    let position_y = layer_transform.position.y * f64::from(frame.height);
+    let anchor_x = layer_transform.anchor.x * f64::from(frame.width);
+    let anchor_y = layer_transform.anchor.y * f64::from(frame.height);
+    MaskParameters {
+        canvas: [frame.width, frame.height, 0, 0],
+        inverse_row0: [
+            inverse_x as f32,
+            inverse_xy as f32,
+            (anchor_x - inverse_x * position_x - inverse_xy * position_y) as f32,
+            0.0,
+        ],
+        inverse_row1: [
+            inverse_yx as f32,
+            inverse_y as f32,
+            (anchor_y - inverse_yx * position_x - inverse_y * position_y) as f32,
+            0.0,
+        ],
+        operation: match mask.operation {
+            crate::project::MaskOperation::Replace => 0,
+            crate::project::MaskOperation::Intersect => 1,
+            crate::project::MaskOperation::Union => 2,
+            crate::project::MaskOperation::Subtract => 3,
+        } | (u32::from(first) << 2),
+        invert: u32::from(mask.invert),
+        strength: mask.strength,
+        _padding: u32::from(first),
+    }
+}
+
 /// Fixed-size evaluated Spectrum2D source parameters. The bands are packed as
 /// vec4 values because uniform-buffer array elements have a 16-byte stride in
 /// WGSL. Unused entries are zeroed and ignored by `band_count`.

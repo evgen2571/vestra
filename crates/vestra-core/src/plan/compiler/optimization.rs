@@ -594,6 +594,7 @@ mod tests {
             opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
             effects: vec![],
+            masks: vec![],
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -626,6 +627,7 @@ mod tests {
             opacity: scalar(1.0),
             opacity_contributions: vec![],
             effects: vec![],
+            masks: vec![],
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -658,6 +660,7 @@ mod tests {
             opacity: scalar(1.0),
             opacity_contributions: vec![],
             effects: vec![],
+            masks: vec![],
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -692,6 +695,7 @@ mod tests {
             opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             opacity_contributions: vec![],
             effects: vec![],
+            masks: vec![],
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -799,6 +803,7 @@ mod tests {
                 dependency: TemporalDependency::Static,
             })
             .collect(),
+            masks: vec![],
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -868,6 +873,7 @@ mod tests {
                     dependency: TemporalDependency::Static,
                 },
             ],
+            masks: vec![],
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };

@@ -26,6 +26,7 @@ pub(super) enum TextureSlot {
     EffectA,
     EffectB,
     Auxiliary,
+    MaskCoverage,
     GroupCanvasA(usize),
     GroupCanvasB(usize),
 }
@@ -62,6 +63,23 @@ pub(super) enum GpuOperation {
         layer_index: usize,
         source_index: usize,
         destination: TextureSlot,
+        parameters_index: u32,
+    },
+    RenderMask {
+        layer_index: usize,
+        mask_index: usize,
+        source_index: usize,
+        state_source: TextureSlot,
+        expected_state_value: Option<u64>,
+        parameters_index: u32,
+    },
+    UpdateMaskCoverage {
+        layer_index: usize,
+        mask_index: usize,
+        source: TextureSlot,
+        expected_source_value: u64,
+        destination: TextureSlot,
+        result_value: u64,
         parameters_index: u32,
     },
     RenderSurfaceLayer {
@@ -115,6 +133,15 @@ pub(super) enum GpuOperation {
         result_value: u64,
         auxiliary: Option<TextureSlot>,
         auxiliary_value: Option<u64>,
+        parameters_index: u32,
+    },
+    ApplyMask {
+        layer_index: usize,
+        mask_index: usize,
+        source: TextureSlot,
+        expected_source_value: u64,
+        destination: TextureSlot,
+        result_value: u64,
         parameters_index: u32,
     },
     CompositeLayer {
@@ -292,6 +319,15 @@ impl GpuFramePlan {
                 | GpuOperation::CompositeCachedLayer {
                     parameters_index, ..
                 } => Some(*parameters_index),
+                GpuOperation::RenderMask {
+                    parameters_index, ..
+                }
+                | GpuOperation::UpdateMaskCoverage {
+                    parameters_index, ..
+                }
+                | GpuOperation::ApplyMask {
+                    parameters_index, ..
+                } => Some(*parameters_index),
                 GpuOperation::ResolveParticleLayer { .. } => None,
                 GpuOperation::CopyForEffect { .. }
                 | GpuOperation::StoreStaticLayer { .. }
@@ -330,6 +366,58 @@ impl GpuFramePlan {
                         ));
                     }
                     states.insert(*destination, TextureState::written(next_value));
+                    next_value += 1;
+                }
+                GpuOperation::RenderMask {
+                    state_source,
+                    expected_state_value,
+                    ..
+                } => {
+                    if let GpuOperation::RenderMask { source_index, .. } = operation
+                        && *source_index >= source_asset_count
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "references an invalid mask source asset",
+                        ));
+                    }
+                    if let Some(expected) = expected_state_value
+                        && (state_source != &TextureSlot::MaskCoverage
+                            || states.get(state_source).and_then(|state| state.value)
+                                != Some(*expected))
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "references an invalid prior mask coverage state",
+                        ));
+                    }
+                    states.insert(TextureSlot::Auxiliary, TextureState::written(next_value));
+                    next_value += 1;
+                }
+                GpuOperation::UpdateMaskCoverage {
+                    source,
+                    expected_source_value,
+                    destination,
+                    result_value,
+                    ..
+                } => {
+                    if states.get(source).and_then(|state| state.value)
+                        != Some(*expected_source_value)
+                        || !states.get(source).copied().unwrap_or_default().initialized
+                        || *destination != TextureSlot::MaskCoverage
+                        || !states
+                            .get(&TextureSlot::Auxiliary)
+                            .copied()
+                            .unwrap_or_default()
+                            .initialized
+                        || *result_value != next_value
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "uses an invalid mask coverage dependency",
+                        ));
+                    }
+                    states.insert(*destination, TextureState::written(*result_value));
                     next_value += 1;
                 }
                 GpuOperation::RenderSurfaceLayer {
@@ -480,6 +568,33 @@ impl GpuFramePlan {
                         return Err(invalid(
                             operation_index,
                             "uses an invalid effect texture dependency",
+                        ));
+                    }
+                    states.insert(*destination, TextureState::written(*result_value));
+                    next_value += 1;
+                }
+                GpuOperation::ApplyMask {
+                    source,
+                    expected_source_value,
+                    destination,
+                    result_value,
+                    ..
+                } => {
+                    if states.get(source).and_then(|state| state.value)
+                        != Some(*expected_source_value)
+                        || !states.get(source).copied().unwrap_or_default().initialized
+                        || !matches!(destination, TextureSlot::EffectA | TextureSlot::EffectB)
+                        || source == destination
+                        || !states
+                            .get(&TextureSlot::Auxiliary)
+                            .copied()
+                            .unwrap_or_default()
+                            .initialized
+                        || *result_value != next_value
+                    {
+                        return Err(invalid(
+                            operation_index,
+                            "uses an invalid mask texture dependency",
                         ));
                     }
                     states.insert(*destination, TextureState::written(*result_value));
@@ -667,6 +782,7 @@ fn append_layer(
         let mut layer_result = TextureSlot::Layer;
         let mut layer_value = *next_value;
         *next_value += 1;
+        let mut mask_state_value = None;
         for (effect_index, effect) in layer.effects.iter().enumerate() {
             append_effect_chain(
                 operations,
@@ -680,6 +796,16 @@ fn append_layer(
                 next_value,
             );
         }
+        append_masks(
+            layer,
+            layer_index,
+            &mut layer_result,
+            &mut layer_value,
+            operations,
+            parameter_count,
+            next_value,
+            &mut mask_state_value,
+        );
         append_composite(
             layer_index,
             layer_result,
@@ -786,6 +912,7 @@ fn append_layer(
     let mut layer_result = TextureSlot::Layer;
     let mut layer_value = *next_value;
     *next_value += 1;
+    let mut mask_state_value = None;
     for (effect_index, effect) in layer.effects.iter().enumerate() {
         append_effect_chain(
             operations,
@@ -799,6 +926,16 @@ fn append_layer(
             next_value,
         );
     }
+    append_masks(
+        layer,
+        layer_index,
+        &mut layer_result,
+        &mut layer_value,
+        operations,
+        parameter_count,
+        next_value,
+        &mut mask_state_value,
+    );
     if cache_targets.contains(&layer.compiled_layer_index) {
         operations.push(GpuOperation::StoreStaticLayer {
             cache_key: layer.compiled_layer_index,
@@ -817,6 +954,62 @@ fn append_layer(
         next_value,
         canvas,
     );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_masks(
+    layer: &crate::plan::EvaluatedLayer,
+    layer_index: usize,
+    layer_result: &mut TextureSlot,
+    layer_value: &mut u64,
+    operations: &mut Vec<GpuOperation>,
+    parameter_count: &mut u32,
+    next_value: &mut u64,
+    mask_state_value: &mut Option<u64>,
+) {
+    for (mask_index, mask) in layer.masks.iter().enumerate() {
+        operations.push(GpuOperation::RenderMask {
+            layer_index,
+            mask_index,
+            source_index: mask.shape_index,
+            state_source: TextureSlot::MaskCoverage,
+            expected_state_value: *mask_state_value,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        *next_value += 1;
+        let coverage_source = *layer_result;
+        let coverage_source_value = *layer_value;
+        let destination = match *layer_result {
+            TextureSlot::EffectA => TextureSlot::EffectB,
+            _ => TextureSlot::EffectA,
+        };
+        operations.push(GpuOperation::ApplyMask {
+            layer_index,
+            mask_index,
+            source: coverage_source,
+            expected_source_value: coverage_source_value,
+            destination,
+            result_value: *next_value,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        *layer_result = destination;
+        *layer_value = *next_value;
+        *next_value += 1;
+        operations.push(GpuOperation::UpdateMaskCoverage {
+            layer_index,
+            mask_index,
+            source: coverage_source,
+            expected_source_value: coverage_source_value,
+            destination: TextureSlot::MaskCoverage,
+            result_value: *next_value,
+            parameters_index: *parameter_count,
+        });
+        *parameter_count += 1;
+        *mask_state_value = Some(*next_value);
+        *next_value += 1;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1098,10 +1291,10 @@ impl TextureState {
 pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
     fn layers_require_auxiliary(layers: &[crate::plan::CompiledLayer]) -> bool {
         layers.iter().any(|layer| {
-            layer
-                .effects
-                .iter()
-                .any(|timed| compiled_effect_pass_requirements(&timed.effect).retains_original())
+            !layer.masks.is_empty()
+                || layer.effects.iter().any(|timed| {
+                    compiled_effect_pass_requirements(&timed.effect).retains_original()
+                })
                 || match &layer.source {
                     crate::plan::CompiledVisualSource::Group(composition) => {
                         layers_require_auxiliary(&composition.layers)
@@ -1116,6 +1309,21 @@ pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
             .post_effects
             .iter()
             .any(|timed| compiled_effect_pass_requirements(&timed.effect).retains_original())
+}
+
+pub(super) fn plan_has_masks(plan: &RenderPlan) -> bool {
+    fn layers_have_masks(layers: &[crate::plan::CompiledLayer]) -> bool {
+        layers.iter().any(|layer| {
+            !layer.masks.is_empty()
+                || match &layer.source {
+                    crate::plan::CompiledVisualSource::Group(composition) => {
+                        layers_have_masks(&composition.layers)
+                    }
+                    _ => false,
+                }
+        })
+    }
+    layers_have_masks(&plan.layers)
 }
 
 fn invalid(operation_index: usize, message: &str) -> Diagnostic {

@@ -46,10 +46,20 @@ pub struct EvaluatedLayer {
     /// Ordered local effect chain. Image effects consume and produce complete
     /// surfaces, so its order is never inferred or rearranged by a backend.
     pub effects: Vec<EvaluatedEffect>,
+    pub masks: Vec<EvaluatedMask>,
     /// Legacy single-pass representation used by the basic WGPU path. Advanced
     /// chains are rejected by that backend before frame rendering.
     pub colour_transform: ColourTransform,
     pub blend_mode: crate::project::BlendMode,
+}
+
+#[derive(Clone, Debug)]
+pub struct EvaluatedMask {
+    pub shape_index: usize,
+    pub operation: crate::project::MaskOperation,
+    pub invert: bool,
+    pub strength: f32,
+    pub transform: Transform2D,
 }
 
 #[derive(Clone, Debug)]
@@ -379,6 +389,19 @@ fn evaluate_layers(
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let masks = layer
+            .masks
+            .iter()
+            .map(|mask| {
+                Ok(EvaluatedMask {
+                    shape_index: mask.shape_index,
+                    operation: mask.operation,
+                    invert: mask.invert,
+                    strength: mask.strength as f32,
+                    transform: evaluate_static_mask_transform(&mask.transform)?,
+                })
+            })
+            .collect::<Result<Vec<_>, EvaluationError>>()?;
         for effect in &mut effects {
             if let EvaluatedEffect::MotionBlur {
                 radius,
@@ -469,10 +492,35 @@ fn evaluate_layers(
             opacity,
             colour_transform: ColourTransform::from_effects(effects.clone()),
             effects,
+            masks,
             blend_mode: layer.blend_mode,
         });
     }
     Ok((layers, evaluated_track_count))
+}
+
+fn evaluate_static_mask_transform(
+    transform: &crate::plan::CompiledTransformTracks,
+) -> Result<Transform2D, EvaluationError> {
+    let position = transform.position.base_value;
+    let anchor = transform.anchor.base_value;
+    let scale = transform.scale.base_value;
+    let rotation = transform
+        .rotation_degrees
+        .authored_track
+        .base_value
+        .to_radians();
+    let result = Transform2D {
+        position,
+        anchor,
+        scale,
+        rotation_radians: rotation,
+    };
+    if result.is_valid() {
+        Ok(result)
+    } else {
+        Err(EvaluationError::NonFiniteScalarProperty)
+    }
 }
 
 fn sample_root_time(

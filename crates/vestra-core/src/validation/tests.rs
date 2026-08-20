@@ -94,6 +94,58 @@ fn group_clip(id: &str, clips: Vec<Value>) -> Value {
     })
 }
 
+fn masked_project(masks: Value) -> Project {
+    serde_json::from_value(json!({
+        "schema_version": 4,
+        "output": {
+            "path": "out.mp4", "width": 32, "height": 32,
+            "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
+            "audio": false, "duration_mode": "explicit", "duration": 1.0
+        },
+        "assets": [],
+        "visual": {"clips": [{
+            "id": "masked", "source": {"type": "solid_color", "colour": "#ff0000"},
+            "start": 0.0, "duration": 1.0, "layer": 0,
+            "opacity": {"base_value": 1.0}, "masks": masks
+        }]}
+    }))
+    .expect("masked project")
+}
+
+fn shape_mask(id: &str, width: f64, strength: f64) -> Value {
+    json!({
+        "id": id,
+        "input": {"type": "shape", "geometry": {"type": "ellipse", "width": width, "height": 16.0}, "fill": "#ffffff"},
+        "strength": strength
+    })
+}
+
+#[test]
+fn masks_validate_ids_geometry_strength_and_static_transform() {
+    let project = masked_project(json!([
+        shape_mask("duplicate", 16.0, 2.0),
+        shape_mask("duplicate", 0.0, 1.0),
+    ]));
+    let codes = codes(&project);
+    assert!(codes.iter().any(|code| code == "VESTRA-MASK-ID"));
+    assert!(codes.iter().any(|code| code == "VESTRA-MASK-STRENGTH"));
+    assert!(codes.iter().any(|code| code == "VESTRA-SHAPE-GEOMETRY"));
+
+    let project = masked_project(json!([{
+        "id": "animated",
+        "input": {"type": "shape", "geometry": {"type": "rectangle", "width": 16.0, "height": 16.0}, "fill": "#ffffff"},
+        "transform": {
+            "position": {"base_value": {"x": 0.5, "y": 0.5}, "keyframes": [{
+                "time": 0.0, "value": {"x": 0.6, "y": 0.5}, "interpolation": "linear"
+            }]},
+            "anchor": {"base_value": {"x": 0.5, "y": 0.5}, "keyframes": []},
+            "scale": {"base_value": {"x": 1.0, "y": 1.0}, "keyframes": []},
+            "rotation_degrees": {"base_value": 0.0, "keyframes": []}
+        }
+    }]));
+    assert!(has(&project, "VESTRA-MASK-STATIC-TRANSFORM"));
+}
+
 fn grouped_project(clips: Vec<Value>) -> Project {
     let mut value = serde_json::json!({
         "schema_version": 3,

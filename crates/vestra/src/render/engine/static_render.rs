@@ -70,11 +70,13 @@ fn static_encoder_failure(
     } else {
         (RenderFailureStage::EncoderFinalization, None)
     };
-    tracing::warn!(
+    // The CLI presents the compatibility-sensitive diagnostic. This lifecycle
+    // event is useful for verbose troubleshooting, but must not duplicate the
+    // default-visible user failure.
+    tracing::debug!(
         stage = stage.as_str(),
         completed_frames,
         total_frames = plan.frame_count,
-        code = %diagnostic.code,
         "static render failed"
     );
     cleanup_error(

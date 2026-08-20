@@ -145,6 +145,29 @@ fn render_failure_is_presented_once_without_duplicate_error_log() {
 }
 
 #[test]
+fn verbose_render_failure_keeps_legacy_code_only_in_user_diagnostic() {
+    let result = common::command()
+        .args([
+            "-vv",
+            "render",
+            "examples/projects/does-not-exist.json",
+            "--progress",
+            "none",
+        ])
+        .output()
+        .expect("render runs");
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert_eq!(stderr.matches("MVP-PROJECT-READ").count(), 1);
+    for line in stderr.lines().filter(|line| line.contains(" DEBUG ")) {
+        assert!(
+            !line.contains("MVP-"),
+            "structured log leaked a code: {line}"
+        );
+    }
+}
+
+#[test]
 fn canonical_project_validates_and_rejects_a_version_field() {
     let project = "examples/projects/animation-effects.json";
     let valid = common::command()

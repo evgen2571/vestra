@@ -1367,6 +1367,31 @@
     "mask": {
       "additionalProperties": false,
       "properties": {
+        "feather": {
+          "default": {
+            "base_value": 0.0
+          },
+          "oneOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/scalar_property"
+                },
+                {
+                  "properties": {
+                    "base_value": {
+                      "minimum": 0.0
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
         "id": {
           "minLength": 1,
           "type": "string"
@@ -1388,10 +1413,31 @@
           ]
         },
         "strength": {
-          "default": 1.0,
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "type": "number"
+          "default": {
+            "base_value": 1.0
+          },
+          "oneOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/scalar_property"
+                },
+                {
+                  "properties": {
+                    "base_value": {
+                      "maximum": 1.0,
+                      "minimum": 0.0
+                    }
+                  }
+                }
+              ]
+            }
+          ]
         },
         "transform": {
           "$ref": "#/$defs/transform"

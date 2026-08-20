@@ -9,6 +9,12 @@ import vestra
 project = vestra.Project(size=(1920, 1080), fps=30, duration=5)
 layer = project.root.add(vestra.Image("character.png"), duration=5)
 layer.masks.add(vestra.Circle(radius=300, fill="#ffffffff"))
+reveal = layer.masks.add(
+    vestra.Circle(radius=300, fill="#ffffffff"),
+    feather=20,
+)
+reveal.transform.scale.keyframe(0, (0.2, 0.2))
+reveal.transform.scale.keyframe(2, (1.0, 1.0))
 hole = layer.masks.add(
     vestra.Circle(radius=120, fill="#ffffffff"),
     operation=vestra.MaskOperation.SUBTRACT,
@@ -29,12 +35,16 @@ and `SUBTRACT` use normalized coverage and can be combined in order. `invert`
 changes coverage to `1 - coverage`. `strength=0` leaves the accumulated
 coverage unchanged; `strength=1` applies the selected operation completely.
 
-Mask transforms use the existing static transform property and are local to
-the owning layer. The layer transform moves the layer and its attached mask
-together. Effects run before masks, and layer opacity runs after masks.
+`strength` and `feather` are scalar properties and support the normal
+keyframes, modifiers, and signal bindings. Mask transforms use the existing
+transform properties and are local to the owning layer. The layer transform
+moves the layer and its attached mask together. Effects run before masks, and
+layer opacity runs after masks.
 Groups are maskable layers, so a group mask clips the already-composited group
 result.
 
-This release supports static geometric masks only. Feathering, animated or
-signal-driven masks, image masks, composition masks, and track mattes are not
-part of this feature.
+Feather is measured in output pixels and filters coverage before inversion,
+operation combination, and strength interpolation. Static masks remain
+cacheable; animated, modifier-driven, or signal-driven mask properties make
+the owning layer dynamic. Image masks, composition masks, and track mattes are
+not supported.

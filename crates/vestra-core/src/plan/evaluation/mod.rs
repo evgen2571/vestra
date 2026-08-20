@@ -59,6 +59,7 @@ pub struct EvaluatedMask {
     pub operation: crate::project::MaskOperation,
     pub invert: bool,
     pub strength: f32,
+    pub feather: f32,
     pub transform: Transform2D,
 }
 
@@ -397,8 +398,21 @@ fn evaluate_layers(
                     shape_index: mask.shape_index,
                     operation: mask.operation,
                     invert: mask.invert,
-                    strength: mask.strength as f32,
-                    transform: evaluate_static_mask_transform(&mask.transform)?,
+                    strength: mask
+                        .strength
+                        .evaluate(relative, root_project_time, context)?
+                        as f32,
+                    feather: mask
+                        .feather
+                        .evaluate(relative, root_project_time, context)?
+                        as f32,
+                    transform: transform::evaluate_tracks(
+                        &mask.transform,
+                        relative,
+                        root_project_time,
+                        context,
+                        &mut evaluated_track_count,
+                    )?,
                 })
             })
             .collect::<Result<Vec<_>, EvaluationError>>()?;
@@ -497,30 +511,6 @@ fn evaluate_layers(
         });
     }
     Ok((layers, evaluated_track_count))
-}
-
-fn evaluate_static_mask_transform(
-    transform: &crate::plan::CompiledTransformTracks,
-) -> Result<Transform2D, EvaluationError> {
-    let position = transform.position.base_value;
-    let anchor = transform.anchor.base_value;
-    let scale = transform.scale.base_value;
-    let rotation = transform
-        .rotation_degrees
-        .authored_track
-        .base_value
-        .to_radians();
-    let result = Transform2D {
-        position,
-        anchor,
-        scale,
-        rotation_radians: rotation,
-    };
-    if result.is_valid() {
-        Ok(result)
-    } else {
-        Err(EvaluationError::NonFiniteScalarProperty)
-    }
 }
 
 fn sample_root_time(

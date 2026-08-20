@@ -32,14 +32,35 @@ pub struct Mask {
     pub operation: MaskOperation,
     #[serde(default)]
     pub invert: bool,
-    #[serde(default = "default_strength")]
-    pub strength: f64,
+    #[serde(
+        default = "default_strength",
+        deserialize_with = "deserialize_scalar_property"
+    )]
+    pub strength: ScalarProperty,
+    #[serde(default = "default_feather")]
+    pub feather: ScalarProperty,
     #[serde(default = "default_transform")]
     pub transform: Transform,
 }
 
-const fn default_strength() -> f64 {
-    1.0
+fn default_strength() -> ScalarProperty {
+    ScalarProperty::from_track(Track::constant(1.0))
+}
+
+fn deserialize_scalar_property<'de, D>(deserializer: D) -> Result<ScalarProperty, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum ScalarOrProperty {
+        Scalar(f64),
+        Property(ScalarProperty),
+    }
+    match ScalarOrProperty::deserialize(deserializer)? {
+        ScalarOrProperty::Scalar(value) => Ok(ScalarProperty::from_track(Track::constant(value))),
+        ScalarOrProperty::Property(property) => Ok(property),
+    }
 }
 
 fn default_transform() -> Transform {
@@ -50,6 +71,10 @@ fn default_transform() -> Transform {
         rotation_degrees: ScalarProperty::from_track(Track::constant(0.0)),
         component_modifiers: Default::default(),
     }
+}
+
+fn default_feather() -> ScalarProperty {
+    ScalarProperty::from_track(Track::constant(0.0))
 }
 
 /// Applies one normalized mask operation. Both inputs and the result are
@@ -95,7 +120,8 @@ mod tests {
             }),
             operation: MaskOperation::Intersect,
             invert: false,
-            strength: 1.0,
+            strength: default_strength(),
+            feather: default_feather(),
             transform: default_transform(),
         }
     }
@@ -141,5 +167,18 @@ mod tests {
             serde_json::to_value(decoded).expect("mask serializes"),
             value
         );
+    }
+
+    #[test]
+    fn feather_defaults_to_zero_and_round_trips_as_a_scalar_property() {
+        let value = serde_json::to_value(mask()).expect("mask serializes");
+        assert_eq!(value["feather"]["base_value"], 0.0);
+        let decoded: Mask = serde_json::from_value(serde_json::json!({
+            "id": "m",
+            "input": value["input"].clone(),
+            "feather": {"base_value": 12.5}
+        }))
+        .expect("mask with feather parses");
+        assert_eq!(decoded.feather.track.base_value, 12.5);
     }
 }

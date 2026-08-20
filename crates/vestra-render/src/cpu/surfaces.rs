@@ -69,6 +69,7 @@ pub(crate) struct EffectSurfacePool {
     mask_local_surface: RgbaImage,
     mask_surface: RgbaImage,
     mask_coverage: Vec<f32>,
+    mask_feather_scratch: Vec<f32>,
     current_slot: usize,
     original_slot: Option<usize>,
     temporary_slots: [Option<usize>; 2],
@@ -85,6 +86,7 @@ impl EffectSurfacePool {
             mask_local_surface: RgbaImage::new(width, height),
             mask_surface: RgbaImage::new(width, height),
             mask_coverage: vec![1.0; (width as usize) * (height as usize)],
+            mask_feather_scratch: vec![0.0; (width as usize) * (height as usize)],
             current_slot: 0,
             original_slot: None,
             temporary_slots: [None; 2],
@@ -100,6 +102,7 @@ impl EffectSurfacePool {
             self.mask_local_surface = RgbaImage::new(width, height);
             self.mask_surface = RgbaImage::new(width, height);
             self.mask_coverage = vec![1.0; (width as usize) * (height as usize)];
+            self.mask_feather_scratch = vec![0.0; (width as usize) * (height as usize)];
             self.current_slot = 0;
             self.original_slot = None;
             self.temporary_slots = [None; 2];
@@ -137,6 +140,43 @@ impl EffectSurfacePool {
                 invert,
                 strength,
             );
+        }
+    }
+
+    /// Applies the deterministic nine-sample coverage filter used by the WGPU
+    /// mask shaders. Samples outside the canvas are transparent, so feathering
+    /// cannot wrap around the opposite edge.
+    pub(super) fn feather_mask_surface(&mut self, radius: f32) {
+        let radius = radius.round().clamp(0.0, 256.0) as i32;
+        if radius == 0 {
+            return;
+        }
+        let width = self.mask_surface.width() as i32;
+        let height = self.mask_surface.height() as i32;
+        for y in 0..height {
+            for x in 0..width {
+                let mut value = 0.0;
+                for dy in [-radius, 0, radius] {
+                    for dx in [-radius, 0, radius] {
+                        let sample_x = x + dx;
+                        let sample_y = y + dy;
+                        if (0..width).contains(&sample_x) && (0..height).contains(&sample_y) {
+                            value += f32::from(
+                                self.mask_surface
+                                    .get_pixel(sample_x as u32, sample_y as u32)[3],
+                            ) / 255.0;
+                        }
+                    }
+                }
+                self.mask_feather_scratch[(y * width + x) as usize] = value / 9.0;
+            }
+        }
+        for (pixel, value) in self
+            .mask_surface
+            .pixels_mut()
+            .zip(&self.mask_feather_scratch)
+        {
+            pixel[3] = (value * 255.0).round().clamp(0.0, 255.0) as u8;
         }
     }
 
@@ -475,5 +515,15 @@ mod tests {
         assert_eq!(pool.stats().allocations, 4);
         assert_eq!(pool.stats().retained_buffers, 3);
         assert_eq!(pool.stats().retained_bytes, 96);
+    }
+
+    #[test]
+    fn mask_feather_blurs_coverage_without_wrapping_edges() {
+        let mut pool = EffectSurfacePool::new(5, 1);
+        pool.mask_surface.put_pixel(0, 0, Rgba([0, 0, 0, 255]));
+        pool.mask_surface.put_pixel(1, 0, Rgba([0, 0, 0, 255]));
+        pool.feather_mask_surface(1.0);
+        assert!(pool.mask_surface.get_pixel(0, 0)[3] < 255);
+        assert!(pool.mask_surface.get_pixel(4, 0)[3] < 1);
     }
 }

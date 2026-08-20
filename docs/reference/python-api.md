@@ -32,13 +32,13 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
 Layers expose an ordered geometric mask collection:
 
 ```python
-mask = layer.masks.add(shape, operation=MaskOperation.INTERSECT, id=None)
+mask = layer.masks.add(shape, operation=MaskOperation.INTERSECT, id=None, feather=12)
 layer.masks.items
 layer.masks.remove(mask_or_id)
 layer.masks.clear()
 ```
 
-`Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, and static
+`Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, `feather`, and
 `transform`. Supported inputs are the existing `Rectangle`, `Ellipse`,
 `Circle`, and `Polygon` shape authoring objects. Masks are applied after layer
 effects and before final opacity/blending.

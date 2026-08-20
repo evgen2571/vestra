@@ -37,7 +37,7 @@ pub(in crate::wgpu) struct MaskParameters {
     pub(in crate::wgpu) operation: u32,
     pub(in crate::wgpu) invert: u32,
     pub(in crate::wgpu) strength: f32,
-    pub(in crate::wgpu) _padding: u32,
+    pub(in crate::wgpu) feather: f32,
 }
 
 pub(in crate::wgpu) fn mask(
@@ -77,7 +77,7 @@ pub(in crate::wgpu) fn mask(
         } | (u32::from(first) << 2),
         invert: u32::from(mask.invert),
         strength: mask.strength,
-        _padding: u32::from(first),
+        feather: mask.feather,
     }
 }
 

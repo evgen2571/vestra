@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from math import isfinite
 from typing import cast
 
-from .properties import Transform
+from .properties import BindableScalarProperty, Transform
 from .sources import Line, Shape
 
 
@@ -18,9 +17,9 @@ class MaskOperation(str, Enum):
 
 
 class Mask:
-    __slots__ = ("_id", "_input", "_operation", "_invert", "_strength", "_transform")
+    __slots__ = ("_id", "_input", "_operation", "_invert", "_strength", "_feather", "_transform")
 
-    def __init__(self, identifier: str, source: Shape, operation: MaskOperation) -> None:
+    def __init__(self, identifier: str, source: Shape, operation: MaskOperation, *, feather: int | float = 0.0) -> None:
         if not isinstance(identifier, str):
             raise TypeError("mask id must be a string")
         if not identifier or identifier.isspace():
@@ -35,7 +34,8 @@ class Mask:
         self._input = cast(Shape, source.snapshot())
         self._operation = operation
         self._invert = False
-        self._strength = 1.0
+        self._strength = BindableScalarProperty(1.0, minimum=0.0, maximum=1.0)
+        self._feather = BindableScalarProperty(feather, minimum=0.0)
         self._transform = Transform()
 
     @property
@@ -55,13 +55,21 @@ class Mask:
         if not isinstance(value, bool): raise TypeError("invert must be a boolean")
         self._invert = value
     @property
-    def strength(self) -> float: return self._strength
+    def strength(self) -> BindableScalarProperty: return self._strength
     @strength.setter
-    def strength(self, value: int | float) -> None:
-        if isinstance(value, bool) or not isinstance(value, int | float): raise TypeError("strength must be a real number")
-        number = float(value)
-        if not isfinite(number) or not 0.0 <= number <= 1.0: raise ValueError("strength must be between 0 and 1")
-        self._strength = number
+    def strength(self, value: int | float | BindableScalarProperty) -> None:
+        if isinstance(value, BindableScalarProperty):
+            value._copy_to(self._strength)
+        else:
+            self._strength.value = value
+    @property
+    def feather(self) -> BindableScalarProperty: return self._feather
+    @feather.setter
+    def feather(self, value: int | float | BindableScalarProperty) -> None:
+        if isinstance(value, BindableScalarProperty):
+            value._copy_to(self._feather)
+        else:
+            self._feather.value = value
     @property
     def transform(self) -> Transform: return self._transform
 
@@ -72,8 +80,24 @@ class Mask:
             "scale": self.transform.scale.to_canonical(),
             "rotation_degrees": self.transform.rotation_degrees.to_canonical(),
         }
+        components = {
+            "position_x": self.transform.position_x.bindings,
+            "position_y": self.transform.position_y.bindings,
+            "scale_x": self.transform.scale_x.bindings,
+            "scale_y": self.transform.scale_y.bindings,
+        }
+        if any(components.values()):
+            transform["component_modifiers"] = {
+                name: [
+                    {"operation": binding.operation, "signal": binding.signal.to_canonical()}
+                    for binding in bindings
+                ]
+                for name, bindings in components.items()
+                if bindings
+            }
         return {"id": self.id, "input": self.input.to_canonical(), "operation": self.operation.value,
-                "invert": self.invert, "strength": self.strength, "transform": transform}
+                "invert": self.invert, "strength": self.strength.to_canonical(),
+                "feather": self.feather.to_canonical(), "transform": transform}
 
 
 class MaskCollection:
@@ -83,7 +107,8 @@ class MaskCollection:
         self._ids: set[str] = set()
     @property
     def items(self) -> tuple[Mask, ...]: return tuple(self._items)
-    def add(self, source: Shape, *, operation: MaskOperation = MaskOperation.INTERSECT, id: str | None = None) -> Mask:
+    def add(self, source: Shape, *, operation: MaskOperation = MaskOperation.INTERSECT,
+            id: str | None = None, feather: int | float = 0.0) -> Mask:
         if id is None:
             number = 1
             while f"mask-{number}" in self._ids:
@@ -92,7 +117,7 @@ class MaskCollection:
         else:
             identifier = id
         if identifier in self._ids: raise ValueError(f"duplicate mask id: {identifier!r}")
-        mask = Mask(identifier, source, operation)
+        mask = Mask(identifier, source, operation, feather=feather)
         self._items.append(mask)
         self._ids.add(identifier)
         return mask

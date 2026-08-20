@@ -2,7 +2,8 @@
 
 The canonical clip field is `masks`, an ordered array of layer-owned mask
 objects. Each object has an `id`, a shape `input`, an `operation`, `invert`,
-`strength`, and a static `transform`.
+scalar properties `strength` and `feather`, and a transform. These properties
+use the normal track, modifier, and signal machinery.
 
 The Rust canonical types are `vestra_core::project::Mask`, `MaskInput`, and
 `MaskOperation`; the SDK crate re-exports these types.
@@ -27,6 +28,6 @@ before normalizing the in-memory project to version 4.
 
 The supported geometric inputs are `Rectangle`, `Ellipse`, `Circle`, and
 `Polygon`. `Line` remains a visible shape source but is rejected as a mask
-input. Feather, dynamic properties,
-image alpha/luma inputs, text/video inputs, composition masks, and track mattes
-are deferred.
+input. `feather` is measured in output pixels and defaults to `0`, preserving
+hard-mask behavior. Image alpha/luma inputs, text/video inputs, composition
+masks, and track mattes are deferred.

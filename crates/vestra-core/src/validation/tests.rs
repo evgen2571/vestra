@@ -121,7 +121,7 @@ fn shape_mask(id: &str, width: f64, strength: f64) -> Value {
 }
 
 #[test]
-fn masks_validate_ids_geometry_strength_and_static_transform() {
+fn masks_validate_ids_geometry_strength_and_dynamic_transform() {
     let project = masked_project(json!([
         shape_mask("duplicate", 16.0, 2.0),
         shape_mask("duplicate", 0.0, 1.0),
@@ -143,7 +143,7 @@ fn masks_validate_ids_geometry_strength_and_static_transform() {
             "rotation_degrees": {"base_value": 0.0, "keyframes": []}
         }
     }]));
-    assert!(has(&project, "VESTRA-MASK-STATIC-TRANSFORM"));
+    assert!(!has(&project, "VESTRA-MASK-STATIC-TRANSFORM"));
 }
 
 #[test]

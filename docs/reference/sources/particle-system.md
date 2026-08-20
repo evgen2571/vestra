@@ -1,19 +1,24 @@
 # Particle system source
 
-`ParticleSystem` supports point, rectangle, and circle emitters, continuous
-`rate`, timed `bursts`, a 64-bit `seed`, lifetime and size ranges, color and
-opacity, initial velocity, speed and direction, acceleration, rotation and
-angular velocity, `disc` or `square` primitives, and `normal` or `additive`
-particle blending. Defaults include rate `0`, lifetime `1`, size `1`, opacity
-`1`, speed `0`, a point emitter at `(0.5, 0.5)`, disc primitive, and normal
-blend mode.
+`ParticleSystem(*, emitter=PointEmitter(), rate=0, bursts=(), seed=0,
+lifetime=1, size=1, colour="#ffffff", opacity=1, ... )` wraps the typed
+particle definition. Its canonical tag is `particle_system`.
 
-Particle simulation is reconstructed from source-local/system time. Lifetime
-styles can animate size, opacity, and color over normalized particle lifetime.
-Audio-reactive appearance can modulate size, opacity, and intensity, but does
-not reconstruct spawn or motion history. The canonical tag is
-`particle_system`.
+The emitter is `PointEmitter`, `RectangleEmitter`, or `CircleEmitter`. Emitter
+positions and extents are normalized source space. `rate` is continuous
+emission; each `ParticleBurst(time, count)` is an instantaneous emission.
+`seed` is an unsigned deterministic authored seed. `lifetime`, size, speed,
+rotation, angular velocity, direction/spread, acceleration, primitive
+(`disc` or `square`), blend mode (`normal` or `additive`), and optional ranges
+define motion and appearance. Equal `ScalarRange` endpoints are fixed values;
+random samples otherwise use the half-open interval `[min, max)`.
 
-Validation checks ranges, emitter geometry, lifetime stops, colors, and seed
-values. CPU and WGPU support follows their tested particle paths. Backend
-selection does not change the public simulation contract.
+`ParticleLifetimeStyle` animates size, opacity, and colour over normalized
+particle age. `ParticleAudioReactive` can bind size, opacity, and intensity to
+scalar properties/signals. That modulation is sampled at the current project
+time and never changes historical spawn or motion reconstruction.
+
+Validation checks finite/ranged values, emitter geometry, lifetime stops,
+colours, and seed bounds. CPU and WGPU have particle rendering paths; exact
+backend parity is not fully verified. Particle systems are not direct transform
+or transition endpoints, but they may live in a nested composition.

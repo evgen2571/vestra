@@ -28,9 +28,9 @@ preflight probes audio sources and resolves the final automatic duration,
 rational frame count to the shared core timeline-limit authority. This closes
 the late-audio placement gap: both maximum duration and maximum frame count
 are inclusive at their configured boundary and reject only values above it.
-Both use `VESTRA-LIMIT-TIMELINE`, with a deterministic message and path that name
+Both use `MVP-LIMIT-TIMELINE`, with a deterministic message and path that name
 the violated duration or frame-count limit. The checked timeline conversion
-continues to report `VESTRA-TIMELINE-OVERFLOW` when a value cannot be represented.
+continues to report `MVP-TIMELINE-OVERFLOW` when a value cannot be represented.
 
 Direct Rust tests now cover track and timeline-global clip IDs, asset kind and
 existence, finite non-negative track/clip gain (including gain above one),
@@ -49,7 +49,7 @@ trims, selected duration, and fades. The plan remains backend-neutral.
 
 `output.audio` only controls mux eligibility. Phase 9A derives the existing
 single-input media settings for exactly one audible clip. More than one
-audible clip fails with `VESTRA-AUDIO-MIX-UNSUPPORTED` before output publication;
+audible clip fails with `MVP-AUDIO-MIX-UNSUPPORTED` before output publication;
 video-only output remains available when `output.audio` is false. Full
 multi-input FFmpeg mixing, normalization, sample-accurate placement, and
 quantitative audio tests are deferred to Phase 9B.

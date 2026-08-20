@@ -41,7 +41,7 @@ metadata snapshot instead of cloning the resolved project per operation.
 Command submissions and cache requests use checked before/after deltas; cache
 occupancy remains a persistent after-operation snapshot. The invalidation test
 asserts that a submission failure makes later reuse return
-`VESTRA-PREPARED-INVALIDATED`. An already-cancelled operation aborts its sink but
+`MVP-PREPARED-INVALIDATED`. An already-cancelled operation aborts its sink but
 does not abort or invalidate an untouched backend; a fresh operation then reuses
 that same backend. WGPU runtime reuse has not been claimed: the
 deterministic lifecycle tests use a mock staged backend; WGPU compile and any

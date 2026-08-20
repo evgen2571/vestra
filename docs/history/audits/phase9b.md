@@ -1,7 +1,7 @@
 # Phase 9B audit
 
 The Phase 9B media path takes `AudioMixPlan` directly. `AudioSettings`,
-`single_input_settings`, and the `VESTRA-AUDIO-MIX-UNSUPPORTED` bridge are gone.
+`single_input_settings`, and the `MVP-AUDIO-MIX-UNSUPPORTED` bridge are gone.
 
 The working format is 48,000 Hz, stereo, `fltp`. The media graph converts each
 audible source with `aformat`, trims with `atrim` sample edges, resets timestamps,

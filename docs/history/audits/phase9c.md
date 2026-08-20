@@ -11,7 +11,7 @@ the final point holds through selected clip end.
 The effective clip multiplier is `clip.gain * automation(t) * fade(t)`. Track
 gain remains after track mixing. Automation does not change project duration.
 The project permits 16,384 gain keyframes in total. The boundary is inclusive;
-one additional point reports `VESTRA-LIMIT-AUDIO-GAIN-KEYFRAMES`, including for
+one additional point reports `MVP-LIMIT-AUDIO-GAIN-KEYFRAMES`, including for
 muted clips and audio-disabled output.
 
 Core validation rejects empty automation, a nonzero first point, unordered or
@@ -46,7 +46,7 @@ Canonical keyframe times remain seconds, but execution is sample-quantized.
 Preflight uses `seconds_to_samples`, which rounds `seconds * 48_000` to the
 nearest mixer sample. Each successive keyframe must resolve to a strictly later
 sample. Otherwise preflight reports
-`VESTRA-AUDIO-AUTOMATION-SAMPLE-RESOLUTION` at the later keyframe, explaining that
+`MVP-AUDIO-AUTOMATION-SAMPLE-RESOLUTION` at the later keyframe, explaining that
 it resolves to the same 48 kHz sample as the preceding point. This rule applies
 to both linear and hold segments. One full sample separation is accepted;
 sub-sample pairs at zero and at a nonzero boundary are rejected. Graph

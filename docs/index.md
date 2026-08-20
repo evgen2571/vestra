@@ -43,18 +43,19 @@ and backend contracts.
 - [Feature support](reference/feature-support.md)
 - [Diagnostics](reference/diagnostics.md)
 - [Environment variables](reference/environment-variables.md)
-- [Sources](reference/sources/image.md), [effects](reference/effects.md), [transitions](reference/transitions.md), [audio](reference/audio.md), and [backends](reference/backends.md)
+- [Sources](reference/sources/image.md), [effects](reference/effects.md), [transitions](reference/transitions.md), [audio](reference/audio.md), [signals](reference/signals.md), and [backends](reference/backends.md)
 
 ## Something is failing?
 
-Use the diagnostics printed by `ve validate` or `ve render`, then check the
-repository tests and the [diagnostics reference](reference/diagnostics.md).
+Use [rendering](troubleshooting/rendering.md), [FFmpeg](troubleshooting/ffmpeg.md),
+[WGPU](troubleshooting/wgpu.md), or [Python](troubleshooting/python.md) help.
 
 ## Understanding or extending the engine?
 
-The [backend concept](concepts/rendering-backends.md) explains the user-visible
-CPU and WGPU choices. The [backend reference](reference/backends.md) records
-selection and reporting semantics.
+Read the [architecture overview](development/architecture/overview.md),
+[extension guides](development/extending/source.md), [testing](development/testing.md),
+[GPU validation](development/gpu-validation.md), [performance](development/performance.md),
+and [contributing](development/contributing.md).
 
 ## Looking for old implementation reports?
 

@@ -51,7 +51,7 @@ proves the generated chromatic/tint pulse; heavy impact proves a distinct
 stronger native frame; focus reveal proves blur-to-focused progression.
 
 The same file proves all three finite invalid interval cases preserve authored
-data and report native `VESTRA-EFFECT-INTERVAL` at either
+data and report native `MVP-EFFECT-INTERVAL` at either
 `/visual/clips/0/preset/start` or `/visual/clips/0/preset/duration`. Its full
 project test includes solid and image clips, transform/opacity/crop animation,
 an animated clip effect, screen blending, a preset, an explicit clip shift,

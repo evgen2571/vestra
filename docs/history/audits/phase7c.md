@@ -83,7 +83,7 @@ The prepared CPU render fails at `FRAME_WRITE`, does not publish output,
 removes the temporary output, and returns `RenderError` with tuple diagnostics
 and warnings, `RenderTimings`, `RenderFailureContext`, and boolean cleanup
 status. Because it fails after submission, subsequent frame use reports the
-stable `VESTRA-PREPARED-INVALIDATED` diagnostic.
+stable `MVP-PREPARED-INVALIDATED` diagnostic.
 
 Prepared and one-shot success tests cover every Python `RenderResult` field:
 editor and project paths, output path, dimensions, frame rate, duration,

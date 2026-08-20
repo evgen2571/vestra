@@ -42,6 +42,19 @@ properties. Groups contain nested visual clips and represent canonical nested
 composition content. `visual.flashes` and `visual.transitions` hold their
 respective placement objects.
 
+| Visual clip field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | Unique in its owning visual group. |
+| `source` | tagged object | See [Sources](sources/image.md). |
+| `start`, `duration` | seconds | Project or owning-group local timeline; duration is positive. |
+| `layer` | integer | Compositing order. |
+| presentation | objects/properties | Opacity, transform, effects, and animation use their dedicated canonical forms. |
+
+Groups hold nested visual clips with their own local timeline. Effects are
+ordered `id`/`type` objects. Transitions connect sibling endpoints and use a
+generic definition; signals appear in bindable scalar-property modifiers. See
+[effects](effects.md), [transitions](transitions.md), and [signals](signals.md).
+
 ## Audio
 
 An audio timeline has `effects` and `tracks`. A track has an id, `mute`, `gain`,

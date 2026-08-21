@@ -154,7 +154,7 @@ fn masks_validate_ids_geometry_strength_and_dynamic_transform() {
 }
 
 #[test]
-fn masks_reject_line_geometry_without_rejecting_general_shapes() {
+fn masks_accept_line_geometry_as_rendered_coverage() {
     let project = masked_project(serde_json::json!([{
         "id": "line-mask",
         "input": {
@@ -164,11 +164,7 @@ fn masks_reject_line_geometry_without_rejecting_general_shapes() {
             "stroke_width": 2.0
         }
     }]));
-    assert!(
-        codes(&project)
-            .iter()
-            .any(|code| code == "VESTRA-MASK-SHAPE")
-    );
+    assert!(!has(&project, "VESTRA-MASK-SHAPE"));
 }
 
 fn grouped_project(clips: Vec<Value>) -> Project {

@@ -6,7 +6,8 @@ from enum import Enum
 from typing import cast
 
 from .properties import BindableScalarProperty, Transform
-from .sources import Color, Group, Image, Line, ParticleSystem, Shape, Source, Spectrum2D, Text, Video
+from .properties.lowering import lower_scalar_property, lower_transform
+from .sources import Color, Group, Image, ParticleSystem, Shape, Source, Spectrum2D, Text, Video
 
 
 class MaskOperation(str, Enum):
@@ -35,8 +36,6 @@ class Mask:
             raise ValueError("mask id must not be empty or whitespace-only")
         if not isinstance(source, (Shape, Image, Color, Text, Video, Spectrum2D, ParticleSystem, Group)):
             raise TypeError("mask input must be a supported owned Source")
-        if isinstance(source, Line):
-            raise TypeError("Line is not supported as a mask input")
         if isinstance(source, Image) and (source.sizing is not None or source.crop.active):
             raise ValueError(
                 "Image masks currently use intrinsic image dimensions. "
@@ -102,31 +101,8 @@ class Mask:
     @property
     def transform(self) -> Transform: return self._transform
 
-    def to_canonical(self, *, asset_id: str | None = None) -> dict[str, object]:
-        scale = self.transform.scale.to_canonical()
-        scale.pop("bindings", None)
-        transform = {
-            "position": self.transform.position.to_canonical(),
-            "anchor": self.transform.anchor.to_canonical(),
-            "scale": scale,
-            "rotation_degrees": self.transform.rotation_degrees.to_canonical(),
-        }
-        uniform_scale_bindings = list(self.transform.scale.bindings)
-        components = {
-            "position_x": self.transform.position_x.bindings,
-            "position_y": self.transform.position_y.bindings,
-            "scale_x": tuple(uniform_scale_bindings) + self.transform.scale_x.bindings,
-            "scale_y": tuple(uniform_scale_bindings) + self.transform.scale_y.bindings,
-        }
-        if any(components.values()):
-            transform["component_modifiers"] = {
-                name: [
-                    {"operation": binding.operation, "signal": binding.signal.to_canonical()}
-                    for binding in bindings
-                ]
-                for name, bindings in components.items()
-                if bindings
-            }
+    def to_canonical(self, *, asset_id: str | None = None, owner_duration: float | None = None) -> dict[str, object]:
+        transform = lower_transform(self.transform)
         if isinstance(self.input, Image):
             if self._mode is None:
                 raise ValueError("image mask lowering requires a coverage mode")
@@ -138,13 +114,17 @@ class Mask:
         elif isinstance(self.input, Shape):
             input_value = self.input.to_canonical()
         else:
-            source_value = self.input.to_canonical()
+            source_value = (
+                self.input.to_canonical(inherited_duration=owner_duration)
+                if isinstance(self.input, Group)
+                else self.input.to_canonical()
+            )
             if isinstance(self.input, Color):
                 source_value = {"type": "solid_color", "colour": source_value}
             input_value = {"type": "source", "source": source_value, "mode": self._mode.value}
         return {"id": self.id, "input": input_value, "operation": self.operation.value,
-                "invert": self.invert, "strength": self.strength.to_canonical(),
-                "feather": self.feather.to_canonical(), "transform": transform}
+                "invert": self.invert, "strength": lower_scalar_property(self.strength),
+                "feather": lower_scalar_property(self.feather), "transform": transform}
 
 
 class MaskCollection:

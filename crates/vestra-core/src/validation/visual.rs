@@ -424,14 +424,6 @@ fn validate_with_depth(
             }
             match &mask.input {
                 crate::project::MaskInput::Shape(shape) => {
-                    if matches!(shape.geometry, crate::project::ShapeGeometry::Line { .. }) {
-                        errors.push(Diagnostic::error(
-                            "VESTRA-MASK-SHAPE",
-                            Category::Semantic,
-                            "Line geometry is not supported as a mask input",
-                            format!("{mask_path}/input/geometry"),
-                        ));
-                    }
                     validate_shape(shape, &format!("{mask_path}/input"), errors);
                 }
                 crate::project::MaskInput::Image { asset, .. } => match assets.get(asset) {

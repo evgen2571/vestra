@@ -36,6 +36,10 @@ class ScalarSignal:
             tuple(_immutable_mapping(transform) for transform in self._transforms),
         )
 
+    def __deepcopy__(self, memo: dict[int, object]) -> "ScalarSignal":
+        """Immutable signals are safe to share across source snapshots."""
+        return self
+
     def _append(self, transform: Mapping[str, object]) -> "ScalarSignal":
         return ScalarSignal(self._feature, self._transforms + (transform,))
 

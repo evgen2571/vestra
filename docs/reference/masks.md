@@ -31,8 +31,8 @@ mask inputs therefore do not trigger a version bump; schema 3 loading remains
 supported.
 
 Masks consume coverage produced by owned sources. The supported geometric
-inputs are `Rectangle`, `Ellipse`, `Circle`, and `Polygon`. `Line` remains a
-visible shape source but is rejected as a mask input. Text, Video, Spectrum2D,
+inputs are `Rectangle`, `Ellipse`, `Circle`, `Polygon`, and `Line`; Line masks
+use rendered stroke alpha. Text, Video, Spectrum2D,
 ParticleSystem, SolidColor, and Group sources use the same source model when
 owned by a mask; an existing timeline Layer is never accepted as a mask.
 Sources use `alpha` coverage or `luma` coverage. Luma is computed
@@ -45,6 +45,12 @@ Direct Image and Video `sizing` and `crop` values are not supported in mask
 context and are rejected during Python authoring. Use `mask.transform` to
 position, scale, or rotate the intrinsic source mask. Video frame timing still
 follows the owning layer's local time.
+An owned Group is a nested composition with Group-local child timing. Omitted
+child duration inherits the containing Group lifetime; explicit child timing
+uses the normal half-open interval `[start, start + duration)`. Group children
+retain normal Clip presentation fields: transform, effects, opacity, blend mode,
+and masks. Child compositing produces the final Group RGBA before alpha/luma
+coverage extraction; `mask.transform` then applies to the complete Group result.
 `mode=None` selects the source-appropriate default (`alpha`). Explicit invalid
 modes are authoring errors. `feather` applies a smooth Gaussian-like coverage blur measured
 in output pixels. It supports fractional values, is limited to `0 .. 256` px,

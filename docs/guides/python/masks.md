@@ -23,11 +23,10 @@ hole.invert = False
 ```
 
 `layer.masks.items` preserves declaration order. Use `remove()` or `clear()`
-to manage the collection. Supported inputs are `Rectangle`, `Ellipse`,
-`Circle`, and `Polygon` shape objects. Shapes still need a fill or stroke,
-just as they do when used as visible sources.
-`Line` remains available as a visible shape source but is not a supported mask
-input.
+to manage the collection. Supported inputs include `Rectangle`, `Ellipse`,
+`Circle`, `Polygon`, and `Line` shape objects. Lines use rendered stroke alpha,
+including antialiased edges. Shapes still need a fill or stroke, just as they
+do when used as visible sources.
 
 The normal `Image` source can also provide static image coverage:
 
@@ -66,6 +65,15 @@ layer.masks.add(owned_group)
 
 `MaskCoverageMode` is the generic name; `ImageMaskMode` remains a compatibility
 alias. These are owned source masks, not references to another timeline Layer.
+
+`Group` is an owned nested visual composition. Child timing is local to the
+Group: omitted `duration` inherits the containing Group lifetime, while an
+explicit `start` and `duration` clip the child to that local interval. Children
+also expose the normal presentation fields (`transform`, `effects`, `opacity`,
+`blend_mode`, and `masks`). The Group is composited normally before its final
+RGBA is converted to alpha or luma coverage. `mask.transform` is applied after
+that Group rendering, so it moves the complete Group coverage rather than an
+individual child.
 
 `ALPHA` uses source alpha without thresholding. `LUMA` uses encoded RGB values
 with Rec.709 coefficients (`0.2126R + 0.7152G + 0.0722B`) multiplied by

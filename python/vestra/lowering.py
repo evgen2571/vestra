@@ -277,9 +277,9 @@ class LoweringContext:
         result = []
         for mask in layer.masks.items:
             if isinstance(mask.input, Image):
-                result.append(mask.to_canonical(asset_id=self.image_asset(mask.input).id))
+                result.append(mask.to_canonical(asset_id=self.image_asset(mask.input).id, owner_duration=layer.duration))
                 continue
-            value = mask.to_canonical()
+            value = mask.to_canonical(owner_duration=layer.duration)
             input_value = cast(dict[str, object], value["input"])
             self._register_mask_input_assets(mask.input, input_value)
             result.append(value)
@@ -307,7 +307,10 @@ class LoweringContext:
             for child, clip in zip(source.children, clips):
                 child_value = cast(dict[str, object], clip["source"])
                 self._register_mask_source_assets(child.source, child_value)
-                for child_mask, child_mask_value in zip(child.masks.items, clip.get("masks", [])):
+                for child_mask, child_mask_value in zip(
+                    child.masks.items,
+                    cast(list[dict[str, object]], clip.get("masks", [])),
+                ):
                     self._register_mask_input_assets(
                         child_mask.input,
                         cast(dict[str, object], child_mask_value["input"]),

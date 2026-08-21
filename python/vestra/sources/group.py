@@ -4,23 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from copy import deepcopy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from .base import Source
 from .image import Image
 from .video import Video
+from ..authoring.values import BlendMode
+from ..effects import EffectStack
+from ..properties import BindableScalarProperty, ScalarProperty, Transform
+from ..properties.lowering import lower_effect, lower_scalar_property, lower_transform
 
 if TYPE_CHECKING:
     from ..masks import MaskCollection
-
-
-def _identity_transform() -> dict[str, object]:
-    return {
-        "position": {"base_value": {"x": 0.5, "y": 0.5}},
-        "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
-        "scale": {"base_value": {"x": 1.0, "y": 1.0}},
-        "rotation_degrees": {"base_value": 0.0},
-    }
 
 
 class GroupChild:
@@ -28,7 +23,7 @@ class GroupChild:
 
     __slots__ = (
         "source", "start", "duration", "source_start", "playback_rate",
-        "layer", "visible", "opacity",
+        "layer", "visible", "_opacity", "transform", "_effects", "_blend_mode",
         "_masks",
     )
 
@@ -37,7 +32,7 @@ class GroupChild:
         source: Source,
         *,
         start: int | float = 0.0,
-        duration: int | float = 1.0,
+        duration: int | float | None = None,
         source_start: int | float = 0.0,
         playback_rate: int | float = 1.0,
         layer: int = 0,
@@ -48,7 +43,7 @@ class GroupChild:
             raise TypeError("Group child source must be a vestra source value")
         if isinstance(start, bool) or not isinstance(start, int | float) or start < 0:
             raise ValueError("Group child start must be non-negative")
-        if isinstance(duration, bool) or not isinstance(duration, int | float) or duration <= 0:
+        if duration is not None and (isinstance(duration, bool) or not isinstance(duration, int | float) or duration <= 0):
             raise ValueError("Group child duration must be positive")
         if isinstance(source_start, bool) or not isinstance(source_start, int | float) or source_start < 0:
             raise ValueError("Group child source_start must be non-negative")
@@ -62,13 +57,16 @@ class GroupChild:
             raise ValueError("Group child opacity must be between 0 and 1")
         self.source = source.snapshot()
         self.start = float(start)
-        self.duration = float(duration)
+        self.duration = None if duration is None else float(duration)
         self.source_start = float(source_start)
         self.playback_rate = float(playback_rate)
         self.layer = layer
         self.visible = visible
-        self.opacity = float(opacity)
-        self._masks = None
+        self._opacity = BindableScalarProperty(opacity, minimum=0.0, maximum=1.0)
+        self.transform = Transform()
+        self._effects = EffectStack("layer")
+        self._blend_mode = BlendMode.NORMAL
+        self._masks: MaskCollection | None = None
 
     @property
     def masks(self) -> "MaskCollection":
@@ -78,6 +76,31 @@ class GroupChild:
             self._masks = MaskCollection()
         return self._masks
 
+    @property
+    def effects(self) -> EffectStack:
+        return self._effects
+
+    @property
+    def opacity(self) -> BindableScalarProperty:
+        return self._opacity
+
+    @opacity.setter
+    def opacity(self, value: int | float | ScalarProperty) -> None:
+        if isinstance(value, ScalarProperty):
+            value._copy_to(self._opacity)
+        else:
+            self._opacity.value = value
+
+    @property
+    def blend_mode(self) -> BlendMode:
+        return self._blend_mode
+
+    @blend_mode.setter
+    def blend_mode(self, value: BlendMode) -> None:
+        if not isinstance(value, BlendMode):
+            raise TypeError("blend_mode must be BlendMode")
+        self._blend_mode = value
+
     def snapshot(self) -> "GroupChild":
         return deepcopy(self)
 
@@ -85,9 +108,8 @@ class GroupChild:
 class Group(Source):
     """A source-local composition of visual sources.
 
-    Children are intentionally source values, rather than timeline layers. They
-    render in declaration order at local time zero; the owning mask supplies
-    the only placement and timing boundary.
+    Children are source-local Clips. Their timing and presentation are local to
+    the Group and are lowered through the normal canonical Clip fields.
     """
 
     __slots__ = ("_children",)
@@ -110,7 +132,7 @@ class Group(Source):
         source: Source,
         *,
         start: int | float = 0.0,
-        duration: int | float = 1.0,
+        duration: int | float | None = None,
         source_start: int | float = 0.0,
         playback_rate: int | float = 1.0,
         layer: int | None = None,
@@ -130,25 +152,37 @@ class Group(Source):
         self._children = (*self._children, child)
         return child
 
-    def to_canonical(self) -> dict[str, object]:
+    def to_canonical(self, *, inherited_duration: float | None = None) -> dict[str, object]:
         clips = []
         for index, child in enumerate(self.children):
-            source = child.source.to_canonical()
+            duration = child.duration if child.duration is not None else inherited_duration
+            if duration is None:
+                raise ValueError("Group child duration requires a containing Group lifetime")
+            source = (
+                child.source.to_canonical(inherited_duration=duration)
+                if isinstance(child.source, Group)
+                else cast(Any, child.source).to_canonical()
+            )
             if isinstance(source, str):
                 source = {"type": "solid_color", "colour": source}
-            masks = [mask.to_canonical() for mask in child.masks.items]
+            effects = []
+            for effect_index, effect in enumerate(child.effects.items):
+                effect_value = lower_effect(effect)
+                effect_value.setdefault("id", f"group-child-{index}-effect-{effect_index}")
+                effects.append(effect_value)
             clip: dict[str, object] = {
                 "id": f"group-child-{index}",
                 "start": child.start,
-                "duration": child.duration,
+                "duration": duration,
                 "layer": child.layer,
                 "visible": child.visible,
-                "opacity": {"base_value": child.opacity},
-                "effects": [],
+                "opacity": lower_scalar_property(child.opacity),
+                "effects": effects,
                 "source": source,
-                "masks": masks,
-                "transform": _identity_transform(),
+                "transform": lower_transform(child.transform),
             }
+            if child.blend_mode is not BlendMode.NORMAL:
+                clip["blend_mode"] = child.blend_mode.to_canonical()
             if isinstance(child.source, (Image, Video)):
                 if child.source.sizing is not None:
                     clip["sizing"] = child.source.sizing.to_canonical()
@@ -158,6 +192,8 @@ class Group(Source):
                 clip["source_start"] = child.source_start
                 if child.playback_rate != 1.0:
                     clip["playback_rate"] = child.playback_rate
+            if child.masks.items:
+                clip["masks"] = [mask.to_canonical(owner_duration=duration) for mask in child.masks.items]
             clips.append(clip)
         return {"type": "group", "clips": clips}
 

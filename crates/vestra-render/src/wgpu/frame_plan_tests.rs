@@ -322,6 +322,35 @@ fn track_matte_is_lowered_to_gpu_texture_operations() {
 }
 
 #[test]
+fn inactive_track_matte_is_lowered_to_transparent_coverage_operations() {
+    let mut frame = static_frame();
+    frame.layers[0].matte = Some(crate::plan::EvaluatedTrackMatte {
+        source_layer_identity: 99,
+        mode: crate::project::MatteMode::Alpha,
+        invert: true,
+    });
+
+    let plan = GpuFramePlan::build(&frame);
+
+    assert!(plan.layers.iter().any(|layer| matches!(
+        &layer.source,
+        EvaluatedSource::Group { composition } if composition.layers.is_empty()
+    )));
+    assert!(
+        plan.operations
+            .iter()
+            .any(|operation| matches!(operation, GpuOperation::RenderMask { .. }))
+    );
+    assert!(
+        plan.operations
+            .iter()
+            .any(|operation| matches!(operation, GpuOperation::ApplyMask { .. }))
+    );
+    plan.validate(0)
+        .expect("inactive track matte frame plan validates");
+}
+
+#[test]
 fn nested_groups_use_isolated_depth_indexed_composition_targets() {
     let transform = crate::animation::Transform2D::identity(
         crate::domain::Point { x: 0.5, y: 0.5 },

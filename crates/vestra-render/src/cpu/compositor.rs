@@ -520,13 +520,18 @@ fn apply_track_matte(
     profiling_enabled: bool,
 ) {
     let Some(matte) = &layer.matte else { return };
+    let mode = match matte.mode {
+        crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
+        crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
+    };
     let Some(source) = layers
         .iter()
         .find(|candidate| candidate.compiled_layer_index == matte.source_layer_identity)
     else {
-        for pixel in surfaces.current().pixels_mut() {
-            pixel[3] = 0;
+        for pixel in surfaces.mask_local_surface().pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
         }
+        surfaces.apply_external_matte(mode, matte.invert);
         return;
     };
     let width = surfaces.current().width();
@@ -564,10 +569,6 @@ fn apply_track_matte(
         .copy_from(&saved_consumer, 0, 0)
         .expect("matching matte restore surface dimensions");
     compositions.release(depth + 1, saved_consumer);
-    let mode = match matte.mode {
-        crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
-        crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
-    };
     surfaces.apply_external_matte(mode, matte.invert);
 }
 

@@ -81,9 +81,13 @@ its outer blend mode is not evaluated against the timeline background.
 The matte layer keeps its normal visibility and timing. A hidden layer can
 still provide matte coverage, while a visible layer is both composited at its
 normal stack position and usable as a matte. Outside the matte layer's own
-active interval, coverage is zero. Matte coordinates are composition-space
-layer coordinates: moving the consumer does not move the matte. Owned masks
-instead follow their owning layer and use owner-local source timing.
+active interval, its raw coverage is zero: a normal matte hides its consumer,
+while an inverted matte leaves the consumer's existing coverage unchanged.
+Matte activation or deactivation within a consumer's lifetime therefore makes
+an otherwise static consumer temporally dynamic. Matte coordinates are
+composition-space layer coordinates: moving the consumer does not move the
+matte. Owned masks instead follow their owning layer and use owner-local source
+timing.
 
 The consumer applies owned masks first, intersects their result with matte
 coverage, then applies final opacity and blend/compositing. Cycles, self

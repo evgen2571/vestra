@@ -11,6 +11,9 @@ from typing import get_type_hints
 import pytest
 import vestra
 
+from vestra.effects import GaussianBlur
+from vestra.authoring.values import BlendMode, Crop, Sizing
+from vestra.sources import ParticleSystem, Spectrum2D
 from vestra import (
     AudioGainKeyframe,
     Circle,
@@ -175,9 +178,96 @@ def test_track_matte_timing_and_visible_source_policy() -> None:
     pixels = _render(visible_project, "cpu")
     assert pixels[:4] == bytes((0, 0, 255, 255))
     assert _render(visible_project, "wgpu") == pixels
-from vestra.effects import GaussianBlur
-from vestra.authoring.values import BlendMode, Crop, Sizing
-from vestra.sources import ParticleSystem, Spectrum2D
+
+
+@pytest.mark.parametrize("mode", ["alpha", "luma"])
+@pytest.mark.parametrize(
+    ("invert", "expected"),
+    [(False, [0, 255, 0]), (True, [255, 0, 255])],
+)
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_prepared_track_matte_uses_zero_coverage_while_source_is_inactive(
+    mode: str, invert: bool, expected: list[int], backend: str
+) -> None:
+    project = Project(size=(4, 4), fps=2, duration=4)
+    consumer = project.root.add(
+        Rectangle(width=4, height=4, fill="#ff0000"), id="consumer", duration=4
+    )
+    matte = project.root.add(
+        Color("#ffffff"), id="matte", start=1, duration=2, visible=False
+    )
+    consumer.set_matte(matte, mode=mode, invert=invert)
+
+    prepared = _prepare(project, backend)
+    observed = [
+        max(prepared.render_frame_seconds(seconds).to_bytes()[0::4])
+        for seconds in (0.5, 2.0, 3.5)
+    ]
+
+    assert observed == expected
+
+
+@pytest.mark.parametrize(
+    ("middle_invert", "expected"),
+    [(False, [0, 255, 0]), (True, [255, 0, 255])],
+)
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_prepared_track_matte_chain_propagates_inactive_source_coverage(
+    middle_invert: bool, expected: list[int], backend: str
+) -> None:
+    project = Project(size=(4, 4), fps=2, duration=5)
+    consumer = project.root.add(
+        Rectangle(width=4, height=4, fill="#ff0000"), id="consumer", duration=5
+    )
+    middle = project.root.add(Color("#ffffff"), id="middle", duration=5, visible=False)
+    source = project.root.add(
+        Color("#ffffff"), id="source", start=2, duration=2, visible=False
+    )
+    consumer.set_matte(middle)
+    middle.set_matte(source, invert=middle_invert)
+
+    prepared = _prepare(project, backend)
+    observed = [
+        max(prepared.render_frame_seconds(seconds).to_bytes()[0::4])
+        for seconds in (1.0, 3.0, 4.5)
+    ]
+
+    assert observed == expected
+
+
+@pytest.mark.parametrize(
+    ("invert", "expected"),
+    [
+        (False, [(0, 0), (255, 0), (0, 0)]),
+        (True, [(255, 0), (0, 0), (255, 0)]),
+    ],
+)
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_prepared_owned_mask_precedes_inactive_track_matte(
+    invert: bool, expected: list[tuple[int, int]], backend: str
+) -> None:
+    project = Project(size=(4, 4), fps=2, duration=4)
+    consumer = project.root.add(
+        Rectangle(width=4, height=4, fill="#ff0000"), id="consumer", duration=4
+    )
+    consumer.masks.add(
+        Rectangle(width=2, height=4, fill="#ffffff"), operation=MaskOperation.REPLACE
+    )
+    matte = project.root.add(
+        Color("#ffffff"), id="matte", start=1, duration=2, visible=False
+    )
+    consumer.set_matte(matte, invert=invert)
+
+    prepared = _prepare(project, backend)
+    observed = [
+        (
+            max(frame := prepared.render_frame_seconds(seconds).to_bytes()[0::4]),
+            min(frame),
+        )
+        for seconds in (0.5, 2.0, 3.5)
+    ]
+
+    assert observed == expected
 
 ROOT = Path(__file__).resolve().parents[1]
 _UNAVAILABLE_WGPU_CODES = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
@@ -201,8 +291,12 @@ def _write_rgba_png(path: Path, width: int, height: int, pixels: list[tuple[int,
 
 
 def _render(project: Project, backend: str, *, seconds: float = 0.0) -> bytes:
+    return _prepare(project, backend).render_frame_seconds(seconds).to_bytes()
+
+
+def _prepare(project: Project, backend: str) -> vestra.PreparedProject:
     try:
-        return project.render_frame(seconds, backend=backend).to_bytes()
+        return project.prepare(backend=backend)
     except Exception as error:
         if (
             backend == "wgpu"

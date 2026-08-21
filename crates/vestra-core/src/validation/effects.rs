@@ -197,6 +197,34 @@ pub(super) fn validate_parameters(
             ScalarPropertyTarget::GaussianBlurRadius,
             errors,
         ),
+        crate::project::Effect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            tile_center,
+            ..
+        } => {
+            track(
+                output_width_percent,
+                "output_width_percent",
+                ScalarPropertyTarget::MotionTileOutputWidthPercent,
+                errors,
+            );
+            track(
+                output_height_percent,
+                "output_height_percent",
+                ScalarPropertyTarget::MotionTileOutputHeightPercent,
+                errors,
+            );
+            if !unit(tile_center.x) || !unit(tile_center.y) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-MOTION-TILE-CENTER",
+                    "motion tile center must be in the unit square",
+                    path,
+                    "tile_center",
+                );
+            }
+        }
         crate::project::Effect::Bloom {
             threshold,
             radius,
@@ -263,6 +291,23 @@ pub(super) fn validate_parameters(
                     "zoom blur anchor must be in the unit square",
                     path,
                     "anchor",
+                );
+            }
+        }
+        crate::project::Effect::RadialBlur { amount, center, .. } => {
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::RadialBlurAmount,
+                errors,
+            );
+            if !unit(center.x) || !unit(center.y) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-RADIAL-BLUR-CENTER",
+                    "radial blur center must be in the unit square",
+                    path,
+                    "center",
                 );
             }
         }

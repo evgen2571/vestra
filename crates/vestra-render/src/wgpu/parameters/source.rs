@@ -11,6 +11,31 @@ use crate::{
 
 use super::super::requirements::align_up;
 
+pub(in crate::wgpu) fn motion_tile(
+    effects: &[crate::plan::EvaluatedEffect],
+) -> Option<geometry::MotionTileParameters> {
+    effects.iter().find_map(|effect| {
+        if !effect.is_pre_transform() {
+            return None;
+        }
+        match effect {
+            crate::plan::EvaluatedEffect::MotionTile {
+                output_width_percent,
+                output_height_percent,
+                tile_center,
+                mirror_edges,
+            } => Some(geometry::MotionTileParameters {
+                width_factor: (*output_width_percent / 100.0).max(1.0),
+                height_factor: (*output_height_percent / 100.0).max(1.0),
+                center_x: tile_center.x,
+                center_y: tile_center.y,
+                mirror_edges: *mirror_edges,
+            }),
+            _ => None,
+        }
+    })
+}
+
 /// Matches the explicit sixteen-byte chunks in `layer.wgsl`.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -26,6 +51,8 @@ pub(in crate::wgpu) struct LayerParameters {
     pub(in crate::wgpu) colour_row2: [f32; 4],
     pub(in crate::wgpu) colour_offset: [f32; 4],
     pub(in crate::wgpu) solid_or_background: [f32; 4],
+    pub(in crate::wgpu) motion_tile: [f32; 4],
+    pub(in crate::wgpu) motion_tile_flags: [u32; 4],
 }
 
 #[repr(C)]
@@ -240,8 +267,9 @@ pub(in crate::wgpu) fn raster(
     transform: Transform2D,
     opacity: f64,
     colour: ColourTransform,
+    motion_tile: Option<geometry::MotionTileParameters>,
 ) -> LayerParameters {
-    let geometry = geometry::resolve_raster_geometry(
+    let geometry = geometry::resolve_raster_geometry_with_motion_tile(
         intrinsic,
         crop,
         cacheable_crop,
@@ -249,7 +277,15 @@ pub(in crate::wgpu) fn raster(
         transform,
         frame.width,
         frame.height,
+        motion_tile,
     );
+    let motion_tile = motion_tile.unwrap_or(geometry::MotionTileParameters {
+        width_factor: 1.0,
+        height_factor: 1.0,
+        center_x: 0.5,
+        center_y: 0.5,
+        mirror_edges: false,
+    });
     LayerParameters {
         header: [
             frame.width,
@@ -317,6 +353,13 @@ pub(in crate::wgpu) fn raster(
             geometry.raster_effective_width as f32,
             geometry.raster_effective_height as f32,
         ],
+        motion_tile: [
+            motion_tile.width_factor as f32,
+            motion_tile.height_factor as f32,
+            motion_tile.center_x as f32,
+            motion_tile.center_y as f32,
+        ],
+        motion_tile_flags: [u32::from(motion_tile.mirror_edges), 0, 0, 0],
     }
 }
 
@@ -324,6 +367,7 @@ pub(in crate::wgpu) fn surface(
     frame: &EvaluatedFrame,
     transform: Transform2D,
     colour: ColourTransform,
+    motion_tile: Option<geometry::MotionTileParameters>,
 ) -> LayerParameters {
     raster(
         frame,
@@ -339,5 +383,6 @@ pub(in crate::wgpu) fn surface(
         transform,
         1.0,
         colour,
+        motion_tile,
     )
 }

@@ -10,6 +10,12 @@ pub enum EffectClass {
     Transform,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EffectStage {
+    PreTransform,
+    PostTransform,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ScalarPropertyConstraint {
     /// Accept any finite scalar value.
@@ -85,9 +91,12 @@ pub enum ScalarPropertyTarget {
     SaturationAmount,
     TintAmount,
     GaussianBlurRadius,
+    MotionTileOutputWidthPercent,
+    MotionTileOutputHeightPercent,
     DirectionalBlurRadius,
     DirectionalBlurAngleDegrees,
     ZoomBlurRadius,
+    RadialBlurAmount,
     GlowThreshold,
     GlowRadius,
     GlowIntensity,
@@ -159,6 +168,7 @@ impl ScalarPropertyTarget {
             Self::GaussianBlurRadius
             | Self::DirectionalBlurRadius
             | Self::ZoomBlurRadius
+            | Self::RadialBlurAmount
             | Self::GlowRadius
             | Self::BloomRadius
             | Self::ChromaticAberrationAmount
@@ -174,6 +184,20 @@ impl ScalarPropertyTarget {
                     max_exclusive: false,
                 },
             },
+            Self::MotionTileOutputWidthPercent | Self::MotionTileOutputHeightPercent => {
+                ScalarPropertyDefinition {
+                    runtime_constraint: RuntimeRange {
+                        min: 100.0,
+                        max: 800.0,
+                    },
+                    authored_validation: Range {
+                        min: Some(100.0),
+                        max: Some(800.0),
+                        min_exclusive: false,
+                        max_exclusive: false,
+                    },
+                }
+            }
             Self::GlowIntensity | Self::BloomIntensity | Self::SharpenAmount => {
                 ScalarPropertyDefinition {
                     runtime_constraint: RuntimeRange { min: 0.0, max: 4.0 },
@@ -301,6 +325,7 @@ pub enum EffectParameterKind {
     Integer,
     Number,
     Point2d,
+    Boolean,
     Enum,
     ActiveInterval,
 }
@@ -429,9 +454,12 @@ impl ScalarPropertyTarget {
             Self::SaturationAmount => "amount",
             Self::TintAmount => "amount",
             Self::GaussianBlurRadius => "radius",
+            Self::MotionTileOutputWidthPercent => "output_width_percent",
+            Self::MotionTileOutputHeightPercent => "output_height_percent",
             Self::DirectionalBlurRadius => "radius",
             Self::DirectionalBlurAngleDegrees => "angle_degrees",
             Self::ZoomBlurRadius => "radius",
+            Self::RadialBlurAmount => "amount",
             Self::GlowThreshold => "threshold",
             Self::GlowRadius => "radius",
             Self::GlowIntensity => "intensity",
@@ -499,6 +527,7 @@ pub(crate) struct EffectDefinition {
     pub id: &'static str,
     pub class: EffectClass,
     pub scope: EffectScope,
+    pub stage: EffectStage,
     pub estimated_pass_count: usize,
     pub temporal_policy: EffectTemporalPolicy,
     pub retains_original: bool,
@@ -520,6 +549,7 @@ macro_rules! visual_effect_catalog {
         id: $id:literal,
         class: $class:ident,
         scope: $scope:ident,
+        stage: $stage:ident,
         passes: $passes:literal,
         temporal: $temporal:ident,
         retains_original: $retains_original:literal,
@@ -542,6 +572,7 @@ macro_rules! visual_effect_catalog {
                             id: $id,
                             class: EffectClass::$class,
                             scope: EffectScope::$scope,
+                            stage: EffectStage::$stage,
                             estimated_pass_count: $passes,
                             temporal_policy: EffectTemporalPolicy::$temporal,
                             retains_original: $retains_original,
@@ -572,97 +603,109 @@ macro_rules! visual_effect_catalog {
 visual_effect_catalog! {
     ColourTransform => {
         id: "colour_transform",
-        class: BasicColour, scope: ClipAndGlobal, passes: 1,
+        class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [], plain_tracks: [], parameters: []
     },
     Brightness => {
         id: "brightness",
-        class: BasicColour, scope: ClipAndGlobal, passes: 1,
+        class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [BrightnessAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::BrightnessAmount)]
     },
     Contrast => {
         id: "contrast",
-        class: BasicColour, scope: ClipAndGlobal, passes: 1,
+        class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [ContrastAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ContrastAmount)]
     },
     Saturation => {
         id: "saturation",
-        class: BasicColour, scope: ClipAndGlobal, passes: 1,
+        class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [SaturationAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::SaturationAmount)]
     },
     Tint => {
         id: "tint",
-        class: BasicColour, scope: ClipAndGlobal, passes: 1,
+        class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [TintAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour), EffectParameterDescriptor::scalar(ScalarPropertyTarget::TintAmount)]
     },
     GaussianBlur => {
         id: "gaussian_blur",
-        class: Advanced, scope: ClipAndGlobal, passes: 2,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [GaussianBlurRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::GaussianBlurRadius)]
     },
+    MotionTile => {
+        id: "motion_tile",
+        class: Transform, scope: ClipAndGlobal, stage: PreTransform, passes: 0,
+        temporal: FromProperties, retains_original: false,
+        scalar_properties: [MotionTileOutputWidthPercent, MotionTileOutputHeightPercent], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionTileOutputWidthPercent), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionTileOutputHeightPercent), EffectParameterDescriptor::simple("tile_center", EffectParameterKind::Point2d), EffectParameterDescriptor::simple("mirror_edges", EffectParameterKind::Boolean)]
+    },
     DirectionalBlur => {
         id: "directional_blur",
-        class: Advanced, scope: ClipAndGlobal, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [DirectionalBlurRadius, DirectionalBlurAngleDegrees], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::DirectionalBlurRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::DirectionalBlurAngleDegrees)]
     },
     ZoomBlur => {
         id: "zoom_blur",
-        class: Advanced, scope: ClipAndGlobal, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [ZoomBlurRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ZoomBlurRadius), EffectParameterDescriptor::integer("samples", 2, 32), EffectParameterDescriptor::simple("anchor", EffectParameterKind::Point2d), EffectParameterDescriptor::optional_enum_default("direction", &["inward", "outward", "centered"], "centered")]
     },
+    RadialBlur => {
+        id: "radial_blur",
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
+        temporal: FromProperties, retains_original: false,
+        scalar_properties: [RadialBlurAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::RadialBlurAmount), EffectParameterDescriptor::simple("center", EffectParameterKind::Point2d)]
+    },
     Glow => {
         id: "glow",
-        class: Advanced, scope: ClipAndGlobal, passes: 4,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 4,
         temporal: FromProperties, retains_original: true,
         scalar_properties: [GlowThreshold, GlowRadius, GlowIntensity], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::GlowIntensity), EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour)]
     },
     Bloom => {
         id: "bloom",
-        class: Advanced, scope: ClipAndGlobal, passes: 4,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 4,
         temporal: FromProperties, retains_original: true,
         scalar_properties: [BloomThreshold, BloomRadius, BloomIntensity], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::BloomThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::BloomRadius), EffectParameterDescriptor::scalar(ScalarPropertyTarget::BloomIntensity)]
     },
     ChromaticAberration => {
         id: "chromatic_aberration",
-        class: Advanced, scope: ClipAndGlobal, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [ChromaticAberrationAmount, ChromaticAberrationAngleDegrees], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ChromaticAberrationAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::ChromaticAberrationAngleDegrees)]
     },
     Vignette => {
         id: "vignette",
-        class: Advanced, scope: ClipAndGlobal, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [VignetteAmount, VignetteRadius], plain_tracks: [VignetteSoftness], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::VignetteAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::VignetteRadius), EffectParameterDescriptor::plain_track(PlainTrackTarget::VignetteSoftness), EffectParameterDescriptor::simple("colour", EffectParameterKind::Colour)]
     },
     Sharpen => {
         id: "sharpen",
-        class: Advanced, scope: ClipAndGlobal, passes: 3,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 3,
         temporal: FromProperties, retains_original: true,
         scalar_properties: [SharpenAmount, SharpenRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::SharpenAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::SharpenRadius)]
     },
     ColorAdjust => {
         id: "color_adjust",
-        class: Advanced, scope: ClipAndGlobal, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [ColorAdjustExposure, ColorAdjustGamma], plain_tracks: [ColorAdjustBlackPoint, ColorAdjustWhitePoint], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::ColorAdjustExposure), EffectParameterDescriptor::scalar(ScalarPropertyTarget::ColorAdjustGamma), EffectParameterDescriptor::plain_track(PlainTrackTarget::ColorAdjustBlackPoint), EffectParameterDescriptor::plain_track(PlainTrackTarget::ColorAdjustWhitePoint)]
     },
     CameraShake => {
         id: "camera_shake",
-        class: Transform, scope: ClipOnly, passes: 0,
+        class: Transform, scope: ClipOnly, stage: PostTransform, passes: 0,
         temporal: AlwaysDynamic, retains_original: false,
         scalar_properties: [CameraShakePositionAmount, CameraShakeRotationDegrees, CameraShakeScaleAmount, CameraShakeFrequency], plain_tracks: [], parameters: [EffectParameterDescriptor::optional("active_interval", EffectParameterKind::ActiveInterval), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakePositionAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakeRotationDegrees), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakeScaleAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CameraShakeFrequency), EffectParameterDescriptor::integer("seed", 0, u64::MAX), EffectParameterDescriptor::number("attack", Some(0.0), false), EffectParameterDescriptor::number("decay", Some(0.0), true)]
     },
     MotionBlur => {
         id: "motion_blur",
-        class: Advanced, scope: ClipOnly, passes: 1,
+        class: Advanced, scope: ClipOnly, stage: PostTransform, passes: 1,
         temporal: AlwaysDynamic, retains_original: false,
         scalar_properties: [MotionBlurIntensity, MotionBlurShutterAngle, MotionBlurMaxRadius], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionBlurIntensity), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionBlurShutterAngle), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionBlurMaxRadius), EffectParameterDescriptor::integer("samples", 2, 32)]
     },
@@ -685,8 +728,10 @@ impl crate::project::Effect {
             Self::Saturation { .. } => VisualEffectKind::Saturation,
             Self::Tint { .. } => VisualEffectKind::Tint,
             Self::GaussianBlur { .. } => VisualEffectKind::GaussianBlur,
+            Self::MotionTile { .. } => VisualEffectKind::MotionTile,
             Self::DirectionalBlur { .. } => VisualEffectKind::DirectionalBlur,
             Self::ZoomBlur { .. } => VisualEffectKind::ZoomBlur,
+            Self::RadialBlur { .. } => VisualEffectKind::RadialBlur,
             Self::Glow { .. } => VisualEffectKind::Glow,
             Self::Bloom { .. } => VisualEffectKind::Bloom,
             Self::ChromaticAberration { .. } => VisualEffectKind::ChromaticAberration,
@@ -807,6 +852,7 @@ mod tests {
                     }
                     EffectParameterKind::Number => serde_json::json!(number),
                     EffectParameterKind::Point2d => serde_json::json!({"x": 0.5, "y": 0.5}),
+                    EffectParameterKind::Boolean => serde_json::json!(true),
                     EffectParameterKind::Enum => {
                         serde_json::json!(parameter.default.unwrap_or(parameter.enum_values[0]))
                     }

@@ -374,8 +374,12 @@ fn render_group(
     // available while nested composition is unwound.
     surfaces.clear();
     let direct_colour_path = uses_direct_colour_path(layer);
+    let motion_tile = layer
+        .effects
+        .iter()
+        .find_map(crate::cpu::raster::motion_tile_parameters);
     let started = profiling_enabled.then(Instant::now);
-    crate::cpu::raster::draw_surface(
+    crate::cpu::raster::draw_surface_with_motion_tile(
         surfaces.current(),
         &group_surface,
         transform,
@@ -384,9 +388,14 @@ fn render_group(
         } else {
             ColourTransform::default()
         },
+        motion_tile,
     );
     if let Some(started) = started {
-        timings.transform_sampling += started.elapsed();
+        let elapsed = started.elapsed();
+        timings.transform_sampling += elapsed;
+        if motion_tile.is_some() {
+            timings.motion_tile += elapsed;
+        }
     }
     if !direct_colour_path {
         effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
@@ -606,7 +615,12 @@ fn render_isolated_layer(
             depth + 2,
             stats,
         );
-        crate::cpu::raster::draw_surface(
+        let motion_tile = layer
+            .effects
+            .iter()
+            .find_map(crate::cpu::raster::motion_tile_parameters);
+        let started = profiling_enabled.then(Instant::now);
+        crate::cpu::raster::draw_surface_with_motion_tile(
             surfaces.current(),
             &group_surface,
             layer.transform,
@@ -615,7 +629,15 @@ fn render_isolated_layer(
             } else {
                 ColourTransform::default()
             },
+            motion_tile,
         );
+        if let Some(started) = started {
+            let elapsed = started.elapsed();
+            timings.transform_sampling += elapsed;
+            if motion_tile.is_some() {
+                timings.motion_tile += elapsed;
+            }
+        }
         compositions.release(depth + 1, group_surface);
     } else {
         draw_layer(

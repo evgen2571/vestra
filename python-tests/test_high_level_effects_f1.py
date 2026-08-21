@@ -11,6 +11,8 @@ from vestra.effects import (
     ColorAdjust,
     EffectStack,
     MotionBlur,
+    MotionTile,
+    RadialBlur,
     Vignette,
     available_effects,
 )
@@ -24,8 +26,10 @@ def _effect_values() -> dict[str, object]:
         "saturation": vestra.Saturation(1.0),
         "tint": vestra.Tint("#ffffff", 0.5),
         "gaussian_blur": vestra.GaussianBlur(1),
+        "motion_tile": MotionTile(200, 150),
         "directional_blur": vestra.DirectionalBlur(1, 45),
         "zoom_blur": vestra.ZoomBlur(1, 2, Point(0.5, 0.5)),
+        "radial_blur": RadialBlur(2, Point(0.5, 0.5)),
         "glow": vestra.Glow(0.5, 1, 1, "#ffffff"),
         "bloom": Bloom(0.5, 1, 1),
         "chromatic_aberration": vestra.ChromaticAberration(1, 45),
@@ -41,7 +45,7 @@ def test_public_catalog_has_one_descriptor_for_each_native_effect() -> None:
     native = {str(item["id"]) for item in vestra.authoring.available_effects()}
     public = {str(item["id"]) for item in available_effects()}
     assert public == native
-    assert len(public) == 15
+    assert len(public) == 17
 
 
 def test_catalog_parameters_have_the_declared_public_property_kinds() -> None:
@@ -153,6 +157,14 @@ def test_effect_tracks_bindings_lower_in_order_and_snapshot_isolation() -> None:
     assert len(first_track["keyframes"]) == 1  # type: ignore[index]
     assert len(second_track["keyframes"]) == 2  # type: ignore[index]
     assert second_track["modifiers"][0]["operation"] == "multiply"  # type: ignore[index]
+
+
+def test_motion_tile_extent_properties_support_keyframes() -> None:
+    effect = MotionTile(200, 150)
+    effect.output_width_percent.keyframe(0.5, 300)
+    canonical = effect.to_canonical()
+    assert canonical["type"] == "motion_tile"
+    assert canonical["output_width_percent"]["keyframes"][0]["value"] == 300  # type: ignore[index]
 
 
 def test_extend_order_ids_and_failed_extensions_are_atomic() -> None:

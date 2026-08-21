@@ -39,6 +39,7 @@ pub(super) fn apply_chain(
             match effect {
                 EvaluatedEffect::GaussianBlur { .. } => timings.gaussian_blur += elapsed,
                 EvaluatedEffect::ZoomBlur { .. } => timings.zoom_blur += elapsed,
+                EvaluatedEffect::RadialBlur { .. } => timings.radial_blur += elapsed,
                 EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. } => {
                     timings.bloom_glow += elapsed;
                 }

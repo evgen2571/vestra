@@ -820,18 +820,23 @@ fn append_layer(
         return;
     }
     let mut planned_layer = layer.clone();
-    if let Some(matte) = &layer.matte
-        && let Some(source) = scope_layers
+    if let Some(matte) = &layer.matte {
+        let isolated_source = if let Some(source) = scope_layers
             .iter()
             .find(|candidate| candidate.compiled_layer_index == matte.source_layer_identity)
-    {
-        let mut presented_source = source.clone();
-        presented_source.visible = true;
-        presented_source.blend_mode = crate::project::BlendMode::Normal;
-        let isolated_source = crate::plan::EvaluatedSource::Group {
-            composition: crate::plan::EvaluatedComposition {
-                layers: vec![presented_source],
-            },
+        {
+            let mut presented_source = source.clone();
+            presented_source.visible = true;
+            presented_source.blend_mode = crate::project::BlendMode::Normal;
+            crate::plan::EvaluatedSource::Group {
+                composition: crate::plan::EvaluatedComposition {
+                    layers: vec![presented_source],
+                },
+            }
+        } else {
+            crate::plan::EvaluatedSource::Group {
+                composition: crate::plan::EvaluatedComposition { layers: Vec::new() },
+            }
         };
         planned_layer.masks.push(crate::plan::EvaluatedMask {
             input: crate::plan::EvaluatedMaskInput::Source {

@@ -398,6 +398,14 @@ def _lower_visual_effects(source: EffectStack, target: Any) -> None:
         )
         for name, property_value in effect._property_items():
             _lower_scalar_property(property_value, native.parameter_track(name))
+        for name, property_value in effect._point_property_items():
+            _lower_point_property(property_value, native.parameter_point_track(name))
+            _lower_component_bindings(
+                property_value.x, native.parameter_point_component(name, "x")
+            )
+            _lower_component_bindings(
+                property_value.y, native.parameter_point_component(name, "y")
+            )
 
 
 def _lower_preset(layer: Layer, clip: VisualClip) -> None:

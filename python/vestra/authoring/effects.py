@@ -10,7 +10,7 @@ from typing import Callable, Literal, Mapping, Self, TypeVar, cast
 
 from ._internal import _IdAllocator, _Owner, _number
 from .signals import ScalarSignal
-from .tracks import ModulatableScalarTrack, ScalarTrack
+from .tracks import ModulatableScalarTrack, PointTrack, ScalarModifierTarget, ScalarTrack
 from .values import Color, CubicBezier, Interpolation, Point, color_to_canonical
 from vestra._native import effect_definitions as _native_effect_definitions
 
@@ -250,6 +250,42 @@ class Effect:
         raise NotImplementedError
 
 
+class _EffectPointTrack(PointTrack):
+    """Private point track used only by generic dynamic effect lowering."""
+
+    __slots__ = ("_x", "_y")
+
+    @classmethod
+    def _create(cls, owner: _Owner, value: Point) -> "_EffectPointTrack":
+        instance = super()._create(owner, value)
+        instance._x = ScalarModifierTarget._create(owner)
+        instance._y = ScalarModifierTarget._create(owner)
+        return instance
+
+    @property
+    def x(self) -> ScalarModifierTarget:
+        return self._x
+
+    @property
+    def y(self) -> ScalarModifierTarget:
+        return self._y
+
+    def modulate(
+        self,
+        signal: ScalarSignal,
+        *,
+        mode: Literal["replace", "add", "multiply"] = "add",
+    ) -> Self:
+        if not isinstance(signal, ScalarSignal):
+            raise TypeError("signal must be ScalarSignal")
+        if mode not in {"replace", "add", "multiply"}:
+            raise ValueError("mode must be replace, add, or multiply")
+        self._modifiers.append({"operation": mode, "signal": signal})
+        return self
+
+    react_to = modulate
+
+
 class GenericEffect(Effect):
     """Registered effect handle used by the generic authoring escape hatch."""
 
@@ -269,6 +305,67 @@ class GenericEffect(Effect):
         parameters = cast(tuple[Mapping[str, object], ...], definition["parameters"])
         for parameter in parameters:
             name = str(parameter["name"])
+            if parameter["kind"] == "point2d" and name in {"tile_center", "center"}:
+                canonical = instance._data.get(name)
+                if not isinstance(canonical, Mapping):
+                    continue
+                if "base_value" in canonical:
+                    base = cast(Mapping[str, object], canonical["base_value"])
+                    frames = cast(list[Mapping[str, object]], canonical.get("keyframes", []))
+                    modifiers = cast(list[Mapping[str, object]], canonical.get("modifiers", []))
+                    components = cast(Mapping[str, object], canonical.get("component_modifiers", {}))
+                else:
+                    base = canonical
+                    frames = []
+                    modifiers = []
+                    components = {}
+                track = _EffectPointTrack._create(
+                    owner, Point(cast(float, base["x"]), cast(float, base["y"]))
+                )
+                for frame in frames:
+                    interpolation = frame["interpolation"]
+                    if isinstance(interpolation, Mapping):
+                        interpolation = CubicBezier(
+                            cast(float, interpolation["x1"]),
+                            cast(float, interpolation["y1"]),
+                            cast(float, interpolation["x2"]),
+                            cast(float, interpolation["y2"]),
+                        )
+                    else:
+                        interpolation = Interpolation(cast(str, interpolation))
+                    value = cast(Mapping[str, object], frame["value"])
+                    track.keyframe(
+                        time=cast(float, frame["time"]),
+                        value=Point(cast(float, value["x"]), cast(float, value["y"])),
+                        interpolation=interpolation,
+                    )
+                for modifier in modifiers:
+                    signal = cast(Mapping[str, object], modifier["signal"])
+                    source = cast(Mapping[str, object], signal["source"])
+                    feature = cast(Mapping[str, object], source["feature"])
+                    transforms = cast(
+                        tuple[Mapping[str, object], ...],
+                        tuple(cast(list[Mapping[str, object]], signal.get("transforms", []))),
+                    )
+                    track.modulate(
+                        ScalarSignal(feature, transforms),
+                        mode=cast(Literal["replace", "add", "multiply"], modifier["operation"]),
+                    )
+                for component_name, target in (("x", track.x), ("y", track.y)):
+                    for modifier in cast(list[Mapping[str, object]], components.get(component_name, [])):
+                        signal = cast(Mapping[str, object], modifier["signal"])
+                        source = cast(Mapping[str, object], signal["source"])
+                        feature = cast(Mapping[str, object], source["feature"])
+                        transforms = cast(
+                            tuple[Mapping[str, object], ...],
+                            tuple(cast(list[Mapping[str, object]], signal.get("transforms", []))),
+                        )
+                        target.modulate(
+                            ScalarSignal(feature, transforms),
+                            mode=cast(Literal["replace", "add", "multiply"], modifier["operation"]),
+                        )
+                instance._data[name] = track
+                continue
             if parameter["kind"] not in {"scalar_property", "plain_track"}:
                 continue
             canonical = instance._data.get(name)
@@ -313,7 +410,25 @@ class GenericEffect(Effect):
         return instance
 
     def to_canonical(self) -> dict[str, object]:
-        return {key: value.to_canonical() if isinstance(value, ScalarTrack) else value for key, value in {**self._data, "id": self.id}.items()}
+        data: dict[str, object] = {}
+        for key, value in {**self._data, "id": self.id}.items():
+            if isinstance(value, (ScalarTrack, PointTrack)):
+                canonical = value.to_canonical()
+                if isinstance(value, PointTrack):
+                    components = {
+                        name: [
+                            {"operation": item["operation"], "signal": item["signal"].to_canonical()}
+                            for item in target._modifiers
+                        ]
+                        for name, target in (("x", value.x), ("y", value.y))
+                        if target._modifiers
+                    }
+                    if components:
+                        canonical["component_modifiers"] = components
+                data[key] = canonical
+            else:
+                data[key] = value
+        return data
 
     def parameter_track(self, name: str) -> ScalarTrack:
         """Return the builder-owned track for one scalar effect parameter."""
@@ -321,6 +436,18 @@ class GenericEffect(Effect):
         if not isinstance(value, ScalarTrack):
             raise TypeError(f"effect parameter {name!r} is not a scalar track")
         return value
+
+    def parameter_point_track(self, name: str) -> PointTrack:
+        """Return the builder-owned track for one point effect parameter."""
+        value = self._data.get(name)
+        if not isinstance(value, PointTrack):
+            raise TypeError(f"effect parameter {name!r} is not a point track")
+        return value
+
+    def parameter_point_component(self, name: str, component: Literal["x", "y"]):
+        """Return the modifier target for one point effect component."""
+        track = self.parameter_point_track(name)
+        return track.x if component == "x" else track.y
 
 
 class _AmountEffect(Effect):

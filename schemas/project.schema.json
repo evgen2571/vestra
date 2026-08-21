@@ -1683,7 +1683,7 @@
           ]
         },
         "tile_center": {
-          "$ref": "#/$defs/unit_point"
+          "$ref": "#/$defs/point_property"
         },
         "type": {
           "const": "motion_tile"
@@ -2264,6 +2264,48 @@
       ],
       "type": "object"
     },
+    "point_property": {
+      "additionalProperties": false,
+      "properties": {
+        "base_value": {
+          "$ref": "#/$defs/point"
+        },
+        "component_modifiers": {
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "items": {
+                "$ref": "#/$defs/scalar_modifier"
+              },
+              "type": "array"
+            },
+            "y": {
+              "items": {
+                "$ref": "#/$defs/scalar_modifier"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/point_keyframe"
+          },
+          "type": "array"
+        },
+        "modifiers": {
+          "items": {
+            "$ref": "#/$defs/scalar_modifier"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_value"
+      ],
+      "type": "object"
+    },
     "point_track": {
       "additionalProperties": false,
       "properties": {
@@ -2362,7 +2404,7 @@
           ]
         },
         "center": {
-          "$ref": "#/$defs/unit_point"
+          "$ref": "#/$defs/point_property"
         },
         "id": {
           "minLength": 1,

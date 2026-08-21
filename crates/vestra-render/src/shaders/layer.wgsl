@@ -17,7 +17,29 @@ fn texel(coord: vec2<i32>) -> vec4<f32> {
     if (coord.x < 0 || coord.y < 0 || coord.x >= i32(params.source_width) || coord.y >= i32(params.source_height)) { return vec4<f32>(0.0); }
     return textureLoad(source, coord + vec2<i32>(i32(params.source_origin_x), i32(params.source_origin_y)), 0) * 255.0;
 }
-fn bilinear(position: vec2<f32>) -> vec4<f32> {
+fn tile_index(index: i32, extent: i32, mirror: bool) -> i32 {
+    let tile = i32(floor(f32(index) / f32(extent)));
+    let offset = index - tile * extent;
+    if (mirror && tile % 2 != 0) { return extent - 1 - offset; }
+    return offset;
+}
+fn tiled_texel(coord: vec2<i32>) -> vec4<f32> {
+    let extent = vec2<i32>(
+        max(1, i32(round(params.crop.z * f32(params.source_width)))),
+        max(1, i32(round(params.crop.w * f32(params.source_height))))
+    );
+    let origin = vec2<i32>(
+        i32(round(params.crop.x * f32(params.source_width))),
+        i32(round(params.crop.y * f32(params.source_height)))
+    );
+    let mirror = params.motion_tile_flags.x != 0u;
+    let addressed = vec2<i32>(
+        tile_index(coord.x - origin.x, extent.x, mirror),
+        tile_index(coord.y - origin.y, extent.y, mirror)
+    );
+    return textureLoad(source, addressed + origin + vec2<i32>(i32(params.source_origin_x), i32(params.source_origin_y)), 0) * 255.0;
+}
+fn bilinear(position: vec2<f32>, tiled: bool) -> vec4<f32> {
     let adjusted = position - vec2<f32>(0.5); let base = vec2<i32>(floor(adjusted)); let fraction = adjusted - vec2<f32>(base);
     let weights = vec4<f32>(
         (1.0 - fraction.x) * (1.0 - fraction.y),
@@ -25,10 +47,10 @@ fn bilinear(position: vec2<f32>) -> vec4<f32> {
         (1.0 - fraction.x) * fraction.y,
         fraction.x * fraction.y,
     );
-    let top_left = texel(base);
-    let top_right = texel(base + vec2<i32>(1, 0));
-    let bottom_left = texel(base + vec2<i32>(0, 1));
-    let bottom_right = texel(base + vec2<i32>(1, 1));
+    let top_left = select(texel(base), tiled_texel(base), tiled);
+    let top_right = select(texel(base + vec2<i32>(1, 0)), tiled_texel(base + vec2<i32>(1, 0)), tiled);
+    let bottom_left = select(texel(base + vec2<i32>(0, 1)), tiled_texel(base + vec2<i32>(0, 1)), tiled);
+    let bottom_right = select(texel(base + vec2<i32>(1, 1)), tiled_texel(base + vec2<i32>(1, 1)), tiled);
     let samples = vec4<f32>(top_left.a, top_right.a, bottom_left.a, bottom_right.a) / 255.0;
     let weighted_alpha = samples * weights;
     var premultiplied = vec3<f32>(0.0);
@@ -64,13 +86,7 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     let tile_size = params.motion_tile.xy;
     let base_size = params.solid_or_background.zw / tile_size;
     let base_origin = local_origin + params.motion_tile.zw * (params.solid_or_background.zw - base_size);
-    var tile_coordinate = (mapped - base_origin) / base_size;
-    let tile_index = floor(tile_coordinate);
-    tile_coordinate = tile_coordinate - tile_index;
-    if (params.motion_tile_flags.x != 0u) {
-        if (i32(tile_index.x) % 2 != 0) { tile_coordinate.x = 1.0 - tile_coordinate.x; }
-        if (i32(tile_index.y) % 2 != 0) { tile_coordinate.y = 1.0 - tile_coordinate.y; }
-    }
+    let tile_coordinate = (mapped - base_origin) / base_size;
     let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + tile_coordinate * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
-    write_pixel(coord, transformed_colour(bilinear(source_position)));
+    write_pixel(coord, transformed_colour(bilinear(source_position, params.motion_tile_flags.y != 0u)));
 }

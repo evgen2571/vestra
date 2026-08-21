@@ -3,6 +3,74 @@
 use serde::{Deserialize, Serialize};
 
 use super::Track;
+use crate::domain::Point;
+
+/// An authored point track with uniform and per-component signal modifiers.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PointProperty {
+    #[serde(flatten)]
+    pub track: Track<Point>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modifiers: Vec<ScalarModifier>,
+    #[serde(default, skip_serializing_if = "PointComponentModifiers::is_empty")]
+    pub component_modifiers: PointComponentModifiers,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PointComponentModifiers {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub x: Vec<ScalarModifier>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub y: Vec<ScalarModifier>,
+}
+
+impl PointComponentModifiers {
+    const fn is_empty(&self) -> bool {
+        self.x.is_empty() && self.y.is_empty()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PointPropertyFields {
+    base_value: Point,
+    #[serde(default)]
+    keyframes: Vec<super::Keyframe<Point>>,
+    #[serde(default)]
+    modifiers: Vec<ScalarModifier>,
+    #[serde(default)]
+    component_modifiers: PointComponentModifiers,
+}
+
+impl<'de> Deserialize<'de> for PointProperty {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("base_value").is_none() {
+            if let Ok(point) = serde_json::from_value::<Point>(value.clone()) {
+                return Ok(Self {
+                    track: Track::constant(point),
+                    modifiers: Vec::new(),
+                    component_modifiers: PointComponentModifiers::default(),
+                });
+            }
+        }
+        let fields = serde_json::from_value::<PointPropertyFields>(value)
+            .map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            track: Track {
+                base_value: fields.base_value,
+                keyframes: fields.keyframes,
+            },
+            modifiers: fields.modifiers,
+            component_modifiers: fields.component_modifiers,
+        })
+    }
+}
 
 /// An authored scalar track plus ordered procedural modifiers.
 ///

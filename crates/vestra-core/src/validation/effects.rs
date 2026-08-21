@@ -53,6 +53,41 @@ fn invalid_effect(
     errors.push(Diagnostic::error(code, Category::Semantic, message, path));
 }
 
+fn point_property(
+    property: &crate::project::PointProperty,
+    duration: f64,
+    path: &str,
+    maximum_keyframes: usize,
+    errors: &mut Vec<Diagnostic>,
+    has_authored_audio: bool,
+) {
+    tracks::validate_track(
+        &property.track,
+        duration,
+        path,
+        maximum_keyframes,
+        errors,
+        |value| unit(value.x) && unit(value.y),
+    );
+    super::signals::validate_modifiers(
+        &property.modifiers,
+        &format!("{path}/modifiers"),
+        has_authored_audio,
+        errors,
+    );
+    for (name, modifiers) in [
+        ("x", &property.component_modifiers.x),
+        ("y", &property.component_modifiers.y),
+    ] {
+        super::signals::validate_modifiers(
+            modifiers,
+            &format!("{path}/component_modifiers/{name}"),
+            has_authored_audio,
+            errors,
+        );
+    }
+}
+
 pub(super) fn validate_colour_points(
     black_point: &crate::project::Track<f64>,
     white_point: &crate::project::Track<f64>,
@@ -215,15 +250,14 @@ pub(super) fn validate_parameters(
                 ScalarPropertyTarget::MotionTileOutputHeightPercent,
                 errors,
             );
-            if !unit(tile_center.x) || !unit(tile_center.y) {
-                invalid_effect(
-                    errors,
-                    "VESTRA-MOTION-TILE-CENTER",
-                    "motion tile center must be in the unit square",
-                    path,
-                    "tile_center",
-                );
-            }
+            point_property(
+                tile_center,
+                active_duration,
+                &format!("{path}/tile_center"),
+                maximum_keyframes,
+                errors,
+                has_authored_audio,
+            );
         }
         crate::project::Effect::Bloom {
             threshold,
@@ -301,15 +335,14 @@ pub(super) fn validate_parameters(
                 ScalarPropertyTarget::RadialBlurAmount,
                 errors,
             );
-            if !unit(center.x) || !unit(center.y) {
-                invalid_effect(
-                    errors,
-                    "VESTRA-RADIAL-BLUR-CENTER",
-                    "radial blur center must be in the unit square",
-                    path,
-                    "center",
-                );
-            }
+            point_property(
+                center,
+                active_duration,
+                &format!("{path}/center"),
+                maximum_keyframes,
+                errors,
+                has_authored_audio,
+            );
         }
         crate::project::Effect::Glow {
             threshold,

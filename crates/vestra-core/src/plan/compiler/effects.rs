@@ -58,7 +58,7 @@ pub(super) fn compile(
                 output_height_percent,
                 ScalarPropertyTarget::MotionTileOutputHeightPercent
             ),
-            tile_center: *tile_center,
+            tile_center: compile_point(tile_center, id, interner)?,
             mirror_edges: *mirror_edges,
         },
         crate::project::Effect::DirectionalBlur {
@@ -87,7 +87,7 @@ pub(super) fn compile(
         crate::project::Effect::RadialBlur { amount, center, .. } => {
             crate::plan::CompiledEffect::RadialBlur {
                 amount: scalar!(amount, ScalarPropertyTarget::RadialBlurAmount),
-                center: *center,
+                center: compile_point(center, id, interner)?,
             }
         }
         crate::project::Effect::Glow {
@@ -203,6 +203,19 @@ pub(super) fn compile(
             max_radius: scalar!(max_radius, ScalarPropertyTarget::MotionBlurMaxRadius),
             samples: *samples,
         },
+    })
+}
+
+fn compile_point(
+    property: &crate::project::PointProperty,
+    id: &str,
+    interner: &mut ScalarSignalInterner,
+) -> Result<crate::plan::CompiledPointProperty, Diagnostic> {
+    Ok(crate::plan::CompiledPointProperty {
+        authored_track: super::tracks::compile(&property.track, id)?,
+        modifiers: super::signals::compile_modifiers(&property.modifiers, interner)?,
+        x_modifiers: super::signals::compile_modifiers(&property.component_modifiers.x, interner)?,
+        y_modifiers: super::signals::compile_modifiers(&property.component_modifiers.y, interner)?,
     })
 }
 

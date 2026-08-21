@@ -306,6 +306,7 @@ fn parameter_schema(parameter: &vestra::EffectParameterDescriptor) -> Value {
             Value::Object(result)
         }
         EffectParameterKind::Point2d => json!({"$ref": "#/$defs/unit_point"}),
+        EffectParameterKind::PointProperty => json!({"$ref": "#/$defs/point_property"}),
         EffectParameterKind::Boolean => json!({"type": "boolean"}),
         EffectParameterKind::Enum => json!({"enum": parameter.enum_values}),
         EffectParameterKind::ActiveInterval => {

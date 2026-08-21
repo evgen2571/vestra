@@ -287,7 +287,11 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
 #[test]
 fn track_matte_is_lowered_to_gpu_texture_operations() {
     let mut frame = static_frame();
-    let source = frame.layers[0].clone();
+    let mut source = frame.layers[0].clone();
+    source.effects = vec![crate::plan::EvaluatedEffect::RadialBlur {
+        amount: 1.25,
+        center: crate::domain::Point { x: 0.62, y: 0.42 },
+    }];
     frame.layers[0].compiled_layer_index = 4;
     frame.layers[0].matte = Some(crate::plan::EvaluatedTrackMatte {
         source_layer_identity: 3,

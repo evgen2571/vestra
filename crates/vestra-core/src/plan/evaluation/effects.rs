@@ -5,7 +5,10 @@ use crate::effects::{
 };
 use crate::{
     domain::Point,
-    plan::{ColourTransform, CompiledEffect, EvaluationContext, EvaluationError},
+    plan::{
+        ColourTransform, CompiledEffect, CompiledPointProperty, EvaluationContext, EvaluationError,
+        ScalarPropertyConstraint,
+    },
     project::ZoomBlurDirection,
 };
 
@@ -198,7 +201,7 @@ pub fn evaluate(
                 project_time,
                 context,
             )?,
-            tile_center: *tile_center,
+            tile_center: evaluate_point(tile_center, authored_time, project_time, context)?,
             mirror_edges: *mirror_edges,
         },
         CompiledEffect::DirectionalBlur {
@@ -221,7 +224,7 @@ pub fn evaluate(
         },
         CompiledEffect::RadialBlur { amount, center } => EvaluatedEffect::RadialBlur {
             amount: amount.evaluate(authored_time, project_time, context)?,
-            center: *center,
+            center: evaluate_point(center, authored_time, project_time, context)?,
         },
         CompiledEffect::Glow {
             threshold,
@@ -312,15 +315,54 @@ pub fn evaluate(
     })
 }
 
+fn evaluate_point(
+    property: &CompiledPointProperty,
+    authored_time: u128,
+    project_time: u128,
+    context: &EvaluationContext<'_>,
+) -> Result<Point, EvaluationError> {
+    let authored = property.authored_track.evaluate(authored_time);
+    let uniform_x = crate::plan::CompiledScalarProperty::apply_modifiers(
+        authored.x,
+        &property.modifiers,
+        project_time,
+        context,
+    )?;
+    let uniform_y = crate::plan::CompiledScalarProperty::apply_modifiers(
+        authored.y,
+        &property.modifiers,
+        project_time,
+        context,
+    )?;
+    Ok(Point {
+        x: ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 }.apply(
+            crate::plan::CompiledScalarProperty::apply_modifiers(
+                uniform_x,
+                &property.x_modifiers,
+                project_time,
+                context,
+            )?,
+        )?,
+        y: ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 }.apply(
+            crate::plan::CompiledScalarProperty::apply_modifiers(
+                uniform_y,
+                &property.y_modifiers,
+                project_time,
+                context,
+            )?,
+        )?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         animation::{Interpolation, Keyframe, Track},
         plan::{
-            CompiledScalarModifier, CompiledScalarProperty, PreparedScalarSignal,
-            PreparedScalarSignals, ScalarModifierOperation, ScalarPropertyConstraint,
-            ScalarSignalId,
+            CompiledPointProperty, CompiledScalarModifier, CompiledScalarProperty,
+            PreparedScalarSignal, PreparedScalarSignals, ScalarModifierOperation,
+            ScalarPropertyConstraint, ScalarSignalId,
         },
     };
 
@@ -399,5 +441,61 @@ mod tests {
             EvaluatedEffect::CameraShake { rotation_radians, .. }
                 if (rotation_radians - 40.0_f64.to_radians()).abs() < 1e-12
         ));
+    }
+
+    #[test]
+    fn dynamic_effect_centers_evaluate_from_point_tracks() {
+        let center = CompiledPointProperty {
+            authored_track: Track {
+                base_value: Point { x: 0.5, y: 0.5 },
+                keyframes: vec![Keyframe {
+                    time: 1_000_000_000,
+                    value: Point { x: 0.25, y: 0.75 },
+                    interpolation: Interpolation::Linear,
+                }],
+            },
+            modifiers: vec![],
+            x_modifiers: vec![],
+            y_modifiers: vec![],
+        };
+        let effect = CompiledEffect::RadialBlur {
+            amount: CompiledScalarProperty::authored(Track::new(2.0)),
+            center,
+        };
+        let signals = PreparedScalarSignals::empty();
+        let context = EvaluationContext::new(&signals);
+        let before = evaluate(&effect, 0, 0, &context).expect("initial center");
+        let after =
+            evaluate(&effect, 1_000_000_000, 1_000_000_000, &context).expect("keyframed center");
+        assert!(
+            matches!(before, EvaluatedEffect::RadialBlur { center, .. } if center == Point { x: 0.5, y: 0.5 })
+        );
+        assert!(
+            matches!(after, EvaluatedEffect::RadialBlur { center, .. } if center == Point { x: 0.25, y: 0.75 })
+        );
+
+        let tile = CompiledEffect::MotionTile {
+            output_width_percent: CompiledScalarProperty::authored(Track::new(200.0)),
+            output_height_percent: CompiledScalarProperty::authored(Track::new(150.0)),
+            tile_center: CompiledPointProperty {
+                authored_track: Track {
+                    base_value: Point { x: 0.5, y: 0.5 },
+                    keyframes: vec![Keyframe {
+                        time: 1_000_000_000,
+                        value: Point { x: 0.75, y: 0.25 },
+                        interpolation: Interpolation::Linear,
+                    }],
+                },
+                modifiers: vec![],
+                x_modifiers: vec![],
+                y_modifiers: vec![],
+            },
+            mirror_edges: true,
+        };
+        let evaluated =
+            evaluate(&tile, 1_000_000_000, 1_000_000_000, &context).expect("keyframed tile center");
+        assert!(
+            matches!(evaluated, EvaluatedEffect::MotionTile { tile_center, .. } if tile_center == Point { x: 0.75, y: 0.25 })
+        );
     }
 }

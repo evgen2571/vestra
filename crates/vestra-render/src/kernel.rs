@@ -288,6 +288,12 @@ mod tests {
         let scalar = |value| {
             crate::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
         };
+        let point = || crate::plan::CompiledPointProperty {
+            authored_track: crate::animation::Track::new(crate::domain::Point { x: 0.5, y: 0.5 }),
+            modifiers: Vec::new(),
+            x_modifiers: Vec::new(),
+            y_modifiers: Vec::new(),
+        };
         let cases = [
             (
                 crate::plan::CompiledEffect::Brightness {
@@ -327,7 +333,7 @@ mod tests {
                 crate::plan::CompiledEffect::MotionTile {
                     output_width_percent: scalar(200.0),
                     output_height_percent: scalar(150.0),
-                    tile_center: crate::domain::Point { x: 0.5, y: 0.5 },
+                    tile_center: point(),
                     mirror_edges: true,
                 },
                 crate::plan::EvaluatedEffect::MotionTile {
@@ -364,7 +370,7 @@ mod tests {
             (
                 crate::plan::CompiledEffect::RadialBlur {
                     amount: scalar(2.0),
-                    center: crate::domain::Point { x: 0.5, y: 0.5 },
+                    center: point(),
                 },
                 crate::plan::EvaluatedEffect::RadialBlur {
                     amount: 2.0,

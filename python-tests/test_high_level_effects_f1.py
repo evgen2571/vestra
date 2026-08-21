@@ -167,6 +167,42 @@ def test_motion_tile_extent_properties_support_keyframes() -> None:
     assert canonical["output_width_percent"]["keyframes"][0]["value"] == 300  # type: ignore[index]
 
 
+def test_effect_centers_use_bindable_point_properties_and_lower_modifiers() -> None:
+    signal = vestra.MasterAudioSignals().rms()
+    motion_tile = MotionTile(200, 150)
+    radial_blur = RadialBlur(2, Point(0.5, 0.5))
+
+    assert isinstance(motion_tile.tile_center, vestra.BindablePointProperty)
+    assert isinstance(radial_blur.center, vestra.BindablePointProperty)
+    motion_tile.tile_center.keyframe(0.5, (0.75, 0.25))
+    motion_tile.tile_center.bind(signal)
+    motion_tile.tile_center.x.bind(signal, operation="replace")
+    radial_blur.center.keyframe(0.5, Point(0.25, 0.75))
+    radial_blur.center.y.bind(signal)
+
+    motion_center = motion_tile.to_canonical()["tile_center"]
+    radial_center = radial_blur.to_canonical()["center"]
+    assert motion_center["keyframes"][0]["value"] == {"x": 0.75, "y": 0.25}  # type: ignore[index]
+    assert motion_center["modifiers"][0]["operation"] == "add"  # type: ignore[index]
+    assert motion_center["component_modifiers"]["x"][0]["operation"] == "replace"  # type: ignore[index]
+    assert radial_center["keyframes"][0]["value"] == {"x": 0.25, "y": 0.75}  # type: ignore[index]
+    assert radial_center["component_modifiers"]["y"][0]["operation"] == "add"  # type: ignore[index]
+
+
+def test_dynamic_effect_centers_survive_project_snapshot_lowering() -> None:
+    project = vestra.Project(size=(8, 8), fps=4, duration=1)
+    layer = project.root.add(vestra.sources.Color("#808080"), duration=1)
+    effect = layer.effects.add(RadialBlur(2, Point(0.5, 0.5)))
+    effect.center.keyframe(0.5, Point(0.25, 0.75))
+    effect.center.bind(project.audio.signal.rms())
+    effect.center.x.bind(project.audio.signal.peak(), operation="replace")
+
+    center = project.snapshot().to_dict()["visual"]["clips"][0]["effects"][0]["center"]  # type: ignore[index]
+    assert center["keyframes"][0]["value"] == {"x": 0.25, "y": 0.75}  # type: ignore[index]
+    assert center["modifiers"][0]["operation"] == "add"  # type: ignore[index]
+    assert center["component_modifiers"]["x"][0]["operation"] == "replace"  # type: ignore[index]
+
+
 def test_extend_order_ids_and_failed_extensions_are_atomic() -> None:
     stack = EffectStack("post")
     stack.add(Bloom(0.5, 1, 1, id="one"))
@@ -267,6 +303,8 @@ def test_effect_stack_copies_on_add_and_rejects_clip_only_post_effects() -> None
         )
     with pytest.raises(ValueError):
         EffectStack("post").add(MotionBlur(1, 180, 2, 2))
+    with pytest.raises(ValueError):
+        EffectStack("post").add(MotionTile(200, 150))
 
 
 def test_spectrum_preset_effects_remain_inside_layer_adapter() -> None:

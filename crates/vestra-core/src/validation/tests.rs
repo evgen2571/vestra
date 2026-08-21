@@ -94,6 +94,45 @@ fn group_clip(id: &str, clips: Vec<Value>) -> Value {
     })
 }
 
+fn motion_tile(id: &str) -> Value {
+    json!({
+        "id": id,
+        "type": "motion_tile",
+        "output_width_percent": {"base_value": 200.0},
+        "output_height_percent": {"base_value": 200.0},
+        "tile_center": {"x": 0.5, "y": 0.5},
+        "mirror_edges": true
+    })
+}
+
+#[test]
+fn motion_tile_is_rejected_as_global_or_duplicate() {
+    let mut global = grouped_project(Vec::new());
+    global.visual.post_effects = vec![serde_json::from_value(motion_tile("global")).unwrap()];
+    assert!(has(&global, "VESTRA-POST-EFFECT-SCOPE"));
+
+    let mut clip = solid_clip("solid", 0.0, 1.0);
+    clip["effects"] = json!([motion_tile("first"), motion_tile("second")]);
+    let project = grouped_project(vec![clip]);
+    assert!(has(&project, "VESTRA-MOTION-TILE-MULTIPLE"));
+}
+
+#[test]
+fn motion_tile_is_rejected_for_unsupported_sources() {
+    let mut clip = solid_clip("solid", 0.0, 1.0);
+    clip["effects"] = json!([motion_tile("tile")]);
+    let project = grouped_project(vec![clip]);
+    let report = validate(&project, ResourceLimits::default());
+    let diagnostics = report.diagnostics();
+    let diagnostic = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "VESTRA-MOTION-TILE-SOURCE")
+        .expect("Motion Tile source diagnostic");
+    let message = diagnostic.message.to_ascii_lowercase();
+    assert!(message.contains("motion tile"));
+    assert!(message.contains("solid"));
+}
+
 fn masked_project(masks: Value) -> Project {
     serde_json::from_value(json!({
         "schema_version": 4,

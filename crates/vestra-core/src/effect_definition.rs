@@ -325,6 +325,7 @@ pub enum EffectParameterKind {
     Integer,
     Number,
     Point2d,
+    PointProperty,
     Boolean,
     Enum,
     ActiveInterval,
@@ -639,9 +640,9 @@ visual_effect_catalog! {
     },
     MotionTile => {
         id: "motion_tile",
-        class: Transform, scope: ClipAndGlobal, stage: PreTransform, passes: 0,
+        class: Transform, scope: ClipOnly, stage: PreTransform, passes: 0,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [MotionTileOutputWidthPercent, MotionTileOutputHeightPercent], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionTileOutputWidthPercent), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionTileOutputHeightPercent), EffectParameterDescriptor::simple("tile_center", EffectParameterKind::Point2d), EffectParameterDescriptor::simple("mirror_edges", EffectParameterKind::Boolean)]
+        scalar_properties: [MotionTileOutputWidthPercent, MotionTileOutputHeightPercent], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionTileOutputWidthPercent), EffectParameterDescriptor::scalar(ScalarPropertyTarget::MotionTileOutputHeightPercent), EffectParameterDescriptor::simple("tile_center", EffectParameterKind::PointProperty), EffectParameterDescriptor::simple("mirror_edges", EffectParameterKind::Boolean)]
     },
     DirectionalBlur => {
         id: "directional_blur",
@@ -659,7 +660,7 @@ visual_effect_catalog! {
         id: "radial_blur",
         class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [RadialBlurAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::RadialBlurAmount), EffectParameterDescriptor::simple("center", EffectParameterKind::Point2d)]
+        scalar_properties: [RadialBlurAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::RadialBlurAmount), EffectParameterDescriptor::simple("center", EffectParameterKind::PointProperty)]
     },
     Glow => {
         id: "glow",
@@ -770,6 +771,10 @@ mod tests {
     #[test]
     fn catalog_keeps_representative_scopes() {
         assert_eq!(
+            VisualEffectKind::MotionTile.definition().scope,
+            EffectScope::ClipOnly
+        );
+        assert_eq!(
             VisualEffectKind::CameraShake.definition().scope,
             EffectScope::ClipOnly
         );
@@ -851,7 +856,9 @@ mod tests {
                         serde_json::json!(parameter.integer_minimum.unwrap_or(2))
                     }
                     EffectParameterKind::Number => serde_json::json!(number),
-                    EffectParameterKind::Point2d => serde_json::json!({"x": 0.5, "y": 0.5}),
+                    EffectParameterKind::Point2d | EffectParameterKind::PointProperty => {
+                        serde_json::json!({"x": 0.5, "y": 0.5})
+                    }
                     EffectParameterKind::Boolean => serde_json::json!(true),
                     EffectParameterKind::Enum => {
                         serde_json::json!(parameter.default.unwrap_or(parameter.enum_values[0]))

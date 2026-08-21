@@ -663,6 +663,7 @@ fn static_frame() -> EvaluatedFrame {
         height: 4,
         layers: vec![EvaluatedLayer {
             compiled_layer_index: 7,
+            visible: true,
             content_dependency: TemporalDependency::Static,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -674,6 +675,7 @@ fn static_frame() -> EvaluatedFrame {
             opacity: 0.5,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1696,6 +1698,7 @@ fn spectrum2d_uses_normal_opacity_and_bloom_pipeline() {
         height: 8,
         layers: vec![EvaluatedLayer {
             compiled_layer_index: 99,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1705,6 +1708,7 @@ fn spectrum2d_uses_normal_opacity_and_bloom_pipeline() {
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],

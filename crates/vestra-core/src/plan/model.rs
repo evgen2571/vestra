@@ -171,6 +171,7 @@ pub struct CompiledLayer {
     /// Compiler-owned identity, unique and deterministic within one plan.
     pub compiled_identity: usize,
     pub id: String,
+    pub visible: bool,
     pub start_nanos: u128,
     pub duration_nanos: u128,
     pub start_frame: u64,
@@ -187,10 +188,19 @@ pub struct CompiledLayer {
     pub opacity_contributions: Vec<Track<f64>>,
     pub effects: Vec<TimedEffect>,
     pub masks: Vec<CompiledMask>,
+    pub matte: Option<CompiledTrackMatte>,
     pub blend_mode: crate::project::BlendMode,
     /// Whether this layer's rendered content can vary while it is active.
     /// Timeline activity itself is deliberately not part of this classification.
     pub content_dependency: TemporalDependency,
+}
+
+#[derive(Clone, Debug)]
+pub struct CompiledTrackMatte {
+    pub source_layer_id: String,
+    pub source_layer_identity: usize,
+    pub mode: crate::project::MatteMode,
+    pub invert: bool,
 }
 
 #[derive(Clone, Debug)]

@@ -194,8 +194,23 @@ impl GpuRequirements {
                 })
                 .sum()
         }
+        fn compiled_matte_count(layers: &[crate::plan::CompiledLayer]) -> usize {
+            layers
+                .iter()
+                .map(|layer| {
+                    usize::from(layer.matte.is_some())
+                        + match &layer.source {
+                            crate::plan::CompiledVisualSource::Group(composition) => {
+                                compiled_matte_count(&composition.layers)
+                            }
+                            _ => 0,
+                        }
+                })
+                .sum()
+        }
         let (compiled_layer_count, compiled_group_count) = compiled_counts(&plan.layers);
         let compiled_mask_count = compiled_mask_count(&plan.layers);
+        let compiled_matte_count = compiled_matte_count(&plan.layers);
         let parameter_record_count = u32::try_from(compiled_layer_count)
             .ok()
             .and_then(|count| count.checked_mul(2))
@@ -208,6 +223,17 @@ impl GpuRequirements {
                                 .checked_mul(3 + crate::project::MASK_FEATHER_PASSES as u32 * 2)?;
                             count.checked_add(passes + mask_records)
                         })
+                    })
+            })
+            .and_then(|count| {
+                u32::try_from(compiled_matte_count)
+                    .ok()
+                    .and_then(|matte_count| {
+                        u32::try_from(compiled_layer_count)
+                            .ok()
+                            .and_then(|layers| layers.checked_mul(2)?.checked_add(4))
+                            .and_then(|per_matte| matte_count.checked_mul(per_matte))
+                            .and_then(|extra| count.checked_add(extra))
                     })
             })
             .and_then(|count| {

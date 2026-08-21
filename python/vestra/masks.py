@@ -22,6 +22,11 @@ class MaskCoverageMode(str, Enum):
     LUMA = "luma"
 
 
+class MatteMode(str, Enum):
+    ALPHA = "alpha"
+    LUMA = "luma"
+
+
 ImageMaskMode = MaskCoverageMode
 MaskSource = Shape | Image | Color | Text | Video | Spectrum2D | ParticleSystem | Group
 
@@ -162,4 +167,4 @@ class MaskCollection:
         self._ids.clear()
 
 
-__all__ = ["ImageMaskMode", "MaskCoverageMode", "Mask", "MaskCollection", "MaskOperation"]
+__all__ = ["ImageMaskMode", "MaskCoverageMode", "MatteMode", "Mask", "MaskCollection", "MaskOperation"]

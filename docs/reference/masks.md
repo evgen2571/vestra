@@ -59,6 +59,39 @@ hard-mask behavior.
 Feathering filters coverage before inversion, operation combination, and
 strength interpolation. Image pixels use their intrinsic dimensions before the
 mask-local transform; the owning layer transform moves the image mask with the
-layer. Track mattes and composition-space masks are separate, unsupported
-features; an owned Group is rendered as a self-contained precomposition before
+layer. An owned Group is rendered as a self-contained precomposition before
 coverage extraction.
+
+## Track Mattes
+
+A Track Matte references existing timeline content; it does not own a new
+source. The two relationships are intentionally distinct:
+
+```python
+layer.masks.add(vestra.Text("MASK", font="font.ttf"))  # owned source
+layer.set_matte(matte_layer, mode=vestra.MatteMode.ALPHA)  # layer reference
+```
+
+Track Mattes are limited to layers in the same immediate composition. They
+support `Alpha` and `Luma` coverage plus `invert=True`, and a layer can have
+one matte. The matte layer is presented in isolation: its source, transform,
+effects, owned masks, opacity, and acyclic own matte contribute to coverage;
+its outer blend mode is not evaluated against the timeline background.
+
+The matte layer keeps its normal visibility and timing. A hidden layer can
+still provide matte coverage, while a visible layer is both composited at its
+normal stack position and usable as a matte. Outside the matte layer's own
+active interval, coverage is zero. Matte coordinates are composition-space
+layer coordinates: moving the consumer does not move the matte. Owned masks
+instead follow their owning layer and use owner-local source timing.
+
+The consumer applies owned masks first, intersects their result with matte
+coverage, then applies final opacity and blend/compositing. Cycles, self
+references, missing sources, and cross-composition references are rejected
+during validation.
+
+Matte dependencies are evaluated per composition rather than by visual stack
+order. A frame-level CPU cache reuses an isolated matte presentation when
+several consumers reference the same layer; static WGPU matte presentations
+also participate in the existing static-layer cache. Dynamic dependencies
+remain frame-local so changing a matte cannot reuse stale consumer output.

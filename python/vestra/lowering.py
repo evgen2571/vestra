@@ -160,6 +160,9 @@ class LoweringContext:
         clips: list[VisualClip] = []
         for layer in composition.layers:
             clips.append(self._lower_layer_parts(layer, scope))
+        for layer in composition.layers:
+            clip = self.layer_clips[layer]
+            self._lower_matte(layer, clip, scope)
         return clips
 
     def _lower_layer_parts(self, layer: Layer, scope: tuple[str, ...]) -> VisualClip:
@@ -231,6 +234,15 @@ class LoweringContext:
         _lower_preset(layer, clip)
         self.layer_clips[layer] = clip
         return clip
+
+    def _lower_matte(self, layer: "Layer", clip: VisualClip, scope: tuple[str, ...]) -> None:
+        if layer._matte is None:
+            return
+        matte, mode, invert = layer._matte
+        source_id = self._local_ids.get((scope, matte.id))
+        if source_id is None:
+            raise ValueError(f"matte layer {matte.id!r} was not lowered in this composition")
+        clip._set_matte(source_id, mode.value, invert)
 
     def lower_overlays(
         self, transitions: TransitionCollection, flashes: FlashCollection

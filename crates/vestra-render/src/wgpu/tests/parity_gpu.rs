@@ -32,6 +32,7 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
         height: 4,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -52,6 +53,7 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],

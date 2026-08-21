@@ -72,6 +72,7 @@ pub(super) fn compile(
     Ok(CompiledLayer {
         compiled_identity,
         id: flash.id.clone(),
+        visible: true,
         start_nanos,
         duration_nanos,
         start_frame: first_frame_at_or_after(start_nanos, rate)?,
@@ -92,6 +93,7 @@ pub(super) fn compile(
         opacity_contributions: Vec::new(),
         effects: Vec::new(),
         masks: Vec::new(),
+        matte: None,
         blend_mode: BlendMode::Normal,
         content_dependency: crate::plan::TemporalDependency::Static,
     })

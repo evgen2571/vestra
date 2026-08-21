@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import get_type_hints
 
 import pytest
+import vestra
 
 from vestra import (
     AudioGainKeyframe,
     Circle,
+    Color,
     Crossfade,
     Ellipse,
     Group,
@@ -27,6 +29,152 @@ from vestra import (
     Video,
     MaskCoverageMode,
 )
+
+
+def test_track_matte_is_an_explicit_layer_relationship() -> None:
+    project = Project(size=(2, 2), fps=1, duration=1)
+    consumer = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"), id="consumer")
+    matte = project.root.add(Rectangle(width=1, height=2, fill="#ffffff"), id="matte")
+
+    consumer.set_matte(matte, mode="alpha", invert=True)
+
+    assert project.snapshot().to_dict()["visual"]["clips"][0]["matte"] == {
+        "source_layer": "matte",
+        "mode": "alpha",
+        "invert": True,
+    }
+
+
+def test_track_matte_can_be_cleared_and_rejects_invalid_relationships() -> None:
+    project = Project(size=(2, 2), fps=1, duration=1)
+    consumer = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"), id="consumer")
+    matte = project.root.add(Rectangle(width=1, height=2, fill="#ffffff"), id="matte")
+    consumer.set_matte(matte)
+    consumer.clear_matte()
+    assert "matte" not in project.snapshot().to_dict()["visual"]["clips"][0]
+
+    with pytest.raises(ValueError, match="itself"):
+        consumer.set_matte(consumer)
+    foreign = Project(size=(2, 2), fps=1, duration=1).root.add(
+        Rectangle(width=1, height=1, fill="#ffffff"), id="foreign"
+    )
+    with pytest.raises(ValueError, match="same composition"):
+        consumer.set_matte(foreign)
+    nested = project.root.group(id="nested").add(Color("#ffffff"), id="nested-matte")
+    with pytest.raises(ValueError, match="same composition"):
+        consumer.set_matte(nested)
+
+    snapshot = project.snapshot().to_dict()
+    snapshot["visual"]["clips"].append(
+        {
+            "id": "broken",
+            "source": {"type": "solid_color", "colour": "#ffffff"},
+            "start": 0,
+                "duration": 1,
+                "layer": 2,
+                "visible": True,
+                "opacity": {"base_value": 1},
+                "matte": {"source_layer": "missing", "mode": "alpha", "invert": False},
+        }
+    )
+    report = vestra.Editor().validate(vestra.ProjectSnapshot.from_dict(snapshot))
+    assert any(diagnostic.code == "VESTRA-MATTE-SOURCE" for diagnostic in report.errors)
+
+    scoped = project.snapshot().to_dict()
+    scoped["visual"]["clips"][0]["matte"] = {
+        "source_layer": "nested/nested-matte",
+        "mode": "alpha",
+        "invert": False,
+    }
+    report = vestra.Editor().validate(vestra.ProjectSnapshot.from_dict(scoped))
+    assert any(diagnostic.code == "VESTRA-MATTE-SCOPE" for diagnostic in report.errors)
+
+
+def test_track_matte_cycle_is_rejected_during_validation() -> None:
+    project = Project(size=(2, 2), fps=1, duration=1)
+    first = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"), id="first")
+    second = project.root.add(Rectangle(width=2, height=2, fill="#ffffff"), id="second")
+    first.set_matte(second)
+    second.set_matte(first)
+    report = project.validate()
+    assert any(diagnostic.code == "VESTRA-MATTE-CYCLE" for diagnostic in report.errors)
+
+    chain = Project(size=(2, 2), fps=1, duration=1)
+    first = chain.root.add(Color("#ffffff"), id="a")
+    second = chain.root.add(Color("#ffffff"), id="b")
+    third = chain.root.add(Color("#ffffff"), id="c")
+    first.set_matte(second)
+    second.set_matte(third)
+    third.set_matte(first)
+    report = chain.validate()
+    assert any(
+        diagnostic.code == "VESTRA-MATTE-CYCLE" and "a" in diagnostic.message
+        for diagnostic in report.errors
+    )
+
+
+def test_hidden_track_matte_layer_is_not_visible_but_remains_a_coverage_source() -> None:
+    project = Project(size=(8, 8), fps=1, duration=1)
+    consumer = project.root.add(Rectangle(width=8, height=8, fill="#ff0000"), id="consumer")
+    matte = project.root.add(Color("#00000000"), id="matte", visible=False)
+    consumer.set_matte(matte)
+
+    pixels = _render(project, "cpu")
+    assert max(pixels[0::4]) == 0
+
+
+def test_track_matte_is_evaluated_before_visual_stacking_and_supports_luma_invert() -> None:
+    project = Project(size=(8, 8), fps=1, duration=1)
+    consumer = project.root.add(Rectangle(width=8, height=8, fill="#ff0000"), id="consumer", z=0)
+    matte = project.root.add(Color("#ffffff"), id="matte", z=1, visible=False)
+    consumer.set_matte(matte, mode="luma", invert=True)
+
+    cpu = _render(project, "cpu")
+    assert max(cpu[0::4]) == 0
+    gpu = _render(project, "wgpu")
+    assert gpu == cpu
+
+
+def test_track_matte_uses_presented_source_effects_masks_and_chains() -> None:
+    project = Project(size=(8, 8), fps=1, duration=1)
+    consumer = project.root.add(Rectangle(width=8, height=8, fill="#ff0000"), id="consumer")
+    matte = project.root.add(Rectangle(width=8, height=8, fill="#ffffff"), id="matte", visible=False)
+    nested = project.root.add(Color("#ffffff80"), id="nested", visible=False)
+    matte.effects.add(GaussianBlur(radius=1))
+    matte.blend_mode = BlendMode.SCREEN
+    matte.masks.add(Rectangle(width=4, height=4, fill="#ffffff"), operation=MaskOperation.REPLACE)
+    matte.set_matte(nested)
+    consumer.set_matte(matte)
+
+    cpu = _render(project, "cpu")
+    gpu = _render(project, "wgpu")
+    differences = [abs(left - right) for left, right in zip(cpu, gpu)]
+    assert max(differences) <= 2
+    assert max(cpu[0::4]) > 0
+    assert min(cpu[0::4]) == 0
+
+
+def test_track_matte_timing_and_visible_source_policy() -> None:
+    project = Project(size=(4, 4), fps=1, duration=4)
+    consumer = project.root.add(Rectangle(width=4, height=4, fill="#ff0000"), id="consumer")
+    matte = project.root.add(
+        Color("#ffffff"), id="matte", start=2, duration=1, visible=False
+    )
+    consumer.set_matte(matte)
+    assert max(_render(project, "cpu", seconds=1)[0::4]) == 0
+    assert max(_render(project, "cpu", seconds=2)[0::4]) > 0
+
+    visible_project = Project(size=(4, 4), fps=1, duration=1)
+    visible_consumer = visible_project.root.add(
+        Rectangle(width=4, height=4, fill="#ff0000"), id="consumer", z=0
+    )
+    visible_matte = visible_project.root.add(
+        Color("#0000ff"), id="matte", z=1, visible=True
+    )
+    visible_consumer.set_matte(visible_matte)
+    pixels = _render(visible_project, "cpu")
+    assert pixels[:4] == bytes((0, 0, 255, 255))
+    assert _render(visible_project, "wgpu") == pixels
 from vestra.effects import GaussianBlur
 from vestra.authoring.values import BlendMode, Crop, Sizing
 from vestra.sources import ParticleSystem, Spectrum2D
@@ -219,6 +367,22 @@ def test_video_mask_uses_owner_local_time_and_cpu_wgpu_parity(tmp_path: Path) ->
     assert max(at_owner_start[0::4]) == 0
     cpu = _render(make_project(), "cpu", seconds=2)
     gpu = _render(make_project(), "wgpu", seconds=2)
+    assert max(cpu[0::4]) == 255
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_video_track_matte_uses_matte_layer_timing(tmp_path: Path) -> None:
+    video_path = tmp_path / "track-matte.mp4"
+    _write_two_frame_video(video_path)
+    project = Project(size=(16, 16), fps=1, duration=3, base_directory=tmp_path)
+    consumer = project.root.add(Rectangle(width=16, height=16, fill="#ff0000"))
+    matte = project.root.add(Video(video_path), start=1, duration=2, visible=False)
+    consumer.set_matte(matte, mode=MaskCoverageMode.LUMA)
+
+    assert max(_render(project, "cpu", seconds=0)[0::4]) == 0
+    assert max(_render(project, "cpu", seconds=1)[0::4]) == 0
+    cpu = _render(project, "cpu", seconds=2)
+    gpu = _render(project, "wgpu", seconds=2)
     assert max(cpu[0::4]) == 255
     assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
 
@@ -883,7 +1047,11 @@ def test_group_child_opacity_signal_is_evaluated_at_render_time() -> None:
         operation="replace",
     )
     layer.masks.add(group, operation=MaskOperation.REPLACE)
-    project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip.set_gain_automation([
+        AudioGainKeyframe(0, 0),
+        AudioGainKeyframe(0.5, 1),
+    ])
 
     quiet = project.render_frame(0, backend="cpu").to_bytes()
     loud = project.render_frame(0.75, backend="cpu").to_bytes()
@@ -917,8 +1085,62 @@ def test_mask_strength_signal_is_evaluated_at_render_time() -> None:
         project.audio.signal.rms().remap(input=(0, 1), output=(0.1, 1.0)),
         operation="replace",
     )
-    project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip.set_gain_automation([
+        AudioGainKeyframe(0, 0),
+        AudioGainKeyframe(0.5, 1),
+    ])
 
     quiet = project.render_frame(0, backend="cpu").to_bytes()
     loud = project.render_frame(0.75, backend="cpu").to_bytes()
     assert quiet != loud
+
+
+def test_group_child_rotation_and_effect_signals_change_owned_mask_output() -> None:
+    def render_group(effect: bool) -> tuple[bytes, bytes]:
+        project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        group = Group()
+        child = group.add(Rectangle(width=18, height=4, fill="#ffffff"))
+        child.transform.rotation.bind(project.audio.signal.rms(), operation="replace")
+        if effect:
+            child.effects.add(GaussianBlur(radius=1)).radius.bind(
+                project.audio.signal.rms(), operation="replace"
+            )
+        layer.masks.add(group, operation=MaskOperation.REPLACE)
+        clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        clip.set_gain_automation([
+            AudioGainKeyframe(0, 0),
+            AudioGainKeyframe(0.5, 1),
+        ])
+        return (
+            project.render_frame(0, backend="cpu").to_bytes(),
+            project.render_frame(0.75, backend="cpu").to_bytes(),
+        )
+
+    for effect in (False, True):
+        quiet, loud = render_group(effect)
+        assert quiet != loud
+
+
+def test_mask_feather_and_rotation_signals_change_rendered_output() -> None:
+    def render_mask(feather: bool) -> tuple[bytes, bytes]:
+        project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        mask = layer.masks.add(Rectangle(width=20, height=4, fill="#ffffff"), operation=MaskOperation.REPLACE)
+        if feather:
+            mask.feather.bind(project.audio.signal.rms(), operation="replace")
+        else:
+            mask.transform.rotation.bind(project.audio.signal.rms(), operation="replace")
+        clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        clip.set_gain_automation([
+            AudioGainKeyframe(0, 0),
+            AudioGainKeyframe(0.5, 1),
+        ])
+        return (
+            project.render_frame(0, backend="cpu").to_bytes(),
+            project.render_frame(0.75, backend="cpu").to_bytes(),
+        )
+
+    assert render_mask(True)[0] != render_mask(True)[1]
+    assert render_mask(False)[0] != render_mask(False)[1]

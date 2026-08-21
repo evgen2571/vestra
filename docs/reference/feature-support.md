@@ -25,9 +25,11 @@ not reduced renderer support.
 | Group masks | owned `Group` source | `masks` (schema v4) | nested owned composition | supported | supported |
 | Soft feather on masks | `mask.feather` | `masks` (schema v4) | layer-local, output-pixel units | supported | supported |
 | Dynamic mask properties | keyframes, modifiers, signals | `masks` (schema v4) | layer-local transform and coverage | supported | supported |
+| Track Matte Alpha/Luma | `layer.set_matte(..., mode=MatteMode.*)` | `matte` (schema v4) | same immediate composition; referenced layer coverage | supported | supported |
+| Track Matte invert and chains | `invert=True`, acyclic references | `matte` (schema v4) | dependency-ordered isolated presentation | supported | supported |
+| Shared Track Matte source | multiple consumers may reference one layer | `matte` (schema v4) | CPU frame reuse; static WGPU cache reuse | supported | supported |
 | Image crop/sizing as a mask | rejected in mask context | not serialized | use `mask.transform` instead | unsupported in v1 | unsupported in v1 |
 | Composition-space masks | not exposed | not serialized | not supported | unsupported | unsupported |
-| Track mattes | not exposed | not serialized | not supported | unsupported | unsupported |
 | Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |

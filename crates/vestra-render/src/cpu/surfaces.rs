@@ -121,6 +121,29 @@ impl EffectSurfacePool {
         &mut self.mask_local_surface
     }
 
+    pub(super) fn copy_current_to_mask_local(&mut self) {
+        let current_slot = self.current_slot;
+        self.mask_local_surface
+            .copy_from(&self.surfaces[current_slot], 0, 0)
+            .expect("matching effect surface dimensions");
+    }
+
+    pub(super) fn apply_external_matte(
+        &mut self,
+        mode: crate::project::MaskCoverageMode,
+        invert: bool,
+    ) {
+        let current_slot = self.current_slot;
+        let (surfaces, matte) = (&mut self.surfaces, &self.mask_local_surface);
+        for (pixel, matte_pixel) in surfaces[current_slot].pixels_mut().zip(matte.pixels()) {
+            let mut coverage = crate::project::mask_coverage(matte_pixel.0, mode);
+            if invert {
+                coverage = 1.0 - coverage;
+            }
+            pixel[3] = (f32::from(pixel[3]) * coverage).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+
     pub(super) fn reset_mask_coverage(&mut self) {
         self.mask_coverage.fill(1.0);
     }

@@ -35,6 +35,7 @@ pub struct EvaluatedLayer {
     /// Stable index in the immutable compiled plan. Render caches use this
     /// plan-local identity, never a frame number.
     pub compiled_layer_index: usize,
+    pub visible: bool,
     /// Compiler-owned cacheability proof. Renderers consume it without
     /// reclassifying tracks or effect parameters.
     pub content_dependency: TemporalDependency,
@@ -47,10 +48,18 @@ pub struct EvaluatedLayer {
     /// surfaces, so its order is never inferred or rearranged by a backend.
     pub effects: Vec<EvaluatedEffect>,
     pub masks: Vec<EvaluatedMask>,
+    pub matte: Option<EvaluatedTrackMatte>,
     /// Legacy single-pass representation used by the basic WGPU path. Advanced
     /// chains are rejected by that backend before frame rendering.
     pub colour_transform: ColourTransform,
     pub blend_mode: crate::project::BlendMode,
+}
+
+#[derive(Clone, Debug)]
+pub struct EvaluatedTrackMatte {
+    pub source_layer_identity: usize,
+    pub mode: crate::project::MatteMode,
+    pub invert: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -457,6 +466,7 @@ fn evaluate_layers(
         }
         layers.push(EvaluatedLayer {
             compiled_layer_index: layer.compiled_identity,
+            visible: layer.visible,
             content_dependency: layer.content_dependency,
             source,
             transform,
@@ -464,6 +474,11 @@ fn evaluate_layers(
             colour_transform: ColourTransform::from_effects(effects.clone()),
             effects,
             masks,
+            matte: layer.matte.as_ref().map(|matte| EvaluatedTrackMatte {
+                source_layer_identity: matte.source_layer_identity,
+                mode: matte.mode,
+                invert: matte.invert,
+            }),
             blend_mode: layer.blend_mode,
         });
     }

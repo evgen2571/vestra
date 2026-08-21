@@ -9,6 +9,7 @@ mod audio;
 mod colour;
 mod effects;
 mod masks;
+mod mattes;
 mod output;
 mod presets;
 mod project;
@@ -31,6 +32,7 @@ pub use masks::{
     MaskOperation, apply_mask_operation, image_mask_coverage, mask_coverage,
     mask_feather_box_half_width,
 };
+pub use mattes::{MatteMode, TrackMatte};
 pub use output::{DurationMode, FrameRate, Output, Quality};
 pub use presets::Preset;
 pub use project::Project;

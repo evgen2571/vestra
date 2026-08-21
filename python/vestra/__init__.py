@@ -138,7 +138,7 @@ from .effects import (
     ZoomBlur,
     ZoomBlurDirection,
 )
-from .masks import ImageMaskMode, Mask, MaskCollection, MaskCoverageMode, MaskOperation
+from .masks import ImageMaskMode, Mask, MaskCollection, MaskCoverageMode, MatteMode, MaskOperation
 from .authoring.values import BlendMode, Crop, CubicBezier, Interpolation, Point
 
 # Keep the native type available under its stable public snapshot name.
@@ -201,6 +201,7 @@ __all__ = [
     "MaskOperation",
     "ImageMaskMode",
     "MaskCoverageMode",
+    "MatteMode",
     "PreflightOptions",
     "ValidationReport",
     "PreflightReport",

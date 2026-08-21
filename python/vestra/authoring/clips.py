@@ -46,7 +46,7 @@ class _OpacityTrack(ModulatableScalarTrack):
 
 
 class _Clip:
-    __slots__ = ("_owner", "_id", "_id_scope", "_start", "_duration", "_layer", "_visible", "_opacity", "_effects", "_blend_mode", "_masks")
+    __slots__ = ("_owner", "_id", "_id_scope", "_start", "_duration", "_layer", "_visible", "_opacity", "_effects", "_blend_mode", "_masks", "_matte")
 
     def _initialize(self, owner: _Owner, identifier: str, *, start: int | float, duration: int | float,
                     layer: int, visible: bool, opacity: int | float) -> None:
@@ -60,6 +60,7 @@ class _Clip:
         self._opacity = _OpacityTrack._create(owner, opacity)
         self._blend_mode = BlendMode.NORMAL
         self._masks: list[dict[str, object]] = []
+        self._matte: dict[str, object] | None = None
 
     def _attach_effects(self, effects: ClipEffectCollection) -> None:
         self._effects = effects
@@ -111,6 +112,9 @@ class _Clip:
     def _set_masks(self, masks: list[dict[str, object]]) -> None:
         self._masks = masks
 
+    def _set_matte(self, source_layer: str, mode: str, invert: bool) -> None:
+        self._matte = {"source_layer": source_layer, "mode": mode, "invert": invert}
+
     @property
     def blend_mode(self) -> BlendMode:
         return self._blend_mode
@@ -127,6 +131,8 @@ class _Clip:
                 "opacity": self.opacity.to_canonical(), "effects": [effect.to_canonical() for effect in self.effects.items]}
         if self._masks:
             data["masks"] = list(self._masks)
+        if self._matte is not None:
+            data["matte"] = dict(self._matte)
         if self.blend_mode is not BlendMode.NORMAL:
             data["blend_mode"] = self.blend_mode.to_canonical()
         return data

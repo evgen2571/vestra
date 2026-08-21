@@ -138,6 +138,7 @@ fn static_frame() -> EvaluatedFrame {
         height: 4,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 3,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Static,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -149,6 +150,7 @@ fn static_frame() -> EvaluatedFrame {
             opacity: 0.75,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -283,6 +285,33 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
 }
 
 #[test]
+fn track_matte_is_lowered_to_gpu_texture_operations() {
+    let mut frame = static_frame();
+    let source = frame.layers[0].clone();
+    frame.layers[0].compiled_layer_index = 4;
+    frame.layers[0].matte = Some(crate::plan::EvaluatedTrackMatte {
+        source_layer_identity: 3,
+        mode: crate::project::MatteMode::Luma,
+        invert: true,
+    });
+    frame.layers.push(source);
+
+    let plan = GpuFramePlan::build(&frame);
+    assert!(
+        plan.operations
+            .iter()
+            .any(|operation| matches!(operation, GpuOperation::RenderMask { .. }))
+    );
+    assert!(
+        plan.operations
+            .iter()
+            .any(|operation| matches!(operation, GpuOperation::ApplyMask { .. }))
+    );
+    assert!(plan.layers[0].masks[0].invert);
+    plan.validate(0).expect("track matte frame plan validates");
+}
+
+#[test]
 fn nested_groups_use_isolated_depth_indexed_composition_targets() {
     let transform = crate::animation::Transform2D::identity(
         crate::domain::Point { x: 0.5, y: 0.5 },
@@ -290,6 +319,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
     );
     let child = |index| crate::plan::EvaluatedLayer {
         compiled_layer_index: index,
+        visible: true,
         content_dependency: crate::plan::TemporalDependency::Static,
         transform: crate::animation::Transform2D::identity(
             crate::domain::Point { x: 0.5, y: 0.5 },
@@ -301,11 +331,13 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         opacity: 1.0,
         effects: Vec::new(),
         masks: Vec::new(),
+        matte: None,
         colour_transform: crate::plan::ColourTransform::default(),
         blend_mode: crate::project::BlendMode::Normal,
     };
     let nested = crate::plan::EvaluatedLayer {
         compiled_layer_index: 2,
+        visible: true,
         content_dependency: crate::plan::TemporalDependency::Static,
         source: EvaluatedSource::Group {
             composition: crate::plan::EvaluatedComposition {
@@ -316,6 +348,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         opacity: 1.0,
         effects: Vec::new(),
         masks: Vec::new(),
+        matte: None,
         colour_transform: crate::plan::ColourTransform::default(),
         blend_mode: crate::project::BlendMode::Normal,
     };
@@ -326,6 +359,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         height: 4,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 1,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Static,
             transform,
             source: EvaluatedSource::Group {
@@ -336,6 +370,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -444,12 +479,14 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
         height: 4,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 1,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform,
             source: EvaluatedSource::Group {
                 composition: crate::plan::EvaluatedComposition {
                     layers: vec![crate::plan::EvaluatedLayer {
                         compiled_layer_index: 2,
+                        visible: true,
                         content_dependency: crate::plan::TemporalDependency::Static,
                         transform,
                         source: EvaluatedSource::SolidColor {
@@ -458,6 +495,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
                         opacity: 1.0,
                         effects: Vec::new(),
                         masks: Vec::new(),
+                        matte: None,
                         colour_transform: crate::plan::ColourTransform::default(),
                         blend_mode: crate::project::BlendMode::Normal,
                     }],
@@ -466,6 +504,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
             opacity: 1.0,
             effects,
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -771,6 +810,7 @@ fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
         height: 5,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -782,6 +822,7 @@ fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
             opacity: 1.0,
             effects: vec![EvaluatedEffect::GaussianBlur { radius: 2.0 }],
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1149,6 +1190,7 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
         height: 7,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1160,6 +1202,7 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
             opacity: 0.75,
             effects: vec![crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 }],
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Screen,
         }],
@@ -1259,6 +1302,7 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
         height: 5,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1278,6 +1322,7 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
                 },
             ],
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1312,6 +1357,7 @@ fn compiler_fused_colour_transform_is_one_wgpu_operation() {
         height: 5,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1323,6 +1369,7 @@ fn compiler_fused_colour_transform_is_one_wgpu_operation() {
             opacity: 1.0,
             effects: vec![EvaluatedEffect::ColourTransform { transform }],
             masks: Vec::new(),
+            matte: None,
             colour_transform: transform,
             blend_mode: crate::project::BlendMode::Normal,
         }],
@@ -1349,6 +1396,7 @@ fn chained_multipass_effects_retain_and_validate_their_original_values() {
         height: 5,
         layers: vec![crate::plan::EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: crate::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1375,6 +1423,7 @@ fn chained_multipass_effects_retain_and_validate_their_original_values() {
                 },
             ],
             masks: Vec::new(),
+            matte: None,
             colour_transform: crate::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Overlay,
         }],

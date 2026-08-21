@@ -19,7 +19,7 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 | `presets/` | Timeline presets and flashes. |
 | `compositing/` | Blend modes and global post-effects. |
 | `python/high-level/11_masks.py` | Layer-owned geometric masks and mask coverage. |
-| `projects/` | Complete projects, including animation and audio mixing. |
+| `projects/` | Complete projects, including animation, audio mixing, and `track-matte.json`. |
 | `particles/` | Deterministic ParticleSystem configurations, including audio-reactive appearance. |
 | `python/high-level/` | The normal `Project`, `Composition`, `Layer`, and source API, including shape and text rendering. |
 | `python/authoring/` | Advanced `ProjectBuilder` examples for canonical authoring and inspection. |

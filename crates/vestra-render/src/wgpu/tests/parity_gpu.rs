@@ -2018,6 +2018,24 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             2,
         ),
         (
+            "radial blur",
+            EvaluatedEffect::RadialBlur {
+                amount: 8.0,
+                center: Point { x: 0.37, y: 0.61 },
+            },
+            4,
+        ),
+        (
+            "motion tile",
+            EvaluatedEffect::MotionTile {
+                output_width_percent: 220.0,
+                output_height_percent: 180.0,
+                tile_center: Point { x: 0.37, y: 0.61 },
+                mirror_edges: true,
+            },
+            2,
+        ),
+        (
             "motion blur",
             EvaluatedEffect::MotionBlur {
                 radius: 4.0,

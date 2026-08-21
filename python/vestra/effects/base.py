@@ -194,6 +194,11 @@ class Effect:
         if kind == "point2d":
             self._values[name] = _point(value, name)
             return
+        if kind == "boolean":
+            if not isinstance(value, bool):
+                raise TypeError(f"{name} must be a boolean")
+            self._values[name] = value
+            return
         if kind == "enum":
             self._values[name] = _enum(
                 value,

@@ -251,6 +251,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 current,
             ),
         ]),
+        CompiledEffect::MotionTile { .. } => EffectPassPlan::new(&[]),
         CompiledEffect::Glow { .. } | CompiledEffect::Bloom { .. } => EffectPassPlan::new(&[
             EffectPass::new(
                 EffectOperation::HighlightExtract {
@@ -297,6 +298,16 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             EffectOperation::ZoomBlur {
                 radius: 1.0,
                 samples: 2,
+                anchor: Point { x: 0.5, y: 0.5 },
+                direction: crate::project::ZoomBlurDirection::Centered,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::RadialBlur { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ZoomBlur {
+                radius: 1.0,
+                samples: 16,
                 anchor: Point { x: 0.5, y: 0.5 },
                 direction: crate::project::ZoomBlurDirection::Centered,
             },
@@ -410,6 +421,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
                 current,
             ),
         ]),
+        EvaluatedEffect::MotionTile { .. } => EffectPassPlan::new(&[]),
         EvaluatedEffect::Glow {
             threshold,
             radius,
@@ -470,6 +482,16 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
                 samples: *samples,
                 anchor: *anchor,
                 direction: *direction,
+            },
+            current,
+            current,
+        )]),
+        EvaluatedEffect::RadialBlur { amount, center } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::ZoomBlur {
+                radius: *amount,
+                samples: 16,
+                anchor: *center,
+                direction: crate::project::ZoomBlurDirection::Centered,
             },
             current,
             current,
@@ -813,6 +835,10 @@ mod tests {
                     anchor: Point { x: 0.5, y: 0.5 },
                     direction: ZoomBlurDirection::Centered,
                 },
+                EvaluatedEffect::RadialBlur {
+                    amount: radius,
+                    center: Point { x: 0.5, y: 0.5 },
+                },
                 EvaluatedEffect::MotionBlur {
                     radius,
                     angle_degrees: 0.0,
@@ -918,6 +944,22 @@ mod tests {
                     direction: ZoomBlurDirection::Centered,
                 },
                 1,
+            ),
+            (
+                EvaluatedEffect::RadialBlur {
+                    amount: 1.0,
+                    center: Point { x: 0.25, y: 0.75 },
+                },
+                1,
+            ),
+            (
+                EvaluatedEffect::MotionTile {
+                    output_width_percent: 200.0,
+                    output_height_percent: 150.0,
+                    tile_center: Point { x: 0.5, y: 0.5 },
+                    mirror_edges: true,
+                },
+                0,
             ),
             (
                 EvaluatedEffect::Glow {

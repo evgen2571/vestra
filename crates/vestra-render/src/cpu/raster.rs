@@ -4,7 +4,7 @@ use image::{Rgba, RgbaImage};
 
 use crate::{
     domain::Crop,
-    plan::{ColourTransform, EvaluatedLayer, EvaluatedSource},
+    plan::{ColourTransform, EvaluatedEffect, EvaluatedLayer, EvaluatedSource},
     render::{
         blend::source_over,
         cpu::particles,
@@ -25,6 +25,10 @@ pub(crate) fn draw_layer(
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
 ) {
+    let motion_tile = layer.effects.iter().find_map(motion_tile_parameters);
+    let motion_tile_started = profiling_enabled
+        .then(std::time::Instant::now)
+        .filter(|_| motion_tile.is_some());
     match &layer.source {
         EvaluatedSource::SolidColor { colour } => {
             fill_solid(canvas, *colour, opacity, colour_transform)
@@ -48,7 +52,7 @@ pub(crate) fn draw_layer(
             };
             if layer.transform.is_valid() {
                 let started = profiling_enabled.then(std::time::Instant::now);
-                draw_raster(
+                draw_raster_with_motion_tile(
                     canvas,
                     source,
                     intrinsic,
@@ -58,6 +62,7 @@ pub(crate) fn draw_layer(
                     layer.transform,
                     opacity,
                     colour_transform,
+                    motion_tile,
                 );
                 if let Some(started) = started {
                     timings.transform_sampling += started.elapsed();
@@ -71,7 +76,7 @@ pub(crate) fn draw_layer(
             sizing,
             ..
         } => match assets.video_source(*asset_index, *source_time) {
-            Ok(prepared) if layer.transform.is_valid() => draw_raster(
+            Ok(prepared) if layer.transform.is_valid() => draw_raster_with_motion_tile(
                 canvas,
                 prepared.pixels(),
                 prepared.intrinsic_size(),
@@ -81,13 +86,14 @@ pub(crate) fn draw_layer(
                 layer.transform,
                 opacity,
                 colour_transform,
+                motion_tile,
             ),
             Ok(_) | Err(_) => {}
         },
         EvaluatedSource::Shape { shape_index, .. } => {
             let prepared = assets.shape_source(*shape_index);
             if layer.transform.is_valid() {
-                draw_raster(
+                draw_raster_with_motion_tile(
                     canvas,
                     prepared.pixels(),
                     prepared.intrinsic_size(),
@@ -102,13 +108,14 @@ pub(crate) fn draw_layer(
                     layer.transform,
                     opacity,
                     colour_transform,
+                    motion_tile,
                 );
             }
         }
         EvaluatedSource::Text { text_index } => {
             let prepared = assets.text_source(*text_index);
             if layer.transform.is_valid() {
-                draw_raster(
+                draw_raster_with_motion_tile(
                     canvas,
                     prepared.pixels(),
                     prepared.intrinsic_size(),
@@ -123,6 +130,7 @@ pub(crate) fn draw_layer(
                     layer.transform,
                     opacity,
                     colour_transform,
+                    motion_tile,
                 );
             }
         }
@@ -167,6 +175,9 @@ pub(crate) fn draw_layer(
             unreachable!("Group sources are composed by the CPU compositor")
         }
     }
+    if let Some(started) = motion_tile_started {
+        timings.motion_tile += started.elapsed();
+    }
 }
 
 #[expect(
@@ -184,7 +195,33 @@ pub(crate) fn draw_raster(
     opacity: f64,
     colour_transform: ColourTransform,
 ) {
-    let resolved = geometry::resolve_raster_geometry(
+    draw_raster_with_motion_tile(
+        canvas,
+        source,
+        intrinsic,
+        crop,
+        cacheable_crop,
+        sizing,
+        transform,
+        opacity,
+        colour_transform,
+        None,
+    );
+}
+
+pub(crate) fn draw_raster_with_motion_tile(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    intrinsic: geometry::IntrinsicSize,
+    crop: Crop,
+    cacheable_crop: bool,
+    sizing: &crate::plan::CompiledSizing,
+    transform: crate::animation::Transform2D,
+    opacity: f64,
+    colour_transform: ColourTransform,
+    motion_tile: Option<geometry::MotionTileParameters>,
+) {
+    let resolved = geometry::resolve_raster_geometry_with_motion_tile(
         intrinsic,
         crop,
         cacheable_crop,
@@ -192,6 +229,7 @@ pub(crate) fn draw_raster(
         transform,
         canvas.width(),
         canvas.height(),
+        motion_tile,
     );
     draw_resolved_raster(canvas, source, &resolved, opacity, colour_transform);
 }
@@ -202,10 +240,20 @@ pub(crate) fn draw_surface(
     transform: crate::animation::Transform2D,
     colour_transform: ColourTransform,
 ) {
+    draw_surface_with_motion_tile(canvas, source, transform, colour_transform, None);
+}
+
+pub(crate) fn draw_surface_with_motion_tile(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    transform: crate::animation::Transform2D,
+    colour_transform: ColourTransform,
+    motion_tile: Option<geometry::MotionTileParameters>,
+) {
     if !transform.is_valid() {
         return;
     }
-    let resolved = geometry::resolve_raster_geometry(
+    let resolved = geometry::resolve_raster_geometry_with_motion_tile(
         geometry::IntrinsicSize::new(source.width(), source.height()),
         crate::domain::Crop {
             x: 0.0,
@@ -218,6 +266,7 @@ pub(crate) fn draw_surface(
         transform,
         canvas.width(),
         canvas.height(),
+        motion_tile,
     );
     draw_resolved_raster(canvas, source, &resolved, 1.0, colour_transform);
 }
@@ -292,16 +341,7 @@ fn draw_resolved_raster(
                 && mapped.x < geometry.logical_origin_x + geometry.raster_effective_width
                 && mapped.y < geometry.logical_origin_y + geometry.raster_effective_height
             {
-                let local_x = mapped.x - geometry.logical_origin_x;
-                let local_y = mapped.y - geometry.logical_origin_y;
-                let source_x = geometry.source.normalized_crop.x * f64::from(source.width())
-                    + local_x / geometry.raster_effective_width
-                        * geometry.source.normalized_crop.width
-                        * f64::from(source.width());
-                let source_y = geometry.source.normalized_crop.y * f64::from(source.height())
-                    + local_y / geometry.raster_effective_height
-                        * geometry.source.normalized_crop.height
-                        * f64::from(source.height());
+                let (source_x, source_y) = source_position(geometry, mapped, source);
                 let sampled = apply_colour_transform(
                     sample_bilinear(source, source_x, source_y),
                     colour_transform,
@@ -312,6 +352,82 @@ fn draw_resolved_raster(
             mapped.x += inverse.m00;
             mapped.y += inverse.m10;
         }
+    }
+}
+
+fn source_position(
+    geometry: &geometry::ResolvedRasterGeometry,
+    mapped: crate::domain::Point,
+    source: &RgbaImage,
+) -> (f64, f64) {
+    let crop = geometry.source.normalized_crop;
+    if let Some(tile) = geometry.motion_tile {
+        let base_origin_x = geometry.logical_origin_x
+            + tile.center_x
+                * (geometry.raster_effective_width
+                    - geometry.raster_effective_width / tile.width_factor);
+        let base_origin_y = geometry.logical_origin_y
+            + tile.center_y
+                * (geometry.raster_effective_height
+                    - geometry.raster_effective_height / tile.height_factor);
+        let base_width = geometry.raster_effective_width / tile.width_factor;
+        let base_height = geometry.raster_effective_height / tile.height_factor;
+        let (u, v) = (
+            (mapped.x - base_origin_x) / base_width,
+            (mapped.y - base_origin_y) / base_height,
+        );
+        let (u, v) = (
+            tile_coordinate(u, tile.mirror_edges),
+            tile_coordinate(v, tile.mirror_edges),
+        );
+        (
+            crop.x * f64::from(source.width()) + u * crop.width * f64::from(source.width()),
+            crop.y * f64::from(source.height()) + v * crop.height * f64::from(source.height()),
+        )
+    } else {
+        (
+            crop.x * f64::from(source.width())
+                + (mapped.x - geometry.logical_origin_x) / geometry.raster_effective_width
+                    * crop.width
+                    * f64::from(source.width()),
+            crop.y * f64::from(source.height())
+                + (mapped.y - geometry.logical_origin_y) / geometry.raster_effective_height
+                    * crop.height
+                    * f64::from(source.height()),
+        )
+    }
+}
+
+fn tile_coordinate(value: f64, mirror_edges: bool) -> f64 {
+    let tile = value.floor();
+    let fraction = value - tile;
+    if mirror_edges && tile.rem_euclid(2.0) >= 1.0 {
+        1.0 - fraction
+    } else {
+        fraction
+    }
+}
+
+pub(crate) fn motion_tile_parameters(
+    effect: &EvaluatedEffect,
+) -> Option<geometry::MotionTileParameters> {
+    if !effect.is_pre_transform() {
+        return None;
+    }
+    match effect {
+        EvaluatedEffect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            tile_center,
+            mirror_edges,
+        } => Some(geometry::MotionTileParameters {
+            width_factor: (*output_width_percent / 100.0).max(1.0),
+            height_factor: (*output_height_percent / 100.0).max(1.0),
+            center_x: tile_center.x,
+            center_y: tile_center.y,
+            mirror_edges: *mirror_edges,
+        }),
+        _ => None,
     }
 }
 
@@ -415,6 +531,77 @@ pub(super) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTrans
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn motion_tile_fills_transformed_source_edges_without_expanding_the_canvas() {
+        let source = RgbaImage::from_fn(2, 2, |x, y| {
+            Rgba([
+                if x == 0 { 255 } else { 0 },
+                if y == 0 { 255 } else { 0 },
+                0,
+                255,
+            ])
+        });
+        let transform = Transform2D {
+            scale: crate::domain::Point { x: 2.0, y: 2.0 },
+            rotation_radians: 45.0_f64.to_radians(),
+            ..Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            )
+        };
+        let mut without_tile = RgbaImage::new(8, 8);
+        draw_raster(
+            &mut without_tile,
+            &source,
+            geometry::IntrinsicSize::new(2, 2),
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            false,
+            &crate::plan::CompiledSizing::Original,
+            transform,
+            1.0,
+            ColourTransform::default(),
+        );
+        let mut with_tile = RgbaImage::new(8, 8);
+        draw_raster_with_motion_tile(
+            &mut with_tile,
+            &source,
+            geometry::IntrinsicSize::new(2, 2),
+            Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            false,
+            &crate::plan::CompiledSizing::Original,
+            transform,
+            1.0,
+            ColourTransform::default(),
+            Some(geometry::MotionTileParameters {
+                width_factor: 2.0,
+                height_factor: 2.0,
+                center_x: 0.5,
+                center_y: 0.5,
+                mirror_edges: true,
+            }),
+        );
+        let without_alpha = without_tile.pixels().filter(|pixel| pixel[3] > 0).count();
+        let with_alpha = with_tile.pixels().filter(|pixel| pixel[3] > 0).count();
+        assert!(
+            without_alpha < with_alpha,
+            "Motion Tile should increase transformed coverage: {without_alpha} -> {with_alpha}"
+        );
+        assert!(
+            with_alpha >= 24,
+            "tiled coverage should fill transformed edges"
+        );
+    }
 
     #[test]
     fn opaque_sample_fast_path_matches_source_over() {

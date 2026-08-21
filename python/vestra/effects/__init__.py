@@ -2,7 +2,7 @@
 
 from ..authoring.effects import ActiveInterval, ZoomBlurDirection
 from .base import Effect, EffectStack, available_effects
-from .blur import DirectionalBlur, GaussianBlur, ZoomBlur
+from .blur import DirectionalBlur, GaussianBlur, MotionTile, RadialBlur, ZoomBlur
 from .camera import CameraShake
 from .color import Brightness, Contrast, Saturation, Tint
 from .motion import MotionBlur
@@ -10,7 +10,7 @@ from .stylize import Bloom, ChromaticAberration, ColorAdjust, Glow, Sharpen, Vig
 
 __all__ = [
     "ActiveInterval", "Effect", "EffectStack", "Brightness", "Contrast",
-    "Saturation", "Tint", "GaussianBlur", "DirectionalBlur", "ZoomBlur",
+    "Saturation", "Tint", "GaussianBlur", "DirectionalBlur", "MotionTile", "ZoomBlur", "RadialBlur",
     "ZoomBlurDirection", "Glow", "Bloom", "ChromaticAberration", "Vignette",
     "Sharpen", "ColorAdjust", "CameraShake", "MotionBlur", "available_effects",
 ]

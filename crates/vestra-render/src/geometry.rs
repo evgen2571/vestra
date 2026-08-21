@@ -85,6 +85,15 @@ pub(crate) struct ResolvedSourceRegion {
     pub(crate) normalized_crop: Crop,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MotionTileParameters {
+    pub(crate) width_factor: f64,
+    pub(crate) height_factor: f64,
+    pub(crate) center_x: f64,
+    pub(crate) center_y: f64,
+    pub(crate) mirror_edges: bool,
+}
+
 /// Materializes a normalized crop with the renderer's stable floor/ceil rule.
 #[must_use]
 pub(crate) fn crop_bounds(source_width: u32, source_height: u32, crop: Crop) -> CropBounds {
@@ -179,6 +188,7 @@ pub(crate) struct ResolvedRasterGeometry {
     pub(crate) forward: ForwardAffine,
     pub(crate) inverse: InverseAffine,
     pub(crate) transformed_corners: [Point; 4],
+    pub(crate) motion_tile: Option<MotionTileParameters>,
 }
 
 impl ResolvedRasterGeometry {
@@ -214,6 +224,7 @@ impl ResolvedRasterGeometry {
 
 /// Resolves crop, sizing, and both affine directions once for all renderers.
 #[must_use]
+#[cfg(test)]
 pub(crate) fn resolve_raster_geometry(
     intrinsic: IntrinsicSize,
     crop: Crop,
@@ -222,6 +233,29 @@ pub(crate) fn resolve_raster_geometry(
     transform: Transform2D,
     canvas_width: u32,
     canvas_height: u32,
+) -> ResolvedRasterGeometry {
+    resolve_raster_geometry_with_motion_tile(
+        intrinsic,
+        crop,
+        cacheable_crop,
+        sizing,
+        transform,
+        canvas_width,
+        canvas_height,
+        None,
+    )
+}
+
+#[must_use]
+pub(crate) fn resolve_raster_geometry_with_motion_tile(
+    intrinsic: IntrinsicSize,
+    crop: Crop,
+    cacheable_crop: bool,
+    sizing: &CompiledSizing,
+    transform: Transform2D,
+    canvas_width: u32,
+    canvas_height: u32,
+    motion_tile: Option<MotionTileParameters>,
 ) -> ResolvedRasterGeometry {
     let source_width = intrinsic.width;
     let source_height = intrinsic.height;
@@ -248,19 +282,44 @@ pub(crate) fn resolve_raster_geometry(
             normalized_crop: crop,
         }
     };
-    let (effective_width, effective_height) = effective_dimensions(
+    let (base_effective_width, base_effective_height) = effective_dimensions(
         sizing,
         intrinsic.logical_width * source.normalized_crop.width,
         intrinsic.logical_height * source.normalized_crop.height,
         canvas_width,
         canvas_height,
     );
-    let logical_origin_x = intrinsic.offset_x;
-    let logical_origin_y = intrinsic.offset_y;
+    let base_logical_origin_x = intrinsic.offset_x;
+    let base_logical_origin_y = intrinsic.offset_y;
     let anchor_origin_x = intrinsic.anchor_offset_x;
     let anchor_origin_y = intrinsic.anchor_offset_y;
     let raster_scale_x = f64::from(source.width) / intrinsic.logical_width;
     let raster_scale_y = f64::from(source.height) / intrinsic.logical_height;
+    let base_raster_effective_width = base_effective_width * raster_scale_x;
+    let base_raster_effective_height = base_effective_height * raster_scale_y;
+    let (effective_width, effective_height, logical_origin_x, logical_origin_y) = motion_tile
+        .map_or(
+            (
+                base_effective_width,
+                base_effective_height,
+                base_logical_origin_x,
+                base_logical_origin_y,
+            ),
+            |tile| {
+                let virtual_width = base_effective_width * tile.width_factor;
+                let virtual_height = base_effective_height * tile.height_factor;
+                let virtual_raster_width = base_raster_effective_width * tile.width_factor;
+                let virtual_raster_height = base_raster_effective_height * tile.height_factor;
+                (
+                    virtual_width,
+                    virtual_height,
+                    base_logical_origin_x
+                        - tile.center_x * (virtual_raster_width - base_raster_effective_width),
+                    base_logical_origin_y
+                        - tile.center_y * (virtual_raster_height - base_raster_effective_height),
+                )
+            },
+        );
     let raster_effective_width = effective_width * raster_scale_x;
     let raster_effective_height = effective_height * raster_scale_y;
     let forward = ForwardAffine::for_transform(
@@ -301,6 +360,7 @@ pub(crate) fn resolve_raster_geometry(
         forward,
         inverse,
         transformed_corners,
+        motion_tile,
     }
 }
 

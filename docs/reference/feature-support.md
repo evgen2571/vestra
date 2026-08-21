@@ -31,6 +31,10 @@ not reduced renderer support.
 | Image crop/sizing as a mask | rejected in mask context | not serialized | use `mask.transform` instead | unsupported in v1 | unsupported in v1 |
 | Composition-space masks | not exposed | not serialized | not supported | unsupported | unsupported |
 | Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |
+| Motion Tile | `MotionTile`, dynamic scalar properties | `motion_tile` | pre-transform source sampling | supported | supported |
+| Directional Blur | `DirectionalBlur`, dynamic scalar properties | `directional_blur` | post-transform | supported | supported |
+| Radial Blur | `RadialBlur`, dynamic scalar properties | `radial_blur` | post-transform | supported | supported |
+| Chromatic Aberration | `ChromaticAberration`, dynamic scalar properties | `chromatic_aberration` | post-transform | supported | supported |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |
 

@@ -43,6 +43,24 @@ pub(super) fn compile(
                 radius: scalar!(radius, ScalarPropertyTarget::GaussianBlurRadius),
             }
         }
+        crate::project::Effect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            tile_center,
+            mirror_edges,
+            ..
+        } => crate::plan::CompiledEffect::MotionTile {
+            output_width_percent: scalar!(
+                output_width_percent,
+                ScalarPropertyTarget::MotionTileOutputWidthPercent
+            ),
+            output_height_percent: scalar!(
+                output_height_percent,
+                ScalarPropertyTarget::MotionTileOutputHeightPercent
+            ),
+            tile_center: *tile_center,
+            mirror_edges: *mirror_edges,
+        },
         crate::project::Effect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -66,6 +84,12 @@ pub(super) fn compile(
             anchor: *anchor,
             direction: *direction,
         },
+        crate::project::Effect::RadialBlur { amount, center, .. } => {
+            crate::plan::CompiledEffect::RadialBlur {
+                amount: scalar!(amount, ScalarPropertyTarget::RadialBlurAmount),
+                center: *center,
+            }
+        }
         crate::project::Effect::Glow {
             threshold,
             radius,

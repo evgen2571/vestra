@@ -315,6 +315,14 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
         | Effect::Saturation { amount, .. } => scalar(amount),
         Effect::Tint { amount, .. } => scalar(amount),
         Effect::GaussianBlur { radius, .. } => scalar(radius),
+        Effect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            ..
+        } => {
+            scalar(output_width_percent);
+            scalar(output_height_percent);
+        }
         Effect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -324,6 +332,7 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
             scalar(angle_degrees);
         }
         Effect::ZoomBlur { radius, .. } => scalar(radius),
+        Effect::RadialBlur { amount, .. } => scalar(amount),
         Effect::Glow {
             threshold,
             radius,

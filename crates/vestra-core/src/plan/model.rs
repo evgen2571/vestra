@@ -378,6 +378,12 @@ pub enum CompiledEffect {
     GaussianBlur {
         radius: CompiledScalarProperty,
     },
+    MotionTile {
+        output_width_percent: CompiledScalarProperty,
+        output_height_percent: CompiledScalarProperty,
+        tile_center: Point,
+        mirror_edges: bool,
+    },
     DirectionalBlur {
         radius: CompiledScalarProperty,
         angle_degrees: CompiledScalarProperty,
@@ -387,6 +393,10 @@ pub enum CompiledEffect {
         samples: u8,
         anchor: Point,
         direction: crate::project::ZoomBlurDirection,
+    },
+    RadialBlur {
+        amount: CompiledScalarProperty,
+        center: Point,
     },
     Glow {
         threshold: CompiledScalarProperty,
@@ -448,10 +458,12 @@ impl CompiledEffect {
             Self::Saturation { .. } => crate::effect_definition::VisualEffectKind::Saturation,
             Self::Tint { .. } => crate::effect_definition::VisualEffectKind::Tint,
             Self::GaussianBlur { .. } => crate::effect_definition::VisualEffectKind::GaussianBlur,
+            Self::MotionTile { .. } => crate::effect_definition::VisualEffectKind::MotionTile,
             Self::DirectionalBlur { .. } => {
                 crate::effect_definition::VisualEffectKind::DirectionalBlur
             }
             Self::ZoomBlur { .. } => crate::effect_definition::VisualEffectKind::ZoomBlur,
+            Self::RadialBlur { .. } => crate::effect_definition::VisualEffectKind::RadialBlur,
             Self::Glow { .. } => crate::effect_definition::VisualEffectKind::Glow,
             Self::Bloom { .. } => crate::effect_definition::VisualEffectKind::Bloom,
             Self::ChromaticAberration { .. } => {
@@ -495,6 +507,20 @@ impl CompiledEffect {
             Self::GaussianBlur { radius } => {
                 visit(ScalarPropertyTarget::GaussianBlurRadius, radius)
             }
+            Self::MotionTile {
+                output_width_percent,
+                output_height_percent,
+                ..
+            } => {
+                visit(
+                    ScalarPropertyTarget::MotionTileOutputWidthPercent,
+                    output_width_percent,
+                );
+                visit(
+                    ScalarPropertyTarget::MotionTileOutputHeightPercent,
+                    output_height_percent,
+                );
+            }
             Self::DirectionalBlur {
                 radius,
                 angle_degrees,
@@ -506,6 +532,9 @@ impl CompiledEffect {
                 );
             }
             Self::ZoomBlur { radius, .. } => visit(ScalarPropertyTarget::ZoomBlurRadius, radius),
+            Self::RadialBlur { amount, .. } => {
+                visit(ScalarPropertyTarget::RadialBlurAmount, amount)
+            }
             Self::Glow {
                 threshold,
                 radius,

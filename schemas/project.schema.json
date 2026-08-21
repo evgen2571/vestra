@@ -708,14 +708,14 @@
         "layer": {
           "type": "integer"
         },
-        "matte": {
-          "$ref": "#/$defs/track_matte"
-        },
         "masks": {
           "items": {
             "$ref": "#/$defs/mask"
           },
           "type": "array"
+        },
+        "matte": {
+          "$ref": "#/$defs/track_matte"
         },
         "opacity": {
           "$ref": "#/$defs/opacity_property"
@@ -1042,10 +1042,16 @@
           "$ref": "#/$defs/gaussian_blur_effect"
         },
         {
+          "$ref": "#/$defs/motion_tile_effect"
+        },
+        {
           "$ref": "#/$defs/directional_blur_effect"
         },
         {
           "$ref": "#/$defs/zoom_blur_effect"
+        },
+        {
+          "$ref": "#/$defs/radial_blur_effect"
         },
         {
           "$ref": "#/$defs/glow_effect"
@@ -1367,30 +1373,6 @@
         }
       ]
     },
-    "track_matte": {
-      "additionalProperties": false,
-      "properties": {
-        "invert": {
-          "default": false,
-          "type": "boolean"
-        },
-        "mode": {
-          "enum": [
-            "alpha",
-            "luma"
-          ]
-        },
-        "source_layer": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "source_layer",
-        "mode"
-      ],
-      "type": "object"
-    },
     "mask": {
       "additionalProperties": false,
       "properties": {
@@ -1633,6 +1615,87 @@
         "shutter_angle",
         "max_radius",
         "samples"
+      ],
+      "type": "object"
+    },
+    "motion_tile_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mirror_edges": {
+          "type": "boolean"
+        },
+        "output_height_percent": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 800.0,
+                  "minimum": 100.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 800.0,
+                        "minimum": 100.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "output_width_percent": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 800.0,
+                  "minimum": 100.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 800.0,
+                        "minimum": 100.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "tile_center": {
+          "$ref": "#/$defs/unit_point"
+        },
+        "type": {
+          "const": "motion_tile"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "output_width_percent",
+        "output_height_percent",
+        "tile_center",
+        "mirror_edges"
       ],
       "type": "object"
     },
@@ -2267,6 +2330,55 @@
           "$ref": "#/$defs/seeded_preset"
         }
       ]
+    },
+    "radial_blur_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 32.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 32.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "center": {
+          "$ref": "#/$defs/unit_point"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "radial_blur"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount",
+        "center"
+      ],
+      "type": "object"
     },
     "saturation_effect": {
       "additionalProperties": false,
@@ -3202,6 +3314,30 @@
         "type",
         "colour",
         "amount"
+      ],
+      "type": "object"
+    },
+    "track_matte": {
+      "additionalProperties": false,
+      "properties": {
+        "invert": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "alpha",
+            "luma"
+          ]
+        },
+        "source_layer": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_layer",
+        "mode"
       ],
       "type": "object"
     },

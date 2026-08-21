@@ -14,7 +14,7 @@ pub(super) use effects::{
 };
 pub(super) use source::{
     LayerParameters, MaskFeatherParameters, MaskParameters, ParticleParameters,
-    Spectrum2DParameters, mask, mask_feather, particles, raster, spectrum2d, surface,
+    Spectrum2DParameters, mask, mask_feather, motion_tile, particles, raster, spectrum2d, surface,
 };
 
 const fn max_parameter_size(left: usize, right: usize) -> u64 {

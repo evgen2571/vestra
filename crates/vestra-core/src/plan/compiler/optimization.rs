@@ -85,6 +85,15 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
         | CompiledEffect::Tint { amount, .. }
         | CompiledEffect::GaussianBlur { radius: amount }
         | CompiledEffect::ZoomBlur { radius: amount, .. } => normalize_track(amount),
+        CompiledEffect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            ..
+        } => {
+            normalize_track(&mut output_width_percent.authored_track)
+                + normalize_track(&mut output_height_percent.authored_track)
+        }
+        CompiledEffect::RadialBlur { amount, .. } => normalize_track(&mut amount.authored_track),
         CompiledEffect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -167,6 +176,16 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         CompiledEffect::GaussianBlur { radius } => {
             static_track(radius) && gaussian_radius_is_identity(radius.base_value)
         }
+        CompiledEffect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            ..
+        } => {
+            static_track(output_width_percent)
+                && static_track(output_height_percent)
+                && output_width_percent.base_value == 100.0
+                && output_height_percent.base_value == 100.0
+        }
         CompiledEffect::ColorAdjust {
             exposure,
             gamma,
@@ -184,6 +203,7 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         }
         CompiledEffect::DirectionalBlur { radius, .. }
         | CompiledEffect::ZoomBlur { radius, .. }
+        | CompiledEffect::RadialBlur { amount: radius, .. }
         | CompiledEffect::ChromaticAberration { amount: radius, .. } => {
             static_track(radius) && sampling_blur_radius_is_identity(radius.base_value)
         }

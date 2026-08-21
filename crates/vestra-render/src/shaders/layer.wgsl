@@ -7,6 +7,7 @@ struct Params {
     inverse_row0: vec4<f32>, inverse_row1: vec4<f32>,
     colour_row0: vec4<f32>, colour_row1: vec4<f32>, colour_row2: vec4<f32>,
     colour_offset: vec4<f32>, solid_or_background: vec4<f32>,
+    motion_tile: vec4<f32>, motion_tile_flags: vec4<u32>,
 };
 @group(0) @binding(0) var source: texture_2d<f32>;
 @group(0) @binding(1) var output: texture_storage_2d<rgba8unorm, write>;
@@ -60,6 +61,16 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         write_pixel(coord, vec4<f32>(0.0)); return;
     }
     let local = mapped - local_origin;
-    let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + local / params.solid_or_background.zw * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
+    let tile_size = params.motion_tile.xy;
+    let base_size = params.solid_or_background.zw / tile_size;
+    let base_origin = local_origin + params.motion_tile.zw * (params.solid_or_background.zw - base_size);
+    var tile_coordinate = (mapped - base_origin) / base_size;
+    let tile_index = floor(tile_coordinate);
+    tile_coordinate = tile_coordinate - tile_index;
+    if (params.motion_tile_flags.x != 0u) {
+        if (i32(tile_index.x) % 2 != 0) { tile_coordinate.x = 1.0 - tile_coordinate.x; }
+        if (i32(tile_index.y) % 2 != 0) { tile_coordinate.y = 1.0 - tile_coordinate.y; }
+    }
+    let source_position = vec2<f32>(params.crop.x * f32(params.source_width), params.crop.y * f32(params.source_height)) + tile_coordinate * vec2<f32>(params.crop.z * f32(params.source_width), params.crop.w * f32(params.source_height));
     write_pixel(coord, transformed_colour(bilinear(source_position)));
 }

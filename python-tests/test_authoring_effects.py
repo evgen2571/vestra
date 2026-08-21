@@ -52,6 +52,8 @@ def _valid_generic_parameters(definition: object) -> dict[str, object]:
             values[str(parameter["name"])] = int(parameter["integer_minimum"])
         elif kind == "point2d":
             values[str(parameter["name"])] = Point(0.5, 0.5)
+        elif kind == "boolean":
+            values[str(parameter["name"])] = True
         elif kind == "enum":
             values[str(parameter["name"])] = str(parameter["enum_values"][0])
         elif kind == "active_interval":
@@ -529,7 +531,7 @@ def test_generic_effect_catalog_is_read_only_and_complete() -> None:
     assert len(ids) == len(set(ids))
     assert set(ids) == {
         "brightness", "contrast", "saturation", "tint", "gaussian_blur", "directional_blur",
-        "zoom_blur", "glow", "chromatic_aberration", "vignette", "sharpen", "color_adjust",
+        "motion_tile", "zoom_blur", "radial_blur", "glow", "chromatic_aberration", "vignette", "sharpen", "color_adjust",
         "camera_shake", "motion_blur", "bloom",
     }
     with pytest.raises(TypeError):

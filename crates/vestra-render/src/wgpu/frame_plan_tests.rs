@@ -309,6 +309,16 @@ fn track_matte_is_lowered_to_gpu_texture_operations() {
     );
     assert!(plan.layers[0].masks[0].invert);
     plan.validate(0).expect("track matte frame plan validates");
+
+    let cached_plan = GpuFramePlan::build_with_static_cache(
+        &frame,
+        &std::collections::BTreeSet::from([3]),
+        &std::collections::BTreeSet::new(),
+    );
+    assert!(cached_plan.operations.iter().any(|operation| matches!(
+        operation,
+        GpuOperation::CompositeCachedLayer { cache_key: 3, .. }
+    )));
 }
 
 #[test]

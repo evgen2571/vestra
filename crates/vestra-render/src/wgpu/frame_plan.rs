@@ -919,6 +919,7 @@ fn append_layer(
             next_value,
             &mut mask_state_value,
             Some(scope_layers),
+            cached_layers,
         );
         append_composite(
             layer_index,
@@ -1052,6 +1053,7 @@ fn append_layer(
         next_value,
         &mut mask_state_value,
         Some(scope_layers),
+        cached_layers,
     );
     if cache_targets.contains(&layer.compiled_layer_index) {
         operations.push(GpuOperation::StoreStaticLayer {
@@ -1086,6 +1088,7 @@ fn append_masks(
     next_value: &mut u64,
     mask_state_value: &mut Option<u64>,
     source_scope_layers: Option<&[crate::plan::EvaluatedLayer]>,
+    cached_layers: &BTreeSet<usize>,
 ) {
     fn source_group_depth(source: &crate::plan::EvaluatedSource) -> usize {
         fn layer_depth(layer: &crate::plan::EvaluatedLayer) -> usize {
@@ -1169,6 +1172,7 @@ fn append_masks(
                     parameter_count,
                     next_value,
                     source_scope_layers,
+                    cached_layers,
                 );
                 (source_layer_index, true)
             }
@@ -1263,6 +1267,7 @@ fn append_mask_source(
     parameter_count: &mut u32,
     next_value: &mut u64,
     source_scope_layers: Option<&[crate::plan::EvaluatedLayer]>,
+    cached_layers: &BTreeSet<usize>,
 ) {
     let layer_index = layers.len();
     layers.push(layer.clone());
@@ -1291,7 +1296,7 @@ fn append_mask_source(
                     next_value,
                     &mut group_canvas,
                     &mut group_value,
-                    &BTreeSet::new(),
+                    cached_layers,
                     &BTreeSet::new(),
                 );
             }

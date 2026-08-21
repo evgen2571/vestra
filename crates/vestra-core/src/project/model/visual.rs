@@ -415,6 +415,8 @@ pub struct Clip {
     pub effects: Vec<Effect>,
     #[serde(default)]
     pub masks: Vec<super::Mask>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matte: Option<super::TrackMatte>,
     #[serde(default)]
     pub blend_mode: BlendMode,
     #[serde(default, deserialize_with = "optional_non_null")]

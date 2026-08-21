@@ -120,6 +120,7 @@ mod tests {
         CompiledLayer {
             compiled_identity: 0,
             id: "layer".into(),
+            visible: true,
             start_nanos: 5_000_000_000,
             duration_nanos: 2_000_000_000,
             start_frame: 120,
@@ -160,6 +161,7 @@ mod tests {
             opacity_contributions: vec![],
             effects: vec![],
             masks: vec![],
+            matte: None,
             blend_mode: BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         }

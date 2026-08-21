@@ -1,6 +1,6 @@
-use std::{sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use image::{Rgba, RgbaImage};
+use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::plan::{
     ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMaskInput,
@@ -83,6 +83,7 @@ pub fn compose(
     if let Some(started) = started {
         timings.layer_composition += started.elapsed();
     }
+    let mut matte_cache = HashMap::new();
     compose_layers(
         &frame.layers,
         frame.width,
@@ -92,6 +93,7 @@ pub fn compose(
         surfaces,
         compositions,
         static_layers,
+        &mut matte_cache,
         timings,
         profiling_enabled,
         0,
@@ -117,16 +119,21 @@ fn compose_layers(
     surfaces: &mut EffectSurfacePool,
     compositions: &mut CompositionSurfacePool,
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    matte_cache: &mut HashMap<usize, RgbaImage>,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
     depth: usize,
     stats: &mut ComposeStats,
 ) {
     for layer in layers {
+        if !layer.visible {
+            continue;
+        }
         if let EvaluatedSource::Group { composition } = &layer.source {
             render_group(
                 layer,
                 composition,
+                layers,
                 layer.transform,
                 width,
                 height,
@@ -135,6 +142,7 @@ fn compose_layers(
                 surfaces,
                 compositions,
                 static_layers,
+                matte_cache,
                 timings,
                 profiling_enabled,
                 depth,
@@ -192,6 +200,20 @@ fn compose_layers(
                 layer,
                 compositions,
                 static_layers,
+                matte_cache,
+                depth,
+                stats,
+                timings,
+                profiling_enabled,
+            );
+            apply_track_matte(
+                surfaces,
+                assets,
+                layer,
+                layers,
+                compositions,
+                static_layers,
+                matte_cache,
                 depth,
                 stats,
                 timings,
@@ -263,6 +285,20 @@ fn compose_layers(
             layer,
             compositions,
             static_layers,
+            matte_cache,
+            depth,
+            stats,
+            timings,
+            profiling_enabled,
+        );
+        apply_track_matte(
+            surfaces,
+            assets,
+            layer,
+            layers,
+            compositions,
+            static_layers,
+            matte_cache,
             depth,
             stats,
             timings,
@@ -287,6 +323,7 @@ fn compose_layers(
 fn render_group(
     layer: &EvaluatedLayer,
     composition: &crate::plan::EvaluatedComposition,
+    scope_layers: &[EvaluatedLayer],
     transform: crate::animation::Transform2D,
     width: u32,
     height: u32,
@@ -295,6 +332,7 @@ fn render_group(
     surfaces: &mut EffectSurfacePool,
     compositions: &mut CompositionSurfacePool,
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    matte_cache: &mut HashMap<usize, RgbaImage>,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
     depth: usize,
@@ -324,6 +362,7 @@ fn render_group(
         surfaces,
         compositions,
         static_layers,
+        matte_cache,
         timings,
         profiling_enabled,
         depth + 1,
@@ -358,6 +397,20 @@ fn render_group(
         layer,
         compositions,
         static_layers,
+        matte_cache,
+        depth,
+        stats,
+        timings,
+        profiling_enabled,
+    );
+    apply_track_matte(
+        surfaces,
+        assets,
+        layer,
+        scope_layers,
+        compositions,
+        static_layers,
+        matte_cache,
         depth,
         stats,
         timings,
@@ -445,11 +498,175 @@ fn composite_cached_surface(
 fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
     matches!(layer.blend_mode, crate::project::BlendMode::Normal)
         && layer.masks.is_empty()
+        && layer.matte.is_none()
         && !matches!(layer.source, EvaluatedSource::ParticleSystem { .. })
         && layer
             .effects
             .iter()
             .all(EvaluatedEffect::is_basic_colour_effect)
+}
+
+fn apply_track_matte(
+    surfaces: &mut EffectSurfacePool,
+    assets: &mut PreparedAssets,
+    layer: &EvaluatedLayer,
+    layers: &[EvaluatedLayer],
+    compositions: &mut CompositionSurfacePool,
+    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    matte_cache: &mut HashMap<usize, RgbaImage>,
+    depth: usize,
+    stats: &mut ComposeStats,
+    timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
+) {
+    let Some(matte) = &layer.matte else { return };
+    let Some(source) = layers
+        .iter()
+        .find(|candidate| candidate.compiled_layer_index == matte.source_layer_identity)
+    else {
+        for pixel in surfaces.current().pixels_mut() {
+            pixel[3] = 0;
+        }
+        return;
+    };
+    let width = surfaces.current().width();
+    let height = surfaces.current().height();
+    let mut saved_consumer = compositions.acquire(depth + 1, width, height);
+    saved_consumer
+        .copy_from(surfaces.current(), 0, 0)
+        .expect("matching matte save surface dimensions");
+    if let Some(cached) = matte_cache.get(&source.compiled_layer_index) {
+        surfaces
+            .mask_local_surface()
+            .copy_from(cached, 0, 0)
+            .expect("matching cached matte surface dimensions");
+    } else {
+        render_isolated_layer(
+            source,
+            layers,
+            assets,
+            surfaces,
+            compositions,
+            static_layers,
+            matte_cache,
+            depth + 1,
+            stats,
+            timings,
+            profiling_enabled,
+        );
+        matte_cache.insert(
+            source.compiled_layer_index,
+            surfaces.mask_local_surface().clone(),
+        );
+    }
+    surfaces
+        .current()
+        .copy_from(&saved_consumer, 0, 0)
+        .expect("matching matte restore surface dimensions");
+    compositions.release(depth + 1, saved_consumer);
+    let mode = match matte.mode {
+        crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
+        crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
+    };
+    surfaces.apply_external_matte(mode, matte.invert);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_isolated_layer(
+    layer: &EvaluatedLayer,
+    scope_layers: &[EvaluatedLayer],
+    assets: &mut PreparedAssets,
+    surfaces: &mut EffectSurfacePool,
+    compositions: &mut CompositionSurfacePool,
+    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    matte_cache: &mut HashMap<usize, RgbaImage>,
+    depth: usize,
+    stats: &mut ComposeStats,
+    timings: &mut CpuHotPathTimings,
+    profiling_enabled: bool,
+) {
+    surfaces.clear();
+    if let EvaluatedSource::Group { composition } = &layer.source {
+        let width = surfaces.current().width();
+        let height = surfaces.current().height();
+        let mut group_surface = compositions.acquire(depth + 1, width, height);
+        compose_layers(
+            &composition.layers,
+            width,
+            height,
+            &mut group_surface,
+            assets,
+            surfaces,
+            compositions,
+            static_layers,
+            matte_cache,
+            timings,
+            profiling_enabled,
+            depth + 2,
+            stats,
+        );
+        crate::cpu::raster::draw_surface(
+            surfaces.current(),
+            &group_surface,
+            layer.transform,
+            if uses_direct_colour_path(layer) {
+                layer.colour_transform
+            } else {
+                ColourTransform::default()
+            },
+        );
+        compositions.release(depth + 1, group_surface);
+    } else {
+        draw_layer(
+            surfaces.current(),
+            assets,
+            layer,
+            1.0,
+            if uses_direct_colour_path(layer) {
+                layer.colour_transform
+            } else {
+                ColourTransform::default()
+            },
+            timings,
+            profiling_enabled,
+        );
+    }
+    if !uses_direct_colour_path(layer) {
+        effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
+    }
+    apply_masks(
+        surfaces,
+        assets,
+        layer,
+        compositions,
+        static_layers,
+        matte_cache,
+        depth,
+        stats,
+        timings,
+        profiling_enabled,
+    );
+    apply_track_matte(
+        surfaces,
+        assets,
+        layer,
+        scope_layers,
+        compositions,
+        static_layers,
+        matte_cache,
+        depth,
+        stats,
+        timings,
+        profiling_enabled,
+    );
+    if layer.opacity != 1.0 {
+        for pixel in surfaces.current().pixels_mut() {
+            pixel[3] = (f64::from(pixel[3]) * layer.opacity)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+    }
+    surfaces.copy_current_to_mask_local();
 }
 
 fn apply_masks(
@@ -458,6 +675,7 @@ fn apply_masks(
     layer: &EvaluatedLayer,
     compositions: &mut CompositionSurfacePool,
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    matte_cache: &mut HashMap<usize, RgbaImage>,
     depth: usize,
     stats: &mut ComposeStats,
     timings: &mut CpuHotPathTimings,
@@ -476,6 +694,7 @@ fn apply_masks(
             EvaluatedMaskInput::Shape { shape_index } => {
                 let mask_layer = EvaluatedLayer {
                     compiled_layer_index: usize::MAX,
+                    visible: true,
                     content_dependency: TemporalDependency::Static,
                     source: EvaluatedSource::Shape {
                         shape_index,
@@ -485,6 +704,7 @@ fn apply_masks(
                     opacity: 1.0,
                     effects: Vec::new(),
                     masks: Vec::new(),
+                    matte: None,
                     colour_transform: ColourTransform::default(),
                     blend_mode: crate::project::BlendMode::Normal,
                 };
@@ -524,12 +744,14 @@ fn apply_masks(
             EvaluatedMaskInput::Source { source, mode } => {
                 let mask_layer = EvaluatedLayer {
                     compiled_layer_index: usize::MAX,
+                    visible: true,
                     content_dependency: TemporalDependency::Dynamic,
                     source: (*source).clone(),
                     transform: mask.transform,
                     opacity: 1.0,
                     effects: Vec::new(),
                     masks: Vec::new(),
+                    matte: None,
                     colour_transform: ColourTransform::default(),
                     blend_mode: crate::project::BlendMode::Normal,
                 };
@@ -551,6 +773,7 @@ fn apply_masks(
                         surfaces,
                         compositions,
                         static_layers,
+                        matte_cache,
                         timings,
                         profiling_enabled,
                         depth + 1,
@@ -643,6 +866,7 @@ mod tests {
     fn layer(opacity: f64, blend_mode: crate::project::BlendMode) -> EvaluatedLayer {
         EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: TemporalDependency::Static,
             source: EvaluatedSource::SolidColor {
                 colour: [0, 0, 0, 255],
@@ -651,6 +875,7 @@ mod tests {
             opacity,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode,
         }
@@ -711,6 +936,7 @@ mod tests {
     fn image_layer(index: usize, position: crate::domain::Point) -> EvaluatedLayer {
         EvaluatedLayer {
             compiled_layer_index: index,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::Image {
                 asset_index: 0,
@@ -730,6 +956,7 @@ mod tests {
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }
@@ -744,12 +971,14 @@ mod tests {
     fn solid_layer(index: usize, colour: [u8; 4]) -> EvaluatedLayer {
         EvaluatedLayer {
             compiled_layer_index: index,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::SolidColor { colour },
             transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }
@@ -763,6 +992,7 @@ mod tests {
     ) -> EvaluatedLayer {
         EvaluatedLayer {
             compiled_layer_index: index,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::Group {
                 composition: EvaluatedComposition { layers: children },
@@ -772,6 +1002,7 @@ mod tests {
             colour_transform: ColourTransform::from_effects(effects.clone()),
             effects,
             masks: Vec::new(),
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
         }
     }
@@ -950,12 +1181,14 @@ mod tests {
         let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
         let child = |index, colour| EvaluatedLayer {
             compiled_layer_index: index,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::SolidColor { colour },
             transform: identity_transform(),
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
@@ -966,6 +1199,7 @@ mod tests {
             height: 2,
             layers: vec![EvaluatedLayer {
                 compiled_layer_index: 50,
+                visible: true,
                 content_dependency: TemporalDependency::Dynamic,
                 source: EvaluatedSource::Group {
                     composition: EvaluatedComposition {
@@ -973,6 +1207,7 @@ mod tests {
                             child(51, [255, 0, 0, 128]),
                             EvaluatedLayer {
                                 compiled_layer_index: 52,
+                                visible: true,
                                 content_dependency: TemporalDependency::Dynamic,
                                 source: EvaluatedSource::Group {
                                     composition: EvaluatedComposition {
@@ -986,6 +1221,7 @@ mod tests {
                                 opacity: 1.0,
                                 effects: Vec::new(),
                                 masks: Vec::new(),
+                                matte: None,
                                 colour_transform: ColourTransform::default(),
                                 blend_mode: crate::project::BlendMode::Normal,
                             },
@@ -999,6 +1235,7 @@ mod tests {
                 opacity: 0.5,
                 effects: Vec::new(),
                 masks: Vec::new(),
+                matte: None,
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
             }],
@@ -1049,6 +1286,7 @@ mod tests {
             1,
             vec![EvaluatedLayer {
                 compiled_layer_index: 2,
+                visible: true,
                 content_dependency: TemporalDependency::Dynamic,
                 source: EvaluatedSource::SolidColor {
                     colour: [80, 110, 160, 255],
@@ -1057,6 +1295,7 @@ mod tests {
                 opacity: 1.0,
                 effects: Vec::new(),
                 masks: Vec::new(),
+                matte: None,
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
             }],
@@ -1275,6 +1514,7 @@ mod tests {
         };
         let particle = EvaluatedLayer {
             compiled_layer_index: 2,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::ParticleSystem {
                 system: std::sync::Arc::new(particle_system),
@@ -1285,6 +1525,7 @@ mod tests {
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
@@ -1304,6 +1545,7 @@ mod tests {
 
         let spectrum = EvaluatedLayer {
             compiled_layer_index: 4,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::Spectrum2D {
                 bands: vec![1.0, 0.75, 0.5],
@@ -1321,6 +1563,7 @@ mod tests {
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };
@@ -1579,6 +1822,7 @@ mod tests {
     fn basic_colour_effects_keep_the_direct_render_path() {
         let base = EvaluatedLayer {
             compiled_layer_index: 0,
+            visible: true,
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::SolidColor {
                 colour: [0, 0, 0, 255],
@@ -1587,6 +1831,7 @@ mod tests {
             opacity: 1.0,
             effects: vec![EvaluatedEffect::Brightness { amount: 0.1 }],
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         };

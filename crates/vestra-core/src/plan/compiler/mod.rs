@@ -93,7 +93,7 @@ pub fn compile(
             .count(),
         ..CompilationStats::default()
     };
-    for clip in project.visual.clips.iter().filter(|clip| clip.visible) {
+    for clip in &project.visual.clips {
         layers.push(clips::compile_with_preset(
             clip,
             &validated,
@@ -128,6 +128,7 @@ pub fn compile(
     compilation.compiled_transition_association_count = compilation
         .compiled_transition_association_count
         .saturating_add(project.visual.transitions.len() as u64 * 2);
+    resolve_mattes(&mut layers)?;
     for flash in &project.visual.flashes {
         layers.push(flashes::compile(
             flash,
@@ -265,6 +266,7 @@ pub(super) fn finalize_composition_layers(
     effective_window: ActiveLayerWindow,
 ) -> Result<(), Diagnostic> {
     optimization::normalize(layers, post_effects, composition_duration, compilation);
+    propagate_matte_dependencies(layers);
     limits::enforce_active_layer_limit(
         layers,
         composition_end_frame,
@@ -272,4 +274,49 @@ pub(super) fn finalize_composition_layers(
         effective_window.start_frame,
         effective_window.end_frame,
     )
+}
+
+pub(super) fn resolve_mattes(layers: &mut [crate::plan::CompiledLayer]) -> Result<(), Diagnostic> {
+    let identities = layers
+        .iter()
+        .map(|layer| (layer.id.clone(), layer.compiled_identity))
+        .collect::<BTreeMap<_, _>>();
+    for layer in layers.iter_mut() {
+        if let Some(matte) = &mut layer.matte {
+            if matte.source_layer_identity == usize::MAX {
+                matte.source_layer_identity =
+                    *identities.get(&matte.source_layer_id).ok_or_else(|| {
+                        Diagnostic::error(
+                            "VESTRA-PLAN-MATTE-SOURCE",
+                            Category::Semantic,
+                            "validated track matte source could not be resolved",
+                            format!("/visual/clips/{}/matte/source_layer", layer.id),
+                        )
+                    })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn propagate_matte_dependencies(layers: &mut [crate::plan::CompiledLayer]) {
+    for _ in 0..layers.len() {
+        let dependencies = layers
+            .iter()
+            .map(|layer| (layer.compiled_identity, layer.content_dependency))
+            .collect::<BTreeMap<_, _>>();
+        let mut changed = false;
+        for layer in layers.iter_mut() {
+            if let Some(matte) = &layer.matte {
+                if let Some(dependency) = dependencies.get(&matte.source_layer_identity) {
+                    let combined = layer.content_dependency.combine(*dependency);
+                    changed |= combined != layer.content_dependency;
+                    layer.content_dependency = combined;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
 }

@@ -340,6 +340,7 @@ pub(super) fn compile(
     Ok(CompiledLayer {
         compiled_identity,
         id: clip.id.clone(),
+        visible: clip.visible,
         start_nanos,
         duration_nanos: end_nanos - start_nanos,
         start_frame: time::first_frame_at_or_after(start_nanos, validated.frame_rate)?,
@@ -367,6 +368,15 @@ pub(super) fn compile(
         opacity_contributions: Vec::new(),
         effects,
         masks,
+        matte: clip
+            .matte
+            .as_ref()
+            .map(|matte| crate::plan::CompiledTrackMatte {
+                source_layer_id: matte.source_layer.clone(),
+                source_layer_identity: usize::MAX,
+                mode: matte.mode,
+                invert: matte.invert,
+            }),
         blend_mode: clip.blend_mode,
         content_dependency: crate::plan::TemporalDependency::Static,
     })
@@ -441,7 +451,7 @@ fn compile_group(
         .min(duration_nanos);
     let effective_visible_window = (visible_start, visible_end.max(visible_start));
     let mut layers = Vec::new();
-    for child in group.clips.iter().filter(|clip| clip.visible) {
+    for child in &group.clips {
         layers.push(compile_with_preset(
             child,
             validated,
@@ -468,6 +478,7 @@ fn compile_group(
         &mut layers,
         scalar_signal_interner,
     )?;
+    super::resolve_mattes(&mut layers)?;
     compilation.compiled_transition_association_count = compilation
         .compiled_transition_association_count
         .saturating_add(group.transitions.len() as u64 * 2);

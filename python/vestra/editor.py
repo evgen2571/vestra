@@ -14,7 +14,7 @@ from .authoring.values import BlendMode, DurationMode, Quality, color_to_canonic
 from .lowering import LoweringContext
 from .audio import AudioTimeline
 from .effects import EffectStack
-from .masks import MaskCollection
+from .masks import MaskCollection, MatteMode
 from .flashes import FlashCollection
 from .presets import Preset, PresetCollection
 from .properties import BindableScalarProperty, ScalarProperty, Transform
@@ -113,6 +113,7 @@ class Layer:
         "_blend_mode",
         "_effects",
         "_masks",
+        "_matte",
         "_presets",
     )
 
@@ -154,6 +155,7 @@ class Layer:
         self._blend_mode = blend_mode
         self._effects = EffectStack("layer")
         self._masks = MaskCollection()
+        self._matte: tuple[Layer, MatteMode, bool] | None = None
         self._presets = PresetCollection(self)
 
     @property
@@ -281,6 +283,26 @@ class Layer:
     @property
     def masks(self) -> MaskCollection:
         return self._masks
+
+    def set_matte(
+        self, matte: "Layer", *, mode: MatteMode | str = MatteMode.ALPHA, invert: bool = False
+    ) -> None:
+        if not isinstance(matte, Layer):
+            raise TypeError("matte must be a Layer")
+        if matte.composition is not self.composition:
+            raise ValueError("matte layer must belong to the same composition")
+        if matte is self:
+            raise ValueError("a layer cannot use itself as a matte")
+        try:
+            resolved = MatteMode(mode)
+        except ValueError as error:
+            raise ValueError("matte mode must be 'alpha' or 'luma'") from error
+        if not isinstance(invert, bool):
+            raise TypeError("invert must be a boolean")
+        self._matte = (matte, resolved, invert)
+
+    def clear_matte(self) -> None:
+        self._matte = None
 
     @property
     def presets(self) -> PresetCollection:

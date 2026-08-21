@@ -29,6 +29,7 @@ fn static_frame(
             .into_iter()
             .map(|compiled_layer_index| EvaluatedLayer {
                 compiled_layer_index,
+                visible: true,
                 content_dependency: TemporalDependency::Static,
                 transform: crate::animation::Transform2D::identity(
                     crate::domain::Point { x: 0.5, y: 0.5 },
@@ -40,6 +41,7 @@ fn static_frame(
                 opacity: 1.0,
                 effects: Vec::new(),
                 masks: Vec::new(),
+                matte: None,
                 colour_transform: ColourTransform::default(),
                 blend_mode: crate::project::BlendMode::Normal,
             })
@@ -68,6 +70,7 @@ fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available
         height: plan.canvas.height,
         layers: vec![EvaluatedLayer {
             compiled_layer_index: 99,
+            visible: true,
             content_dependency: TemporalDependency::Static,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -79,6 +82,7 @@ fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available
             opacity: 0.75,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Screen,
         }],
@@ -125,6 +129,7 @@ fn gpu_in_flight_static_cache_population_reserves_one_key_when_an_adapter_is_ava
         height: plan.canvas.height,
         layers: vec![EvaluatedLayer {
             compiled_layer_index: 101,
+            visible: true,
             content_dependency: TemporalDependency::Static,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -136,6 +141,7 @@ fn gpu_in_flight_static_cache_population_reserves_one_key_when_an_adapter_is_ava
             opacity: 1.0,
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             colour_transform: ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],

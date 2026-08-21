@@ -511,6 +511,7 @@ mod generic_tests {
         CompiledLayer {
             compiled_identity: 0,
             id: id.to_owned(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 20_000_000_000,
             start_frame: 0,
@@ -538,6 +539,7 @@ mod generic_tests {
             opacity_contributions: Vec::new(),
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         }

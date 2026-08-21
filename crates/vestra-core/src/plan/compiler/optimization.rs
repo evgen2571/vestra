@@ -606,6 +606,7 @@ mod tests {
         let mut layer = CompiledLayer {
             compiled_identity: 0,
             id: "test".into(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 10,
             start_frame: 0,
@@ -624,6 +625,7 @@ mod tests {
             opacity_contributions: vec![],
             effects: vec![],
             masks: vec![],
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -641,6 +643,7 @@ mod tests {
         let mut layer = CompiledLayer {
             compiled_identity: 0,
             id: "shape".into(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 10,
             start_frame: 0,
@@ -657,6 +660,7 @@ mod tests {
             opacity_contributions: vec![],
             effects: vec![],
             masks: vec![],
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -674,6 +678,7 @@ mod tests {
         let mut layer = CompiledLayer {
             compiled_identity: 0,
             id: "text".into(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 10,
             start_frame: 0,
@@ -690,6 +695,7 @@ mod tests {
             opacity_contributions: vec![],
             effects: vec![],
             masks: vec![],
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -707,6 +713,7 @@ mod tests {
         let mut layer = CompiledLayer {
             compiled_identity: 0,
             id: "test".into(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 10,
             start_frame: 0,
@@ -725,6 +732,7 @@ mod tests {
             opacity_contributions: vec![],
             effects: vec![],
             masks: vec![],
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -797,6 +805,7 @@ mod tests {
         let mut layer = CompiledLayer {
             compiled_identity: 0,
             id: "test".into(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 10,
             start_frame: 0,
@@ -833,6 +842,7 @@ mod tests {
             })
             .collect(),
             masks: vec![],
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };
@@ -861,6 +871,7 @@ mod tests {
         let mut layer = CompiledLayer {
             compiled_identity: 0,
             id: "test".into(),
+            visible: true,
             start_nanos: 0,
             duration_nanos: 10,
             start_frame: 0,
@@ -903,6 +914,7 @@ mod tests {
                 },
             ],
             masks: vec![],
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             content_dependency: TemporalDependency::Static,
         };

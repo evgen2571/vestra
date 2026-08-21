@@ -43,7 +43,7 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
         ids: &mut BTreeSet<&'a str>,
         video_ids: &mut BTreeSet<&'a str>,
     ) {
-        for clip in clips.iter().filter(|clip| clip.visible) {
+        for clip in clips {
             for mask in &clip.masks {
                 match &mask.input {
                     crate::project::MaskInput::Image { asset, .. } => {
@@ -141,7 +141,7 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
     }
 
     fn collect_fonts<'a>(clips: &'a [crate::project::Clip], ids: &mut BTreeSet<&'a str>) {
-        for clip in clips.iter().filter(|clip| clip.visible) {
+        for clip in clips {
             for mask in &clip.masks {
                 if let crate::project::MaskInput::Source { source, .. } = &mask.input {
                     collect_font_source(source, ids);

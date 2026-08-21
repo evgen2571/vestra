@@ -233,6 +233,7 @@ impl GpuFramePlan {
         for layer in &frame.layers {
             append_layer(
                 layer,
+                &frame.layers,
                 canvas,
                 0,
                 &mut operations,
@@ -296,14 +297,28 @@ impl GpuFramePlan {
             source_depth(&layer.source).max(owned_mask_depth)
         }
         fn composition_depth(composition: &crate::plan::CompiledComposition) -> usize {
-            composition
+            let ordinary = composition
                 .layers
                 .iter()
                 .map(layer_depth)
                 .max()
-                .unwrap_or(0)
+                .unwrap_or(0);
+            let matte_scratch = composition
+                .layers
+                .iter()
+                .any(|layer| layer.matte.is_some())
+                .then_some(4 + composition.layers.len() * 2)
+                .unwrap_or(0);
+            ordinary.max(matte_scratch)
         }
-        plan.layers.iter().map(layer_depth).max().unwrap_or(0)
+        let ordinary = plan.layers.iter().map(layer_depth).max().unwrap_or(0);
+        let matte_scratch = plan
+            .layers
+            .iter()
+            .any(|layer| layer.matte.is_some())
+            .then_some(4 + plan.layers.len() * 2)
+            .unwrap_or(0);
+        ordinary.max(matte_scratch)
     }
 
     pub(super) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
@@ -789,6 +804,7 @@ impl GpuFramePlan {
 #[allow(clippy::too_many_arguments)]
 fn append_layer(
     layer: &crate::plan::EvaluatedLayer,
+    scope_layers: &[crate::plan::EvaluatedLayer],
     parent_canvas: TextureSlot,
     depth: usize,
     operations: &mut Vec<GpuOperation>,
@@ -800,8 +816,43 @@ fn append_layer(
     cached_layers: &BTreeSet<usize>,
     cache_targets: &BTreeSet<usize>,
 ) {
+    if !layer.visible {
+        return;
+    }
+    let mut planned_layer = layer.clone();
+    if let Some(matte) = &layer.matte
+        && let Some(source) = scope_layers
+            .iter()
+            .find(|candidate| candidate.compiled_layer_index == matte.source_layer_identity)
+    {
+        let mut presented_source = source.clone();
+        presented_source.visible = true;
+        presented_source.blend_mode = crate::project::BlendMode::Normal;
+        let isolated_source = crate::plan::EvaluatedSource::Group {
+            composition: crate::plan::EvaluatedComposition {
+                layers: vec![presented_source],
+            },
+        };
+        planned_layer.masks.push(crate::plan::EvaluatedMask {
+            input: crate::plan::EvaluatedMaskInput::Source {
+                source: Box::new(isolated_source),
+                mode: match matte.mode {
+                    crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
+                    crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
+                },
+            },
+            operation: crate::project::MaskOperation::Intersect,
+            invert: matte.invert,
+            strength: 1.0,
+            feather: 0.0,
+            transform: crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ),
+        });
+    }
     let layer_index = layers.len();
-    layers.push(layer.clone());
+    layers.push(planned_layer.clone());
     if matches!(layer.source, EvaluatedSource::Group { .. }) {
         let composition = match &layer.source {
             EvaluatedSource::Group { composition, .. } => composition,
@@ -819,6 +870,7 @@ fn append_layer(
         for child in &composition.layers {
             append_layer(
                 child,
+                &composition.layers,
                 group_canvas,
                 depth + 1,
                 operations,
@@ -856,7 +908,7 @@ fn append_layer(
             );
         }
         append_masks(
-            layer,
+            &planned_layer,
             layer_index,
             depth,
             layers,
@@ -866,6 +918,7 @@ fn append_layer(
             parameter_count,
             next_value,
             &mut mask_state_value,
+            Some(scope_layers),
         );
         append_composite(
             layer_index,
@@ -988,7 +1041,7 @@ fn append_layer(
         );
     }
     append_masks(
-        layer,
+        &planned_layer,
         layer_index,
         depth,
         layers,
@@ -998,6 +1051,7 @@ fn append_layer(
         parameter_count,
         next_value,
         &mut mask_state_value,
+        Some(scope_layers),
     );
     if cache_targets.contains(&layer.compiled_layer_index) {
         operations.push(GpuOperation::StoreStaticLayer {
@@ -1031,6 +1085,7 @@ fn append_masks(
     parameter_count: &mut u32,
     next_value: &mut u64,
     mask_state_value: &mut Option<u64>,
+    source_scope_layers: Option<&[crate::plan::EvaluatedLayer]>,
 ) {
     fn source_group_depth(source: &crate::plan::EvaluatedSource) -> usize {
         fn layer_depth(layer: &crate::plan::EvaluatedLayer) -> usize {
@@ -1097,12 +1152,14 @@ fn append_masks(
                 append_mask_source(
                     &crate::plan::EvaluatedLayer {
                         compiled_layer_index: usize::MAX,
+                        visible: true,
                         content_dependency: crate::plan::TemporalDependency::Dynamic,
                         source: (**source).clone(),
                         transform: mask.transform,
                         opacity: 1.0,
                         effects: Vec::new(),
                         masks: Vec::new(),
+                        matte: None,
                         colour_transform: crate::plan::ColourTransform::default(),
                         blend_mode: crate::project::BlendMode::Normal,
                     },
@@ -1111,6 +1168,7 @@ fn append_masks(
                     layers,
                     parameter_count,
                     next_value,
+                    source_scope_layers,
                 );
                 (source_layer_index, true)
             }
@@ -1204,6 +1262,7 @@ fn append_mask_source(
     layers: &mut Vec<crate::plan::EvaluatedLayer>,
     parameter_count: &mut u32,
     next_value: &mut u64,
+    source_scope_layers: Option<&[crate::plan::EvaluatedLayer]>,
 ) {
     let layer_index = layers.len();
     layers.push(layer.clone());
@@ -1217,9 +1276,13 @@ fn append_mask_source(
             *parameter_count += 1;
             *next_value += 1;
             let mut group_value = *next_value - 1;
+            let child_scope = source_scope_layers
+                .filter(|_| composition.layers.len() == 1)
+                .unwrap_or(&composition.layers);
             for child in &composition.layers {
                 append_layer(
                     child,
+                    child_scope,
                     group_canvas,
                     depth + 1,
                     operations,
@@ -1599,6 +1662,7 @@ pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
     fn layers_require_auxiliary(layers: &[crate::plan::CompiledLayer]) -> bool {
         layers.iter().any(|layer| {
             !layer.masks.is_empty()
+                || layer.matte.is_some()
                 || layer.effects.iter().any(|timed| {
                     compiled_effect_pass_requirements(&timed.effect).retains_original()
                 })
@@ -1622,6 +1686,7 @@ pub(super) fn plan_has_masks(plan: &RenderPlan) -> bool {
     fn layers_have_masks(layers: &[crate::plan::CompiledLayer]) -> bool {
         layers.iter().any(|layer| {
             !layer.masks.is_empty()
+                || layer.matte.is_some()
                 || match &layer.source {
                     crate::plan::CompiledVisualSource::Group(composition) => {
                         layers_have_masks(&composition.layers)

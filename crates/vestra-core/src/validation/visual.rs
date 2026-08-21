@@ -515,6 +515,104 @@ fn validate_with_depth(
             );
         }
     }
+    validate_mattes(&visual.clips, errors);
+}
+
+fn validate_mattes(clips: &[crate::project::Clip], errors: &mut Vec<Diagnostic>) {
+    fn nested_contains_id(source: &crate::project::VisualSource, target: &str) -> bool {
+        match source {
+            crate::project::VisualSource::Group(group) => group
+                .clips
+                .iter()
+                .any(|clip| clip.id == target || nested_contains_id(&clip.source, target)),
+            _ => false,
+        }
+    }
+    let by_id = clips
+        .iter()
+        .map(|clip| (clip.id.as_str(), clip))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (index, clip) in clips.iter().enumerate() {
+        let Some(matte) = &clip.matte else { continue };
+        let path = format!("/visual/clips/{index}/matte/source_layer");
+        if clip.id == matte.source_layer {
+            errors.push(Diagnostic::error(
+                "VESTRA-MATTE-SELF",
+                Category::Semantic,
+                format!("layer '{}' cannot use itself as a track matte", clip.id),
+                path,
+            ));
+        } else if !by_id.contains_key(matte.source_layer.as_str()) {
+            let cross_scope = clips
+                .iter()
+                .any(|candidate| nested_contains_id(&candidate.source, &matte.source_layer));
+            let (code, message) = if cross_scope {
+                (
+                    "VESTRA-MATTE-SCOPE",
+                    format!(
+                        "track matte source layer '{}' is in another composition; only immediate composition references are supported",
+                        matte.source_layer
+                    ),
+                )
+            } else {
+                (
+                    "VESTRA-MATTE-SOURCE",
+                    format!(
+                        "track matte source layer '{}' does not exist in this composition",
+                        matte.source_layer
+                    ),
+                )
+            };
+            errors.push(Diagnostic::error(code, Category::Semantic, message, path));
+        }
+    }
+
+    let edges = clips
+        .iter()
+        .filter_map(|clip| {
+            clip.matte
+                .as_ref()
+                .map(|matte| (clip.id.as_str(), matte.source_layer.as_str()))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut state = std::collections::BTreeMap::<&str, u8>::new();
+    let mut stack = Vec::<&str>::new();
+    for clip in clips {
+        if state.get(clip.id.as_str()).copied().unwrap_or_default() == 0 {
+            visit_matte(clip.id.as_str(), &edges, &mut state, &mut stack, errors);
+        }
+    }
+}
+
+fn visit_matte<'a>(
+    node: &'a str,
+    edges: &std::collections::BTreeMap<&'a str, &'a str>,
+    state: &mut std::collections::BTreeMap<&'a str, u8>,
+    stack: &mut Vec<&'a str>,
+    errors: &mut Vec<Diagnostic>,
+) {
+    state.insert(node, 1);
+    stack.push(node);
+    if let Some(&target) = edges.get(node) {
+        match state.get(target).copied().unwrap_or_default() {
+            0 => visit_matte(target, edges, state, stack, errors),
+            1 => {
+                let start = stack.iter().position(|item| *item == target).unwrap_or(0);
+                let mut cycle = stack[start..].join(" → ");
+                cycle.push_str(" → ");
+                cycle.push_str(target);
+                errors.push(Diagnostic::error(
+                    "VESTRA-MATTE-CYCLE",
+                    Category::Semantic,
+                    format!("track matte cycle: {cycle}"),
+                    "/visual/clips",
+                ));
+            }
+            _ => {}
+        }
+    }
+    stack.pop();
+    state.insert(node, 2);
 }
 
 fn validate_owned_mask_source(
@@ -547,6 +645,7 @@ fn validate_owned_mask_source(
             )),
             effects: Vec::new(),
             masks: Vec::new(),
+            matte: None,
             blend_mode: crate::project::BlendMode::Normal,
             preset: None,
         }],

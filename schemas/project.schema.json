@@ -708,6 +708,9 @@
         "layer": {
           "type": "integer"
         },
+        "matte": {
+          "$ref": "#/$defs/track_matte"
+        },
         "masks": {
           "items": {
             "$ref": "#/$defs/mask"
@@ -1363,6 +1366,30 @@
           "type": "object"
         }
       ]
+    },
+    "track_matte": {
+      "additionalProperties": false,
+      "properties": {
+        "invert": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "alpha",
+            "luma"
+          ]
+        },
+        "source_layer": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_layer",
+        "mode"
+      ],
+      "type": "object"
     },
     "mask": {
       "additionalProperties": false,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from ..properties import BindableScalarProperty, ScalarProperty
+from ..properties import BindablePointProperty, BindableScalarProperty, ScalarProperty
 from ..authoring.effects import ZoomBlurDirection
 from ..authoring.values import Point
 from .base import (
@@ -69,8 +69,8 @@ class MotionTile(Effect):
         self._set_property("output_height_percent", value)
 
     @property
-    def tile_center(self) -> Point:
-        return cast(Point, self._values["tile_center"])
+    def tile_center(self) -> BindablePointProperty:
+        return cast(BindablePointProperty, self._properties["tile_center"])
 
     @tile_center.setter
     def tile_center(self, value: Point | tuple[int | float, int | float]) -> None:
@@ -196,8 +196,8 @@ class RadialBlur(Effect):
         self._set_property("amount", value)
 
     @property
-    def center(self) -> Point:
-        return cast(Point, self._values["center"])
+    def center(self) -> BindablePointProperty:
+        return cast(BindablePointProperty, self._properties["center"])
 
     @center.setter
     def center(self, value: Point | tuple[int | float, int | float]) -> None:

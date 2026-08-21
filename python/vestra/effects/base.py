@@ -11,7 +11,12 @@ from ..authoring.effects import ActiveInterval, ZoomBlurDirection
 from ..authoring.effects import available_effects as _native_effects
 from ..authoring.effects import effect_definition
 from ..authoring.values import Color, Point, color_to_canonical
-from ..properties import BindableScalarProperty, ScalarProperty
+from ..properties import (
+    BindablePointProperty,
+    BindableScalarProperty,
+    PointProperty,
+    ScalarProperty,
+)
 
 
 def _freeze(value: object) -> object:
@@ -142,7 +147,7 @@ class Effect:
 
     def __init__(self) -> None:
         self._values: dict[str, object] = {}
-        self._properties: dict[str, ScalarProperty] = {}
+        self._properties: dict[str, ScalarProperty | PointProperty] = {}
         self._id: str | None = None
 
     @property
@@ -192,6 +197,13 @@ class Effect:
             self._values[name] = _validate_number(parameter, value)
             return
         if kind == "point2d":
+            if name in {"tile_center", "center"}:
+                target = self._properties[name]
+                if isinstance(value, PointProperty):
+                    value._copy_to(target)
+                else:
+                    target.value = _point(value, name)
+                return
             self._values[name] = _point(value, name)
             return
         if kind == "boolean":
@@ -218,7 +230,7 @@ class Effect:
         # Stage all values before publishing any state, so constructor failures
         # cannot leave a partially initialized descriptor.
         staged_values: dict[str, object] = {}
-        staged_properties: dict[str, ScalarProperty] = {}
+        staged_properties: dict[str, ScalarProperty | PointProperty] = {}
         parameters = cast(
             tuple[Mapping[str, object], ...],
             _descriptor(self.effect_type)["parameters"],
@@ -246,6 +258,8 @@ class Effect:
             kind = parameter["kind"]
             if kind in {"scalar_property", "plain_track"}:
                 staged_properties[name] = _property(parameter, values[name])
+            elif kind == "point2d" and name in {"tile_center", "center"}:
+                staged_properties[name] = BindablePointProperty(_point(values[name], name))
             else:
                 # Use a temporary descriptor state for the shared validators.
                 self._values = staged_values
@@ -268,18 +282,33 @@ class Effect:
                 result[name] = value.value
         return result
 
-    def _property_items(self) -> tuple[tuple[str, ScalarProperty], ...]:
-        return tuple(self._properties.items())
+    def _property_items(self) -> tuple[tuple[str, ScalarProperty | PointProperty], ...]:
+        return tuple(
+            (name, value)
+            for name, value in self._properties.items()
+            if isinstance(value, ScalarProperty)
+        )
+
+    def _point_property_items(self) -> tuple[tuple[str, PointProperty], ...]:
+        return tuple(
+            (name, value)
+            for name, value in self._properties.items()
+            if isinstance(value, PointProperty)
+        )
 
     def to_canonical(self) -> dict[str, object]:
-        from ..properties.lowering import lower_scalar_property
+        from ..properties.lowering import lower_point_property, lower_scalar_property
 
         data: dict[str, object] = {"type": self.type}
         if self.id is not None:
             data["id"] = self.id
         data.update(self._values)
         for name, property_value in self._properties.items():
-            data[name] = lower_scalar_property(property_value)
+            data[name] = (
+                lower_point_property(property_value)
+                if isinstance(property_value, PointProperty)
+                else lower_scalar_property(property_value)
+            )
         active = data.pop("active_interval", None)
         if isinstance(active, ActiveInterval):
             data.update(active.to_canonical())
@@ -295,18 +324,25 @@ class Effect:
         result._values = dict(self._values)
         result._properties = {}
         for name, source in self._properties.items():
-            property_type: type[ScalarProperty] = (
-                BindableScalarProperty
-                if isinstance(source, BindableScalarProperty)
-                else ScalarProperty
-            )
-            target = property_type(
-                source.value,
-                minimum=source._minimum,
-                maximum=source._maximum,
-                minimum_exclusive=source._minimum_exclusive,
-                maximum_exclusive=source._maximum_exclusive,
-            )
+            if isinstance(source, PointProperty):
+                target = (
+                    BindablePointProperty(source.value)
+                    if isinstance(source, BindablePointProperty)
+                    else PointProperty(source.value)
+                )
+            else:
+                property_type: type[ScalarProperty] = (
+                    BindableScalarProperty
+                    if isinstance(source, BindableScalarProperty)
+                    else ScalarProperty
+                )
+                target = property_type(
+                    source.value,
+                    minimum=source._minimum,
+                    maximum=source._maximum,
+                    minimum_exclusive=source._minimum_exclusive,
+                    maximum_exclusive=source._maximum_exclusive,
+                )
             source._copy_to(target)
             result._properties[name] = target
         result._id = self._id

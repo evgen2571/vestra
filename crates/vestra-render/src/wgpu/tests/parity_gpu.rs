@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     animation::Track,
-    domain::Point,
+    domain::{Crop, Point},
     plan::{
         ActiveSchedule, ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty,
         CompiledSizing, CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, EvaluatedSource,
@@ -177,6 +177,10 @@ fn render_project_parity(
     );
     let mut assets = std::collections::BTreeMap::new();
     assets.insert("tone".to_owned(), std::path::PathBuf::from("tone.wav"));
+    assets.insert(
+        "blue".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets/blue.png"),
+    );
     let mut durations = std::collections::BTreeMap::new();
     durations.insert("tone".to_owned(), 2.0);
     let input = crate::plan::PlanCompileInput::new(
@@ -209,6 +213,122 @@ fn render_project_parity(
         "Group parity exceeded tolerance {tolerance}: {difference:?}"
     );
     Some(gpu_output)
+}
+
+fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
+    let tile = json!({
+        "id": "tile", "type": "motion_tile",
+        "output_width_percent": {"base_value": 220.0},
+        "output_height_percent": {"base_value": 180.0},
+        "tile_center": {"base_value": {"x": 0.37, "y": 0.61}},
+        "mirror_edges": false
+    });
+    let directional = json!({
+        "id": "directional", "type": "directional_blur",
+        "radius": {"base_value": 1.5}, "angle_degrees": {"base_value": 27.0}
+    });
+    let chromatic = json!({
+        "id": "chromatic", "type": "chromatic_aberration",
+        "amount": {"base_value": 1.25}, "angle_degrees": {"base_value": 18.0}
+    });
+    let radial = json!({
+        "id": "radial", "type": "radial_blur", "amount": {"base_value": 1.25},
+        "center": {"base_value": {"x": 0.62, "y": 0.42}}
+    });
+    let mask = json!({
+        "id": "owned-mask", "input": {
+            "type": "shape", "geometry": {"type": "rectangle", "width": 32.0, "height": 32.0},
+            "fill": "#ffffff"
+        }, "operation": "replace", "feather": {"base_value": 1.5}
+    });
+    let image = json!({"type": "image", "asset": "blue"});
+    let common = json!({
+        "start": 0.0, "duration": 1.0, "opacity": {"base_value": 1.0},
+        "transform": transform((0.5, 0.5), (1.0, 1.0), 0.0)
+    });
+    let clips = match variant {
+        "owned-mask" => json!([
+            {
+                "id": "consumer", "source": image, "layer": 0,
+                "effects": [tile, directional, chromatic], "masks": [mask]
+            }
+        ]),
+        "track-matte" => json!([
+            {
+                "id": "consumer", "source": image, "layer": 0,
+                "effects": [tile, directional],
+                "matte": {"source_layer": "matte", "mode": "alpha", "invert": false}
+            },
+            {
+                "id": "matte", "source": {
+                    "type": "shape", "geometry": {"type": "rectangle", "width": 32.0, "height": 32.0},
+                    "fill": "#ffffff"
+                }, "layer": 1, "visible": false, "effects": [radial]
+            }
+        ]),
+        "group" => json!([
+            {
+                "id": "group", "source": {"type": "group", "clips": [{
+                    "id": "child", "source": image, "layer": 0,
+                    "effects": [tile], "transform": transform((0.55, 0.48), (0.8, 0.8), 13.0),
+                    "start": 0.0, "duration": 1.0, "opacity": {"base_value": 1.0}
+                }]}, "layer": 0, "effects": [directional, chromatic],
+                "transform": transform((0.52, 0.5), (0.9, 0.9), -9.0)
+            }
+        ]),
+        "cross-stage" => json!([
+            {
+                "id": "consumer", "source": image, "layer": 0,
+                "effects": [tile, directional, chromatic], "masks": [mask],
+                "matte": {"source_layer": "matte", "mode": "alpha", "invert": false}
+            },
+            {
+                "id": "matte", "source": {
+                    "type": "shape", "geometry": {"type": "rectangle", "width": 32.0, "height": 32.0},
+                    "fill": "#ffffff"
+                }, "layer": 1, "visible": false, "effects": [radial]
+            }
+        ]),
+        other => panic!("unknown MotionTile parity variant {other}"),
+    };
+    let clips = clips
+        .as_array()
+        .expect("MotionTile parity clips are an array")
+        .iter()
+        .map(|clip| {
+            let mut clip = clip.clone();
+            if let Some(object) = clip.as_object_mut() {
+                for (key, value) in common.as_object().expect("common clip fields") {
+                    object.entry(key.clone()).or_insert_with(|| value.clone());
+                }
+            }
+            clip
+        })
+        .collect::<Vec<_>>();
+    serde_json::from_value(json!({
+        "schema_version": 4,
+        "output": {
+            "path": "motion-tile-parity.mp4", "width": 32, "height": 32,
+            "frame_rate": "24/1", "background": "#00000000", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 1.0
+        },
+        "assets": [{"id": "blue", "type": "image", "source": "examples/assets/blue.png"}],
+        "visual": {"clips": clips, "transitions": [], "flashes": [], "post_effects": []}
+    }))
+    .unwrap_or_else(|error| panic!("{variant} MotionTile parity project parses: {error}"))
+}
+
+#[test]
+fn gpu_motion_tile_matches_cpu_through_masks_mattes_groups_and_cross_stage_order() {
+    for variant in ["owned-mask", "track-matte", "group", "cross-stage"] {
+        let output = render_project_parity(motion_tile_parity_project(variant), 0, 3);
+        if let Some(output) = output {
+            assert!(
+                output.pixels().any(|pixel| pixel[3] > 0),
+                "{variant} MotionTile parity case should produce visible pixels"
+            );
+        }
+    }
 }
 
 fn shape_feather_parity_project(radius: f64, transformed: bool) -> crate::project::Project {
@@ -2036,6 +2156,16 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             2,
         ),
         (
+            "motion tile repeat",
+            EvaluatedEffect::MotionTile {
+                output_width_percent: 220.0,
+                output_height_percent: 180.0,
+                tile_center: Point { x: 0.37, y: 0.61 },
+                mirror_edges: false,
+            },
+            2,
+        ),
+        (
             "motion blur",
             EvaluatedEffect::MotionBlur {
                 radius: 4.0,
@@ -2095,6 +2225,36 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             return;
         }
     }
+
+    let mut cropped = base.clone();
+    let EvaluatedSource::Image {
+        crop,
+        cacheable_crop,
+        ..
+    } = &mut cropped.layers[0].source
+    else {
+        panic!("RGBA parity fixture must use an image source");
+    };
+    *crop = Crop {
+        x: 0.2,
+        y: 0.15,
+        width: 0.55,
+        height: 0.65,
+    };
+    *cacheable_crop = false;
+    cropped.layers[0].effects = vec![EvaluatedEffect::MotionTile {
+        output_width_percent: 220.0,
+        output_height_percent: 180.0,
+        tile_center: Point { x: 0.37, y: 0.61 },
+        mirror_edges: true,
+    }];
+    assert!(gpu_effect_case_matches_cpu(
+        &plan,
+        &decoded,
+        &cropped,
+        "motion tile with a nonzero crop",
+        2,
+    ));
 
     let chains = [
         (

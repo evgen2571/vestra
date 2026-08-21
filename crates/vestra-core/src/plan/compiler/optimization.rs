@@ -88,12 +88,17 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
         CompiledEffect::MotionTile {
             output_width_percent,
             output_height_percent,
+            tile_center,
             ..
         } => {
             normalize_track(&mut output_width_percent.authored_track)
                 + normalize_track(&mut output_height_percent.authored_track)
+                + normalize_track(&mut tile_center.authored_track)
         }
-        CompiledEffect::RadialBlur { amount, .. } => normalize_track(&mut amount.authored_track),
+        CompiledEffect::RadialBlur { amount, center } => {
+            normalize_track(&mut amount.authored_track)
+                + normalize_track(&mut center.authored_track)
+        }
         CompiledEffect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -179,10 +184,12 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         CompiledEffect::MotionTile {
             output_width_percent,
             output_height_percent,
+            tile_center,
             ..
         } => {
             static_track(output_width_percent)
                 && static_track(output_height_percent)
+                && static_point_property(tile_center)
                 && output_width_percent.base_value == 100.0
                 && output_height_percent.base_value == 100.0
         }
@@ -203,9 +210,16 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         }
         CompiledEffect::DirectionalBlur { radius, .. }
         | CompiledEffect::ZoomBlur { radius, .. }
-        | CompiledEffect::RadialBlur { amount: radius, .. }
         | CompiledEffect::ChromaticAberration { amount: radius, .. } => {
             static_track(radius) && sampling_blur_radius_is_identity(radius.base_value)
+        }
+        CompiledEffect::RadialBlur {
+            amount: radius,
+            center,
+        } => {
+            static_track(radius)
+                && static_point_property(center)
+                && sampling_blur_radius_is_identity(radius.base_value)
         }
         CompiledEffect::Glow {
             radius, intensity, ..
@@ -342,6 +356,14 @@ pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
     effect.for_each_plain_track(|_, track| {
         dynamic |= !static_track(track);
     });
+    dynamic |= match effect {
+        CompiledEffect::MotionTile { tile_center, .. }
+        | CompiledEffect::RadialBlur {
+            center: tile_center,
+            ..
+        } => !static_point_property(tile_center),
+        _ => false,
+    };
     dynamic |= matches!(
         effect.definition().temporal_policy,
         crate::effect_definition::EffectTemporalPolicy::AlwaysDynamic
@@ -356,7 +378,25 @@ pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
 fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
     let mut has_modifiers = false;
     effect.for_each_scalar_property(|_, property| has_modifiers |= property.has_modifiers());
+    has_modifiers |= match effect {
+        CompiledEffect::MotionTile { tile_center, .. }
+        | CompiledEffect::RadialBlur {
+            center: tile_center,
+            ..
+        } => point_property_has_modifiers(tile_center),
+        _ => false,
+    };
     has_modifiers
+}
+
+fn point_property_has_modifiers(property: &crate::plan::CompiledPointProperty) -> bool {
+    !property.modifiers.is_empty()
+        || !property.x_modifiers.is_empty()
+        || !property.y_modifiers.is_empty()
+}
+
+fn static_point_property(property: &crate::plan::CompiledPointProperty) -> bool {
+    static_track(&property.authored_track) && !point_property_has_modifiers(property)
 }
 
 fn fuse_static_colour_chain(layer: &mut CompiledLayer) {
@@ -491,6 +531,27 @@ mod tests {
             effect_dependency(&dynamic_brightness),
             TemporalDependency::Dynamic
         );
+        let dynamic_center = crate::plan::CompiledPointProperty {
+            authored_track: Track {
+                base_value: crate::domain::Point { x: 0.5, y: 0.5 },
+                keyframes: vec![Keyframe {
+                    time: 1,
+                    value: crate::domain::Point { x: 0.25, y: 0.75 },
+                    interpolation: Interpolation::Linear,
+                }],
+            },
+            modifiers: Vec::new(),
+            x_modifiers: Vec::new(),
+            y_modifiers: Vec::new(),
+        };
+        let dynamic_radial = CompiledEffect::RadialBlur {
+            amount: scalar(2.0),
+            center: dynamic_center,
+        };
+        assert_eq!(
+            effect_dependency(&dynamic_radial),
+            TemporalDependency::Dynamic
+        );
         let modulated_identity = CompiledEffect::Brightness {
             amount: crate::plan::CompiledScalarProperty {
                 authored_track: Track::new(0.0),
@@ -550,6 +611,25 @@ mod tests {
 
     #[test]
     fn every_compiler_eliminated_identity_is_omitted() {
+        for (width, height, expected_identity) in [(100.0, 100.0, true), (200.0, 100.0, false)] {
+            let mut timed = TimedEffect {
+                start: 0,
+                end: 10,
+                effect: CompiledEffect::MotionTile {
+                    output_width_percent: scalar(width),
+                    output_height_percent: scalar(height),
+                    tile_center: crate::plan::CompiledPointProperty {
+                        authored_track: Track::new(Point { x: 0.2, y: 0.8 }),
+                        modifiers: Vec::new(),
+                        x_modifiers: Vec::new(),
+                        y_modifiers: Vec::new(),
+                    },
+                    mirror_edges: true,
+                },
+                dependency: TemporalDependency::Static,
+            };
+            assert_eq!(normalize_for_test(&mut timed, 10), !expected_identity);
+        }
         let identities = vec![
             CompiledEffect::Brightness {
                 amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.0)),

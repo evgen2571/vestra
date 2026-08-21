@@ -62,7 +62,9 @@ def _valid_generic_parameters(definition: object) -> dict[str, object]:
 
 
 def test_generic_authoring_smoke_covers_every_registered_visual_effect() -> None:
-    authored, clip = builder()
+    authored = ProjectBuilder(width=16, height=16, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=2)
+    asset = authored.add_image_asset("fixture.png")
+    clip = authored.add_image_clip(source=asset, start=0, duration=2, layer=0)
     for definition in available_effects():
         clip.effects.add_effect(str(definition["id"]), **_valid_generic_parameters(definition))
     assert len(clip.effects.items) == len(available_effects())

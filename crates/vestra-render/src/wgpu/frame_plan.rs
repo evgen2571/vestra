@@ -1143,13 +1143,21 @@ fn append_masks(
         } else {
             TextureSlot::EffectA
         };
+        let source_is_group = matches!(
+            &mask.input,
+            crate::plan::EvaluatedMaskInput::Source { source, .. }
+                if matches!(source.as_ref(), crate::plan::EvaluatedSource::Group { .. })
+        );
+        let saved_layer_result = *layer_result;
+        // An isolated matte group uses the shared effect slots. Preserve the
+        // consumer result even when it already lives in one of those slots.
         let saved_layer_for_source =
             matches!(&mask.input, crate::plan::EvaluatedMaskInput::Source { .. })
-                && *layer_result == TextureSlot::Layer;
+                && (*layer_result == TextureSlot::Layer || source_is_group);
         let saved_layer_value = *layer_value;
         if saved_layer_for_source {
             operations.push(GpuOperation::CopyForEffect {
-                source: TextureSlot::Layer,
+                source: saved_layer_result,
                 destination: saved_layer_destination,
                 value: saved_layer_value,
             });
@@ -1198,12 +1206,12 @@ fn append_masks(
         if saved_layer_for_source {
             operations.push(GpuOperation::CopyForEffect {
                 source: saved_layer_destination,
-                destination: TextureSlot::Layer,
+                destination: saved_layer_result,
                 value: saved_layer_value,
             });
         }
         let coverage_source = *layer_result;
-        let coverage_source_value = saved_layer_value;
+        let coverage_source_value = *layer_value;
         let mut feather_value = *next_value - 1;
         if mask.feather > 0.0 {
             let mut feather_source = TextureSlot::Auxiliary;

@@ -335,6 +335,14 @@ pub struct CompiledTransformTracks {
 }
 
 #[derive(Clone, Debug)]
+pub struct CompiledPointProperty {
+    pub authored_track: Track<Point>,
+    pub modifiers: Vec<CompiledScalarModifier>,
+    pub x_modifiers: Vec<CompiledScalarModifier>,
+    pub y_modifiers: Vec<CompiledScalarModifier>,
+}
+
+#[derive(Clone, Debug)]
 pub struct TransformContribution {
     pub start: u128,
     pub end: u128,
@@ -381,7 +389,7 @@ pub enum CompiledEffect {
     MotionTile {
         output_width_percent: CompiledScalarProperty,
         output_height_percent: CompiledScalarProperty,
-        tile_center: Point,
+        tile_center: CompiledPointProperty,
         mirror_edges: bool,
     },
     DirectionalBlur {
@@ -396,7 +404,7 @@ pub enum CompiledEffect {
     },
     RadialBlur {
         amount: CompiledScalarProperty,
-        center: Point,
+        center: CompiledPointProperty,
     },
     Glow {
         threshold: CompiledScalarProperty,

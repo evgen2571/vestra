@@ -383,6 +383,39 @@ fn validate_with_depth(
             );
         }
         let mut effect_ids = BTreeSet::new();
+        let motion_tile_count = clip
+            .effects
+            .iter()
+            .filter(|effect| matches!(effect, crate::project::Effect::MotionTile { .. }))
+            .count();
+        if motion_tile_count > 1 {
+            errors.push(Diagnostic::error(
+                "VESTRA-MOTION-TILE-MULTIPLE",
+                Category::Semantic,
+                "only one Motion Tile is supported per Layer",
+                format!("{path}/effects"),
+            ));
+        }
+        if motion_tile_count > 0 {
+            let unsupported_source = match &clip.source {
+                crate::project::VisualSource::SolidColor { .. } => Some("solid color"),
+                crate::project::VisualSource::Spectrum2D(_) => Some("Spectrum2D"),
+                crate::project::VisualSource::ParticleSystem(_) => Some("ParticleSystem"),
+                crate::project::VisualSource::Image { .. }
+                | crate::project::VisualSource::Video { .. }
+                | crate::project::VisualSource::Shape(_)
+                | crate::project::VisualSource::Text(_)
+                | crate::project::VisualSource::Group(_) => None,
+            };
+            if let Some(source_name) = unsupported_source {
+                errors.push(Diagnostic::error(
+                    "VESTRA-MOTION-TILE-SOURCE",
+                    Category::Semantic,
+                    format!("Motion Tile is unsupported for {source_name} sources"),
+                    format!("{path}/effects"),
+                ));
+            }
+        }
         for (effect_index, effect) in clip.effects.iter().enumerate() {
             if clip.effects.len() > limits.maximum_effects_per_clip {
                 errors.push(Diagnostic::error(

@@ -37,8 +37,8 @@ pub use output::{DurationMode, FrameRate, Output, Quality};
 pub use presets::Preset;
 pub use project::Project;
 pub use signals::{
-    AudioAnalysisTap, AudioScalarFeature, ScalarModifier, ScalarModifierOperation, ScalarProperty,
-    ScalarSignal, ScalarSignalSource, SignalTransform,
+    AudioAnalysisTap, AudioScalarFeature, PointComponentModifiers, PointProperty, ScalarModifier,
+    ScalarModifierOperation, ScalarProperty, ScalarSignal, ScalarSignalSource, SignalTransform,
 };
 pub use transitions::{
     Flash, NormalizedKeyframe, NormalizedTrack, TransitionDefinition, TransitionPlacement,

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{ActiveInterval, Point, ScalarProperty, Track};
+use super::{ActiveInterval, Point, PointProperty, ScalarProperty, Track};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -30,7 +30,7 @@ pub enum Effect {
         id: String,
         output_width_percent: ScalarProperty,
         output_height_percent: ScalarProperty,
-        tile_center: Point,
+        tile_center: PointProperty,
         mirror_edges: bool,
     },
     DirectionalBlur {
@@ -49,7 +49,7 @@ pub enum Effect {
     RadialBlur {
         id: String,
         amount: ScalarProperty,
-        center: Point,
+        center: PointProperty,
     },
     Glow {
         id: String,
@@ -168,6 +168,26 @@ mod tests {
             effect.is_ok(),
             "Motion Tile must be part of the canonical Effect model"
         );
+    }
+
+    #[test]
+    fn effect_centers_deserialize_as_point_properties() {
+        let effect = serde_json::from_str::<Effect>(
+            r#"{
+                "type":"radial_blur",
+                "id":"radial",
+                "amount":{"base_value":2.0},
+                "center":{
+                    "base_value":{"x":0.5,"y":0.5},
+                    "keyframes":[{"time":0.5,"value":{"x":0.25,"y":0.75},"interpolation":"linear"}]
+                }
+            }"#,
+        )
+        .expect("dynamic radial center");
+
+        let value = serde_json::to_value(effect).expect("dynamic radial center serializes");
+        assert_eq!(value["center"]["base_value"]["x"], 0.5);
+        assert_eq!(value["center"]["keyframes"].as_array().unwrap().len(), 1);
     }
 }
 

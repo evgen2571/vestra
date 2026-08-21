@@ -22,6 +22,8 @@ def main() -> None:
         MotionTile(output_width_percent=200, output_height_percent=180)
     )
     tile.output_width_percent.keyframe(1.0, 260)
+    tile.tile_center.keyframe(0.0, (0.35, 0.5))
+    tile.tile_center.keyframe(2.0, (0.65, 0.5))
     content.transform.scale.keyframe(0.0, (1.0, 1.0))
     content.transform.scale.keyframe(2.0, (1.35, 1.2))
     content.transform.rotation_degrees.keyframe(0.0, -8)

@@ -17,6 +17,23 @@ fn scalar(track: Track<f64>) -> CompiledScalarProperty {
     CompiledScalarProperty::authored(track)
 }
 
+#[test]
+fn motion_tile_parameters_are_packed_without_an_adapter() {
+    let effects = [crate::plan::EvaluatedEffect::MotionTile {
+        output_width_percent: 220.0,
+        output_height_percent: 180.0,
+        tile_center: crate::domain::Point { x: 0.37, y: 0.61 },
+        mirror_edges: true,
+    }];
+    let parameters = super::parameters::motion_tile(&effects).expect("MotionTile is pre-transform");
+    assert_eq!(parameters.width_factor, 2.2);
+    assert_eq!(parameters.height_factor, 1.8);
+    assert_eq!(parameters.center_x, 0.37);
+    assert_eq!(parameters.center_y, 0.61);
+    assert!(parameters.mirror_edges);
+    assert!(super::parameters::motion_tile(&[]).is_none());
+}
+
 fn fixture_requirements() -> (
     crate::plan::RenderPlan,
     std::sync::Arc<crate::DecodedAssets>,

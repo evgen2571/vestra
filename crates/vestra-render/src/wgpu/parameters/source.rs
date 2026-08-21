@@ -279,6 +279,7 @@ pub(in crate::wgpu) fn raster(
         frame.height,
         motion_tile,
     );
+    let has_motion_tile = motion_tile.is_some();
     let motion_tile = motion_tile.unwrap_or(geometry::MotionTileParameters {
         width_factor: 1.0,
         height_factor: 1.0,
@@ -359,7 +360,12 @@ pub(in crate::wgpu) fn raster(
             motion_tile.center_x as f32,
             motion_tile.center_y as f32,
         ],
-        motion_tile_flags: [u32::from(motion_tile.mirror_edges), 0, 0, 0],
+        motion_tile_flags: [
+            u32::from(motion_tile.mirror_edges),
+            u32::from(has_motion_tile),
+            0,
+            0,
+        ],
     }
 }
 

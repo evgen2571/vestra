@@ -343,7 +343,16 @@ fn draw_resolved_raster(
             {
                 let (source_x, source_y) = source_position(geometry, mapped, source);
                 let sampled = apply_colour_transform(
-                    sample_bilinear(source, source_x, source_y),
+                    match geometry.motion_tile {
+                        Some(tile) => sample_motion_tile_bilinear(
+                            source,
+                            source_x,
+                            source_y,
+                            geometry.source.normalized_crop,
+                            tile.mirror_edges,
+                        ),
+                        None => sample_bilinear(source, source_x, source_y),
+                    },
                     colour_transform,
                 );
                 let destination = canvas.get_pixel_mut(x, y);
@@ -376,10 +385,6 @@ fn source_position(
             (mapped.x - base_origin_x) / base_width,
             (mapped.y - base_origin_y) / base_height,
         );
-        let (u, v) = (
-            tile_coordinate(u, tile.mirror_edges),
-            tile_coordinate(v, tile.mirror_edges),
-        );
         (
             crop.x * f64::from(source.width()) + u * crop.width * f64::from(source.width()),
             crop.y * f64::from(source.height()) + v * crop.height * f64::from(source.height()),
@@ -395,16 +400,6 @@ fn source_position(
                     * crop.height
                     * f64::from(source.height()),
         )
-    }
-}
-
-fn tile_coordinate(value: f64, mirror_edges: bool) -> f64 {
-    let tile = value.floor();
-    let fraction = value - tile;
-    if mirror_edges && tile.rem_euclid(2.0) >= 1.0 {
-        1.0 - fraction
-    } else {
-        fraction
     }
 }
 
@@ -501,6 +496,75 @@ pub(crate) fn sample_bilinear(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
         premultiplied.map(|value| (value / alpha * 255.0).round().clamp(0.0, 255.0) as u8)
     };
     Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8])
+}
+
+fn sample_motion_tile_bilinear(
+    image: &RgbaImage,
+    x: f64,
+    y: f64,
+    crop: Crop,
+    mirror_edges: bool,
+) -> Rgba<u8> {
+    let origin_x = (crop.x * f64::from(image.width())).round();
+    let origin_y = (crop.y * f64::from(image.height())).round();
+    let width = (crop.width * f64::from(image.width())).round().max(1.0) as u32;
+    let height = (crop.height * f64::from(image.height())).round().max(1.0) as u32;
+    sample_motion_tile_bilinear_region(image, x, y, origin_x, origin_y, width, height, mirror_edges)
+}
+
+fn sample_motion_tile_bilinear_region(
+    image: &RgbaImage,
+    x: f64,
+    y: f64,
+    origin_x: f64,
+    origin_y: f64,
+    width: u32,
+    height: u32,
+    mirror_edges: bool,
+) -> Rgba<u8> {
+    let x = x - origin_x - 0.5;
+    let y = y - origin_y - 0.5;
+    let x0 = x.floor() as i64;
+    let y0 = y.floor() as i64;
+    let tx = x - x0 as f64;
+    let ty = y - y0 as f64;
+    let mut premultiplied = [0.0; 3];
+    let mut alpha = 0.0;
+    for (offset_x, weight_x) in [(0_i64, 1.0 - tx), (1, tx)] {
+        for (offset_y, weight_y) in [(0_i64, 1.0 - ty), (1, ty)] {
+            let sample_x =
+                origin_x as i64 + i64::from(tile_index(x0 + offset_x, width, mirror_edges));
+            let sample_y =
+                origin_y as i64 + i64::from(tile_index(y0 + offset_y, height, mirror_edges));
+            let sample = image.get_pixel(sample_x as u32, sample_y as u32);
+            let weight = weight_x * weight_y;
+            let sample_alpha = f64::from(sample[3]) / 255.0;
+            alpha += sample_alpha * weight;
+            for channel in 0..3 {
+                premultiplied[channel] +=
+                    f64::from(sample[channel]) / 255.0 * sample_alpha * weight;
+            }
+        }
+    }
+    let rgb = if alpha <= 0.000_000_1 {
+        [0; 3]
+    } else {
+        premultiplied.map(|value| (value / alpha * 255.0).round().clamp(0.0, 255.0) as u8)
+    };
+    Rgba([rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8])
+}
+
+#[inline]
+fn tile_index(index: i64, extent: u32, mirror_edges: bool) -> u32 {
+    let extent = i64::from(extent);
+    let tile = index.div_euclid(extent);
+    let offset = index.rem_euclid(extent);
+    let offset = if mirror_edges && tile.rem_euclid(2) != 0 {
+        extent - 1 - offset
+    } else {
+        offset
+    };
+    offset as u32
 }
 
 pub(crate) fn sample_edge(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
@@ -624,6 +688,111 @@ mod tests {
         assert_eq!(
             composite_sample(destination, Rgba([191, 127, 61, 255]), 0.5),
             source_over(destination, Rgba([191, 127, 61, 255]), 0.5)
+        );
+    }
+
+    #[test]
+    fn motion_tile_repeat_bilinear_wraps_each_neighbor_at_a_seam() {
+        let source =
+            RgbaImage::from_raw(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]).expect("2x1 source");
+
+        assert_eq!(
+            sample_motion_tile_bilinear(
+                &source,
+                2.0,
+                0.5,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                false,
+            ),
+            Rgba([128, 0, 128, 255])
+        );
+        assert_eq!(
+            sample_motion_tile_bilinear(
+                &source,
+                -2.0,
+                0.5,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                false,
+            ),
+            Rgba([128, 0, 128, 255])
+        );
+        assert_eq!(
+            sample_motion_tile_bilinear(
+                &source,
+                0.0,
+                0.5,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                false,
+            ),
+            Rgba([128, 0, 128, 255])
+        );
+    }
+
+    #[test]
+    fn motion_tile_mirror_bilinear_repeats_boundary_pixels_without_a_gap() {
+        let source =
+            RgbaImage::from_raw(3, 1, vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255])
+                .expect("3x1 source");
+
+        assert_eq!(
+            sample_motion_tile_bilinear(
+                &source,
+                3.0,
+                0.5,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                true,
+            ),
+            Rgba([0, 0, 255, 255])
+        );
+        assert_eq!(
+            sample_motion_tile_bilinear(
+                &source,
+                -3.0,
+                0.5,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                true,
+            ),
+            Rgba([0, 0, 255, 255])
+        );
+        assert_eq!(
+            sample_motion_tile_bilinear(
+                &source,
+                0.0,
+                0.5,
+                Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+                true,
+            ),
+            Rgba([255, 0, 0, 255])
         );
     }
 }

@@ -92,6 +92,8 @@ during validation.
 
 Matte dependencies are evaluated per composition rather than by visual stack
 order. A frame-level CPU cache reuses an isolated matte presentation when
-several consumers reference the same layer; static WGPU matte presentations
-also participate in the existing static-layer cache. Dynamic dependencies
-remain frame-local so changing a matte cannot reuse stale consumer output.
+several consumers reference the same layer. On WGPU, an already-populated
+static-layer cache entry may be reused while rendering an isolated matte
+presentation; a cache entry is not shared between consumers for its first
+render in a frame. Dynamic dependencies remain frame-local so changing a matte
+cannot reuse stale consumer output.

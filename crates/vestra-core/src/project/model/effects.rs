@@ -26,6 +26,13 @@ pub enum Effect {
         id: String,
         radius: ScalarProperty,
     },
+    MotionTile {
+        id: String,
+        output_width_percent: ScalarProperty,
+        output_height_percent: ScalarProperty,
+        tile_center: Point,
+        mirror_edges: bool,
+    },
     DirectionalBlur {
         id: String,
         radius: ScalarProperty,
@@ -38,6 +45,11 @@ pub enum Effect {
         anchor: Point,
         #[serde(default)]
         direction: ZoomBlurDirection,
+    },
+    RadialBlur {
+        id: String,
+        amount: ScalarProperty,
+        center: Point,
     },
     Glow {
         id: String,
@@ -111,8 +123,10 @@ impl Effect {
             | Self::Saturation { id, .. }
             | Self::Tint { id, .. }
             | Self::GaussianBlur { id, .. }
+            | Self::MotionTile { id, .. }
             | Self::DirectionalBlur { id, .. }
             | Self::ZoomBlur { id, .. }
+            | Self::RadialBlur { id, .. }
             | Self::Glow { id, .. }
             | Self::Bloom { id, .. }
             | Self::ChromaticAberration { id, .. }
@@ -130,6 +144,30 @@ impl Effect {
             Self::CameraShake { timing, .. } => *timing,
             _ => ActiveInterval::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Effect;
+
+    #[test]
+    fn motion_tile_deserializes_with_dynamic_extent_properties() {
+        let effect = serde_json::from_str::<Effect>(
+            r#"{
+                "type":"motion_tile",
+                "id":"tile",
+                "output_width_percent":{"base_value":200.0},
+                "output_height_percent":{"base_value":150.0},
+                "tile_center":{"x":0.5,"y":0.5},
+                "mirror_edges":true
+            }"#,
+        );
+
+        assert!(
+            effect.is_ok(),
+            "Motion Tile must be part of the canonical Effect model"
+        );
     }
 }
 

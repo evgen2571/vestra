@@ -142,6 +142,10 @@ def _canonical_parameter(
         if not 0 <= value.x <= 1 or not 0 <= value.y <= 1:
             raise ValueError(f"{name} must be within unit space")
         return value.to_canonical()
+    if kind == "boolean":
+        if not isinstance(value, bool):
+            raise TypeError(f"{name} must be a boolean")
+        return value
     if kind == "enum":
         candidate = value.value if isinstance(value, Enum) else value
         enum_values = cast(tuple[object, ...], parameter["enum_values"])

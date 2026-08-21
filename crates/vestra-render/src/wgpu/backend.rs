@@ -1062,6 +1062,7 @@ fn encode_parameters(
                     plan.layers[*layer_index].transform,
                     1.0,
                     crate::plan::ColourTransform::default(),
+                    parameters::motion_tile(&plan.layers[*layer_index].effects),
                 );
                 arena.push(&parameters)?;
             }
@@ -1099,6 +1100,7 @@ fn encode_parameters(
                     },
                     1.0,
                     crate::plan::ColourTransform::default(),
+                    None,
                 );
                 parameters.header[3] = match mask.input {
                     crate::plan::EvaluatedMaskInput::Shape { .. } => 3,
@@ -1135,6 +1137,7 @@ fn encode_parameters(
                     frame,
                     plan.layers[*layer_index].transform,
                     crate::plan::ColourTransform::default(),
+                    parameters::motion_tile(&plan.layers[*layer_index].effects),
                 ))?;
             }
             GpuOperation::RenderSolidLayer { layer_index, .. } => {

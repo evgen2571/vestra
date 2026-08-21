@@ -324,6 +324,20 @@ mod tests {
                 crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 },
             ),
             (
+                crate::plan::CompiledEffect::MotionTile {
+                    output_width_percent: scalar(200.0),
+                    output_height_percent: scalar(150.0),
+                    tile_center: crate::domain::Point { x: 0.5, y: 0.5 },
+                    mirror_edges: true,
+                },
+                crate::plan::EvaluatedEffect::MotionTile {
+                    output_width_percent: 200.0,
+                    output_height_percent: 150.0,
+                    tile_center: crate::domain::Point { x: 0.5, y: 0.5 },
+                    mirror_edges: true,
+                },
+            ),
+            (
                 crate::plan::CompiledEffect::DirectionalBlur {
                     radius: scalar(2.0),
                     angle_degrees: scalar(10.0),
@@ -345,6 +359,16 @@ mod tests {
                     samples: 2,
                     anchor: crate::domain::Point { x: 0.5, y: 0.5 },
                     direction: crate::project::ZoomBlurDirection::Centered,
+                },
+            ),
+            (
+                crate::plan::CompiledEffect::RadialBlur {
+                    amount: scalar(2.0),
+                    center: crate::domain::Point { x: 0.5, y: 0.5 },
+                },
+                crate::plan::EvaluatedEffect::RadialBlur {
+                    amount: 2.0,
+                    center: crate::domain::Point { x: 0.5, y: 0.5 },
                 },
             ),
             (

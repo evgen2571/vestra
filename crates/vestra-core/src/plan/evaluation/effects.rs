@@ -30,6 +30,12 @@ pub enum EvaluatedEffect {
     GaussianBlur {
         radius: f64,
     },
+    MotionTile {
+        output_width_percent: f64,
+        output_height_percent: f64,
+        tile_center: Point,
+        mirror_edges: bool,
+    },
     DirectionalBlur {
         radius: f64,
         angle_degrees: f64,
@@ -39,6 +45,10 @@ pub enum EvaluatedEffect {
         samples: u8,
         anchor: Point,
         direction: ZoomBlurDirection,
+    },
+    RadialBlur {
+        amount: f64,
+        center: Point,
     },
     Glow {
         threshold: f64,
@@ -93,6 +103,11 @@ pub enum EvaluatedEffect {
 
 impl EvaluatedEffect {
     #[must_use]
+    pub const fn is_pre_transform(&self) -> bool {
+        matches!(self, Self::MotionTile { .. })
+    }
+
+    #[must_use]
     pub fn is_identity(&self) -> bool {
         match self {
             Self::ColourTransform { transform } => *transform == ColourTransform::default(),
@@ -102,9 +117,15 @@ impl EvaluatedEffect {
             | Self::ChromaticAberration { amount, .. }
             | Self::Vignette { amount, .. } => effect_amount_is_identity(*amount),
             Self::GaussianBlur { radius } => gaussian_radius_is_identity(*radius),
+            Self::MotionTile {
+                output_width_percent,
+                output_height_percent,
+                ..
+            } => *output_width_percent == 100.0 && *output_height_percent == 100.0,
             Self::DirectionalBlur { radius, .. }
             | Self::ZoomBlur { radius, .. }
             | Self::MotionBlur { radius, .. } => sampling_blur_radius_is_identity(*radius),
+            Self::RadialBlur { amount, .. } => sampling_blur_radius_is_identity(*amount),
             Self::Glow {
                 radius, intensity, ..
             } => gaussian_radius_is_identity(*radius) || effect_amount_is_identity(*intensity),
@@ -161,6 +182,25 @@ pub fn evaluate(
         CompiledEffect::GaussianBlur { radius } => EvaluatedEffect::GaussianBlur {
             radius: radius.evaluate(authored_time, project_time, context)?,
         },
+        CompiledEffect::MotionTile {
+            output_width_percent,
+            output_height_percent,
+            tile_center,
+            mirror_edges,
+        } => EvaluatedEffect::MotionTile {
+            output_width_percent: output_width_percent.evaluate(
+                authored_time,
+                project_time,
+                context,
+            )?,
+            output_height_percent: output_height_percent.evaluate(
+                authored_time,
+                project_time,
+                context,
+            )?,
+            tile_center: *tile_center,
+            mirror_edges: *mirror_edges,
+        },
         CompiledEffect::DirectionalBlur {
             radius,
             angle_degrees,
@@ -178,6 +218,10 @@ pub fn evaluate(
             samples: *samples,
             anchor: *anchor,
             direction: *direction,
+        },
+        CompiledEffect::RadialBlur { amount, center } => EvaluatedEffect::RadialBlur {
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            center: *center,
         },
         CompiledEffect::Glow {
             threshold,

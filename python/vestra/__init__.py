@@ -131,6 +131,8 @@ from .effects import (
     GaussianBlur,
     Glow,
     MotionBlur,
+    MotionTile,
+    RadialBlur,
     Saturation,
     Sharpen,
     Tint,
@@ -288,4 +290,6 @@ __all__ = [
     "ColorAdjust",
     "CameraShake",
     "MotionBlur",
+    "MotionTile",
+    "RadialBlur",
 ]

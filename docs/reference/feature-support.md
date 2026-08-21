@@ -10,7 +10,7 @@ not reduced renderer support.
 | Image | supported | `image` | direct | supported | supported |
 | Video | supported | `video` | direct | supported, requires media preflight | supported, requires media preflight |
 | Solid color | `Color`/`SolidColor` | `solid_color` | adapter-mediated | supported | supported |
-| Shape | supported | `shape` | direct | supported | supported |
+| Shape (including Line stroke masks) | supported | `shape` | direct | supported | supported |
 | Text | supported, requires a font path | `text` | direct | supported, requires font preparation | supported, requires font preparation |
 | Spectrum2D | supported through authoring/source wrappers | `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | not fully verified |
 | Particle system | supported | `particle_system` | adapter-mediated | supported | not fully verified |

@@ -28,7 +28,7 @@ from vestra import (
     MaskCoverageMode,
 )
 from vestra.effects import GaussianBlur
-from vestra.authoring.values import Crop, Sizing
+from vestra.authoring.values import BlendMode, Crop, Sizing
 from vestra.sources import ParticleSystem, Spectrum2D
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -505,14 +505,99 @@ def test_mask_ids_reject_whitespace_and_non_strings() -> None:
         layer.masks.add(Circle(radius=4, fill="#ffffff"), id=42)  # type: ignore[arg-type]
 
 
-def test_line_is_not_a_supported_mask_input() -> None:
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_line_mask_uses_rendered_stroke_coverage(backend: str) -> None:
     project = Project(size=(32, 32), fps=1, duration=1)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    layer.masks.add(Line(start=(4, 4), end=(28, 28), stroke="#ffffff", stroke_width=3))
 
-    with pytest.raises((TypeError, ValueError), match="Line|line|mask"):
-        layer.masks.add(
-            Line(start=(0, 0), end=(8, 8), stroke="#ffffff", stroke_width=1)
-        )
+    pixels = _render(project, backend)
+    diagonal = (16 * 32 + 16) * 4
+    off_stroke = (16 * 32 + 4) * 4
+    assert pixels[diagonal] > 0
+    assert pixels[off_stroke] == 0
+
+
+def test_group_mask_omitted_child_duration_inherits_owner_duration() -> None:
+    project = Project(size=(32, 32), fps=1, duration=5)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=5)
+    group = Group([Rectangle(width=32, height=32, fill="#ffffff")])
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    for time in (0.5, 2.0, 4.5):
+        pixels = _render(project, "cpu", seconds=time)
+        assert pixels[(16 * 32 + 16) * 4] == 255
+
+    child_clip = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]
+    assert child_clip["duration"] == 5.0
+
+
+def test_group_mask_explicit_child_timing_remains_local_and_clipped() -> None:
+    project = Project(size=(32, 32), fps=1, duration=5)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=5)
+    group = Group()
+    group.add(Rectangle(width=32, height=32, fill="#ffffff"), start=1, duration=2)
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    assert _render(project, "cpu", seconds=0.5)[(16 * 32 + 16) * 4] == 0
+    assert _render(project, "cpu", seconds=2.0)[(16 * 32 + 16) * 4] == 255
+    assert _render(project, "cpu", seconds=3.5)[(16 * 32 + 16) * 4] == 0
+
+
+def test_group_child_presentation_lowers_to_normal_clip_fields() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=2)
+    group = Group()
+    child = group.add(Rectangle(width=8, height=8, fill="#ffffff"))
+    child.transform.position = (0.25, 0.5)
+    child.transform.rotation = 15
+    child.opacity = 0.5
+    child.blend_mode = BlendMode.SCREEN
+    child.effects.add(GaussianBlur(radius=1))
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    clip = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]
+    assert clip["transform"]["position"]["base_value"] == {"x": 0.25, "y": 0.5}
+    assert clip["transform"]["rotation_degrees"]["base_value"] == 15.0
+    assert clip["opacity"]["base_value"] == 0.5
+    assert clip["blend_mode"] == "screen"
+    assert clip["effects"][0]["type"] == "gaussian_blur"
+
+
+def test_group_child_bindings_use_canonical_modifiers() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=2)
+    group = Group()
+    child = group.add(Rectangle(width=8, height=8, fill="#ffffff"))
+    signal = project.audio.signal.rms()
+    child.opacity.bind(signal, operation="replace")
+    child.transform.rotation.bind(signal, operation="add")
+    child.transform.scale.bind(signal, operation="multiply")
+    child.transform.position_x.bind(signal, operation="add")
+    child.effects.add(GaussianBlur(radius=1)).radius.bind(signal, operation="replace")
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+
+    clip = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]
+    assert clip["opacity"]["modifiers"][0]["operation"] == "replace"
+    assert clip["transform"]["rotation_degrees"]["modifiers"][0]["operation"] == "add"
+    assert clip["transform"]["component_modifiers"]["scale_x"] == clip["transform"]["component_modifiers"]["scale_y"]
+    assert clip["transform"]["component_modifiers"]["position_x"][0]["operation"] == "add"
+    assert clip["effects"][0]["radius"]["modifiers"][0]["operation"] == "replace"
+
+
+def test_mask_scalar_and_rotation_bindings_use_canonical_modifiers() -> None:
+    project = Project(size=(32, 32), fps=1, duration=2)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"), duration=2)
+    mask = layer.masks.add(Rectangle(width=12, height=12, fill="#ffffff"))
+    signal = project.audio.signal.rms()
+    mask.strength.bind(signal, operation="replace")
+    mask.feather.bind(signal, operation="add")
+    mask.transform.rotation.bind(signal, operation="multiply")
+
+    canonical = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]
+    assert canonical["strength"]["modifiers"][0]["operation"] == "replace"
+    assert canonical["feather"]["modifiers"][0]["operation"] == "add"
+    assert canonical["transform"]["rotation_degrees"]["modifiers"][0]["operation"] == "multiply"
 
 
 @pytest.mark.parametrize("backend", ["cpu", "wgpu"])
@@ -783,6 +868,57 @@ def test_mask_uniform_scale_signal_is_evaluated_at_render_time() -> None:
         AudioGainKeyframe(0, 0),
         AudioGainKeyframe(0.5, 1),
     ])
+    quiet = project.render_frame(0, backend="cpu").to_bytes()
+    loud = project.render_frame(0.75, backend="cpu").to_bytes()
+    assert quiet != loud
+
+
+def test_group_child_opacity_signal_is_evaluated_at_render_time() -> None:
+    project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    group = Group()
+    child = group.add(Rectangle(width=20, height=20, fill="#ffffff"))
+    child.opacity.bind(
+        project.audio.signal.rms().remap(input=(0, 1), output=(0.1, 1.0)),
+        operation="replace",
+    )
+    layer.masks.add(group, operation=MaskOperation.REPLACE)
+    project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+
+    quiet = project.render_frame(0, backend="cpu").to_bytes()
+    loud = project.render_frame(0.75, backend="cpu").to_bytes()
+    assert quiet != loud
+
+
+def test_group_child_uniform_scale_signal_cpu_wgpu_parity() -> None:
+    def make_project() -> Project:
+        project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+        layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+        group = Group()
+        child = group.add(Rectangle(width=12, height=4, fill="#ffffff"))
+        child.transform.scale.bind(
+            project.audio.signal.rms().remap(input=(0, 1), output=(0.5, 1.5)),
+            operation="replace",
+        )
+        layer.masks.add(group, operation=MaskOperation.REPLACE)
+        project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        return project
+
+    cpu = _render(make_project(), "cpu", seconds=0.75)
+    gpu = _render(make_project(), "wgpu", seconds=0.75)
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
+
+
+def test_mask_strength_signal_is_evaluated_at_render_time() -> None:
+    project = Project(size=(32, 32), fps=4, duration=1, base_directory=".")
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    mask = layer.masks.add(Rectangle(width=20, height=20, fill="#ffffff"), operation=MaskOperation.REPLACE)
+    mask.strength.bind(
+        project.audio.signal.rms().remap(input=(0, 1), output=(0.1, 1.0)),
+        operation="replace",
+    )
+    project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+
     quiet = project.render_frame(0, backend="cpu").to_bytes()
     loud = project.render_frame(0.75, backend="cpu").to_bytes()
     assert quiet != loud

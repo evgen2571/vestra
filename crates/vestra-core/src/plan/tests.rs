@@ -1979,6 +1979,76 @@ fn mask_properties_classify_static_and_dynamic_content() {
 }
 
 #[test]
+fn track_matte_activity_dependency_propagates_through_chains() {
+    let mut project = canonical_project();
+    project.visual.transitions.clear();
+    project.visual.flashes.clear();
+    project.visual.post_effects.clear();
+
+    let mut layer = project.visual.clips[0].clone();
+    layer.effects.clear();
+    let transform = layer.transform.as_mut().expect("fixture transform");
+    transform.position.keyframes.clear();
+    transform.anchor.keyframes.clear();
+    transform.scale.keyframes.clear();
+    transform.rotation_degrees.track.keyframes.clear();
+    layer.visible = true;
+
+    let mut consumer = layer.clone();
+    consumer.id = "consumer".to_owned();
+    consumer.start = 0.0;
+    consumer.duration = 5.0;
+    consumer.matte = Some(crate::project::TrackMatte {
+        source_layer: "middle".to_owned(),
+        mode: crate::project::MatteMode::Alpha,
+        invert: false,
+    });
+
+    let mut middle = layer.clone();
+    middle.id = "middle".to_owned();
+    middle.start = 0.0;
+    middle.duration = 5.0;
+    middle.matte = Some(crate::project::TrackMatte {
+        source_layer: "matte".to_owned(),
+        mode: crate::project::MatteMode::Alpha,
+        invert: false,
+    });
+
+    let mut matte = layer;
+    matte.id = "matte".to_owned();
+    matte.start = 2.0;
+    matte.duration = 2.0;
+    matte.matte = None;
+
+    project.visual.clips = vec![consumer, middle, matte];
+    let plan = compile_project(project);
+    assert_eq!(
+        plan.layers
+            .iter()
+            .find(|layer| layer.id == "matte")
+            .expect("matte layer")
+            .content_dependency,
+        TemporalDependency::Static
+    );
+    assert_eq!(
+        plan.layers
+            .iter()
+            .find(|layer| layer.id == "middle")
+            .expect("middle layer")
+            .content_dependency,
+        TemporalDependency::Dynamic
+    );
+    assert_eq!(
+        plan.layers
+            .iter()
+            .find(|layer| layer.id == "consumer")
+            .expect("consumer layer")
+            .content_dependency,
+        TemporalDependency::Dynamic
+    );
+}
+
+#[test]
 fn compiler_classifies_whole_visual_activity_conservatively() {
     let mut project = canonical_project();
     project.visual.transitions.clear();

@@ -672,15 +672,25 @@ impl PyPreparedProject {
             Err(error) => Err(slot_error(py, error)?),
         }
     }
-    #[pyo3(signature = (request, *, progress = None, cancellation = None))]
+    #[pyo3(signature = (request, *, progress = None, show_progress = true, on_progress = None, cancellation = None))]
     fn render_video(
         &self,
         py: Python<'_>,
         request: &crate::render::PyPreparedVideoRenderRequest,
         progress: Option<Py<PyAny>>,
+        show_progress: bool,
+        on_progress: Option<Py<PyAny>>,
         cancellation: Option<&crate::render::PyCancellationToken>,
     ) -> PyResult<crate::render::PyRenderResult> {
-        crate::render::render_prepared(py, self, request, progress, cancellation)
+        crate::render::render_prepared(
+            py,
+            self,
+            request,
+            progress,
+            show_progress,
+            on_progress,
+            cancellation,
+        )
     }
 }
 

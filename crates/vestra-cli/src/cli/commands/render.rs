@@ -7,13 +7,13 @@ use std::{
 };
 
 use crate::output::{
-    HumanProgress, ProgressFormat, ResultFormat, print_failure, print_failure_stderr,
-    print_success, print_success_stderr, write_command_failure_report, write_plan_failure_report,
+    ProgressFormat, ResultFormat, print_failure, print_failure_stderr, print_success,
+    print_success_stderr, write_command_failure_report, write_plan_failure_report,
     write_render_failure_report, write_success_report,
 };
 use vestra::{
-    BackendPreference as RenderBackendPreference, CancellationToken, Category, Diagnostic, Editor,
-    EditorError, RenderEvent, RenderRequest,
+    BackendPreference as RenderBackendPreference, CallbackProgress, CancellationToken, Category,
+    Diagnostic, Editor, EditorError, ProgressMode, ProgressSink, RenderRequest,
 };
 
 #[expect(
@@ -41,29 +41,29 @@ pub(super) fn run(
     if let Err(error) = ctrlc::set_handler(move || cancellation_flag.cancel()) {
         tracing::warn!(error = %error, "interrupt handler unavailable");
     }
-    // Human progress owns presentation state for the whole render. Engine
-    // callbacks remain unthrottled; only terminal redraws are rate-limited.
-    let mut human_progress = (progress == ProgressFormat::Human).then(HumanProgress::new);
     let editor = Editor::new();
+    let progress_mode = match progress {
+        ProgressFormat::Auto => ProgressMode::Auto,
+        ProgressFormat::Terminal => ProgressMode::Terminal,
+        ProgressFormat::Json | ProgressFormat::None => ProgressMode::Disabled,
+    };
+    let mut json_progress = CallbackProgress(crate::output::progress::write_json_progress);
     let outcome = {
-        let mut emit = |event: RenderEvent| match progress {
-            ProgressFormat::Human => human_progress
-                .as_mut()
-                .expect("human progress state exists")
-                .update(&event),
-            ProgressFormat::Json => crate::output::progress::write_json_progress(&event),
-            ProgressFormat::None => {}
+        let sink: Option<&mut dyn ProgressSink> = match progress {
+            ProgressFormat::Json => Some(&mut json_progress),
+            ProgressFormat::Auto | ProgressFormat::Terminal | ProgressFormat::None => None,
         };
         match editor.load_project(&project) {
-            Ok(loaded) => editor.render(
+            Ok(loaded) => editor.render_with_progress(
                 &loaded,
                 RenderRequest {
                     output,
                     overwrite,
                     preview,
                     backend: backend_preference,
+                    progress_mode,
                 },
-                &mut emit,
+                sink,
                 &cancellation,
             ),
             Err(error) => Err(error),
@@ -165,9 +165,6 @@ pub(super) fn run(
             temporary_removed,
             timings,
         }) => {
-            if let Some(progress) = human_progress.as_mut() {
-                progress.finish_failure();
-            }
             tracing::debug!(
                 category = diagnostic.category.as_str(),
                 stage = %context.stage.as_str(),

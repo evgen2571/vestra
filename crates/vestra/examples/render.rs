@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             overwrite: true,
             preview: false,
             backend: BackendPreference::Auto,
+            progress_mode: vestra::ProgressMode::Disabled,
         },
         &mut |event| println!("{event:?}"),
         &CancellationToken::new(),

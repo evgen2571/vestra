@@ -537,6 +537,7 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
                 overwrite: true,
                 preview: false,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -561,6 +562,104 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
 }
 
 #[test]
+fn automatic_duration_started_event_uses_an_explicit_unknown_total() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_json(
+        r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"automatic"},"assets":[],"visual":{"clips":[]}}"##,
+        directory.path(),
+    )
+    .expect("project parses");
+    let mut events = Vec::new();
+
+    let error = Editor::new()
+        .render_with_observer(
+            &project,
+            RenderRequest::default().with_progress_mode(vestra::ProgressMode::Disabled),
+            |event| {
+                let cancel = matches!(event, vestra::RenderEvent::Started { .. });
+                events.push(event);
+                if cancel {
+                    vestra::RenderObserverControl::Cancel
+                } else {
+                    vestra::RenderObserverControl::Continue
+                }
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("observer stops before automatic preparation");
+
+    assert!(error.is_cancelled());
+    assert!(matches!(
+        events.first(),
+        Some(vestra::RenderEvent::Started {
+            total_frames: None,
+            ..
+        })
+    ));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.is_terminal()
+                && matches!(event, vestra::RenderEvent::Completed { .. }))
+    );
+}
+
+#[test]
+fn preparing_observer_cancellation_has_no_publication_or_completed_event() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("preparing-cancelled.mp4");
+    let mut events = Vec::new();
+
+    let error = Editor::new()
+        .render_with_observer(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
+            },
+            |event| {
+                let cancel = matches!(
+                    event,
+                    vestra::RenderEvent::StageChanged {
+                        stage: vestra::RenderStage::Preparing,
+                        ..
+                    }
+                );
+                events.push(event);
+                if cancel {
+                    vestra::RenderObserverControl::Cancel
+                } else {
+                    vestra::RenderObserverControl::Continue
+                }
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("observer stops during preparing");
+
+    assert!(error.is_cancelled());
+    assert!(!output.exists());
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| match event {
+                vestra::RenderEvent::Started { .. } => "started",
+                vestra::RenderEvent::StageChanged { .. } => "stage_changed",
+                vestra::RenderEvent::Cancelled { .. } => "cancelled",
+                _ => "other",
+            })
+            .collect::<Vec<_>>(),
+        ["started", "stage_changed", "cancelled"]
+    );
+}
+
+#[test]
 fn render_preparation_failure_belongs_to_the_started_operation() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
@@ -576,6 +675,7 @@ fn render_preparation_failure_belongs_to_the_started_operation() {
             RenderRequest {
                 output: Some(directory.path().join("out.mp4")),
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
                 ..RenderRequest::default()
             },
             &mut |event| events.push(event),
@@ -623,6 +723,7 @@ fn observer_cancellation_at_encoding_prevents_publication() {
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             |event| {
                 let cancel = matches!(
@@ -671,6 +772,7 @@ fn observer_cancellation_at_finalizing_prevents_publication() {
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             |event| {
                 let cancel = matches!(
@@ -714,6 +816,7 @@ fn static_render_does_not_report_ffmpeg_progress_as_rendering_progress() {
                 overwrite: true,
                 preview: false,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -737,6 +840,35 @@ fn static_render_does_not_report_ffmpeg_progress_as_rendering_progress() {
             .iter()
             .any(|event| matches!(event, vestra::RenderEvent::Progress { .. }))
     );
+    let operation_id = events.first().expect("started event").operation_id();
+    assert!(
+        events
+            .iter()
+            .all(|event| event.operation_id() == operation_id)
+    );
+    let stages: Vec<_> = events
+        .iter()
+        .filter_map(vestra::RenderEvent::stage)
+        .collect();
+    assert!(stages.windows(2).all(|window| window[0] < window[1]));
+    let rendering = stages
+        .iter()
+        .position(|stage| *stage == vestra::RenderStage::Rendering)
+        .expect("static render enters rendering");
+    let encoding = stages
+        .iter()
+        .position(|stage| *stage == vestra::RenderStage::Encoding)
+        .expect("static render enters encoding");
+    let finalizing = stages
+        .iter()
+        .position(|stage| *stage == vestra::RenderStage::Finalizing)
+        .expect("static render enters finalizing");
+    assert!(rendering < encoding && encoding < finalizing);
+    assert!(events.iter().filter(|event| event.is_terminal()).count() == 1);
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
 }
 
 #[test]
@@ -753,6 +885,7 @@ fn observer_cancellation_at_encoding_removes_temporary_output_and_prevents_publi
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             |event| {
                 let cancel = matches!(
@@ -813,6 +946,7 @@ fn token_cancellation_from_progress_prevents_publication() {
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             &mut |event| {
                 if matches!(
@@ -847,6 +981,7 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -882,6 +1017,7 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
                 overwrite: true,
                 preview: false,
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
             },
             |event| {
                 let control = if matches!(event, vestra::RenderEvent::Completed { .. }) {
@@ -915,11 +1051,21 @@ fn request_getters_expose_the_configured_values() {
         overwrite: true,
         preview: true,
         backend: BackendPreference::Cpu,
+        progress_mode: vestra::ProgressMode::Disabled,
     };
     assert_eq!(request.output(), Some(output.as_path()));
     assert!(request.overwrite());
     assert!(request.preview());
     assert_eq!(request.backend(), BackendPreference::Cpu);
+    assert_eq!(request.progress_mode(), vestra::ProgressMode::Disabled);
+    assert_eq!(
+        RenderRequest::default().progress_mode(),
+        vestra::ProgressMode::Auto
+    );
+    assert_eq!(
+        PreparedVideoRenderRequest::new(&output).progress_mode(),
+        vestra::ProgressMode::Auto
+    );
 
     let options = PrepareOptions::new(BackendPreference::Wgpu);
     assert_eq!(options.backend(), BackendPreference::Wgpu);
@@ -1168,6 +1314,7 @@ fn render_validation_and_preflight_failures_keep_operation_timings() {
             &project,
             RenderRequest {
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
                 ..RenderRequest::default()
             },
             &mut |_| {},
@@ -1188,6 +1335,7 @@ fn render_validation_and_preflight_failures_keep_operation_timings() {
             RenderRequest {
                 output: Some(directory.path().join("missing").join("out.mp4")),
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
                 ..RenderRequest::default()
             },
             &mut |_| {},
@@ -1215,6 +1363,7 @@ fn project_parse_time_stays_separate_from_sdk_operation_time() {
             RenderRequest {
                 output: Some(directory.path().join("missing").join("out.mp4")),
                 backend: BackendPreference::Cpu,
+                progress_mode: vestra::ProgressMode::Disabled,
                 ..RenderRequest::default()
             },
             &mut |_| {},

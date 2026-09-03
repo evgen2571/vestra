@@ -1,4 +1,4 @@
-use std::{fmt, io::IsTerminal};
+use std::fmt;
 
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing::{
@@ -20,11 +20,14 @@ pub(crate) fn init(verbosity: u8) -> Result<(), Box<dyn std::error::Error + Send
     let environment_filter = std::env::var("RUST_LOG").ok();
     let filter = EnvFilter::try_new(selected_filter(verbosity, environment_filter.as_deref()))?;
 
-    let output = crate::output::progress::terminal_output();
+    let output = vestra::terminal_output();
     tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .with_writer(move || output.writer())
-        .with_ansi(std::io::stderr().is_terminal())
+        .with_writer({
+            let output = std::sync::Arc::clone(&output);
+            move || output.writer()
+        })
+        .with_ansi(output.is_interactive())
         .event_format(TerminalEventFormatter)
         .try_init()
 }

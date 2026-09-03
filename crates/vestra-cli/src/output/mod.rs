@@ -5,7 +5,6 @@ mod report;
 mod result;
 mod terminal;
 
-pub(crate) use progress::HumanProgress;
 pub use progress::ProgressFormat;
 pub use report::{
     write_command_failure_report, write_plan_failure_report, write_render_failure_report,

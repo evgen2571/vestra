@@ -44,7 +44,7 @@ where
 {
     let mut lifecycle = super::runner::LifecycleEmitter::new(OperationId::new(), emit);
     lifecycle.started(
-        prepared.plan.frame_count,
+        Some(prepared.plan.frame_count),
         &options
             .output_override
             .clone()
@@ -68,7 +68,7 @@ pub(crate) fn render_prepared(
 ) -> Result<super::RenderSummary, super::RenderError> {
     let mut lifecycle = super::runner::LifecycleEmitter::new(OperationId::new(), emit);
     lifecycle.started(
-        prepared.plan.frame_count,
+        Some(prepared.plan.frame_count),
         &options
             .output_override
             .clone()

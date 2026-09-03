@@ -30,7 +30,10 @@ pub use render::{
     RenderFailureContext, RenderFailureStage, RenderObserverControl, RenderTimings,
 };
 pub use vestra_core::OperationId;
-pub use vestra_progress::{CallbackProgress, NoProgress, ProgressMode, ProgressSink, RenderStage};
+pub use vestra_progress::{
+    CallbackProgress, NoProgress, ProgressMode, ProgressSink, RenderStage, TerminalEnvironment,
+    TerminalOutput, TerminalProgress, TerminalWriter, terminal_output,
+};
 
 pub use vestra_core::audio_effect_definition::{
     AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectKind,

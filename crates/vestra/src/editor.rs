@@ -15,6 +15,7 @@ use crate::{
     render::{LifecycleEmitter, RenderBackendPreference},
 };
 use vestra_core::OperationId;
+use vestra_progress::{ProgressMode, ProgressSink, TerminalProgress};
 
 /// Stable category for an [`EditorError`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -521,6 +522,11 @@ impl Editor {
         clippy::result_large_err,
         reason = "render diagnostics retain operation timings for CLI report output"
     )]
+    /// Compatibility observer-oriented render entry point.
+    ///
+    /// New callers that want the normal [`ProgressMode::Auto`] presentation
+    /// should use [`Self::render_auto`]. Callers that need observer-controlled
+    /// cancellation should use [`Self::render_with_observer`].
     pub fn render(
         &self,
         project: &Project,
@@ -537,6 +543,76 @@ impl Editor {
             },
             cancellation,
         )
+    }
+
+    /// Renders with the request's built-in progress policy.
+    ///
+    /// A custom sink replaces the native terminal presentation. Use
+    /// [`Self::render_with_observer`] when the observer must also control
+    /// cancellation.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render diagnostics retain operation timings for CLI report output"
+    )]
+    pub fn render_with_progress(
+        &self,
+        project: &Project,
+        request: SdkRenderRequest,
+        mut sink: Option<&mut dyn ProgressSink>,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        let mut terminal = sink
+            .is_none()
+            .then(|| TerminalProgress::with_shared_output(request.progress_mode))
+            .flatten();
+        self.render_with_observer(
+            project,
+            request,
+            move |event| {
+                if let Some(sink) = sink.as_mut() {
+                    sink.on_event(&event);
+                }
+                if let Some(terminal) = terminal.as_mut() {
+                    terminal.on_event(&event);
+                }
+                crate::RenderObserverControl::Continue
+            },
+            cancellation,
+        )
+    }
+
+    /// Renders using the default [`ProgressMode::Auto`] policy.
+    ///
+    /// This is the recommended normal high-level render entry point. The
+    /// historically named [`Self::render`] remains the compatibility entry
+    /// point for observer-oriented callers; new cancellation-capable
+    /// observers should use [`Self::render_with_observer`] explicitly.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render diagnostics retain operation timings for CLI report output"
+    )]
+    pub fn render_auto(
+        &self,
+        project: &Project,
+        request: SdkRenderRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        self.render_with_progress(project, request, None, cancellation)
+    }
+
+    /// Compatibility alias for [`Self::render_auto`].
+    #[deprecated(note = "use Editor::render_auto for the default Auto progress policy")]
+    #[expect(
+        clippy::result_large_err,
+        reason = "render diagnostics retain operation timings for CLI report output"
+    )]
+    pub fn render_default(
+        &self,
+        project: &Project,
+        request: SdkRenderRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        self.render_auto(project, request, cancellation)
     }
 
     /// Renders while allowing a synchronous observer to stop before output
@@ -562,7 +638,7 @@ impl Editor {
             lifecycle.cancelled();
             return Err(Self::cancelled_editor_error(
                 operation_started,
-                total_frames,
+                total_frames.unwrap_or_default(),
                 output_path,
             ));
         }
@@ -570,7 +646,7 @@ impl Editor {
             lifecycle.cancelled();
             return Err(Self::cancelled_editor_error(
                 operation_started,
-                total_frames,
+                total_frames.unwrap_or_default(),
                 output_path,
             ));
         }
@@ -578,7 +654,7 @@ impl Editor {
             lifecycle.cancelled();
             return Err(Self::cancelled_editor_error(
                 operation_started,
-                total_frames,
+                total_frames.unwrap_or_default(),
                 output_path,
             ));
         }
@@ -699,18 +775,12 @@ impl Editor {
             }
         })
     }
-    fn estimated_total_frames(project: &Project) -> u64 {
+    fn estimated_total_frames(project: &Project) -> Option<u64> {
         let output = &project.canonical().output;
-        let Some(duration) = output.duration else {
-            return 0;
-        };
-        let Some(duration_nanos) = vestra_core::timeline::seconds_to_nanos(duration) else {
-            return 0;
-        };
-        let Ok((numerator, denominator)) = output.frame_rate.rational() else {
-            return 0;
-        };
-        vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).unwrap_or(0)
+        let duration = output.duration?;
+        let duration_nanos = vestra_core::timeline::seconds_to_nanos(duration)?;
+        let (numerator, denominator) = output.frame_rate.rational().ok()?;
+        vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).ok()
     }
     fn cancelled_editor_error(
         operation_started: Instant,
@@ -917,13 +987,15 @@ impl EditorBuilder {
     }
 }
 
-/// SDK-owned rendering inputs. It intentionally contains no terminal options.
+/// SDK-owned rendering inputs, including the built-in progress policy.
+/// Terminal I/O remains owned by the native progress presentation layer.
 #[derive(Clone, Debug, Default)]
 pub struct SdkRenderRequest {
     pub output: Option<PathBuf>,
     pub overwrite: bool,
     pub preview: bool,
     pub backend: RenderBackendPreference,
+    pub progress_mode: ProgressMode,
 }
 
 impl SdkRenderRequest {
@@ -942,6 +1014,15 @@ impl SdkRenderRequest {
     #[must_use]
     pub const fn backend(&self) -> RenderBackendPreference {
         self.backend
+    }
+    #[must_use]
+    pub const fn progress_mode(&self) -> ProgressMode {
+        self.progress_mode
+    }
+    #[must_use]
+    pub const fn with_progress_mode(mut self, progress_mode: ProgressMode) -> Self {
+        self.progress_mode = progress_mode;
+        self
     }
 }
 

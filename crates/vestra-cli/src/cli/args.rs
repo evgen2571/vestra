@@ -56,7 +56,7 @@ pub(super) struct RenderArgs {
     pub(super) preview: bool,
     #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
     pub(super) format: CliResultFormat,
-    #[arg(long, value_enum, default_value_t = CliProgressFormat::Human)]
+    #[arg(long, value_enum, default_value_t = CliProgressFormat::Auto)]
     pub(super) progress: CliProgressFormat,
     #[arg(long)]
     pub(super) report: Option<PathBuf>,

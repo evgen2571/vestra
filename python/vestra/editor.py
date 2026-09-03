@@ -759,8 +759,15 @@ class Project:
         overwrite: bool = False,
         preview: bool = False,
         progress: Callable[[_native.RenderEvent], object] | None = None,
+        show_progress: bool = True,
+        on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
     ) -> _native.RenderResult:
+        """Render using native stderr progress by default.
+
+        ``show_progress=False`` disables the built-in presentation. ``progress``
+        and ``on_progress`` are callback aliases; either one replaces it.
+        """
         request = _native.RenderRequest(
             _path(output, "output"),
             backend=_backend(backend),
@@ -771,6 +778,8 @@ class Project:
             self.snapshot(output=output),
             request,
             progress=progress,
+            show_progress=show_progress,
+            on_progress=on_progress,
             cancellation=cancellation,
         )
 

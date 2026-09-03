@@ -485,6 +485,7 @@ fn render_once(
             overwrite: false,
             preview: false,
             backend: backend_preference,
+            progress_mode: vestra::ProgressMode::Disabled,
         },
         &mut |_| {},
         &CancellationToken::new(),

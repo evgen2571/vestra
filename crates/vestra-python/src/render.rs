@@ -29,15 +29,22 @@ use crate::{
 pub(crate) fn validate_progress(
     py: Python<'_>,
     progress: Option<Py<PyAny>>,
+    on_progress: Option<Py<PyAny>>,
 ) -> PyResult<Option<Py<PyAny>>> {
-    if let Some(callback) = progress.as_ref()
+    if progress.is_some() && on_progress.is_some() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "pass only one of progress or on_progress",
+        ));
+    }
+    let callback = on_progress.or(progress);
+    if let Some(callback) = callback.as_ref()
         && !callback.bind(py).is_callable()
     {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "progress must be callable or None",
         ));
     }
-    Ok(progress)
+    Ok(callback)
 }
 
 #[pyclass(
@@ -137,6 +144,7 @@ impl PyRenderRequest {
                 overwrite,
                 preview,
                 backend: backend.native(),
+                progress_mode: vestra::ProgressMode::Auto,
             },
             output,
             backend,
@@ -300,7 +308,7 @@ impl From<NativeRenderEvent> for PyRenderEvent {
                 operation_id,
                 stage: None,
                 frame: None,
-                total_frames: Some(total_frames),
+                total_frames,
                 fraction: None,
                 output_path: Some(output_path),
             },
@@ -671,21 +679,41 @@ pub(crate) fn render_prepared(
     prepared: &crate::prepared::PyPreparedProject,
     request: &PyPreparedVideoRenderRequest,
     progress: Option<Py<PyAny>>,
+    show_progress: bool,
+    on_progress: Option<Py<PyAny>>,
     cancellation: Option<&PyCancellationToken>,
 ) -> PyResult<PyRenderResult> {
-    let progress = validate_progress(py, progress)?;
+    let progress = validate_progress(py, progress, on_progress)?;
     let request = request.inner.clone();
     let cancellation =
         cancellation.map_or_else(NativeCancellationToken::new, |token| token.inner.clone());
     match prepared.video_operation(py, move |native| {
         wait_for_video_render_test_barrier()?;
         NATIVE_RENDER_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
-        let mut state = CallbackState::new(progress);
-        let result =
-            native.render_video_with_observer(request, |event| state.observe(event), &cancellation);
+        let (result, callback_error) = if let Some(progress) = progress {
+            let mut state = CallbackState::new(Some(progress));
+            let result = native.render_video_with_observer(
+                request,
+                |event| state.observe(event),
+                &cancellation,
+            );
+            (result, state.first_error)
+        } else {
+            let mode = if show_progress {
+                vestra::ProgressMode::Auto
+            } else {
+                vestra::ProgressMode::Disabled
+            };
+            let result = native.render_video_with_progress(
+                request.with_progress_mode(mode),
+                None,
+                &cancellation,
+            );
+            (result, None)
+        };
         Ok(Invocation {
             result,
-            callback_error: state.first_error,
+            callback_error,
         })
     }) {
         Ok(Ok(invocation)) => finish_invocation(py, invocation),
@@ -694,15 +722,21 @@ pub(crate) fn render_prepared(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the Python bridge keeps render options explicit at the boundary"
+)]
 pub(crate) fn render_one_shot(
     py: Python<'_>,
     editor: &NativeEditor,
     project: &NativeProject,
     request: &PyRenderRequest,
     progress: Option<Py<PyAny>>,
+    show_progress: bool,
+    on_progress: Option<Py<PyAny>>,
     cancellation: Option<&PyCancellationToken>,
 ) -> PyResult<PyRenderResult> {
-    let progress = validate_progress(py, progress)?;
+    let progress = validate_progress(py, progress, on_progress)?;
     let request = request.inner.clone();
     let cancellation =
         cancellation.map_or_else(NativeCancellationToken::new, |token| token.inner.clone());
@@ -711,16 +745,33 @@ pub(crate) fn render_one_shot(
     // in CallbackState::observe.
     let invocation = py.detach(|| {
         NATIVE_RENDER_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
-        let mut state = CallbackState::new(progress);
-        let result = editor.render_with_observer(
-            project,
-            request,
-            |event| state.observe(event),
-            &cancellation,
-        );
-        Invocation {
-            result,
-            callback_error: state.first_error,
+        if let Some(progress) = progress {
+            let mut state = CallbackState::new(Some(progress));
+            let result = editor.render_with_observer(
+                project,
+                request,
+                |event| state.observe(event),
+                &cancellation,
+            );
+            Invocation {
+                result,
+                callback_error: state.first_error,
+            }
+        } else {
+            let mode = if show_progress {
+                vestra::ProgressMode::Auto
+            } else {
+                vestra::ProgressMode::Disabled
+            };
+            Invocation {
+                result: editor.render_with_progress(
+                    project,
+                    request.with_progress_mode(mode),
+                    None,
+                    &cancellation,
+                ),
+                callback_error: None,
+            }
         }
     });
     finish_invocation(py, invocation)

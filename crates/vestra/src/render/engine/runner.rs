@@ -126,7 +126,7 @@ impl LifecycleEmitter<'_> {
 
     pub(crate) fn started(
         &mut self,
-        total_frames: u64,
+        total_frames: Option<u64>,
         output_path: &Path,
     ) -> RenderObserverControl {
         debug_assert!(!self.started, "render lifecycle started twice");

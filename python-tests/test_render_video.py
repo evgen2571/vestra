@@ -27,7 +27,7 @@ def multi_frame_prepared(tmp_path: Path) -> vestra.PreparedProject:
     return project.prepare(backend="cpu")
 
 
-def test_prepared_video_render_publishes_output_and_filters_completed(tmp_path: Path) -> None:
+def test_prepared_video_render_publishes_output_and_delivers_completed(tmp_path: Path) -> None:
     output = tmp_path / "prepared.mp4"
     events: list[vestra.RenderEvent] = []
     result = cpu_prepared().render_video(
@@ -59,6 +59,35 @@ def test_prepared_render_without_callback_never_reattaches_to_python(tmp_path: P
     assert result.output_path == output
     assert output.exists()
     assert native._test_callback_attach_count() == 0
+
+
+def test_show_progress_false_uses_native_render_without_python_callback(
+    tmp_path: Path,
+) -> None:
+    import vestra._native as native
+
+    native._test_reset_callback_attach_count()
+    output = tmp_path / "prepared-no-progress.mp4"
+    result = cpu_prepared().render_video(
+        vestra.PreparedVideoRenderRequest(output), show_progress=False
+    )
+
+    assert result.output_path == output
+    assert output.exists()
+    assert native._test_callback_attach_count() == 0
+
+
+def test_on_progress_alias_receives_the_native_event_schema(tmp_path: Path) -> None:
+    events: list[vestra.RenderEvent] = []
+    output = tmp_path / "prepared-on-progress.mp4"
+
+    cpu_prepared().render_video(
+        vestra.PreparedVideoRenderRequest(output), on_progress=events.append
+    )
+
+    assert events
+    assert events[-1].kind == "completed"
+    assert all(event.schema_version == 2 for event in events)
 
 
 def test_one_shot_video_render_uses_one_shot_timing_scope(tmp_path: Path) -> None:

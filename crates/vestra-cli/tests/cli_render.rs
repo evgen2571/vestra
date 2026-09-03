@@ -108,7 +108,7 @@ fn none_progress_does_not_suppress_debug_logs_or_the_command_result() {
 }
 
 #[test]
-fn redirected_human_progress_is_clean_and_sparse() {
+fn redirected_terminal_progress_has_no_animated_output() {
     let workspace = TempDir::new().expect("workspace");
     let output = workspace.path().join("human-progress.mp4");
     let result = command()
@@ -120,7 +120,7 @@ fn redirected_human_progress_is_clean_and_sparse() {
             "--output",
             output.to_str().expect("UTF-8 path"),
             "--progress",
-            "human",
+            "terminal",
         ])
         .output()
         .expect("render runs");
@@ -132,6 +132,29 @@ fn redirected_human_progress_is_clean_and_sparse() {
         progress.lines().count() <= 5,
         "progress was not sparse: {progress}"
     );
+}
+
+#[test]
+fn default_auto_progress_is_silent_when_stderr_is_redirected() {
+    let workspace = TempDir::new().expect("workspace");
+    let output = workspace.path().join("auto-progress.mp4");
+    let result = command()
+        .args([
+            "render",
+            "tests/fixtures/wgpu-small-rgba.json",
+            "--render-backend",
+            "cpu",
+            "--output",
+            output.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .expect("render runs");
+    assert!(result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(!stderr.contains("Rendering"));
+    assert!(!stderr.contains("ETA"));
+    assert!(!stderr.contains('\r'));
+    assert!(!stderr.contains("\x1b["));
 }
 
 #[test]

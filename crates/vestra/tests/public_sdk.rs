@@ -547,21 +547,14 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
     assert!(result.timings.operation_total_ms >= result.timings.semantic_validation_ms);
     assert!(result.timings.operation_total_ms >= result.timings.preflight_ms);
     assert_eq!(result.timings.total_ms, result.timings.operation_total_ms);
-    assert_eq!(
-        events.last().map(|event| event.kind.as_str()),
-        Some("completed")
-    );
-    assert_eq!(
-        events
-            .iter()
-            .map(|event| event.kind.as_str())
-            .collect::<Vec<_>>(),
-        ["started", "completed"]
-    );
-    assert!(events.iter().all(|event| {
-        event.kind != "progress"
-            || (event.frame < event.total_frames && event.progress.is_some_and(|value| value < 1.0))
-    }));
+    assert!(matches!(
+        events.first(),
+        Some(vestra::RenderEvent::Started { .. })
+    ));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
 }
 
 #[test]
@@ -581,8 +574,8 @@ fn observer_cancellation_on_last_legitimate_progress_removes_temporary_output_an
                 backend: BackendPreference::Cpu,
             },
             |event| {
-                let cancel = event.kind == "progress" && event.frame + 1 == event.total_frames;
-                events.push(event.kind);
+                let cancel = matches!(event, vestra::RenderEvent::Progress { frame, total_frames, .. } if frame + 1 == total_frames);
+                events.push(event);
                 if cancel {
                     vestra::RenderObserverControl::Cancel
                 } else {
@@ -602,8 +595,10 @@ fn observer_cancellation_on_last_legitimate_progress_removes_temporary_output_an
         Some("cancellation")
     );
     assert_eq!(error.temporary_output_removed(), Some(true));
-    assert!(events.iter().all(|kind| kind != "completed"));
-    assert_eq!(events.last().map(String::as_str), Some("progress"));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
     assert!(!output.exists());
     assert!(
         !std::fs::read_dir(directory.path())
@@ -633,7 +628,7 @@ fn token_cancellation_from_progress_prevents_publication() {
                 backend: BackendPreference::Cpu,
             },
             &mut |event| {
-                if event.kind == "progress" && event.frame + 1 == event.total_frames {
+                if matches!(event, vestra::RenderEvent::Progress { frame, total_frames, .. } if frame + 1 == total_frames) {
                     callback_token.cancel();
                 }
             },
@@ -664,23 +659,17 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
         )
         .expect("multi-frame render");
     assert!(result.output.is_file());
-    assert_eq!(
-        events.first().map(|event| event.kind.as_str()),
-        Some("started")
-    );
-    assert_eq!(
-        events.last().map(|event| event.kind.as_str()),
-        Some("completed")
-    );
-    assert!(events.iter().any(|event| event.kind == "progress"));
-    for event in events.iter().filter(|event| event.kind == "progress") {
-        assert!(event.frame > 0 && event.frame < event.total_frames);
-        assert!(
-            event
-                .progress
-                .is_some_and(|value| value > 0.0 && value < 1.0)
-        );
-    }
+    assert!(matches!(
+        events.first(),
+        Some(vestra::RenderEvent::Started { .. })
+    ));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
+    assert!(events.iter().any(
+        |event| matches!(event, vestra::RenderEvent::Progress { fraction, .. } if *fraction == 1.0)
+    ));
 }
 
 #[test]
@@ -701,12 +690,12 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
                 backend: BackendPreference::Cpu,
             },
             |event| {
-                let control = if event.kind == "completed" {
+                let control = if matches!(event, vestra::RenderEvent::Completed { .. }) {
                     vestra::RenderObserverControl::Cancel
                 } else {
                     vestra::RenderObserverControl::Continue
                 };
-                events.push(event.kind);
+                events.push(event);
                 control
             },
             &CancellationToken::new(),
@@ -714,7 +703,10 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
         .expect("completed observer control cannot roll back success");
     assert_eq!(result.output, output);
     assert!(output.is_file());
-    assert_eq!(events, ["started", "completed"]);
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
 }
 
 #[test]
@@ -759,7 +751,7 @@ fn observer_cancellation_before_submission_keeps_prepared_project_reusable() {
         )
         .expect_err("started observer cancellation");
     assert!(error.is_cancelled());
-    assert_eq!(calls, 1);
+    assert_eq!(calls, 2, "started cancellation is followed by Cancelled");
     assert!(!output.exists());
     assert!(prepared.render_frame_number(0).is_ok());
 }
@@ -777,8 +769,8 @@ fn observer_cancellation_after_submission_invalidates_prepared_project() {
         .render_video_with_observer(
             PreparedVideoRenderRequest::new(&output).with_overwrite(true),
             |event| {
-                let cancel = event.kind == "progress" && event.frame + 1 == event.total_frames;
-                events.push(event.kind);
+                let cancel = matches!(event, vestra::RenderEvent::Progress { frame, total_frames, .. } if frame + 1 == total_frames);
+                events.push(event);
                 if cancel {
                     vestra::RenderObserverControl::Cancel
                 } else {
@@ -789,7 +781,10 @@ fn observer_cancellation_after_submission_invalidates_prepared_project() {
         )
         .expect_err("last legitimate progress observer cancellation");
     assert!(error.is_cancelled());
-    assert_eq!(events.last().map(String::as_str), Some("progress"));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
     assert!(!output.exists());
     let invalidated = prepared
         .render_frame_number(0)

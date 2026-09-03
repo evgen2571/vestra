@@ -3,9 +3,11 @@ use std::{path::Path, sync::Arc, time::Instant};
 #[cfg(test)]
 use crate::render::RenderBackend;
 use crate::{Category, Diagnostic, render::RenderBackendKind};
+use vestra_core::OperationId;
 #[cfg(test)]
 use vestra_media::FfmpegSink;
 use vestra_media::{EncoderSettings, FrameSink, MediaError, OutputTarget};
+use vestra_progress::{RenderEvent, RenderStage};
 
 use super::{
     events,
@@ -13,7 +15,7 @@ use super::{
     frame_loop::run as run_frame_loop,
     metrics::{failure_timings, failure_with_context, milliseconds, operation_backend_metrics},
     types::{
-        RenderError, RenderEvent, RenderFailureContext, RenderFailureStage, RenderObserverControl,
+        RenderError, RenderFailureContext, RenderFailureStage, RenderObserverControl,
         RenderOptions, RenderSummary, RenderTimings, backend_fallback_warning,
     },
 };
@@ -93,6 +95,93 @@ where
     S: FrameSink,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
+    let operation_id = OperationId::new();
+    let mut lifecycle = LifecycleEmitter {
+        emit,
+        operation_id,
+        started: false,
+    };
+    let result = render_prepared_with_sink_inner(prepared, options, &mut lifecycle, start_sink);
+    match &result {
+        Ok(summary) => lifecycle.completed(&summary.output_path),
+        Err(error) if error.diagnostic.category == Category::Cancellation => lifecycle.cancelled(),
+        Err(_) => lifecycle.failed(),
+    }
+    result
+}
+
+pub(super) struct LifecycleEmitter<'a> {
+    emit: &'a mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    operation_id: OperationId,
+    started: bool,
+}
+
+impl LifecycleEmitter<'_> {
+    fn emit(&mut self, event: RenderEvent) -> RenderObserverControl {
+        (self.emit)(event)
+    }
+
+    fn started(&mut self, total_frames: u64, output_path: &Path) -> RenderObserverControl {
+        self.started = true;
+        self.emit(events::started(
+            self.operation_id,
+            total_frames,
+            output_path,
+        ))
+    }
+
+    fn stage(&mut self, stage: RenderStage) -> RenderObserverControl {
+        self.emit(events::stage(self.operation_id, stage))
+    }
+
+    pub(super) fn progress(
+        &mut self,
+        completed_frames: u64,
+        total_frames: u64,
+    ) -> RenderObserverControl {
+        self.emit(events::progress(
+            self.operation_id,
+            completed_frames,
+            total_frames,
+        ))
+    }
+
+    fn completed(&mut self, output_path: &Path) {
+        if self.started {
+            let _ = self.emit(RenderEvent::completed(
+                self.operation_id,
+                output_path.to_path_buf(),
+            ));
+        }
+    }
+
+    fn cancelled(&mut self) {
+        if self.started {
+            let _ = self.emit(RenderEvent::cancelled(self.operation_id));
+        }
+    }
+
+    fn failed(&mut self) {
+        if self.started {
+            let _ = self.emit(RenderEvent::failed(self.operation_id));
+        }
+    }
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "render errors retain cleanup status"
+)]
+fn render_prepared_with_sink_inner<S, SF>(
+    prepared: &mut PreparedState,
+    options: &RenderOptions,
+    lifecycle: &mut LifecycleEmitter<'_>,
+    start_sink: SF,
+) -> Result<RenderSummary, RenderError>
+where
+    S: FrameSink,
+    SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
+{
     prepared.ensure_ready()?;
     // Keep the immutable plan local while the backend is mutably borrowed.
     // This lets a failed operation invalidate the reusable state immediately.
@@ -136,8 +225,27 @@ where
     prepared.backend.reset_operation_metrics();
     let operation_metrics_before = prepared.backend.stats();
     let cancelled_before_started = options.cancelled.load(std::sync::atomic::Ordering::Relaxed);
-    if emit(events::started(plan.frame_count, &output.final_path)) == RenderObserverControl::Cancel
-    {
+    if lifecycle.started(plan.frame_count, &output.final_path) == RenderObserverControl::Cancel {
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::Cancellation,
+                0,
+                None,
+                Diagnostic::error(
+                    "VESTRA-CANCELLED",
+                    Category::Cancellation,
+                    "render cancelled by observer",
+                    "",
+                ),
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
+    if lifecycle.stage(RenderStage::Preparing) == RenderObserverControl::Cancel {
         return Err(failure_with_context(
             cleanup_error(
                 &output,
@@ -199,6 +307,26 @@ where
         .map_err(|error| {
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
+    if lifecycle.stage(RenderStage::Rendering) == RenderObserverControl::Cancel {
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::Cancellation,
+                0,
+                None,
+                Diagnostic::error(
+                    "VESTRA-CANCELLED",
+                    Category::Cancellation,
+                    "render cancelled by observer",
+                    "",
+                ),
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
     let frame_loop = run_frame_loop(
         &plan,
         &prepared.scalar_signals,
@@ -208,7 +336,7 @@ where
         prepared.backend.as_mut(),
         &mut encoder,
         &mut performance,
-        emit,
+        lifecycle,
         &mut prepared.static_visual_template,
     )
     .map_err(|error| {
@@ -313,6 +441,8 @@ where
         ));
     }
     let finish_started = Instant::now();
+    let _ = lifecycle.stage(RenderStage::Encoding);
+    let _ = lifecycle.stage(RenderStage::Finalizing);
     let sink_result = encoder
         .finish()
         .map_err(|error| {
@@ -399,11 +529,6 @@ where
     timings.track_evaluation_ms = milliseconds(frame_loop.track_evaluation);
     timings.encoder_write_ms = milliseconds(frame_loop.encoder_write);
     timings.total_ms = milliseconds(total_started.elapsed());
-    let _ = emit(events::completed(
-        plan.frame_count,
-        &output.final_path,
-        plan.warnings.clone(),
-    ));
     if prepared.backend.kind() == RenderBackendKind::Wgpu {
         let backend_timings = prepared.backend.timings();
         timings.gpu_frame_command_encode_ms =

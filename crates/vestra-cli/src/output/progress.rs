@@ -124,6 +124,7 @@ pub(crate) struct HumanProgress {
     last_sample: Option<(u64, Instant)>,
     valid_samples: u8,
     speed: Option<f64>,
+    total_frames: u64,
 }
 
 impl HumanProgress {
@@ -135,6 +136,7 @@ impl HumanProgress {
             last_sample: None,
             valid_samples: 0,
             speed: None,
+            total_frames: 0,
         }
     }
 
@@ -143,21 +145,56 @@ impl HumanProgress {
         // rate-limited. FPS and ETA are local monotonic-clock estimates and do
         // not become part of the raw JSON event stream.
         let now = Instant::now();
-        if event.kind == "started" {
-            self.started = Some(now);
-            self.last_update = None;
-            self.last_sample = Some((event.frame, now));
-            self.valid_samples = 0;
-            self.speed = None;
-            self.output
-                .write_progress("Rendering", !self.output.interactive);
-        }
+        let (frame, total_frames, important) = match event {
+            RenderEvent::Started { total_frames, .. } => {
+                self.started = Some(now);
+                self.last_update = None;
+                self.last_sample = Some((0, now));
+                self.valid_samples = 0;
+                self.speed = None;
+                self.total_frames = *total_frames;
+                self.output
+                    .write_progress("Preparing", !self.output.interactive);
+                (0, *total_frames, true)
+            }
+            RenderEvent::Progress {
+                frame,
+                total_frames,
+                ..
+            } => (*frame, *total_frames, false),
+            RenderEvent::StageChanged { stage, .. } => {
+                self.output
+                    .write_progress(&format!("{stage:?}"), !self.output.interactive);
+                return;
+            }
+            RenderEvent::Completed { output_path, .. } => {
+                let elapsed = self
+                    .started
+                    .map(|started| started.elapsed())
+                    .unwrap_or_default();
+                self.output.write_progress(
+                    &format!(
+                        "Rendered {} frames in {}",
+                        self.total_frames,
+                        format_duration(elapsed)
+                    ),
+                    true,
+                );
+                self.output
+                    .write_progress(&format!("Output: {}", output_path.display()), true);
+                return;
+            }
+            RenderEvent::Cancelled { .. } | RenderEvent::Failed { .. } => {
+                self.output.clear();
+                return;
+            }
+        };
 
         if let Some((previous_frame, previous_time)) = self.last_sample
-            && event.frame > previous_frame
+            && frame > previous_frame
         {
             let elapsed = now.saturating_duration_since(previous_time);
-            if let Some(sample) = rolling_fps(event.frame, previous_frame, elapsed) {
+            if let Some(sample) = rolling_fps(frame, previous_frame, elapsed) {
                 self.valid_samples = self.valid_samples.saturating_add(1);
                 if speed_warmed_up(self.valid_samples) {
                     self.speed = Some(self.speed.map_or(sample, |current| {
@@ -165,9 +202,8 @@ impl HumanProgress {
                     }));
                 }
             }
-            self.last_sample = Some((event.frame, now));
+            self.last_sample = Some((frame, now));
         }
-        let important = matches!(event.kind.as_str(), "started" | "completed" | "failed");
         if !important
             && self.last_update.is_some_and(|last| {
                 !refresh_due(
@@ -183,40 +219,16 @@ impl HumanProgress {
         }
         self.last_update = Some(now);
 
-        match event.kind.as_str() {
-            "started" | "progress" => self
-                .output
-                .write_progress(&self.line(event), !self.output.interactive),
-            "completed" => {
-                self.output.write_progress(&self.line(event), true);
-                let elapsed = self
-                    .started
-                    .map(|started| started.elapsed())
-                    .unwrap_or_default();
-                self.output.write_progress(
-                    &format!(
-                        "Rendered {} frames in {}",
-                        event.total_frames,
-                        format_duration(elapsed)
-                    ),
-                    true,
-                );
-                if let Some(path) = &event.output_path {
-                    self.output
-                        .write_progress(&format!("Output: {}", path.display()), true);
-                }
-            }
-            "failed" => self.output.clear(),
-            _ => {}
-        }
+        self.output
+            .write_progress(&self.line(frame, total_frames), !self.output.interactive);
     }
 
     pub(crate) fn finish_failure(&mut self) {
         self.output.clear();
     }
 
-    fn line(&self, event: &RenderEvent) -> String {
-        let percent = percentage(event.frame, event.total_frames);
+    fn line(&self, frame: u64, total_frames: u64) -> String {
+        let percent = percentage(frame, total_frames);
         let compact = self.output.width < 60;
         let bar_width = if self.output.interactive && !compact {
             self.output.width.saturating_sub(48).clamp(20, 40)
@@ -234,32 +246,20 @@ impl HumanProgress {
             )
         };
         if compact {
-            if event.kind == "completed" {
-                return format!("{percent:.1}% {}/{}", event.frame, event.total_frames);
-            }
-            let eta = eta_for(self.speed, event.frame, event.total_frames)
+            let eta = eta_for(self.speed, frame, total_frames)
                 .map(format_duration)
                 .unwrap_or_else(|| "--".to_owned());
-            return format!(
-                "{percent:.1}% {}/{} ETA {eta}",
-                event.frame, event.total_frames
-            );
+            return format!("{percent:.1}% {}/{} ETA {eta}", frame, total_frames);
         }
         let speed = self
             .speed
             .map_or_else(|| "-- fps".to_owned(), |fps| format!("{fps:.1} fps"));
-        let eta = eta_for(self.speed, event.frame, event.total_frames)
+        let eta = eta_for(self.speed, frame, total_frames)
             .map(format_duration)
             .unwrap_or_else(|| "--".to_owned());
-        if event.kind == "completed" {
-            return format!(
-                "{bar}{percent:.1}% · {}/{} · {speed}",
-                event.frame, event.total_frames
-            );
-        }
         format!(
             "{bar}{percent:.1}% · {}/{} · {speed} · ETA {eta}",
-            event.frame, event.total_frames
+            frame, total_frames
         )
     }
 }

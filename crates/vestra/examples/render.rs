@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             preview: false,
             backend: BackendPreference::Auto,
         },
-        &mut |event| println!("{}", event.kind),
+        &mut |event| println!("{event:?}"),
         &CancellationToken::new(),
     )?;
     println!("{}", result.output.display());

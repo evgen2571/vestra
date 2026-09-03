@@ -18,8 +18,8 @@ use vestra_core::timeline::frame_time_nanos;
 use vestra_media::{FrameSink, OutputTarget};
 
 use super::{
-    RenderError, RenderEvent, RenderFailureStage, RenderObserverControl, RenderOptions, events,
-    failure::cleanup_error,
+    RenderError, RenderFailureStage, RenderObserverControl, RenderOptions, failure::cleanup_error,
+    runner::LifecycleEmitter,
 };
 
 pub(super) struct FrameLoopResult {
@@ -50,7 +50,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
     backend: &mut dyn RenderBackend,
     encoder: &mut S,
     performance: &mut PreparationStats,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    emit: &mut LifecycleEmitter<'_>,
     static_template: &mut Option<std::sync::Arc<[u8]>>,
 ) -> Result<FrameLoopResult, RenderError> {
     if plan.visual_dependency == vestra_core::plan::TemporalDependency::Static {
@@ -464,7 +464,7 @@ fn run_static<S: FrameSink + ?Sized>(
     backend: &mut dyn RenderBackend,
     encoder: &mut S,
     performance: &mut PreparationStats,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    emit: &mut LifecycleEmitter<'_>,
     template: &mut Option<std::sync::Arc<[u8]>>,
 ) -> Result<FrameLoopResult, RenderError> {
     let mut composition = Duration::ZERO;
@@ -598,9 +598,7 @@ fn run_static<S: FrameSink + ?Sized>(
         write += started.elapsed();
         backend.record_written(frame_number);
         performance.rendered_frame_count = frame_number + 1;
-        if frame_number + 1 < plan.frame_count
-            && emit_progress(frame_number + 1, plan.frame_count, emit)
-                == RenderObserverControl::Cancel
+        if emit_progress(frame_number + 1, plan.frame_count, emit) == RenderObserverControl::Cancel
         {
             return cancellation(
                 backend,
@@ -701,7 +699,7 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
     plan: &RenderPlan,
     output: &OutputTarget,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    emit: &mut LifecycleEmitter<'_>,
     encoder_write: &mut Duration,
 ) -> Result<(), RenderError> {
     while let Some(frame) = ready_frames.remove(next_frame_to_write) {
@@ -745,9 +743,7 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
         *completed_frames += 1;
         *next_frame_to_write += 1;
         performance.rendered_frame_count = *completed_frames;
-        if *completed_frames < plan.frame_count
-            && emit_progress(*completed_frames, plan.frame_count, emit)
-                == RenderObserverControl::Cancel
+        if emit_progress(*completed_frames, plan.frame_count, emit) == RenderObserverControl::Cancel
         {
             return cancellation(
                 backend,
@@ -780,9 +776,9 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
 fn emit_progress(
     completed_frames: u64,
     total_frames: u64,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    emit: &mut LifecycleEmitter<'_>,
 ) -> RenderObserverControl {
-    emit(events::progress(completed_frames, total_frames))
+    emit.progress(completed_frames, total_frames)
 }
 
 fn with_encoder_cleanup(diagnostic: Diagnostic, cleanup: Option<String>) -> Diagnostic {

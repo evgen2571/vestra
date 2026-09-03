@@ -273,37 +273,97 @@ pub(crate) struct PyRenderEvent {
     #[pyo3(get)]
     kind: String,
     #[pyo3(get)]
-    frame: u64,
+    operation_id: u64,
     #[pyo3(get)]
-    total_frames: u64,
+    stage: Option<String>,
     #[pyo3(get)]
-    progress: Option<f64>,
+    frame: Option<u64>,
+    #[pyo3(get)]
+    total_frames: Option<u64>,
+    #[pyo3(get)]
+    fraction: Option<f64>,
     #[pyo3(get)]
     output_path: Option<PathBuf>,
-    warnings: Option<Vec<PyDiagnostic>>,
 }
 impl From<NativeRenderEvent> for PyRenderEvent {
     fn from(value: NativeRenderEvent) -> Self {
-        Self {
-            schema_version: value.event_schema_version,
-            kind: value.kind,
-            frame: value.frame,
-            total_frames: value.total_frames,
-            progress: value.progress,
-            output_path: value.output_path,
-            warnings: value
-                .warnings
-                .map(|items| items.into_iter().map(PyDiagnostic::from).collect()),
+        let schema_version = value.schema_version();
+        let operation_id = value.operation_id().value();
+        match value {
+            NativeRenderEvent::Started {
+                total_frames,
+                output_path,
+                ..
+            } => Self {
+                schema_version,
+                kind: "started".to_owned(),
+                operation_id,
+                stage: None,
+                frame: Some(0),
+                total_frames: Some(total_frames),
+                fraction: Some(0.0),
+                output_path: Some(output_path),
+            },
+            NativeRenderEvent::StageChanged { stage, .. } => Self {
+                schema_version,
+                kind: "stage_changed".to_owned(),
+                operation_id,
+                stage: Some(format!("{stage:?}").to_lowercase()),
+                frame: None,
+                total_frames: None,
+                fraction: None,
+                output_path: None,
+            },
+            NativeRenderEvent::Progress {
+                frame,
+                total_frames,
+                fraction,
+                ..
+            } => Self {
+                schema_version,
+                kind: "progress".to_owned(),
+                operation_id,
+                stage: Some("rendering".to_owned()),
+                frame: Some(frame),
+                total_frames: Some(total_frames),
+                fraction: Some(fraction),
+                output_path: None,
+            },
+            NativeRenderEvent::Completed { output_path, .. } => Self {
+                schema_version,
+                kind: "completed".to_owned(),
+                operation_id,
+                stage: None,
+                frame: None,
+                total_frames: None,
+                fraction: None,
+                output_path: Some(output_path),
+            },
+            NativeRenderEvent::Cancelled { .. } => Self {
+                schema_version,
+                kind: "cancelled".to_owned(),
+                operation_id,
+                stage: None,
+                frame: None,
+                total_frames: None,
+                fraction: None,
+                output_path: None,
+            },
+            NativeRenderEvent::Failed { .. } => Self {
+                schema_version,
+                kind: "failed".to_owned(),
+                operation_id,
+                stage: None,
+                frame: None,
+                total_frames: None,
+                fraction: None,
+                output_path: None,
+            },
         }
     }
 }
 #[pymethods]
-impl PyRenderEvent {
-    #[getter]
-    fn warnings(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        diagnostic_tuple(py, self.warnings.as_deref().unwrap_or_default())
-    }
-}
+impl PyRenderEvent {}
 
 #[pyclass(
     name = "RenderTimings",
@@ -571,16 +631,10 @@ impl CallbackState {
         if self.disabled {
             return RenderObserverControl::Cancel;
         }
-        if event.kind == "completed" {
-            // Native completion is emitted only after the temporary output has
-            // been published. The Python callback cannot affect that outcome,
-            // so filtering it preserves the historical callback contract and
-            // avoids presenting a post-publication event as cancellable.
-            return RenderObserverControl::Continue;
-        }
         let Some(callback) = self.callback.as_ref() else {
             return RenderObserverControl::Continue;
         };
+        let terminal = event.is_terminal();
         CALLBACK_PYTHON_ATTACHMENTS.fetch_add(1, Ordering::Relaxed);
         // Rendering runs detached from Python so decoding, composition, and
         // encoding do not monopolize the interpreter. Reattach only for the
@@ -593,6 +647,11 @@ impl CallbackState {
             // The native observer turns callback failure into cancellation at
             // the next engine boundary. Keep the original Python exception for
             // the caller; native cleanup is attached as secondary context.
+            if terminal {
+                // Publication already succeeded for `Completed`; callback
+                // failure is observer-side and cannot rewrite that result.
+                return RenderObserverControl::Continue;
+            }
             self.first_error = Some(error);
             self.disabled = true;
             RenderObserverControl::Cancel

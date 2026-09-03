@@ -1,6 +1,7 @@
 use std::{
     path::Path,
     process::{Command, Stdio},
+    time::Instant,
 };
 
 use serde::Deserialize;
@@ -8,12 +9,21 @@ use serde::Deserialize;
 use crate::MediaError;
 
 pub fn check_executable(executable: &Path, program: &'static str) -> Result<(), MediaError> {
+    let started = Instant::now();
     let status = Command::new(executable)
         .arg("-version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .map_err(|source| MediaError::ProcessStart { program, source })?;
+    tracing::debug!(
+        target: "vestra.media.probe",
+        program,
+        executable = %executable.display(),
+        elapsed_ms = started.elapsed().as_millis(),
+        available = status.success(),
+        "media tool availability checked"
+    );
     if !status.success() {
         return Err(MediaError::Unavailable { program });
     }
@@ -44,6 +54,8 @@ pub fn probe_audio_duration_with(
     path: &Path,
     executable: Option<&Path>,
 ) -> Result<f64, MediaError> {
+    let started = Instant::now();
+    let asset_path = path;
     let output = Command::new(executable.unwrap_or_else(|| Path::new("ffprobe")))
         .args([
             "-v",
@@ -66,7 +78,16 @@ pub fn probe_audio_duration_with(
             stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
         });
     }
-    parse_audio_duration(&output.stdout)
+    let duration = parse_audio_duration(&output.stdout)?;
+    tracing::debug!(
+        target: "vestra.media.audio",
+        asset_path = %asset_path.display(),
+        asset_type = "audio",
+        duration_ms = (duration * 1_000.0) as u64,
+        elapsed_ms = started.elapsed().as_millis(),
+        "audio media probe completed"
+    );
+    Ok(duration)
 }
 
 fn parse_audio_duration(bytes: &[u8]) -> Result<f64, MediaError> {

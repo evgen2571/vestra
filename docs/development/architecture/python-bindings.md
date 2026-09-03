@@ -12,6 +12,12 @@ high-level Python editing graph
 
 `vestra-python` is a thin PyO3 boundary over `vestra`. It converts paths, enums, JSON-like mappings, diagnostics, reports, frames, events and errors. `ProjectSnapshot` is immutable and supports loading/serialization. `Editor` owns semantic validation, preflight, inspection, preparation and one-shot render. `PreparedProject` keeps prepared native resources and exposes frame and video methods.
 
+Tracing remains native and renderer-independent. Python does not configure a
+second logger or duplicate lifecycle records; native render spans and
+`RenderEvent` values share one operation identifier. Python callbacks receive
+progress events only and may opt out of the built-in terminal presentation with
+`show_progress=False`.
+
 Native validation, preflight, preparation and rendering detach from the GIL. When a render has a `progress` callback, the binding reacquires Python only to invoke that callback and converts the native `RenderEvent`. Native observers can receive `started`, `progress`, and `completed`. Python callbacks receive only `started` and `progress`. The binding filters `completed` because native completion is emitted after output publication, so the callback cannot still cancel or change the finished render.
 
 If a Python callback raises, the binding requests native cancellation, preserves that original Python exception, and re-raises it after cleanup. It never returns a `RenderResult` or replaces the callback exception with a generic `RenderError`. When cleanup reports a native error, the binding attaches its Python error object as `error.render_cleanup_error`. Ordinary cooperative cancellation is different: it raises `CancelledError`, a `RenderError`.

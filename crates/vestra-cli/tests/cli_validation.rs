@@ -27,7 +27,7 @@ fn verbose_json_results_keep_logs_off_stdout() {
     let result: Value = serde_json::from_slice(&output.stdout).expect("stdout remains JSON");
     assert_eq!(result["status"], "success");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains(" INFO ve::cli::commands: command started"));
+    assert!(stderr.contains(" INFO vestra.project: command started"));
 }
 
 #[test]
@@ -45,8 +45,7 @@ fn default_verbosity_hides_info_and_v_enables_it() {
         .expect("verbose validate runs");
     assert!(verbose.status.success());
     assert!(
-        String::from_utf8_lossy(&verbose.stderr)
-            .contains(" INFO ve::cli::commands: command started")
+        String::from_utf8_lossy(&verbose.stderr).contains(" INFO vestra.project: command started")
     );
 }
 
@@ -61,10 +60,7 @@ fn double_verbose_enables_debug_and_explicit_rust_log_overrides_cli_verbosity() 
         .output()
         .expect("debug validate runs");
     assert!(debug.status.success());
-    assert!(
-        String::from_utf8_lossy(&debug.stderr)
-            .contains(" DEBUG ve::cli::commands: logging configured")
-    );
+    assert!(String::from_utf8_lossy(&debug.stderr).contains(" DEBUG vestra: logging configured"));
 
     let overridden = common::command()
         .env("RUST_LOG", "warn")
@@ -106,7 +102,7 @@ fn schema_success_result_is_stdout_only() {
         String::from_utf8_lossy(&output.stdout),
         format!("generated {}\n", output_path.display())
     );
-    assert!(String::from_utf8_lossy(&output.stderr).contains(" INFO ve::cli::commands:"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains(" INFO vestra.project:"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains("generated "));
 }
 
@@ -142,6 +138,61 @@ fn render_failure_is_presented_once_without_duplicate_error_log() {
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert_eq!(stderr.matches("VESTRA-PROJECT-READ").count(), 1);
     assert!(!stderr.contains(" ERROR ve::cli::commands"));
+}
+
+#[test]
+fn render_preflight_failure_has_one_authoritative_error_record() {
+    let workspace = TempDir::new().expect("temporary output directory");
+    let output_path = workspace.path().join("existing.mp4");
+    std::fs::write(&output_path, b"existing").expect("seed existing output");
+    let result = common::command()
+        .args([
+            "render",
+            "examples/projects/animation-effects.json",
+            "--output",
+        ])
+        .arg(&output_path)
+        .args(["--progress", "none"])
+        .output()
+        .expect("render runs");
+
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert_eq!(stderr.matches("render failed").count(), 1);
+    assert_eq!(stderr.matches("VESTRA-OUTPUT-PATH").count(), 2);
+}
+
+#[test]
+fn render_progress_and_root_log_share_the_operation_id() {
+    let workspace = TempDir::new().expect("temporary output directory");
+    let output_path = workspace.path().join("existing.mp4");
+    std::fs::write(&output_path, b"existing").expect("seed existing output");
+    let result = common::command()
+        .args([
+            "render",
+            "examples/projects/animation-effects.json",
+            "--output",
+        ])
+        .arg(&output_path)
+        .args(["--progress", "json"])
+        .output()
+        .expect("render runs");
+
+    assert!(!result.status.success());
+    let first_event: Value = serde_json::from_slice(
+        result
+            .stdout
+            .split(|byte| *byte == b'\n')
+            .find(|line| !line.is_empty())
+            .expect("started event is present"),
+    )
+    .expect("started event is JSON");
+    let operation_id = first_event["operation_id"]
+        .as_u64()
+        .expect("started event has an operation id");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains(&format!("operation_id: {operation_id}")));
+    assert_eq!(stderr.matches("render failed").count(), 1);
 }
 
 #[test]

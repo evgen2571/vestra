@@ -25,11 +25,13 @@ ve render project.json \
   --report render-report.json
 ```
 
-The default output format and progress format are human-readable. Use
-`--format json` for a machine-readable final result. Use `--progress json` for
-the event stream, or `--progress none` when another program owns the display.
-`--preview` requests preview rendering behavior. `--render-backend` accepts
-`auto`, `cpu`, or `wgpu`.
+The default output format is human-readable. Progress defaults to Auto: it is
+shown on a supported interactive terminal and disabled for redirected or CI
+stderr. Use `--progress human` to force the terminal presentation,
+`--progress json` for the event stream, or `--progress none` when another
+program owns the display. `--format json` selects a machine-readable final
+result. `--preview` requests preview rendering behavior.
+`--render-backend` accepts `auto`, `cpu`, or `wgpu`.
 
 Run `validate` first in scripts so an invalid project fails before encoding.
 Use `--overwrite` only when replacing the output is intentional. A WGPU

@@ -71,10 +71,14 @@ impl CpuBackend {
 
     fn build(plan: &RenderPlan, decoded: Arc<DecodedAssets>, worker_count: usize) -> Self {
         let profiling_enabled = std::env::var_os("VESTRA_CPU_PROFILE").is_some();
-        tracing::info!(
+        tracing::debug!(
+            target: "vestra.render.cpu",
             worker_count,
             profiling = profiling_enabled,
-            "CPU renderer selected"
+            cache_budget_bytes = plan.limits.maximum_cache_bytes,
+            width = plan.canvas.width,
+            height = plan.canvas.height,
+            "CPU renderer initialized"
         );
         let class_budgets = cache_class_budgets(plan);
         let worker_cache_budgets = (0..worker_count)
@@ -376,10 +380,15 @@ impl RenderBackend for CpuBackend {
             && !self.profile_reported
             && self.metrics.backend_completed_frames > 0
         {
-            eprintln!(
-                "{}",
-                self.worker_hot_path_timings
-                    .report_line(self.workers.len(), self.metrics.backend_completed_frames)
+            tracing::info!(
+                target: "vestra.performance",
+                stage = "render",
+                worker_count = self.workers.len(),
+                total_frames = self.metrics.backend_completed_frames,
+                report = %self
+                    .worker_hot_path_timings
+                    .report_line(self.workers.len(), self.metrics.backend_completed_frames),
+                "CPU profiling report"
             );
             self.profile_reported = true;
         }

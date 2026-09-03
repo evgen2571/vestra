@@ -225,6 +225,12 @@ where
     // This lets a failed operation invalidate the reusable state immediately.
     let plan = Arc::clone(&prepared.plan);
     let total_started = Instant::now();
+    let _output_span = tracing::debug_span!(
+        target: "vestra.output",
+        "output",
+        stage = "prepare"
+    )
+    .entered();
     let output = OutputTarget::prepare(
         options
             .output_override
@@ -262,6 +268,15 @@ where
         .collect::<Vec<_>>();
     prepared.backend.reset_operation_metrics();
     let operation_metrics_before = prepared.backend.stats();
+    drop(_output_span);
+    let _encode_start_span = tracing::debug_span!(
+        target: "vestra.encode",
+        "encode",
+        stage = "start",
+        output = %output.final_path.display(),
+        total_frames = plan.frame_count
+    )
+    .entered();
     let mut encoder = start_sink(&plan.encoder, &output.temporary_path)
         .map_err(|error| {
             cleanup_error(
@@ -281,6 +296,7 @@ where
         .map_err(|error| {
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
+    drop(_encode_start_span);
     if lifecycle.stage(RenderStage::Rendering) == RenderObserverControl::Cancel {
         return Err(failure_with_context(
             cleanup_error(
@@ -301,6 +317,13 @@ where
             total_started,
         ));
     }
+    let _frames_span = tracing::debug_span!(
+        target: "vestra.render",
+        "frames",
+        stage = "render",
+        total_frames = plan.frame_count
+    )
+    .entered();
     let frame_loop = run_frame_loop(
         &plan,
         &prepared.scalar_signals,
@@ -324,6 +347,7 @@ where
         }
         failure_with_context(error, &fallback_warnings, &timings, total_started)
     })?;
+    drop(_frames_span);
     performance.absorb_staged(&prepared.backend.staged_metrics());
     let completed_frames = frame_loop.completed_frames;
     performance.static_visual_frame_cache_hits = frame_loop.static_visual_hits;
@@ -378,7 +402,11 @@ where
     // legitimate progress callback even when no later frame-loop iteration
     // occurs.
     if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-        tracing::info!(stage = "render", "render cancellation requested");
+        tracing::info!(
+            target: "vestra.render",
+            stage = "render",
+            "render cancellation requested"
+        );
         prepared.backend.abort();
         // Frame submission has already completed, so aborting the backend may
         // leave it permanently unusable. Keep the public prepared lifecycle in
@@ -432,6 +460,14 @@ where
         }
         return result.map(|_| unreachable!("cancellation helper always returns an error"));
     }
+    let _encode_finalize_span = tracing::debug_span!(
+        target: "vestra.encode",
+        "finalize",
+        stage = "finalize",
+        output = %output.final_path.display(),
+        total_frames = plan.frame_count
+    )
+    .entered();
     let sink_result = encoder
         .finish()
         .map_err(|error| {
@@ -447,9 +483,11 @@ where
         .map_err(|error| {
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
+    drop(_encode_finalize_span);
     tracing::debug!(
+        target: "vestra.encode",
         elapsed_ms = finish_started.elapsed().as_millis(),
-        stage = "encode",
+        stage = "finalize",
         "encoder finalization completed"
     );
     if sink_result.frames_written != plan.frame_count {
@@ -499,6 +537,13 @@ where
     }
     timings.encoder_finalize_ms = milliseconds(finish_started.elapsed());
     let publish_started = Instant::now();
+    let _publish_span = tracing::debug_span!(
+        target: "vestra.output",
+        "publish",
+        stage = "publish",
+        output = %output.final_path.display()
+    )
+    .entered();
     output
         .publish()
         .map_err(|error| {
@@ -525,10 +570,12 @@ where
         .map_err(|error| {
             failure_with_context(error, &fallback_warnings, &timings, total_started)
         })?;
+    drop(_publish_span);
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
     tracing::debug!(
+        target: "vestra.output",
         elapsed_ms = timings.output_publish_ms,
-        stage = "output_publication",
+        stage = "publish",
         "output finalization completed"
     );
     let frame_render = if prepared.backend.kind() == RenderBackendKind::Cpu {

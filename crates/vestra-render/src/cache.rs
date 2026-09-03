@@ -51,10 +51,26 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
             Some(entry) => {
                 entry.last_used = self.clock;
                 self.stats.hits += 1;
+                tracing::trace!(
+                    target: "vestra.cache",
+                    cache = "byte_lru",
+                    operation = "get",
+                    cache_hit = true,
+                    current_bytes = self.stats.current_bytes,
+                    "cache hit"
+                );
                 Some(&entry.value)
             }
             None => {
                 self.stats.misses += 1;
+                tracing::trace!(
+                    target: "vestra.cache",
+                    cache = "byte_lru",
+                    operation = "get",
+                    cache_hit = false,
+                    current_bytes = self.stats.current_bytes,
+                    "cache miss"
+                );
                 None
             }
         }
@@ -79,8 +95,25 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
         self.clock = self.clock.wrapping_add(1);
         self.stats.requests += 1;
         self.stats.misses += 1;
+        tracing::trace!(
+            target: "vestra.cache",
+            cache = "byte_lru",
+            operation = "get_or_insert",
+            cache_hit = false,
+            current_bytes = self.stats.current_bytes,
+            "cache miss"
+        );
         if bytes > self.stats.budget_bytes {
             self.stats.oversized_entries_skipped += 1;
+            tracing::debug!(
+                target: "vestra.cache",
+                cache = "byte_lru",
+                operation = "insert",
+                bytes,
+                budget_bytes = self.stats.budget_bytes,
+                reason = "entry exceeds cache budget",
+                "cache budget bypass"
+            );
             return None;
         }
         while self.stats.current_bytes.saturating_add(bytes) > self.stats.budget_bytes {
@@ -98,6 +131,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
                 .expect("LRU key was selected from cache");
             self.stats.current_bytes -= removed.bytes;
             self.stats.evictions += 1;
+            tracing::debug!(
+                target: "vestra.cache",
+                cache = "byte_lru",
+                operation = "insert",
+                evicted_bytes = removed.bytes,
+                current_bytes = self.stats.current_bytes,
+                reason = "cache budget pressure",
+                "cache entry evicted"
+            );
         }
         self.stats.current_bytes += bytes;
         self.stats.peak_bytes = self.stats.peak_bytes.max(self.stats.current_bytes);
@@ -129,6 +171,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
     pub fn insert_with(&mut self, key: K, bytes: u64, create: impl FnOnce() -> V) -> Option<&V> {
         if bytes > self.stats.budget_bytes {
             self.stats.oversized_entries_skipped += 1;
+            tracing::debug!(
+                target: "vestra.cache",
+                cache = "byte_lru",
+                operation = "insert",
+                bytes,
+                budget_bytes = self.stats.budget_bytes,
+                reason = "entry exceeds cache budget",
+                "cache budget bypass"
+            );
             return None;
         }
         if let Some(previous) = self.entries.remove(&key) {
@@ -149,6 +200,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
                 .expect("LRU key was selected from cache");
             self.stats.current_bytes -= removed.bytes;
             self.stats.evictions += 1;
+            tracing::debug!(
+                target: "vestra.cache",
+                cache = "byte_lru",
+                operation = "insert",
+                evicted_bytes = removed.bytes,
+                current_bytes = self.stats.current_bytes,
+                reason = "cache budget pressure",
+                "cache entry evicted"
+            );
         }
         self.clock = self.clock.wrapping_add(1);
         self.stats.current_bytes += bytes;
@@ -177,6 +237,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
     /// the caller because pending resources are not yet cache entries.
     pub fn reserve(&mut self, bytes: u64, pending_bytes: u64) -> bool {
         if bytes > self.stats.budget_bytes {
+            tracing::debug!(
+                target: "vestra.cache",
+                cache = "byte_lru",
+                operation = "reserve",
+                bytes,
+                budget_bytes = self.stats.budget_bytes,
+                reason = "reservation exceeds cache budget",
+                "cache budget bypass"
+            );
             return false;
         }
         while self
@@ -192,6 +261,16 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
                 .min_by_key(|(_, entry)| entry.last_used)
                 .map(|(key, _)| key.clone())
             else {
+                tracing::debug!(
+                    target: "vestra.cache",
+                    cache = "byte_lru",
+                    operation = "reserve",
+                    bytes,
+                    pending_bytes,
+                    budget_bytes = self.stats.budget_bytes,
+                    reason = "no retained entries can satisfy reservation",
+                    "cache budget bypass"
+                );
                 return false;
             };
             let removed = self
@@ -200,6 +279,15 @@ impl<K: Ord + Clone, V> ByteLruCache<K, V> {
                 .expect("LRU key was selected from cache");
             self.stats.current_bytes -= removed.bytes;
             self.stats.evictions += 1;
+            tracing::debug!(
+                target: "vestra.cache",
+                cache = "byte_lru",
+                operation = "reserve",
+                evicted_bytes = removed.bytes,
+                current_bytes = self.stats.current_bytes,
+                reason = "cache budget pressure",
+                "cache entry evicted"
+            );
         }
         true
     }

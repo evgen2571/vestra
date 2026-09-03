@@ -182,14 +182,18 @@ impl PreparedAssets {
                 .decoded
                 .video_asset(asset)
                 .ok_or_else(|| format!("video asset index {asset} is out of range"))?;
-            let decoder = factory.open(video, self.video_cache_budget_bytes)?;
+            let decoder = factory.open_with_span(
+                video,
+                self.video_cache_budget_bytes,
+                tracing::Span::current(),
+            )?;
             self.video_decoders.insert(asset, decoder);
         }
         let frame = self
             .video_decoders
             .get_mut(&asset)
             .expect("video decoder inserted above")
-            .frame_at(source_time)
+            .frame_at_with_span(source_time, tracing::Span::current())
             .map_err(|error| {
                 let path = self
                     .decoded

@@ -16,7 +16,10 @@ verbosity flags provide the CLI's default filter when it is unset.
 
 `PROJECT` is a path. Human results are printed as readable output. JSON results
 are machine-readable envelopes. Failures use a nonzero exit code and expose
-diagnostics. Tracing is written to stderr.
+diagnostics. Tracing is written to stderr. The default log policy is WARN;
+`-v`, `-vv`, and `-vvv` enable INFO, DEBUG, and TRACE respectively. `RUST_LOG`
+has precedence over those flags and supports target-specific filters such as
+`vestra=warn,vestra.render.wgpu=trace`.
 
 ## Render
 
@@ -31,8 +34,10 @@ diagnostics. Tracing is written to stderr.
 | `--render-backend auto\|cpu\|wgpu` | `auto`. |
 
 With JSON progress and human final results, progress is sent to stdout and the
-final result is sent to stderr to keep the streams separable. WGPU fallback is
-reported as `VESTRA-WGPU-FALLBACK` where applicable.
+final result is sent to stderr to keep the streams separable. Auto progress is
+TTY-only; redirected and CI output is quiet unless `--progress human` is
+explicit. WGPU fallback is reported as `VESTRA-WGPU-FALLBACK` where
+applicable.
 
 ## Validation meaning
 

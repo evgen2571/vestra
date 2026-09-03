@@ -1,12 +1,14 @@
 //! Native terminal presentation for render progress.
 
 use std::{
+    collections::BTreeMap,
     io::{self, IsTerminal, Write},
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
 use super::{ProgressMode, ProgressSink, RenderEvent, RenderStage};
+use vestra_core::OperationId;
 
 const TTY_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
 const EMA_WEIGHT: f64 = 0.35;
@@ -71,14 +73,15 @@ impl TerminalEnvironment {
 
 #[derive(Default)]
 struct TerminalState {
-    line: String,
-    active: bool,
+    lines: BTreeMap<OperationId, String>,
+    foreground: Option<OperationId>,
 }
 
 /// Shared stderr ownership used by native progress and frontend logging.
 pub struct TerminalOutput {
     state: Mutex<TerminalState>,
     interactive: bool,
+    writer: Mutex<Box<dyn Write + Send>>,
 }
 
 impl TerminalOutput {
@@ -86,38 +89,95 @@ impl TerminalOutput {
         Self {
             state: Mutex::new(TerminalState::default()),
             interactive: environment.interactive(),
+            writer: Mutex::new(Box::new(io::stderr())),
         }
     }
 
-    fn write_progress(&self, line: &str, newline: bool) {
+    /// Creates a terminal coordinator backed by a supplied writer.
+    ///
+    /// This is useful for embedding applications that own their terminal
+    /// stream and for deterministic tests. Progress remains disabled when the
+    /// supplied environment is not interactive, while log writes still pass
+    /// through to the writer.
+    pub fn with_writer<W>(environment: TerminalEnvironment, writer: W) -> Arc<Self>
+    where
+        W: Write + Send + 'static,
+    {
+        Arc::new(Self {
+            state: Mutex::new(TerminalState::default()),
+            interactive: environment.interactive(),
+            writer: Mutex::new(Box::new(writer)),
+        })
+    }
+
+    fn foreground_line(state: &TerminalState) -> Option<&str> {
+        state
+            .foreground
+            .and_then(|operation_id| state.lines.get(&operation_id))
+            .map(String::as_str)
+    }
+
+    fn redraw_foreground(&self, state: &TerminalState, writer: &mut dyn Write) -> io::Result<()> {
+        if let Some(line) = Self::foreground_line(state) {
+            write!(writer, "\r\x1b[2K{line}")?;
+        }
+        Ok(())
+    }
+
+    fn write_progress(&self, operation_id: OperationId, line: &str, newline: bool) {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        let mut stderr = io::stderr().lock();
+        let Ok(mut writer) = self.writer.lock() else {
+            return;
+        };
         if self.interactive {
-            let _ = write!(stderr, "\r\x1b[2K{line}");
+            if Self::foreground_line(&state).is_some() {
+                let _ = write!(writer, "\r\x1b[2K");
+            }
+            state.lines.insert(operation_id, line.to_owned());
+            state.foreground = Some(operation_id);
+            let _ = write!(writer, "\r\x1b[2K{line}");
             if newline {
-                let _ = writeln!(stderr);
-                state.active = false;
-                state.line.clear();
-            } else {
-                state.active = true;
-                state.line.clear();
-                state.line.push_str(line);
+                let _ = writeln!(writer);
+                state.lines.remove(&operation_id);
+                state.foreground = state.lines.keys().next_back().copied();
+                let _ = self.redraw_foreground(&state, &mut **writer);
             }
         }
-        let _ = stderr.flush();
+        let _ = writer.flush();
     }
 
-    fn clear(&self) {
+    fn clear(&self, operation_id: OperationId) {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        if state.active && self.interactive {
-            let _ = write!(io::stderr().lock(), "\r\x1b[2K");
+        let was_foreground = state.foreground == Some(operation_id);
+        state.lines.remove(&operation_id);
+        if was_foreground {
+            let _ = state.foreground.take();
+            if self.interactive
+                && let Ok(mut writer) = self.writer.lock()
+            {
+                let _ = write!(writer, "\r\x1b[2K");
+                state.foreground = state.lines.keys().next_back().copied();
+                let _ = self.redraw_foreground(&state, &mut **writer);
+                let _ = writer.flush();
+            }
         }
-        state.active = false;
-        state.line.clear();
+    }
+
+    #[cfg(test)]
+    fn active_operation_count(&self) -> usize {
+        self.state.lock().unwrap().lines.len()
+    }
+
+    #[cfg(test)]
+    fn foreground_line_for_test(&self) -> Option<String> {
+        let state = self.state.lock().unwrap();
+        state
+            .foreground
+            .and_then(|operation_id| state.lines.get(&operation_id).cloned())
     }
 
     /// Returns whether this output coordinator targets an interactive stderr.
@@ -154,20 +214,31 @@ impl Write for TerminalWriter {
             .state
             .lock()
             .map_err(|_| io::Error::other("terminal progress mutex poisoned"))?;
-        let mut stderr = io::stderr().lock();
-        if state.active && self.output.interactive {
-            write!(stderr, "\r\x1b[2K")?;
+        let line = TerminalOutput::foreground_line(&state).map(str::to_owned);
+        let mut writer = self
+            .output
+            .writer
+            .lock()
+            .map_err(|_| io::Error::other("terminal writer mutex poisoned"))?;
+        if line.is_some() && self.output.interactive {
+            write!(writer, "\r\x1b[2K")?;
         }
-        let result = stderr.write(bytes);
-        if state.active && self.output.interactive {
-            write!(stderr, "\r{}", state.line)?;
+        let result = writer.write(bytes);
+        if let Some(line) = line
+            && self.output.interactive
+        {
+            write!(writer, "\r{line}")?;
         }
-        stderr.flush()?;
+        writer.flush()?;
         result
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        io::stderr().lock().flush()
+        self.output
+            .writer
+            .lock()
+            .map_err(|_| io::Error::other("terminal writer mutex poisoned"))?
+            .flush()
     }
 }
 
@@ -181,9 +252,7 @@ pub struct TerminalProgress {
     width: usize,
     started: Option<Instant>,
     last_update: Option<Instant>,
-    last_sample: Option<(u64, Instant)>,
-    valid_samples: u8,
-    speed: Option<f64>,
+    timing: TimingState,
     stage: Option<RenderStage>,
     frame: Option<u64>,
     total_frames: Option<u64>,
@@ -225,15 +294,14 @@ impl TerminalProgress {
         selected.then(|| Self::with_output(terminal_output(), environment.width))
     }
 
-    fn with_output(output: Arc<TerminalOutput>, width: usize) -> Self {
+    /// Creates a terminal presentation using an existing shared coordinator.
+    pub fn with_output(output: Arc<TerminalOutput>, width: usize) -> Self {
         Self {
             output,
             width,
             started: None,
             last_update: None,
-            last_sample: None,
-            valid_samples: 0,
-            speed: None,
+            timing: TimingState::default(),
             stage: None,
             frame: None,
             total_frames: None,
@@ -268,23 +336,42 @@ impl TerminalProgress {
     /// Returns the smoothed FPS once enough samples have been collected.
     #[must_use]
     pub const fn fps(&self) -> Option<f64> {
-        self.speed
+        self.timing.fps()
     }
 
     /// Returns the current ETA when FPS and a positive remainder are known.
     #[must_use]
     pub fn eta(&self) -> Option<Duration> {
-        eta_for(self.speed, self.frame?, self.total_frames?)
+        eta_for(self.timing.fps(), self.frame?, self.total_frames?)
     }
 
-    fn draw_status(&mut self, status: &str, now: Instant) {
+    fn draw_status(&mut self, operation_id: OperationId, status: &str, now: Instant) {
         if self.output.interactive {
             self.last_update = Some(now);
-            self.output.write_progress(status, false);
+            self.output.write_progress(operation_id, status, false);
         }
     }
 
     fn update_timing(&mut self, frame: u64, now: Instant) {
+        self.timing.update(frame, now);
+    }
+}
+
+#[derive(Default)]
+struct TimingState {
+    last_sample: Option<(u64, Instant)>,
+    valid_samples: u8,
+    speed: Option<f64>,
+}
+
+impl TimingState {
+    fn start(&mut self, now: Instant) {
+        self.last_sample = Some((0, now));
+        self.valid_samples = 0;
+        self.speed = None;
+    }
+
+    fn update(&mut self, frame: u64, now: Instant) {
         if let Some((previous_frame, previous_time)) = self.last_sample
             && frame > previous_frame
         {
@@ -301,6 +388,12 @@ impl TerminalProgress {
         }
     }
 
+    const fn fps(&self) -> Option<f64> {
+        self.speed
+    }
+}
+
+impl TerminalProgress {
     fn line(&self, frame: u64, total_frames: u64) -> String {
         let percent = percentage(frame, total_frames);
         let compact = self.width < 60;
@@ -320,7 +413,8 @@ impl TerminalProgress {
             )
         };
         let speed = self
-            .speed
+            .timing
+            .fps()
             .map_or_else(|| "-- fps".to_owned(), |fps| format!("{fps:.1} fps"));
         let eta = self
             .eta()
@@ -344,21 +438,21 @@ impl ProgressSink for TerminalProgress {
             RenderEvent::Started { total_frames, .. } => {
                 self.started = Some(now);
                 self.last_update = None;
-                self.last_sample = Some((0, now));
-                self.valid_samples = 0;
-                self.speed = None;
+                self.timing.start(now);
                 self.stage = None;
                 self.frame = None;
                 self.total_frames = *total_frames;
-                self.draw_status("Preparing…", now);
+                self.draw_status(event.operation_id(), "Starting…", now);
             }
             RenderEvent::StageChanged { stage, .. } => {
                 self.stage = Some(*stage);
-                if *stage == RenderStage::Rendering {
-                    self.draw_status("Rendering…", now);
-                } else {
-                    self.draw_status(&format!("{}…", stage.as_str().trim_end_matches('…')), now);
-                }
+                let status = match stage {
+                    RenderStage::Preparing => "Preparing…",
+                    RenderStage::Rendering => "Rendering…",
+                    RenderStage::Encoding => "Encoding…",
+                    RenderStage::Finalizing => "Finalizing…",
+                };
+                self.draw_status(event.operation_id(), status, now);
             }
             RenderEvent::Progress {
                 frame,
@@ -378,25 +472,32 @@ impl ProgressSink for TerminalProgress {
                     return;
                 }
                 self.last_update = Some(now);
-                self.output
-                    .write_progress(&self.line(*frame, *total_frames), false);
+                self.output.write_progress(
+                    event.operation_id(),
+                    &self.line(*frame, *total_frames),
+                    false,
+                );
             }
             RenderEvent::Completed { .. } => {
                 self.finished = true;
                 if self.output.interactive {
-                    let frames = self.frame.or(self.total_frames).unwrap_or(0);
+                    let frames = self.frame.or(self.total_frames);
                     let elapsed = self.started.map_or(Duration::ZERO, |start| start.elapsed());
-                    self.output.write_progress(
-                        &format!("Rendered {frames} frames in {}", format_duration(elapsed)),
-                        true,
+                    let summary = frames.map_or_else(
+                        || format!("Rendered in {}", format_duration(elapsed)),
+                        |frames| {
+                            format!("Rendered {frames} frames in {}", format_duration(elapsed))
+                        },
                     );
+                    self.output
+                        .write_progress(event.operation_id(), &summary, true);
                 } else {
-                    self.output.clear();
+                    self.output.clear(event.operation_id());
                 }
             }
             RenderEvent::Cancelled { .. } | RenderEvent::Failed { .. } => {
                 self.finished = true;
-                self.output.clear();
+                self.output.clear(event.operation_id());
             }
         }
     }
@@ -437,8 +538,16 @@ fn format_duration(duration: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_duration, percentage, rolling_fps};
-    use std::time::Duration;
+    use super::{
+        EMA_WEIGHT, MIN_SPEED_SAMPLES, ProgressSink, TimingState, format_duration, percentage,
+        rolling_fps,
+    };
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+        time::{Duration, Instant},
+    };
+    use vestra_core::OperationId;
 
     #[test]
     fn percentage_is_bounded_without_dividing_by_zero() {
@@ -452,6 +561,163 @@ mod tests {
         assert_eq!(rolling_fps(5, 5, Duration::ZERO), None);
         assert_eq!(rolling_fps(4, 5, Duration::from_secs(1)), None);
         assert_eq!(rolling_fps(10, 5, Duration::from_secs(2)), Some(2.5));
+    }
+
+    #[test]
+    fn timing_state_has_no_fps_until_enough_valid_samples_exist() {
+        let mut timing = TimingState::default();
+        let start = Instant::now();
+
+        timing.start(start);
+        timing.update(1, start + Duration::from_secs(1));
+        timing.update(2, start + Duration::from_secs(2));
+
+        assert_eq!(timing.fps(), None);
+        assert_eq!(timing.valid_samples, MIN_SPEED_SAMPLES - 1);
+    }
+
+    #[test]
+    fn timing_state_exposes_smoothed_fps_after_valid_samples() {
+        let mut timing = TimingState::default();
+        let start = Instant::now();
+
+        timing.start(start);
+        for (frame, seconds) in [(1, 1), (2, 2), (3, 3)] {
+            timing.update(frame, start + Duration::from_secs(seconds));
+        }
+
+        assert_eq!(timing.valid_samples, MIN_SPEED_SAMPLES);
+        assert_eq!(timing.fps(), Some(1.0));
+        assert!((timing.fps().unwrap() - 1.0).abs() < EMA_WEIGHT);
+    }
+
+    #[test]
+    fn timing_state_rejects_zero_elapsed_and_long_pause_arithmetic() {
+        let mut timing = TimingState::default();
+        let start = Instant::now();
+
+        timing.start(start);
+        timing.update(1, start);
+        timing.update(2, start + Duration::from_secs(86_400));
+
+        assert!(timing.fps().is_none() || timing.fps().is_some_and(f64::is_finite));
+        assert!(
+            timing
+                .last_sample
+                .is_some_and(|(_, timestamp)| timestamp >= start)
+        );
+    }
+
+    #[test]
+    fn eta_is_unavailable_without_a_usable_rate_and_at_completion() {
+        assert_eq!(super::eta_for(None, 1, 10), None);
+        assert_eq!(super::eta_for(Some(f64::NAN), 1, 10), None);
+        assert_eq!(super::eta_for(Some(2.0), 10, 10), None);
+        assert_eq!(
+            super::eta_for(Some(2.0), 4, 10),
+            Some(Duration::from_secs(3))
+        );
+    }
+
+    #[test]
+    fn terminal_summary_omits_unknown_frame_count() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let output = super::TerminalOutput::with_writer(
+            super::TerminalEnvironment::new(true, false, false, 80),
+            CapturedWriter(Arc::clone(&bytes)),
+        );
+        let mut progress = super::TerminalProgress::with_output(output, 80);
+        let operation_id = OperationId::new();
+
+        progress.on_event(&super::RenderEvent::started(
+            operation_id,
+            None,
+            "output.mp4".into(),
+        ));
+        progress.on_event(&super::RenderEvent::completed(
+            operation_id,
+            "output.mp4".into(),
+        ));
+
+        let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        assert!(output.contains("Rendered in "));
+        assert!(!output.contains("Rendered 0 frames"));
+    }
+
+    #[test]
+    fn started_status_is_neutral_until_preparing_stage_is_observed() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let output = super::TerminalOutput::with_writer(
+            super::TerminalEnvironment::new(true, false, false, 80),
+            CapturedWriter(Arc::clone(&bytes)),
+        );
+        let mut progress = super::TerminalProgress::with_output(output, 80);
+        let operation_id = OperationId::new();
+
+        progress.on_event(&super::RenderEvent::started(
+            operation_id,
+            Some(10),
+            "output.mp4".into(),
+        ));
+        let started = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        assert!(started.contains("Starting…"));
+        assert!(!started.contains("Preparing…"));
+
+        progress.on_event(&super::RenderEvent::stage_changed(
+            operation_id,
+            super::RenderStage::Preparing,
+        ));
+        let preparing = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        assert!(preparing.contains("Preparing…"));
+    }
+
+    #[test]
+    fn terminal_writer_clears_logs_and_redraws_the_foreground_progress() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let output = super::TerminalOutput::with_writer(
+            super::TerminalEnvironment::new(true, false, false, 80),
+            CapturedWriter(Arc::clone(&bytes)),
+        );
+        let operation_id = OperationId::new();
+        output.write_progress(operation_id, "progress", false);
+        output.writer().write_all(b"log\n").unwrap();
+
+        let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        let clear = output.find("\r\x1b[2K").unwrap();
+        let log = output.find("log\n").unwrap();
+        let redraw = output.rfind("\rprogress").unwrap();
+        assert!(clear < log);
+        assert!(log < redraw);
+    }
+
+    #[test]
+    fn terminal_output_tracks_multiple_operations_without_claiming_multiline_presentation() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let output = super::TerminalOutput::with_writer(
+            super::TerminalEnvironment::new(true, false, false, 80),
+            CapturedWriter(Arc::clone(&bytes)),
+        );
+        let first = OperationId::new();
+        let second = OperationId::new();
+        output.write_progress(first, "first", false);
+        output.write_progress(second, "second", false);
+        output.clear(first);
+
+        assert_eq!(output.active_operation_count(), 1);
+        assert_eq!(output.foreground_line_for_test().as_deref(), Some("second"));
+    }
+
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
     }
 
     #[test]

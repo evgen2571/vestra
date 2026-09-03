@@ -522,6 +522,11 @@ impl Editor {
         clippy::result_large_err,
         reason = "render diagnostics retain operation timings for CLI report output"
     )]
+    /// Compatibility observer-oriented render entry point.
+    ///
+    /// New callers that want the normal [`ProgressMode::Auto`] presentation
+    /// should use [`Self::render_auto`]. Callers that need observer-controlled
+    /// cancellation should use [`Self::render_with_observer`].
     pub fn render(
         &self,
         project: &Project,
@@ -577,6 +582,26 @@ impl Editor {
     }
 
     /// Renders using the default [`ProgressMode::Auto`] policy.
+    ///
+    /// This is the recommended normal high-level render entry point. The
+    /// historically named [`Self::render`] remains the compatibility entry
+    /// point for observer-oriented callers; new cancellation-capable
+    /// observers should use [`Self::render_with_observer`] explicitly.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render diagnostics retain operation timings for CLI report output"
+    )]
+    pub fn render_auto(
+        &self,
+        project: &Project,
+        request: SdkRenderRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        self.render_with_progress(project, request, None, cancellation)
+    }
+
+    /// Compatibility alias for [`Self::render_auto`].
+    #[deprecated(note = "use Editor::render_auto for the default Auto progress policy")]
     #[expect(
         clippy::result_large_err,
         reason = "render diagnostics retain operation timings for CLI report output"
@@ -587,7 +612,7 @@ impl Editor {
         request: SdkRenderRequest,
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
-        self.render_with_progress(project, request, None, cancellation)
+        self.render_auto(project, request, cancellation)
     }
 
     /// Renders while allowing a synchronous observer to stop before output

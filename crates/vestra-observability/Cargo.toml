@@ -1,0 +1,21 @@
+[package]
+name = "vestra-observability"
+version = "0.1.0"
+edition = "2024"
+description = "Shared tracing subscriber and output infrastructure for Vestra applications"
+license = "MIT"
+publish = false
+
+[dependencies]
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+vestra-progress = { path = "../vestra-progress" }
+
+[dev-dependencies]
+serde_json = "1"
+vestra-core = { path = "../vestra-core" }
+tempfile = "3"
+
+[lints]
+workspace = true

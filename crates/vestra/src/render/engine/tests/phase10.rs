@@ -13,9 +13,8 @@ use crate::{
     render::{CompletedFrame, RenderBackendPreference, RenderObserverControl, RenderOptions},
 };
 
-use super::super::runner::{
-    prepare, render_prepared, render_prepared_frame, render_prepared_with_sink,
-};
+use super::super::runner::{prepare, render_prepared_frame};
+use super::{render_prepared, render_prepared_with_sink};
 
 const FRAME_RATE: u64 = 30;
 

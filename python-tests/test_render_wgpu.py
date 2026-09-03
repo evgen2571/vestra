@@ -36,7 +36,9 @@ def test_prepared_wgpu_video_render_returns_adapter_owned_result(tmp_path: Path)
     assert result.selected_backend == "wgpu"
     assert result.adapter is not None
     assert result.performance.rendered_frame_count == result.total_frames
-    assert [event.kind for event in events] == ["started"]
+    assert [event.kind for event in events] == [
+        "started", "stage_changed", "stage_changed", "stage_changed", "completed"
+    ]
 
 
 def test_one_shot_wgpu_video_render_preserves_backend_metadata(tmp_path: Path) -> None:

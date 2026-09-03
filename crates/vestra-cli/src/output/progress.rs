@@ -163,8 +163,9 @@ impl HumanProgress {
                 ..
             } => (*frame, *total_frames, false),
             RenderEvent::StageChanged { stage, .. } => {
-                self.output
-                    .write_progress(&format!("{stage:?}"), !self.output.interactive);
+                if self.output.interactive {
+                    self.output.write_progress(stage.as_str(), false);
+                }
                 return;
             }
             RenderEvent::Completed { output_path, .. } => {

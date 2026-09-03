@@ -12,8 +12,9 @@ use crate::{
     PreparedProject, Project, RenderEvent, RenderFailureContext, RenderResult, ValidationReport,
     application::{self, ApplicationRenderError, PreparationTimings, RenderRequest},
     project::{LoadError, ValidatedProject, ValidationOptions},
-    render::RenderBackendPreference,
+    render::{LifecycleEmitter, RenderBackendPreference},
 };
+use vestra_core::OperationId;
 
 /// Stable category for an [`EditorError`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -552,14 +553,48 @@ impl Editor {
         mut emit: impl FnMut(RenderEvent) -> crate::RenderObserverControl,
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
+        let operation_started = Instant::now();
+        let operation_id = OperationId::new();
+        let output_path = Self::render_output_path(project, &request);
+        let total_frames = Self::estimated_total_frames(project);
+        let mut lifecycle = LifecycleEmitter::new(operation_id, &mut emit);
+        if lifecycle.started(total_frames, &output_path) == crate::RenderObserverControl::Cancel {
+            lifecycle.cancelled();
+            return Err(Self::cancelled_editor_error(
+                operation_started,
+                total_frames,
+                output_path,
+            ));
+        }
+        if lifecycle.stage(crate::RenderStage::Preparing) == crate::RenderObserverControl::Cancel {
+            lifecycle.cancelled();
+            return Err(Self::cancelled_editor_error(
+                operation_started,
+                total_frames,
+                output_path,
+            ));
+        }
+        if cancellation.is_cancelled() {
+            lifecycle.cancelled();
+            return Err(Self::cancelled_editor_error(
+                operation_started,
+                total_frames,
+                output_path,
+            ));
+        }
         tracing::info!(
             requested_backend = request.backend.as_str(),
             preview = request.preview,
             "render preparation started"
         );
         let coordinated =
-            self.prepare_internal(project, InternalPreparationTarget::OneShot(&request))?;
-        let operation_started = coordinated.started;
+            match self.prepare_internal(project, InternalPreparationTarget::OneShot(&request)) {
+                Ok(coordinated) => coordinated,
+                Err(error) => {
+                    lifecycle.failed();
+                    return Err(error);
+                }
+            };
         let render_request = RenderRequest {
             output_override: request.output,
             overwrite: request.overwrite,
@@ -586,27 +621,33 @@ impl Editor {
             total_frames = metadata.frame_count,
             "render execution started"
         );
-        let mut summary =
-            match application::render_prepared_project(&mut prepared, render_request, &mut emit) {
-                Ok(summary) => summary,
-                Err(error) => {
-                    let mut editor_error = Self::render_error(
-                        error,
-                        project,
-                        operation_started,
-                        std::time::Duration::from_millis(
-                            operation_preparation.validation_ms as u64,
-                        ),
-                        std::time::Duration::from_millis(operation_preparation.preflight_ms as u64),
-                        warnings.clone(),
-                    );
-                    Self::apply_error_preparation_timings(
-                        &mut editor_error,
-                        operation_preparation.renderer,
-                    );
-                    return Err(editor_error);
+        let mut summary = match application::render_prepared_project(
+            &mut prepared,
+            render_request,
+            &mut lifecycle,
+        ) {
+            Ok(summary) => summary,
+            Err(error) => {
+                let mut editor_error = Self::render_error(
+                    error,
+                    project,
+                    operation_started,
+                    std::time::Duration::from_millis(operation_preparation.validation_ms as u64),
+                    std::time::Duration::from_millis(operation_preparation.preflight_ms as u64),
+                    warnings.clone(),
+                );
+                Self::apply_error_preparation_timings(
+                    &mut editor_error,
+                    operation_preparation.renderer,
+                );
+                if editor_error.is_cancelled() {
+                    lifecycle.cancelled();
+                } else {
+                    lifecycle.failed();
                 }
-            };
+                return Err(editor_error);
+            }
+        };
         let preparation_timings = prepared.preparation_timings();
         summary.timings.plan_compile_ms = preparation_timings.plan_compile_ms;
         summary.timings.project_parse_ms = project.parse_elapsed().as_millis();
@@ -631,6 +672,7 @@ impl Editor {
             warnings.push(crate::render::backend_fallback_warning(fallback));
             warnings = Self::operation_warnings(&warnings);
         }
+        lifecycle.completed(&summary.output_path);
         Ok(application::render_result(
             Self::project_display_path(project),
             prepared.result_metadata(),
@@ -646,6 +688,62 @@ impl Editor {
 
     fn project_display_path(project: &Project) -> &Path {
         project.source_path().unwrap_or(project.base_directory())
+    }
+    fn render_output_path(project: &Project, request: &SdkRenderRequest) -> PathBuf {
+        request.output.clone().unwrap_or_else(|| {
+            let configured = PathBuf::from(&project.canonical().output.path);
+            if configured.is_absolute() {
+                configured
+            } else {
+                project.base_directory().join(configured)
+            }
+        })
+    }
+    fn estimated_total_frames(project: &Project) -> u64 {
+        let output = &project.canonical().output;
+        let Some(duration) = output.duration else {
+            return 0;
+        };
+        let Some(duration_nanos) = vestra_core::timeline::seconds_to_nanos(duration) else {
+            return 0;
+        };
+        let Ok((numerator, denominator)) = output.frame_rate.rational() else {
+            return 0;
+        };
+        vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).unwrap_or(0)
+    }
+    fn cancelled_editor_error(
+        operation_started: Instant,
+        total_frames: u64,
+        output_path: PathBuf,
+    ) -> EditorError {
+        let operation_total_ms = operation_started.elapsed().as_millis();
+        EditorError::Render {
+            diagnostic: Box::new(Diagnostic::error(
+                "VESTRA-CANCELLED",
+                crate::Category::Cancellation,
+                "render cancelled",
+                "",
+            )),
+            warnings: Vec::new(),
+            context: Box::new(RenderFailureContext {
+                stage: crate::RenderFailureStage::Cancellation,
+                last_completed_frame_index: None,
+                completed_frames: 0,
+                attempted_frame: None,
+                total_frames,
+                timeline_position: None,
+                progress: (total_frames > 0).then_some(0.0),
+                output_path: Some(output_path),
+                temporary_output_path: None,
+            }),
+            temporary_removed: false,
+            timings: crate::RenderTimings {
+                operation_total_ms,
+                total_ms: operation_total_ms,
+                ..crate::RenderTimings::default()
+            },
+        }
     }
     fn project_error(error: LoadError) -> EditorError {
         match error {

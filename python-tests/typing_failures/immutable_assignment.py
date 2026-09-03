@@ -30,6 +30,6 @@ result.output_path = "changed"  # E: Property "output_path" defined in "RenderRe
 token = CancellationToken()
 token.is_cancelled = False  # E: Property "is_cancelled" defined in "CancellationToken" is read-only
 event: RenderEvent
-event.progress = 1.0  # E: Property "progress" defined in "RenderEvent" is read-only
+event.fraction = 1.0  # E: Property "fraction" defined in "RenderEvent" is read-only
 from vestra import PreparedVideoRenderRequest
 PreparedVideoRenderRequest("out.mp4").overwrite = True  # E: Property "overwrite" defined in "PreparedVideoRenderRequest" is read-only

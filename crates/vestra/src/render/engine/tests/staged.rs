@@ -36,11 +36,12 @@ use vestra_render::CpuBackend;
 use super::super::{
     BackendFallback, RenderBackendPreference, RenderObserverControl, RenderOptions,
     runner::{
-        audio_analysis_invocation_count, prepare, render_prepared_frame, render_prepared_with_sink,
+        audio_analysis_invocation_count, prepare, render_prepared_frame,
         render_with_backend_builder, render_with_backend_builder_and_sink,
         reset_audio_analysis_invocation_count,
     },
 };
+use super::render_prepared_with_sink;
 
 #[test]
 fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time() {

@@ -25,6 +25,19 @@ pub enum RenderStage {
     Finalizing,
 }
 
+impl RenderStage {
+    /// Returns the stable serialized name of this stage.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Preparing => "preparing",
+            Self::Rendering => "rendering",
+            Self::Encoding => "encoding",
+            Self::Finalizing => "finalizing",
+        }
+    }
+}
+
 /// A typed lifecycle event for one render operation.
 ///
 /// Every event carries the same [`OperationId`] for its render. Rendering
@@ -160,6 +173,7 @@ impl RenderEvent {
 
     #[must_use]
     pub fn progress(operation_id: OperationId, frame: u64, total_frames: u64) -> Self {
+        let frame = frame.min(total_frames);
         let fraction = if total_frames == 0 {
             0.0
         } else {

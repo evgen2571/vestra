@@ -296,8 +296,8 @@ def test_multi_input_render_cancellation_removes_temporary_output(tmp_path: Path
     second.add_clip(asset=asset, start=0.12345, trim_end=0.8)
     token = CancellationToken()
 
-    def cancel_on_progress(event: object) -> None:
-        if getattr(event, "kind") == "progress":
+    def cancel_on_encoding(event: object) -> None:
+        if getattr(event, "stage") == "encoding":
             token.cancel()
 
     output = tmp_path / "cancelled.mp4"
@@ -305,7 +305,7 @@ def test_multi_input_render_cancellation_removes_temporary_output(tmp_path: Path
         Editor().render(
             project_builder.build(),
             RenderRequest(output, backend=BackendPreference.CPU),
-            progress=cancel_on_progress,
+            progress=cancel_on_encoding,
             cancellation=token,
         )
     assert raised.value.temporary_removed is True

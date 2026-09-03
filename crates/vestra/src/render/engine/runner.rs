@@ -12,7 +12,7 @@ use vestra_progress::{RenderEvent, RenderStage};
 use super::{
     events,
     failure::cleanup_error,
-    frame_loop::run as run_frame_loop,
+    frame_loop::{cancellation, run as run_frame_loop},
     metrics::{failure_timings, failure_with_context, milliseconds, operation_backend_metrics},
     types::{
         RenderError, RenderFailureContext, RenderFailureStage, RenderObserverControl,
@@ -28,7 +28,7 @@ pub(super) use super::preparation::{
 #[cfg(test)]
 pub(super) use super::preparation::{prepare, render_prepared_frame};
 #[cfg(test)]
-pub(super) use super::static_render::render_prepared;
+use super::tests::render_prepared_with_sink;
 #[cfg(test)]
 use super::types::{BackendFallback, RenderBackendPreference};
 #[cfg(test)]
@@ -85,43 +85,51 @@ where
     clippy::result_large_err,
     reason = "render errors retain cleanup status"
 )]
-pub(crate) fn render_prepared_with_sink<S, SF>(
+pub(crate) fn render_prepared_with_lifecycle<S, SF>(
     prepared: &mut PreparedState,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    lifecycle: &mut LifecycleEmitter<'_>,
     start_sink: SF,
 ) -> Result<RenderSummary, RenderError>
 where
     S: FrameSink,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
-    let operation_id = OperationId::new();
-    let mut lifecycle = LifecycleEmitter {
-        emit,
-        operation_id,
-        started: false,
-    };
-    let result = render_prepared_with_sink_inner(prepared, options, &mut lifecycle, start_sink);
-    match &result {
-        Ok(summary) => lifecycle.completed(&summary.output_path),
-        Err(error) if error.diagnostic.category == Category::Cancellation => lifecycle.cancelled(),
-        Err(_) => lifecycle.failed(),
-    }
-    result
+    render_prepared_with_sink_inner(prepared, options, lifecycle, start_sink)
 }
 
-pub(super) struct LifecycleEmitter<'a> {
+pub(crate) struct LifecycleEmitter<'a> {
     emit: &'a mut dyn FnMut(RenderEvent) -> RenderObserverControl,
     operation_id: OperationId,
     started: bool,
+    current_stage: Option<RenderStage>,
+    terminal: bool,
 }
 
 impl LifecycleEmitter<'_> {
+    pub(crate) fn new(
+        operation_id: OperationId,
+        emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    ) -> LifecycleEmitter<'_> {
+        LifecycleEmitter {
+            emit,
+            operation_id,
+            started: false,
+            current_stage: None,
+            terminal: false,
+        }
+    }
+
     fn emit(&mut self, event: RenderEvent) -> RenderObserverControl {
         (self.emit)(event)
     }
 
-    fn started(&mut self, total_frames: u64, output_path: &Path) -> RenderObserverControl {
+    pub(crate) fn started(
+        &mut self,
+        total_frames: u64,
+        output_path: &Path,
+    ) -> RenderObserverControl {
+        debug_assert!(!self.started, "render lifecycle started twice");
         self.started = true;
         self.emit(events::started(
             self.operation_id,
@@ -130,15 +138,30 @@ impl LifecycleEmitter<'_> {
         ))
     }
 
-    fn stage(&mut self, stage: RenderStage) -> RenderObserverControl {
+    pub(crate) fn stage(&mut self, stage: RenderStage) -> RenderObserverControl {
+        debug_assert!(self.started, "render stage emitted before Started");
+        debug_assert!(
+            !self.terminal,
+            "render stage emitted after terminal outcome"
+        );
+        if let Some(previous) = self.current_stage {
+            debug_assert!(previous < stage, "render stage regressed or repeated");
+        }
+        self.current_stage = Some(stage);
         self.emit(events::stage(self.operation_id, stage))
     }
 
-    pub(super) fn progress(
+    pub(crate) fn progress(
         &mut self,
         completed_frames: u64,
         total_frames: u64,
     ) -> RenderObserverControl {
+        debug_assert_eq!(
+            self.current_stage,
+            Some(RenderStage::Rendering),
+            "render progress emitted outside Rendering"
+        );
+        debug_assert!(completed_frames <= total_frames);
         self.emit(events::progress(
             self.operation_id,
             completed_frames,
@@ -146,8 +169,9 @@ impl LifecycleEmitter<'_> {
         ))
     }
 
-    fn completed(&mut self, output_path: &Path) {
-        if self.started {
+    pub(crate) fn completed(&mut self, output_path: &Path) {
+        if self.started && !self.terminal {
+            self.terminal = true;
             let _ = self.emit(RenderEvent::completed(
                 self.operation_id,
                 output_path.to_path_buf(),
@@ -155,16 +179,30 @@ impl LifecycleEmitter<'_> {
         }
     }
 
-    fn cancelled(&mut self) {
-        if self.started {
+    pub(crate) fn cancelled(&mut self) {
+        if self.started && !self.terminal {
+            self.terminal = true;
             let _ = self.emit(RenderEvent::cancelled(self.operation_id));
         }
     }
 
-    fn failed(&mut self) {
-        if self.started {
+    pub(crate) fn failed(&mut self) {
+        if self.started && !self.terminal {
+            self.terminal = true;
             let _ = self.emit(RenderEvent::failed(self.operation_id));
         }
+    }
+}
+
+#[cfg(test)]
+pub(super) fn finish_lifecycle(
+    lifecycle: &mut LifecycleEmitter<'_>,
+    result: &Result<RenderSummary, RenderError>,
+) {
+    match result {
+        Ok(summary) => lifecycle.completed(&summary.output_path),
+        Err(error) if error.diagnostic.category == Category::Cancellation => lifecycle.cancelled(),
+        Err(_) => lifecycle.failed(),
     }
 }
 
@@ -224,70 +262,6 @@ where
         .collect::<Vec<_>>();
     prepared.backend.reset_operation_metrics();
     let operation_metrics_before = prepared.backend.stats();
-    let cancelled_before_started = options.cancelled.load(std::sync::atomic::Ordering::Relaxed);
-    if lifecycle.started(plan.frame_count, &output.final_path) == RenderObserverControl::Cancel {
-        return Err(failure_with_context(
-            cleanup_error(
-                &output,
-                &plan,
-                RenderFailureStage::Cancellation,
-                0,
-                None,
-                Diagnostic::error(
-                    "VESTRA-CANCELLED",
-                    Category::Cancellation,
-                    "render cancelled by observer",
-                    "",
-                ),
-            ),
-            &fallback_warnings,
-            &timings,
-            total_started,
-        ));
-    }
-    if lifecycle.stage(RenderStage::Preparing) == RenderObserverControl::Cancel {
-        return Err(failure_with_context(
-            cleanup_error(
-                &output,
-                &plan,
-                RenderFailureStage::Cancellation,
-                0,
-                None,
-                Diagnostic::error(
-                    "VESTRA-CANCELLED",
-                    Category::Cancellation,
-                    "render cancelled by observer",
-                    "",
-                ),
-            ),
-            &fallback_warnings,
-            &timings,
-            total_started,
-        ));
-    }
-    // The legacy callback can only request cancellation through the shared
-    // token. `started` is also a pre-publication callback, so do not start the
-    // encoder if it requested cancellation.
-    if !cancelled_before_started && options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-        return Err(failure_with_context(
-            cleanup_error(
-                &output,
-                &plan,
-                RenderFailureStage::Cancellation,
-                0,
-                None,
-                Diagnostic::error(
-                    "VESTRA-CANCELLED",
-                    Category::Cancellation,
-                    "render cancelled",
-                    "",
-                ),
-            ),
-            &fallback_warnings,
-            &timings,
-            total_started,
-        ));
-    }
     let mut encoder = start_sink(&plan.encoder, &output.temporary_path)
         .map_err(|error| {
             cleanup_error(
@@ -441,8 +415,23 @@ where
         ));
     }
     let finish_started = Instant::now();
-    let _ = lifecycle.stage(RenderStage::Encoding);
-    let _ = lifecycle.stage(RenderStage::Finalizing);
+    if lifecycle.stage(RenderStage::Encoding) == RenderObserverControl::Cancel
+        || options.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        let submitted = prepared.backend.staged_metrics().submitted_frames > 0;
+        let result = cancellation(
+            prepared.backend.as_mut(),
+            &mut encoder,
+            &output,
+            &plan,
+            completed_frames,
+            None,
+        );
+        if submitted {
+            prepared.invalidate();
+        }
+        return result.map(|_| unreachable!("cancellation helper always returns an error"));
+    }
     let sink_result = encoder
         .finish()
         .map_err(|error| {
@@ -478,6 +467,28 @@ where
                         "sink accepted {} frames; expected {}",
                         sink_result.frames_written, plan.frame_count
                     ),
+                    "",
+                ),
+            ),
+            &fallback_warnings,
+            &timings,
+            total_started,
+        ));
+    }
+    if lifecycle.stage(RenderStage::Finalizing) == RenderObserverControl::Cancel
+        || options.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        return Err(failure_with_context(
+            cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::Cancellation,
+                completed_frames,
+                None,
+                Diagnostic::error(
+                    "VESTRA-CANCELLED",
+                    Category::Cancellation,
+                    "render cancelled",
                     "",
                 ),
             ),

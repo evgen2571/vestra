@@ -796,7 +796,7 @@ fn abort_sink<S: FrameSink + ?Sized>(sink: &mut S) -> Option<String> {
     clippy::result_large_err,
     reason = "cancellation preserves the existing structured cleanup context"
 )]
-fn cancellation<S: FrameSink + ?Sized>(
+pub(super) fn cancellation<S: FrameSink + ?Sized>(
     backend: &mut dyn RenderBackend,
     encoder: &mut S,
     output: &OutputTarget,

@@ -9,13 +9,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
+use crate::render::{RenderEvent, RenderObserverControl};
 use crate::{
     Diagnostic,
     plan::{CompileOptions, compile},
     project::ValidatedProject,
     render::{
-        PreparedState, RenderBackendPreference, RenderError, RenderEvent, RenderObserverControl,
-        RenderOptions, RenderSummary, prepare_for_video, render_prepared, render_prepared_frame,
+        LifecycleEmitter, PreparedState, RenderBackendPreference, RenderError, RenderOptions,
+        RenderSummary, prepare_for_video, render_prepared_frame, render_prepared_with_lifecycle,
     },
 };
 
@@ -201,9 +203,9 @@ pub(crate) fn prepare_project(
 pub(crate) fn render_prepared_project(
     prepared: &mut PreparedRender,
     request: RenderRequest,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, ApplicationRenderError> {
-    let summary = render_prepared(
+    let summary = render_prepared_with_lifecycle(
         &mut prepared.prepared,
         &RenderOptions {
             output_override: request.output_override,
@@ -212,7 +214,7 @@ pub(crate) fn render_prepared_project(
             #[cfg(test)]
             backend_preference: request.backend_preference,
         },
-        emit,
+        lifecycle,
     )
     .map_err(|error| ApplicationRenderError::Render {
         error: Box::new(error),

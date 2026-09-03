@@ -30,6 +30,21 @@ fn stages_have_a_stable_order_and_progress_modes_are_presentation_policy() {
 }
 
 #[test]
+fn progress_constructor_keeps_frame_and_fraction_within_the_rendering_range() {
+    let event = RenderEvent::progress(OperationId::new(), 11, 10);
+    let RenderEvent::Progress {
+        frame,
+        total_frames,
+        fraction,
+        ..
+    } = event
+    else {
+        panic!("expected progress event");
+    };
+    assert_eq!((frame, total_frames, fraction), (10, 10, 1.0));
+}
+
+#[test]
 fn no_progress_sink_observes_events_without_side_effects() {
     let mut sink = vestra_progress::NoProgress;
     sink.on_event(&RenderEvent::cancelled(OperationId::new()));

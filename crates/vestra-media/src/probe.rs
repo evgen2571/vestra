@@ -20,7 +20,7 @@ pub fn check_executable(executable: &Path, program: &'static str) -> Result<(), 
         target: "vestra.media.probe",
         program,
         executable = %executable.display(),
-        elapsed_ms = started.elapsed().as_millis(),
+        elapsed_ms = crate::trace_milliseconds(started.elapsed()),
         available = status.success(),
         "media tool availability checked"
     );
@@ -84,7 +84,7 @@ pub fn probe_audio_duration_with(
         asset_path = %asset_path.display(),
         asset_type = "audio",
         duration_ms = (duration * 1_000.0) as u64,
-        elapsed_ms = started.elapsed().as_millis(),
+        elapsed_ms = crate::trace_milliseconds(started.elapsed()),
         "audio media probe completed"
     );
     Ok(duration)

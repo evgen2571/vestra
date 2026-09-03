@@ -30,7 +30,13 @@ Importing the package and ordinary rendering are subscriber-neutral. The API
 maps to the shared Rust observability implementation and supports human or
 JSON Lines format, stderr, file, stderr-plus-file, levels, `filter=`, and the
 advanced `RUST_LOG` override. Repeated global initialization raises a clear
-runtime error.
+runtime error. `output="stderr"` requires no `file`; `output="file"` and
+`output="stderr_and_file"` require one. Supplying a file with
+`output="stderr"` is rejected rather than silently changing the destination.
+The compatibility spelling `output="stderr+file"` is accepted as an alias for
+`stderr_and_file`. JSON tracing on stderr disables native terminal progress so
+the stream remains valid JSON Lines; JSON tracing to a file leaves native
+stderr progress available.
 
 For ordinary cancellation, create a `CancellationToken`, pass it to `render`,
 and call `cancel()` from another control path. Observed cancellation raises

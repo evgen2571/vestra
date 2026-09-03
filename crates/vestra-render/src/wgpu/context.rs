@@ -133,7 +133,7 @@ impl GpuContext {
             graphics_backend = %adapter_metadata.graphics_backend,
             adapter = %adapter_metadata.adapter_name,
             device_type = %adapter_metadata.device_type,
-            elapsed_ms = device_request.as_millis(),
+            elapsed_ms = crate::trace_milliseconds(device_request),
             "GPU device initialized"
         );
         requirements.validate(&device.limits(), plan)?;

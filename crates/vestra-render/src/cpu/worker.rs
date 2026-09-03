@@ -100,7 +100,7 @@ pub(super) fn run_worker(
                     stage = "render",
                     worker_id,
                     frame = frame_number,
-                    elapsed_ms = render_duration.as_millis(),
+                    elapsed_ms = crate::trace_milliseconds(render_duration),
                     "CPU worker frame completed"
                 );
                 let panicked = result.is_err();

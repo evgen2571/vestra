@@ -13,6 +13,10 @@
 
 pub use vestra_core::{Category, Diagnostic, Severity, animation, domain};
 mod kernel;
+
+pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
 pub mod plan {
     #[cfg(not(test))]
     pub use vestra_core::plan::*;

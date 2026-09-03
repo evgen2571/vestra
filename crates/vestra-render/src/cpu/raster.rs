@@ -209,6 +209,10 @@ pub(crate) fn draw_raster(
     );
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "raster parameters stay explicit at the renderer boundary"
+)]
 pub(crate) fn draw_raster_with_motion_tile(
     canvas: &mut RgbaImage,
     source: &RgbaImage,
@@ -512,6 +516,10 @@ fn sample_motion_tile_bilinear(
     sample_motion_tile_bilinear_region(image, x, y, origin_x, origin_y, width, height, mirror_edges)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "sampling coordinates stay explicit in the inner loop"
+)]
 fn sample_motion_tile_bilinear_region(
     image: &RgbaImage,
     x: f64,

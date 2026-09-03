@@ -348,7 +348,7 @@ fn evaluate_layers(
                         crate::plan::CompiledMaskInput::Source { source, mode } => {
                             EvaluatedMaskInput::Source {
                                 source: Box::new(evaluate_source(
-                                    &source,
+                                    source,
                                     relative,
                                     root_project_time,
                                     frame_rate,

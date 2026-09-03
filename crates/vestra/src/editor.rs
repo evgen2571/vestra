@@ -248,26 +248,82 @@ pub(crate) fn log_render_failure(
             .map_or(error.kind().as_str(), |context| context.stage.as_str()),
         error_code = diagnostic.map_or("unknown", |item| item.code.as_str()),
         error = diagnostic.map_or("render operation failed", |item| item.message.as_str()),
-        elapsed_ms = operation_started.elapsed().as_millis(),
+        elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
         "render failed"
     );
 }
 
-pub(crate) fn log_render_timing_summary(operation_id: OperationId, timings: &crate::RenderTimings) {
-    tracing::debug!(
-        target: "vestra.performance",
-        operation_id = %operation_id,
-        semantic_validation_ms = timings.semantic_validation_ms,
-        preflight_ms = timings.preflight_ms,
-        plan_compile_ms = timings.plan_compile_ms,
-        asset_decode_ms = timings.asset_decode_ms,
-        frame_render_ms = timings.frame_render_ms,
-        encoder_write_ms = timings.encoder_write_ms,
-        encoder_finalize_ms = timings.encoder_finalize_ms,
-        output_publish_ms = timings.output_publish_ms,
-        elapsed_ms = timings.operation_total_ms,
-        "render timing summary"
+pub(crate) fn log_render_timing_summary(
+    operation_id: OperationId,
+    actual_backend: &str,
+    audio_analysis_ms: u128,
+    timings: &crate::RenderTimings,
+) {
+    let common = (
+        crate::render::trace_millisecond_value(timings.project_parse_ms),
+        crate::render::trace_millisecond_value(timings.semantic_validation_ms),
+        crate::render::trace_millisecond_value(timings.preflight_ms),
+        crate::render::trace_millisecond_value(timings.plan_compile_ms),
+        crate::render::trace_millisecond_value(timings.asset_decode_ms),
+        crate::render::trace_millisecond_value(timings.track_evaluation_ms),
+        crate::render::trace_millisecond_value(timings.frame_render_ms),
+        crate::render::trace_millisecond_value(timings.encoder_write_ms),
+        crate::render::trace_millisecond_value(timings.encoder_finalize_ms),
+        crate::render::trace_millisecond_value(timings.output_publish_ms),
+        crate::render::trace_millisecond_value(timings.operation_total_ms),
     );
+    if actual_backend == "wgpu" {
+        tracing::debug!(
+            target: "vestra.performance",
+            operation_id = %operation_id,
+            actual_backend,
+            project_parse_ms = common.0,
+            semantic_validation_ms = common.1,
+            preflight_ms = common.2,
+            plan_compile_ms = common.3,
+            asset_decode_ms = common.4,
+            audio_analysis_ms = crate::render::trace_millisecond_value(audio_analysis_ms),
+            gpu_initialization_ms = crate::render::trace_millisecond_value(timings.gpu_initialization_ms.unwrap_or_default()),
+            gpu_adapter_request_ms = crate::render::trace_millisecond_value(timings.gpu_adapter_request_ms.unwrap_or_default()),
+            gpu_device_request_ms = crate::render::trace_millisecond_value(timings.gpu_device_request_ms.unwrap_or_default()),
+            gpu_pipeline_creation_ms = crate::render::trace_millisecond_value(timings.gpu_pipeline_creation_ms.unwrap_or_default()),
+            texture_upload_ms = crate::render::trace_millisecond_value(timings.texture_upload_ms.unwrap_or_default()),
+            gpu_frame_command_encode_ms = crate::render::trace_millisecond_value(timings.gpu_frame_command_encode_ms.unwrap_or_default()),
+            gpu_submission_ms = crate::render::trace_millisecond_value(timings.gpu_submission_ms.unwrap_or_default()),
+            gpu_readback_wait_ms = crate::render::trace_millisecond_value(timings.gpu_readback_wait_ms.unwrap_or_default()),
+            row_repack_ms = crate::render::trace_millisecond_value(timings.row_repack_ms.unwrap_or_default()),
+            track_evaluation_ms = common.5,
+            frame_render_ms = common.6,
+            encoder_write_ms = common.7,
+            encoder_finalize_ms = common.8,
+            output_publish_ms = common.9,
+            operation_total_ms = common.10,
+            total_ms = common.10,
+            elapsed_ms = common.10,
+            "render timing summary"
+        );
+    } else {
+        tracing::debug!(
+            target: "vestra.performance",
+            operation_id = %operation_id,
+            actual_backend,
+            project_parse_ms = common.0,
+            semantic_validation_ms = common.1,
+            preflight_ms = common.2,
+            plan_compile_ms = common.3,
+            asset_decode_ms = common.4,
+            audio_analysis_ms = crate::render::trace_millisecond_value(audio_analysis_ms),
+            track_evaluation_ms = common.5,
+            frame_render_ms = common.6,
+            encoder_write_ms = common.7,
+            encoder_finalize_ms = common.8,
+            output_publish_ms = common.9,
+            operation_total_ms = common.10,
+            total_ms = common.10,
+            elapsed_ms = common.10,
+            "render timing summary"
+        );
+    }
 }
 
 impl Editor {
@@ -464,7 +520,7 @@ impl Editor {
         tracing::debug!(
             target: "vestra.project",
             stage = "validate",
-            elapsed_ms = validation_elapsed.as_millis(),
+            elapsed_ms = crate::render::trace_milliseconds(validation_elapsed),
             "project validation completed"
         );
         let preflight_started = Instant::now();
@@ -490,7 +546,7 @@ impl Editor {
             target: "vestra.project",
             stage = "preflight",
             requested_backend = backend.as_str(),
-            elapsed_ms = preflight_elapsed.as_millis(),
+            elapsed_ms = crate::render::trace_milliseconds(preflight_elapsed),
             diagnostics = outcome.report.diagnostics.len(),
             "render preflight completed"
         );
@@ -706,7 +762,7 @@ impl Editor {
                 target: "vestra.render",
                 operation_id = %operation_id,
                 stage = "preparing",
-                elapsed_ms = operation_started.elapsed().as_millis(),
+                elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
                 "render cancelled"
             );
             return Err(Self::cancelled_editor_error(
@@ -721,7 +777,7 @@ impl Editor {
                 target: "vestra.render",
                 operation_id = %operation_id,
                 stage = "preparing",
-                elapsed_ms = operation_started.elapsed().as_millis(),
+                elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
                 "render cancelled"
             );
             return Err(Self::cancelled_editor_error(
@@ -736,7 +792,7 @@ impl Editor {
                 target: "vestra.render",
                 operation_id = %operation_id,
                 stage = "preparing",
-                elapsed_ms = operation_started.elapsed().as_millis(),
+                elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
                 "render cancelled"
             );
             return Err(Self::cancelled_editor_error(
@@ -785,8 +841,8 @@ impl Editor {
             width = metadata.width,
             height = metadata.height,
             total_frames = metadata.frame_count,
-            duration_ms = metadata.duration.as_millis(),
-            elapsed_ms = coordinated.started.elapsed().as_millis(),
+            duration_ms = crate::render::trace_milliseconds(metadata.duration),
+            elapsed_ms = crate::render::trace_milliseconds(coordinated.started.elapsed()),
             "render preparation completed"
         );
         let mut summary = match application::render_prepared_project(
@@ -816,7 +872,7 @@ impl Editor {
                         stage = %editor_error
                             .render_failure_context()
                             .map_or("render", |context| context.stage.as_str()),
-                        elapsed_ms = operation_started.elapsed().as_millis(),
+                        elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
                         "render cancelled"
                     );
                 } else {
@@ -843,14 +899,19 @@ impl Editor {
         summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
         summary.timings.total_ms = summary.timings.operation_total_ms;
         summary.elapsed_ms = summary.timings.operation_total_ms;
-        log_render_timing_summary(operation_id, &summary.timings);
+        log_render_timing_summary(
+            operation_id,
+            summary.render_backend.as_str(),
+            preparation_timings.audio_analysis_ms,
+            &summary.timings,
+        );
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
             stage = "finalizing",
             actual_backend = summary.render_backend.as_str(),
             total_frames = summary.frame_count,
-            elapsed_ms = summary.elapsed_ms,
+            elapsed_ms = crate::render::trace_millisecond_value(summary.elapsed_ms),
             output = %summary.output_path.display(),
             "render execution completed"
         );
@@ -1018,7 +1079,7 @@ impl Editor {
             ..crate::RenderTimings::default()
         }
     }
-    fn apply_renderer_preparation_timings(
+    pub(crate) fn apply_renderer_preparation_timings(
         timings: &mut crate::RenderTimings,
         preparation: crate::render::PreparationTimings,
     ) {
@@ -1331,6 +1392,8 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             log_render_timing_summary(
                 vestra_core::OperationId::new(),
+                "wgpu",
+                29,
                 &crate::RenderTimings {
                     semantic_validation_ms: 2,
                     plan_compile_ms: 3,
@@ -1352,10 +1415,20 @@ mod tests {
             serde_json::from_str(output.trim()).expect("summary is valid JSON");
         assert_eq!(record["target"], "vestra.performance");
         assert!(record["fields"]["operation_id"].is_string());
-        assert_eq!(record["fields"]["frame_render_ms"], "11");
-        assert_eq!(record["fields"]["encoder_finalize_ms"], "17");
-        assert_eq!(record["fields"]["output_publish_ms"], "19");
-        assert_eq!(record["fields"]["elapsed_ms"], "23");
+        assert_eq!(record["fields"]["audio_analysis_ms"], 29);
+        assert!(record["fields"]["gpu_initialization_ms"].is_number());
+        assert!(record["fields"]["track_evaluation_ms"].is_number());
+        assert!(record["fields"]["frame_render_ms"].is_number());
+        assert!(record["fields"]["encoder_finalize_ms"].is_number());
+        assert!(record["fields"]["output_publish_ms"].is_number());
+        assert!(record["fields"]["operation_total_ms"].is_number());
+        assert!(record["fields"]["total_ms"].is_number());
+        assert!(record["fields"]["elapsed_ms"].is_number());
+    }
+
+    #[test]
+    fn trace_millisecond_conversion_saturates_at_u64_maximum() {
+        assert_eq!(crate::render::trace_millisecond_value(u128::MAX), u64::MAX);
     }
 
     struct CapturedWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);

@@ -136,7 +136,7 @@ def _canonical_parameter(
         if validate_descriptor_values:
             _validate_descriptor_value(parameter, number)
         return number
-    if kind == "point2d":
+    if kind in {"point2d", "point_property"}:
         if not isinstance(value, Point):
             raise TypeError(f"{name} must be Point")
         if not 0 <= value.x <= 1 or not 0 <= value.y <= 1:
@@ -305,7 +305,10 @@ class GenericEffect(Effect):
         parameters = cast(tuple[Mapping[str, object], ...], definition["parameters"])
         for parameter in parameters:
             name = str(parameter["name"])
-            if parameter["kind"] == "point2d" and name in {"tile_center", "center"}:
+            if parameter["kind"] in {"point2d", "point_property"} and name in {
+                "tile_center",
+                "center",
+            }:
                 canonical = instance._data.get(name)
                 if not isinstance(canonical, Mapping):
                     continue

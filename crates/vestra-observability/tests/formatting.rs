@@ -92,6 +92,78 @@ fn json_output_is_one_parseable_line_with_structured_fields() {
 }
 
 #[test]
+fn json_stderr_disables_native_progress_on_the_shared_terminal() {
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let terminal = test_terminal(Arc::clone(&bytes));
+    let subscriber = build_with_terminal_output(
+        ObservabilityConfig::default()
+            .with_format(LogFormat::Json)
+            .with_output(LogOutput::Stderr)
+            .with_filter("formatting=info"),
+        Arc::clone(&terminal),
+    )
+    .expect("subscriber builds");
+
+    let mut progress = TerminalProgress::with_output(terminal, 80);
+    let operation_id = vestra_core::OperationId::new();
+    progress.on_event(&RenderEvent::started(
+        operation_id,
+        Some(10),
+        "output.mp4".into(),
+    ));
+    progress.on_event(&RenderEvent::stage_changed(
+        operation_id,
+        vestra_progress::RenderStage::Rendering,
+    ));
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!(target: "formatting", "clean JSON record");
+    });
+    progress.on_event(&RenderEvent::completed(operation_id, "output.mp4".into()));
+
+    let output = captured(&bytes);
+    let records = output
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("valid JSON line"))
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["fields"]["message"], "clean JSON record");
+    assert!(!output.contains('\x1b'));
+    assert!(!output.contains('\r'));
+}
+
+#[test]
+fn json_file_output_leaves_native_terminal_progress_available() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("events.jsonl");
+    let terminal_bytes = Arc::new(Mutex::new(Vec::new()));
+    let terminal = test_terminal(Arc::clone(&terminal_bytes));
+    let subscriber = build_with_terminal_output(
+        ObservabilityConfig::default()
+            .with_format(LogFormat::Json)
+            .with_output(LogOutput::File(path.clone()))
+            .with_filter("formatting=info"),
+        Arc::clone(&terminal),
+    )
+    .expect("subscriber builds");
+
+    let mut progress = TerminalProgress::with_output(terminal, 80);
+    let operation_id = vestra_core::OperationId::new();
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!(target: "formatting", "file JSON record");
+        progress.on_event(&RenderEvent::started(
+            operation_id,
+            Some(10),
+            "output.mp4".into(),
+        ));
+    });
+
+    let file_output = std::fs::read_to_string(path).expect("read JSON file");
+    let record: serde_json::Value = serde_json::from_str(file_output.trim()).expect("valid JSON");
+    assert_eq!(record["fields"]["message"], "file JSON record");
+    assert!(captured(&terminal_bytes).contains('\x1b'));
+}
+
+#[test]
 fn filtering_honors_levels_target_directives_and_dependency_overrides() {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     let subscriber = build_with_terminal_output(

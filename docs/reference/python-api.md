@@ -96,15 +96,22 @@ importing Vestra and ordinary rendering do not install a global subscriber:
 import vestra
 
 vestra.configure_logging(level="info")
-vestra.configure_logging(level="debug", format="json", file="vestra.log")
+vestra.configure_logging(level="debug", format="json", output="file",
+                         file="vestra.log")
 ```
 
 `level` accepts `error`, `warn`, `info`, `debug`, and `trace`. `format` is
-`human` or `json`. Output is `stderr` by default, or `file`/`stderr_and_file`
-when `file` is supplied. `filter=` accepts an EnvFilter directive such as
+`human` or `json`. `output` is `stderr` (the default), `file`, or
+`stderr_and_file`. `file` is required for `file` and `stderr_and_file`, and
+must be omitted for `stderr`; passing a file with `output="stderr"` is an
+error. The compatibility spelling `output="stderr+file"` is equivalent to
+`stderr_and_file` and also requires `file`. `filter=` accepts an EnvFilter directive such as
 `"vestra=info,vestra.render.wgpu=debug"`; `RUST_LOG` remains the advanced
 override. A second global initialization raises a clear `RuntimeError`.
-JSON tracing logs are distinct from JSON RenderEvent progress.
+JSON tracing logs are distinct from JSON RenderEvent progress. JSON tracing on
+stderr disables native Auto or explicit terminal progress on that shared
+terminal so the stream stays valid JSON Lines; JSON tracing to a file leaves
+native stderr progress available.
 
 ## Reports and errors
 

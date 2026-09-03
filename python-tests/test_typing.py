@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     request = vestra.PreparedVideoRenderRequest("out.mp4")
 
     def on_progress(event: vestra.RenderEvent) -> object:
-        print(event.progress)
+        print(event.fraction)
         return None
 
     rendered: vestra.RenderResult = prepared.render_video(

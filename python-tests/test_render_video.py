@@ -18,21 +18,13 @@ def cpu_prepared() -> vestra.PreparedProject:
 
 
 def multi_frame_prepared(tmp_path: Path) -> vestra.PreparedProject:
-    project = vestra.ProjectSnapshot.from_dict(
-        {
-            "schema_version": 3,
-            "output": {
-                "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
-                "background": "#102030", "quality": "preview", "audio": False,
-                "duration_mode": "explicit", "duration": 3,
-            },
-            "assets": [], "visual": {"clips": []},
-        },
-        base_directory=tmp_path,
+    project = vestra.Project(
+        size=(2, 2), fps=1, duration=3, base_directory=tmp_path
     )
-    return vestra.Editor().prepare(
-        project, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)
-    )
+    layer = project.root.add(vestra.sources.Color("#102030"))
+    layer.opacity.keyframe(0, 0)
+    layer.opacity.keyframe(1, 1)
+    return project.prepare(backend="cpu")
 
 
 def test_prepared_video_render_publishes_output_and_filters_completed(tmp_path: Path) -> None:
@@ -46,9 +38,13 @@ def test_prepared_video_render_publishes_output_and_filters_completed(tmp_path: 
     assert result.output_path == output
     assert result.timing_scope is vestra.RenderTimingScope.PREPARED_OPERATION
     assert result.performance.rendered_frame_count == result.total_frames
-    assert [event.kind for event in events] == ["started"]
+    assert [event.kind for event in events] == [
+        "started", "stage_changed", "stage_changed", "stage_changed", "completed"
+    ]
     assert events[0].output_path == output
-    assert events[0].progress == 0.0
+    assert events[0].operation_id == events[-1].operation_id
+    assert events[0].frame is None
+    assert events[0].fraction is None
     subprocess.run(["ffprobe", "-v", "error", "-show_format", str(output)], check=True)
 
 
@@ -128,7 +124,7 @@ def test_cancelled_token_is_structured_and_prepared_object_is_reusable(tmp_path:
         prepared.render_video(vestra.PreparedVideoRenderRequest(output), cancellation=token)
     assert raised.value.kind == "render"
     assert raised.value.failure_context is not None
-    assert raised.value.temporary_removed is True
+    assert raised.value.temporary_removed is False
     assert not output.exists()
     assert prepared.render_frame_number(0).width == 174
 
@@ -149,6 +145,67 @@ def test_callback_exception_is_preserved_and_suppresses_publication(tmp_path: Pa
     assert prepared.render_frame_number(0).frame_number == 0
 
 
+def test_callback_failure_at_encoding_aborts_before_publication(tmp_path: Path) -> None:
+    output = tmp_path / "encoding-callback.mp4"
+    seen: list[str] = []
+
+    class EncodingFailure(Exception):
+        pass
+
+    def fail_at_encoding(event: vestra.RenderEvent) -> None:
+        seen.append(event.kind)
+        if event.stage == "encoding":
+            raise EncodingFailure("encoding callback failed")
+
+    with pytest.raises(EncodingFailure, match="encoding callback failed") as raised:
+        cpu_prepared().render_video(
+            vestra.PreparedVideoRenderRequest(output), progress=fail_at_encoding
+        )
+
+    assert seen == ["started", "stage_changed", "stage_changed"]
+    assert not output.exists()
+    assert isinstance(raised.value.render_cleanup_error, vestra.CancelledError)
+
+
+def test_callback_failure_at_finalizing_aborts_before_publication(tmp_path: Path) -> None:
+    output = tmp_path / "finalizing-callback.mp4"
+
+    class FinalizingFailure(Exception):
+        pass
+
+    def fail_at_finalizing(event: vestra.RenderEvent) -> None:
+        if event.stage == "finalizing":
+            raise FinalizingFailure("finalizing callback failed")
+
+    with pytest.raises(FinalizingFailure, match="finalizing callback failed") as raised:
+        cpu_prepared().render_video(
+            vestra.PreparedVideoRenderRequest(output), progress=fail_at_finalizing
+        )
+
+    assert not output.exists()
+    assert isinstance(raised.value.render_cleanup_error, vestra.CancelledError)
+
+
+def test_completed_callback_failure_does_not_invalidate_published_success(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "completed-callback.mp4"
+
+    def fail_at_completed(event: vestra.RenderEvent) -> None:
+        if event.kind == "completed":
+            raise RuntimeError("completed callback failed")
+
+    events: list[vestra.RenderEvent] = []
+    result = cpu_prepared().render_video(
+        vestra.PreparedVideoRenderRequest(output),
+        progress=lambda event: (events.append(event), fail_at_completed(event)),
+    )
+
+    assert result.output_path == output
+    assert output.exists()
+    assert events[-1].kind == "completed"
+
+
 def test_callback_reentrancy_is_immediately_busy_and_outer_render_continues(tmp_path: Path) -> None:
     prepared = cpu_prepared()
     output = tmp_path / "reentrant.mp4"
@@ -162,7 +219,7 @@ def test_callback_reentrancy_is_immediately_busy_and_outer_render_continues(tmp_
         busy.append(True)
 
     prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=callback)
-    assert busy == [True]
+    assert busy and all(busy)
     assert output.exists()
 
 
@@ -181,7 +238,7 @@ def test_callback_failure_after_progress_invalidates_the_native_prepared_state(t
     native._test_reset_callback_attach_count()
     with pytest.raises(RuntimeError, match="after progress") as raised:
         prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=fail_on_progress)
-    assert seen == ["started", "progress"]
+    assert seen == ["started", "stage_changed", "progress"]
     assert native._test_callback_attach_count() == len(seen)
     assert not output.exists()
     cleanup_error = raised.value.render_cleanup_error
@@ -233,7 +290,7 @@ def test_callback_cancellation_removes_output_and_invalidates_after_submission(t
         )
     assert raised.value.temporary_removed is True
     assert token.is_cancelled
-    assert events == ["started", "progress"]
+    assert events == ["started", "stage_changed", "progress", "cancelled"]
     assert not output.exists()
     assert list(tmp_path.iterdir()) == []
     with pytest.raises(vestra.FrameRenderError) as invalidated:
@@ -384,21 +441,27 @@ def test_render_event_snapshots_keep_the_sdk_contract(tmp_path: Path) -> None:
         vestra.PreparedVideoRenderRequest(output), progress=events.append
     )
 
-    assert [event.kind for event in events] == ["started", "progress", "progress"]
-    started, *progress = events
-    assert started.schema_version == 1
-    assert started.frame == 0
+    assert [event.kind for event in events] == [
+        "started", "stage_changed", "progress", "progress", "progress",
+        "stage_changed", "stage_changed", "completed",
+    ]
+    started, rendering, *rest = events
+    progress = [event for event in events if event.kind == "progress"]
+    assert started.schema_version == 2
+    assert started.operation_id == events[-1].operation_id
+    assert started.stage is None
+    assert started.frame is None
     assert started.total_frames == 3
-    assert started.progress == 0.0
+    assert started.fraction is None
     assert started.output_path == output
-    assert started.warnings == ()
-    assert all(event.schema_version == 1 for event in events)
-    assert [event.frame for event in progress] == [1, 2]
+    assert all(event.schema_version == 2 for event in events)
+    assert rendering.stage == "rendering"
+    assert [event.frame for event in progress] == [1, 2, 3]
     assert all(event.total_frames == 3 for event in progress)
-    assert all(event.progress is not None and event.progress < 1.0 for event in progress)
-    assert all(event.output_path is None and event.warnings == () for event in progress)
+    assert all(event.fraction is not None for event in progress)
+    assert all(event.output_path is None for event in progress)
     with pytest.raises(AttributeError):
-        events[0].progress = 1.0  # type: ignore[misc]
+        events[0].fraction = 1.0  # type: ignore[misc]
     assert events[0].kind == "started"
 
 

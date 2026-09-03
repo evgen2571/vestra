@@ -177,23 +177,8 @@ pub(super) fn run(
                 diagnostic.category,
                 Category::Backend | Category::Render | Category::Cancellation
             ) {
-                let failed = RenderEvent {
-                    event_schema_version: 1,
-                    kind: "failed".to_owned(),
-                    frame: context.completed_frames,
-                    total_frames: context.total_frames,
-                    progress: context.progress,
-                    output_path: context.output_path.clone(),
-                    warnings: Some(warnings.clone()),
-                };
-                match progress {
-                    ProgressFormat::Human => human_progress
-                        .as_mut()
-                        .expect("human progress state exists")
-                        .update(&failed),
-                    ProgressFormat::Json => crate::output::progress::write_json_progress(&failed),
-                    ProgressFormat::None => {}
-                }
+                // Runtime lifecycle owns the canonical `Failed` event. The
+                // CLI reports diagnostics here but never fabricates progress.
             }
             if let Some(path) = report.as_deref()
                 && let Err(report_error) = write_render_failure_report(

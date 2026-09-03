@@ -5,58 +5,18 @@ use std::{
 
 use crate::{Category, Diagnostic, plan::RenderPlan};
 use vestra_media::{FfmpegSink, FrameSink, OutputTarget};
+use vestra_progress::RenderStage;
 
 use super::{
-    events,
     failure::cleanup_error,
     metrics::{milliseconds, operation_backend_metrics},
     preparation::{PreparedState, frame_diagnostic, frame_error, render_prepared_frame},
-    runner::render_prepared_with_sink,
+    runner::{LifecycleEmitter, render_prepared_with_lifecycle as render_raw},
     types::{
-        RenderError, RenderEvent, RenderFailureContext, RenderFailureStage, RenderObserverControl,
+        RenderError, RenderFailureContext, RenderFailureStage, RenderObserverControl,
         RenderOptions, RenderSummary, RenderTimings,
     },
 };
-fn emit_static_ffmpeg_progress(
-    encoder: &FfmpegSink,
-    options: &RenderOptions,
-    total_frames: u64,
-    last_progress: &mut u64,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
-) -> Option<&'static str> {
-    let reported = encoder.static_progress_frames()?;
-    emit_static_progress_events(reported, options, total_frames, last_progress, emit)
-}
-
-fn emit_static_progress_events(
-    reported: u64,
-    options: &RenderOptions,
-    total_frames: u64,
-    last_progress: &mut u64,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
-) -> Option<&'static str> {
-    // `completed` is the only event allowed to report 100%. FFmpeg is free to
-    // jump directly to its terminal frame count, especially for tiny static
-    // encodes, so clamp that terminal sample to the final legitimate
-    // pre-publication progress event.
-    let progress = reported.min(total_frames.saturating_sub(1));
-    if progress == 0 || progress <= *last_progress {
-        return None;
-    }
-    for frame in (*last_progress + 1)..=progress {
-        *last_progress = frame;
-        if emit(events::progress(frame, total_frames)) == RenderObserverControl::Cancel {
-            return Some("render cancelled by observer");
-        }
-        // The legacy callback can request cancellation only through the shared
-        // token. Check immediately after emitting progress because FFmpeg may
-        // already have finished and there may be no later polling iteration.
-        if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-            return Some("render cancelled");
-        }
-    }
-    None
-}
 
 fn static_encoder_failure(
     output: &OutputTarget,
@@ -127,17 +87,17 @@ fn cancel_static_ffmpeg(
     clippy::result_large_err,
     reason = "operation errors retain structured diagnostics"
 )]
-pub(crate) fn render_prepared(
+pub(crate) fn render_prepared_with_lifecycle(
     prepared: &mut PreparedState,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, RenderError> {
     if prepared.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
         && !prepared.plan.canvas.preview
     {
-        return render_static_ffmpeg(prepared, options, emit);
+        return render_static_ffmpeg(prepared, options, lifecycle);
     }
-    render_prepared_with_sink(prepared, options, emit, FfmpegSink::start)
+    render_raw(prepared, options, lifecycle, FfmpegSink::start)
 }
 
 #[expect(
@@ -147,7 +107,19 @@ pub(crate) fn render_prepared(
 pub(super) fn render_static_ffmpeg(
     prepared: &mut PreparedState,
     options: &RenderOptions,
-    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    lifecycle: &mut LifecycleEmitter<'_>,
+) -> Result<RenderSummary, RenderError> {
+    render_static_ffmpeg_inner(prepared, options, lifecycle)
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "static rendering preserves structured render failures"
+)]
+fn render_static_ffmpeg_inner(
+    prepared: &mut PreparedState,
+    options: &RenderOptions,
+    lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, RenderError> {
     prepared.ensure_ready()?;
     let plan = Arc::clone(&prepared.plan);
@@ -172,16 +144,14 @@ pub(super) fn render_static_ffmpeg(
         timings: RenderTimings::default(),
     })?;
     if options.cancelled.load(std::sync::atomic::Ordering::Relaxed)
-        || emit(events::started(plan.frame_count, &output.final_path))
-            == RenderObserverControl::Cancel
+        || lifecycle.stage(RenderStage::Rendering) == RenderObserverControl::Cancel
     {
-        tracing::info!(stage = "render", "static render cancelled before encoding");
         let removed = output.cleanup();
         return Err(RenderError {
             diagnostic: Diagnostic::error(
                 "VESTRA-CANCELLED",
                 Category::Cancellation,
-                "render cancelled",
+                "render cancelled by observer",
                 "",
             ),
             warnings: Vec::new(),
@@ -221,6 +191,26 @@ pub(super) fn render_static_ffmpeg(
             Diagnostic::error("VESTRA-STATIC-PNG", Category::Output, error.to_string(), ""),
         ));
     }
+    if lifecycle.stage(RenderStage::Encoding) == RenderObserverControl::Cancel
+        || options.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        prepared.backend.abort();
+        prepared.invalidate();
+        let _ = std::fs::remove_file(&image_path);
+        return Err(cleanup_error(
+            &output,
+            &plan,
+            RenderFailureStage::Cancellation,
+            0,
+            None,
+            Diagnostic::error(
+                "VESTRA-CANCELLED",
+                Category::Cancellation,
+                "render cancelled",
+                "",
+            ),
+        ));
+    }
     let mut encoder =
         match FfmpegSink::start_static(&plan.encoder, &output.temporary_path, image_path.clone()) {
             Ok(encoder) => encoder,
@@ -242,7 +232,6 @@ pub(super) fn render_static_ffmpeg(
             }
         };
     let finalize_started = Instant::now();
-    let mut last_progress = 0;
     let result = loop {
         if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(cancel_static_ffmpeg(
@@ -250,48 +239,12 @@ pub(super) fn render_static_ffmpeg(
                 &mut encoder,
                 &output,
                 &plan,
-                last_progress,
+                0,
                 "render cancelled",
-            ));
-        }
-        if let Some(message) = emit_static_ffmpeg_progress(
-            &encoder,
-            options,
-            plan.frame_count,
-            &mut last_progress,
-            emit,
-        ) {
-            return Err(cancel_static_ffmpeg(
-                prepared,
-                &mut encoder,
-                &output,
-                &plan,
-                last_progress,
-                message,
             ));
         }
         match encoder.try_finish_static() {
             Ok(Some(result)) => {
-                // `try_finish_static` joins the FFmpeg progress-reader thread.
-                // Re-read progress afterwards so a short encode that raced
-                // straight to `frame=total_frames` still emits the SDK's final
-                // legitimate pre-completion progress event.
-                if let Some(message) = emit_static_ffmpeg_progress(
-                    &encoder,
-                    options,
-                    plan.frame_count,
-                    &mut last_progress,
-                    emit,
-                ) {
-                    return Err(cancel_static_ffmpeg(
-                        prepared,
-                        &mut encoder,
-                        &output,
-                        &plan,
-                        last_progress,
-                        message,
-                    ));
-                }
                 break result;
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(25)),
@@ -299,10 +252,7 @@ pub(super) fn render_static_ffmpeg(
                 // `try_finish_static` joins FFmpeg's progress reader before
                 // returning a process failure. Read the final monotonic sample
                 // instead of relying only on the last polling iteration.
-                let reported_frames = encoder
-                    .static_progress_frames()
-                    .unwrap_or(last_progress)
-                    .max(last_progress);
+                let reported_frames = encoder.static_progress_frames().unwrap_or(0);
                 let failure = static_encoder_failure(
                     &output,
                     &plan,
@@ -331,6 +281,23 @@ pub(super) fn render_static_ffmpeg(
                 "VESTRA-SINK-FRAME-COUNT",
                 Category::Render,
                 "static FFmpeg frame count differs from the plan",
+                "",
+            ),
+        ));
+    }
+    if lifecycle.stage(RenderStage::Finalizing) == RenderObserverControl::Cancel
+        || options.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        return Err(cleanup_error(
+            &output,
+            &plan,
+            RenderFailureStage::Cancellation,
+            plan.frame_count,
+            None,
+            Diagnostic::error(
+                "VESTRA-CANCELLED",
+                Category::Cancellation,
+                "render cancelled",
                 "",
             ),
         ));
@@ -405,11 +372,6 @@ pub(super) fn render_static_ffmpeg(
         elapsed_ms = timings.total_ms,
         "static render completed"
     );
-    let _ = emit(events::completed(
-        plan.frame_count,
-        &output.final_path,
-        plan.warnings.clone(),
-    ));
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,
@@ -431,31 +393,8 @@ pub(super) fn render_static_ffmpeg(
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use std::sync::{Arc, atomic::AtomicBool};
 
     use super::*;
-
-    #[test]
-    fn static_progress_catches_up_each_pre_completion_frame() {
-        let options = RenderOptions {
-            output_override: None,
-            overwrite: false,
-            cancelled: Arc::new(AtomicBool::new(false)),
-            backend_preference: super::super::types::RenderBackendPreference::Cpu,
-        };
-        let mut last_progress = 0;
-        let mut frames = Vec::new();
-
-        let cancellation =
-            emit_static_progress_events(3, &options, 3, &mut last_progress, &mut |event| {
-                frames.push(event.frame);
-                RenderObserverControl::Continue
-            });
-
-        assert_eq!(cancellation, None);
-        assert_eq!(frames, [1, 2]);
-        assert_eq!(last_progress, 2);
-    }
 
     #[test]
     fn static_encoder_failure_reports_frame_write_context() {

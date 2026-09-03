@@ -547,26 +547,200 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
     assert!(result.timings.operation_total_ms >= result.timings.semantic_validation_ms);
     assert!(result.timings.operation_total_ms >= result.timings.preflight_ms);
     assert_eq!(result.timings.total_ms, result.timings.operation_total_ms);
-    assert_eq!(
-        events.last().map(|event| event.kind.as_str()),
-        Some("completed")
-    );
-    assert_eq!(
-        events
-            .iter()
-            .map(|event| event.kind.as_str())
-            .collect::<Vec<_>>(),
-        ["started", "completed"]
-    );
+    assert!(matches!(
+        events.first(),
+        Some(vestra::RenderEvent::Started { .. })
+    ));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
     assert!(events.iter().all(|event| {
-        event.kind != "progress"
-            || (event.frame < event.total_frames && event.progress.is_some_and(|value| value < 1.0))
+        event.operation_id() == events.first().expect("started event").operation_id()
     }));
 }
 
 #[test]
-fn observer_cancellation_on_last_legitimate_progress_removes_temporary_output_and_prevents_publication()
- {
+fn render_preparation_failure_belongs_to_the_started_operation() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_json(
+        r##"{"schema_version":3,"output":{"path":"out.mp4","width":0,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        directory.path(),
+    )
+    .expect("project parses");
+    let mut events = Vec::new();
+
+    let error = Editor::new()
+        .render(
+            &project,
+            RenderRequest {
+                output: Some(directory.path().join("out.mp4")),
+                backend: BackendPreference::Cpu,
+                ..RenderRequest::default()
+            },
+            &mut |event| events.push(event),
+            &CancellationToken::new(),
+        )
+        .expect_err("invalid project fails during preparation");
+
+    assert!(matches!(error, EditorError::Project { .. }));
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| match event {
+                vestra::RenderEvent::Started { .. } => "started",
+                vestra::RenderEvent::StageChanged { .. } => "stage_changed",
+                vestra::RenderEvent::Failed { .. } => "failed",
+                _ => "other",
+            })
+            .collect::<Vec<_>>(),
+        ["started", "stage_changed", "failed"]
+    );
+    assert!(matches!(
+        events.get(1),
+        Some(vestra::RenderEvent::StageChanged {
+            stage: vestra::RenderStage::Preparing,
+            ..
+        })
+    ));
+    assert!(events.iter().all(|event| {
+        event.operation_id() == events.first().expect("started event").operation_id()
+    }));
+}
+
+#[test]
+fn observer_cancellation_at_encoding_prevents_publication() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("encoding-cancelled.mp4");
+    let mut events = Vec::new();
+
+    let error = Editor::new()
+        .render_with_observer(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: true,
+                backend: BackendPreference::Cpu,
+            },
+            |event| {
+                let cancel = matches!(
+                    event,
+                    vestra::RenderEvent::StageChanged {
+                        stage: vestra::RenderStage::Encoding,
+                        ..
+                    }
+                );
+                events.push(event);
+                if cancel {
+                    vestra::RenderObserverControl::Cancel
+                } else {
+                    vestra::RenderObserverControl::Continue
+                }
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("encoding cancellation stops before finish");
+
+    assert!(error.is_cancelled());
+    assert!(!output.exists());
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, vestra::RenderEvent::Completed { .. }))
+    );
+}
+
+#[test]
+fn observer_cancellation_at_finalizing_prevents_publication() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("finalizing-cancelled.mp4");
+    let mut events = Vec::new();
+
+    let error = Editor::new()
+        .render_with_observer(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: true,
+                backend: BackendPreference::Cpu,
+            },
+            |event| {
+                let cancel = matches!(
+                    event,
+                    vestra::RenderEvent::StageChanged {
+                        stage: vestra::RenderStage::Finalizing,
+                        ..
+                    }
+                );
+                events.push(event);
+                if cancel {
+                    vestra::RenderObserverControl::Cancel
+                } else {
+                    vestra::RenderObserverControl::Continue
+                }
+            },
+            &CancellationToken::new(),
+        )
+        .expect_err("finalizing cancellation stops before publication");
+
+    assert!(error.is_cancelled());
+    assert!(!output.exists());
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
+}
+
+#[test]
+fn static_render_does_not_report_ffmpeg_progress_as_rendering_progress() {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let output = directory.path().join("static.mp4");
+    let mut events = Vec::new();
+
+    Editor::new()
+        .render(
+            &project,
+            RenderRequest {
+                output: Some(output.clone()),
+                overwrite: true,
+                preview: false,
+                backend: BackendPreference::Cpu,
+            },
+            &mut |event| events.push(event),
+            &CancellationToken::new(),
+        )
+        .expect("static render");
+
+    let first_late_stage = events
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                vestra::RenderEvent::StageChanged {
+                    stage: vestra::RenderStage::Encoding | vestra::RenderStage::Finalizing,
+                    ..
+                }
+            )
+        })
+        .expect("static render enters encoding or finalizing");
+    assert!(
+        !events[first_late_stage..]
+            .iter()
+            .any(|event| matches!(event, vestra::RenderEvent::Progress { .. }))
+    );
+}
+
+#[test]
+fn observer_cancellation_at_encoding_removes_temporary_output_and_prevents_publication() {
     let directory = tempdir().expect("temporary directory");
     let project = background_project(directory.path());
     let output = directory.path().join("cancelled.mp4");
@@ -577,12 +751,18 @@ fn observer_cancellation_on_last_legitimate_progress_removes_temporary_output_an
             RenderRequest {
                 output: Some(output.clone()),
                 overwrite: true,
-                preview: false,
+                preview: true,
                 backend: BackendPreference::Cpu,
             },
             |event| {
-                let cancel = event.kind == "progress" && event.frame + 1 == event.total_frames;
-                events.push(event.kind);
+                let cancel = matches!(
+                    event,
+                    vestra::RenderEvent::StageChanged {
+                        stage: vestra::RenderStage::Encoding,
+                        ..
+                    }
+                );
+                events.push(event);
                 if cancel {
                     vestra::RenderObserverControl::Cancel
                 } else {
@@ -602,8 +782,10 @@ fn observer_cancellation_on_last_legitimate_progress_removes_temporary_output_an
         Some("cancellation")
     );
     assert_eq!(error.temporary_output_removed(), Some(true));
-    assert!(events.iter().all(|kind| kind != "completed"));
-    assert_eq!(events.last().map(String::as_str), Some("progress"));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
     assert!(!output.exists());
     assert!(
         !std::fs::read_dir(directory.path())
@@ -629,11 +811,18 @@ fn token_cancellation_from_progress_prevents_publication() {
             RenderRequest {
                 output: Some(output.clone()),
                 overwrite: true,
-                preview: false,
+                preview: true,
                 backend: BackendPreference::Cpu,
             },
             &mut |event| {
-                if event.kind == "progress" && event.frame + 1 == event.total_frames {
+                if matches!(
+                    event,
+                    vestra::RenderEvent::Progress {
+                        frame,
+                        total_frames,
+                        ..
+                    } if frame + 1 == total_frames
+                ) {
                     callback_token.cancel();
                 }
             },
@@ -656,7 +845,7 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
             RenderRequest {
                 output: Some(output.clone()),
                 overwrite: true,
-                preview: false,
+                preview: true,
                 backend: BackendPreference::Cpu,
             },
             &mut |event| events.push(event),
@@ -664,23 +853,17 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
         )
         .expect("multi-frame render");
     assert!(result.output.is_file());
-    assert_eq!(
-        events.first().map(|event| event.kind.as_str()),
-        Some("started")
-    );
-    assert_eq!(
-        events.last().map(|event| event.kind.as_str()),
-        Some("completed")
-    );
-    assert!(events.iter().any(|event| event.kind == "progress"));
-    for event in events.iter().filter(|event| event.kind == "progress") {
-        assert!(event.frame > 0 && event.frame < event.total_frames);
-        assert!(
-            event
-                .progress
-                .is_some_and(|value| value > 0.0 && value < 1.0)
-        );
-    }
+    assert!(matches!(
+        events.first(),
+        Some(vestra::RenderEvent::Started { .. })
+    ));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
+    assert!(events.iter().any(
+        |event| matches!(event, vestra::RenderEvent::Progress { fraction, .. } if *fraction == 1.0)
+    ));
 }
 
 #[test]
@@ -701,12 +884,12 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
                 backend: BackendPreference::Cpu,
             },
             |event| {
-                let control = if event.kind == "completed" {
+                let control = if matches!(event, vestra::RenderEvent::Completed { .. }) {
                     vestra::RenderObserverControl::Cancel
                 } else {
                     vestra::RenderObserverControl::Continue
                 };
-                events.push(event.kind);
+                events.push(event);
                 control
             },
             &CancellationToken::new(),
@@ -714,7 +897,10 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
         .expect("completed observer control cannot roll back success");
     assert_eq!(result.output, output);
     assert!(output.is_file());
-    assert_eq!(events, ["started", "completed"]);
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Completed { .. })
+    ));
 }
 
 #[test]
@@ -759,7 +945,7 @@ fn observer_cancellation_before_submission_keeps_prepared_project_reusable() {
         )
         .expect_err("started observer cancellation");
     assert!(error.is_cancelled());
-    assert_eq!(calls, 1);
+    assert_eq!(calls, 2, "started cancellation is followed by Cancelled");
     assert!(!output.exists());
     assert!(prepared.render_frame_number(0).is_ok());
 }
@@ -777,8 +963,14 @@ fn observer_cancellation_after_submission_invalidates_prepared_project() {
         .render_video_with_observer(
             PreparedVideoRenderRequest::new(&output).with_overwrite(true),
             |event| {
-                let cancel = event.kind == "progress" && event.frame + 1 == event.total_frames;
-                events.push(event.kind);
+                let cancel = matches!(
+                    event,
+                    vestra::RenderEvent::StageChanged {
+                        stage: vestra::RenderStage::Encoding,
+                        ..
+                    }
+                );
+                events.push(event);
                 if cancel {
                     vestra::RenderObserverControl::Cancel
                 } else {
@@ -789,7 +981,10 @@ fn observer_cancellation_after_submission_invalidates_prepared_project() {
         )
         .expect_err("last legitimate progress observer cancellation");
     assert!(error.is_cancelled());
-    assert_eq!(events.last().map(String::as_str), Some("progress"));
+    assert!(matches!(
+        events.last(),
+        Some(vestra::RenderEvent::Cancelled { .. })
+    ));
     assert!(!output.exists());
     let invalidated = prepared
         .render_frame_number(0)

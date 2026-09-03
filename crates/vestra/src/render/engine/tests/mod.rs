@@ -18,6 +18,9 @@ use std::{
 
 use image::RgbaImage;
 use tempfile::TempDir;
+use vestra_core::OperationId;
+use vestra_media::{EncoderSettings, FrameSink, MediaError};
+use vestra_progress::{RenderEvent, RenderStage};
 
 use crate::{
     Category, Diagnostic,
@@ -28,6 +31,55 @@ use crate::{
 };
 
 mod vfr;
+
+pub(crate) fn render_prepared_with_sink<S, SF>(
+    prepared: &mut super::runner::PreparedState,
+    options: &RenderOptions,
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    start_sink: SF,
+) -> Result<super::RenderSummary, super::RenderError>
+where
+    S: FrameSink,
+    SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
+{
+    let mut lifecycle = super::runner::LifecycleEmitter::new(OperationId::new(), emit);
+    lifecycle.started(
+        prepared.plan.frame_count,
+        &options
+            .output_override
+            .clone()
+            .unwrap_or_else(|| prepared.plan.configured_output.clone()),
+    );
+    lifecycle.stage(RenderStage::Preparing);
+    let result = super::runner::render_prepared_with_lifecycle(
+        prepared,
+        options,
+        &mut lifecycle,
+        start_sink,
+    );
+    super::runner::finish_lifecycle(&mut lifecycle, &result);
+    result
+}
+
+pub(crate) fn render_prepared(
+    prepared: &mut super::runner::PreparedState,
+    options: &RenderOptions,
+    emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+) -> Result<super::RenderSummary, super::RenderError> {
+    let mut lifecycle = super::runner::LifecycleEmitter::new(OperationId::new(), emit);
+    lifecycle.started(
+        prepared.plan.frame_count,
+        &options
+            .output_override
+            .clone()
+            .unwrap_or_else(|| prepared.plan.configured_output.clone()),
+    );
+    lifecycle.stage(RenderStage::Preparing);
+    let result =
+        super::static_render::render_prepared_with_lifecycle(prepared, options, &mut lifecycle);
+    super::runner::finish_lifecycle(&mut lifecycle, &result);
+    result
+}
 
 struct FailingBackend {
     failure_code: &'static str,

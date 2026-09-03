@@ -98,9 +98,13 @@ def test_prepared_video_reuses_session_and_reports_actual_backend(
     assert first.timing_scope is vestra.RenderTimingScope.PREPARED_OPERATION
     assert first.total_frames == second.total_frames == 4
     assert first_output.is_file() and second_output.is_file()
-    assert events[0].kind == "started" and events[-1].kind == "progress"
-    assert all(event.kind in {"started", "progress"} for event in events)
-    assert events[-1].progress is not None and 0 < events[-1].progress < 1.0
+    assert events[0].kind == "started" and events[-1].kind == "completed"
+    assert events[0].operation_id == events[-1].operation_id
+    assert events[0].stage is None and events[0].fraction is None
+    assert all(event.schema_version == 2 for event in events)
+    assert all(
+        event.kind != "progress" or event.stage == "rendering" for event in events
+    )
 
 
 def test_one_shot_progress_cancellation_and_result_stay_native(tmp_path: Path) -> None:
@@ -113,8 +117,8 @@ def test_one_shot_progress_cancellation_and_result_stay_native(tmp_path: Path) -
     assert isinstance(result, vestra.RenderResult)
     assert result.selected_backend == "cpu"
     assert result.timing_scope is vestra.RenderTimingScope.ONE_SHOT
-    assert events[0].kind == "started" and events[-1].kind == "progress"
-    assert all(event.kind in {"started", "progress"} for event in events)
+    assert events[0].kind == "started" and events[-1].kind == "completed"
+    assert all(event.operation_id == events[0].operation_id for event in events)
 
     cancelled = vestra.CancellationToken()
     cancelled.cancel()

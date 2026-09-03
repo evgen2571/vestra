@@ -15,6 +15,7 @@ pub mod diagnostic;
 pub mod domain;
 pub mod effect_definition;
 pub mod effects;
+pub mod operation_id;
 pub mod output;
 /// Deterministic output configuration, never media process behavior.
 pub mod media {
@@ -47,6 +48,7 @@ pub mod validation;
 pub mod project;
 
 pub use diagnostic::{Category, Diagnostic, Severity};
+pub use operation_id::OperationId;
 
 #[cfg(test)]
 mod camera_shake_tests {

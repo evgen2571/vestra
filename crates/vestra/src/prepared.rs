@@ -8,8 +8,9 @@ use std::{
 use crate::{
     AdapterInfo, BackendFallback, CancellationToken, Diagnostic, EditorError, RenderResult,
     application::{self, ApplicationRenderError},
-    render::{RenderBackendKind, RenderBackendPreference, RenderEvent},
+    render::{LifecycleEmitter, RenderBackendKind, RenderBackendPreference, RenderEvent},
 };
+use vestra_core::OperationId;
 
 /// A normalized positive rational video frame rate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -455,6 +456,19 @@ impl PreparedProject {
         // operation can still fail during encoding or publication, so metrics
         // and failure context are captured per execution below.
         let operation_started = Instant::now();
+        let output_path = request.output.clone();
+        let mut lifecycle = LifecycleEmitter::new(OperationId::new(), &mut emit);
+        if lifecycle.started(self.report.frame_count, &output_path)
+            == crate::RenderObserverControl::Cancel
+            || cancellation.is_cancelled()
+        {
+            lifecycle.cancelled();
+            return Err(prepared_cancelled_error(
+                operation_started,
+                self.report.frame_count,
+                output_path,
+            ));
+        }
         let render_request = application::RenderRequest {
             output_override: Some(request.output),
             overwrite: request.overwrite,
@@ -462,9 +476,23 @@ impl PreparedProject {
             cancelled: cancellation.flag(),
             backend_preference: self.report.requested_backend,
         };
-        let summary =
-            application::render_prepared_project(&mut self.prepared, render_request, &mut emit)
-                .map_err(|error| prepared_operation_error(frame_error(error), operation_started))?;
+        let summary = match application::render_prepared_project(
+            &mut self.prepared,
+            render_request,
+            &mut lifecycle,
+        ) {
+            Ok(summary) => summary,
+            Err(error) => {
+                let error = prepared_operation_error(frame_error(error), operation_started);
+                if error.is_cancelled() {
+                    lifecycle.cancelled();
+                } else {
+                    lifecycle.failed();
+                }
+                return Err(error);
+            }
+        };
+        lifecycle.completed(&output_path);
         let mut result = application::render_result(
             &self.project_path,
             self.prepared.result_metadata(),
@@ -476,6 +504,40 @@ impl PreparedProject {
         result.timings.total_ms = result.timings.operation_total_ms;
         result.elapsed_ms = result.timings.operation_total_ms;
         Ok(result)
+    }
+}
+
+fn prepared_cancelled_error(
+    operation_started: Instant,
+    total_frames: u64,
+    output_path: PathBuf,
+) -> EditorError {
+    let operation_total_ms = operation_started.elapsed().as_millis();
+    EditorError::Render {
+        diagnostic: Box::new(Diagnostic::error(
+            "VESTRA-CANCELLED",
+            crate::Category::Cancellation,
+            "render cancelled",
+            "",
+        )),
+        warnings: Vec::new(),
+        context: Box::new(crate::RenderFailureContext {
+            stage: crate::RenderFailureStage::Cancellation,
+            last_completed_frame_index: None,
+            completed_frames: 0,
+            attempted_frame: None,
+            total_frames,
+            timeline_position: None,
+            progress: Some(0.0),
+            output_path: Some(output_path),
+            temporary_output_path: None,
+        }),
+        temporary_removed: false,
+        timings: crate::RenderTimings {
+            operation_total_ms,
+            total_ms: operation_total_ms,
+            ..crate::RenderTimings::default()
+        },
     }
 }
 

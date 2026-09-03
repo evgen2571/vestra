@@ -2784,6 +2784,7 @@ dependencies = [
  "tracing",
  "vestra-core",
  "vestra-media",
+ "vestra-progress",
  "vestra-render",
 ]
 
@@ -2829,6 +2830,15 @@ dependencies = [
  "uuid",
  "vestra-core",
  "vestra-render",
+]
+
+[[package]]
+name = "vestra-progress"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vestra-core",
 ]
 
 [[package]]

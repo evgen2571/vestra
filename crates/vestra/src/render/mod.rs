@@ -10,7 +10,10 @@ pub(crate) use engine::backend_fallback_warning;
 pub(crate) use engine::inject_wgpu_preparation_failure;
 #[cfg(test)]
 pub(crate) use engine::render_prepared_with_sink;
-pub(crate) use engine::{PreparedState, prepare_for_video, render_prepared, render_prepared_frame};
+pub(crate) use engine::{
+    LifecycleEmitter, PreparedState, prepare_for_video, render_prepared_frame,
+    render_prepared_with_lifecycle,
+};
 
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,

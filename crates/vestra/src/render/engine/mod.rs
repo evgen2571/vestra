@@ -15,9 +15,10 @@ pub(crate) use selection::inject_wgpu_preparation_failure;
 pub(crate) use types::backend_fallback_warning;
 
 pub(crate) use preparation::{PreparedState, prepare_for_video, render_prepared_frame};
+pub(crate) use runner::LifecycleEmitter;
+pub(crate) use static_render::render_prepared_with_lifecycle;
 #[cfg(test)]
-pub(crate) use runner::render_prepared_with_sink;
-pub(crate) use static_render::render_prepared;
+pub(crate) use tests::render_prepared_with_sink;
 pub use types::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,
     RenderFailureStage, RenderObserverControl, RenderOptions, RenderSummary, RenderTimings,

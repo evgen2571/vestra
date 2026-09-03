@@ -6,6 +6,7 @@ use std::{
 };
 
 use serde::Serialize;
+pub use vestra_progress::RenderEvent;
 
 use crate::{
     Diagnostic,
@@ -117,21 +118,6 @@ pub struct RenderSummary {
     pub render_backend: RenderBackendKind,
     pub backend_fallback: Option<BackendFallback>,
     pub adapter: Option<AdapterMetadata>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct RenderEvent {
-    pub event_schema_version: u8,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub frame: u64,
-    pub total_frames: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub progress: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_path: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub warnings: Option<Vec<Diagnostic>>,
 }
 
 /// Synchronous control returned by an advanced render observer.

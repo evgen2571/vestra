@@ -36,11 +36,12 @@ use vestra_render::CpuBackend;
 use super::super::{
     BackendFallback, RenderBackendPreference, RenderObserverControl, RenderOptions,
     runner::{
-        audio_analysis_invocation_count, prepare, render_prepared_frame, render_prepared_with_sink,
+        audio_analysis_invocation_count, prepare, render_prepared_frame,
         render_with_backend_builder, render_with_backend_builder_and_sink,
         reset_audio_analysis_invocation_count,
     },
 };
+use super::render_prepared_with_sink;
 
 #[test]
 fn preparation_routes_audible_master_response_curve_to_brightness_at_global_time() {
@@ -1295,7 +1296,7 @@ fn idle_failure_prevents_publication_and_invalidates_prepared_state() {
         &mut prepared,
         &options,
         &mut |event| {
-            events.push(event.kind);
+            events.push(event);
             RenderObserverControl::Continue
         },
         |_settings: &EncoderSettings, temporary_path| {
@@ -1308,7 +1309,19 @@ fn idle_failure_prevents_publication_and_invalidates_prepared_state() {
     .expect_err("idle failure rejects the operation");
     assert_eq!(error.diagnostic.code, "MOCK-NOT-IDLE");
     assert!(!output.exists());
-    assert!(!events.iter().any(|kind| kind == "completed"));
+    assert!(matches!(
+        events.first(),
+        Some(vestra_progress::RenderEvent::Started { .. })
+    ));
+    assert!(matches!(
+        events.last(),
+        Some(vestra_progress::RenderEvent::Failed { .. })
+    ));
+    assert!(
+        events
+            .iter()
+            .all(|event| event.operation_id() == events[0].operation_id())
+    );
     let next = render_prepared_with_sink(
         &mut prepared,
         &options,
@@ -2154,7 +2167,7 @@ fn observer_cancellation_stops_ready_queue_drain_before_another_frame_write() {
         &plan,
         &options,
         &mut |event| {
-            if event.kind == "progress" {
+            if matches!(event, vestra_progress::RenderEvent::Progress { .. }) {
                 RenderObserverControl::Cancel
             } else {
                 RenderObserverControl::Continue
@@ -2207,7 +2220,7 @@ fn callback_token_cancellation_stops_ready_queue_drain_before_another_frame_writ
         &plan,
         &options,
         &mut |event| {
-            if event.kind == "progress" {
+            if matches!(event, vestra_progress::RenderEvent::Progress { .. }) {
                 callback_token.store(true, Ordering::Relaxed);
             }
             RenderObserverControl::Continue

@@ -27,7 +27,7 @@ fn verbose_json_results_keep_logs_off_stdout() {
     let result: Value = serde_json::from_slice(&output.stdout).expect("stdout remains JSON");
     assert_eq!(result["status"], "success");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains(" INFO ve::cli::commands command started command=validate"));
+    assert!(stderr.contains(" INFO ve::cli::commands: command started"));
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn default_verbosity_hides_info_and_v_enables_it() {
     assert!(verbose.status.success());
     assert!(
         String::from_utf8_lossy(&verbose.stderr)
-            .contains(" INFO ve::cli::commands command started command=validate")
+            .contains(" INFO ve::cli::commands: command started")
     );
 }
 
@@ -63,7 +63,7 @@ fn double_verbose_enables_debug_and_explicit_rust_log_overrides_cli_verbosity() 
     assert!(debug.status.success());
     assert!(
         String::from_utf8_lossy(&debug.stderr)
-            .contains(" DEBUG ve::cli::commands logging configured verbosity=2")
+            .contains(" DEBUG ve::cli::commands: logging configured")
     );
 
     let overridden = common::command()
@@ -106,7 +106,7 @@ fn schema_success_result_is_stdout_only() {
         String::from_utf8_lossy(&output.stdout),
         format!("generated {}\n", output_path.display())
     );
-    assert!(String::from_utf8_lossy(&output.stderr).contains(" INFO ve::cli::commands"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains(" INFO ve::cli::commands:"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains("generated "));
 }
 

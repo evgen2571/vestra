@@ -39,13 +39,15 @@ before rendering. The immutable runtime SDK exposes the same split through
 ## Render requests and events
 
 A render request supplies an output path, overwrite policy, preview choice, and
-backend preference. Native Rust render observers can receive `started`,
-`progress`, and `completed` events. Python progress callbacks receive only
-`started` and `progress`: the binding filters `completed` because it is emitted
-after successful output publication, when a Python callback can no longer
-affect the render. The result includes the output path, timing data, requested
-backend, selected backend, and adapter information when the backend provides
-it.
+backend preference. Native Rust render observers and Python progress callbacks
+receive the typed lifecycle `started`, `stage_changed`, `progress`, and one
+terminal outcome. `Completed` is emitted only after encoder finalization and
+successful output publication. Rendering fraction is frame progress only and
+may reach `1.0` before encoding/finalizing complete. A callback error before
+terminal success may abort the operation; a callback error while receiving
+`Completed` cannot invalidate a published render. The result includes the
+output path, timing data, requested backend, selected backend, and adapter
+information when the backend provides it.
 
 Cancellation is cooperative. Pass a `CancellationToken` to the native or
 Python runtime operation and request cancellation from the controlling code.

@@ -100,6 +100,7 @@ where
 
 pub(crate) struct LifecycleEmitter<'a> {
     emit: &'a mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    render_span: &'a tracing::Span,
     operation_id: OperationId,
     started: bool,
     current_stage: Option<RenderStage>,
@@ -107,12 +108,14 @@ pub(crate) struct LifecycleEmitter<'a> {
 }
 
 impl LifecycleEmitter<'_> {
-    pub(crate) fn new(
+    pub(crate) fn new<'a>(
         operation_id: OperationId,
-        emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
-    ) -> LifecycleEmitter<'_> {
+        render_span: &'a tracing::Span,
+        emit: &'a mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    ) -> LifecycleEmitter<'a> {
         LifecycleEmitter {
             emit,
+            render_span,
             operation_id,
             started: false,
             current_stage: None,
@@ -148,6 +151,7 @@ impl LifecycleEmitter<'_> {
             debug_assert!(previous < stage, "render stage regressed or repeated");
         }
         self.current_stage = Some(stage);
+        self.render_span.record("stage", stage.as_str());
         self.emit(events::stage(self.operation_id, stage))
     }
 

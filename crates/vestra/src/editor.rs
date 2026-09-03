@@ -253,6 +253,23 @@ pub(crate) fn log_render_failure(
     );
 }
 
+pub(crate) fn log_render_timing_summary(operation_id: OperationId, timings: &crate::RenderTimings) {
+    tracing::debug!(
+        target: "vestra.performance",
+        operation_id = %operation_id,
+        semantic_validation_ms = timings.semantic_validation_ms,
+        preflight_ms = timings.preflight_ms,
+        plan_compile_ms = timings.plan_compile_ms,
+        asset_decode_ms = timings.asset_decode_ms,
+        frame_render_ms = timings.frame_render_ms,
+        encoder_write_ms = timings.encoder_write_ms,
+        encoder_finalize_ms = timings.encoder_finalize_ms,
+        output_publish_ms = timings.output_publish_ms,
+        elapsed_ms = timings.operation_total_ms,
+        "render timing summary"
+    );
+}
+
 impl Editor {
     #[must_use]
     pub fn new() -> Self {
@@ -675,7 +692,7 @@ impl Editor {
             stage = tracing::field::Empty,
         );
         let _render_span = render_span.enter();
-        let mut lifecycle = LifecycleEmitter::new(operation_id, &mut emit);
+        let mut lifecycle = LifecycleEmitter::new(operation_id, &render_span, &mut emit);
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
@@ -688,7 +705,7 @@ impl Editor {
             tracing::info!(
                 target: "vestra.render",
                 operation_id = %operation_id,
-                stage = "start",
+                stage = "preparing",
                 elapsed_ms = operation_started.elapsed().as_millis(),
                 "render cancelled"
             );
@@ -703,7 +720,7 @@ impl Editor {
             tracing::info!(
                 target: "vestra.render",
                 operation_id = %operation_id,
-                stage = "prepare",
+                stage = "preparing",
                 elapsed_ms = operation_started.elapsed().as_millis(),
                 "render cancelled"
             );
@@ -718,7 +735,7 @@ impl Editor {
             tracing::info!(
                 target: "vestra.render",
                 operation_id = %operation_id,
-                stage = "prepare",
+                stage = "preparing",
                 elapsed_ms = operation_started.elapsed().as_millis(),
                 "render cancelled"
             );
@@ -731,7 +748,7 @@ impl Editor {
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
-            stage = "prepare",
+            stage = "preparing",
             output = %output_path.display(),
             requested_backend = request.backend.as_str(),
             preview = request.preview,
@@ -758,11 +775,10 @@ impl Editor {
         let operation_preparation = prepared.preparation_timings();
         let metadata = prepared.result_metadata();
         render_span.record("actual_backend", prepared.selected_backend().as_str());
-        render_span.record("stage", "prepare");
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
-            stage = "prepare",
+            stage = "preparing",
             output = %output_path.display(),
             requested_backend = request.backend.as_str(),
             actual_backend = prepared.selected_backend().as_str(),
@@ -772,16 +788,6 @@ impl Editor {
             duration_ms = metadata.duration.as_millis(),
             elapsed_ms = coordinated.started.elapsed().as_millis(),
             "render preparation completed"
-        );
-        render_span.record("stage", "render");
-        tracing::info!(
-            target: "vestra.render",
-            operation_id = %operation_id,
-            stage = "render",
-            output = %output_path.display(),
-            actual_backend = prepared.selected_backend().as_str(),
-            total_frames = metadata.frame_count,
-            "render execution started"
         );
         let mut summary = match application::render_prepared_project(
             &mut prepared,
@@ -837,11 +843,11 @@ impl Editor {
         summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
         summary.timings.total_ms = summary.timings.operation_total_ms;
         summary.elapsed_ms = summary.timings.operation_total_ms;
-        render_span.record("stage", "finalize");
+        log_render_timing_summary(operation_id, &summary.timings);
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
-            stage = "finalize",
+            stage = "finalizing",
             actual_backend = summary.render_backend.as_str(),
             total_frames = summary.frame_count,
             elapsed_ms = summary.elapsed_ms,
@@ -1133,6 +1139,8 @@ impl SdkRenderRequest {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use super::*;
 
     #[test]
@@ -1308,5 +1316,61 @@ mod tests {
         };
         assert_eq!(timings.asset_decode_ms, 37);
         assert_eq!(timings.gpu_initialization_ms, Some(41));
+    }
+
+    #[test]
+    fn performance_summary_contains_coarse_render_timings() {
+        let bytes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let writer_bytes = std::sync::Arc::clone(&bytes);
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_writer(move || CapturedWriter(std::sync::Arc::clone(&writer_bytes)))
+            .finish();
+
+        tracing::subscriber::with_default(subscriber, || {
+            log_render_timing_summary(
+                vestra_core::OperationId::new(),
+                &crate::RenderTimings {
+                    semantic_validation_ms: 2,
+                    plan_compile_ms: 3,
+                    asset_decode_ms: 5,
+                    gpu_initialization_ms: Some(7),
+                    frame_render_ms: 11,
+                    encoder_write_ms: 13,
+                    encoder_finalize_ms: 17,
+                    output_publish_ms: 19,
+                    operation_total_ms: 23,
+                    ..crate::RenderTimings::default()
+                },
+            );
+        });
+
+        let output = String::from_utf8(bytes.lock().expect("capture lock").clone())
+            .expect("captured output is UTF-8");
+        let record: serde_json::Value =
+            serde_json::from_str(output.trim()).expect("summary is valid JSON");
+        assert_eq!(record["target"], "vestra.performance");
+        assert!(record["fields"]["operation_id"].is_string());
+        assert_eq!(record["fields"]["frame_render_ms"], "11");
+        assert_eq!(record["fields"]["encoder_finalize_ms"], "17");
+        assert_eq!(record["fields"]["output_publish_ms"], "19");
+        assert_eq!(record["fields"]["elapsed_ms"], "23");
+    }
+
+    struct CapturedWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl io::Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .expect("capture lock")
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
     }
 }

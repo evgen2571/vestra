@@ -14,8 +14,18 @@ Set `RUST_LOG` when you need explicit tracing filters. It replaces the
 verbosity-derived filter, so a command such as this can focus on one target:
 
 ```bash
-RUST_LOG=vestra=debug ve -v render project.json --progress none
+RUST_LOG=vestra=warn,vestra.render.wgpu=trace ve render project.json --progress none
 ```
+
+The stable application targets are rooted at `vestra`: `vestra.project`,
+`vestra.render`, `vestra.render.cpu`, `vestra.render.wgpu`, `vestra.media`,
+`vestra.media.probe`,
+`vestra.media.audio`, `vestra.media.video`, `vestra.media.image`,
+`vestra.encode`, `vestra.output`, `vestra.cache`, and `vestra.performance`.
+Render records carry `operation_id`, `stage`, `output`, `requested_backend`,
+`actual_backend`, `total_frames`, and elapsed timing fields where applicable.
+The root render span uses the same `operation_id` as the native `RenderEvent`
+stream, and child records inherit that context in both human and JSON output.
 
 Log lines are formatted conceptually as:
 
@@ -33,10 +43,11 @@ The default is `human`.
 
 Human progress reports percentage and completed versus total frames. Once
 enough samples exist it also shows rolling render FPS and an ETA. On a TTY it
-updates a terminal line. With redirected output it emits newline-delimited
-updates. Completion reports the rendered frame count, elapsed time, and output
-path. Logs coordinate with the active display so a log does not permanently
-destroy the progress line.
+updates a terminal line. Auto mode disables the built-in progress sink when
+stderr is redirected, in CI, or under a dumb terminal; use `--progress human`
+to request it explicitly. Completion reports the rendered frame count, elapsed
+time, and output path. Logs coordinate with the active display so a log does
+not permanently destroy the progress line.
 
 JSON progress writes one JSON object per line to stdout for the started,
 progress, and completed events. This is a JSONL stream, not one JSON document.

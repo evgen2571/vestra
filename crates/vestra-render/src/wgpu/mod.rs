@@ -63,10 +63,11 @@ pub fn discover() -> Vec<crate::AdapterMetadata> {
             };
             let class = metadata.performance_class();
             tracing::debug!(
-                backend = %metadata.graphics_backend,
+                target: "vestra.render.wgpu",
+                graphics_backend = %metadata.graphics_backend,
                 adapter = %metadata.adapter_name,
                 device_type = %metadata.device_type,
-                driver = %metadata.driver_name,
+                driver_name = %metadata.driver_name,
                 driver_info = %metadata.driver_info,
                 vendor_id = metadata.vendor_id,
                 device_id = metadata.device_id,

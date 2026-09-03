@@ -232,6 +232,27 @@ impl fmt::Display for EditorError {
 }
 impl std::error::Error for EditorError {}
 
+pub(crate) fn log_render_failure(
+    operation_id: OperationId,
+    output_path: &Path,
+    operation_started: Instant,
+    error: &EditorError,
+) {
+    let diagnostic = error.diagnostics().first();
+    tracing::error!(
+        target: "vestra.render",
+        operation_id = %operation_id,
+        output = %output_path.display(),
+        stage = error
+            .render_failure_context()
+            .map_or(error.kind().as_str(), |context| context.stage.as_str()),
+        error_code = diagnostic.map_or("unknown", |item| item.code.as_str()),
+        error = diagnostic.map_or("render operation failed", |item| item.message.as_str()),
+        elapsed_ms = operation_started.elapsed().as_millis(),
+        "render failed"
+    );
+}
+
 impl Editor {
     #[must_use]
     pub fn new() -> Self {
@@ -413,11 +434,19 @@ impl Editor {
         project: &Project,
         target: InternalPreparationTarget<'_>,
     ) -> Result<CoordinatedPreparation, EditorError> {
+        let _prepare_span = tracing::debug_span!(
+            target: "vestra.render",
+            "prepare",
+            stage = "prepare"
+        )
+        .entered();
         let started = Instant::now();
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
         tracing::debug!(
+            target: "vestra.project",
+            stage = "validate",
             elapsed_ms = validation_elapsed.as_millis(),
             "project validation completed"
         );
@@ -441,6 +470,8 @@ impl Editor {
         let outcome = self.run_preflight(project, &validation, &options);
         let preflight_elapsed = preflight_started.elapsed();
         tracing::debug!(
+            target: "vestra.project",
+            stage = "preflight",
             requested_backend = backend.as_str(),
             elapsed_ms = preflight_elapsed.as_millis(),
             diagnostics = outcome.report.diagnostics.len(),
@@ -633,9 +664,34 @@ impl Editor {
         let operation_id = OperationId::new();
         let output_path = Self::render_output_path(project, &request);
         let total_frames = Self::estimated_total_frames(project);
+        let render_span = tracing::info_span!(
+            target: "vestra.render",
+            "render",
+            operation_id = %operation_id,
+            operation = "render",
+            output = %output_path.display(),
+            requested_backend = request.backend.as_str(),
+            actual_backend = tracing::field::Empty,
+            stage = tracing::field::Empty,
+        );
+        let _render_span = render_span.enter();
         let mut lifecycle = LifecycleEmitter::new(operation_id, &mut emit);
+        tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            output = %output_path.display(),
+            requested_backend = request.backend.as_str(),
+            "render started"
+        );
         if lifecycle.started(total_frames, &output_path) == crate::RenderObserverControl::Cancel {
             lifecycle.cancelled();
+            tracing::info!(
+                target: "vestra.render",
+                operation_id = %operation_id,
+                stage = "start",
+                elapsed_ms = operation_started.elapsed().as_millis(),
+                "render cancelled"
+            );
             return Err(Self::cancelled_editor_error(
                 operation_started,
                 total_frames.unwrap_or_default(),
@@ -644,6 +700,13 @@ impl Editor {
         }
         if lifecycle.stage(crate::RenderStage::Preparing) == crate::RenderObserverControl::Cancel {
             lifecycle.cancelled();
+            tracing::info!(
+                target: "vestra.render",
+                operation_id = %operation_id,
+                stage = "prepare",
+                elapsed_ms = operation_started.elapsed().as_millis(),
+                "render cancelled"
+            );
             return Err(Self::cancelled_editor_error(
                 operation_started,
                 total_frames.unwrap_or_default(),
@@ -652,6 +715,13 @@ impl Editor {
         }
         if cancellation.is_cancelled() {
             lifecycle.cancelled();
+            tracing::info!(
+                target: "vestra.render",
+                operation_id = %operation_id,
+                stage = "prepare",
+                elapsed_ms = operation_started.elapsed().as_millis(),
+                "render cancelled"
+            );
             return Err(Self::cancelled_editor_error(
                 operation_started,
                 total_frames.unwrap_or_default(),
@@ -659,6 +729,10 @@ impl Editor {
             ));
         }
         tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            stage = "prepare",
+            output = %output_path.display(),
             requested_backend = request.backend.as_str(),
             preview = request.preview,
             "render preparation started"
@@ -668,6 +742,7 @@ impl Editor {
                 Ok(coordinated) => coordinated,
                 Err(error) => {
                     lifecycle.failed();
+                    log_render_failure(operation_id, &output_path, operation_started, &error);
                     return Err(error);
                 }
             };
@@ -682,17 +757,28 @@ impl Editor {
         let mut warnings = prepared.preparation_warnings().to_vec();
         let operation_preparation = prepared.preparation_timings();
         let metadata = prepared.result_metadata();
+        render_span.record("actual_backend", prepared.selected_backend().as_str());
+        render_span.record("stage", "prepare");
         tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            stage = "prepare",
+            output = %output_path.display(),
             requested_backend = request.backend.as_str(),
             actual_backend = prepared.selected_backend().as_str(),
             width = metadata.width,
             height = metadata.height,
             total_frames = metadata.frame_count,
-            duration = metadata.duration.as_secs_f64(),
+            duration_ms = metadata.duration.as_millis(),
             elapsed_ms = coordinated.started.elapsed().as_millis(),
             "render preparation completed"
         );
+        render_span.record("stage", "render");
         tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            stage = "render",
+            output = %output_path.display(),
             actual_backend = prepared.selected_backend().as_str(),
             total_frames = metadata.frame_count,
             "render execution started"
@@ -718,8 +804,23 @@ impl Editor {
                 );
                 if editor_error.is_cancelled() {
                     lifecycle.cancelled();
+                    tracing::info!(
+                        target: "vestra.render",
+                        operation_id = %operation_id,
+                        stage = %editor_error
+                            .render_failure_context()
+                            .map_or("render", |context| context.stage.as_str()),
+                        elapsed_ms = operation_started.elapsed().as_millis(),
+                        "render cancelled"
+                    );
                 } else {
                     lifecycle.failed();
+                    log_render_failure(
+                        operation_id,
+                        &output_path,
+                        operation_started,
+                        &editor_error,
+                    );
                 }
                 return Err(editor_error);
             }
@@ -736,7 +837,11 @@ impl Editor {
         summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
         summary.timings.total_ms = summary.timings.operation_total_ms;
         summary.elapsed_ms = summary.timings.operation_total_ms;
+        render_span.record("stage", "finalize");
         tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            stage = "finalize",
             actual_backend = summary.render_backend.as_str(),
             total_frames = summary.frame_count,
             elapsed_ms = summary.elapsed_ms,

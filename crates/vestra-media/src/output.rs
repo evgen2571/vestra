@@ -52,8 +52,9 @@ impl OutputTarget {
         let temporary_path =
             path.with_file_name(format!(".{stem}.vestra-{}.tmp.mp4", Uuid::new_v4()));
         tracing::debug!(
+            target: "vestra.output",
             output = %path.display(),
-            temporary_output = %temporary_path.display(),
+            temporary_output_path = %temporary_path.display(),
             "temporary output created"
         );
         Ok(Self {
@@ -66,17 +67,39 @@ impl OutputTarget {
         // Encoding stays in the sibling temporary file until FFmpeg has
         // finalized successfully. Renaming only then prevents a failed or
         // cancelled render from replacing the destination with partial data.
-        tracing::debug!(output = %self.final_path.display(), "output publication started");
+        tracing::debug!(
+            target: "vestra.output",
+            output = %self.final_path.display(),
+            temporary_output_path = %self.temporary_path.display(),
+            "output publication started"
+        );
         fs::rename(&self.temporary_path, &self.final_path)
             .map_err(MediaError::Publication)
             .inspect(|()| {
-                tracing::info!(output = %self.final_path.display(), "output published");
+                tracing::info!(
+                    target: "vestra.output",
+                    output = %self.final_path.display(),
+                    "output published"
+                );
             })
     }
 
     #[must_use]
     pub fn cleanup(&self) -> bool {
-        fs::remove_file(&self.temporary_path).is_ok() || !self.temporary_path.exists()
+        match fs::remove_file(&self.temporary_path) {
+            Ok(()) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+            Err(error) => {
+                tracing::warn!(
+                    target: "vestra.output",
+                    temporary_output_path = %self.temporary_path.display(),
+                    error = %error,
+                    reason = "temporary output cleanup failed",
+                    "temporary output cleanup failed"
+                );
+                false
+            }
+        }
     }
 }
 

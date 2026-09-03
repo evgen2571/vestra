@@ -216,12 +216,17 @@ impl FfmpegSink {
         pipe_progress: bool,
     ) -> Result<Self, MediaError> {
         tracing::debug!(
+            target: "vestra.encode",
             program = "ffmpeg",
             stage = "encode",
             output = %output.display(),
             width = settings.width,
             height = settings.height,
-            frame_count = settings.frame_count,
+            total_frames = settings.frame_count,
+            fps = ?settings.frame_rate,
+            audio = settings.audio_mix.is_some(),
+            quality_crf = settings.quality_crf,
+            preset = x264_preset_for_crf(settings.quality_crf),
             "encoder process spawning"
         );
         let mut child = command
@@ -244,13 +249,18 @@ impl FfmpegSink {
                 source,
             })?;
         tracing::info!(
+            target: "vestra.encode",
             program = "ffmpeg",
             stage = "encode",
             output = %output.display(),
             codec = "libx264",
             width = settings.width,
             height = settings.height,
-            frame_count = settings.frame_count,
+            total_frames = settings.frame_count,
+            fps = ?settings.frame_rate,
+            audio = settings.audio_mix.is_some(),
+            quality_crf = settings.quality_crf,
+            preset = x264_preset_for_crf(settings.quality_crf),
             "encoder initialized"
         );
         let stdin = if pipe_stdin {
@@ -370,6 +380,12 @@ impl FfmpegSink {
         let reported_static_frames = self.static_progress_frames();
         self.cleanup_static_image();
         if status.success() {
+            tracing::debug!(
+                target: "vestra.encode",
+                stage = "finalize",
+                total_frames = static_frame_count.unwrap_or(self.expected_frame),
+                "encoder finalized"
+            );
             Ok(SinkResult {
                 frames_written: reported_static_frames
                     .filter(|frames| *frames > 0)
@@ -377,6 +393,13 @@ impl FfmpegSink {
                     .unwrap_or(self.expected_frame),
             })
         } else {
+            tracing::debug!(
+                target: "vestra.encode",
+                stage = "finalize",
+                error = %stderr,
+                reason = "FFmpeg exited unsuccessfully",
+                "encoder finalization failed"
+            );
             Err(MediaError::ProcessFailed {
                 program: "FFmpeg",
                 status,

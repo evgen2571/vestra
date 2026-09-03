@@ -124,6 +124,12 @@ pub(crate) fn prepare_project(
     preparation_warnings: Vec<Diagnostic>,
     preparation_timings: PreparationTimings,
 ) -> Result<PreparedRender, ApplicationRenderError> {
+    let _compile_span = tracing::debug_span!(
+        target: "vestra.project",
+        "compile",
+        stage = "compile"
+    )
+    .entered();
     let compilation_started = Instant::now();
     let plan = compile(
         &validated,
@@ -137,6 +143,8 @@ pub(crate) fn prepare_project(
     })?;
     let plan_compile_elapsed_ms = compilation_started.elapsed().as_millis();
     tracing::debug!(
+        target: "vestra.project",
+        stage = "compile",
         elapsed_ms = plan_compile_elapsed_ms,
         layers = validated.visual_counts().0,
         total_frames = validated.frame_count,

@@ -20,6 +20,7 @@ use super::{assets::PreparedAssets, compositor};
 pub(super) struct CpuFrameJob {
     pub(super) frame_number: u64,
     pub(super) frame: EvaluatedFrame,
+    pub(super) span: tracing::Span,
     #[cfg(test)]
     pub(crate) panic_for_test: bool,
 }
@@ -29,6 +30,7 @@ impl CpuFrameJob {
         Self {
             frame_number,
             frame,
+            span: tracing::Span::current(),
             #[cfg(test)]
             panic_for_test: false,
         }
@@ -83,6 +85,7 @@ pub(super) fn run_worker(
         match command {
             WorkerCommand::Render(job) => {
                 let frame_number = job.frame_number;
+                let _entered = job.span.enter();
                 let render_started = std::time::Instant::now();
                 let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
                     #[cfg(test)]
@@ -92,6 +95,14 @@ pub(super) fn run_worker(
                     state.render_frame(job.frame_number, &job.frame)
                 }));
                 let render_duration = render_started.elapsed();
+                tracing::trace!(
+                    target: "vestra.render.cpu",
+                    stage = "render",
+                    worker_id,
+                    frame = frame_number,
+                    elapsed_ms = render_duration.as_millis(),
+                    "CPU worker frame completed"
+                );
                 let panicked = result.is_err();
                 let completion = match result {
                     Ok(Ok(frame)) => WorkerCompletion::Frame {

@@ -20,6 +20,7 @@ struct NativeVideoFactory {
 type NativeVideoCommand = (
     f64,
     std::sync::mpsc::Sender<Result<vestra_render::VideoFrame, String>>,
+    tracing::Span,
 );
 
 struct NativeVideoSession {
@@ -46,7 +47,7 @@ impl vestra_render::VideoDecoderSession for NativeVideoSession {
         self.command_tx
             .as_ref()
             .ok_or_else(|| "video decoder session ended".to_owned())?
-            .send((seconds, reply_tx))
+            .send((seconds, reply_tx, tracing::Span::current()))
             .map_err(|_| "video decoder session ended".to_owned())?;
         reply_rx
             .recv()
@@ -75,9 +76,11 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
         let asset_id = asset.id.clone();
         let metadata = Arc::clone(&self.metadata);
         let limits = self.limits;
+        let span = tracing::Span::current();
         let join = std::thread::Builder::new()
             .name(format!("vestra-video-decoder-{}", asset.id))
             .spawn(move || {
+                let _entered = span.enter();
                 let decoder_result = match metadata.get(&asset_id) {
                     Some(info) => vestra_media::VideoDecoder::open_with_info(
                         &path,
@@ -103,7 +106,8 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                     }
                 };
                 let _ = ready_tx.send(Ok(()));
-                while let Ok((seconds, reply)) = command_rx.recv() {
+                while let Ok((seconds, reply, span)) = command_rx.recv() {
+                    let _entered = span.enter();
                     let result = decoder
                         .frame_at(seconds)
                         .map(|frame| vestra_render::VideoFrame {
@@ -344,6 +348,12 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
         limits: plan.limits,
         metadata: Arc::new(video_metadata),
     });
+    let _media_span = tracing::debug_span!(
+        target: "vestra.media",
+        "media",
+        stage = "prepare"
+    )
+    .entered();
     let decoded = DecodedAssets::build_with_video_factory(&plan, Some(video_factory)).map_err(
         |diagnostic| RenderError {
             diagnostic,
@@ -357,7 +367,10 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
         },
     )?;
     tracing::debug!(
+        target: "vestra.media",
+        stage = "prepare",
         elapsed_ms = decoded.timings().decode.as_millis(),
+        asset_count = decoded.stats().decoded_image_count,
         "media preparation completed"
     );
     let schedule = ActiveSchedule::compile(&plan);
@@ -384,10 +397,20 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
     };
     if !audio_analysis_duration.is_zero() {
         tracing::debug!(
+            target: "vestra.media.audio",
+            stage = "prepare",
             elapsed_ms = audio_analysis_duration.as_millis(),
             "audio preparation completed"
         );
     }
+    drop(_media_span);
+    let _backend_span = tracing::debug_span!(
+        target: "vestra.render",
+        "backend",
+        stage = "prepare",
+        requested_backend = preference.as_str()
+    )
+    .entered();
     let (backend, backend_fallback) =
         build_backend(preference, &plan, &decoded).map_err(|diagnostic| RenderError {
             diagnostic,
@@ -402,17 +425,28 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
                 ..RenderTimings::default()
             },
         })?;
+    let adapter = backend.adapter();
     tracing::info!(
+        target: "vestra.render",
+        stage = "prepare",
         requested_backend = preference.as_str(),
         actual_backend = backend.kind().as_str(),
+        adapter = adapter
+            .as_ref()
+            .map_or("cpu", |metadata| metadata.adapter_name.as_str()),
+        device_type = adapter
+            .as_ref()
+            .map_or("cpu", |metadata| metadata.device_type.as_str()),
         "render backend selected"
     );
     if let Some(fallback) = backend_fallback.as_ref() {
         tracing::warn!(
+            target: "vestra.render",
             requested_backend = preference.as_str(),
             actual_backend = backend.kind().as_str(),
             stage = %fallback.stage,
             reason = %fallback.message,
+            error_code = %fallback.code,
             "render backend fallback"
         );
     }

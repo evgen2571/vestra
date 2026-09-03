@@ -34,6 +34,7 @@ fn static_encoder_failure(
     // event is useful for verbose troubleshooting, but must not duplicate the
     // default-visible user failure.
     tracing::debug!(
+        target: "vestra.render",
         stage = stage.as_str(),
         completed_frames,
         total_frames = plan.frame_count,
@@ -57,11 +58,6 @@ fn cancel_static_ffmpeg(
     completed_frames: u64,
     message: &'static str,
 ) -> RenderError {
-    tracing::info!(
-        stage = "render",
-        completed_frames,
-        "static render cancelled"
-    );
     // The static template frame has already been submitted/rendered before the
     // FFmpeg loop starts. Match the normal staged-render lifecycle: any
     // cancellation from this point invalidates the prepared backend.
@@ -124,6 +120,12 @@ fn render_static_ffmpeg_inner(
     prepared.ensure_ready()?;
     let plan = Arc::clone(&prepared.plan);
     let started = Instant::now();
+    let _output_span = tracing::debug_span!(
+        target: "vestra.output",
+        "output",
+        stage = "prepare"
+    )
+    .entered();
     let output = OutputTarget::prepare(
         options
             .output_override
@@ -143,6 +145,7 @@ fn render_static_ffmpeg_inner(
         context: RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, &plan),
         timings: RenderTimings::default(),
     })?;
+    drop(_output_span);
     if options.cancelled.load(std::sync::atomic::Ordering::Relaxed)
         || lifecycle.stage(RenderStage::Rendering) == RenderObserverControl::Cancel
     {
@@ -165,8 +168,16 @@ fn render_static_ffmpeg_inner(
     prepared.backend.reset_operation_metrics();
     let operation_metrics_before = prepared.backend.stats();
     let frame_started = Instant::now();
+    let _frames_span = tracing::debug_span!(
+        target: "vestra.render",
+        "frames",
+        stage = "render",
+        total_frames = plan.frame_count
+    )
+    .entered();
     let frame = render_prepared_frame(prepared, 0)?;
     let frame_render = frame_started.elapsed();
+    drop(_frames_span);
     let frame_bytes = frame.rgba.len() as u64;
     let template_cache_eligible = frame_bytes <= plan.limits.maximum_cache_bytes;
     let image_path = output.temporary_path.with_extension("static-visual.png");
@@ -211,6 +222,14 @@ fn render_static_ffmpeg_inner(
             ),
         ));
     }
+    let _encode_span = tracing::debug_span!(
+        target: "vestra.encode",
+        "encode",
+        stage = "encode",
+        output = %output.final_path.display(),
+        total_frames = plan.frame_count
+    )
+    .entered();
     let mut encoder =
         match FfmpegSink::start_static(&plan.encoder, &output.temporary_path, image_path.clone()) {
             Ok(encoder) => encoder,
@@ -345,6 +364,14 @@ fn render_static_ffmpeg_inner(
     performance.encoder_video_input_mode = "looped_static_image".to_owned();
     performance.encoder_video_frames_pushed_from_rust = 0;
     performance.rendered_frame_count = plan.frame_count;
+    drop(_encode_span);
+    let _publish_span = tracing::debug_span!(
+        target: "vestra.output",
+        "publish",
+        stage = "publish",
+        output = %output.final_path.display()
+    )
+    .entered();
     output.publish().map_err(|error| {
         cleanup_error(
             &output,
@@ -360,18 +387,13 @@ fn render_static_ffmpeg_inner(
             ),
         )
     })?;
+    drop(_publish_span);
     let timings = RenderTimings {
         frame_render_ms: milliseconds(frame_render),
         encoder_finalize_ms: milliseconds(finalize_started.elapsed()),
         total_ms: milliseconds(started.elapsed()),
         ..RenderTimings::default()
     };
-    tracing::info!(
-        stage = "render",
-        total_frames = plan.frame_count,
-        elapsed_ms = timings.total_ms,
-        "static render completed"
-    );
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,

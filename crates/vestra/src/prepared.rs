@@ -438,6 +438,11 @@ impl PreparedProject {
         clippy::result_large_err,
         reason = "render failures retain diagnostics"
     )]
+    /// Compatibility observer-oriented video render entry point.
+    ///
+    /// Use [`Self::render_video_auto`] for the normal automatic presentation
+    /// or [`Self::render_video_with_observer`] for observer-controlled
+    /// cancellation.
     pub fn render_video(
         &mut self,
         request: PreparedVideoRenderRequest,
@@ -483,6 +488,24 @@ impl PreparedProject {
             },
             cancellation,
         )
+    }
+
+    /// Renders video using the request's default [`ProgressMode::Auto`] policy.
+    ///
+    /// This is the recommended normal high-level entry point for prepared
+    /// video rendering. Use [`Self::render_video_with_progress`] for an
+    /// explicit sink and [`Self::render_video_with_observer`] for cancellation
+    /// control from an observer.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render failures retain structured diagnostics"
+    )]
+    pub fn render_video_auto(
+        &mut self,
+        request: PreparedVideoRenderRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        self.render_video_with_progress(request, None, cancellation)
     }
 
     /// Renders while allowing a synchronous observer to stop before output

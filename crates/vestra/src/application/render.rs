@@ -80,6 +80,65 @@ pub(crate) struct PreparationTimings {
     pub(crate) renderer: crate::render::PreparationTimings,
 }
 
+fn trace_execution_objects(project: &vestra_core::project::Project) {
+    if !tracing::enabled!(target: "vestra.render", tracing::Level::TRACE) {
+        return;
+    }
+    for clip in &project.visual.clips {
+        trace_clip_execution_objects(clip);
+    }
+    trace_transitions(&project.visual.transitions);
+}
+
+fn trace_clip_execution_objects(clip: &vestra_core::project::Clip) {
+    tracing::trace!(
+        target: "vestra.render",
+        stage = "prepare",
+        layer_id = %clip.id,
+        clip_id = %clip.id,
+        "render layer correlation"
+    );
+    for effect in &clip.effects {
+        tracing::trace!(
+            target: "vestra.render",
+            stage = "prepare",
+            layer_id = %clip.id,
+            clip_id = %clip.id,
+            effect_id = %effect.id(),
+            "render effect correlation"
+        );
+    }
+    for mask in &clip.masks {
+        tracing::trace!(
+            target: "vestra.render",
+            stage = "prepare",
+            layer_id = %clip.id,
+            clip_id = %clip.id,
+            mask_id = %mask.id,
+            "render mask correlation"
+        );
+    }
+    if let vestra_core::project::VisualSource::Group(group) = &clip.source {
+        for child in &group.clips {
+            trace_clip_execution_objects(child);
+        }
+        trace_transitions(&group.transitions);
+    }
+}
+
+fn trace_transitions(transitions: &[vestra_core::project::TransitionPlacement]) {
+    for transition in transitions {
+        tracing::trace!(
+            target: "vestra.render",
+            stage = "prepare",
+            transition_id = %transition.id,
+            outgoing_layer_id = %transition.outgoing,
+            incoming_layer_id = %transition.incoming,
+            "render transition correlation"
+        );
+    }
+}
+
 impl PreparedRender {
     pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
         self.requested_backend
@@ -124,6 +183,7 @@ pub(crate) fn prepare_project(
     preparation_warnings: Vec<Diagnostic>,
     preparation_timings: PreparationTimings,
 ) -> Result<PreparedRender, ApplicationRenderError> {
+    trace_execution_objects(&validated.project);
     let _compile_span = tracing::debug_span!(
         target: "vestra.project",
         "compile",
@@ -145,7 +205,7 @@ pub(crate) fn prepare_project(
     tracing::debug!(
         target: "vestra.project",
         stage = "compile",
-        elapsed_ms = plan_compile_elapsed_ms,
+        elapsed_ms = crate::render::trace_millisecond_value(plan_compile_elapsed_ms),
         layers = validated.visual_counts().0,
         total_frames = validated.frame_count,
         "render plan compilation completed"
@@ -269,6 +329,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::{
+        io::{self, Write},
         path::Path,
         sync::{
             Arc, Mutex,
@@ -285,6 +346,58 @@ mod tests {
     };
 
     type CapturedFrames = Arc<Mutex<Vec<(u64, Vec<u8>)>>>;
+
+    #[test]
+    fn execution_object_trace_records_preserve_authored_correlation_ids() {
+        let project = vestra_core::project::Project::from_json(include_str!(
+            "../../../../examples/projects/animation-effects.json"
+        ))
+        .expect("correlation fixture parses");
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let writer_bytes = Arc::clone(&bytes);
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_max_level(tracing::Level::TRACE)
+            .with_writer(move || CapturedWriter(Arc::clone(&writer_bytes)))
+            .finish();
+
+        tracing::subscriber::with_default(subscriber, || trace_execution_objects(&project));
+
+        let records = String::from_utf8(bytes.lock().expect("capture lock").clone())
+            .expect("captured output is UTF-8")
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("valid JSON"))
+            .collect::<Vec<_>>();
+        assert!(records.iter().any(|record| {
+            record["fields"]["layer_id"] == "red-pan" && record["fields"]["clip_id"] == "red-pan"
+        }));
+        assert!(
+            records
+                .iter()
+                .any(|record| record["fields"]["effect_id"] == "warm")
+        );
+        assert!(
+            records
+                .iter()
+                .any(|record| record["fields"]["transition_id"] == "red-blue")
+        );
+    }
+
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .expect("capture lock")
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     struct CountingSink {
         frames: u64,

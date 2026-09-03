@@ -130,7 +130,7 @@ impl DecodedAssets {
                 asset_path = %image_asset.path.display(),
                 width,
                 height,
-                elapsed_ms = image_started.elapsed().as_millis(),
+                elapsed_ms = crate::trace_milliseconds(image_started.elapsed()),
                 "image decoded"
             );
         }

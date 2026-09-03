@@ -14,6 +14,7 @@ pub(crate) use engine::{
     LifecycleEmitter, PreparedState, prepare_for_video, render_prepared_frame,
     render_prepared_with_lifecycle,
 };
+pub(crate) use engine::{trace_millisecond_value, trace_milliseconds};
 
 pub use engine::{
     BackendFallback, RenderBackendPreference, RenderError, RenderEvent, RenderFailureContext,

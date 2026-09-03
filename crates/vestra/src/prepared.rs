@@ -8,7 +8,10 @@ use std::{
 use crate::{
     AdapterInfo, BackendFallback, CancellationToken, Diagnostic, EditorError, RenderResult,
     application::{self, ApplicationRenderError},
-    render::{LifecycleEmitter, RenderBackendKind, RenderBackendPreference, RenderEvent},
+    render::{
+        LifecycleEmitter, RenderBackendKind, RenderBackendPreference, RenderEvent,
+        trace_milliseconds,
+    },
 };
 use vestra_core::OperationId;
 use vestra_progress::{ProgressSink, TerminalProgress};
@@ -538,7 +541,7 @@ impl PreparedProject {
             stage = tracing::field::Empty,
         );
         let _render_span = render_span.enter();
-        let mut lifecycle = LifecycleEmitter::new(operation_id, &mut emit);
+        let mut lifecycle = LifecycleEmitter::new(operation_id, &render_span, &mut emit);
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
@@ -555,8 +558,25 @@ impl PreparedProject {
             tracing::info!(
                 target: "vestra.render",
                 operation_id = %operation_id,
-                stage = "start",
-                elapsed_ms = operation_started.elapsed().as_millis(),
+                stage = "preparing",
+                elapsed_ms = trace_milliseconds(operation_started.elapsed()),
+                "render cancelled"
+            );
+            return Err(prepared_cancelled_error(
+                operation_started,
+                self.report.frame_count,
+                output_path,
+            ));
+        }
+        if lifecycle.stage(crate::RenderStage::Preparing) == crate::RenderObserverControl::Cancel
+            || cancellation.is_cancelled()
+        {
+            lifecycle.cancelled();
+            tracing::info!(
+                target: "vestra.render",
+                operation_id = %operation_id,
+                stage = "preparing",
+                elapsed_ms = trace_milliseconds(operation_started.elapsed()),
                 "render cancelled"
             );
             return Err(prepared_cancelled_error(
@@ -588,7 +608,7 @@ impl PreparedProject {
                         stage = %error
                             .render_failure_context()
                             .map_or("render", |context| context.stage.as_str()),
-                        elapsed_ms = operation_started.elapsed().as_millis(),
+                        elapsed_ms = trace_milliseconds(operation_started.elapsed()),
                         "render cancelled"
                     );
                 } else {
@@ -603,14 +623,15 @@ impl PreparedProject {
                 return Err(error);
             }
         };
-        render_span.record("stage", "finalize");
+        let actual_backend = summary.render_backend.as_str();
+        let preparation_timings = self.prepared.preparation_timings();
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
-            stage = "finalize",
+            stage = "finalizing",
             actual_backend = summary.render_backend.as_str(),
             total_frames = summary.frame_count,
-            elapsed_ms = operation_started.elapsed().as_millis(),
+            elapsed_ms = trace_milliseconds(operation_started.elapsed()),
             output = %summary.output_path.display(),
             "render execution completed"
         );
@@ -621,10 +642,23 @@ impl PreparedProject {
             summary,
             self.report.warnings.clone(),
         );
+        result.timings.semantic_validation_ms = preparation_timings.validation_ms;
+        result.timings.preflight_ms = preparation_timings.preflight_ms;
+        result.timings.plan_compile_ms = preparation_timings.plan_compile_ms;
+        crate::editor::Editor::apply_renderer_preparation_timings(
+            &mut result.timings,
+            preparation_timings.renderer,
+        );
         result.timing_scope = crate::RenderTimingScope::PreparedOperation;
         result.timings.operation_total_ms = operation_started.elapsed().as_millis();
         result.timings.total_ms = result.timings.operation_total_ms;
         result.elapsed_ms = result.timings.operation_total_ms;
+        crate::editor::log_render_timing_summary(
+            operation_id,
+            actual_backend,
+            preparation_timings.audio_analysis_ms,
+            &result.timings,
+        );
         Ok(result)
     }
 }

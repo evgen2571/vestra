@@ -15,10 +15,21 @@ high-level Python editing graph
 Tracing remains native and renderer-independent. Python does not configure a
 second logger or duplicate lifecycle records; native render spans and
 `RenderEvent` values share one operation identifier. Python callbacks receive
-progress events only and may opt out of the built-in terminal presentation with
+the typed lifecycle and may opt out of the built-in terminal presentation with
 `show_progress=False`.
 
-Native validation, preflight, preparation and rendering detach from the GIL. When a render has a `progress` callback, the binding reacquires Python only to invoke that callback and converts the native `RenderEvent`. Native observers can receive `started`, `progress`, and `completed`. Python callbacks receive only `started` and `progress`. The binding filters `completed` because native completion is emitted after output publication, so the callback cannot still cancel or change the finished render.
+Native validation, preflight, preparation and rendering detach from the GIL. A
+Python `on_progress` callback (with `progress` retained as a compatibility
+alias) reacquires Python only to invoke that callback and converts the native
+RenderEvent v2. Callbacks receive `started`, `stage_changed`, `progress`, and
+the terminal outcome. The callback replaces the native Auto terminal renderer;
+without a callback, ordinary rendering still uses the shared native progress
+policy. `Completed` is emitted only after output publication.
+
+Python logging is explicit: `vestra.configure_logging(...)` maps to the shared
+`vestra-observability` subscriber and does not run during import or ordinary
+rendering. The binding exposes ergonomic level, format, output, file, and
+EnvFilter settings without duplicating Rust formatting or filtering.
 
 If a Python callback raises, the binding requests native cancellation, preserves that original Python exception, and re-raises it after cleanup. It never returns a `RenderResult` or replaces the callback exception with a generic `RenderError`. When cleanup reports a native error, the binding attaches its Python error object as `error.render_cleanup_error`. Ordinary cooperative cancellation is different: it raises `CancelledError`, a `RenderError`.
 

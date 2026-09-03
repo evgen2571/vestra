@@ -29,14 +29,15 @@ has precedence over those flags and supports target-specific filters such as
 | `--overwrite` | False. Required to replace an existing output. |
 | `--preview` | False. Requests preview output behavior. |
 | `--format human\|json` | `human`. |
-| `--progress human\|json\|none` | `human`. JSON progress is JSONL. |
+| `--progress auto\|terminal\|json\|none` | `auto`. JSON progress is JSONL. |
 | `--report PATH` | Unset. Writes a structured report on success or failure. |
 | `--render-backend auto\|cpu\|wgpu` | `auto`. |
 
 With JSON progress and human final results, progress is sent to stdout and the
-final result is sent to stderr to keep the streams separable. Auto progress is
-TTY-only; redirected and CI output is quiet unless `--progress human` is
-explicit. WGPU fallback is reported as `VESTRA-WGPU-FALLBACK` where
+final result is sent to stderr to keep the streams separable. Auto selects
+native terminal progress only for interactive supported stderr; redirected,
+CI, dumb, and unsupported terminals are quiet. `terminal` forces the native
+presentation. WGPU fallback is reported as `VESTRA-WGPU-FALLBACK` where
 applicable.
 
 ## Validation meaning

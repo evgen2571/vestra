@@ -16,7 +16,11 @@ Rust exposes `Diagnostic` through validation reports and SDK errors. Python
 exposes immutable `Diagnostic` values through reports and exception
 attributes. CLI human output formats them for people. CLI JSON results and
 reports serialize diagnostics, errors, and warnings where the command has
-them. JSON progress events can carry warnings.
+them.
+
+Tracing/logging is operational observability. `RenderEvent` progress describes
+operation state. Diagnostics and errors are structured, actionable failures;
+JSON progress is not a diagnostics stream and does not carry warnings.
 
 Codes are part of the current diagnostic contract, but the project does not
 promise that every code is an eternal catalog. Treat codes as identifiers and

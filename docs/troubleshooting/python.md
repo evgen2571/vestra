@@ -14,12 +14,29 @@ The compiled extension supplies runtime native classes; `python/vestra/_native.p
 
 ## Progress callback or cancellation behavior is surprising
 
-`render(..., progress=callback)` calls Python with `started` and `progress`
-`RenderEvent` values. It does not deliver native `completed`, which is emitted
-only after output publication. If the callback raises, Vestra stops rendering
-and re-raises the original Python exception. No `RenderResult` is returned. A
-native cleanup error may be attached to that exception as
-`render_cleanup_error`.
+`render(..., on_progress=callback)` calls Python with typed v2 `RenderEvent`
+values for `started`, `stage_changed`, `progress`, and the terminal outcome.
+`progress=` remains a compatibility alias. The callback replaces the built-in
+Auto terminal renderer. `completed` occurs only after output publication. If
+the callback raises before terminal success, Vestra stops rendering and
+re-raises the original Python exception. A callback error while receiving
+`completed` cannot invalidate a published render. A native cleanup error may
+be attached to a pre-terminal callback exception as `render_cleanup_error`.
+
+## Explicit logging
+
+Call `vestra.configure_logging(...)` when an application wants Vestra logs.
+Importing the package and ordinary rendering are subscriber-neutral. The API
+maps to the shared Rust observability implementation and supports human or
+JSON Lines format, stderr, file, stderr-plus-file, levels, `filter=`, and the
+advanced `RUST_LOG` override. Repeated global initialization raises a clear
+runtime error. `output="stderr"` requires no `file`; `output="file"` and
+`output="stderr_and_file"` require one. Supplying a file with
+`output="stderr"` is rejected rather than silently changing the destination.
+The compatibility spelling `output="stderr+file"` is accepted as an alias for
+`stderr_and_file`. JSON tracing on stderr disables native terminal progress so
+the stream remains valid JSON Lines; JSON tracing to a file leaves native
+stderr progress available.
 
 For ordinary cancellation, create a `CancellationToken`, pass it to `render`,
 and call `cancel()` from another control path. Observed cancellation raises

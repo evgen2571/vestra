@@ -11,6 +11,7 @@ use super::{
 use super::{metrics::milliseconds, runner::render_with_backend_builder};
 use std::{
     cell::Cell,
+    io,
     path::Path,
     sync::{Arc, atomic::AtomicBool},
     time::Duration,
@@ -42,7 +43,9 @@ where
     S: FrameSink,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
-    let mut lifecycle = super::runner::LifecycleEmitter::new(OperationId::new(), emit);
+    let render_span = tracing::Span::none();
+    let mut lifecycle =
+        super::runner::LifecycleEmitter::new(OperationId::new(), &render_span, emit);
     lifecycle.started(
         Some(prepared.plan.frame_count),
         &options
@@ -61,12 +64,69 @@ where
     result
 }
 
+#[test]
+fn lifecycle_stage_updates_the_root_render_span() {
+    let bytes = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let writer_bytes = Arc::clone(&bytes);
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .with_current_span(true)
+        .with_span_list(true)
+        .with_writer(move || CapturedWriter(Arc::clone(&writer_bytes)))
+        .finish();
+
+    tracing::subscriber::with_default(subscriber, || {
+        let root = tracing::info_span!(
+            target: "vestra.render",
+            "render",
+            stage = tracing::field::Empty
+        );
+        let _entered = root.enter();
+        let mut emit = |_event: RenderEvent| {
+            tracing::info!(target: "stage_test", "stage observed");
+            RenderObserverControl::Continue
+        };
+        let mut lifecycle =
+            super::runner::LifecycleEmitter::new(OperationId::new(), &root, &mut emit);
+        lifecycle.started(Some(1), Path::new("output.mp4"));
+        lifecycle.stage(RenderStage::Preparing);
+        lifecycle.stage(RenderStage::Rendering);
+        lifecycle.stage(RenderStage::Encoding);
+        lifecycle.stage(RenderStage::Finalizing);
+    });
+
+    let output = String::from_utf8(bytes.lock().expect("capture lock").clone())
+        .expect("captured output is UTF-8");
+    assert!(output.contains(r#""stage":"preparing""#), "{output}");
+    assert!(output.contains(r#""stage":"rendering""#), "{output}");
+    assert!(output.contains(r#""stage":"encoding""#), "{output}");
+    assert!(output.contains(r#""stage":"finalizing""#), "{output}");
+}
+
+struct CapturedWriter(Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl io::Write for CapturedWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0
+            .lock()
+            .expect("capture lock")
+            .extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 pub(crate) fn render_prepared(
     prepared: &mut super::runner::PreparedState,
     options: &RenderOptions,
     emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
 ) -> Result<super::RenderSummary, super::RenderError> {
-    let mut lifecycle = super::runner::LifecycleEmitter::new(OperationId::new(), emit);
+    let render_span = tracing::Span::none();
+    let mut lifecycle =
+        super::runner::LifecycleEmitter::new(OperationId::new(), &render_span, emit);
     lifecycle.started(
         Some(prepared.plan.frame_count),
         &options

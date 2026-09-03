@@ -37,7 +37,7 @@ def test_prepared_wgpu_video_render_returns_adapter_owned_result(tmp_path: Path)
     assert result.adapter is not None
     assert result.performance.rendered_frame_count == result.total_frames
     assert [event.kind for event in events] == [
-        "started", "stage_changed", "stage_changed", "stage_changed", "completed"
+        "started", "stage_changed", "stage_changed", "stage_changed", "stage_changed", "completed"
     ]
 
 

@@ -515,6 +515,10 @@ fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
             .all(EvaluatedEffect::is_basic_colour_effect)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "composition state is passed explicitly through this hot path"
+)]
 fn apply_track_matte(
     surfaces: &mut EffectSurfacePool,
     assets: &mut PreparedAssets,
@@ -692,6 +696,10 @@ fn render_isolated_layer(
     surfaces.copy_current_to_mask_local();
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "composition state is passed explicitly through this hot path"
+)]
 fn apply_masks(
     surfaces: &mut EffectSurfacePool,
     assets: &mut PreparedAssets,

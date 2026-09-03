@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, ClassVar, final
 
 __all__ = [
-    "BackendPreference", "BackendKind", "BackendFallback", "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Diagnostic", "Editor", "InspectAssets",
+    "BackendPreference", "BackendKind", "BackendFallback", "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Diagnostic", "Editor", "InspectAssets", "configure_logging",
     "InspectAudio", "InspectAudioClip", "InspectAudioEffect", "InspectAudioGainKeyframe", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
     "PreflightReport", "Project", "ProjectError", "Severity", "ValidationReport",
     "VideoEditorError", "PreparationError", "FrameRenderError", "RenderError", "CancelledError", "PreparedProjectBusyError", "PrepareOptions", "PreparedProject", "PreparationReport", "PreparationTimings", "FrameRate", "Frame", "PreparedVideoRenderRequest", "RenderRequest", "CancellationToken", "RenderEvent", "RenderResult", "RenderTimingScope", "RenderTimings", "RenderPerformance", "RenderFailureContext", "RenderFailureStage", "native_version", "video_duration",
@@ -16,6 +16,8 @@ class VideoEditorError(Exception):
     kind: str
     diagnostics: tuple[Diagnostic, ...]
     warnings: tuple[Diagnostic, ...]
+
+def configure_logging(level: str = "info", format: str = "human", output: str = "stderr", file: PathLike[str] | str | None = None, filter: str | None = None) -> None: ...
 
 class ProjectError(VideoEditorError): ...
 class PreparationError(VideoEditorError): ...

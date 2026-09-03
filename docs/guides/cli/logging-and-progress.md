@@ -17,11 +17,32 @@ verbosity-derived filter, so a command such as this can focus on one target:
 RUST_LOG=vestra=warn,vestra.render.wgpu=trace ve render project.json --progress none
 ```
 
-The stable application targets are rooted at `vestra`: `vestra.project`,
-`vestra.render`, `vestra.render.cpu`, `vestra.render.wgpu`, `vestra.media`,
-`vestra.media.probe`,
-`vestra.media.audio`, `vestra.media.video`, `vestra.media.image`,
-`vestra.encode`, `vestra.output`, `vestra.cache`, and `vestra.performance`.
+The stable application targets are:
+
+```text
+vestra
+vestra.project
+vestra.render
+vestra.render.cpu
+vestra.render.wgpu
+vestra.media
+vestra.media.probe
+vestra.media.image
+vestra.media.video
+vestra.media.audio
+vestra.encode
+vestra.output
+vestra.cache
+vestra.performance
+```
+
+Examples:
+
+```bash
+RUST_LOG=vestra=info ve render project.json
+RUST_LOG=vestra=warn,vestra.render.wgpu=debug ve render project.json
+RUST_LOG=warn,vestra.performance=debug ve render project.json
+```
 Render records carry `operation_id`, `stage`, `output`, `requested_backend`,
 `actual_backend`, `total_frames`, and elapsed timing fields where applicable.
 The root render span uses the same `operation_id` as the native `RenderEvent`
@@ -36,26 +57,55 @@ TIME LEVEL TARGET MESSAGE fields...
 The exact field set depends on the event. Logs stay on stderr so stdout can be
 used for command results or JSON progress.
 
+Human tracing logs use stderr, or the configured file destination; they never
+contaminate normal command stdout. The shared observability infrastructure
+supports human-readable logs, JSON Lines logs, stderr, file, and stderr-plus-file
+output. JSON tracing logs are separate from `--progress json`, which is a
+`RenderEvent` stream. `--progress json` remains a stdout result/progress stream;
+it does not select the tracing format.
+
+When JSON tracing owns stderr, native terminal progress is disabled for that
+same terminal coordinator, including explicit terminal progress, so stderr
+contains only valid JSON Lines records. JSON tracing sent only to a file leaves
+native stderr progress available. This is an application-boundary policy; the
+progress crate does not inspect logging formats.
+
+The `vestra.performance` target emits one compact `render timing summary` per
+successful render. It includes operation identity, the actual backend, numeric
+project parse, validation, preflight, plan compilation, audio analysis, asset
+decode, track evaluation, frame render, encoder write/finalize, publication,
+and total timings. WGPU renders additionally report adapter/device/pipeline,
+texture upload, command encoding, submission, readback, and row repack timing.
+Use `RUST_LOG=warn,vestra.performance=debug` to enable it.
+
+Trace-level preparation records carry authored `layer_id`, `clip_id`,
+`effect_id`, `mask_id`, and `transition_id` fields where those objects enter
+execution. Audio track identifiers are not forced through the renderer until
+the audio execution boundary has a stable authored-to-runtime mapping.
+
 ## Progress modes
 
-`render` accepts `--progress human`, `--progress json`, and `--progress none`.
-The default is `human`.
+`render` accepts `--progress auto`, `--progress terminal`, `--progress json`,
+and `--progress none`. Auto is the default. `terminal` forces the native
+terminal presentation; `json` emits the machine-readable event stream; `none`
+disables progress.
 
 Human progress reports percentage and completed versus total frames. Once
 enough samples exist it also shows rolling render FPS and an ETA. On a TTY it
-updates a terminal line. Auto mode disables the built-in progress sink when
-stderr is redirected, in CI, or under a dumb terminal; use `--progress human`
-to request it explicitly. Completion reports the rendered frame count, elapsed
-time, and output path. Logs coordinate with the active display so a log does
-not permanently destroy the progress line.
+updates a terminal line. Auto uses native terminal progress only with
+interactive stderr; redirected stderr, CI, `TERM=dumb`, and unsupported
+terminals receive no native human progress. Completion reports the rendered
+frame count, elapsed time, and output path. Logs coordinate with the active
+display so a log does not permanently destroy the progress line.
 
-JSON progress writes one JSON object per line to stdout for the started,
-progress, and completed events. This is a JSONL stream, not one JSON document.
-Use it for a process monitor or pipeline. `--progress none` suppresses progress
-events while leaving logs and the final command result under their normal
-format rules.
+JSON progress writes one JSON object per line to stdout for the complete typed
+lifecycle: `started`, `stage_changed`, `progress`, and one terminal event
+(`completed`, `cancelled`, or `failed`). Use it for a process monitor or
+pipeline. `--progress none` suppresses progress events while leaving logs and
+the final command result under their normal format rules.
 
 When `--progress json` is combined with `--format json`, progress events and the
 final result form one JSONL stream on stdout. With `--format human`, the JSON
 progress remains on stdout and the human final result goes to stderr, keeping
-stdout machine-readable.
+stdout machine-readable. This does not change the independent tracing policy
+described above.

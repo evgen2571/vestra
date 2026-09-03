@@ -13,7 +13,10 @@ use super::{
     events,
     failure::cleanup_error,
     frame_loop::{cancellation, run as run_frame_loop},
-    metrics::{failure_timings, failure_with_context, milliseconds, operation_backend_metrics},
+    metrics::{
+        failure_timings, failure_with_context, milliseconds, operation_backend_metrics,
+        trace_millisecond_value, trace_milliseconds,
+    },
     types::{
         RenderError, RenderFailureContext, RenderFailureStage, RenderObserverControl,
         RenderOptions, RenderSummary, RenderTimings, backend_fallback_warning,
@@ -100,6 +103,7 @@ where
 
 pub(crate) struct LifecycleEmitter<'a> {
     emit: &'a mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    render_span: &'a tracing::Span,
     operation_id: OperationId,
     started: bool,
     current_stage: Option<RenderStage>,
@@ -107,12 +111,14 @@ pub(crate) struct LifecycleEmitter<'a> {
 }
 
 impl LifecycleEmitter<'_> {
-    pub(crate) fn new(
+    pub(crate) fn new<'a>(
         operation_id: OperationId,
-        emit: &mut dyn FnMut(RenderEvent) -> RenderObserverControl,
-    ) -> LifecycleEmitter<'_> {
+        render_span: &'a tracing::Span,
+        emit: &'a mut dyn FnMut(RenderEvent) -> RenderObserverControl,
+    ) -> LifecycleEmitter<'a> {
         LifecycleEmitter {
             emit,
+            render_span,
             operation_id,
             started: false,
             current_stage: None,
@@ -148,6 +154,7 @@ impl LifecycleEmitter<'_> {
             debug_assert!(previous < stage, "render stage regressed or repeated");
         }
         self.current_stage = Some(stage);
+        self.render_span.record("stage", stage.as_str());
         self.emit(events::stage(self.operation_id, stage))
     }
 
@@ -486,7 +493,7 @@ where
     drop(_encode_finalize_span);
     tracing::debug!(
         target: "vestra.encode",
-        elapsed_ms = finish_started.elapsed().as_millis(),
+        elapsed_ms = trace_milliseconds(finish_started.elapsed()),
         stage = "finalize",
         "encoder finalization completed"
     );
@@ -574,7 +581,7 @@ where
     timings.output_publish_ms = milliseconds(publish_started.elapsed());
     tracing::debug!(
         target: "vestra.output",
-        elapsed_ms = timings.output_publish_ms,
+        elapsed_ms = trace_millisecond_value(timings.output_publish_ms),
         stage = "publish",
         "output finalization completed"
     );

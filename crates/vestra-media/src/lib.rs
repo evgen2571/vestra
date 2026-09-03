@@ -14,6 +14,10 @@ mod probe;
 mod sink;
 mod video;
 
+pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
 #[cfg(test)]
 mod test_support;
 

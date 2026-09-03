@@ -203,7 +203,7 @@ impl WgpuBackend {
             height = plan.canvas.height,
             pipeline_depth,
             resource_bytes = resource_estimates.working_texture_bytes,
-            elapsed_ms = pipeline_creation.as_millis(),
+            elapsed_ms = crate::trace_milliseconds(pipeline_creation),
             "WGPU resources initialized"
         );
         let upload_started = Instant::now();
@@ -274,7 +274,7 @@ impl WgpuBackend {
             stage = "prepare",
             resource_count = sources.raster_textures.len(),
             resource_bytes = sources.uploaded_texture_bytes,
-            elapsed_ms = upload_started.elapsed().as_millis(),
+            elapsed_ms = crate::trace_milliseconds(upload_started.elapsed()),
             "WGPU source resources prepared"
         );
         let mut slots = Vec::with_capacity(pipeline_depth);
@@ -485,44 +485,41 @@ impl WgpuBackend {
             collect(layer, &mut sources);
         }
         for source in sources {
-            match source {
-                EvaluatedSource::Video {
-                    asset_index,
-                    source_index,
-                    source_time,
-                    ..
-                } => {
-                    let (pts, pixels) = {
-                        let decoder =
-                            self.video_decoders.get_mut(asset_index).ok_or_else(|| {
-                                Diagnostic::error(
-                                    "WGPU-VIDEO-DECODER",
-                                    crate::Category::Media,
-                                    "video decoder session is missing",
-                                    "",
-                                )
-                            })?;
-                        let frame = decoder
-                            .frame_at_with_span(*source_time, tracing::Span::current())
-                            .map_err(|error| {
-                                Diagnostic::error(
-                                    "WGPU-VIDEO-DECODE",
-                                    crate::Category::Media,
-                                    error,
-                                    "",
-                                )
-                            })?;
-                        (frame.pts, frame.pixels)
-                    };
-                    if self.video_pts.get(source_index) != Some(&pts) {
-                        self.sources
-                            .upload_video(&self.context.queue, *source_index, &pixels)?;
-                        self.video_upload_count += 1;
-                        self.video_upload_bytes += pixels.as_raw().len() as u64;
-                        self.video_pts.insert(*source_index, pts);
-                    }
+            if let EvaluatedSource::Video {
+                asset_index,
+                source_index,
+                source_time,
+                ..
+            } = source
+            {
+                let (pts, pixels) = {
+                    let decoder = self.video_decoders.get_mut(asset_index).ok_or_else(|| {
+                        Diagnostic::error(
+                            "WGPU-VIDEO-DECODER",
+                            crate::Category::Media,
+                            "video decoder session is missing",
+                            "",
+                        )
+                    })?;
+                    let frame = decoder
+                        .frame_at_with_span(*source_time, tracing::Span::current())
+                        .map_err(|error| {
+                            Diagnostic::error(
+                                "WGPU-VIDEO-DECODE",
+                                crate::Category::Media,
+                                error,
+                                "",
+                            )
+                        })?;
+                    (frame.pts, frame.pixels)
+                };
+                if self.video_pts.get(source_index) != Some(&pts) {
+                    self.sources
+                        .upload_video(&self.context.queue, *source_index, &pixels)?;
+                    self.video_upload_count += 1;
+                    self.video_upload_bytes += pixels.as_raw().len() as u64;
+                    self.video_pts.insert(*source_index, pts);
                 }
-                _ => {}
             }
         }
         Ok(())

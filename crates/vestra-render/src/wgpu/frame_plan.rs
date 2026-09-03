@@ -303,21 +303,19 @@ impl GpuFramePlan {
                 .map(layer_depth)
                 .max()
                 .unwrap_or(0);
-            let matte_scratch = composition
-                .layers
-                .iter()
-                .any(|layer| layer.matte.is_some())
-                .then_some(4 + composition.layers.len() * 2)
-                .unwrap_or(0);
+            let matte_scratch = if composition.layers.iter().any(|layer| layer.matte.is_some()) {
+                4 + composition.layers.len() * 2
+            } else {
+                0
+            };
             ordinary.max(matte_scratch)
         }
         let ordinary = plan.layers.iter().map(layer_depth).max().unwrap_or(0);
-        let matte_scratch = plan
-            .layers
-            .iter()
-            .any(|layer| layer.matte.is_some())
-            .then_some(4 + plan.layers.len() * 2)
-            .unwrap_or(0);
+        let matte_scratch = if plan.layers.iter().any(|layer| layer.matte.is_some()) {
+            4 + plan.layers.len() * 2
+        } else {
+            0
+        };
         ordinary.max(matte_scratch)
     }
 

@@ -196,7 +196,7 @@ class Effect:
         if kind == "number":
             self._values[name] = _validate_number(parameter, value)
             return
-        if kind == "point2d":
+        if kind in {"point2d", "point_property"}:
             if name in {"tile_center", "center"}:
                 target = self._properties[name]
                 if isinstance(value, PointProperty):
@@ -258,7 +258,10 @@ class Effect:
             kind = parameter["kind"]
             if kind in {"scalar_property", "plain_track"}:
                 staged_properties[name] = _property(parameter, values[name])
-            elif kind == "point2d" and name in {"tile_center", "center"}:
+            elif kind in {"point2d", "point_property"} and name in {
+                "tile_center",
+                "center",
+            }:
                 staged_properties[name] = BindablePointProperty(_point(values[name], name))
             else:
                 # Use a temporary descriptor state for the shared validators.

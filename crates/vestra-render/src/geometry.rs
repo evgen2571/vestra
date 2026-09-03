@@ -247,6 +247,10 @@ pub(crate) fn resolve_raster_geometry(
 }
 
 #[must_use]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "geometry inputs stay explicit at the renderer boundary"
+)]
 pub(crate) fn resolve_raster_geometry_with_motion_tile(
     intrinsic: IntrinsicSize,
     crop: Crop,

@@ -29,6 +29,8 @@ pub use render::{
     BackendFallback, RenderBackendPreference as BackendPreference, RenderEvent,
     RenderFailureContext, RenderFailureStage, RenderObserverControl, RenderTimings,
 };
+pub use vestra_core::OperationId;
+pub use vestra_progress::{CallbackProgress, NoProgress, ProgressMode, ProgressSink, RenderStage};
 
 pub use vestra_core::audio_effect_definition::{
     AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectKind,

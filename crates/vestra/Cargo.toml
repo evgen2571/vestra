@@ -13,6 +13,7 @@ wgpu = ["vestra-render/wgpu"]
 
 [dependencies]
 vestra-core = { path = "../vestra-core" }
+vestra-progress = { path = "../vestra-progress" }
 vestra-render = { path = "../vestra-render", default-features = false }
 vestra-media = { path = "../vestra-media" }
 serde = { version = "1", features = ["derive"] }

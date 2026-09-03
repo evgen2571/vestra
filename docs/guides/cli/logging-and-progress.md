@@ -61,7 +61,27 @@ Human tracing logs use stderr, or the configured file destination; they never
 contaminate normal command stdout. The shared observability infrastructure
 supports human-readable logs, JSON Lines logs, stderr, file, and stderr-plus-file
 output. JSON tracing logs are separate from `--progress json`, which is a
-`RenderEvent` stream.
+`RenderEvent` stream. `--progress json` remains a stdout result/progress stream;
+it does not select the tracing format.
+
+When JSON tracing owns stderr, native terminal progress is disabled for that
+same terminal coordinator, including explicit terminal progress, so stderr
+contains only valid JSON Lines records. JSON tracing sent only to a file leaves
+native stderr progress available. This is an application-boundary policy; the
+progress crate does not inspect logging formats.
+
+The `vestra.performance` target emits one compact `render timing summary` per
+successful render. It includes operation identity, the actual backend, numeric
+project parse, validation, preflight, plan compilation, audio analysis, asset
+decode, track evaluation, frame render, encoder write/finalize, publication,
+and total timings. WGPU renders additionally report adapter/device/pipeline,
+texture upload, command encoding, submission, readback, and row repack timing.
+Use `RUST_LOG=warn,vestra.performance=debug` to enable it.
+
+Trace-level preparation records carry authored `layer_id`, `clip_id`,
+`effect_id`, `mask_id`, and `transition_id` fields where those objects enter
+execution. Audio track identifiers are not forced through the renderer until
+the audio execution boundary has a stable authored-to-runtime mapping.
 
 ## Progress modes
 
@@ -87,4 +107,5 @@ the final command result under their normal format rules.
 When `--progress json` is combined with `--format json`, progress events and the
 final result form one JSONL stream on stdout. With `--format human`, the JSON
 progress remains on stdout and the human final result goes to stderr, keeping
-stdout machine-readable.
+stdout machine-readable. This does not change the independent tracing policy
+described above.

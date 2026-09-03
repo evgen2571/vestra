@@ -282,18 +282,18 @@ pub(super) fn resolve_mattes(layers: &mut [crate::plan::CompiledLayer]) -> Resul
         .map(|layer| (layer.id.clone(), layer.compiled_identity))
         .collect::<BTreeMap<_, _>>();
     for layer in layers.iter_mut() {
-        if let Some(matte) = &mut layer.matte {
-            if matte.source_layer_identity == usize::MAX {
-                matte.source_layer_identity =
-                    *identities.get(&matte.source_layer_id).ok_or_else(|| {
-                        Diagnostic::error(
-                            "VESTRA-PLAN-MATTE-SOURCE",
-                            Category::Semantic,
-                            "validated track matte source could not be resolved",
-                            format!("/visual/clips/{}/matte/source_layer", layer.id),
-                        )
-                    })?;
-            }
+        if let Some(matte) = &mut layer.matte
+            && matte.source_layer_identity == usize::MAX
+        {
+            matte.source_layer_identity =
+                *identities.get(&matte.source_layer_id).ok_or_else(|| {
+                    Diagnostic::error(
+                        "VESTRA-PLAN-MATTE-SOURCE",
+                        Category::Semantic,
+                        "validated track matte source could not be resolved",
+                        format!("/visual/clips/{}/matte/source_layer", layer.id),
+                    )
+                })?;
         }
     }
     Ok(())
@@ -316,23 +316,22 @@ fn propagate_matte_dependencies(layers: &mut [crate::plan::CompiledLayer]) {
             .collect::<BTreeMap<_, _>>();
         let mut changed = false;
         for layer in layers.iter_mut() {
-            if let Some(matte) = &layer.matte {
-                if let Some(&(source_start, source_duration)) =
+            if let Some(matte) = &layer.matte
+                && let Some(&(source_start, source_duration)) =
                     intervals.get(&matte.source_layer_identity)
-                {
-                    let dependency = effective_matte_dependency(
-                        layer.start_nanos,
-                        layer.duration_nanos,
-                        source_start,
-                        source_duration,
-                        *dependencies
-                            .get(&matte.source_layer_identity)
-                            .expect("matte source dependency exists"),
-                    );
-                    let combined = layer.content_dependency.combine(dependency);
-                    changed |= combined != layer.content_dependency;
-                    layer.content_dependency = combined;
-                }
+            {
+                let dependency = effective_matte_dependency(
+                    layer.start_nanos,
+                    layer.duration_nanos,
+                    source_start,
+                    source_duration,
+                    *dependencies
+                        .get(&matte.source_layer_identity)
+                        .expect("matte source dependency exists"),
+                );
+                let combined = layer.content_dependency.combine(dependency);
+                changed |= combined != layer.content_dependency;
+                layer.content_dependency = combined;
             }
         }
         if !changed {

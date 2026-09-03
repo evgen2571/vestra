@@ -151,7 +151,7 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
 }
 
 use super::{
-    metrics::milliseconds,
+    metrics::{milliseconds, trace_milliseconds},
     selection::create_backend,
     types::{
         BackendFallback, RenderBackendPreference, RenderError, RenderFailureContext,
@@ -369,7 +369,7 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
     tracing::debug!(
         target: "vestra.media",
         stage = "prepare",
-        elapsed_ms = decoded.timings().decode.as_millis(),
+        elapsed_ms = trace_milliseconds(decoded.timings().decode),
         asset_count = decoded.stats().decoded_image_count,
         "media preparation completed"
     );
@@ -399,7 +399,7 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
         tracing::debug!(
             target: "vestra.media.audio",
             stage = "prepare",
-            elapsed_ms = audio_analysis_duration.as_millis(),
+            elapsed_ms = trace_milliseconds(audio_analysis_duration),
             "audio preparation completed"
         );
     }

@@ -202,6 +202,14 @@ pub(super) fn milliseconds(duration: Duration) -> u128 {
     duration.as_millis()
 }
 
+pub(crate) fn trace_milliseconds(duration: Duration) -> u64 {
+    trace_millisecond_value(duration.as_millis())
+}
+
+pub(crate) fn trace_millisecond_value(value: u128) -> u64 {
+    u64::try_from(value).unwrap_or(u64::MAX)
+}
+
 pub(super) fn failure_with_context(
     mut error: RenderError,
     warnings: &[Diagnostic],

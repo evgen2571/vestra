@@ -50,7 +50,7 @@ def _valid_generic_parameters(definition: object) -> dict[str, object]:
             values[str(parameter["name"])] = "#ffffff"
         elif kind == "integer":
             values[str(parameter["name"])] = int(parameter["integer_minimum"])
-        elif kind == "point2d":
+        elif kind in {"point2d", "point_property"}:
             values[str(parameter["name"])] = Point(0.5, 0.5)
         elif kind == "boolean":
             values[str(parameter["name"])] = True

@@ -230,13 +230,20 @@ pub fn build_with_terminal_output(
     config: ObservabilityConfig,
     terminal: Arc<TerminalOutput>,
 ) -> Result<BoxedSubscriber, ObservabilityError> {
+    let json_uses_terminal = matches!(config.format, LogFormat::Json)
+        && matches!(
+            config.output,
+            LogOutput::Stderr | LogOutput::StderrAndFile(_)
+        );
     let directive = config.selected_filter();
     let filter =
         EnvFilter::try_new(&directive).map_err(|error| ObservabilityError::InvalidFilter {
             directive,
             message: error.to_string(),
         })?;
+    let terminal_for_policy = Arc::clone(&terminal);
     let writer = OutputFactory::new(&config.output, config.file_mode, terminal)?;
+    terminal_for_policy.set_native_progress_enabled(!json_uses_terminal);
 
     match config.format {
         LogFormat::Human => {

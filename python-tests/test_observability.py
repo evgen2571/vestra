@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+
 def _run_script(script: str, *args: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     package_root = Path(__file__).parents[1] / "python"
@@ -37,7 +38,7 @@ import sys
 from pathlib import Path
 import vestra
 path = Path(sys.argv[1])
-vestra.configure_logging(level="info", file=path)
+vestra.configure_logging(level="info", output="file", file=path)
 vestra.Project(size=(2, 2), fps=1, duration=1, base_directory=path.parent).render(
     path.with_suffix(".mp4"), backend="cpu", overwrite=True
 )
@@ -56,7 +57,9 @@ import sys
 from pathlib import Path
 import vestra
 path = Path(sys.argv[1])
-vestra.configure_logging(level="info", format="json", file=path)
+vestra.configure_logging(
+    level="info", format="json", output="file", file=path
+)
 vestra.Project(size=(2, 2), fps=1, duration=1, base_directory=path.parent).render(
     path.with_suffix(".mp4"), backend="cpu", overwrite=True
 )
@@ -67,6 +70,18 @@ vestra.Project(size=(2, 2), fps=1, duration=1, base_directory=path.parent).rende
     assert log_path.is_file()
     records = [json.loads(line) for line in log_path.read_text().splitlines()]
     assert any(record["target"] == "vestra.render" for record in records)
+
+
+def test_python_logging_configuration_supports_stderr_plus_file_alias(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "vestra.log"
+    result = _run_script(
+        "import vestra; vestra.configure_logging(output='stderr+file', file=__import__('sys').argv[1])",
+        str(log_path),
+    )
+    assert result.returncode == 0, result.stderr
+    assert log_path.is_file()
 
 
 @pytest.mark.parametrize(
@@ -85,7 +100,7 @@ def test_python_logging_configuration_rejects_invalid_values(
 
 def test_python_logging_configuration_validates_file_path(tmp_path: Path) -> None:
     result = _run_script(
-        "import vestra; vestra.configure_logging(file=__import__('sys').argv[1])",
+        "import vestra; vestra.configure_logging(output='file', file=__import__('sys').argv[1])",
         str(tmp_path / "missing" / "vestra.log"),
     )
     assert result.returncode != 0
@@ -98,3 +113,20 @@ def test_python_logging_configuration_rejects_repeated_initialization() -> None:
     )
     assert result.returncode != 0
     assert "global tracing subscriber" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "vestra.configure_logging(output='file')",
+        "vestra.configure_logging(output='stderr_and_file')",
+        "vestra.configure_logging(output='stderr', file='vestra.log')",
+        "vestra.configure_logging(output='stderr_and_file', file=None)",
+    ],
+)
+def test_python_logging_configuration_rejects_ambiguous_output_file_combinations(
+    script: str,
+) -> None:
+    result = _run_script(f"import vestra; {script}")
+    assert result.returncode != 0
+    assert "file" in result.stderr

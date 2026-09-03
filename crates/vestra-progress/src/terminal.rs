@@ -3,7 +3,10 @@
 use std::{
     collections::BTreeMap,
     io::{self, IsTerminal, Write},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -81,6 +84,7 @@ struct TerminalState {
 pub struct TerminalOutput {
     state: Mutex<TerminalState>,
     interactive: bool,
+    native_progress_enabled: AtomicBool,
     writer: Mutex<Box<dyn Write + Send>>,
 }
 
@@ -89,6 +93,7 @@ impl TerminalOutput {
         Self {
             state: Mutex::new(TerminalState::default()),
             interactive: environment.interactive(),
+            native_progress_enabled: AtomicBool::new(true),
             writer: Mutex::new(Box::new(io::stderr())),
         }
     }
@@ -106,6 +111,7 @@ impl TerminalOutput {
         Arc::new(Self {
             state: Mutex::new(TerminalState::default()),
             interactive: environment.interactive(),
+            native_progress_enabled: AtomicBool::new(true),
             writer: Mutex::new(Box::new(writer)),
         })
     }
@@ -125,6 +131,9 @@ impl TerminalOutput {
     }
 
     fn write_progress(&self, operation_id: OperationId, line: &str, newline: bool) {
+        if !self.native_progress_enabled() {
+            return;
+        }
         let Ok(mut state) = self.state.lock() else {
             return;
         };
@@ -154,7 +163,7 @@ impl TerminalOutput {
         };
         let was_foreground = state.foreground == Some(operation_id);
         state.lines.remove(&operation_id);
-        if was_foreground {
+        if was_foreground && self.native_progress_enabled() {
             let _ = state.foreground.take();
             if self.interactive
                 && let Ok(mut writer) = self.writer.lock()
@@ -184,6 +193,24 @@ impl TerminalOutput {
     #[must_use]
     pub const fn is_interactive(&self) -> bool {
         self.interactive
+    }
+
+    /// Enables or disables the native progress presentation for this output.
+    ///
+    /// Application boundaries can disable the presentation when another
+    /// machine-readable stream owns the same terminal. This generic control
+    /// keeps progress independent of logging formats.
+    pub fn set_native_progress_enabled(&self, enabled: bool) {
+        if !enabled && let Ok(mut state) = self.state.lock() {
+            state.lines.clear();
+            state.foreground = None;
+        }
+        self.native_progress_enabled
+            .store(enabled, Ordering::Relaxed);
+    }
+
+    fn native_progress_enabled(&self) -> bool {
+        self.native_progress_enabled.load(Ordering::Relaxed)
     }
 
     /// Returns a writer that clears and redraws an active progress line around
@@ -220,12 +247,13 @@ impl Write for TerminalWriter {
             .writer
             .lock()
             .map_err(|_| io::Error::other("terminal writer mutex poisoned"))?;
-        if line.is_some() && self.output.interactive {
+        if line.is_some() && self.output.interactive && self.output.native_progress_enabled() {
             write!(writer, "\r\x1b[2K")?;
         }
         let result = writer.write(bytes);
         if let Some(line) = line
             && self.output.interactive
+            && self.output.native_progress_enabled()
         {
             write!(writer, "\r{line}")?;
         }
@@ -290,7 +318,7 @@ impl TerminalProgress {
             ProgressMode::Auto => environment.supports_auto(),
             ProgressMode::Disabled => false,
             ProgressMode::Terminal => true,
-        };
+        } && terminal_output().native_progress_enabled();
         selected.then(|| Self::with_output(terminal_output(), environment.width))
     }
 

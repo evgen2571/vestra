@@ -179,7 +179,10 @@ fn logging_format(value: &str) -> PyResult<LogFormat> {
 fn logging_output(value: &str, file: Option<PathBuf>) -> PyResult<LogOutput> {
     match value.to_ascii_lowercase().as_str() {
         "stderr" if file.is_none() => Ok(LogOutput::Stderr),
-        "stderr" | "file" => file.map_or_else(
+        "stderr" if file.is_some() => Err(PyValueError::new_err(
+            "output='stderr' does not accept a file path; use output='file' or 'stderr_and_file'",
+        )),
+        "file" => file.map_or_else(
             || {
                 Err(PyValueError::new_err(
                     "a file path is required for the selected logging output",
@@ -196,7 +199,7 @@ fn logging_output(value: &str, file: Option<PathBuf>) -> PyResult<LogOutput> {
             |path| Ok(LogOutput::StderrAndFile(path)),
         ),
         _ => Err(PyValueError::new_err(
-            "output must be 'stderr', 'file', or 'stderr_and_file'",
+            "output must be 'stderr', 'file', or 'stderr_and_file' (alias: 'stderr+file')",
         )),
     }
 }

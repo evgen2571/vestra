@@ -50,14 +50,14 @@ impl<'de> Deserialize<'de> for PointProperty {
         D: serde::Deserializer<'de>,
     {
         let value = serde_json::Value::deserialize(deserializer)?;
-        if value.get("base_value").is_none() {
-            if let Ok(point) = serde_json::from_value::<Point>(value.clone()) {
-                return Ok(Self {
-                    track: Track::constant(point),
-                    modifiers: Vec::new(),
-                    component_modifiers: PointComponentModifiers::default(),
-                });
-            }
+        if value.get("base_value").is_none()
+            && let Ok(point) = serde_json::from_value::<Point>(value.clone())
+        {
+            return Ok(Self {
+                track: Track::constant(point),
+                modifiers: Vec::new(),
+                component_modifiers: PointComponentModifiers::default(),
+            });
         }
         let fields = serde_json::from_value::<PointPropertyFields>(value)
             .map_err(serde::de::Error::custom)?;

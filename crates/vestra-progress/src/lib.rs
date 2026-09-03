@@ -9,6 +9,12 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use vestra_core::OperationId;
 
+mod terminal;
+
+pub use terminal::{
+    TerminalEnvironment, TerminalOutput, TerminalProgress, TerminalWriter, terminal_output,
+};
+
 /// The version of the stable serialized render-event representation.
 pub const RENDER_EVENT_SCHEMA_VERSION: u8 = 2;
 
@@ -43,8 +49,9 @@ impl RenderStage {
 /// Every event carries the same [`OperationId`] for its render. Rendering
 /// progress describes frame work only: a fraction of `1.0` does not imply that
 /// encoding, publication, or the full operation has completed. Frame indices
-/// are completed-frame counts, from zero through `total_frames`; Vestra render
-/// plans always know a nonzero total frame count.
+/// are completed-frame counts, from zero through `total_frames`. The initial
+/// `Started` event may omit the total when automatic-duration preparation has
+/// not resolved it yet; rendering progress is always determinate.
 ///
 /// Once started, the runtime emits exactly one terminal variant, subject to
 /// event delivery remaining available. `Completed` means encoder finalization
@@ -55,7 +62,7 @@ pub enum RenderEvent {
     Started {
         event_schema_version: u8,
         operation_id: OperationId,
-        total_frames: u64,
+        total_frames: Option<u64>,
         output_path: PathBuf,
     },
     StageChanged {
@@ -153,7 +160,11 @@ impl RenderEvent {
     }
 
     #[must_use]
-    pub fn started(operation_id: OperationId, total_frames: u64, output_path: PathBuf) -> Self {
+    pub fn started(
+        operation_id: OperationId,
+        total_frames: Option<u64>,
+        output_path: PathBuf,
+    ) -> Self {
         Self::Started {
             event_schema_version: RENDER_EVENT_SCHEMA_VERSION,
             operation_id,
@@ -245,8 +256,10 @@ where
 
 /// The requested built-in progress presentation policy.
 ///
-/// This is a contract only. TTY resolution and terminal presentation belong to
-/// a later layer; custom sinks are configured separately.
+/// `Auto` selects the native terminal presentation only when stderr is a
+/// supported interactive terminal. `Disabled` selects no built-in sink, and
+/// `Terminal` explicitly requests the native terminal sink. A custom sink is
+/// configured separately and replaces the built-in presentation by default.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProgressMode {

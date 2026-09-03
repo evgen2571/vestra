@@ -11,6 +11,7 @@ use crate::{
     render::{LifecycleEmitter, RenderBackendKind, RenderBackendPreference, RenderEvent},
 };
 use vestra_core::OperationId;
+use vestra_progress::{ProgressSink, TerminalProgress};
 
 /// A normalized positive rational video frame rate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -100,6 +101,7 @@ impl PrepareOptions {
 pub struct PreparedVideoRenderRequest {
     output: PathBuf,
     overwrite: bool,
+    progress_mode: vestra_progress::ProgressMode,
 }
 
 impl PreparedVideoRenderRequest {
@@ -108,6 +110,7 @@ impl PreparedVideoRenderRequest {
         Self {
             output: output.into(),
             overwrite: false,
+            progress_mode: vestra_progress::ProgressMode::Auto,
         }
     }
     #[must_use]
@@ -122,6 +125,18 @@ impl PreparedVideoRenderRequest {
     #[must_use]
     pub const fn overwrite(&self) -> bool {
         self.overwrite
+    }
+    #[must_use]
+    pub const fn progress_mode(&self) -> vestra_progress::ProgressMode {
+        self.progress_mode
+    }
+    #[must_use]
+    pub const fn with_progress_mode(
+        mut self,
+        progress_mode: vestra_progress::ProgressMode,
+    ) -> Self {
+        self.progress_mode = progress_mode;
+        self
     }
 }
 
@@ -439,6 +454,37 @@ impl PreparedProject {
         )
     }
 
+    /// Renders with the request's built-in progress policy. A custom sink
+    /// replaces the native terminal presentation.
+    #[expect(
+        clippy::result_large_err,
+        reason = "render failures retain structured diagnostics"
+    )]
+    pub fn render_video_with_progress(
+        &mut self,
+        request: PreparedVideoRenderRequest,
+        mut sink: Option<&mut dyn ProgressSink>,
+        cancellation: &CancellationToken,
+    ) -> Result<RenderResult, EditorError> {
+        let mut terminal = sink
+            .is_none()
+            .then(|| TerminalProgress::with_shared_output(request.progress_mode()))
+            .flatten();
+        self.render_video_with_observer(
+            request,
+            move |event| {
+                if let Some(sink) = sink.as_mut() {
+                    sink.on_event(&event);
+                }
+                if let Some(terminal) = terminal.as_mut() {
+                    terminal.on_event(&event);
+                }
+                crate::RenderObserverControl::Continue
+            },
+            cancellation,
+        )
+    }
+
     /// Renders while allowing a synchronous observer to stop before output
     /// publication. A cancellation requested for the post-publication
     /// `completed` event is intentionally ignored.
@@ -458,7 +504,7 @@ impl PreparedProject {
         let operation_started = Instant::now();
         let output_path = request.output.clone();
         let mut lifecycle = LifecycleEmitter::new(OperationId::new(), &mut emit);
-        if lifecycle.started(self.report.frame_count, &output_path)
+        if lifecycle.started(Some(self.report.frame_count), &output_path)
             == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {

@@ -7,7 +7,7 @@ use vestra_progress::{RenderEvent, RenderStage};
 
 pub(super) fn started(
     operation_id: OperationId,
-    total_frames: u64,
+    total_frames: Option<u64>,
     output_path: &Path,
 ) -> RenderEvent {
     RenderEvent::started(operation_id, total_frames, output_path.to_path_buf())

@@ -12,6 +12,9 @@ pub(super) enum CliResultFormat {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(super) enum CliProgressFormat {
+    Auto,
+    Terminal,
+    #[value(name = "human", hide = true)]
     Human,
     Json,
     None,
@@ -36,7 +39,8 @@ impl From<CliResultFormat> for ResultFormat {
 impl From<CliProgressFormat> for ProgressFormat {
     fn from(format: CliProgressFormat) -> Self {
         match format {
-            CliProgressFormat::Human => Self::Human,
+            CliProgressFormat::Auto => Self::Auto,
+            CliProgressFormat::Terminal | CliProgressFormat::Human => Self::Terminal,
             CliProgressFormat::Json => Self::Json,
             CliProgressFormat::None => Self::None,
         }

@@ -36,17 +36,19 @@ pub enum LogOutput {
     StderrAndFile(PathBuf),
 }
 
-/// The simple frontend-facing verbosity policies.
+/// The frontend-facing verbosity policies.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Verbosity {
     /// Only Vestra errors are enabled by the policy.
     Quiet,
-    /// Normal Vestra informational records are enabled.
+    /// Vestra warnings are enabled by the policy.
     #[default]
     Normal,
-    /// Debug records are enabled.
+    /// Vestra informational records are enabled.
+    Verbose,
+    /// Vestra debug records are enabled.
     Debug,
-    /// Trace records are enabled.
+    /// Vestra trace records are enabled.
     Trace,
 }
 
@@ -55,19 +57,27 @@ impl Verbosity {
     #[must_use]
     pub const fn from_count(count: u8) -> Self {
         match count {
-            0 => Self::Quiet,
-            1 => Self::Normal,
+            0 => Self::Normal,
+            1 => Self::Verbose,
             2 => Self::Debug,
             _ => Self::Trace,
         }
     }
 
-    const fn level(self) -> &'static str {
+    const fn vestra_level(self) -> &'static str {
         match self {
             Self::Quiet => "error",
-            Self::Normal => "info",
+            Self::Normal => "warn",
+            Self::Verbose => "info",
             Self::Debug => "debug",
             Self::Trace => "trace",
+        }
+    }
+
+    const fn global_level(self) -> &'static str {
+        match self {
+            Self::Quiet => "error",
+            Self::Normal | Self::Verbose | Self::Debug | Self::Trace => "warn",
         }
     }
 }
@@ -170,17 +180,21 @@ impl ObservabilityConfig {
         self.filter.clone().unwrap_or_else(|| {
             format!(
                 "{},vestra={},{}",
-                self.verbosity.level(),
-                self.verbosity.level(),
+                self.verbosity.global_level(),
+                self.verbosity.vestra_level(),
                 DEPENDENCY_NOISE_FILTER
             )
         })
     }
 
     fn selected_filter(&self) -> String {
-        self.filter
-            .clone()
-            .or_else(|| std::env::var("RUST_LOG").ok())
+        self.selected_filter_for_test(std::env::var("RUST_LOG").ok().as_deref())
+    }
+
+    fn selected_filter_for_test(&self, environment_filter: Option<&str>) -> String {
+        environment_filter
+            .map(str::to_owned)
+            .or_else(|| self.filter.clone())
             .unwrap_or_else(|| self.filter_directive())
     }
 }
@@ -411,17 +425,22 @@ mod tests {
         assert!(
             ObservabilityConfig::with_verbosity(Verbosity::Normal)
                 .filter_directive()
-                .starts_with("info,vestra=info")
+                .starts_with("warn,vestra=warn")
+        );
+        assert!(
+            ObservabilityConfig::with_verbosity(Verbosity::Verbose)
+                .filter_directive()
+                .starts_with("warn,vestra=info")
         );
         assert!(
             ObservabilityConfig::with_verbosity(Verbosity::Debug)
                 .filter_directive()
-                .starts_with("debug,vestra=debug")
+                .starts_with("warn,vestra=debug")
         );
         assert!(
             ObservabilityConfig::with_verbosity(Verbosity::Trace)
                 .filter_directive()
-                .starts_with("trace,vestra=trace")
+                .starts_with("warn,vestra=trace")
         );
     }
 
@@ -459,9 +478,28 @@ mod tests {
 
     #[test]
     fn verbosity_count_mapping_matches_cli_count_flags() {
-        assert_eq!(Verbosity::from_count(0), Verbosity::Quiet);
-        assert_eq!(Verbosity::from_count(1), Verbosity::Normal);
+        assert_eq!(Verbosity::from_count(0), Verbosity::Normal);
+        assert_eq!(Verbosity::from_count(1), Verbosity::Verbose);
         assert_eq!(Verbosity::from_count(2), Verbosity::Debug);
         assert_eq!(Verbosity::from_count(3), Verbosity::Trace);
+        assert_eq!(Verbosity::from_count(u8::MAX), Verbosity::Trace);
+    }
+
+    #[test]
+    fn environment_filter_takes_precedence_over_config_and_verbosity() {
+        let config =
+            ObservabilityConfig::with_verbosity(Verbosity::Trace).with_filter("vestra=debug");
+
+        assert_eq!(
+            config.selected_filter_for_test(Some("vestra=warn,vestra.render.wgpu=trace")),
+            "vestra=warn,vestra.render.wgpu=trace"
+        );
+    }
+
+    #[test]
+    fn config_filter_is_used_when_environment_filter_is_absent() {
+        let config = ObservabilityConfig::default().with_filter("vestra=debug");
+
+        assert_eq!(config.selected_filter_for_test(None), "vestra=debug");
     }
 }

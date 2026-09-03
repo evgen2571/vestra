@@ -63,6 +63,15 @@ impl GpuContext {
             .allowed_usages
             .contains(WORKING_TEXTURE_USAGE)
         {
+            let info = adapter.get_info();
+            tracing::debug!(
+                target: "vestra.render.wgpu",
+                adapter = %info.name,
+                device_type = ?info.device_type,
+                reason = "working texture format does not support required usages",
+                error_code = "WGPU-TEXTURE-FORMAT",
+                "WGPU adapter rejected"
+            );
             return Err(Diagnostic::error(
                 "WGPU-TEXTURE-FORMAT",
                 Category::Backend,
@@ -82,10 +91,11 @@ impl GpuContext {
         };
         let performance_class = adapter_metadata.performance_class();
         tracing::debug!(
-            backend = %adapter_metadata.graphics_backend,
+            target: "vestra.render.wgpu",
+            graphics_backend = %adapter_metadata.graphics_backend,
             adapter = %adapter_metadata.adapter_name,
             device_type = %adapter_metadata.device_type,
-            driver = %adapter_metadata.driver_name,
+            driver_name = %adapter_metadata.driver_name,
             driver_info = %adapter_metadata.driver_info,
             vendor_id = adapter_metadata.vendor_id,
             device_id = adapter_metadata.device_id,
@@ -95,7 +105,8 @@ impl GpuContext {
         );
         if performance_class.is_software() {
             tracing::debug!(
-                backend = %adapter_metadata.graphics_backend,
+                target: "vestra.render.wgpu",
+                graphics_backend = %adapter_metadata.graphics_backend,
                 adapter = %adapter_metadata.adapter_name,
                 device_type = %adapter_metadata.device_type,
                 hardware = false,
@@ -118,8 +129,10 @@ impl GpuContext {
         .map_err(|error| diagnostic("WGPU-DEVICE-REQUEST", "device_request", error))?;
         let device_request = device_request_started.elapsed();
         tracing::debug!(
-            backend = %adapter_metadata.graphics_backend,
+            target: "vestra.render.wgpu",
+            graphics_backend = %adapter_metadata.graphics_backend,
             adapter = %adapter_metadata.adapter_name,
+            device_type = %adapter_metadata.device_type,
             elapsed_ms = device_request.as_millis(),
             "GPU device initialized"
         );
@@ -129,10 +142,12 @@ impl GpuContext {
         // plan-specific limit validation succeed. A discovered candidate is
         // not yet a usable render context.
         tracing::info!(
-            backend = %adapter_metadata.graphics_backend,
+            target: "vestra.render.wgpu",
+            actual_backend = "wgpu",
+            graphics_backend = %adapter_metadata.graphics_backend,
             adapter = %adapter_metadata.adapter_name,
             device_type = %adapter_metadata.device_type,
-            driver = %adapter_metadata.driver_name,
+            driver_name = %adapter_metadata.driver_name,
             driver_info = %adapter_metadata.driver_info,
             vendor_id = adapter_metadata.vendor_id,
             device_id = adapter_metadata.device_id,

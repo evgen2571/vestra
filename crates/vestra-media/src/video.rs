@@ -150,7 +150,12 @@ impl Default for VideoDecoderOptions {
 
 /// Probe one deterministic usable video stream without retaining a decoder session.
 pub fn probe_video(path: &Path) -> Result<VideoMediaInfo, MediaError> {
-    tracing::debug!(input = %path.display(), "media probe started");
+    tracing::debug!(
+        target: "vestra.media.video",
+        asset_path = %path.display(),
+        asset_type = "video",
+        "media probe started"
+    );
     init_ffmpeg()?;
     let ictx = format::input(path).map_err(|error| open_error(path, error))?;
     let stream = select_stream(&ictx).ok_or(MediaError::NoVideoStream)?;
@@ -163,7 +168,9 @@ pub fn probe_video(path: &Path) -> Result<VideoMediaInfo, MediaError> {
         Some((&decoder, decoder.width(), decoder.height())),
     )?;
     tracing::debug!(
-        input = %path.display(),
+        target: "vestra.media.video",
+        asset_path = %path.display(),
+        asset_type = "video",
         width = info.coded_width,
         height = info.coded_height,
         "media probe completed"
@@ -250,7 +257,11 @@ impl VideoDecoder {
         // Keep the decoder's packet time base aligned with the selected stream.
         decoder.set_packet_time_base(stream.time_base());
         tracing::debug!(
-            input = %path.display(),
+            target: "vestra.media.video",
+            asset_path = %path.display(),
+            asset_type = "video",
+            stream_index = info.stream_index,
+            cache_budget_bytes = options.cache_budget_bytes,
             width,
             height,
             "decoder initialized"
@@ -291,11 +302,35 @@ impl VideoDecoder {
         let final_end = self.draining.then(|| self.final_timestamp()).flatten();
         if let Some(cached) = self.cache.covering_at(target, final_end) {
             self.metrics.cache_hits += 1;
+            tracing::trace!(
+                target: "vestra.cache",
+                asset_type = "video",
+                media_pts = target,
+                cache_hit = true,
+                "video frame cache hit"
+            );
             return Ok(cached);
         }
         self.metrics.cache_misses += 1;
-        if self.max_decoded_pts.is_some_and(|max| target < max) {
-            self.seek(target)?;
+        tracing::trace!(
+            target: "vestra.cache",
+            asset_type = "video",
+            media_pts = target,
+            cache_hit = false,
+            "video frame cache miss"
+        );
+        if self.max_decoded_pts.is_some_and(|max| target < max)
+            && let Err(error) = self.seek(target)
+        {
+            tracing::debug!(
+                target: "vestra.media.video",
+                asset_type = "video",
+                media_pts = target,
+                error = %error,
+                reason = "decoder seek failed",
+                "video seek failed"
+            );
+            return Err(error);
         }
         let mut selected = self.cache.covering_at(target, final_end);
         while let Some(frame) = {
@@ -325,6 +360,12 @@ impl VideoDecoder {
     }
 
     fn seek(&mut self, target: i64) -> Result<(), MediaError> {
+        tracing::debug!(
+            target: "vestra.media.video",
+            media_pts = target,
+            reason = "requested timestamp precedes decoded range",
+            "video seek started"
+        );
         let raw_seconds = self.info.time_base.ticks_to_seconds(target);
         let micros = (raw_seconds * 1_000_000.0).round();
         if !micros.is_finite() || micros < i64::MIN as f64 || micros > i64::MAX as f64 {
@@ -340,6 +381,11 @@ impl VideoDecoder {
         self.pending = None;
         self.max_decoded_pts = None;
         self.draining = false;
+        tracing::debug!(
+            target: "vestra.media.video",
+            media_pts = target,
+            "video seek completed"
+        );
         Ok(())
     }
 

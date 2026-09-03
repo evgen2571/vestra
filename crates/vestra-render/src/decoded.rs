@@ -43,6 +43,14 @@ impl DecodedAssets {
         let mut decoded = Vec::with_capacity(plan.images.len());
         let mut decoded_source_bytes = 0_u64;
         for image_asset in &plan.images {
+            let image_started = Instant::now();
+            tracing::debug!(
+                target: "vestra.media.image",
+                asset_id = %image_asset.id,
+                asset_type = "image",
+                asset_path = %image_asset.path.display(),
+                "image decode started"
+            );
             let (width, height) = image::image_dimensions(&image_asset.path).map_err(|error| {
                 Diagnostic::error(
                     "VESTRA-IMAGE-INSPECT",
@@ -115,6 +123,16 @@ impl DecodedAssets {
                 ));
             }
             decoded.push(Arc::new(image));
+            tracing::debug!(
+                target: "vestra.media.image",
+                asset_id = %image_asset.id,
+                asset_type = "image",
+                asset_path = %image_asset.path.display(),
+                width,
+                height,
+                elapsed_ms = image_started.elapsed().as_millis(),
+                "image decoded"
+            );
         }
         let mut shapes = Vec::with_capacity(plan.shapes.len());
         for shape in &plan.shapes {

@@ -526,12 +526,39 @@ impl PreparedProject {
         // and failure context are captured per execution below.
         let operation_started = Instant::now();
         let output_path = request.output.clone();
-        let mut lifecycle = LifecycleEmitter::new(OperationId::new(), &mut emit);
+        let operation_id = OperationId::new();
+        let render_span = tracing::info_span!(
+            target: "vestra.render",
+            "render",
+            operation_id = %operation_id,
+            operation = "render",
+            output = %output_path.display(),
+            requested_backend = self.report.requested_backend.as_str(),
+            actual_backend = self.report.selected_backend.as_str(),
+            stage = tracing::field::Empty,
+        );
+        let _render_span = render_span.enter();
+        let mut lifecycle = LifecycleEmitter::new(operation_id, &mut emit);
+        tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            output = %output_path.display(),
+            requested_backend = self.report.requested_backend.as_str(),
+            actual_backend = self.report.selected_backend.as_str(),
+            "render started"
+        );
         if lifecycle.started(Some(self.report.frame_count), &output_path)
             == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {
             lifecycle.cancelled();
+            tracing::info!(
+                target: "vestra.render",
+                operation_id = %operation_id,
+                stage = "start",
+                elapsed_ms = operation_started.elapsed().as_millis(),
+                "render cancelled"
+            );
             return Err(prepared_cancelled_error(
                 operation_started,
                 self.report.frame_count,
@@ -555,12 +582,38 @@ impl PreparedProject {
                 let error = prepared_operation_error(frame_error(error), operation_started);
                 if error.is_cancelled() {
                     lifecycle.cancelled();
+                    tracing::info!(
+                        target: "vestra.render",
+                        operation_id = %operation_id,
+                        stage = %error
+                            .render_failure_context()
+                            .map_or("render", |context| context.stage.as_str()),
+                        elapsed_ms = operation_started.elapsed().as_millis(),
+                        "render cancelled"
+                    );
                 } else {
                     lifecycle.failed();
+                    crate::editor::log_render_failure(
+                        operation_id,
+                        &output_path,
+                        operation_started,
+                        &error,
+                    );
                 }
                 return Err(error);
             }
         };
+        render_span.record("stage", "finalize");
+        tracing::info!(
+            target: "vestra.render",
+            operation_id = %operation_id,
+            stage = "finalize",
+            actual_backend = summary.render_backend.as_str(),
+            total_frames = summary.frame_count,
+            elapsed_ms = operation_started.elapsed().as_millis(),
+            output = %summary.output_path.display(),
+            "render execution completed"
+        );
         lifecycle.completed(&output_path);
         let mut result = application::render_result(
             &self.project_path,

@@ -159,6 +159,15 @@ impl WgpuBackend {
         decoded: Arc<DecodedAssets>,
         pipeline_depth: usize,
     ) -> Result<Self, Diagnostic> {
+        let _backend_span = tracing::debug_span!(
+            target: "vestra.render.wgpu",
+            "backend",
+            stage = "prepare",
+            width = plan.canvas.width,
+            height = plan.canvas.height,
+            pipeline_depth
+        )
+        .entered();
         validate_pipeline_depth(pipeline_depth)?;
         let started = Instant::now();
         let requirements =
@@ -187,6 +196,16 @@ impl WgpuBackend {
             resource_estimates.working_texture_count
         );
         let pipeline_creation = pipeline_started.elapsed();
+        tracing::debug!(
+            target: "vestra.render.wgpu",
+            stage = "prepare",
+            width = plan.canvas.width,
+            height = plan.canvas.height,
+            pipeline_depth,
+            resource_bytes = resource_estimates.working_texture_bytes,
+            elapsed_ms = pipeline_creation.as_millis(),
+            "WGPU resources initialized"
+        );
         let upload_started = Instant::now();
         let mut video_decoders = BTreeMap::new();
         let mut video_decoder_open_count = 0;
@@ -217,12 +236,16 @@ impl WgpuBackend {
                     )
                 })?;
                 video_decoder_open_count += 1;
-                let mut decoder = factory.open(asset, per_decoder_budget).map_err(|error| {
-                    Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
-                })?;
-                let frame = decoder.frame_at(0.0).map_err(|error| {
-                    Diagnostic::error("WGPU-VIDEO-DECODE", crate::Category::Media, error, "")
-                })?;
+                let mut decoder = factory
+                    .open_with_span(asset, per_decoder_budget, tracing::Span::current())
+                    .map_err(|error| {
+                        Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
+                    })?;
+                let frame = decoder
+                    .frame_at_with_span(0.0, tracing::Span::current())
+                    .map_err(|error| {
+                        Diagnostic::error("WGPU-VIDEO-DECODE", crate::Category::Media, error, "")
+                    })?;
                 initial_video_frames.insert(asset_index, (frame.pts, frame.pixels));
                 video_decoders.insert(asset_index, decoder);
             }
@@ -246,6 +269,14 @@ impl WgpuBackend {
             context.adapter_limits.max_texture_dimension_2d,
             &dynamic_frames,
         )?;
+        tracing::debug!(
+            target: "vestra.render.wgpu",
+            stage = "prepare",
+            resource_count = sources.raster_textures.len(),
+            resource_bytes = sources.uploaded_texture_bytes,
+            elapsed_ms = upload_started.elapsed().as_millis(),
+            "WGPU source resources prepared"
+        );
         let mut slots = Vec::with_capacity(pipeline_depth);
         let per_slot_bind_group_count = {
             let parameter_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
@@ -471,14 +502,16 @@ impl WgpuBackend {
                                     "",
                                 )
                             })?;
-                        let frame = decoder.frame_at(*source_time).map_err(|error| {
-                            Diagnostic::error(
-                                "WGPU-VIDEO-DECODE",
-                                crate::Category::Media,
-                                error,
-                                "",
-                            )
-                        })?;
+                        let frame = decoder
+                            .frame_at_with_span(*source_time, tracing::Span::current())
+                            .map_err(|error| {
+                                Diagnostic::error(
+                                    "WGPU-VIDEO-DECODE",
+                                    crate::Category::Media,
+                                    error,
+                                    "",
+                                )
+                            })?;
                         (frame.pts, frame.pixels)
                     };
                     if self.video_pts.get(source_index) != Some(&pts) {
@@ -514,6 +547,13 @@ impl RenderBackend for WgpuBackend {
         frame_number: u64,
         evaluated: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
+        tracing::trace!(
+            target: "vestra.render.wgpu",
+            stage = "render",
+            frame = frame_number,
+            in_flight = self.in_flight(),
+            "WGPU frame submission started"
+        );
         self.context
             .runtime_errors
             .check()
@@ -713,10 +753,24 @@ impl RenderBackend for WgpuBackend {
         self.timings.gpu_frame_command_encode += execution.command_encode;
         self.timings.gpu_submission += execution.submission;
         self.stats.command_submission_count += execution.queue_submissions;
+        tracing::trace!(
+            target: "vestra.render.wgpu",
+            stage = "render",
+            frame = frame_number,
+            in_flight = self.in_flight(),
+            "WGPU frame submitted"
+        );
         Ok(())
     }
 
     fn poll_completed(&mut self, mode: PollMode) -> Result<Option<CompletedFrame>, Diagnostic> {
+        tracing::trace!(
+            target: "vestra.render.wgpu",
+            stage = "render",
+            poll_mode = ?mode,
+            in_flight = self.in_flight(),
+            "WGPU completion poll"
+        );
         self.context
             .runtime_errors
             .check()

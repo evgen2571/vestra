@@ -25,6 +25,15 @@ pub struct VideoFrame {
 pub trait VideoDecoderSession: Send {
     fn frame_at(&mut self, seconds: f64) -> Result<VideoFrame, String>;
 
+    fn frame_at_with_span(
+        &mut self,
+        seconds: f64,
+        span: tracing::Span,
+    ) -> Result<VideoFrame, String> {
+        let _entered = span.enter();
+        self.frame_at(seconds)
+    }
+
     fn metrics(&self) -> VideoDecoderMetrics {
         VideoDecoderMetrics::default()
     }
@@ -36,6 +45,16 @@ pub trait VideoDecoderFactory: Send + Sync {
         asset: &VideoAsset,
         cache_budget_bytes: u64,
     ) -> Result<Box<dyn VideoDecoderSession>, String>;
+
+    fn open_with_span(
+        &self,
+        asset: &VideoAsset,
+        cache_budget_bytes: u64,
+        span: tracing::Span,
+    ) -> Result<Box<dyn VideoDecoderSession>, String> {
+        let _entered = span.enter();
+        self.open(asset, cache_budget_bytes)
+    }
 
     fn validate(&self, _path: &Path) -> Result<(), String> {
         Ok(())

@@ -16,6 +16,11 @@ pub fn write_json_progress(event: &RenderEvent) {
     // such as local FPS and ETA belongs only to the native terminal sink.
     match serde_json::to_string(event) {
         Ok(value) => println!("{value}"),
-        Err(error) => tracing::warn!(error = %error, "cannot serialize progress event"),
+        Err(error) => tracing::warn!(
+            target: "vestra",
+            error = %error,
+            reason = "progress event serialization failed",
+            "cannot serialize progress event"
+        ),
     }
 }

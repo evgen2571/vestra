@@ -49,11 +49,24 @@ pub fn consume_master_pcm(
     maximum_audio_sources: usize,
     mut consume: impl FnMut(&[f32]) -> Result<(), MediaError>,
 ) -> Result<MasterPcmSpec, MediaError> {
+    tracing::debug!(
+        target: "vestra.media.audio",
+        asset_type = "audio",
+        duration_ms = project_duration * 1000.0,
+        "audio preparation started"
+    );
     let spec = MasterPcmSpec::timeline_master();
     let (expected_frames, graph) =
         master_pcm_execution(mix, project_duration, maximum_audio_sources)?;
     let Some(graph) = graph else {
         consume_silence(expected_frames, &mut consume)?;
+        tracing::debug!(
+            target: "vestra.media.audio",
+            asset_type = "audio",
+            total_frames = expected_frames,
+            reason = "audio mix has no audible contributors",
+            "audio preparation used silence"
+        );
         return Ok(spec);
     };
 
@@ -129,6 +142,12 @@ pub fn consume_master_pcm(
         });
     }
     result?;
+    tracing::debug!(
+        target: "vestra.media.audio",
+        asset_type = "audio",
+        total_frames = expected_frames,
+        "audio preparation completed"
+    );
     Ok(spec)
 }
 

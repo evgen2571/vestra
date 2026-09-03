@@ -20,35 +20,36 @@ pub fn run() -> ExitCode {
         eprintln!("failed to initialize logging: {error}");
         return ExitCode::FAILURE;
     }
-    tracing::debug!(verbosity = cli.verbose, "logging configured");
+    tracing::debug!(target: "vestra", verbosity = cli.verbose, "logging configured");
     match cli.command {
         Command::Validate(args) => {
-            tracing::info!(command = "validate", "command started");
+            tracing::info!(target: "vestra.project", command = "validate", "command started");
             validate::run(args.project, args.format.into())
         }
         Command::Inspect(args) => {
-            tracing::info!(command = "inspect", "command started");
+            tracing::info!(target: "vestra.project", command = "inspect", "command started");
             inspect::run(args.project, args.preview, args.format.into())
         }
-        Command::Render(args) => {
-            tracing::info!(command = "render", "command started");
-            render::run(
-                args.project,
-                args.output,
-                args.overwrite,
-                args.preview,
-                args.format.into(),
-                args.progress.into(),
-                args.report,
-                args.render_backend.into(),
-            )
-        }
+        Command::Render(args) => render::run(
+            args.project,
+            args.output,
+            args.overwrite,
+            args.preview,
+            args.format.into(),
+            args.progress.into(),
+            args.report,
+            args.render_backend.into(),
+        ),
         Command::GenerateSchema(args) => {
-            tracing::info!(command = "generate-schema", "command started");
+            tracing::info!(
+                target: "vestra.project",
+                command = "generate-schema",
+                "command started"
+            );
             schema::run(args.output)
         }
         Command::Version => {
-            tracing::info!(command = "version", "command started");
+            tracing::info!(target: "vestra", command = "version", "command started");
             print_success(
                 "version",
                 ResultFormat::Human,

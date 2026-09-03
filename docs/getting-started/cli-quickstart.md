@@ -75,7 +75,9 @@ cargo run -q -p vestra-cli -- render solid.json \
 
 The output is `quickstart.mp4` in the current directory. It is a 320×180,
 24 fps, one-second MP4 filled with `#2f6fed`. `--progress none` keeps this
-minimal command quiet. Omit it to use the default human progress display.
+minimal command quiet. Progress defaults to Auto: it is shown on an interactive
+terminal and stays quiet when stderr is redirected. Use `--progress human` to
+force the terminal presentation.
 
 The normal backend choice is `auto`. `cpu` is useful for a deterministic first
 render. `wgpu` selects a WGPU adapter, which may be software rather than a

@@ -46,14 +46,34 @@ fn json_output_is_one_parseable_line_with_structured_fields() {
     let subscriber = build_with_terminal_output(
         ObservabilityConfig::default()
             .with_format(LogFormat::Json)
-            .with_filter("formatting=info"),
+            .with_filter("vestra.render=trace"),
         test_terminal(Arc::clone(&bytes)),
     )
     .expect("subscriber builds");
 
     tracing::subscriber::with_default(subscriber, || {
-        let span = tracing::info_span!("render", operation_id = 17);
-        span.in_scope(|| tracing::info!(answer = 42, "json event"));
+        let span = tracing::info_span!(
+            target: "vestra.render",
+            "render",
+            operation_id = 17,
+            output = "output.mp4"
+        );
+        span.in_scope(|| {
+            let stage = tracing::debug_span!(
+                target: "vestra.render.wgpu",
+                "backend",
+                stage = "prepare"
+            );
+            stage.in_scope(|| {
+                tracing::info!(
+                    target: "vestra.render.wgpu",
+                    adapter = "test-adapter",
+                    device_type = "integrated",
+                    answer = 42,
+                    "backend selected"
+                );
+            });
+        });
     });
 
     let output = captured(&bytes);
@@ -61,10 +81,13 @@ fn json_output_is_one_parseable_line_with_structured_fields() {
     let record: serde_json::Value = serde_json::from_str(output.trim()).expect("valid JSON line");
     assert!(record["timestamp"].is_string());
     assert_eq!(record["level"], "INFO");
-    assert_eq!(record["target"], "formatting");
-    assert_eq!(record["fields"]["message"], "json event");
+    assert_eq!(record["target"], "vestra.render.wgpu");
+    assert_eq!(record["fields"]["message"], "backend selected");
     assert_eq!(record["fields"]["answer"], 42);
-    assert_eq!(record["span"]["name"], "render");
+    assert_eq!(record["span"]["name"], "backend");
+    assert!(output.contains("vestra.render"));
+    assert!(output.contains("operation_id"));
+    assert!(output.contains("output.mp4"));
     assert!(!output.contains("\x1b["));
 }
 

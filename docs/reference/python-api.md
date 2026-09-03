@@ -24,7 +24,8 @@ project.validate() -> ValidationReport
 project.prepare(*, backend="auto") -> PreparedProject
 project.render_frame(seconds, *, backend="auto") -> Frame
 project.render(output, *, backend="auto", overwrite=False, preview=False,
-               progress=None, cancellation=None) -> RenderResult
+               progress=None, show_progress=True, on_progress=None,
+               cancellation=None) -> RenderResult
 ```
 
 `validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
@@ -55,12 +56,12 @@ opacity/blending.
 | `ProjectSnapshot` | `load(path)`, `from_json(text, *, base_directory=None)`, `from_dict(data, *, base_directory=None)`, `to_json()`, `to_dict()`, `save(path)`. |
 | `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, progress=None, cancellation=None)`. |
 | `PrepareOptions` | `PrepareOptions(*, backend=None)`. |
-| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, progress=None, cancellation=None)`. |
+| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, progress=None, show_progress=True, on_progress=None, cancellation=None)`. |
 | `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
 | `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for `PreparedProject.render_video`. |
 | `CancellationToken` | `CancellationToken()`, `cancel()`, read-only `is_cancelled`. |
 
-`RenderEvent` exposes `schema_version`, `kind`, `frame`, `total_frames`, `progress`, `output_path` and `warnings`. Python `progress` callbacks receive only `started` and `progress` events. Native Rust observers also receive `completed`, after successful output publication. A successful `RenderResult` exposes output dimensions/timing, selected/requested backend, fallback, adapter, warnings, detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a cancelled operation does not return a `RenderResult`.
+`RenderEvent` exposes `schema_version`, `kind`, `frame`, `total_frames`, `progress`, `output_path` and `warnings`. Pass either `progress` or `on_progress`, not both. Set `show_progress=False` to disable the built-in terminal presentation. Python progress callbacks receive only `started` and `progress` events. Native Rust observers also receive `completed`, after successful output publication. A successful `RenderResult` exposes output dimensions/timing, selected/requested backend, fallback, adapter, warnings, detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a cancelled operation does not return a `RenderResult`.
 
 If a Python progress callback raises, Vestra stops the native render and
 re-raises the original Python exception. No `RenderResult` is returned. If

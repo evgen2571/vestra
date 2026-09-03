@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/vestra-core",
     "crates/vestra-progress",
+    "crates/vestra-observability",
     "crates/vestra-render",
     "crates/vestra-media",
     "crates/vestra",

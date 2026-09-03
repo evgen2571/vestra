@@ -48,6 +48,7 @@ from ._native import (
     ValidationReport,
     VideoEditorError,
     native_version,
+    configure_logging,
 )
 
 # Mutable high-level editor model. ``ProjectSnapshot`` remains the stable
@@ -151,6 +152,7 @@ __version__ = native_version()
 __all__ = [
     "__version__",
     "native_version",
+    "configure_logging",
     "BackendPreference",
     "BackendKind",
     "BackendFallback",

@@ -2747,6 +2747,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
+ "tracing-subscriber",
  "vestra-core",
  "vestra-media",
  "vestra-progress",
@@ -2826,6 +2827,7 @@ dependencies = [
  "pythonize",
  "serde_json",
  "vestra",
+ "vestra-observability",
 ]
 
 [[package]]

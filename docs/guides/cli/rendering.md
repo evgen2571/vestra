@@ -20,14 +20,14 @@ ve render project.json \
   --output final.mp4 \
   --overwrite \
   --render-backend cpu \
-  --progress human \
+  --progress terminal \
   --format json \
   --report render-report.json
 ```
 
 The default output format is human-readable. Progress defaults to Auto: it is
 shown on a supported interactive terminal and disabled for redirected or CI
-stderr. Use `--progress human` to force the terminal presentation,
+ stderr. Use `--progress terminal` to force the terminal presentation,
 `--progress json` for the event stream, or `--progress none` when another
 program owns the display. `--format json` selects a machine-readable final
 result. `--preview` requests preview rendering behavior.

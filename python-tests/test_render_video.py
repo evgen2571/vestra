@@ -39,7 +39,8 @@ def test_prepared_video_render_publishes_output_and_delivers_completed(tmp_path:
     assert result.timing_scope is vestra.RenderTimingScope.PREPARED_OPERATION
     assert result.performance.rendered_frame_count == result.total_frames
     assert [event.kind for event in events] == [
-        "started", "stage_changed", "stage_changed", "stage_changed", "completed"
+        "started", "stage_changed", "stage_changed", "stage_changed",
+        "stage_changed", "completed",
     ]
     assert events[0].output_path == output
     assert events[0].operation_id == events[-1].operation_id
@@ -191,7 +192,7 @@ def test_callback_failure_at_encoding_aborts_before_publication(tmp_path: Path) 
             vestra.PreparedVideoRenderRequest(output), progress=fail_at_encoding
         )
 
-    assert seen == ["started", "stage_changed", "stage_changed"]
+    assert seen == ["started", "stage_changed", "stage_changed", "stage_changed"]
     assert not output.exists()
     assert isinstance(raised.value.render_cleanup_error, vestra.CancelledError)
 
@@ -267,7 +268,7 @@ def test_callback_failure_after_progress_invalidates_the_native_prepared_state(t
     native._test_reset_callback_attach_count()
     with pytest.raises(RuntimeError, match="after progress") as raised:
         prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=fail_on_progress)
-    assert seen == ["started", "stage_changed", "progress"]
+    assert seen == ["started", "stage_changed", "stage_changed", "progress"]
     assert native._test_callback_attach_count() == len(seen)
     assert not output.exists()
     cleanup_error = raised.value.render_cleanup_error
@@ -319,7 +320,9 @@ def test_callback_cancellation_removes_output_and_invalidates_after_submission(t
         )
     assert raised.value.temporary_removed is True
     assert token.is_cancelled
-    assert events == ["started", "stage_changed", "progress", "cancelled"]
+    assert events == [
+        "started", "stage_changed", "stage_changed", "progress", "cancelled"
+    ]
     assert not output.exists()
     assert list(tmp_path.iterdir()) == []
     with pytest.raises(vestra.FrameRenderError) as invalidated:
@@ -471,10 +474,10 @@ def test_render_event_snapshots_keep_the_sdk_contract(tmp_path: Path) -> None:
     )
 
     assert [event.kind for event in events] == [
-        "started", "stage_changed", "progress", "progress", "progress",
-        "stage_changed", "stage_changed", "completed",
+        "started", "stage_changed", "stage_changed", "progress", "progress",
+        "progress", "stage_changed", "stage_changed", "completed",
     ]
-    started, rendering, *rest = events
+    started, preparing, rendering, *rest = events
     progress = [event for event in events if event.kind == "progress"]
     assert started.schema_version == 2
     assert started.operation_id == events[-1].operation_id
@@ -484,6 +487,7 @@ def test_render_event_snapshots_keep_the_sdk_contract(tmp_path: Path) -> None:
     assert started.fraction is None
     assert started.output_path == output
     assert all(event.schema_version == 2 for event in events)
+    assert preparing.stage == "preparing"
     assert rendering.stage == "rendering"
     assert [event.frame for event in progress] == [1, 2, 3]
     assert all(event.total_frames == 3 for event in progress)

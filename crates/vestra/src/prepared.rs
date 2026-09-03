@@ -538,7 +538,7 @@ impl PreparedProject {
             stage = tracing::field::Empty,
         );
         let _render_span = render_span.enter();
-        let mut lifecycle = LifecycleEmitter::new(operation_id, &mut emit);
+        let mut lifecycle = LifecycleEmitter::new(operation_id, &render_span, &mut emit);
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
@@ -555,7 +555,24 @@ impl PreparedProject {
             tracing::info!(
                 target: "vestra.render",
                 operation_id = %operation_id,
-                stage = "start",
+                stage = "preparing",
+                elapsed_ms = operation_started.elapsed().as_millis(),
+                "render cancelled"
+            );
+            return Err(prepared_cancelled_error(
+                operation_started,
+                self.report.frame_count,
+                output_path,
+            ));
+        }
+        if lifecycle.stage(crate::RenderStage::Preparing) == crate::RenderObserverControl::Cancel
+            || cancellation.is_cancelled()
+        {
+            lifecycle.cancelled();
+            tracing::info!(
+                target: "vestra.render",
+                operation_id = %operation_id,
+                stage = "preparing",
                 elapsed_ms = operation_started.elapsed().as_millis(),
                 "render cancelled"
             );
@@ -603,11 +620,10 @@ impl PreparedProject {
                 return Err(error);
             }
         };
-        render_span.record("stage", "finalize");
         tracing::info!(
             target: "vestra.render",
             operation_id = %operation_id,
-            stage = "finalize",
+            stage = "finalizing",
             actual_backend = summary.render_backend.as_str(),
             total_frames = summary.frame_count,
             elapsed_ms = operation_started.elapsed().as_millis(),
@@ -625,6 +641,7 @@ impl PreparedProject {
         result.timings.operation_total_ms = operation_started.elapsed().as_millis();
         result.timings.total_ms = result.timings.operation_total_ms;
         result.elapsed_ms = result.timings.operation_total_ms;
+        crate::editor::log_render_timing_summary(operation_id, &result.timings);
         Ok(result)
     }
 }

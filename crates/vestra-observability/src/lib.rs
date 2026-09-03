@@ -348,6 +348,9 @@ impl Write for OutputWriter {
                     if let Err(error) = file.write_all(bytes) {
                         first_error.get_or_insert(error);
                         written = 0;
+                    } else if let Err(error) = file.flush() {
+                        first_error.get_or_insert(error);
+                        written = 0;
                     }
                 }
                 Err(_) => {

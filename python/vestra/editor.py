@@ -763,10 +763,11 @@ class Project:
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
     ) -> _native.RenderResult:
-        """Render using native stderr progress by default.
+        """Render using native Auto progress by default.
 
         ``show_progress=False`` disables the built-in presentation. ``progress``
-        and ``on_progress`` are callback aliases; either one replaces it.
+        is a compatibility alias for ``on_progress``; either callback replaces
+        the built-in presentation.
         """
         request = _native.RenderRequest(
             _path(output, "output"),

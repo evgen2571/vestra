@@ -140,6 +140,25 @@ fn trace_filter_enables_debug_and_trace_records() {
 }
 
 #[test]
+fn performance_target_can_be_enabled_without_ordinary_vestra_debug_records() {
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = build_with_terminal_output(
+        ObservabilityConfig::default().with_filter("warn,vestra.performance=debug"),
+        test_terminal(Arc::clone(&bytes)),
+    )
+    .expect("subscriber builds");
+
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::debug!(target: "vestra.performance", elapsed_ms = 23, "render timing summary");
+        tracing::debug!(target: "vestra.render", "ordinary debug record");
+    });
+
+    let output = captured(&bytes);
+    assert!(output.contains("render timing summary"));
+    assert!(!output.contains("ordinary debug record"));
+}
+
+#[test]
 fn file_output_supports_append_truncate_and_flush() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("events.log");

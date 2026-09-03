@@ -3,15 +3,19 @@
     reason = "PyO3 method signatures are clearer without const"
 )]
 
-use std::sync::{Condvar, Mutex, OnceLock};
+use std::{
+    path::PathBuf,
+    sync::{Condvar, Mutex, OnceLock},
+};
 
 use pyo3::{
     create_exception,
-    exceptions::{PyRuntimeError, PyValueError},
+    exceptions::{PyOSError, PyRuntimeError, PyValueError},
     prelude::*,
     types::{PyAny, PyList, PyModule},
 };
 use vestra::{Editor as NativeEditor, EditorError, LoadError};
+use vestra_observability::{FileMode, LogFormat, LogOutput, ObservabilityConfig, Verbosity};
 
 mod conversion;
 mod diagnostics;
@@ -151,6 +155,86 @@ fn audio_effect_definitions(py: Python<'_>) -> PyResult<Py<PyAny>> {
         .map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
+fn logging_level(value: &str) -> PyResult<Verbosity> {
+    match value.to_ascii_lowercase().as_str() {
+        "quiet" | "error" => Ok(Verbosity::Quiet),
+        "normal" | "warn" | "warning" => Ok(Verbosity::Normal),
+        "info" => Ok(Verbosity::Verbose),
+        "debug" => Ok(Verbosity::Debug),
+        "trace" => Ok(Verbosity::Trace),
+        _ => Err(PyValueError::new_err(
+            "level must be one of: error, warn, info, debug, trace",
+        )),
+    }
+}
+
+fn logging_format(value: &str) -> PyResult<LogFormat> {
+    match value.to_ascii_lowercase().as_str() {
+        "human" => Ok(LogFormat::Human),
+        "json" => Ok(LogFormat::Json),
+        _ => Err(PyValueError::new_err("format must be 'human' or 'json'")),
+    }
+}
+
+fn logging_output(value: &str, file: Option<PathBuf>) -> PyResult<LogOutput> {
+    match value.to_ascii_lowercase().as_str() {
+        "stderr" if file.is_none() => Ok(LogOutput::Stderr),
+        "stderr" | "file" => file.map_or_else(
+            || {
+                Err(PyValueError::new_err(
+                    "a file path is required for the selected logging output",
+                ))
+            },
+            |path| Ok(LogOutput::File(path)),
+        ),
+        "stderr_and_file" | "stderr+file" => file.map_or_else(
+            || {
+                Err(PyValueError::new_err(
+                    "a file path is required for the selected logging output",
+                ))
+            },
+            |path| Ok(LogOutput::StderrAndFile(path)),
+        ),
+        _ => Err(PyValueError::new_err(
+            "output must be 'stderr', 'file', or 'stderr_and_file'",
+        )),
+    }
+}
+
+/// Installs the shared Rust tracing subscriber for an explicit Python process boundary.
+#[pyfunction]
+#[pyo3(signature = (level = "info", format = "human", output = "stderr", file = None, filter = None))]
+fn configure_logging(
+    level: &str,
+    format: &str,
+    output: &str,
+    file: Option<&Bound<'_, PyAny>>,
+    filter: Option<&str>,
+) -> PyResult<()> {
+    let verbosity = logging_level(level)?;
+    let format = logging_format(format)?;
+    let file = file.map(conversion::path_from_python).transpose()?;
+    let output = logging_output(output, file)?;
+    let mut config = ObservabilityConfig::with_verbosity(verbosity)
+        .with_format(format)
+        .with_output(output)
+        .with_file_mode(FileMode::Append);
+    if let Some(filter) = filter {
+        config = config.with_filter(filter);
+    }
+    vestra_observability::try_init(config).map_err(|error| match error {
+        vestra_observability::ObservabilityError::InvalidFilter { .. } => {
+            PyValueError::new_err(error.to_string())
+        }
+        vestra_observability::ObservabilityError::OpenFile { .. } => {
+            PyOSError::new_err(error.to_string())
+        }
+        vestra_observability::ObservabilityError::Install(_) => {
+            PyRuntimeError::new_err(error.to_string())
+        }
+    })
+}
+
 #[derive(Default)]
 struct DetachBarrier {
     entered: bool,
@@ -252,6 +336,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(video_duration, module)?)?;
     module.add_function(wrap_pyfunction!(effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(audio_effect_definitions, module)?)?;
+    module.add_function(wrap_pyfunction!(configure_logging, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;
     module.add_function(wrap_pyfunction!(_test_wait_until_detached_entered, module)?)?;
     module.add_function(wrap_pyfunction!(_test_release_detached_wait, module)?)?;
@@ -308,6 +393,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "native_version",
                 "effect_definitions",
                 "audio_effect_definitions",
+                "configure_logging",
             ],
         )?,
     )?;

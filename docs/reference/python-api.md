@@ -28,6 +28,12 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
                cancellation=None) -> RenderResult
 ```
 
+`project.render("output.mp4")` uses native Auto progress by default. Set
+`show_progress=False` to disable it, or pass `on_progress=my_callback` to
+replace the built-in terminal renderer with a callback. The older
+`progress=` spelling remains a compatibility alias and is not the preferred
+name.
+
 `validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
 
 Layers expose an ordered mask collection:
@@ -54,19 +60,51 @@ opacity/blending.
 | Type | Exact construction or methods |
 | --- | --- |
 | `ProjectSnapshot` | `load(path)`, `from_json(text, *, base_directory=None)`, `from_dict(data, *, base_directory=None)`, `to_json()`, `to_dict()`, `save(path)`. |
-| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, progress=None, cancellation=None)`. |
+| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, on_progress=None, progress=None, cancellation=None)`. `progress` is a compatibility alias. |
 | `PrepareOptions` | `PrepareOptions(*, backend=None)`. |
-| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, progress=None, show_progress=True, on_progress=None, cancellation=None)`. |
+| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, on_progress=None, progress=None, show_progress=True, cancellation=None)`. `progress` is a compatibility alias. |
 | `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
 | `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for `PreparedProject.render_video`. |
 | `CancellationToken` | `CancellationToken()`, `cancel()`, read-only `is_cancelled`. |
 
-`RenderEvent` exposes `schema_version`, `kind`, `frame`, `total_frames`, `progress`, `output_path` and `warnings`. Pass either `progress` or `on_progress`, not both. Set `show_progress=False` to disable the built-in terminal presentation. Python progress callbacks receive only `started` and `progress` events. Native Rust observers also receive `completed`, after successful output publication. A successful `RenderResult` exposes output dimensions/timing, selected/requested backend, fallback, adapter, warnings, detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a cancelled operation does not return a `RenderResult`.
+`RenderEvent` v2 exposes `schema_version`, `kind`, `operation_id`, `stage`,
+`frame`, `total_frames`, `fraction`, and `output_path` with the applicable
+fields optional. Its lifecycle is `started`, `stage_changed`, `progress`, and
+one terminal event: `completed`, `cancelled`, or `failed`. Pass either
+`progress` or `on_progress`, not both. Set `show_progress=False` to disable
+the built-in Auto terminal presentation. Custom callbacks replace the built-in
+terminal renderer. `Completed` occurs only after encoder finalization and
+successful output publication. Rendering may reach fraction `1.0` before
+encoding and finalizing complete. A callback error before terminal success may
+abort the operation; an error while receiving `Completed` cannot invalidate a
+successfully published render. A successful `RenderResult` exposes output
+dimensions/timing, selected/requested backend, fallback, adapter, warnings,
+detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a
+cancelled operation does not return a `RenderResult`.
 
 If a Python progress callback raises, Vestra stops the native render and
 re-raises the original Python exception. No `RenderResult` is returned. If
 cleanup reports a native error, it is attached as
 `error.render_cleanup_error`; it does not replace the callback exception.
+
+## Logging
+
+Logging is explicit and uses the shared Rust observability implementation;
+importing Vestra and ordinary rendering do not install a global subscriber:
+
+```python
+import vestra
+
+vestra.configure_logging(level="info")
+vestra.configure_logging(level="debug", format="json", file="vestra.log")
+```
+
+`level` accepts `error`, `warn`, `info`, `debug`, and `trace`. `format` is
+`human` or `json`. Output is `stderr` by default, or `file`/`stderr_and_file`
+when `file` is supplied. `filter=` accepts an EnvFilter directive such as
+`"vestra=info,vestra.render.wgpu=debug"`; `RUST_LOG` remains the advanced
+override. A second global initialization raises a clear `RuntimeError`.
+JSON tracing logs are distinct from JSON RenderEvent progress.
 
 ## Reports and errors
 

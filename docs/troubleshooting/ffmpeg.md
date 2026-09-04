@@ -2,7 +2,13 @@
 
 ## Build cannot find FFmpeg
 
-`vestra-media` links native FFmpeg through `ffmpeg-next`. A build error about `libavcodec.pc`, `libavformat.pc`, `libavutil.pc`, `libswscale.pc` or `pkg-config` means the development headers/libraries are missing from the active build environment. Installing only an `ffmpeg` executable does not fix that. Use the repository Nix development shell where possible, or install the platform's FFmpeg development package and make its `pkg-config` files visible.
+`vestra-media` links native FFmpeg through `ffmpeg-next` and enables its bundled
+FFmpeg build. A plain Cargo build therefore does not require `libavcodec.pc`,
+`libavformat.pc`, `libavutil.pc`, or `libswscale.pc`; it does require a C
+compiler, `make`, `git`, `nasm`, and network access for the first build. Remove
+stale build artifacts and retry with `cargo clean && cargo build` if a previous
+checkout was built with the system-library configuration. The repository Nix
+development shell supplies the required tools.
 
 ## `ffmpeg` or `ffprobe` is missing at runtime
 

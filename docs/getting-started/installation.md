@@ -12,19 +12,21 @@ You need:
 - A Rust toolchain supported by the repository's `Cargo.lock` and edition 2024
   workspace.
 - `uv` for the locked Python environment.
-- FFmpeg for runtime encoding and FFmpeg development libraries discoverable by
-  `pkg-config` when building the Rust media crate.
+- FFmpeg for runtime encoding, plus a C toolchain, `make`, `git`, and `nasm`
+  for the bundled FFmpeg build used by the Rust media crate.
 
 The repository's Nix flake supplies a convenient development environment with
-Rust, Python, `uv`, `pkg-config`, FFmpeg, and the FFmpeg development outputs:
+Rust, Python, `uv`, `pkg-config`, FFmpeg, and the native build tools:
 
 ```bash
 nix develop
 ```
 
 Nix is convenient, not mandatory. On other systems, install the prerequisites
-with the platform's package manager and make sure both `ffmpeg` and the native
-FFmpeg libraries are available.
+with the platform's package manager and make sure `ffmpeg`, a C compiler,
+`make`, `git`, and `nasm` are available. The Rust media crate builds the FFmpeg
+libraries it needs, so `libavutil.pc` and the other FFmpeg development package
+files do not need to be installed or added to `PKG_CONFIG_PATH`.
 
 ## Set up a checkout
 

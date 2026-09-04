@@ -26,6 +26,8 @@
             pkg-config
             clang
             gnumake
+            git
+            nasm
             ffmpeg
           ];
 

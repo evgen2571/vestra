@@ -296,6 +296,131 @@ impl PreparedState {
     pub(super) fn invalidate(&mut self) {
         self.lifecycle = PreparedLifecycle::Invalidated;
     }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "frame failures retain SDK diagnostics"
+    )]
+    pub(crate) fn render_frame(
+        &mut self,
+        frame_number: u64,
+    ) -> Result<CompletedFrame, RenderError> {
+        self.ensure_ready()?;
+        if frame_number >= self.plan.frame_count {
+            return Err(frame_error(
+                self,
+                frame_diagnostic(
+                    "VESTRA-FRAME-RANGE",
+                    "frame number is outside the prepared timeline",
+                ),
+            ));
+        }
+        if self.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
+            && let Some(template) = &self.static_visual_template
+        {
+            return Ok(CompletedFrame {
+                frame_number,
+                rgba: template.to_vec(),
+            });
+        }
+        let active = self.schedule.active_at(&self.plan, frame_number);
+        let time = vestra_core::timeline::frame_time_nanos(
+            frame_number,
+            self.plan.frame_rate.0,
+            self.plan.frame_rate.1,
+        )
+        .map_err(|_| {
+            frame_error(
+                self,
+                frame_diagnostic(
+                    "VESTRA-TIMELINE-OVERFLOW",
+                    "frame timestamp cannot be represented",
+                ),
+            )
+        })?;
+        let context = vestra_core::plan::EvaluationContext::new(&self.scalar_signals);
+        let evaluated = vestra_core::plan::evaluate_with_context(
+            &self.plan, &active, time, &context,
+        )
+        .map_err(|error| {
+            frame_error(
+                self,
+                frame_diagnostic("VESTRA-EVALUATION", &error.to_string()),
+            )
+        })?;
+        self.backend.reset_operation_metrics();
+        if let Err(diagnostic) = self.backend.submit_frame(frame_number, &evaluated) {
+            self.backend.abort();
+            self.invalidate();
+            return Err(frame_error(self, diagnostic));
+        }
+        let completion = match self.backend.poll_completed(PollMode::WaitForOne) {
+            Ok(Some(completion)) => completion,
+            Ok(None) => {
+                self.backend.abort();
+                self.invalidate();
+                return Err(frame_error(
+                    self,
+                    frame_diagnostic(
+                        "VESTRA-FRAME-COMPLETION",
+                        "backend did not complete the submitted frame",
+                    ),
+                ));
+            }
+            Err(diagnostic) => {
+                self.backend.abort();
+                self.invalidate();
+                return Err(frame_error(self, diagnostic));
+            }
+        };
+        if completion.frame_number != frame_number {
+            self.backend.abort();
+            self.invalidate();
+            return Err(frame_error(
+                self,
+                frame_diagnostic(
+                    "VESTRA-FRAME-COMPLETION",
+                    "backend completed an unexpected frame",
+                ),
+            ));
+        }
+        if let Err(diagnostic) = validate_completed_frame(&self.plan, &completion) {
+            self.backend.abort();
+            self.invalidate();
+            return Err(frame_error(self, diagnostic));
+        }
+        match self.backend.flush() {
+            Ok(extra) if extra.is_empty() => {}
+            Ok(_) => {
+                self.backend.abort();
+                self.invalidate();
+                return Err(frame_error(
+                    self,
+                    frame_diagnostic(
+                        "VESTRA-FRAME-COMPLETION",
+                        "backend retained an unexpected completion",
+                    ),
+                ));
+            }
+            Err(diagnostic) => {
+                self.backend.abort();
+                self.invalidate();
+                return Err(frame_error(self, diagnostic));
+            }
+        }
+        if let Err(diagnostic) = self.backend.verify_idle() {
+            self.backend.abort();
+            self.invalidate();
+            return Err(frame_error(self, diagnostic));
+        }
+        if self.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
+            && completion.rgba.len()
+                <= usize::try_from(self.plan.limits.maximum_cache_bytes).unwrap_or(usize::MAX)
+        {
+            self.static_visual_template = Some(Arc::from(completion.rgba.clone()));
+        }
+        Ok(completion)
+    }
 }
 
 #[allow(
@@ -508,131 +633,6 @@ fn analysis_error(
             ..RenderTimings::default()
         },
     }
-}
-
-#[allow(
-    clippy::result_large_err,
-    reason = "frame failures retain SDK diagnostics"
-)]
-pub(crate) fn render_prepared_frame(
-    prepared: &mut PreparedState,
-    frame_number: u64,
-) -> Result<CompletedFrame, RenderError> {
-    prepared.ensure_ready()?;
-    if frame_number >= prepared.plan.frame_count {
-        return Err(frame_error(
-            prepared,
-            frame_diagnostic(
-                "VESTRA-FRAME-RANGE",
-                "frame number is outside the prepared timeline",
-            ),
-        ));
-    }
-    if prepared.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
-        && let Some(template) = &prepared.static_visual_template
-    {
-        return Ok(CompletedFrame {
-            frame_number,
-            rgba: template.to_vec(),
-        });
-    }
-    let active = prepared.schedule.active_at(&prepared.plan, frame_number);
-    let time = vestra_core::timeline::frame_time_nanos(
-        frame_number,
-        prepared.plan.frame_rate.0,
-        prepared.plan.frame_rate.1,
-    )
-    .map_err(|_| {
-        frame_error(
-            prepared,
-            frame_diagnostic(
-                "VESTRA-TIMELINE-OVERFLOW",
-                "frame timestamp cannot be represented",
-            ),
-        )
-    })?;
-    let context = vestra_core::plan::EvaluationContext::new(&prepared.scalar_signals);
-    let evaluated =
-        vestra_core::plan::evaluate_with_context(&prepared.plan, &active, time, &context).map_err(
-            |error| {
-                frame_error(
-                    prepared,
-                    frame_diagnostic("VESTRA-EVALUATION", &error.to_string()),
-                )
-            },
-        )?;
-    prepared.backend.reset_operation_metrics();
-    if let Err(diagnostic) = prepared.backend.submit_frame(frame_number, &evaluated) {
-        prepared.backend.abort();
-        prepared.invalidate();
-        return Err(frame_error(prepared, diagnostic));
-    }
-    let completion = match prepared.backend.poll_completed(PollMode::WaitForOne) {
-        Ok(Some(completion)) => completion,
-        Ok(None) => {
-            prepared.backend.abort();
-            prepared.invalidate();
-            return Err(frame_error(
-                prepared,
-                frame_diagnostic(
-                    "VESTRA-FRAME-COMPLETION",
-                    "backend did not complete the submitted frame",
-                ),
-            ));
-        }
-        Err(diagnostic) => {
-            prepared.backend.abort();
-            prepared.invalidate();
-            return Err(frame_error(prepared, diagnostic));
-        }
-    };
-    if completion.frame_number != frame_number {
-        prepared.backend.abort();
-        prepared.invalidate();
-        return Err(frame_error(
-            prepared,
-            frame_diagnostic(
-                "VESTRA-FRAME-COMPLETION",
-                "backend completed an unexpected frame",
-            ),
-        ));
-    }
-    if let Err(diagnostic) = validate_completed_frame(&prepared.plan, &completion) {
-        prepared.backend.abort();
-        prepared.invalidate();
-        return Err(frame_error(prepared, diagnostic));
-    }
-    match prepared.backend.flush() {
-        Ok(extra) if extra.is_empty() => {}
-        Ok(_) => {
-            prepared.backend.abort();
-            prepared.invalidate();
-            return Err(frame_error(
-                prepared,
-                frame_diagnostic(
-                    "VESTRA-FRAME-COMPLETION",
-                    "backend retained an unexpected completion",
-                ),
-            ));
-        }
-        Err(diagnostic) => {
-            prepared.backend.abort();
-            prepared.invalidate();
-            return Err(frame_error(prepared, diagnostic));
-        }
-    }
-    if let Err(diagnostic) = prepared.backend.verify_idle() {
-        prepared.backend.abort();
-        prepared.invalidate();
-        return Err(frame_error(prepared, diagnostic));
-    }
-    if prepared.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
-        && completion.rgba.len()
-            <= usize::try_from(prepared.plan.limits.maximum_cache_bytes).unwrap_or(usize::MAX)
-    {
-        prepared.static_visual_template = Some(Arc::from(completion.rgba.clone()));
-    }
-    Ok(completion)
 }
 
 /// Backend output is an internal contract, not caller-controlled input. Validate

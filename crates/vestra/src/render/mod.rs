@@ -11,8 +11,7 @@ pub(crate) use engine::inject_wgpu_preparation_failure;
 #[cfg(test)]
 pub(crate) use engine::render_prepared_with_sink;
 pub(crate) use engine::{
-    LifecycleEmitter, PreparedState, prepare_for_video, render_prepared_frame,
-    render_prepared_with_lifecycle,
+    LifecycleEmitter, PreparedState, prepare_for_video, render_prepared_with_lifecycle,
 };
 pub(crate) use engine::{trace_millisecond_value, trace_milliseconds};
 

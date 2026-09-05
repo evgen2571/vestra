@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Command};
 
-use super::super::{RenderBackendPreference, prepare_for_video, render_prepared_frame};
+use super::super::{RenderBackendPreference, prepare_for_video};
 use crate::{
     plan,
     project::{ValidationOptions, load_and_validate},
@@ -56,18 +56,21 @@ fn native_vfr_video_renders_through_layer_timing_and_holds_previous_pts() {
         (45, [255, 255, 0, 255]),
     ];
     for (frame_number, colour) in expected {
-        let frame =
-            render_prepared_frame(&mut prepared, frame_number).expect("native VFR frame renders");
+        let frame = prepared
+            .render_frame(frame_number)
+            .expect("native VFR frame renders");
         assert_pixel_near(&frame.rgba, colour);
     }
 
-    let repeated = render_prepared_frame(&mut prepared, 45)
+    let repeated = prepared
+        .render_frame(45)
         .expect("repeated VFR frame renders")
         .rgba;
     let non_monotonic = [3, 37, 10, 45]
         .into_iter()
         .map(|frame_number| {
-            render_prepared_frame(&mut prepared, frame_number)
+            prepared
+                .render_frame(frame_number)
                 .expect("non-monotonic VFR frame renders")
                 .rgba
         })

@@ -15,7 +15,7 @@ pub(crate) use metrics::{trace_millisecond_value, trace_milliseconds};
 pub(crate) use selection::inject_wgpu_preparation_failure;
 pub(crate) use types::backend_fallback_warning;
 
-pub(crate) use preparation::{PreparedState, prepare_for_video, render_prepared_frame};
+pub(crate) use preparation::{PreparedState, prepare_for_video};
 pub(crate) use runner::LifecycleEmitter;
 pub(crate) use static_render::render_prepared_with_lifecycle;
 #[cfg(test)]

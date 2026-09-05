@@ -18,6 +18,7 @@ use crate::{
 mod assets;
 mod audio;
 mod clips;
+mod dependency;
 mod effects;
 mod flashes;
 mod limits;

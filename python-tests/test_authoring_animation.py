@@ -1,4 +1,4 @@
-"""Phase 8C-A keyframe authoring, serialization, and native validation."""
+"""Keyframe authoring, serialization, and native validation."""
 
 from copy import deepcopy
 from typing import get_type_hints

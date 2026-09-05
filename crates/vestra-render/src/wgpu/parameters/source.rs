@@ -1,25 +1,21 @@
 //! WGPU source and layer parameter records and their evaluated-state packing.
 
 use bytemuck::{Pod, Zeroable};
+use vestra_core::plan::{ColourTransform, CompiledSizing, EvaluatedFrame};
 
-use crate::{
-    animation::Transform2D,
-    domain::Crop,
-    plan::{ColourTransform, CompiledSizing, EvaluatedFrame},
-    render::geometry,
-};
+use crate::{animation::Transform2D, domain::Crop, render::geometry};
 
 use super::super::requirements::align_up;
 
 pub(in crate::wgpu) fn motion_tile(
-    effects: &[crate::plan::EvaluatedEffect],
+    effects: &[vestra_core::plan::EvaluatedEffect],
 ) -> Option<geometry::MotionTileParameters> {
     effects.iter().find_map(|effect| {
         if !effect.is_pre_transform() {
             return None;
         }
         match effect {
-            crate::plan::EvaluatedEffect::MotionTile {
+            vestra_core::plan::EvaluatedEffect::MotionTile {
                 output_width_percent,
                 output_height_percent,
                 tile_center,
@@ -95,7 +91,7 @@ pub(in crate::wgpu) fn mask_feather(
 
 pub(in crate::wgpu) fn mask(
     frame: &EvaluatedFrame,
-    mask: &crate::plan::EvaluatedMask,
+    mask: &vestra_core::plan::EvaluatedMask,
     layer_transform: Transform2D,
     first: bool,
 ) -> MaskParameters {

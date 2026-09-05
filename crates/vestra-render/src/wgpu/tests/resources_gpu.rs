@@ -6,18 +6,19 @@ use super::{
     compare_rgba,
     gpu::{wgpu_backend_or_skip, wgpu_backend_or_skip_depth},
 };
+use vestra_core::plan::{
+    ColourTransform, CompileOptions, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
+    TemporalDependency, compile,
+};
+
 use crate::{
-    plan::{
-        ColourTransform, CompileOptions, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
-        TemporalDependency, compile,
-    },
-    project::{ValidationOptions, load_and_validate},
     render::{CompletedFrame, CpuBackend, PollMode, RenderBackend, StagedMetrics, WgpuBackend},
+    test_support::{ValidationOptions, load_and_validate},
 };
 use image::RgbaImage;
 
 fn static_frame(
-    plan: &crate::plan::RenderPlan,
+    plan: &vestra_core::plan::RenderPlan,
     keys: impl IntoIterator<Item = usize>,
 ) -> EvaluatedFrame {
     EvaluatedFrame {
@@ -57,11 +58,10 @@ fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frame = EvaluatedFrame {
         time: 0,
@@ -116,11 +116,10 @@ fn gpu_in_flight_static_cache_population_reserves_one_key_when_an_adapter_is_ava
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frame = EvaluatedFrame {
         time: 0,
@@ -177,11 +176,10 @@ fn gpu_abort_clears_pending_static_cache_reservations_when_an_adapter_is_availab
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, decoded, 2) else {
         return;
@@ -208,11 +206,10 @@ fn gpu_multi_key_pending_cache_reservations_stay_within_budget_when_an_adapter_i
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let bytes = u64::from(plan.canvas.width) * u64::from(plan.canvas.height) * 4;
     plan.limits.maximum_cache_bytes = bytes * 2;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
@@ -245,11 +242,10 @@ fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let canonical = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&canonical).expect("fixture decodes");
     let image_layer = canonical
         .layers
@@ -257,7 +253,7 @@ fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
         .position(|layer| {
             matches!(
                 layer.source,
-                crate::plan::CompiledVisualSource::Image { .. }
+                vestra_core::plan::CompiledVisualSource::Image { .. }
             )
         })
         .expect("fixture has image");
@@ -268,7 +264,9 @@ fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
         let mut plan = canonical.clone();
         plan.canvas.width = width;
         plan.canvas.height = 18;
-        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+        let frame =
+            vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(image_layer)], 0)
+                .expect("renderer fixture evaluates");
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
@@ -297,11 +295,10 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layer = plan
         .layers
@@ -309,7 +306,7 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
         .position(|layer| {
             matches!(
                 layer.source,
-                crate::plan::CompiledVisualSource::Image { .. }
+                vestra_core::plan::CompiledVisualSource::Image { .. }
             )
         })
         .expect("fixture has image");
@@ -359,7 +356,12 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
     );
 
     for time in [0, 500_000_000, 1_000_000_000] {
-        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], time);
+        let frame = vestra_core::plan::evaluate(
+            &plan,
+            &[vestra_core::plan::ScheduledItem(image_layer)],
+            time,
+        )
+        .expect("renderer fixture evaluates");
         let mut output = RgbaImage::new(frame.width, frame.height);
         gpu.render_frame(&frame, &mut output)
             .expect("GPU frame renders");
@@ -412,11 +414,10 @@ fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_avail
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layer = plan
         .layers
@@ -424,13 +425,20 @@ fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_avail
         .position(|layer| {
             matches!(
                 layer.source,
-                crate::plan::CompiledVisualSource::Image { .. }
+                vestra_core::plan::CompiledVisualSource::Image { .. }
             )
         })
         .expect("fixture has image");
     let frames = [0, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000]
         .into_iter()
-        .map(|time| crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], time))
+        .map(|time| {
+            vestra_core::plan::evaluate(
+                &plan,
+                &[vestra_core::plan::ScheduledItem(image_layer)],
+                time,
+            )
+            .expect("renderer fixture evaluates")
+        })
         .collect::<Vec<_>>();
     let mut outputs = Vec::new();
     for depth in [1, 2, 3] {
@@ -451,7 +459,7 @@ fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_avail
 
 fn render_staged_sequence(
     mut backend: WgpuBackend,
-    frames: &[crate::plan::EvaluatedFrame],
+    frames: &[vestra_core::plan::EvaluatedFrame],
 ) -> (Vec<Vec<u8>>, StagedMetrics) {
     let mut next = 0;
     let mut completed = Vec::<CompletedFrame>::new();

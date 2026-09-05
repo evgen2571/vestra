@@ -6,7 +6,7 @@ use super::WgpuBackend;
 use crate::{AdapterPerformanceClass, render::RenderBackend};
 
 pub(super) fn hardware_wgpu_backend_or_skip(
-    plan: &crate::plan::RenderPlan,
+    plan: &vestra_core::plan::RenderPlan,
     decoded: Arc<crate::DecodedAssets>,
 ) -> Option<WgpuBackend> {
     let backend = wgpu_backend_or_skip(plan, decoded)?;
@@ -28,7 +28,7 @@ pub(super) fn hardware_wgpu_backend_or_skip(
 }
 
 pub(super) fn wgpu_backend_or_skip(
-    plan: &crate::plan::RenderPlan,
+    plan: &vestra_core::plan::RenderPlan,
     decoded: Arc<crate::DecodedAssets>,
 ) -> Option<WgpuBackend> {
     match WgpuBackend::new(plan, decoded) {
@@ -74,7 +74,7 @@ pub(super) fn wgpu_backend_or_skip(
 }
 
 pub(super) fn wgpu_backend_or_skip_depth(
-    plan: &crate::plan::RenderPlan,
+    plan: &vestra_core::plan::RenderPlan,
     decoded: Arc<crate::DecodedAssets>,
     depth: usize,
 ) -> Option<WgpuBackend> {

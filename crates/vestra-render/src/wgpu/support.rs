@@ -1,10 +1,11 @@
 //! Exhaustive WGPU plan compatibility policy.
 
+use vestra_core::plan::RenderPlan;
+
 use crate::{
     Diagnostic,
     backend::RenderBackendKind,
     kernel::{required_effect_kernels, validate_required_kernels},
-    plan::RenderPlan,
     project::BlendMode,
 };
 
@@ -78,27 +79,23 @@ fn validate_blend_mode(mode: BlendMode) -> Result<(), Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::{validate_kernel_capabilities, validate_kernel_capabilities_with, validate_plan};
+    use crate::test_support::{ValidationOptions, load_and_validate};
     use crate::{
         backend::RenderBackendKind,
         kernel::{EffectKernel, required_effect_kernels},
     };
-    use crate::{
-        plan::{CompileOptions, compile},
-        project::{ValidationOptions, load_and_validate},
-    };
+    use vestra_core::plan::{CompileOptions, compile};
 
     #[test]
     fn current_advanced_transition_preset_and_post_effect_plan_does_not_force_cpu_fallback() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/effects-ready.json"),
+            std::path::Path::new("examples/projects/effects-showcase.json"),
             &ValidationOptions {
                 check_backend: false,
-                ..ValidationOptions::default()
             },
         )
         .expect("effects fixture validates");
-        let plan =
-            compile(&validated, CompileOptions::default()).expect("effects fixture compiles");
+        let plan = compile(validated, CompileOptions::default()).expect("effects fixture compiles");
         assert!(plan.compilation.generated_transform_contribution_count > 0);
         assert!(plan.compilation.global_effect_count > 0);
         assert!(plan.compilation.effect_pass_count > 0);
@@ -125,15 +122,13 @@ mod tests {
     #[test]
     fn unused_unsupported_kernel_does_not_disable_wgpu_validation() {
         let validated = load_and_validate(
-            std::path::Path::new("examples/projects/effects-ready.json"),
+            std::path::Path::new("examples/projects/effects-showcase.json"),
             &ValidationOptions {
                 check_backend: false,
-                ..ValidationOptions::default()
             },
         )
         .expect("effects fixture validates");
-        let plan =
-            compile(&validated, CompileOptions::default()).expect("effects fixture compiles");
+        let plan = compile(validated, CompileOptions::default()).expect("effects fixture compiles");
         let required = required_effect_kernels(&plan);
         assert!(!required.contains(EffectKernel::MotionBlur));
         validate_kernel_capabilities_with(RenderBackendKind::Wgpu, required.iter(), |kernel| {

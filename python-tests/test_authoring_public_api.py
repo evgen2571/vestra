@@ -1,4 +1,4 @@
-"""Release-candidate conformance checks for the complete Phase 8 authoring API."""
+"""Conformance checks for the complete public authoring API."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ PUBLIC_NAMES = {
 def _builder() -> tuple[ProjectBuilder, AudioAsset, ImageClip, ImageClip]:
     builder = ProjectBuilder(
         width=32, height=24, frame_rate=FrameRate(20, 1), output_path="out.mp4",
-        duration=2.5, base_directory=".", name="Phase 8", metadata={"release": 8},
+        duration=2.5, base_directory=".", name="Public authoring API", metadata={"suite": "authoring"},
     )
     image = builder.add_image_asset("tests/assets/wgpu-small-rgba.png")
     audio = builder.add_audio_asset("examples/assets/tone.wav")

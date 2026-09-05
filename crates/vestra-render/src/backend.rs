@@ -6,10 +6,10 @@
 use std::sync::atomic::AtomicBool;
 
 use serde::Serialize;
+use vestra_core::plan::EvaluatedFrame;
 
 use crate::{
     Diagnostic,
-    plan::EvaluatedFrame,
     render::metrics::{PreparationStats, PreparationTimings},
 };
 

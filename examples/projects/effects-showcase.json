@@ -2,7 +2,7 @@
   "schema_version": 4,
   "name": "Effects showcase",
   "output": {
-    "path": "../output/effects-ready.mp4",
+    "path": "../output/effects-showcase.mp4",
     "width": 720,
     "height": 1280,
     "frame_rate": 30,

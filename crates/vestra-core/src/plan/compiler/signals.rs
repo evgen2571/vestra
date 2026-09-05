@@ -12,7 +12,7 @@ use crate::{
     project,
 };
 
-use super::{time, tracks};
+use crate::{plan_time, plan_tracks};
 
 pub(crate) fn compile_property(
     property: &project::ScalarProperty,
@@ -21,7 +21,7 @@ pub(crate) fn compile_property(
     interner: &mut ScalarSignalInterner,
 ) -> Result<CompiledScalarProperty, Diagnostic> {
     Ok(CompiledScalarProperty {
-        authored_track: tracks::compile(&property.track, id)?,
+        authored_track: plan_tracks::compile(&property.track, id)?,
         modifiers: compile_modifiers(&property.modifiers, interner)?,
         constraint,
     })
@@ -95,8 +95,8 @@ fn compile_transform(
             .map(CompiledSignalTransform::Clamp)
             .map_err(|error| signal_error(error.to_string())),
         project::SignalTransform::Envelope { attack, release } => {
-            let attack = time::to_nanos(*attack, "signal envelope")?;
-            let release = time::to_nanos(*release, "signal envelope")?;
+            let attack = plan_time::to_nanos(*attack, "signal envelope")?;
+            let release = plan_time::to_nanos(*release, "signal envelope")?;
             Ok(CompiledSignalTransform::Envelope(EnvelopeTransform::new(
                 attack, release,
             )))

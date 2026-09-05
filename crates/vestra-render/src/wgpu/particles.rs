@@ -2,7 +2,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::plan::{CompiledParticleSystem, EvaluatedParticleAppearance};
+use vestra_core::plan::{CompiledParticleSystem, EvaluatedParticleAppearance};
 
 /// Explicit, stable GPU instance layout. Particle identity, simulation state,
 /// and authored lifetime/audio inputs intentionally stop at this boundary.
@@ -115,7 +115,7 @@ mod tests {
         let system = CompiledParticleSystem {
             seed: 7,
             emitter: crate::project::ParticleEmitter::default(),
-            rate_units_per_second: crate::plan::RATE_SCALE,
+            rate_units_per_second: vestra_core::plan::RATE_SCALE,
             lifetime_nanos: 1_000_000_000,
             lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
             initial_velocity: crate::domain::Point { x: 0.0, y: 0.0 },
@@ -133,7 +133,7 @@ mod tests {
             angular_velocity_range: None,
             primitive: crate::project::ParticlePrimitive::Square,
             blend_mode: crate::project::ParticleBlendMode::Normal,
-            bursts: vec![crate::plan::CompiledParticleBurst {
+            bursts: vec![vestra_core::plan::CompiledParticleBurst {
                 time_nanos: 0,
                 count: 1,
             }],
@@ -221,7 +221,7 @@ mod tests {
         CompiledParticleSystem {
             seed: 7,
             emitter: crate::project::ParticleEmitter::default(),
-            rate_units_per_second: crate::plan::RATE_SCALE,
+            rate_units_per_second: vestra_core::plan::RATE_SCALE,
             lifetime_nanos: 1_000_000_000,
             lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
             initial_velocity: crate::domain::Point { x: 0.0, y: 0.0 },
@@ -239,7 +239,7 @@ mod tests {
             angular_velocity_range: None,
             primitive: crate::project::ParticlePrimitive::Square,
             blend_mode: crate::project::ParticleBlendMode::Normal,
-            bursts: vec![crate::plan::CompiledParticleBurst {
+            bursts: vec![vestra_core::plan::CompiledParticleBurst {
                 time_nanos: 0,
                 count: 1,
             }],

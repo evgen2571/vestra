@@ -1,10 +1,10 @@
 //! CPU layer rasterization and image sampling.
 
 use image::{Rgba, RgbaImage};
+use vestra_core::plan::{ColourTransform, EvaluatedEffect, EvaluatedLayer, EvaluatedSource};
 
 use crate::{
     domain::Crop,
-    plan::{ColourTransform, EvaluatedEffect, EvaluatedLayer, EvaluatedSource},
     render::{
         blend::source_over,
         cpu::particles,
@@ -104,7 +104,7 @@ pub(crate) fn draw_layer(
                         height: 1.0,
                     },
                     false,
-                    &crate::plan::CompiledSizing::Original,
+                    &vestra_core::plan::CompiledSizing::Original,
                     layer.transform,
                     opacity,
                     colour_transform,
@@ -126,7 +126,7 @@ pub(crate) fn draw_layer(
                         height: 1.0,
                     },
                     false,
-                    &crate::plan::CompiledSizing::Original,
+                    &vestra_core::plan::CompiledSizing::Original,
                     layer.transform,
                     opacity,
                     colour_transform,
@@ -190,7 +190,7 @@ pub(crate) fn draw_raster(
     intrinsic: geometry::IntrinsicSize,
     crop: Crop,
     cacheable_crop: bool,
-    sizing: &crate::plan::CompiledSizing,
+    sizing: &vestra_core::plan::CompiledSizing,
     transform: crate::animation::Transform2D,
     opacity: f64,
     colour_transform: ColourTransform,
@@ -219,7 +219,7 @@ pub(crate) fn draw_raster_with_motion_tile(
     intrinsic: geometry::IntrinsicSize,
     crop: Crop,
     cacheable_crop: bool,
-    sizing: &crate::plan::CompiledSizing,
+    sizing: &vestra_core::plan::CompiledSizing,
     transform: crate::animation::Transform2D,
     opacity: f64,
     colour_transform: ColourTransform,
@@ -266,7 +266,7 @@ pub(crate) fn draw_surface_with_motion_tile(
             height: 1.0,
         },
         false,
-        &crate::plan::CompiledSizing::Original,
+        &vestra_core::plan::CompiledSizing::Original,
         transform,
         canvas.width(),
         canvas.height(),
@@ -317,7 +317,7 @@ pub(crate) fn draw_image(
         geometry::IntrinsicSize::new(source.width(), source.height()),
         crop,
         false,
-        &crate::plan::CompiledSizing::Stretch {
+        &vestra_core::plan::CompiledSizing::Stretch {
             width: effective_width as u32,
             height: effective_height as u32,
         },
@@ -456,7 +456,7 @@ pub(crate) fn visible_bounds(
             height: 1.0,
         },
         false,
-        &crate::plan::CompiledSizing::Original,
+        &vestra_core::plan::CompiledSizing::Original,
         transform,
         canvas_width,
         canvas_height,
@@ -634,7 +634,7 @@ mod tests {
                 height: 1.0,
             },
             false,
-            &crate::plan::CompiledSizing::Original,
+            &vestra_core::plan::CompiledSizing::Original,
             transform,
             1.0,
             ColourTransform::default(),
@@ -651,7 +651,7 @@ mod tests {
                 height: 1.0,
             },
             false,
-            &crate::plan::CompiledSizing::Original,
+            &vestra_core::plan::CompiledSizing::Original,
             transform,
             1.0,
             ColourTransform::default(),

@@ -114,7 +114,7 @@ pub struct CompilationStats {
     pub saturation_effect_count: usize,
     pub tint_effect_count: usize,
     pub local_effect_count: usize,
-    /// Effects synthesized before Phase 10A normalization, included in the
+    /// Effects synthesized before compiler normalization, included in the
     /// pre-normalization generated local-effect count even when normalization
     /// later removes an identity effect.
     pub generated_local_effect_count: usize,
@@ -123,9 +123,9 @@ pub struct CompilationStats {
     pub generated_transform_contribution_count: usize,
     pub effect_pass_count: usize,
     /// Authored and generated executable local and post effects before
-    /// compiler-owned Phase 10A normalization.
+    /// compiler-owned normalization.
     pub effect_count_before_normalization: usize,
-    /// Executable effects after compiler-owned Phase 10A normalization.
+    /// Executable effects after compiler-owned normalization.
     pub effect_count_after_normalization: usize,
     /// Compiled visual layers whose final content is independent of render time.
     pub static_layer_count: usize,

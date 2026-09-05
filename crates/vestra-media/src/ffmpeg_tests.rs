@@ -242,7 +242,7 @@ fn multi_input_mix_muxes_aac_audio_with_raw_video() {
 }
 
 #[test]
-fn production_aac_decodes_phase9c_automation_and_equal_power_crossfade() {
+fn production_aac_decodes_automation_and_equal_power_crossfade() {
     let directory = tempfile::tempdir().expect("temporary render directory");
     let low = directory.path().join("440.wav");
     let high = directory.path().join("880.wav");

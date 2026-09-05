@@ -321,7 +321,7 @@ fn scenario_fixture(scenario: &str) -> &'static Path {
         "impact" => Path::new("examples/presets/impact.json"),
         "heavy_impact" => Path::new("examples/presets/heavy-impact.json"),
         "transitions" => Path::new("examples/projects/animation-effects.json"),
-        "combined" | "multiple_layers" => Path::new("examples/projects/effects-ready.json"),
+        "combined" | "multiple_layers" => Path::new("examples/projects/effects-showcase.json"),
         "short_sequence" | "long_sequence" => Path::new("examples/projects/animation-effects.json"),
         _ => panic!("unknown VESTRA_BENCH_SCENARIO: {scenario}"),
     }

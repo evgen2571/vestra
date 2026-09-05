@@ -6,13 +6,11 @@ use std::{
 };
 
 use image::RgbaImage;
+use vestra_core::plan::{EvaluatedFrame, RenderPlan};
 
-use crate::{
-    plan::{EvaluatedFrame, RenderPlan},
-    render::{
-        ByteLruCache, CompletedFrame, DecodedAssets,
-        metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings},
-    },
+use crate::render::{
+    ByteLruCache, CompletedFrame, DecodedAssets,
+    metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings},
 };
 
 use super::{assets::PreparedAssets, compositor};

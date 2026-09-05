@@ -22,6 +22,7 @@ mod resources;
 mod runtime_error;
 pub(crate) mod support;
 mod texture_pool;
+mod topology;
 
 #[cfg(test)]
 #[path = "tests/fixtures.rs"]

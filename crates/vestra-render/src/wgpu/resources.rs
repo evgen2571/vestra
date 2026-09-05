@@ -6,7 +6,7 @@ use vestra_core::plan::RenderPlan;
 use crate::{Category, Diagnostic, geometry::IntrinsicSize, render::DecodedAssets};
 use image::RgbaImage;
 
-use super::texture_pool::TexturePool;
+use super::{texture_pool::TexturePool, topology::PlanTopology};
 
 pub(super) struct FrameResources {
     pub(super) working: TexturePool,
@@ -14,9 +14,14 @@ pub(super) struct FrameResources {
 }
 
 impl FrameResources {
-    pub(super) fn create(device: &wgpu::Device, plan: &RenderPlan, padded_row_bytes: u32) -> Self {
+    pub(super) fn create_with_topology(
+        device: &wgpu::Device,
+        plan: &RenderPlan,
+        topology: &PlanTopology,
+        padded_row_bytes: u32,
+    ) -> Self {
         Self {
-            working: TexturePool::create(device, plan),
+            working: TexturePool::create_with_topology(device, plan, topology),
             padded_row_bytes,
         }
     }

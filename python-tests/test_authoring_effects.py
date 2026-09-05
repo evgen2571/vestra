@@ -1,4 +1,4 @@
-"""Phase 8C-B authoring, ordering, scope, and native round-trip checks."""
+"""Effect authoring, ordering, scope, and native round-trip checks."""
 
 from copy import deepcopy
 import json

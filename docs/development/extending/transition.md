@@ -6,4 +6,4 @@ Add a typed public definition with exact parameters and defaults. Use `Interpola
 
 Then extend compilation/evaluation so easing and normalized progress produce the intended presentation properties. A transition inside a group belongs to that group's child-local timeline, so cover nested compositions before calling it supported. Add CPU and WGPU consumption of every generated channel and transition effect.
 
-Tests should cover definition defaults, invalid parameters, placement endpoints and timing, canonical JSON, a nested owner where supported, and both render paths. Update [Transitions](../../reference/transitions.md) with types, defaults, units and exceptions. Do not bring back obsolete versioned transition architecture.
+Tests should cover definition defaults, invalid parameters, placement endpoints and timing, canonical JSON, a nested owner where supported, and both render paths. Update [Transitions](../../reference/transitions.md) with types, defaults, units and exceptions. Keep one ownership path for transition definitions and placements.

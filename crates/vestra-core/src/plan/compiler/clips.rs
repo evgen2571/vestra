@@ -14,7 +14,9 @@ use crate::{
     project::{Clip, VisualSource, parse_colour},
 };
 
-use super::{assets, effects, output, time, tracks};
+use crate::{plan_time, plan_tracks};
+
+use super::{assets, effects, output};
 
 #[derive(Clone, Copy)]
 struct GroupTiming {
@@ -43,8 +45,8 @@ pub(super) fn compile(
 ) -> Result<CompiledLayer, Diagnostic> {
     let compiled_identity = *next_compiled_identity;
     *next_compiled_identity = (*next_compiled_identity).saturating_add(1);
-    let start_nanos = time::to_nanos(clip.start, &clip.id)?;
-    let end_nanos = start_nanos.saturating_add(time::to_nanos(clip.duration, &clip.id)?);
+    let start_nanos = plan_time::to_nanos(clip.start, &clip.id)?;
+    let end_nanos = start_nanos.saturating_add(plan_time::to_nanos(clip.duration, &clip.id)?);
     let source = match &clip.source {
         VisualSource::Image { asset } => CompiledVisualSource::Image {
             asset_index: assets::lookup(image_indices, asset, &clip.id)?,
@@ -53,7 +55,7 @@ pub(super) fn compile(
                 .as_ref()
                 .is_none_or(|track| track.keyframes.is_empty()),
             crop: match &clip.crop {
-                Some(track) => tracks::compile(track, &clip.id)?,
+                Some(track) => plan_tracks::compile(track, &clip.id)?,
                 None => Track::new(Crop {
                     x: 0.0,
                     y: 0.0,
@@ -84,7 +86,7 @@ pub(super) fn compile(
             source_start: clip.source_start,
             playback_rate: clip.playback_rate,
             crop: match &clip.crop {
-                Some(track) => tracks::compile(track, &clip.id)?,
+                Some(track) => plan_tracks::compile(track, &clip.id)?,
                 None => Track::new(Crop {
                     x: 0.0,
                     y: 0.0,
@@ -199,8 +201,14 @@ pub(super) fn compile(
                             ),
                             crate::plan::CompiledSignalTransform::Envelope(
                                 crate::plan::EnvelopeTransform::new(
-                                    time::to_nanos(spectrum.attack_seconds, "Spectrum2D attack")?,
-                                    time::to_nanos(spectrum.release_seconds, "Spectrum2D release")?,
+                                    plan_time::to_nanos(
+                                        spectrum.attack_seconds,
+                                        "Spectrum2D attack",
+                                    )?,
+                                    plan_time::to_nanos(
+                                        spectrum.release_seconds,
+                                        "Spectrum2D release",
+                                    )?,
                                 ),
                             ),
                         ],
@@ -343,8 +351,8 @@ pub(super) fn compile(
         visible: clip.visible,
         start_nanos,
         duration_nanos: end_nanos - start_nanos,
-        start_frame: time::first_frame_at_or_after(start_nanos, validated.frame_rate)?,
-        end_frame: time::first_frame_at_or_after(end_nanos, validated.frame_rate)?
+        start_frame: plan_time::first_frame_at_or_after(start_nanos, validated.frame_rate)?,
+        end_frame: plan_time::first_frame_at_or_after(end_nanos, validated.frame_rate)?
             .min(validated.frame_count),
         draw_key: DrawKey {
             layer: clip.layer,
@@ -438,7 +446,7 @@ fn compile_group(
     next_compiled_identity: &mut usize,
     next_video_slot_index: &mut usize,
 ) -> Result<CompiledComposition, Diagnostic> {
-    let duration_nanos = time::to_nanos(timing.duration, "Group")?;
+    let duration_nanos = plan_time::to_nanos(timing.duration, "Group")?;
     let visible_start = timing
         .parent_visible_window
         .0
@@ -483,11 +491,11 @@ fn compile_group(
         .compiled_transition_association_count
         .saturating_add(group.transitions.len() as u64 * 2);
     let composition_end_frame =
-        time::first_frame_at_or_after(duration_nanos, validated.frame_rate)?;
+        plan_time::first_frame_at_or_after(duration_nanos, validated.frame_rate)?;
     let visible_start_frame =
-        time::first_frame_at_or_after(effective_visible_window.0, validated.frame_rate)?;
+        plan_time::first_frame_at_or_after(effective_visible_window.0, validated.frame_rate)?;
     let visible_end_frame =
-        time::first_frame_at_or_after(effective_visible_window.1, validated.frame_rate)?;
+        plan_time::first_frame_at_or_after(effective_visible_window.1, validated.frame_rate)?;
     let mut post_effects = Vec::new();
     super::finalize_composition_layers(
         &mut layers,
@@ -568,7 +576,7 @@ fn compile_transform_tracks(
     scalar_signal_interner: &mut ScalarSignalInterner,
 ) -> Result<CompiledTransformTracks, Diagnostic> {
     Ok(CompiledTransformTracks {
-        position: tracks::compile(&transform.position, id)?,
+        position: plan_tracks::compile(&transform.position, id)?,
         position_x_modifiers: super::signals::compile_modifiers(
             &transform.component_modifiers.position_x,
             scalar_signal_interner,
@@ -577,8 +585,8 @@ fn compile_transform_tracks(
             &transform.component_modifiers.position_y,
             scalar_signal_interner,
         )?,
-        anchor: tracks::compile(&transform.anchor, id)?,
-        scale: tracks::compile(&transform.scale, id)?,
+        anchor: plan_tracks::compile(&transform.anchor, id)?,
+        scale: plan_tracks::compile(&transform.scale, id)?,
         scale_x_modifiers: super::signals::compile_modifiers(
             &transform.component_modifiers.scale_x,
             scalar_signal_interner,

@@ -1,11 +1,10 @@
 use super::*;
-use crate::{
-    plan::{
-        ColourTransform, CompileOptions, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer,
-        EvaluatedSource, ScheduledItem, TemporalDependency, compile, evaluate,
-    },
-    project::{ValidationOptions, load_and_validate},
+use vestra_core::plan::{
+    ColourTransform, CompileOptions, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer,
+    EvaluatedSource, ScheduledItem, TemporalDependency, compile, evaluate,
 };
+
+use crate::test_support::{ValidationOptions, load_and_validate};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -26,7 +25,7 @@ impl crate::VideoDecoderSession for VideoFixtureSession {
 impl crate::VideoDecoderFactory for VideoFixtureFactory {
     fn open(
         &self,
-        _asset: &crate::plan::VideoAsset,
+        _asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(VideoFixtureSession {
@@ -62,7 +61,7 @@ impl crate::VideoDecoderSession for TimelineVideoSession {
 impl crate::VideoDecoderFactory for TimelineVideoFactory {
     fn open(
         &self,
-        _asset: &crate::plan::VideoAsset,
+        _asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(TimelineVideoSession {
@@ -118,7 +117,7 @@ impl crate::VideoDecoderSession for WorkerBenchmarkVideoSession {
 impl crate::VideoDecoderFactory for WorkerBenchmarkVideoFactory {
     fn open(
         &self,
-        _asset: &crate::plan::VideoAsset,
+        _asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(WorkerBenchmarkVideoSession {
@@ -144,7 +143,7 @@ impl crate::VideoDecoderSession for ColourVideoSession {
 impl crate::VideoDecoderFactory for ColourVideoFactory {
     fn open(
         &self,
-        asset: &crate::plan::VideoAsset,
+        asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         let colour = match asset.id.as_str() {
@@ -186,8 +185,8 @@ fn cpu_video_renderer_uses_layer_local_source_timing_end_to_end() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 2.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -200,11 +199,12 @@ fn cpu_video_renderer_uses_layer_local_source_timing_end_to_end() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("video timing fixture compiles");
     let time = 1_000_000_000;
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], time);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], time)
+        .expect("renderer fixture evaluates");
     let requested_times = Arc::new(Mutex::new(Vec::new()));
     let decoded = DecodedAssets::build_with_video_factory(
         &plan,
@@ -223,7 +223,8 @@ fn cpu_video_renderer_uses_layer_local_source_timing_end_to_end() {
     assert_eq!(output.get_pixel(0, 0), &image::Rgba([75, 0, 0, 255]));
     let first_pixels = output.clone();
     for time in [200_000_000, 700_000_000, 1_000_000_000] {
-        let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], time);
+        let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], time)
+            .expect("renderer fixture evaluates");
         backend
             .render_frame(&frame, &mut output)
             .expect("random-access video frame renders");
@@ -280,8 +281,8 @@ fn cpu_video_to_video_transition_advances_both_endpoints() {
         std::collections::BTreeMap::from([("red".to_owned(), 4.0), ("blue".to_owned(), 4.0)]);
     let dimensions =
         std::collections::BTreeMap::from([("red".to_owned(), (1, 1)), ("blue".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -294,7 +295,7 @@ fn cpu_video_to_video_transition_advances_both_endpoints() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("Video transition fixture compiles");
     let requests = Arc::new(Mutex::new(Vec::new()));
@@ -305,7 +306,9 @@ fn cpu_video_to_video_transition_advances_both_endpoints() {
         })),
     )
     .expect("Video transition fixture decodes");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 1_000_000_000);
+    let frame =
+        vestra_core::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 1_000_000_000)
+            .expect("renderer fixture evaluates");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
     let mut output = image::RgbaImage::new(1, 1);
     backend
@@ -357,8 +360,8 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 4.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -371,7 +374,7 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("same-asset Video fixture compiles");
     let single_worker_requests = Arc::new(Mutex::new(Vec::new()));
@@ -390,7 +393,9 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
         })),
     )
     .expect("same-asset Video fixture decodes for multiple workers");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 500_000_000);
+    let frame =
+        vestra_core::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 500_000_000)
+            .expect("renderer fixture evaluates");
     let mut single_worker = CpuBackend::new_with_worker_count(&plan, single_worker_decoded, 1);
     let mut multi_worker = CpuBackend::new_with_worker_count(&plan, multi_worker_decoded, 2);
     let mut single_output = image::RgbaImage::new(1, 1);
@@ -445,8 +450,8 @@ fn cpu_nested_video_renderer_uses_nested_local_time() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 4.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -459,7 +464,7 @@ fn cpu_nested_video_renderer_uses_nested_local_time() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("nested Video fixture compiles");
     let requested_times = Arc::new(Mutex::new(Vec::new()));
@@ -470,7 +475,8 @@ fn cpu_nested_video_renderer_uses_nested_local_time() {
         })),
     )
     .expect("nested Video fixture decodes");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_000_000_000);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 1_000_000_000)
+        .expect("renderer fixture evaluates");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
     let mut output = image::RgbaImage::new(1, 1);
     backend
@@ -507,8 +513,8 @@ fn cpu_video_renderer_samples_the_authored_crop_from_a_dynamic_frame() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 1.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (2, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -521,10 +527,11 @@ fn cpu_video_renderer_samples_the_authored_crop_from_a_dynamic_frame() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("video fixture compiles");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let decoded = DecodedAssets::build_with_video_factory(
         &plan,
         Some(std::sync::Arc::new(VideoFixtureFactory {
@@ -612,8 +619,8 @@ fn cpu_mixed_static_and_video_sources_render_through_one_layer_pipeline() {
     ]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 1.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -626,7 +633,7 @@ fn cpu_mixed_static_and_video_sources_render_through_one_layer_pipeline() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("mixed source fixture compiles");
     let decoded = DecodedAssets::build_with_video_factory(
@@ -643,7 +650,8 @@ fn cpu_mixed_static_and_video_sources_render_through_one_layer_pipeline() {
         })),
     )
     .expect("mixed source fixture decodes");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let mut backend = CpuBackend::new(&plan, decoded);
     let mut output = image::RgbaImage::new(4, 4);
     backend
@@ -761,11 +769,10 @@ fn automatic_worker_policy_reserves_cpu_and_applies_frame_memory_limit() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
 
     plan.canvas.width = 1_920;
     plan.canvas.height = 1_080;
@@ -788,11 +795,10 @@ fn automatic_worker_policy_is_never_zero_and_handles_overflow() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = u32::MAX;
     plan.canvas.height = u32::MAX;
     assert_eq!(automatic_worker_count(&plan, 0), 1);
@@ -883,8 +889,8 @@ fn cpu_video_worker_count_benchmark() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 4.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (320, 180))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -897,16 +903,17 @@ fn cpu_video_worker_count_benchmark() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("benchmark project compiles");
     let frames = (0_u64..120)
         .map(|number| {
-            crate::plan::evaluate(
+            vestra_core::plan::evaluate(
                 &plan,
                 &[ScheduledItem(0)],
                 u128::from(number) * 1_000_000_000 / 30,
             )
+            .expect("renderer fixture evaluates")
         })
         .collect::<Vec<_>>();
 
@@ -957,11 +964,10 @@ fn multiple_workers_partition_both_cache_classes_without_multiplying_capacity() 
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.limits.maximum_cache_bytes = 257;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 4);
@@ -993,11 +999,10 @@ fn completion_accounting_sums_render_work_and_reset_clears_it() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
     backend.worker_busy.fill(true);
@@ -1038,11 +1043,10 @@ fn worker_panic_preserves_the_failing_frame_number() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
     backend
@@ -1062,11 +1066,10 @@ fn reuses_complete_static_layer_surfaces_without_mutating_them() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 4;
     plan.canvas.height = 4;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
@@ -1110,11 +1113,10 @@ fn static_layer_renders_once_across_one_hundred_frames() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     let mut frame = static_frame();
@@ -1151,11 +1153,10 @@ fn static_layer_activity_does_not_affect_its_cache_identity() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     let mut inactive = static_frame();
@@ -1187,11 +1188,10 @@ fn static_cache_matches_the_dynamic_reference_path() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut frame = static_frame();
     frame.layers[0].effects = vec![
@@ -1230,11 +1230,10 @@ fn dynamic_effect_scratch_allocations_stabilize_after_warmup() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 4;
     plan.canvas.height = 4;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
@@ -1267,11 +1266,10 @@ fn dynamic_layers_bypass_the_whole_layer_cache() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     let mut frame = static_frame();
@@ -1299,11 +1297,10 @@ fn over_budget_static_layers_render_without_retention() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.limits.maximum_cache_bytes = 1;
     plan.canvas.width = 4;
     plan.canvas.height = 4;
@@ -1351,11 +1348,10 @@ fn distinct_static_layers_do_not_alias_or_mutate_under_dynamic_composition() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     let mut base = static_frame();
@@ -1408,13 +1404,12 @@ fn completed_pixels_remain_owned_after_later_submission_and_polling() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-    let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = evaluate(&plan, &[ScheduledItem(0)], 0).expect("renderer fixture evaluates");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
 
     backend.submit_frame(3, &frame).expect("first submission");
@@ -1441,13 +1436,12 @@ fn explicit_workers_accept_multiple_frames_and_reuse_slots() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-    let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = evaluate(&plan, &[ScheduledItem(0)], 0).expect("renderer fixture evaluates");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
     assert_eq!(backend.capacity(), 2);
     backend.submit_frame(0, &frame).expect("first submission");
@@ -1484,14 +1478,15 @@ fn one_and_two_workers_produce_identical_frame_pixels() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let frames: Vec<_> = (0..4)
-        .map(|number| evaluate(&plan, &[ScheduledItem(0)], number))
+        .map(|number| {
+            evaluate(&plan, &[ScheduledItem(0)], number).expect("renderer fixture evaluates")
+        })
         .collect();
     let mut single = CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), 1);
     let mut multi = CpuBackend::new_with_worker_count(&plan, decoded, 2);
@@ -1540,14 +1535,15 @@ fn one_and_four_workers_produce_identical_frame_pixels() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let frames: Vec<_> = (0..8)
-        .map(|number| evaluate(&plan, &[ScheduledItem(0)], number))
+        .map(|number| {
+            evaluate(&plan, &[ScheduledItem(0)], number).expect("renderer fixture evaluates")
+        })
         .collect();
     let collect = |worker_count, decoded: Arc<DecodedAssets>| {
         let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, worker_count);
@@ -1587,15 +1583,15 @@ fn spectrum2d_one_two_and_four_workers_are_byte_identical() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let frames: Vec<_> = (0..6)
         .map(|frame_number| {
-            let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number);
+            let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number)
+                .expect("renderer fixture evaluates");
             frame.layers[0].source = EvaluatedSource::Spectrum2D {
                 bands: vec![
                     (frame_number as f32 * 0.17).sin().abs(),
@@ -1673,11 +1669,10 @@ fn spectrum2d_uses_normal_opacity_and_bloom_pipeline() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let spectrum = EvaluatedSource::Spectrum2D {
         bands: vec![1.0],
@@ -1749,11 +1744,10 @@ fn spectrum2d_cpu_benchmark() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 1_920;
     plan.canvas.height = 1_080;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
@@ -1867,7 +1861,8 @@ fn spectrum2d_cpu_benchmark() {
     for (name, band_count, worker_count, layout, gradient, neon_circle) in cases {
         let frames: Vec<_> = (0..24)
             .map(|frame_number| {
-                let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number);
+                let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number)
+                    .expect("renderer fixture evaluates");
                 if let EvaluatedSource::Image { .. } = frame.layers[0].source {
                     frame.layers[0].source = EvaluatedSource::Spectrum2D {
                         bands: (0..band_count)
@@ -1960,17 +1955,19 @@ fn cpu_parallel_scaling_benchmark() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 1_920;
     plan.canvas.height = 1_080;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let frame_count = plan.frame_count.min(60);
     let frames: Vec<_> = (0..frame_count)
-        .map(|number| evaluate(&plan, &[ScheduledItem(0)], u128::from(number)))
+        .map(|number| {
+            evaluate(&plan, &[ScheduledItem(0)], u128::from(number))
+                .expect("renderer fixture evaluates")
+        })
         .collect();
     let automatic = automatic_worker_count(
         &plan,
@@ -2045,13 +2042,12 @@ fn cancellation_does_not_block_on_cpu_completion() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
-    let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = evaluate(&plan, &[ScheduledItem(0)], 0).expect("renderer fixture evaluates");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     backend.submit_frame(0, &frame).expect("submission");
     let cancelled = AtomicBool::new(true);

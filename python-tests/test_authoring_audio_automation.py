@@ -180,7 +180,7 @@ def test_public_automation_and_equal_power_crossfade_render_aac(tmp_path: Path) 
     project.audio.crossfade(outgoing, incoming, curve=AudioFadeCurve.EQUAL_POWER)
     result = Editor().render(
         project.build(),
-        RenderRequest(tmp_path / "phase9c.mp4", backend=BackendPreference.CPU),
+        RenderRequest(tmp_path / "automation-crossfade.mp4", backend=BackendPreference.CPU),
     )
     assert result.audio_present
 

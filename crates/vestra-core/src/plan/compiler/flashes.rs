@@ -7,9 +7,9 @@ use crate::{
     project::{BlendMode, Flash, parse_colour},
 };
 
-use super::{
-    clips::canvas_transform, first_frame_at_or_after, to_nanos, transitions::insert_keyframe,
-};
+use crate::plan_time::{first_frame_at_or_after, to_nanos};
+
+use super::{clips::canvas_transform, transitions::insert_keyframe};
 
 pub(super) fn compile(
     flash: &Flash,

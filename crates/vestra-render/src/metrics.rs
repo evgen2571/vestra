@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::plan::{ActiveSchedule, CompilationStats, TemporalDependency};
+use vestra_core::plan::{ActiveSchedule, CompilationStats, TemporalDependency};
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct PreparationStats {
@@ -23,7 +23,7 @@ pub struct PreparationStats {
     pub saturation_effect_count: usize,
     pub tint_effect_count: usize,
     pub local_effect_count: usize,
-    /// Generated local effects before Phase 10A normalization. Identity
+    /// Generated local effects before compiler normalization. Identity
     /// elimination means this count may exceed executable local effects.
     pub generated_local_effect_count: usize,
     pub global_effect_count: usize,
@@ -53,7 +53,7 @@ pub struct PreparationStats {
     pub cache_peak_bytes: u64,
     pub cache_evictions: u64,
     pub cache_oversized_entries_skipped: u64,
-    /// Whole rendered layers reused because Phase 10A proved their content static.
+    /// Whole rendered layers reused because their content is static.
     pub static_cache_hits: u64,
     pub static_cache_misses: u64,
     pub static_cache_entries: usize,

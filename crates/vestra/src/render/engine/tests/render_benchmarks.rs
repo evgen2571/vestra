@@ -96,7 +96,7 @@ impl FrameSink for NullSink {
 }
 
 #[test]
-fn phase10_null_sink_measures_renderer_without_pixel_copies() {
+fn null_sink_measures_renderer_without_pixel_copies() {
     let fixture =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/projects/audio-static-mix.json");
     let validated =
@@ -135,8 +135,8 @@ fn phase10_null_sink_measures_renderer_without_pixel_copies() {
 }
 
 #[test]
-fn phase10_random_access_matrix() {
-    if std::env::var_os("VESTRA_PHASE10_BENCH").is_none() {
+fn random_access_matrix() {
+    if std::env::var_os("VESTRA_RENDER_BENCH").is_none() {
         return;
     }
     let directory = tempfile::tempdir().expect("temporary benchmark directory");
@@ -164,18 +164,12 @@ fn phase10_random_access_matrix() {
         measure_random_access(&mut dynamic_prepared, "animated-transform", 0, "cold"),
         measure_random_access(&mut dynamic_prepared, "animated-transform", 99, "warm"),
     ];
-    let output = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/audits/phase10d-random-results.json");
-    fs::write(
-        output,
-        serde_json::to_vec_pretty(&results).expect("serialize random-access results"),
-    )
-    .expect("write random-access results");
+    write_benchmark_results("render-random-access.json", &results, "random-access");
 }
 
 #[test]
-fn phase10_preparation_matrix() {
-    if std::env::var_os("VESTRA_PHASE10_BENCH").is_none() {
+fn preparation_matrix() {
+    if std::env::var_os("VESTRA_RENDER_BENCH").is_none() {
         return;
     }
     let directory = tempfile::tempdir().expect("temporary benchmark directory");
@@ -197,23 +191,17 @@ fn phase10_preparation_matrix() {
         measure_preparation(
             &directory,
             "mixed-layers-10",
-            "effects-ready.json",
+            "effects-showcase.json",
             1920,
             1080,
         ),
     ];
-    let output = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/audits/phase10d-preparation-results.json");
-    fs::write(
-        output,
-        serde_json::to_vec_pretty(&results).expect("serialize preparation results"),
-    )
-    .expect("write preparation results");
+    write_benchmark_results("render-preparation.json", &results, "preparation");
 }
 
 #[test]
-fn phase10_effect_scaling_matrix() {
-    if std::env::var_os("VESTRA_PHASE10_BENCH").is_none() {
+fn effect_scaling_matrix() {
+    if std::env::var_os("VESTRA_RENDER_BENCH").is_none() {
         return;
     }
     let directory = tempfile::tempdir().expect("temporary benchmark directory");
@@ -223,29 +211,23 @@ fn phase10_effect_scaling_matrix() {
         let mut prepared = prepare_fixture(&project, None);
         measure_null(&mut prepared, directory.path(), &workload, "cold")
     });
-    let output = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/audits/phase10d-effect-results.json");
-    fs::write(
-        output,
-        serde_json::to_vec_pretty(&results).expect("serialize effect results"),
-    )
-    .expect("write effect results");
+    write_benchmark_results("render-effect-scaling.json", &results, "effect-scaling");
 }
 
-/// Run with `VESTRA_PHASE10_BENCH=1 cargo test --release -p vestra
-/// phase10_release_matrix -- --nocapture`. The gate keeps normal tests quick.
+/// Run with `VESTRA_RENDER_BENCH=1 cargo test --release -p vestra
+/// render_workload_matrix -- --nocapture`. The gate keeps normal tests quick.
 #[test]
-fn phase10_release_matrix() {
-    if std::env::var_os("VESTRA_PHASE10_BENCH").is_none() {
+fn render_workload_matrix() {
+    if std::env::var_os("VESTRA_RENDER_BENCH").is_none() {
         return;
     }
     let directory = tempfile::tempdir().expect("temporary benchmark directory");
     let mut results = Vec::new();
-    let limit = std::env::var("VESTRA_PHASE10_BENCH_LIMIT")
+    let limit = std::env::var("VESTRA_RENDER_BENCH_LIMIT")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(usize::MAX);
-    let start = std::env::var("VESTRA_PHASE10_BENCH_START")
+    let start = std::env::var("VESTRA_RENDER_BENCH_START")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(0);
@@ -355,11 +337,18 @@ fn phase10_release_matrix() {
             30,
             None,
         ),
-        ("short-mixed", "effects-ready.json", 1920, 1080, 30, None),
-        ("long-combined", "effects-ready.json", 1920, 1080, 180, None),
+        ("short-mixed", "effects-showcase.json", 1920, 1080, 30, None),
+        (
+            "long-combined",
+            "effects-showcase.json",
+            1920,
+            1080,
+            180,
+            None,
+        ),
         (
             "chromatic-focused",
-            "effects-ready.json",
+            "effects-showcase.json",
             1280,
             720,
             100,
@@ -419,21 +408,36 @@ fn phase10_release_matrix() {
         );
         results.push(measurement);
     }
-    let output = std::env::var_os("VESTRA_PHASE10_BENCH_OUTPUT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/audits/phase10d-results.json")
-        });
-    fs::write(
-        &output,
-        serde_json::to_vec_pretty(&results).expect("serialize results"),
-    )
-    .expect("write benchmark results");
+    let output = write_benchmark_results("render-workloads.json", &results, "benchmark");
     println!(
         "wrote {} benchmark measurements to {}",
         results.len(),
         output.display()
     );
+}
+
+fn write_benchmark_results<T: Serialize>(
+    default_filename: &str,
+    results: &T,
+    kind: &str,
+) -> PathBuf {
+    let output = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/benchmark-results")
+                .join(default_filename)
+        });
+    if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).expect("create benchmark output directory");
+    }
+    fs::write(
+        &output,
+        serde_json::to_vec_pretty(results)
+            .unwrap_or_else(|error| panic!("serialize {kind} benchmark results: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("write {kind} benchmark results: {error}"));
+    output
 }
 
 fn write_fixture(
@@ -447,7 +451,9 @@ fn write_fixture(
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples")
         .join(match fixture {
-            "audio-static-mix.json" | "animation-effects.json" | "effects-ready.json" => "projects",
+            "audio-static-mix.json" | "animation-effects.json" | "effects-showcase.json" => {
+                "projects"
+            }
             "color-adjust.json" => "effects",
             "global-post-effects.json" => "compositing",
             "heavy-impact.json" => "presets",

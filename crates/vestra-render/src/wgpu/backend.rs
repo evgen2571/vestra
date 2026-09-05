@@ -12,10 +12,10 @@ use std::{
 
 use bytemuck::Zeroable;
 use image::RgbaImage;
+use vestra_core::plan::{EvaluatedFrame, EvaluatedSource, RenderPlan};
 
 use crate::{
     Diagnostic, VideoDecoderSession,
-    plan::{EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::{
         AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
         RenderBackendKind,
@@ -457,22 +457,24 @@ impl WgpuBackend {
 
     fn upload_video_layers(
         &mut self,
-        layers: &[crate::plan::EvaluatedLayer],
+        layers: &[vestra_core::plan::EvaluatedLayer],
     ) -> Result<(), Diagnostic> {
         fn collect<'a>(
-            layer: &'a crate::plan::EvaluatedLayer,
-            output: &mut Vec<&'a crate::plan::EvaluatedSource>,
+            layer: &'a vestra_core::plan::EvaluatedLayer,
+            output: &mut Vec<&'a vestra_core::plan::EvaluatedSource>,
         ) {
             output.push(&layer.source);
-            if let crate::plan::EvaluatedSource::Group { composition } = &layer.source {
+            if let vestra_core::plan::EvaluatedSource::Group { composition } = &layer.source {
                 for child in &composition.layers {
                     collect(child, output);
                 }
             }
             for mask in &layer.masks {
-                if let crate::plan::EvaluatedMaskInput::Source { source, .. } = &mask.input {
+                if let vestra_core::plan::EvaluatedMaskInput::Source { source, .. } = &mask.input {
                     output.push(source);
-                    if let crate::plan::EvaluatedSource::Group { composition } = source.as_ref() {
+                    if let vestra_core::plan::EvaluatedSource::Group { composition } =
+                        source.as_ref()
+                    {
                         for child in &composition.layers {
                             collect(child, output);
                         }
@@ -575,7 +577,7 @@ impl RenderBackend for WgpuBackend {
         let mut cache_targets = BTreeSet::new();
         let mut textures = BTreeMap::new();
         for layer in evaluated.layers.iter().filter(|_| !has_groups) {
-            if layer.content_dependency != crate::plan::TemporalDependency::Static {
+            if layer.content_dependency != vestra_core::plan::TemporalDependency::Static {
                 continue;
             }
             let key = layer.compiled_layer_index;
@@ -1112,7 +1114,7 @@ fn encode_parameters(
                     &presentation.sizing,
                     plan.layers[*layer_index].transform,
                     1.0,
-                    crate::plan::ColourTransform::default(),
+                    vestra_core::plan::ColourTransform::default(),
                     parameters::motion_tile(&plan.layers[*layer_index].effects),
                 );
                 arena.push(&parameters)?;
@@ -1140,7 +1142,7 @@ fn encode_parameters(
                         height: 1.0,
                     },
                     false,
-                    &crate::plan::CompiledSizing::Original,
+                    &vestra_core::plan::CompiledSizing::Original,
                     if *source_layer {
                         crate::animation::Transform2D::identity(
                             crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1150,16 +1152,16 @@ fn encode_parameters(
                         mask.transform
                     },
                     1.0,
-                    crate::plan::ColourTransform::default(),
+                    vestra_core::plan::ColourTransform::default(),
                     None,
                 );
                 parameters.header[3] = match mask.input {
-                    crate::plan::EvaluatedMaskInput::Shape { .. } => 3,
-                    crate::plan::EvaluatedMaskInput::Image { mode, .. } => match mode {
+                    vestra_core::plan::EvaluatedMaskInput::Shape { .. } => 3,
+                    vestra_core::plan::EvaluatedMaskInput::Image { mode, .. } => match mode {
                         crate::project::ImageMaskMode::Alpha => 3,
                         crate::project::ImageMaskMode::Luma => 4,
                     },
-                    crate::plan::EvaluatedMaskInput::Source { mode, .. } => match mode {
+                    vestra_core::plan::EvaluatedMaskInput::Source { mode, .. } => match mode {
                         crate::project::MaskCoverageMode::Alpha => 3,
                         crate::project::MaskCoverageMode::Luma => 4,
                     },
@@ -1176,7 +1178,8 @@ fn encode_parameters(
                 arena.push(&parameters::mask_feather(frame, radius, *horizontal))?;
             }
             GpuOperation::RenderSurfaceLayer { layer_index, .. } => {
-                let crate::plan::EvaluatedSource::Group { .. } = &plan.layers[*layer_index].source
+                let vestra_core::plan::EvaluatedSource::Group { .. } =
+                    &plan.layers[*layer_index].source
                 else {
                     unreachable!("surface frame operation must reference a Group source")
                 };
@@ -1187,7 +1190,7 @@ fn encode_parameters(
                 arena.push(&parameters::surface(
                     frame,
                     plan.layers[*layer_index].transform,
-                    crate::plan::ColourTransform::default(),
+                    vestra_core::plan::ColourTransform::default(),
                     parameters::motion_tile(&plan.layers[*layer_index].effects),
                 ))?;
             }
@@ -1298,7 +1301,7 @@ fn encode_parameters(
                         system.evaluated_particles_at_with_appearance(*time_nanos, *appearance),
                         system.primitive,
                         system.blend_mode,
-                        crate::plan::ColourTransform::default(),
+                        vestra_core::plan::ColourTransform::default(),
                     );
                     let pixels = image.into_raw();
                     let upload = append_particle_upload(
@@ -1404,8 +1407,11 @@ const fn blend_mode(mode: BlendMode) -> u32 {
     }
 }
 
-fn contains_group(layer: &crate::plan::EvaluatedLayer) -> bool {
-    matches!(layer.source, crate::plan::EvaluatedSource::Group { .. })
+fn contains_group(layer: &vestra_core::plan::EvaluatedLayer) -> bool {
+    matches!(
+        layer.source,
+        vestra_core::plan::EvaluatedSource::Group { .. }
+    )
 }
 
 fn used_video_asset_indices(slot_assets: &[usize]) -> BTreeSet<usize> {
@@ -1429,8 +1435,8 @@ mod configuration_tests {
             180,
             EffectPass::new(
                 EffectOperation::GaussianVertical { radius: 4.0 },
-                crate::plan::EffectResource::Current,
-                crate::plan::EffectResource::Current,
+                vestra_core::plan::EffectResource::Current,
+                vestra_core::plan::EffectResource::Current,
             ),
         );
         let parameters::EffectKernelParameters::GaussianBlur(gaussian) = gaussian else {
@@ -1448,8 +1454,8 @@ mod configuration_tests {
                     mode: CompositeMode::Additive,
                     amount: 0.75,
                 },
-                crate::plan::EffectResource::Original,
-                crate::plan::EffectResource::Current,
+                vestra_core::plan::EffectResource::Original,
+                vestra_core::plan::EffectResource::Current,
             ),
         );
         let parameters::EffectKernelParameters::Composite(composite) = composite else {
@@ -1468,8 +1474,8 @@ mod configuration_tests {
                     softness: 0.2,
                     colour: [10, 20, 30, 255],
                 },
-                crate::plan::EffectResource::Current,
-                crate::plan::EffectResource::Current,
+                vestra_core::plan::EffectResource::Current,
+                vestra_core::plan::EffectResource::Current,
             ),
         );
         let parameters::EffectKernelParameters::Vignette(vignette) = vignette else {

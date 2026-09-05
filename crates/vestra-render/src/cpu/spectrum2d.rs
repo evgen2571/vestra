@@ -1,11 +1,9 @@
 //! CPU rasterization for the concrete Spectrum2D source.
 
 use image::{Rgba, RgbaImage};
+use vestra_core::plan::ColourTransform;
 
-use crate::{
-    plan::ColourTransform,
-    render::{blend::source_over, cpu::raster},
-};
+use crate::render::{blend::source_over, cpu::raster};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn rasterize(

@@ -123,10 +123,10 @@ pub(in crate::wgpu) fn push_effect_parameters(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::EvaluatedFrame;
     use crate::wgpu::parameters::{LayerParameters, Spectrum2DParameters, spectrum2d};
     use bytemuck::Zeroable;
     use std::mem::{align_of, size_of};
+    use vestra_core::plan::EvaluatedFrame;
 
     #[test]
     fn frame_parameter_offsets_honor_dynamic_uniform_alignment() {

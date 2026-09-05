@@ -12,10 +12,10 @@ use std::{
 
 #[cfg(test)]
 use image::RgbaImage;
+use vestra_core::plan::{EvaluatedFrame, RenderPlan};
 
 use crate::{
     Diagnostic,
-    plan::{EvaluatedFrame, RenderPlan},
     render::{
         AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
         metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings, StagedMetrics},

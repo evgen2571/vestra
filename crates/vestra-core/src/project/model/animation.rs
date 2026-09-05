@@ -58,7 +58,7 @@ pub enum Interpolation {
 impl Interpolation {
     /// Converts the serialized interpolation form into its deterministic
     /// evaluator representation. This is workspace-visible because plan
-    /// compilation remains in the transitional root package during Phase 1.
+    /// compilation consumes the same canonical interpolation values.
     #[must_use]
     pub fn to_animation(&self) -> crate::animation::Interpolation {
         match self {

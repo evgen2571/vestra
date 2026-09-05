@@ -1,4 +1,4 @@
-//! Compiler-owned Phase 10A visual-plan normalization.
+//! Compiler-owned visual-plan normalization.
 
 use crate::{
     animation::{Interpolate, Track},

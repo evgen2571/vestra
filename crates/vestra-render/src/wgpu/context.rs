@@ -1,8 +1,9 @@
 //! Adapter discovery and device creation for a prepared WGPU backend.
 
 use std::time::{Duration, Instant};
+use vestra_core::plan::RenderPlan;
 
-use crate::{Category, Diagnostic, plan::RenderPlan, render::AdapterMetadata};
+use crate::{Category, Diagnostic, render::AdapterMetadata};
 
 use super::{
     diagnostics::{diagnostic, environment_present, requested_backends},

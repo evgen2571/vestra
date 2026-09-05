@@ -2,7 +2,7 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::plan::EffectResource;
+use vestra_core::plan::EffectResource;
 
 const SURFACE_COUNT: usize = 3;
 
@@ -262,7 +262,7 @@ impl EffectSurfacePool {
             &mut self.mask_surface,
             &self.mask_local_surface,
             transform,
-            crate::plan::ColourTransform::default(),
+            vestra_core::plan::ColourTransform::default(),
         );
     }
 

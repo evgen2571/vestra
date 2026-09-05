@@ -4,13 +4,14 @@ use super::{
     parameters::LayerParameters,
     requirements::{GpuRequirements, estimated_texture_bytes},
 };
+use vestra_core::plan::{
+    CompileOptions, CompiledEffect, CompiledScalarProperty, PlanCompileInput, TimedEffect, compile,
+};
+use vestra_core::project::Project;
+
 use crate::{
     animation::Track,
-    plan::{
-        CompileOptions, CompiledEffect, CompiledScalarProperty, PlanCompileInput, TimedEffect,
-        compile,
-    },
-    project::{Project, ValidationOptions, load_and_validate},
+    test_support::{ValidationOptions, load_and_validate},
 };
 
 fn scalar(track: Track<f64>) -> CompiledScalarProperty {
@@ -19,7 +20,7 @@ fn scalar(track: Track<f64>) -> CompiledScalarProperty {
 
 #[test]
 fn motion_tile_parameters_are_packed_without_an_adapter() {
-    let effects = [crate::plan::EvaluatedEffect::MotionTile {
+    let effects = [vestra_core::plan::EvaluatedEffect::MotionTile {
         output_width_percent: 220.0,
         output_height_percent: 180.0,
         tile_center: crate::domain::Point { x: 0.37, y: 0.61 },
@@ -35,7 +36,7 @@ fn motion_tile_parameters_are_packed_without_an_adapter() {
 }
 
 fn fixture_requirements() -> (
-    crate::plan::RenderPlan,
+    vestra_core::plan::RenderPlan,
     std::sync::Arc<crate::DecodedAssets>,
     GpuRequirements,
 ) {
@@ -43,11 +44,10 @@ fn fixture_requirements() -> (
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let requirements = GpuRequirements::from_plan(
         &plan,
@@ -62,7 +62,7 @@ fn nested_group_requirements(
     depth: usize,
     auxiliary_effect: bool,
 ) -> (
-    crate::plan::RenderPlan,
+    vestra_core::plan::RenderPlan,
     std::sync::Arc<crate::DecodedAssets>,
 ) {
     assert!(depth > 0);
@@ -132,7 +132,7 @@ fn nested_group_requirements(
         24,
         &warnings,
     );
-    let plan = compile(&input, CompileOptions::default()).expect("nested Group compiles");
+    let plan = compile(input, CompileOptions::default()).expect("nested Group compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("nested Group assets decode");
     (plan, decoded)
 }
@@ -343,7 +343,7 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
             intensity: scalar(Track::new(0.8)),
             colour: [255, 180, 60, 255],
         },
-        dependency: crate::plan::TemporalDependency::Static,
+        dependency: vestra_core::plan::TemporalDependency::Static,
     }];
     plan.compilation.effect_pass_count = 4;
     let requirements = GpuRequirements::from_plan(
@@ -492,7 +492,7 @@ fn video_requirements_charge_each_compiled_video_slot_once() {
     )
     .with_video_durations(&durations)
     .with_video_dimensions(&dimensions);
-    let plan = compile(&input, CompileOptions::default()).expect("video requirements compile");
+    let plan = compile(input, CompileOptions::default()).expect("video requirements compile");
     let decoded = crate::DecodedAssets::build(&plan).expect("video requirements decode");
     let requirements = GpuRequirements::from_plan(
         &plan,

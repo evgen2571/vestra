@@ -1,4 +1,4 @@
-"""Typed, ordered effect handles for the schema-version 3 project model."""
+"""Typed, ordered effect handles for canonical project effects."""
 
 from __future__ import annotations
 

@@ -433,7 +433,7 @@ fn public_sdk_loads_validates_preflights_and_inspects_without_cli() {
 }
 
 #[test]
-fn public_sdk_prepares_and_renders_a_final_phase9_audio_project() {
+fn public_sdk_prepares_and_renders_a_complete_audio_project() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
         r##"{"schema_version":3,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"examples/assets/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,

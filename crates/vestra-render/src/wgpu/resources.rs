@@ -1,10 +1,9 @@
 //! Persistent source textures, reusable working textures, and readback state.
 
 use std::sync::Arc;
+use vestra_core::plan::RenderPlan;
 
-use crate::{
-    Category, Diagnostic, geometry::IntrinsicSize, plan::RenderPlan, render::DecodedAssets,
-};
+use crate::{Category, Diagnostic, geometry::IntrinsicSize, render::DecodedAssets};
 use image::RgbaImage;
 
 use super::texture_pool::TexturePool;

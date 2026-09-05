@@ -115,7 +115,7 @@ def test_preset_timing_remains_authored_for_native_interval_validation(
     assert diagnostic.code == "VESTRA-EFFECT-INTERVAL" and diagnostic.pointer == pointer
 
 
-def test_full_phase8_authoring_project_renders_frames_and_video_with_audio(tmp_path: Path) -> None:
+def test_complete_authoring_project_renders_frames_and_video_with_audio(tmp_path: Path) -> None:
     builder = ProjectBuilder(
         width=32, height=24, frame_rate=FrameRate(20, 1), output_path="complete.mp4",
         duration=2.5, base_directory=Path.cwd(), background="#101010",

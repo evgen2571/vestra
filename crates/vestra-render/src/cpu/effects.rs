@@ -1,9 +1,9 @@
 use std::{cell::RefCell, time::Instant};
 
 use image::{GenericImage, Rgba, RgbaImage};
+use vestra_core::plan::{ColourTransform, EffectOperation, EffectResource, EvaluatedEffect};
 
 use crate::{
-    plan::{ColourTransform, EffectOperation, EffectResource, EvaluatedEffect},
     render::effects::{
         EffectPass, canonical_gaussian_radius, effect_pass_plan, gaussian_radius_is_identity,
         sampling_blur_radius_is_identity,

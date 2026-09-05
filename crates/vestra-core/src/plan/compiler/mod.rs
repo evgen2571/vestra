@@ -37,19 +37,7 @@ pub(super) struct ActiveLayerWindow {
     pub(super) end_frame: u64,
 }
 
-/// Transitional facade for compiler submodules while time conversion is owned
-/// by `vestra-core`.
-mod time {
-    pub use crate::plan_time::{first_frame_at_or_after, to_nanos};
-}
-
-/// Transitional facade for compiler submodules while track compilation is
-/// owned by `vestra-core`.
-mod tracks {
-    pub use crate::plan_tracks::compile;
-}
-
-use crate::plan_time::{effective_dimensions, first_frame_at_or_after, to_nanos};
+use crate::plan_time::{effective_dimensions, to_nanos};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,
@@ -161,7 +149,7 @@ pub fn compile(
     finalize_composition_layers(
         &mut layers,
         &mut post_effects,
-        time::to_nanos(validated.duration, "project")?,
+        to_nanos(validated.duration, "project")?,
         validated.frame_count,
         &mut compilation,
         validated.limits.maximum_active_layers,

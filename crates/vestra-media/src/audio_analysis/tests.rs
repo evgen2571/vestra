@@ -1,4 +1,9 @@
-use std::{fs, path::Path, process::Command, time::Instant};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    time::Instant,
+};
 
 use super::spectrum::TEST_STFT_SIZE_FRAMES as STFT_SIZE_FRAMES;
 use crate::test_support::write_mono_wav;
@@ -21,6 +26,16 @@ fn requirements(features: &[AudioScalarFeature]) -> AudioAnalysisRequirements {
             .copied()
             .map(AudioAnalysisRequirement::Master),
     )
+}
+
+fn analysis_benchmark_output(default_filename: &str) -> PathBuf {
+    std::env::var_os("VESTRA_ANALYSIS_BENCH_OUTPUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/benchmark-results")
+                .join(default_filename)
+        })
 }
 
 fn analyze_chunks(
@@ -87,7 +102,7 @@ fn measure_master_analysis(seconds: u64, band_count: usize) -> AnalysisBenchmark
 }
 
 #[test]
-#[ignore = "manual streaming analysis benchmark; run with --release for meaningful timing"]
+#[ignore = "manual streaming analysis benchmark; run an optimized build for meaningful timing"]
 fn master_analysis_benchmark() {
     let seconds = std::env::var("VESTRA_ANALYSIS_BENCH_SECONDS")
         .ok()
@@ -109,18 +124,20 @@ fn master_analysis_benchmark() {
     );
 }
 
-/// Release-only manual matrix used by the final procedural-signal audit.
+/// Manual matrix for procedural-signal analysis.
 /// It keeps a fixed 60-second duration for the 1/10/50-band scaling rows,
 /// then records 10- and 60-minute one-band duration baselines.
 #[test]
-#[ignore = "manual release benchmark matrix"]
+#[ignore = "manual optimized-build benchmark matrix"]
 fn master_analysis_benchmark_matrix() {
     let measurements = [(60, 1), (60, 10), (60, 50), (600, 1), (3_600, 1)]
         .map(|(seconds, bands)| measure_master_analysis(seconds, bands));
-    let output = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/audits/procedural-signal-audio-modulation-benchmarks.json");
+    let output = analysis_benchmark_output("audio-analysis-matrix.json");
+    if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).expect("create benchmark output directory");
+    }
     fs::write(
-        output,
+        &output,
         serde_json::to_vec_pretty(&measurements).expect("serialize benchmark matrix"),
     )
     .expect("write benchmark matrix");
@@ -209,12 +226,12 @@ fn measure_transformed_signal_scaling(
     }
 }
 
-/// Release-only benchmark for the finalized complete-signal sharing contract.
+/// Benchmark for the complete-signal sharing contract.
 /// One raw BandEnergy feature is analyzed once, then reused by 1/10/50
 /// distinct ordered transform pipelines. Only transform preparation should
 /// scale with complete-signal count.
 #[test]
-#[ignore = "manual release complete-signal scaling benchmark"]
+#[ignore = "manual optimized-build complete-signal scaling benchmark"]
 fn transformed_signal_scaling_benchmark() {
     let seconds = std::env::var("VESTRA_ANALYSIS_BENCH_SECONDS")
         .ok()

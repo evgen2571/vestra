@@ -2,14 +2,14 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::plan::{
-    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMaskInput,
-    EvaluatedSource, TemporalDependency,
-};
 use crate::{
     blend::blend_surface,
     cpu::{assets::PreparedAssets, effects, raster::draw_layer},
     render::{ByteLruCache, metrics::CpuHotPathTimings},
+};
+use vestra_core::plan::{
+    ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMaskInput,
+    EvaluatedSource, TemporalDependency,
 };
 
 pub(crate) use super::surfaces::{CompositionSurfacePool, EffectSurfacePool};
@@ -322,7 +322,7 @@ fn compose_layers(
 #[allow(clippy::too_many_arguments)]
 fn render_group(
     layer: &EvaluatedLayer,
-    composition: &crate::plan::EvaluatedComposition,
+    composition: &vestra_core::plan::EvaluatedComposition,
     scope_layers: &[EvaluatedLayer],
     transform: crate::animation::Transform2D,
     width: u32,
@@ -729,7 +729,7 @@ fn apply_masks(
                     content_dependency: TemporalDependency::Static,
                     source: EvaluatedSource::Shape {
                         shape_index,
-                        sizing: crate::plan::CompiledSizing::Original,
+                        sizing: vestra_core::plan::CompiledSizing::Original,
                     },
                     transform: mask.transform,
                     opacity: 1.0,
@@ -762,7 +762,7 @@ fn apply_masks(
                         height: 1.0,
                     },
                     false,
-                    &crate::plan::CompiledSizing::Original,
+                    &vestra_core::plan::CompiledSizing::Original,
                     mask.transform,
                     1.0,
                     ColourTransform::default(),
@@ -862,8 +862,8 @@ mod tests {
     use super::*;
     use crate::blend::{blend_pixel, source_over};
     use crate::effects::effect_pass_plan;
-    use crate::plan::EvaluatedComposition;
-    use crate::plan::EvaluatedEffect;
+    use vestra_core::plan::EvaluatedComposition;
+    use vestra_core::plan::EvaluatedEffect;
 
     fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
         for effect in effects {
@@ -920,20 +920,23 @@ mod tests {
     }
 
     fn render_test_frame(frame: EvaluatedFrame) -> RgbaImage {
-        let validated = crate::project::load_and_validate(
+        let validated = crate::test_support::load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
-            &crate::project::ValidationOptions {
+            &crate::test_support::ValidationOptions {
                 check_backend: false,
-                ..crate::project::ValidationOptions::default()
             },
         )
         .expect("fixture validates");
-        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
-            .expect("fixture compiles");
+        let plan =
+            vestra_core::plan::compile(validated, vestra_core::plan::CompileOptions::default())
+                .expect("fixture compiles");
         render_frame_with_plan(frame, &plan)
     }
 
-    fn render_frame_with_plan(frame: EvaluatedFrame, plan: &crate::plan::RenderPlan) -> RgbaImage {
+    fn render_frame_with_plan(
+        frame: EvaluatedFrame,
+        plan: &vestra_core::plan::RenderPlan,
+    ) -> RgbaImage {
         let mut assets = crate::cpu::assets::PreparedAssets::build(plan).expect("assets decode");
         let mut canvas = RgbaImage::new(frame.width, frame.height);
         let mut effects = EffectSurfacePool::new(frame.width, frame.height);
@@ -977,7 +980,7 @@ mod tests {
                     width: 1.0,
                     height: 1.0,
                 },
-                sizing: crate::plan::CompiledSizing::Fit,
+                sizing: vestra_core::plan::CompiledSizing::Fit,
                 cacheable_crop: false,
             },
             transform: Transform2D {
@@ -1040,16 +1043,16 @@ mod tests {
 
     #[test]
     fn static_group_is_cached_at_the_complete_layer_stage() {
-        let validated = crate::project::load_and_validate(
+        let validated = crate::test_support::load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
-            &crate::project::ValidationOptions {
+            &crate::test_support::ValidationOptions {
                 check_backend: false,
-                ..crate::project::ValidationOptions::default()
             },
         )
         .expect("fixture validates");
-        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
-            .expect("fixture compiles");
+        let plan =
+            vestra_core::plan::compile(validated, vestra_core::plan::CompileOptions::default())
+                .expect("fixture compiles");
         let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
         let child = {
             let mut child = solid_layer(2, [40, 80, 120, 255]);
@@ -1096,16 +1099,16 @@ mod tests {
 
     #[test]
     fn dynamic_group_never_reuses_a_static_surface() {
-        let validated = crate::project::load_and_validate(
+        let validated = crate::test_support::load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
-            &crate::project::ValidationOptions {
+            &crate::test_support::ValidationOptions {
                 check_backend: false,
-                ..crate::project::ValidationOptions::default()
             },
         )
         .expect("fixture validates");
-        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
-            .expect("fixture compiles");
+        let plan =
+            vestra_core::plan::compile(validated, vestra_core::plan::CompileOptions::default())
+                .expect("fixture compiles");
         let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
         let make_frame = |colour| {
             frame_with_layers(vec![group_layer(
@@ -1199,16 +1202,16 @@ mod tests {
 
     #[test]
     fn group_opacity_is_applied_once_to_the_isolated_child_result() {
-        let validated = crate::project::load_and_validate(
+        let validated = crate::test_support::load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),
-            &crate::project::ValidationOptions {
+            &crate::test_support::ValidationOptions {
                 check_backend: false,
-                ..crate::project::ValidationOptions::default()
             },
         )
         .expect("fixture validates");
-        let plan = crate::plan::compile(&validated, crate::plan::CompileOptions::default())
-            .expect("fixture compiles");
+        let plan =
+            vestra_core::plan::compile(validated, vestra_core::plan::CompileOptions::default())
+                .expect("fixture compiles");
         let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
         let child = |index, colour| EvaluatedLayer {
             compiled_layer_index: index,
@@ -1510,7 +1513,7 @@ mod tests {
 
     #[test]
     fn particle_and_spectrum_sources_render_inside_groups_deterministically() {
-        let particle_system = crate::plan::CompiledParticleSystem {
+        let particle_system = vestra_core::plan::CompiledParticleSystem {
             seed: 7,
             emitter: crate::project::ParticleEmitter::default(),
             rate_units_per_second: 0,
@@ -1531,7 +1534,7 @@ mod tests {
             angular_velocity_range: None,
             primitive: crate::project::ParticlePrimitive::Square,
             blend_mode: crate::project::ParticleBlendMode::Normal,
-            bursts: vec![crate::plan::CompiledParticleBurst {
+            bursts: vec![vestra_core::plan::CompiledParticleBurst {
                 time_nanos: 0,
                 count: 1,
             }],
@@ -1550,7 +1553,7 @@ mod tests {
             source: EvaluatedSource::ParticleSystem {
                 system: std::sync::Arc::new(particle_system),
                 time_nanos: 0,
-                appearance: crate::plan::EvaluatedParticleAppearance::default(),
+                appearance: vestra_core::plan::EvaluatedParticleAppearance::default(),
             },
             transform: identity_transform(),
             opacity: 1.0,
@@ -1661,7 +1664,7 @@ mod tests {
         let asset_paths = std::collections::BTreeMap::new();
         let audio_durations = std::collections::BTreeMap::new();
         let warnings = Vec::new();
-        let input = crate::plan::PlanCompileInput::new(
+        let input = vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -1672,9 +1675,10 @@ mod tests {
             24,
             &warnings,
         );
-        let plan = crate::plan::compile(&input, crate::plan::CompileOptions::default())
+        let plan = vestra_core::plan::compile(input, vestra_core::plan::CompileOptions::default())
             .expect("canonical Group compiles");
-        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(0)], 0);
+        let frame = vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(0)], 0)
+            .expect("renderer fixture evaluates");
         let output = render_frame_with_plan(frame, &plan);
         assert_eq!(output.get_pixel(2, 2), &Rgba([102, 166, 230, 255]));
     }
@@ -1726,7 +1730,7 @@ mod tests {
         let assets = std::collections::BTreeMap::new();
         let durations = std::collections::BTreeMap::new();
         let warnings = Vec::new();
-        let input = crate::plan::PlanCompileInput::new(
+        let input = vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -1737,13 +1741,17 @@ mod tests {
             48,
             &warnings,
         );
-        let plan = crate::plan::compile(&input, crate::plan::CompileOptions::default())
+        let plan = vestra_core::plan::compile(input, vestra_core::plan::CompileOptions::default())
             .expect("Group transition compiles");
-        let frame = crate::plan::evaluate(
+        let frame = vestra_core::plan::evaluate(
             &plan,
-            &[crate::plan::ScheduledItem(0), crate::plan::ScheduledItem(1)],
+            &[
+                vestra_core::plan::ScheduledItem(0),
+                vestra_core::plan::ScheduledItem(1),
+            ],
             1_000_000_000,
-        );
+        )
+        .expect("renderer fixture evaluates");
         let output = render_frame_with_plan(frame, &plan);
         let pixel = output.get_pixel(1, 1);
         assert!(pixel[0] > 0 && pixel[2] > 0 && pixel[1] == 0);
@@ -1880,7 +1888,7 @@ mod tests {
         let mut particle_layer = layer(1.0, crate::project::BlendMode::Normal);
         particle_layer.content_dependency = TemporalDependency::Dynamic;
         particle_layer.source = EvaluatedSource::ParticleSystem {
-            system: std::sync::Arc::new(crate::plan::CompiledParticleSystem {
+            system: std::sync::Arc::new(vestra_core::plan::CompiledParticleSystem {
                 seed: 0,
                 emitter: crate::project::ParticleEmitter::default(),
                 rate_units_per_second: 0,
@@ -1911,7 +1919,7 @@ mod tests {
                 audio_intensity: None,
             }),
             time_nanos: 0,
-            appearance: crate::plan::EvaluatedParticleAppearance::default(),
+            appearance: vestra_core::plan::EvaluatedParticleAppearance::default(),
         };
         particle_layer.effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
         assert!(!uses_direct_colour_path(&particle_layer));
@@ -1919,7 +1927,7 @@ mod tests {
 
     #[test]
     fn particle_pixels_pass_through_the_cpu_effect_chain() {
-        let system = crate::plan::CompiledParticleSystem {
+        let system = vestra_core::plan::CompiledParticleSystem {
             seed: 0,
             emitter: crate::project::ParticleEmitter::default(),
             rate_units_per_second: 0,
@@ -1940,7 +1948,7 @@ mod tests {
             angular_velocity_range: None,
             primitive: crate::project::ParticlePrimitive::Square,
             blend_mode: crate::project::ParticleBlendMode::Normal,
-            bursts: vec![crate::plan::CompiledParticleBurst {
+            bursts: vec![vestra_core::plan::CompiledParticleBurst {
                 time_nanos: 0,
                 count: 1,
             }],

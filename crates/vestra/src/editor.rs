@@ -46,8 +46,8 @@ impl fmt::Display for EditorErrorKind {
 #[derive(Clone, Debug, Default)]
 pub struct Editor;
 
-/// Builder for persistent SDK configuration. Phase 5 has no persistent
-/// runtime options yet, but the builder provides the stable construction path.
+/// Builder for persistent SDK configuration. The builder currently has no
+/// persistent runtime options, but it provides the stable construction path.
 #[derive(Clone, Debug, Default)]
 pub struct EditorBuilder;
 

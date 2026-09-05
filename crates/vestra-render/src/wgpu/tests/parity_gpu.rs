@@ -9,16 +9,17 @@ use super::{
     parameters::{FrameParameterArena, LayerParameters},
     requirements::GpuRequirements,
 };
+use vestra_core::plan::{
+    ActiveSchedule, ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty,
+    CompiledSizing, CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, EvaluatedSource,
+    RenderPlan, ScheduleAction, ScheduledItem, TimedEffect, compile,
+};
+
 use crate::{
     animation::Track,
     domain::{Crop, Point},
-    plan::{
-        ActiveSchedule, ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty,
-        CompiledSizing, CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, EvaluatedSource,
-        RenderPlan, ScheduleAction, ScheduledItem, TimedEffect, compile,
-    },
-    project::{ValidationOptions, load_and_validate},
     render::{CpuBackend, RenderBackend, effects::effect_pass_plan},
+    test_support::{ValidationOptions, load_and_validate},
 };
 use bytemuck::Zeroable;
 use image::RgbaImage;
@@ -30,10 +31,10 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
         background: [0, 0, 0, 0],
         width: 10,
         height: 4,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -54,7 +55,7 @@ fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
             effects: Vec::new(),
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: Vec::new(),
@@ -183,7 +184,7 @@ fn render_project_parity(
     );
     let mut durations = std::collections::BTreeMap::new();
     durations.insert("tone".to_owned(), 2.0);
-    let input = crate::plan::PlanCompileInput::new(
+    let input = vestra_core::plan::PlanCompileInput::new(
         &project,
         vestra_core::validation::ResourceLimits::default(),
         std::path::Path::new("."),
@@ -194,10 +195,11 @@ fn render_project_parity(
         48,
         &[],
     );
-    let plan = compile(&input, CompileOptions::default()).expect("Group parity project compiles");
+    let plan = compile(input, CompileOptions::default()).expect("Group parity project compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("Group parity assets decode");
     let active = active_items_at(&plan, time);
-    let frame = crate::plan::evaluate(&plan, &active, time);
+    let frame =
+        vestra_core::plan::evaluate(&plan, &active, time).expect("renderer fixture evaluates");
     let mut cpu_output = RgbaImage::new(frame.width, frame.height);
     let mut gpu_output = RgbaImage::new(frame.width, frame.height);
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
@@ -438,13 +440,13 @@ fn run_image_mask_parity(case: &str, mode: &str, masks: Value, pixels: Vec<u8>) 
         &project_path,
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .unwrap_or_else(|error| panic!("{case} image mask project validates: {error:?}"));
-    let plan = compile(&validated, CompileOptions::default()).expect("image mask parity compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("image mask parity compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("image mask parity assets decode");
-    let frame = crate::plan::evaluate(&plan, &active_items_at(&plan, 0), 0);
+    let frame = vestra_core::plan::evaluate(&plan, &active_items_at(&plan, 0), 0)
+        .expect("renderer fixture evaluates");
     let mut cpu_output = RgbaImage::new(frame.width, frame.height);
     let mut gpu_output = RgbaImage::new(frame.width, frame.height);
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
@@ -539,7 +541,7 @@ fn assert_particle_group_plan_targets_group_canvas(project: &crate::project::Pro
     assert!(report.is_valid(), "particle Group project is invalid");
     let assets = std::collections::BTreeMap::new();
     let durations = std::collections::BTreeMap::new();
-    let input = crate::plan::PlanCompileInput::new(
+    let input = vestra_core::plan::PlanCompileInput::new(
         project,
         vestra_core::validation::ResourceLimits::default(),
         std::path::Path::new("."),
@@ -550,8 +552,9 @@ fn assert_particle_group_plan_targets_group_canvas(project: &crate::project::Pro
         24,
         &[],
     );
-    let plan = compile(&input, CompileOptions::default()).expect("particle Group plan compiles");
-    let frame = crate::plan::evaluate(&plan, &active_items_at(&plan, 0), 0);
+    let plan = compile(input, CompileOptions::default()).expect("particle Group plan compiles");
+    let frame = vestra_core::plan::evaluate(&plan, &active_items_at(&plan, 0), 0)
+        .expect("renderer fixture evaluates");
     let frame_plan = GpuFramePlan::build(&frame);
     frame_plan
         .validate(0)
@@ -610,7 +613,7 @@ fn gpu_nested_group_matches_cpu_when_an_adapter_is_available() {
     let assets = std::collections::BTreeMap::new();
     let durations = std::collections::BTreeMap::new();
     let warnings = Vec::new();
-    let input = crate::plan::PlanCompileInput::new(
+    let input = vestra_core::plan::PlanCompileInput::new(
         &project,
         vestra_core::validation::ResourceLimits::default(),
         std::path::Path::new("."),
@@ -621,9 +624,10 @@ fn gpu_nested_group_matches_cpu_when_an_adapter_is_available() {
         24,
         &warnings,
     );
-    let plan = compile(&input, CompileOptions::default()).expect("nested Group compiles");
+    let plan = compile(input, CompileOptions::default()).expect("nested Group compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("nested Group assets decode");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
         return;
@@ -761,7 +765,7 @@ fn gpu_spectrum2d_inside_group_matches_cpu_on_vulkan() {
     );
     let assets = std::collections::BTreeMap::new();
     let durations = std::collections::BTreeMap::new();
-    let input = crate::plan::PlanCompileInput::new(
+    let input = vestra_core::plan::PlanCompileInput::new(
         &project,
         vestra_core::validation::ResourceLimits::default(),
         std::path::Path::new("."),
@@ -772,15 +776,16 @@ fn gpu_spectrum2d_inside_group_matches_cpu_on_vulkan() {
         24,
         &[],
     );
-    let plan = compile(&input, CompileOptions::default()).expect("Spectrum Group plan compiles");
+    let plan = compile(input, CompileOptions::default()).expect("Spectrum Group plan compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("Spectrum Group assets decode");
     let active = active_items_at(&plan, 0);
-    let mut frame = crate::plan::evaluate(&plan, &active, 0);
+    let mut frame =
+        vestra_core::plan::evaluate(&plan, &active, 0).expect("renderer fixture evaluates");
     let spectrum = spectrum_frame(vec![1.0, 0.5, 0.25, 0.75], 0.0)
         .layers
         .remove(0)
         .source;
-    let crate::plan::EvaluatedSource::Group { composition, .. } = &mut frame.layers[0].source
+    let vestra_core::plan::EvaluatedSource::Group { composition, .. } = &mut frame.layers[0].source
     else {
         panic!("expected Group source");
     };
@@ -895,7 +900,7 @@ fn plan_for_evaluated_effect_case(base: &RenderPlan, frame: &EvaluatedFrame) -> 
                 radius: scalar(Track::new(1.0)),
                 intensity: scalar(Track::new(1.0)),
             },
-            dependency: crate::plan::TemporalDependency::Static,
+            dependency: vestra_core::plan::TemporalDependency::Static,
         });
     }
     plan
@@ -955,11 +960,10 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("RGBA parity fixture validates");
-    let mut base = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut base = compile(validated, CompileOptions::default()).expect("fixture compiles");
     base.layers[0].effects = vec![TimedEffect {
         start: 0,
         end: u128::MAX,
@@ -969,9 +973,10 @@ fn evaluated_effect_chain_reserves_more_than_the_old_four_pass_capacity() {
             intensity: scalar(Track::new(0.8)),
             colour: [255, 170, 60, 255],
         },
-        dependency: crate::plan::TemporalDependency::Static,
+        dependency: vestra_core::plan::TemporalDependency::Static,
     }];
-    let mut frame = crate::plan::evaluate(&base, &[ScheduledItem(0)], 0);
+    let mut frame = vestra_core::plan::evaluate(&base, &[ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     frame.layers[0].effects = vec![
         EvaluatedEffect::Sharpen {
             amount: 0.65,
@@ -1027,11 +1032,10 @@ fn gpu_spectrum2d_matches_cpu_for_fractional_zero_gap_bars() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
     plan.compilation.effect_pass_count = 0;
@@ -1065,11 +1069,10 @@ fn gpu_spectrum2d_brightness_matches_cpu_without_double_application() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
     plan.compilation.effect_pass_count = 0;
@@ -1088,11 +1091,10 @@ fn gpu_spectrum2d_brightness_then_bloom_matches_cpu() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
     plan.compilation.effect_pass_count = 0;
@@ -1124,11 +1126,10 @@ fn gpu_spectrum2d_frames_keep_distinct_in_flight_band_data() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
     plan.compilation.effect_pass_count = 0;
@@ -1164,11 +1165,10 @@ fn gpu_spectrum2d_layout_and_style_cases_match_cpu() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 32;
     plan.canvas.height = 32;
     plan.compilation.effect_pass_count = 0;
@@ -1336,11 +1336,10 @@ fn gpu_spectrum2d_uses_the_existing_bloom_pipeline() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    let mut base_plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut base_plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     base_plan.canvas.width = 10;
     base_plan.canvas.height = 4;
     base_plan.compilation.effect_pass_count = 0;
@@ -1388,19 +1387,20 @@ fn generated_camera_shake_changes_geometry_without_creating_a_pixel_effect_pass(
         std::path::Path::new("examples/presets/heavy-impact.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("heavy-impact fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
-    let before = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_450_000_000);
-    let during = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 1_550_000_000);
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
+    let before = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 1_450_000_000)
+        .expect("renderer fixture evaluates");
+    let during = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 1_550_000_000)
+        .expect("renderer fixture evaluates");
     let before_transform = before.layers[0].transform;
-    let crate::plan::EvaluatedSource::Image { .. } = &before.layers[0].source else {
+    let vestra_core::plan::EvaluatedSource::Image { .. } = &before.layers[0].source else {
         unreachable!("heavy-impact clip uses an image")
     };
     let during_transform = during.layers[0].transform;
-    let crate::plan::EvaluatedSource::Image { .. } = &during.layers[0].source else {
+    let vestra_core::plan::EvaluatedSource::Image { .. } = &during.layers[0].source else {
         unreachable!("heavy-impact clip uses an image")
     };
     assert_ne!(before_transform.position, during_transform.position);
@@ -1435,11 +1435,10 @@ fn gpu_background_frame_matches_cpu_when_an_adapter_is_available() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
@@ -1473,11 +1472,10 @@ fn gpu_image_layer_matches_cpu_within_two_channels_when_an_adapter_is_available(
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
@@ -1489,11 +1487,13 @@ fn gpu_image_layer_matches_cpu_within_two_channels_when_an_adapter_is_available(
         .position(|layer| {
             matches!(
                 layer.source,
-                crate::plan::CompiledVisualSource::Image { .. }
+                vestra_core::plan::CompiledVisualSource::Image { .. }
             )
         })
         .expect("fixture has image");
-    let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+    let frame =
+        vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(image_layer)], 0)
+            .expect("renderer fixture evaluates");
     let mut cpu_output = RgbaImage::new(frame.width, frame.height);
     let mut gpu_output = RgbaImage::new(frame.width, frame.height);
     cpu.render_frame(&frame, &mut cpu_output)
@@ -1513,11 +1513,10 @@ fn gpu_multilayer_frame_uses_nonzero_dynamic_offsets_without_validation_errors()
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layers = plan
         .layers
@@ -1530,11 +1529,12 @@ fn gpu_multilayer_frame_uses_nonzero_dynamic_offsets_without_validation_errors()
     let [first, second] = image_layers.as_slice() else {
         panic!("canonical fixture must contain two visible image layers");
     };
-    let frame = crate::plan::evaluate(
+    let frame = vestra_core::plan::evaluate(
         &plan,
         &[ScheduledItem(*first), ScheduledItem(*second)],
         1_750_000_000,
-    );
+    )
+    .expect("renderer fixture evaluates");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
         return;
@@ -1569,13 +1569,13 @@ fn gpu_rgba_fixture_matches_cpu_with_transparent_edges_when_an_adapter_is_availa
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("RGBA parity fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
-    let frame = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, decoded) else {
         return;
@@ -1599,16 +1599,15 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("RGBA parity fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 173;
     plan.canvas.height = 129;
     let mut upper = plan.layers[0].clone();
     upper.id = "overlapping-rgba-layer".to_owned();
-    upper.opacity = crate::plan::CompiledScalarProperty::authored(Track::new(1.0));
+    upper.opacity = vestra_core::plan::CompiledScalarProperty::authored(Track::new(1.0));
     upper.transform.position = Track::new(Point { x: 0.56, y: 0.46 });
     upper.effects = vec![TimedEffect {
         start: 0,
@@ -1619,9 +1618,9 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
             softness: Track::new(0.2),
             colour: [0, 255, 1, 255],
         },
-        dependency: crate::plan::TemporalDependency::Static,
+        dependency: vestra_core::plan::TemporalDependency::Static,
     }];
-    plan.layers[0].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(1.0));
+    plan.layers[0].opacity = vestra_core::plan::CompiledScalarProperty::authored(Track::new(1.0));
     plan.layers.push(upper);
     plan.compilation.effect_pass_count = 1;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
@@ -1646,7 +1645,9 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     assert_eq!(crate::project::BlendMode::ALL.len(), 5);
     for mode in crate::project::BlendMode::ALL {
         for (case, background, lower_opacity, upper_opacity) in cases {
-            let mut frame = crate::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 0);
+            let mut frame =
+                vestra_core::plan::evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 0)
+                    .expect("renderer fixture evaluates");
             frame.background = background;
             frame.layers[0].opacity = lower_opacity;
             frame.layers[1].opacity = upper_opacity;
@@ -1723,13 +1724,13 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
             std::path::Path::new(path),
             &ValidationOptions {
                 check_backend: false,
-                ..ValidationOptions::default()
             },
         )
         .expect("generated feature fixture validates");
-        let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
         let active = active_items_at(&plan, time);
-        let frame = crate::plan::evaluate(&plan, &active, time);
+        let frame =
+            vestra_core::plan::evaluate(&plan, &active, time).expect("renderer fixture evaluates");
         match name {
             "impact preset" => assert!(matches!(
                 frame.layers[0].effects.as_slice(),
@@ -1757,7 +1758,7 @@ fn gpu_matches_cpu_for_generated_preset_transition_camera_shake_and_flash_frames
             )),
             "flash overlay" => assert!(frame.layers.iter().any(|layer| matches!(
                 layer.source,
-                crate::plan::EvaluatedSource::SolidColor { .. }
+                vestra_core::plan::EvaluatedSource::SolidColor { .. }
             ))),
             _ => {}
         }
@@ -1790,7 +1791,6 @@ fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("flash fixture validates");
@@ -1799,7 +1799,7 @@ fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
         ("opaque flash", true, false),
         ("partial flash with global post", false, true),
     ] {
-        let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+        let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
         if global_post {
             plan.post_effects.push(TimedEffect {
                 start: 0,
@@ -1810,20 +1810,21 @@ fn gpu_flash_matches_cpu_for_opaque_and_global_post_effect_variants() {
                     softness: Track::new(0.35),
                     colour: [0, 0, 0, 255],
                 },
-                dependency: crate::plan::TemporalDependency::Static,
+                dependency: vestra_core::plan::TemporalDependency::Static,
             });
             plan.compilation.effect_pass_count += 1;
         }
         let time = 1_150_000_000;
         let active = active_items_at(&plan, time);
-        let mut frame = crate::plan::evaluate(&plan, &active, time);
+        let mut frame =
+            vestra_core::plan::evaluate(&plan, &active, time).expect("renderer fixture evaluates");
         let flash = frame
             .layers
             .iter_mut()
             .find(|layer| {
                 matches!(
                     layer.source,
-                    crate::plan::EvaluatedSource::SolidColor { .. }
+                    vestra_core::plan::EvaluatedSource::SolidColor { .. }
                 )
             })
             .expect("fixture has an active flash layer");
@@ -1859,11 +1860,10 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let canonical = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&canonical).expect("fixture decodes");
     let image_layers = canonical
         .layers
@@ -1900,10 +1900,11 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
         plan.layers[*red].transform.anchor = Track::new(Point { x: 0.31, y: 0.67 });
         plan.layers[*red].transform.scale = Track::new(Point { x: 0.79, y: 1.13 });
         plan.layers[*red].transform.rotation_degrees = scalar(Track::new(0.31_f64.to_degrees()));
-        plan.layers[*red].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.63));
+        plan.layers[*red].opacity =
+            vestra_core::plan::CompiledScalarProperty::authored(Track::new(0.63));
         plan.layers[*red].effects = vec![
             CompiledEffect::Brightness {
-                amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.08)),
+                amount: vestra_core::plan::CompiledScalarProperty::authored(Track::new(0.08)),
             },
             CompiledEffect::Contrast {
                 amount: scalar(Track::new(0.82)),
@@ -1917,11 +1918,11 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
             },
         ]
         .into_iter()
-        .map(|effect| crate::plan::TimedEffect {
+        .map(|effect| vestra_core::plan::TimedEffect {
             start: 0,
             end: u128::MAX,
             effect,
-            dependency: crate::plan::TemporalDependency::Static,
+            dependency: vestra_core::plan::TemporalDependency::Static,
         })
         .collect();
         plan.compilation.effect_pass_count = plan.layers[*red]
@@ -1929,7 +1930,8 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
             .iter()
             .map(|effect| effect.effect.estimated_pass_count())
             .sum();
-        let frame = crate::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000);
+        let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(*red)], 750_000_000)
+            .expect("renderer fixture evaluates");
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = hardware_wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
@@ -1952,13 +1954,16 @@ fn gpu_composite_matches_cpu_for_sizing_transforms_effects_and_alpha() {
     }
 
     let mut plan = canonical.clone();
-    plan.layers[*red].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.47));
-    plan.layers[*blue].opacity = crate::plan::CompiledScalarProperty::authored(Track::new(0.58));
-    let frame = crate::plan::evaluate(
+    plan.layers[*red].opacity =
+        vestra_core::plan::CompiledScalarProperty::authored(Track::new(0.47));
+    plan.layers[*blue].opacity =
+        vestra_core::plan::CompiledScalarProperty::authored(Track::new(0.58));
+    let frame = vestra_core::plan::evaluate(
         &plan,
         &[ScheduledItem(*red), ScheduledItem(*blue)],
         1_750_000_000,
-    );
+    )
+    .expect("renderer fixture evaluates");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;
@@ -1982,11 +1987,10 @@ fn gpu_canonical_timeline_frames_match_cpu_within_two_channels() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
@@ -2013,7 +2017,8 @@ fn gpu_canonical_timeline_frames_match_cpu_within_two_channels() {
         let time =
             crate::timeline::frame_time_nanos(frame_index, plan.frame_rate.0, plan.frame_rate.1)
                 .expect("validated plan has representable timeline timestamps");
-        let evaluated = crate::plan::evaluate(&plan, &active, time);
+        let evaluated =
+            vestra_core::plan::evaluate(&plan, &active, time).expect("renderer fixture evaluates");
         let mut cpu_output = RgbaImage::new(evaluated.width, evaluated.height);
         let mut gpu_output = RgbaImage::new(evaluated.width, evaluated.height);
         cpu.render_frame(&evaluated, &mut cpu_output)
@@ -2034,11 +2039,10 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
         std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("RGBA parity fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     // Exercise odd output dimensions as well as the fixture's transparent,
     // partial-alpha, sharp-edge, and nonuniform-colour source pixels.
     plan.canvas.width = 173;
@@ -2053,11 +2057,12 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
             intensity: scalar(Track::new(0.8)),
             colour: [255, 170, 60, 255],
         },
-        dependency: crate::plan::TemporalDependency::Static,
+        dependency: vestra_core::plan::TemporalDependency::Static,
     }];
     plan.compilation.effect_pass_count = 4;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
-    let base = crate::plan::evaluate(&plan, &[ScheduledItem(0)], 0);
+    let base = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let cases = [
         (
             "brightness",

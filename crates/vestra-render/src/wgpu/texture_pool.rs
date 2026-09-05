@@ -6,7 +6,7 @@
 //! pass writes `Layer`. Compute shaders clamp before each write, which matches
 //! the CPU renderer's byte-oriented semantics.
 
-use crate::plan::RenderPlan;
+use vestra_core::plan::RenderPlan;
 
 use super::frame_plan::{
     GpuFramePlan, TextureSlot, plan_has_mask_feather, plan_has_masks, plan_requires_auxiliary,
@@ -34,7 +34,7 @@ pub(super) struct WorkingTexture {
     pub(super) estimated_bytes: u64,
 }
 
-/// Immutable completed layer-local output retained for Phase 10B reuse.
+/// Immutable completed layer-local output retained for static-layer reuse.
 /// It is sampled by composition and never used as a render target after
 /// publication.
 pub(super) struct StaticLayerTexture {

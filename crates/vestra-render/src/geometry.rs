@@ -1,9 +1,10 @@
 //! Renderer-neutral image geometry.
 
+use vestra_core::plan::CompiledSizing;
+
 use crate::{
     animation::Transform2D,
     domain::{Crop, Point},
-    plan::CompiledSizing,
 };
 
 /// Dimensions of prepared source-local raster content.
@@ -472,10 +473,11 @@ pub(crate) fn visible_bounds(
 #[cfg(test)]
 mod tests {
     use super::{IntrinsicSize, resolve_raster_geometry, visible_bounds};
+    use vestra_core::plan::CompiledSizing;
+
     use crate::{
         animation::Transform2D,
         domain::{Crop, Point},
-        plan::CompiledSizing,
     };
 
     #[test]

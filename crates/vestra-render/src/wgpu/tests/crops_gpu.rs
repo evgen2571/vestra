@@ -6,12 +6,13 @@ use std::sync::{
 };
 
 use super::{compare_rgba, gpu::wgpu_backend_or_skip};
+use vestra_core::plan::{CompileOptions, compile};
+
 use crate::{
     animation::{Interpolation, Keyframe, Track},
     domain::Crop,
-    plan::{CompileOptions, compile},
-    project::{ValidationOptions, load_and_validate},
     render::CpuBackend,
+    test_support::{ValidationOptions, load_and_validate},
 };
 use image::RgbaImage;
 
@@ -68,7 +69,7 @@ impl crate::VideoDecoderSession for TimingVideoSession {
 impl crate::VideoDecoderFactory for TimingVideoFactory {
     fn open(
         &self,
-        _asset: &crate::plan::VideoAsset,
+        _asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(TimingVideoSession {
@@ -99,7 +100,7 @@ impl crate::VideoDecoderSession for TransitionVideoSession {
 impl crate::VideoDecoderFactory for TransitionVideoFactory {
     fn open(
         &self,
-        asset: &crate::plan::VideoAsset,
+        asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(TransitionVideoSession {
@@ -119,7 +120,7 @@ impl crate::VideoDecoderSession for CountingVideoSession {
 impl crate::VideoDecoderFactory for CountingVideoFactory {
     fn open(
         &self,
-        _asset: &crate::plan::VideoAsset,
+        _asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         self.opens.fetch_add(1, Ordering::Relaxed);
@@ -146,7 +147,7 @@ impl crate::VideoDecoderSession for VideoFixtureSession {
 impl crate::VideoDecoderFactory for VideoFixtureFactory {
     fn open(
         &self,
-        _asset: &crate::plan::VideoAsset,
+        _asset: &vestra_core::plan::VideoAsset,
         _cache_budget_bytes: u64,
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(VideoFixtureSession {
@@ -184,8 +185,8 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
     let durations =
         std::collections::BTreeMap::from([("used".to_owned(), 1.0), ("unused".to_owned(), 1.0)]);
     let dimensions = std::collections::BTreeMap::from([("used".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -198,7 +199,7 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("unused-video fixture compiles");
     let opens = Arc::new(AtomicUsize::new(0));
@@ -218,7 +219,8 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
     assert_eq!(frame_requests.load(Ordering::Relaxed), 1);
     assert_eq!(backend.video_upload_count(), 0);
 
-    let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(0)], 0);
+    let frame = vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let mut output = RgbaImage::new(1, 1);
     backend
         .render_frame(&frame, &mut output)
@@ -258,8 +260,8 @@ fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 4.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (1, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -272,7 +274,7 @@ fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("Video timing project compiles");
     let requests = Arc::new(Mutex::new(Vec::new()));
@@ -283,7 +285,9 @@ fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
         })),
     )
     .expect("Video timing assets decode");
-    let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(0)], 500_000_000);
+    let frame =
+        vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(0)], 500_000_000)
+            .expect("renderer fixture evaluates");
     let mut cpu_output = RgbaImage::new(1, 1);
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     cpu.render_frame(&frame, &mut cpu_output)
@@ -308,7 +312,9 @@ fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
     let first_cpu = cpu_output.clone();
     let first_gpu = gpu_output.clone();
     for time in [1_500_000_000, 250_000_000, 750_000_000, 500_000_000] {
-        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(0)], time);
+        let frame =
+            vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(0)], time)
+                .expect("renderer fixture evaluates");
         cpu.render_frame(&frame, &mut cpu_output)
             .expect("CPU random-access timing frame renders");
         gpu.render_frame(&frame, &mut gpu_output)
@@ -365,8 +371,8 @@ fn gpu_video_to_video_transition_advances_both_sources_and_matches_cpu() {
         ("video-a".to_owned(), (1, 1)),
         ("video-b".to_owned(), (1, 1)),
     ]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -379,7 +385,7 @@ fn gpu_video_to_video_transition_advances_both_sources_and_matches_cpu() {
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("Video transition project compiles");
     assert_eq!(plan.video_slot_count(), 2);
@@ -396,11 +402,15 @@ fn gpu_video_to_video_transition_advances_both_sources_and_matches_cpu() {
         return;
     };
     for time in [500_000_000, 750_000_000] {
-        let frame = crate::plan::evaluate(
+        let frame = vestra_core::plan::evaluate(
             &plan,
-            &[crate::plan::ScheduledItem(0), crate::plan::ScheduledItem(1)],
+            &[
+                vestra_core::plan::ScheduledItem(0),
+                vestra_core::plan::ScheduledItem(1),
+            ],
             time,
-        );
+        )
+        .expect("renderer fixture evaluates");
         let mut cpu_output = RgbaImage::new(1, 1);
         let mut gpu_output = RgbaImage::new(1, 1);
         cpu.render_frame(&frame, &mut cpu_output)
@@ -458,8 +468,8 @@ fn gpu_video_crop_matches_cpu_for_a_dynamic_frame_when_an_adapter_is_available()
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 1.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (2, 1))]);
-    let plan = crate::plan::compile(
-        &crate::plan::PlanCompileInput::new(
+    let plan = vestra_core::plan::compile(
+        vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
             std::path::Path::new("."),
@@ -472,7 +482,7 @@ fn gpu_video_crop_matches_cpu_for_a_dynamic_frame_when_an_adapter_is_available()
         )
         .with_video_durations(&durations)
         .with_video_dimensions(&dimensions),
-        crate::plan::CompileOptions::default(),
+        vestra_core::plan::CompileOptions::default(),
     )
     .expect("video fixture compiles");
     assert_eq!(plan.video_slot_count(), 1);
@@ -492,7 +502,8 @@ fn gpu_video_crop_matches_cpu_for_a_dynamic_frame_when_an_adapter_is_available()
         })),
     )
     .expect("video fixture decodes");
-    let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(0)], 0);
+    let frame = vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(0)], 0)
+        .expect("renderer fixture evaluates");
     let mut cpu_output = RgbaImage::new(1, 1);
     crate::render::CpuBackend::new(&plan, Arc::clone(&decoded))
         .render_frame(&frame, &mut cpu_output)
@@ -520,11 +531,10 @@ fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let canonical = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let canonical = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&canonical).expect("fixture decodes");
     let image_layer = canonical
         .layers
@@ -532,7 +542,7 @@ fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
         .position(|layer| {
             matches!(
                 layer.source,
-                crate::plan::CompiledVisualSource::Image { .. }
+                vestra_core::plan::CompiledVisualSource::Image { .. }
             )
         })
         .expect("fixture has image");
@@ -570,7 +580,7 @@ fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
         },
     ] {
         let mut plan = canonical.clone();
-        let crate::plan::CompiledVisualSource::Image {
+        let vestra_core::plan::CompiledVisualSource::Image {
             crop: track,
             cacheable_crop,
             ..
@@ -580,7 +590,9 @@ fn gpu_static_crops_match_cpu_when_an_adapter_is_available() {
         };
         *track = Track::new(crop);
         *cacheable_crop = true;
-        let frame = crate::plan::evaluate(&plan, &[crate::plan::ScheduledItem(image_layer)], 0);
+        let frame =
+            vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(image_layer)], 0)
+                .expect("renderer fixture evaluates");
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
         let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
             return;
@@ -605,11 +617,10 @@ fn gpu_animated_crop_matches_cpu_when_an_adapter_is_available() {
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("canonical fixture validates");
-    let mut plan = compile(&validated, CompileOptions::default()).expect("fixture compiles");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let image_layer = plan
         .layers
@@ -617,11 +628,11 @@ fn gpu_animated_crop_matches_cpu_when_an_adapter_is_available() {
         .position(|layer| {
             matches!(
                 layer.source,
-                crate::plan::CompiledVisualSource::Image { .. }
+                vestra_core::plan::CompiledVisualSource::Image { .. }
             )
         })
         .expect("fixture has image");
-    let crate::plan::CompiledVisualSource::Image {
+    let vestra_core::plan::CompiledVisualSource::Image {
         crop,
         cacheable_crop,
         ..
@@ -648,11 +659,12 @@ fn gpu_animated_crop_matches_cpu_when_an_adapter_is_available() {
         }],
     };
     *cacheable_crop = false;
-    let frame = crate::plan::evaluate(
+    let frame = vestra_core::plan::evaluate(
         &plan,
-        &[crate::plan::ScheduledItem(image_layer)],
+        &[vestra_core::plan::ScheduledItem(image_layer)],
         500_000_000,
-    );
+    )
+    .expect("renderer fixture evaluates");
     let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
     let Some(mut gpu) = wgpu_backend_or_skip(&plan, Arc::clone(&decoded)) else {
         return;

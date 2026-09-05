@@ -16,7 +16,9 @@ use crate::render::{
 use crate::video::VideoDecoderSession;
 
 #[cfg(test)]
-use crate::{Diagnostic, plan::RenderPlan};
+use crate::Diagnostic;
+#[cfg(test)]
+use vestra_core::plan::{CompileOptions, RenderPlan, compile};
 
 pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
@@ -279,10 +281,7 @@ fn crop_key(asset: usize, source: &RgbaImage, crop: crate::domain::Crop) -> Crop
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        plan::{CompileOptions, compile},
-        project::{ValidationOptions, load_and_validate},
-    };
+    use crate::test_support::{ValidationOptions, load_and_validate};
 
     #[test]
     fn caches_static_source_crops_with_byte_metrics() {
@@ -290,11 +289,10 @@ mod tests {
             std::path::Path::new("examples/projects/animation-effects.json"),
             &ValidationOptions {
                 check_backend: false,
-                ..ValidationOptions::default()
             },
         )
         .expect("valid fixture");
-        let plan = compile(&validated, CompileOptions::default()).expect("compiled plan");
+        let plan = compile(validated, CompileOptions::default()).expect("compiled plan");
         let mut assets = PreparedAssets::build(&plan).expect("decoded assets");
         let crop = crate::domain::Crop {
             x: 0.1,
@@ -317,11 +315,10 @@ mod tests {
             std::path::Path::new("examples/projects/animation-effects.json"),
             &ValidationOptions {
                 check_backend: false,
-                ..ValidationOptions::default()
             },
         )
         .expect("valid fixture");
-        let plan = compile(&validated, CompileOptions::default()).expect("compiled plan");
+        let plan = compile(validated, CompileOptions::default()).expect("compiled plan");
         let assets = PreparedAssets::build(&plan).expect("decoded assets");
         let first = assets.raster_source(1);
         let second = assets.raster_source(1);
@@ -354,11 +351,10 @@ mod tests {
             std::path::Path::new("examples/projects/animation-effects.json"),
             &ValidationOptions {
                 check_backend: false,
-                ..ValidationOptions::default()
             },
         )
         .expect("valid fixture");
-        let mut plan = compile(&validated, CompileOptions::default()).expect("compiled plan");
+        let mut plan = compile(validated, CompileOptions::default()).expect("compiled plan");
         plan.limits.maximum_cache_bytes = 1;
         let mut assets = PreparedAssets::build(&plan).expect("decoded assets");
         let crop = crate::domain::Crop {

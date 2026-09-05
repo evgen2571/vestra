@@ -5,7 +5,9 @@
     reason = "WGPU requirements preserve structured user-facing diagnostics"
 )]
 
-use crate::{Category, Diagnostic, plan::RenderPlan, render::DecodedAssets};
+use vestra_core::plan::RenderPlan;
+
+use crate::{Category, Diagnostic, render::DecodedAssets};
 
 use super::frame_plan::{
     GpuFramePlan, plan_has_mask_feather, plan_has_masks, plan_requires_auxiliary,
@@ -104,28 +106,28 @@ impl GpuRequirements {
             )
             .max()
             .unwrap_or(1);
-        fn source_group_count(source: &crate::plan::CompiledVisualSource) -> usize {
+        fn source_group_count(source: &vestra_core::plan::CompiledVisualSource) -> usize {
             match source {
-                crate::plan::CompiledVisualSource::Group(composition) => {
+                vestra_core::plan::CompiledVisualSource::Group(composition) => {
                     1 + compiled_counts(&composition.layers).1
                 }
                 _ => 0,
             }
         }
-        fn source_layer_count(source: &crate::plan::CompiledVisualSource) -> usize {
+        fn source_layer_count(source: &vestra_core::plan::CompiledVisualSource) -> usize {
             1 + match source {
-                crate::plan::CompiledVisualSource::Group(composition) => {
+                vestra_core::plan::CompiledVisualSource::Group(composition) => {
                     compiled_counts(&composition.layers).0
                 }
                 _ => 0,
             }
         }
-        fn compiled_counts(layers: &[crate::plan::CompiledLayer]) -> (usize, usize) {
+        fn compiled_counts(layers: &[vestra_core::plan::CompiledLayer]) -> (usize, usize) {
             layers
                 .iter()
                 .fold((0, 0), |(layer_count, group_count), layer| {
                     let (nested_layers, nested_groups) = match &layer.source {
-                        crate::plan::CompiledVisualSource::Group(composition) => {
+                        vestra_core::plan::CompiledVisualSource::Group(composition) => {
                             compiled_counts(&composition.layers)
                         }
                         _ => (0, 0),
@@ -134,7 +136,7 @@ impl GpuRequirements {
                         .masks
                         .iter()
                         .filter_map(|mask| match &mask.input {
-                            crate::plan::CompiledMaskInput::Source { source, .. } => {
+                            vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
                                 Some(source_group_count(source))
                             }
                             _ => None,
@@ -144,7 +146,7 @@ impl GpuRequirements {
                         .masks
                         .iter()
                         .filter_map(|mask| match &mask.input {
-                            crate::plan::CompiledMaskInput::Source { source, .. } => {
+                            vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
                                 Some(source_layer_count(source))
                             }
                             _ => None,
@@ -155,22 +157,22 @@ impl GpuRequirements {
                         group_count
                             + usize::from(matches!(
                                 &layer.source,
-                                crate::plan::CompiledVisualSource::Group(_)
+                                vestra_core::plan::CompiledVisualSource::Group(_)
                             ))
                             + nested_groups
                             + owned_groups,
                     )
                 })
         }
-        fn source_mask_count(source: &crate::plan::CompiledVisualSource) -> usize {
+        fn source_mask_count(source: &vestra_core::plan::CompiledVisualSource) -> usize {
             match source {
-                crate::plan::CompiledVisualSource::Group(composition) => {
+                vestra_core::plan::CompiledVisualSource::Group(composition) => {
                     compiled_mask_count(&composition.layers)
                 }
                 _ => 0,
             }
         }
-        fn compiled_mask_count(layers: &[crate::plan::CompiledLayer]) -> usize {
+        fn compiled_mask_count(layers: &[vestra_core::plan::CompiledLayer]) -> usize {
             layers
                 .iter()
                 .map(|layer| {
@@ -179,14 +181,14 @@ impl GpuRequirements {
                             .masks
                             .iter()
                             .filter_map(|mask| match &mask.input {
-                                crate::plan::CompiledMaskInput::Source { source, .. } => {
+                                vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
                                     Some(source_mask_count(source))
                                 }
                                 _ => None,
                             })
                             .sum::<usize>()
                         + match &layer.source {
-                            crate::plan::CompiledVisualSource::Group(composition) => {
+                            vestra_core::plan::CompiledVisualSource::Group(composition) => {
                                 compiled_mask_count(&composition.layers)
                             }
                             _ => 0,
@@ -194,13 +196,13 @@ impl GpuRequirements {
                 })
                 .sum()
         }
-        fn compiled_matte_count(layers: &[crate::plan::CompiledLayer]) -> usize {
+        fn compiled_matte_count(layers: &[vestra_core::plan::CompiledLayer]) -> usize {
             layers
                 .iter()
                 .map(|layer| {
                     usize::from(layer.matte.is_some())
                         + match &layer.source {
-                            crate::plan::CompiledVisualSource::Group(composition) => {
+                            vestra_core::plan::CompiledVisualSource::Group(composition) => {
                                 compiled_matte_count(&composition.layers)
                             }
                             _ => 0,

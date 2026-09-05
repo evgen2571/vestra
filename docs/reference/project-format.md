@@ -19,11 +19,11 @@ not read files or probe media.
 | `visual` | object | yes | Root visual composition. |
 | `audio` | object | no | Audio timeline; omitted when absent. |
 
-Schema version 4 remains the evolving, pre-release project language for this
+Schema version 4 remains the evolving project language for this
 0.1 SDK. Vestra therefore keeps additive Masks v1 fields, including the image
 `MaskInput` variant, in schema 4 rather than treating them as a stable external
 compatibility boundary. The loader still accepts schema 3 and normalizes it to
-4. A future stable format will make a deliberate version-boundary decision.
+4. A future format will make a deliberate version-boundary decision.
 
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |

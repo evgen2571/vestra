@@ -27,5 +27,5 @@ not parsed.
 
 `VESTRA_REQUIRE_WGPU`, `VESTRA_REQUIRE_HARDWARE_WGPU`, and
 `VESTRA_WGPU_FORCE_FALLBACK` are test or verification controls. The
-`VESTRA_ANALYSIS_BENCH_*`, `VESTRA_BENCH_*`, and `VESTRA_PHASE10_BENCH*`
+`VESTRA_ANALYSIS_BENCH_*`, `VESTRA_BENCH_*`, and `VESTRA_RENDER_BENCH*`
 families are benchmark/test controls. None are supported project configuration.

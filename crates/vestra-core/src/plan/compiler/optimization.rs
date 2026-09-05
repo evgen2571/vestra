@@ -43,7 +43,7 @@ pub(super) fn normalize(
             .effects
             .retain_mut(|effect| normalize_timed_effect(effect, layer.duration_nanos, compilation));
         fuse_static_colour_chain(layer);
-        layer.content_dependency = layer_dependency(layer);
+        layer.content_dependency = super::dependency::layer_dependency(layer);
     }
     post_effects.retain_mut(|effect| normalize_timed_effect(effect, project_duration, compilation));
 }
@@ -54,7 +54,7 @@ fn normalize_timed_effect(
     compilation: &mut crate::plan::CompilationStats,
 ) -> bool {
     compilation.constant_track_normalization_count += normalize_effect(&mut timed.effect);
-    timed.dependency = effect_dependency(&timed.effect);
+    timed.dependency = super::dependency::effect_dependency(&timed.effect);
     if timed.start != 0 || timed.end < owner_duration {
         timed.dependency = TemporalDependency::Dynamic;
     }
@@ -69,7 +69,7 @@ fn normalize_source(layer: &mut CompiledLayer) -> usize {
     } = &mut layer.source
     {
         let normalized = normalize_track(crop);
-        *cacheable_crop = static_track(crop);
+        *cacheable_crop = crop.keyframes.is_empty();
         normalized
     } else {
         0
@@ -164,22 +164,38 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
 }
 
 fn is_static_identity(effect: &CompiledEffect) -> bool {
-    if effect_has_modifiers(effect) {
+    let mut has_modifiers = false;
+    effect.for_each_scalar_property(|_, property| has_modifiers |= property.has_modifiers());
+    has_modifiers |= match effect {
+        CompiledEffect::MotionTile { tile_center, .. }
+        | CompiledEffect::RadialBlur {
+            center: tile_center,
+            ..
+        } => {
+            !tile_center.modifiers.is_empty()
+                || !tile_center.x_modifiers.is_empty()
+                || !tile_center.y_modifiers.is_empty()
+        }
+        _ => false,
+    };
+    if has_modifiers {
         return false;
     }
     match effect {
         CompiledEffect::ColourTransform { transform } => *transform == ColourTransform::default(),
         CompiledEffect::Brightness { amount } => {
             !amount.has_modifiers()
-                && static_track(&amount.authored_track)
+                && amount.authored_track.keyframes.is_empty()
                 && amount.authored_track.base_value == 0.0
         }
         CompiledEffect::Contrast { amount } | CompiledEffect::Saturation { amount } => {
-            static_track(amount) && amount.base_value == 1.0
+            amount.keyframes.is_empty() && amount.base_value == 1.0
         }
-        CompiledEffect::Tint { amount, .. } => static_track(amount) && amount.base_value == 0.0,
+        CompiledEffect::Tint { amount, .. } => {
+            amount.keyframes.is_empty() && amount.base_value == 0.0
+        }
         CompiledEffect::GaussianBlur { radius } => {
-            static_track(radius) && gaussian_radius_is_identity(radius.base_value)
+            radius.keyframes.is_empty() && gaussian_radius_is_identity(radius.base_value)
         }
         CompiledEffect::MotionTile {
             output_width_percent,
@@ -187,9 +203,12 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
             tile_center,
             ..
         } => {
-            static_track(output_width_percent)
-                && static_track(output_height_percent)
-                && static_point_property(tile_center)
+            output_width_percent.keyframes.is_empty()
+                && output_height_percent.keyframes.is_empty()
+                && tile_center.authored_track.keyframes.is_empty()
+                && tile_center.modifiers.is_empty()
+                && tile_center.x_modifiers.is_empty()
+                && tile_center.y_modifiers.is_empty()
                 && output_width_percent.base_value == 100.0
                 && output_height_percent.base_value == 100.0
         }
@@ -199,10 +218,10 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
             black_point,
             white_point,
         } => {
-            static_track(exposure)
-                && static_track(gamma)
-                && static_track(black_point)
-                && static_track(white_point)
+            exposure.keyframes.is_empty()
+                && gamma.keyframes.is_empty()
+                && black_point.keyframes.is_empty()
+                && white_point.keyframes.is_empty()
                 && exposure.base_value == 0.0
                 && gamma.base_value == 1.0
                 && black_point.base_value == 0.0
@@ -211,38 +230,41 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         CompiledEffect::DirectionalBlur { radius, .. }
         | CompiledEffect::ZoomBlur { radius, .. }
         | CompiledEffect::ChromaticAberration { amount: radius, .. } => {
-            static_track(radius) && sampling_blur_radius_is_identity(radius.base_value)
+            radius.keyframes.is_empty() && sampling_blur_radius_is_identity(radius.base_value)
         }
         CompiledEffect::RadialBlur {
             amount: radius,
             center,
         } => {
-            static_track(radius)
-                && static_point_property(center)
+            radius.keyframes.is_empty()
+                && center.authored_track.keyframes.is_empty()
+                && center.modifiers.is_empty()
+                && center.x_modifiers.is_empty()
+                && center.y_modifiers.is_empty()
                 && sampling_blur_radius_is_identity(radius.base_value)
         }
         CompiledEffect::Glow {
             radius, intensity, ..
         } => {
-            static_track(radius)
-                && static_track(intensity)
+            radius.keyframes.is_empty()
+                && intensity.keyframes.is_empty()
                 && (gaussian_radius_is_identity(radius.base_value)
                     || effect_amount_is_identity(intensity.base_value))
         }
         CompiledEffect::Bloom { intensity, .. } => {
-            static_track(intensity) && effect_amount_is_identity(intensity.base_value)
+            intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)
         }
         CompiledEffect::Vignette { amount, .. } => {
-            static_track(amount) && effect_amount_is_identity(amount.base_value)
+            amount.keyframes.is_empty() && effect_amount_is_identity(amount.base_value)
         }
         CompiledEffect::Sharpen { amount, radius } => {
-            static_track(amount)
-                && static_track(radius)
+            amount.keyframes.is_empty()
+                && radius.keyframes.is_empty()
                 && (effect_amount_is_identity(amount.base_value)
                     || gaussian_radius_is_identity(radius.base_value))
         }
         CompiledEffect::MotionBlur { intensity, .. } => {
-            static_track(intensity) && effect_amount_is_identity(intensity.base_value)
+            intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)
         }
         CompiledEffect::CameraShake {
             position_amount,
@@ -250,9 +272,9 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
             scale_amount,
             ..
         } => {
-            static_track(position_amount)
-                && static_track(rotation_degrees)
-                && static_track(scale_amount)
+            position_amount.keyframes.is_empty()
+                && rotation_degrees.keyframes.is_empty()
+                && scale_amount.keyframes.is_empty()
                 && position_amount.base_value == 0.0
                 && rotation_degrees.base_value == 0.0
                 && scale_amount.base_value == 0.0
@@ -263,140 +285,12 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
 fn is_static_identity_transform_contribution(
     contribution: &crate::plan::TransformContribution,
 ) -> bool {
-    static_track(&contribution.position_offset)
-        && static_track(&contribution.scale_multiplier)
-        && static_track(&contribution.rotation_radians_offset)
+    contribution.position_offset.keyframes.is_empty()
+        && contribution.scale_multiplier.keyframes.is_empty()
+        && contribution.rotation_radians_offset.keyframes.is_empty()
         && contribution.position_offset.base_value == crate::domain::Point { x: 0.0, y: 0.0 }
         && contribution.scale_multiplier.base_value == crate::domain::Point { x: 1.0, y: 1.0 }
         && contribution.rotation_radians_offset.base_value == 0.0
-}
-
-fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
-    let mut dependency = TemporalDependency::Static;
-    let source_dependency = |source: &crate::plan::CompiledVisualSource| match source {
-        crate::plan::CompiledVisualSource::Video { .. }
-        | crate::plan::CompiledVisualSource::Spectrum2D { .. }
-        | crate::plan::CompiledVisualSource::ParticleSystem(_) => TemporalDependency::Dynamic,
-        crate::plan::CompiledVisualSource::Group(composition) => composition.dependency,
-        _ => TemporalDependency::Static,
-    };
-    let owned_source_dynamic = layer.masks.iter().any(|mask| match &mask.input {
-        crate::plan::CompiledMaskInput::Source { source, .. } => {
-            source_dependency(source) == TemporalDependency::Dynamic
-        }
-        _ => false,
-    });
-    for dynamic in [
-        matches!(
-            &layer.source,
-            crate::plan::CompiledVisualSource::Image { crop, .. } if !static_track(crop)
-        ),
-        matches!(
-            &layer.source,
-            crate::plan::CompiledVisualSource::Video { .. }
-                | crate::plan::CompiledVisualSource::Spectrum2D { .. }
-                | crate::plan::CompiledVisualSource::ParticleSystem(_)
-        ),
-        matches!(&layer.source, crate::plan::CompiledVisualSource::Group(composition)
-            if composition.dependency == TemporalDependency::Dynamic),
-        layer.opacity.has_modifiers() || !static_track(&layer.opacity.authored_track),
-        layer
-            .opacity_contributions
-            .iter()
-            .any(|track| !static_track(track)),
-        !static_track(&layer.transform.position),
-        !static_track(&layer.transform.anchor),
-        !static_track(&layer.transform.scale),
-        !layer.transform.position_x_modifiers.is_empty(),
-        !layer.transform.position_y_modifiers.is_empty(),
-        !layer.transform.scale_x_modifiers.is_empty(),
-        !layer.transform.scale_y_modifiers.is_empty(),
-        layer.transform.rotation_degrees.has_modifiers()
-            || !static_track(&layer.transform.rotation_degrees.authored_track),
-        layer.transform_contributions.iter().any(|contribution| {
-            !static_track(&contribution.position_offset)
-                || !static_track(&contribution.scale_multiplier)
-                || !static_track(&contribution.rotation_radians_offset)
-                || contribution.start != 0
-                || contribution.end < layer.duration_nanos
-        }),
-        layer
-            .effects
-            .iter()
-            .any(|effect| effect.dependency == TemporalDependency::Dynamic),
-        owned_source_dynamic
-            || layer.masks.iter().any(|mask| {
-                !static_track(&mask.strength.authored_track)
-                    || mask.strength.has_modifiers()
-                    || !static_track(&mask.feather.authored_track)
-                    || mask.feather.has_modifiers()
-                    || !static_track(&mask.transform.position)
-                    || !static_track(&mask.transform.anchor)
-                    || !static_track(&mask.transform.scale)
-                    || !mask.transform.position_x_modifiers.is_empty()
-                    || !mask.transform.position_y_modifiers.is_empty()
-                    || !mask.transform.scale_x_modifiers.is_empty()
-                    || !mask.transform.scale_y_modifiers.is_empty()
-                    || !static_track(&mask.transform.rotation_degrees.authored_track)
-                    || mask.transform.rotation_degrees.has_modifiers()
-            }),
-    ] {
-        if dynamic {
-            dependency = dependency.combine(TemporalDependency::Dynamic);
-        }
-    }
-    dependency
-}
-
-pub(crate) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
-    let mut dynamic = effect_has_modifiers(effect);
-    effect.for_each_scalar_property(|_, property| {
-        dynamic |= !static_track(&property.authored_track);
-    });
-    effect.for_each_plain_track(|_, track| {
-        dynamic |= !static_track(track);
-    });
-    dynamic |= match effect {
-        CompiledEffect::MotionTile { tile_center, .. }
-        | CompiledEffect::RadialBlur {
-            center: tile_center,
-            ..
-        } => !static_point_property(tile_center),
-        _ => false,
-    };
-    dynamic |= matches!(
-        effect.definition().temporal_policy,
-        crate::effect_definition::EffectTemporalPolicy::AlwaysDynamic
-    );
-    if dynamic {
-        TemporalDependency::Dynamic
-    } else {
-        TemporalDependency::Static
-    }
-}
-
-fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
-    let mut has_modifiers = false;
-    effect.for_each_scalar_property(|_, property| has_modifiers |= property.has_modifiers());
-    has_modifiers |= match effect {
-        CompiledEffect::MotionTile { tile_center, .. }
-        | CompiledEffect::RadialBlur {
-            center: tile_center,
-            ..
-        } => point_property_has_modifiers(tile_center),
-        _ => false,
-    };
-    has_modifiers
-}
-
-fn point_property_has_modifiers(property: &crate::plan::CompiledPointProperty) -> bool {
-    !property.modifiers.is_empty()
-        || !property.x_modifiers.is_empty()
-        || !property.y_modifiers.is_empty()
-}
-
-fn static_point_property(property: &crate::plan::CompiledPointProperty) -> bool {
-    static_track(&property.authored_track) && !point_property_has_modifiers(property)
 }
 
 fn fuse_static_colour_chain(layer: &mut CompiledLayer) {
@@ -438,10 +332,6 @@ fn normalize_track<T: Interpolate + PartialEq>(track: &mut Track<T>) -> usize {
 
 fn normalize_transform<T: Interpolate + PartialEq>(track: &mut Track<T>) -> usize {
     normalize_track(track)
-}
-
-fn static_track<T>(track: &Track<T>) -> bool {
-    track.keyframes.is_empty()
 }
 
 #[cfg(test)]
@@ -509,49 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn effects_classify_static_dynamic_and_remove_only_exact_identities() {
-        let static_brightness = CompiledEffect::Brightness {
-            amount: crate::plan::CompiledScalarProperty::authored(Track::new(0.2)),
-        };
-        assert_eq!(
-            effect_dependency(&static_brightness),
-            TemporalDependency::Static
-        );
-        let dynamic_brightness = CompiledEffect::Brightness {
-            amount: crate::plan::CompiledScalarProperty::authored(Track {
-                base_value: 0.0,
-                keyframes: vec![Keyframe {
-                    time: 1,
-                    value: 0.2,
-                    interpolation: Interpolation::Linear,
-                }],
-            }),
-        };
-        assert_eq!(
-            effect_dependency(&dynamic_brightness),
-            TemporalDependency::Dynamic
-        );
-        let dynamic_center = crate::plan::CompiledPointProperty {
-            authored_track: Track {
-                base_value: crate::domain::Point { x: 0.5, y: 0.5 },
-                keyframes: vec![Keyframe {
-                    time: 1,
-                    value: crate::domain::Point { x: 0.25, y: 0.75 },
-                    interpolation: Interpolation::Linear,
-                }],
-            },
-            modifiers: Vec::new(),
-            x_modifiers: Vec::new(),
-            y_modifiers: Vec::new(),
-        };
-        let dynamic_radial = CompiledEffect::RadialBlur {
-            amount: scalar(2.0),
-            center: dynamic_center,
-        };
-        assert_eq!(
-            effect_dependency(&dynamic_radial),
-            TemporalDependency::Dynamic
-        );
+    fn normalization_removes_exact_identities_but_keeps_modulated_or_near_values() {
         let modulated_identity = CompiledEffect::Brightness {
             amount: crate::plan::CompiledScalarProperty {
                 authored_track: Track::new(0.0),
@@ -562,10 +410,6 @@ mod tests {
                 constraint: crate::plan::ScalarPropertyConstraint::Finite,
             },
         };
-        assert_eq!(
-            effect_dependency(&modulated_identity),
-            TemporalDependency::Dynamic
-        );
         let mut modulated_timed = TimedEffect {
             start: 0,
             end: 10,
@@ -699,162 +543,6 @@ mod tests {
             };
             assert!(!normalize_for_test(&mut timed, 10));
         }
-    }
-
-    #[test]
-    fn layer_dependency_includes_transform_and_effect_work() {
-        let mut layer = CompiledLayer {
-            compiled_identity: 0,
-            id: "test".into(),
-            visible: true,
-            start_nanos: 0,
-            duration_nanos: 10,
-            start_frame: 0,
-            end_frame: 1,
-            draw_key: crate::plan::DrawKey {
-                layer: 0,
-                start_nanos: 0,
-                id: "test".into(),
-            },
-            source: crate::plan::CompiledVisualSource::SolidColor {
-                colour: [0, 0, 0, 255],
-            },
-            transform: transform(),
-            transform_contributions: vec![],
-            opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
-            opacity_contributions: vec![],
-            effects: vec![],
-            masks: vec![],
-            matte: None,
-            blend_mode: crate::project::BlendMode::Normal,
-            content_dependency: TemporalDependency::Static,
-        };
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
-        layer.transform.scale.keyframes.push(Keyframe {
-            time: 1,
-            value: Point { x: 1.1, y: 1.1 },
-            interpolation: Interpolation::Linear,
-        });
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
-    }
-
-    #[test]
-    fn static_shape_source_is_static_until_layer_presentation_animates() {
-        let mut layer = CompiledLayer {
-            compiled_identity: 0,
-            id: "shape".into(),
-            visible: true,
-            start_nanos: 0,
-            duration_nanos: 10,
-            start_frame: 0,
-            end_frame: 1,
-            draw_key: crate::plan::DrawKey {
-                layer: 0,
-                start_nanos: 0,
-                id: "shape".into(),
-            },
-            source: crate::plan::CompiledVisualSource::Shape { shape_index: 0 },
-            transform: transform(),
-            transform_contributions: vec![],
-            opacity: scalar(1.0),
-            opacity_contributions: vec![],
-            effects: vec![],
-            masks: vec![],
-            matte: None,
-            blend_mode: crate::project::BlendMode::Normal,
-            content_dependency: TemporalDependency::Static,
-        };
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
-        layer.transform.position.keyframes.push(Keyframe {
-            time: 1,
-            value: Point { x: 0.6, y: 0.5 },
-            interpolation: Interpolation::Linear,
-        });
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
-    }
-
-    #[test]
-    fn static_text_source_is_static_until_layer_presentation_animates() {
-        let mut layer = CompiledLayer {
-            compiled_identity: 0,
-            id: "text".into(),
-            visible: true,
-            start_nanos: 0,
-            duration_nanos: 10,
-            start_frame: 0,
-            end_frame: 1,
-            draw_key: crate::plan::DrawKey {
-                layer: 0,
-                start_nanos: 0,
-                id: "text".into(),
-            },
-            source: crate::plan::CompiledVisualSource::Text { text_index: 0 },
-            transform: transform(),
-            transform_contributions: vec![],
-            opacity: scalar(1.0),
-            opacity_contributions: vec![],
-            effects: vec![],
-            masks: vec![],
-            matte: None,
-            blend_mode: crate::project::BlendMode::Normal,
-            content_dependency: TemporalDependency::Static,
-        };
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
-        layer.transform.scale.keyframes.push(Keyframe {
-            time: 1,
-            value: Point { x: 1.1, y: 1.1 },
-            interpolation: Interpolation::Linear,
-        });
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
-    }
-
-    #[test]
-    fn transform_contribution_dependency_includes_half_open_activity_interval() {
-        let mut layer = CompiledLayer {
-            compiled_identity: 0,
-            id: "test".into(),
-            visible: true,
-            start_nanos: 0,
-            duration_nanos: 10,
-            start_frame: 0,
-            end_frame: 1,
-            draw_key: crate::plan::DrawKey {
-                layer: 0,
-                start_nanos: 0,
-                id: "test".into(),
-            },
-            source: crate::plan::CompiledVisualSource::SolidColor {
-                colour: [0, 0, 0, 255],
-            },
-            transform: transform(),
-            transform_contributions: vec![],
-            opacity: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
-            opacity_contributions: vec![],
-            effects: vec![],
-            masks: vec![],
-            matte: None,
-            blend_mode: crate::project::BlendMode::Normal,
-            content_dependency: TemporalDependency::Static,
-        };
-        let mut contribution = crate::plan::TransformContribution::identity();
-        contribution.start = 2;
-        contribution.end = 8;
-        contribution.position_offset = Track::new(Point { x: 0.1, y: 0.0 });
-        layer.transform_contributions = vec![contribution.clone()];
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
-
-        contribution.start = 0;
-        contribution.end = 10;
-        layer.transform_contributions = vec![contribution.clone()];
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Static);
-
-        contribution.position_offset.keyframes.push(Keyframe {
-            time: 5,
-            value: Point { x: 0.2, y: 0.0 },
-            interpolation: Interpolation::Linear,
-        });
-        layer.transform_contributions = vec![contribution];
-        assert_eq!(layer_dependency(&layer), TemporalDependency::Dynamic);
     }
 
     #[test]

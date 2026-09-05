@@ -97,54 +97,87 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
 
     for layer in layers {
         let source = summarize_source(&layer.source);
-        let mut owned_mask_layers = 0;
-        let mut owned_mask_groups = 0;
-        let mut owned_mask_masks = 0;
-        let mut owned_mask_depth = 0;
+        let mut owned_mask_summary = TopologySummary::default();
         // A Source mask is lowered as one additional layer, followed by any
         // descendants of a Group source. Its descendants contribute masks
-        // exactly as the compiled requirement walk did, but mattes remain
-        // excluded because owned mask source compilation strips the source
-        // layer's own matte metadata.
+        // exactly as the compiled requirement walk did. The synthetic source
+        // layer itself has no matte metadata, but its group descendants retain
+        // their resolved mattes and all other topology facts.
         for mask in &layer.masks {
             let CompiledMaskInput::Source { source, .. } = &mask.input else {
                 continue;
             };
             let source = summarize_source(source);
-            owned_mask_layers = add(owned_mask_layers, add(1, source.compiled_layer_count));
-            owned_mask_groups = add(owned_mask_groups, source.compiled_group_count);
-            owned_mask_masks = add(owned_mask_masks, source.compiled_mask_count);
-            owned_mask_depth = owned_mask_depth.max(add(2, source.required_group_depth));
+            owned_mask_summary.compiled_layer_count = add(
+                owned_mask_summary.compiled_layer_count,
+                add(1, source.compiled_layer_count),
+            );
+            owned_mask_summary.compiled_group_count = add(
+                owned_mask_summary.compiled_group_count,
+                source.compiled_group_count,
+            );
+            owned_mask_summary.compiled_mask_count = add(
+                owned_mask_summary.compiled_mask_count,
+                source.compiled_mask_count,
+            );
+            owned_mask_summary.compiled_matte_count = add(
+                owned_mask_summary.compiled_matte_count,
+                source.compiled_matte_count,
+            );
+            owned_mask_summary.required_group_depth = owned_mask_summary
+                .required_group_depth
+                .max(add(2, source.required_group_depth));
+            owned_mask_summary.requires_auxiliary |= source.requires_auxiliary;
+            owned_mask_summary.has_masks |= source.has_masks;
+            owned_mask_summary.has_mask_feather |= source.has_mask_feather;
         }
         summary.compiled_layer_count = add(
             summary.compiled_layer_count,
-            add(1, add(source.compiled_layer_count, owned_mask_layers)),
+            add(
+                1,
+                add(
+                    source.compiled_layer_count,
+                    owned_mask_summary.compiled_layer_count,
+                ),
+            ),
         );
         summary.compiled_group_count = add(
             summary.compiled_group_count,
-            add(source.compiled_group_count, owned_mask_groups),
+            add(
+                source.compiled_group_count,
+                owned_mask_summary.compiled_group_count,
+            ),
         );
         summary.compiled_mask_count = add(
             summary.compiled_mask_count,
             add(
                 layer.masks.len(),
-                add(source.compiled_mask_count, owned_mask_masks),
+                add(
+                    source.compiled_mask_count,
+                    owned_mask_summary.compiled_mask_count,
+                ),
             ),
         );
         summary.compiled_matte_count = add(
             summary.compiled_matte_count,
             add(
                 usize::from(layer.matte.is_some()),
-                source.compiled_matte_count,
+                add(
+                    source.compiled_matte_count,
+                    owned_mask_summary.compiled_matte_count,
+                ),
             ),
         );
 
-        let layer_depth = source.required_group_depth.max(owned_mask_depth);
+        let layer_depth = source
+            .required_group_depth
+            .max(owned_mask_summary.required_group_depth);
         summary.required_group_depth = summary.required_group_depth.max(layer_depth);
 
         let layer_has_masks = !layer.masks.is_empty() || layer.matte.is_some();
-        summary.has_masks |= layer_has_masks || source.has_masks;
+        summary.has_masks |= layer_has_masks || source.has_masks || owned_mask_summary.has_masks;
         summary.has_mask_feather |= source.has_mask_feather
+            || owned_mask_summary.has_mask_feather
             || layer.masks.iter().any(|mask| {
                 mask.feather.authored_track.base_value > 0.0
                     || !mask.feather.authored_track.keyframes.is_empty()
@@ -155,7 +188,8 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
                 .effects
                 .iter()
                 .any(|timed| compiled_effect_pass_requirements(&timed.effect).retains_original())
-            || source.requires_auxiliary;
+            || source.requires_auxiliary
+            || owned_mask_summary.requires_auxiliary;
         has_matte |= layer.matte.is_some();
     }
 
@@ -287,8 +321,8 @@ mod tests {
     }
 
     #[test]
-    fn owned_source_masks_include_nested_group_layers_and_groups() {
-        let project: vestra_core::project::Project = serde_json::from_value(serde_json::json!({
+    fn owned_source_masks_include_nested_group_layers_groups_mattes_and_feather() {
+        let project: vestra_core::project::Project = serde_json::from_str(r##"{
             "schema_version": 4,
             "output": {
                 "path": "owned-mask-topology.mp4", "width": 2, "height": 2,
@@ -311,6 +345,19 @@ mod tests {
                                 "id": "leaf",
                                 "source": {"type": "solid_color", "colour": "#ffffff"},
                                 "start": 0, "duration": 1, "layer": 0,
+                                "opacity": {"base_value": 1},
+                                "matte": {"source_layer": "leaf-matte", "mode": "alpha", "invert": false},
+                                "masks": [{
+                                    "id": "leaf-feather",
+                                    "input": {"type": "shape", "geometry": {"type": "rectangle", "width": 1, "height": 1}, "fill": "#ffffff"},
+                                    "operation": "replace",
+                                    "feather": {"base_value": 2}
+                                }]
+                            }, {
+                                "id": "leaf-matte",
+                                "source": {"type": "solid_color", "colour": "#ffffff"},
+                                "start": 0, "duration": 1, "layer": 1,
+                                "visible": false,
                                 "opacity": {"base_value": 1}
                             }]},
                             "start": 0, "duration": 1, "layer": 0,
@@ -320,7 +367,7 @@ mod tests {
                     "operation": "replace"
                 }]
             }]}
-        }))
+        }"##)
         .expect("owned source mask project parses");
         let report = vestra_core::validation::validate(
             &project,
@@ -342,12 +389,13 @@ mod tests {
         );
         let plan = compile(input, CompileOptions::default()).expect("owned source mask compiles");
         let topology = PlanTopology::from_plan(&plan);
-        assert_eq!(topology.compiled_layer_count(), 4);
+        assert_eq!(topology.compiled_layer_count(), 5);
         assert_eq!(topology.compiled_group_count(), 2);
-        assert_eq!(topology.compiled_mask_count(), 1);
-        assert_eq!(topology.compiled_matte_count(), 0);
-        assert_eq!(topology.required_group_depth(), 4);
+        assert_eq!(topology.compiled_mask_count(), 2);
+        assert_eq!(topology.compiled_matte_count(), 1);
+        assert_eq!(topology.required_group_depth(), 12);
         assert!(topology.has_masks());
+        assert!(topology.has_mask_feather());
         assert!(topology.requires_auxiliary());
     }
 }

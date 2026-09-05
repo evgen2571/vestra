@@ -50,7 +50,7 @@ use crate::{animation::Transform2D, domain::Crop, render::geometry};
 
 /// Composites an immutable, backend-neutral frame program into a reusable buffer.
 #[allow(clippy::too_many_arguments)]
-pub fn compose(
+pub(super) fn compose(
     frame: &EvaluatedFrame,
     assets: &mut PreparedAssets,
     canvas: &mut RgbaImage,
@@ -60,7 +60,6 @@ pub fn compose(
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
 ) -> ComposeStats {
-    let mut stats = ComposeStats::default();
     let first_is_opaque_cached = frame.layers.first().and_then(|layer| {
         static_layers
             .peek(&layer.compiled_layer_index)
@@ -83,389 +82,319 @@ pub fn compose(
     if let Some(started) = started {
         timings.layer_composition += started.elapsed();
     }
-    let mut matte_cache = HashMap::new();
-    compose_layers(
-        &frame.layers,
-        frame.width,
-        frame.height,
-        canvas,
+
+    let mut context = ComposeContext {
         assets,
         surfaces,
         compositions,
         static_layers,
-        &mut matte_cache,
         timings,
         profiling_enabled,
-        0,
-        &mut stats,
-    );
+        matte_cache: HashMap::new(),
+        stats: ComposeStats::default(),
+    };
+    context.compose_layers(&frame.layers, frame.width, frame.height, canvas, 0);
     effects::apply_to(
-        surfaces,
+        context.surfaces,
         canvas,
         &frame.post_effects,
-        timings,
-        profiling_enabled,
+        context.timings,
+        context.profiling_enabled,
     );
-    stats
+    context.stats
 }
 
-#[allow(clippy::too_many_arguments)]
-fn compose_layers(
-    layers: &[EvaluatedLayer],
-    width: u32,
-    height: u32,
-    canvas: &mut RgbaImage,
-    assets: &mut PreparedAssets,
-    surfaces: &mut EffectSurfacePool,
-    compositions: &mut CompositionSurfacePool,
-    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
-    matte_cache: &mut HashMap<usize, RgbaImage>,
-    timings: &mut CpuHotPathTimings,
+struct ComposeContext<'a> {
+    assets: &'a mut PreparedAssets,
+    surfaces: &'a mut EffectSurfacePool,
+    compositions: &'a mut CompositionSurfacePool,
+    static_layers: &'a mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
+    timings: &'a mut CpuHotPathTimings,
     profiling_enabled: bool,
-    depth: usize,
-    stats: &mut ComposeStats,
-) {
-    for layer in layers {
-        if !layer.visible {
-            continue;
-        }
-        if let EvaluatedSource::Group { composition } = &layer.source {
-            render_group(
-                layer,
-                composition,
-                layers,
-                layer.transform,
-                width,
-                height,
-                canvas,
-                assets,
-                surfaces,
-                compositions,
-                static_layers,
-                matte_cache,
-                timings,
-                profiling_enabled,
-                depth,
-                stats,
-            );
-            continue;
-        }
+    matte_cache: HashMap<usize, RgbaImage>,
+    stats: ComposeStats,
+}
 
-        if layer.content_dependency == TemporalDependency::Static {
-            if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
-                composite_cached_surface(
-                    canvas,
-                    &cached,
-                    layer,
-                    stats,
-                    profiling_enabled.then_some(&mut timings.composition_cases),
-                );
+impl ComposeContext<'_> {
+    fn compose_layers(
+        &mut self,
+        layers: &[EvaluatedLayer],
+        width: u32,
+        height: u32,
+        canvas: &mut RgbaImage,
+        depth: usize,
+    ) {
+        for layer in layers {
+            if !layer.visible {
                 continue;
             }
-            surfaces.clear();
-            stats.static_layer_renders += 1;
+            if let EvaluatedSource::Group { composition } = &layer.source {
+                self.render_group(layer, composition, layers, canvas, depth);
+                continue;
+            }
+
+            if layer.content_dependency == TemporalDependency::Static {
+                if let Some(cached) = self.static_layers.get(&layer.compiled_layer_index).cloned() {
+                    composite_cached_surface(
+                        canvas,
+                        &cached,
+                        layer,
+                        &mut self.stats,
+                        self.profiling_enabled
+                            .then_some(&mut self.timings.composition_cases),
+                    );
+                    continue;
+                }
+                self.surfaces.clear();
+                self.stats.static_layer_renders += 1;
+                if uses_direct_colour_path(layer) {
+                    let started = self.profiling_enabled.then(Instant::now);
+                    draw_layer(
+                        self.surfaces.current(),
+                        self.assets,
+                        layer,
+                        1.0,
+                        layer.colour_transform,
+                        self.timings,
+                        self.profiling_enabled,
+                    );
+                    if let Some(started) = started {
+                        self.timings.source_rasterization += started.elapsed();
+                    }
+                } else {
+                    let started = self.profiling_enabled.then(Instant::now);
+                    draw_layer(
+                        self.surfaces.current(),
+                        self.assets,
+                        layer,
+                        1.0,
+                        ColourTransform::default(),
+                        self.timings,
+                        self.profiling_enabled,
+                    );
+                    if let Some(started) = started {
+                        self.timings.source_rasterization += started.elapsed();
+                    }
+                    effects::apply_chain(
+                        self.surfaces,
+                        &layer.effects,
+                        self.timings,
+                        self.profiling_enabled,
+                    );
+                }
+                self.apply_masks(layer, depth);
+                self.apply_track_matte(layer, layers, depth);
+                let bytes = u64::from(width) * u64::from(height) * 4;
+                let cached =
+                    self.static_layers
+                        .insert_with(layer.compiled_layer_index, bytes, || {
+                            Arc::new(CachedCpuLayerSurface::from_image(
+                                self.surfaces.take_current(),
+                            ))
+                        });
+                if let Some(cached) = cached {
+                    composite_cached_surface(
+                        canvas,
+                        cached,
+                        layer,
+                        &mut self.stats,
+                        self.profiling_enabled
+                            .then_some(&mut self.timings.composition_cases),
+                    );
+                } else {
+                    let started = self.profiling_enabled.then(Instant::now);
+                    blend_surface(
+                        canvas,
+                        self.surfaces.current(),
+                        layer.blend_mode,
+                        layer.opacity,
+                        self.profiling_enabled
+                            .then_some(&mut self.timings.composition_cases),
+                    );
+                    if let Some(started) = started {
+                        self.timings.layer_composition += started.elapsed();
+                    }
+                    self.stats.generic_blend_surface_calls += 1;
+                }
+                continue;
+            }
             if uses_direct_colour_path(layer) {
-                let started = profiling_enabled.then(Instant::now);
+                let started = self.profiling_enabled.then(Instant::now);
                 draw_layer(
-                    surfaces.current(),
-                    assets,
-                    layer,
-                    1.0,
-                    layer.colour_transform,
-                    timings,
-                    profiling_enabled,
-                );
-                if let Some(started) = started {
-                    timings.source_rasterization += started.elapsed();
-                }
-            } else {
-                let started = profiling_enabled.then(Instant::now);
-                draw_layer(
-                    surfaces.current(),
-                    assets,
-                    layer,
-                    1.0,
-                    ColourTransform::default(),
-                    timings,
-                    profiling_enabled,
-                );
-                if let Some(started) = started {
-                    timings.source_rasterization += started.elapsed();
-                }
-                effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
-            }
-            apply_masks(
-                surfaces,
-                assets,
-                layer,
-                compositions,
-                static_layers,
-                matte_cache,
-                depth,
-                stats,
-                timings,
-                profiling_enabled,
-            );
-            apply_track_matte(
-                surfaces,
-                assets,
-                layer,
-                layers,
-                compositions,
-                static_layers,
-                matte_cache,
-                depth,
-                stats,
-                timings,
-                profiling_enabled,
-            );
-            let bytes = u64::from(width) * u64::from(height) * 4;
-            if let Some(cached) =
-                static_layers.insert_with(layer.compiled_layer_index, bytes, || {
-                    Arc::new(CachedCpuLayerSurface::from_image(surfaces.take_current()))
-                })
-            {
-                composite_cached_surface(
                     canvas,
-                    cached,
+                    self.assets,
                     layer,
-                    stats,
-                    profiling_enabled.then_some(&mut timings.composition_cases),
-                );
-            } else {
-                let started = profiling_enabled.then(Instant::now);
-                blend_surface(
-                    canvas,
-                    surfaces.current(),
-                    layer.blend_mode,
                     layer.opacity,
-                    profiling_enabled.then_some(&mut timings.composition_cases),
+                    layer.colour_transform,
+                    self.timings,
+                    self.profiling_enabled,
                 );
                 if let Some(started) = started {
-                    timings.layer_composition += started.elapsed();
+                    self.timings.source_rasterization += started.elapsed();
                 }
-                stats.generic_blend_surface_calls += 1;
+                continue;
             }
-            continue;
-        }
-        if uses_direct_colour_path(layer) {
-            let started = profiling_enabled.then(Instant::now);
+            self.surfaces.clear();
+            let started = self.profiling_enabled.then(Instant::now);
             draw_layer(
-                canvas,
-                assets,
+                self.surfaces.current(),
+                self.assets,
                 layer,
-                layer.opacity,
-                layer.colour_transform,
-                timings,
-                profiling_enabled,
+                1.0,
+                ColourTransform::default(),
+                self.timings,
+                self.profiling_enabled,
             );
             if let Some(started) = started {
-                timings.source_rasterization += started.elapsed();
+                self.timings.source_rasterization += started.elapsed();
             }
-            continue;
-        }
-        surfaces.clear();
-        let started = profiling_enabled.then(Instant::now);
-        draw_layer(
-            surfaces.current(),
-            assets,
-            layer,
-            1.0,
-            ColourTransform::default(),
-            timings,
-            profiling_enabled,
-        );
-        if let Some(started) = started {
-            timings.source_rasterization += started.elapsed();
-        }
-        effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
-        apply_masks(
-            surfaces,
-            assets,
-            layer,
-            compositions,
-            static_layers,
-            matte_cache,
-            depth,
-            stats,
-            timings,
-            profiling_enabled,
-        );
-        apply_track_matte(
-            surfaces,
-            assets,
-            layer,
-            layers,
-            compositions,
-            static_layers,
-            matte_cache,
-            depth,
-            stats,
-            timings,
-            profiling_enabled,
-        );
-        let started = profiling_enabled.then(Instant::now);
-        blend_surface(
-            canvas,
-            surfaces.current(),
-            layer.blend_mode,
-            layer.opacity,
-            profiling_enabled.then_some(&mut timings.composition_cases),
-        );
-        if let Some(started) = started {
-            timings.layer_composition += started.elapsed();
-        }
-        stats.generic_blend_surface_calls += 1;
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_group(
-    layer: &EvaluatedLayer,
-    composition: &vestra_core::plan::EvaluatedComposition,
-    scope_layers: &[EvaluatedLayer],
-    transform: crate::animation::Transform2D,
-    width: u32,
-    height: u32,
-    parent: &mut RgbaImage,
-    assets: &mut PreparedAssets,
-    surfaces: &mut EffectSurfacePool,
-    compositions: &mut CompositionSurfacePool,
-    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
-    matte_cache: &mut HashMap<usize, RgbaImage>,
-    timings: &mut CpuHotPathTimings,
-    profiling_enabled: bool,
-    depth: usize,
-    stats: &mut ComposeStats,
-) {
-    if layer.content_dependency == TemporalDependency::Static {
-        if let Some(cached) = static_layers.get(&layer.compiled_layer_index).cloned() {
-            composite_cached_surface(
-                parent,
-                &cached,
-                layer,
-                stats,
-                profiling_enabled.then_some(&mut timings.composition_cases),
+            effects::apply_chain(
+                self.surfaces,
+                &layer.effects,
+                self.timings,
+                self.profiling_enabled,
             );
-            return;
-        }
-        stats.static_layer_renders += 1;
-    }
-
-    let mut group_surface = compositions.acquire(depth, width, height);
-    compose_layers(
-        &composition.layers,
-        width,
-        height,
-        &mut group_surface,
-        assets,
-        surfaces,
-        compositions,
-        static_layers,
-        matte_cache,
-        timings,
-        profiling_enabled,
-        depth + 1,
-        stats,
-    );
-
-    // A Group becomes image-like only after all children have been composed.
-    // The effect pool is separate so the live composition surface remains
-    // available while nested composition is unwound.
-    surfaces.clear();
-    let direct_colour_path = uses_direct_colour_path(layer);
-    let motion_tile = layer
-        .effects
-        .iter()
-        .find_map(crate::cpu::raster::motion_tile_parameters);
-    let started = profiling_enabled.then(Instant::now);
-    crate::cpu::raster::draw_surface_with_motion_tile(
-        surfaces.current(),
-        &group_surface,
-        transform,
-        if direct_colour_path {
-            layer.colour_transform
-        } else {
-            ColourTransform::default()
-        },
-        motion_tile,
-    );
-    if let Some(started) = started {
-        let elapsed = started.elapsed();
-        timings.transform_sampling += elapsed;
-        if motion_tile.is_some() {
-            timings.motion_tile += elapsed;
-        }
-    }
-    if !direct_colour_path {
-        effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
-    }
-    apply_masks(
-        surfaces,
-        assets,
-        layer,
-        compositions,
-        static_layers,
-        matte_cache,
-        depth,
-        stats,
-        timings,
-        profiling_enabled,
-    );
-    apply_track_matte(
-        surfaces,
-        assets,
-        layer,
-        scope_layers,
-        compositions,
-        static_layers,
-        matte_cache,
-        depth,
-        stats,
-        timings,
-        profiling_enabled,
-    );
-    if layer.content_dependency == TemporalDependency::Static {
-        let bytes = u64::from(width) * u64::from(height) * 4;
-        if let Some(cached) = static_layers.insert_with(layer.compiled_layer_index, bytes, || {
-            Arc::new(CachedCpuLayerSurface::from_image(surfaces.take_current()))
-        }) {
-            composite_cached_surface(
-                parent,
-                cached,
-                layer,
-                stats,
-                profiling_enabled.then_some(&mut timings.composition_cases),
-            );
-        } else {
-            let started = profiling_enabled.then(Instant::now);
+            self.apply_masks(layer, depth);
+            self.apply_track_matte(layer, layers, depth);
+            let started = self.profiling_enabled.then(Instant::now);
             blend_surface(
-                parent,
-                surfaces.current(),
+                canvas,
+                self.surfaces.current(),
                 layer.blend_mode,
                 layer.opacity,
-                profiling_enabled.then_some(&mut timings.composition_cases),
+                self.profiling_enabled
+                    .then_some(&mut self.timings.composition_cases),
             );
             if let Some(started) = started {
-                timings.layer_composition += started.elapsed();
+                self.timings.layer_composition += started.elapsed();
             }
-            stats.generic_blend_surface_calls += 1;
+            self.stats.generic_blend_surface_calls += 1;
         }
-    } else {
-        let started = profiling_enabled.then(Instant::now);
-        blend_surface(
-            parent,
-            surfaces.current(),
-            layer.blend_mode,
-            layer.opacity,
-            profiling_enabled.then_some(&mut timings.composition_cases),
+    }
+
+    fn render_group(
+        &mut self,
+        layer: &EvaluatedLayer,
+        composition: &vestra_core::plan::EvaluatedComposition,
+        scope_layers: &[EvaluatedLayer],
+        parent: &mut RgbaImage,
+        depth: usize,
+    ) {
+        if layer.content_dependency == TemporalDependency::Static {
+            if let Some(cached) = self.static_layers.get(&layer.compiled_layer_index).cloned() {
+                composite_cached_surface(
+                    parent,
+                    &cached,
+                    layer,
+                    &mut self.stats,
+                    self.profiling_enabled
+                        .then_some(&mut self.timings.composition_cases),
+                );
+                return;
+            }
+            self.stats.static_layer_renders += 1;
+        }
+
+        let width = parent.width();
+        let height = parent.height();
+        let transform = layer.transform;
+        let mut group_surface = self.compositions.acquire(depth, width, height);
+        self.compose_layers(
+            &composition.layers,
+            width,
+            height,
+            &mut group_surface,
+            depth + 1,
+        );
+
+        // A Group becomes image-like only after all children have been composed.
+        // The effect pool is separate so the live composition surface remains
+        // available while nested composition is unwound.
+        self.surfaces.clear();
+        let direct_colour_path = uses_direct_colour_path(layer);
+        let motion_tile = layer
+            .effects
+            .iter()
+            .find_map(crate::cpu::raster::motion_tile_parameters);
+        let started = self.profiling_enabled.then(Instant::now);
+        crate::cpu::raster::draw_surface_with_motion_tile(
+            self.surfaces.current(),
+            &group_surface,
+            transform,
+            if direct_colour_path {
+                layer.colour_transform
+            } else {
+                ColourTransform::default()
+            },
+            motion_tile,
         );
         if let Some(started) = started {
-            timings.layer_composition += started.elapsed();
+            let elapsed = started.elapsed();
+            self.timings.transform_sampling += elapsed;
+            if motion_tile.is_some() {
+                self.timings.motion_tile += elapsed;
+            }
         }
-        stats.generic_blend_surface_calls += 1;
+        if !direct_colour_path {
+            effects::apply_chain(
+                self.surfaces,
+                &layer.effects,
+                self.timings,
+                self.profiling_enabled,
+            );
+        }
+        self.apply_masks(layer, depth);
+        self.apply_track_matte(layer, scope_layers, depth);
+        if layer.content_dependency == TemporalDependency::Static {
+            let bytes = u64::from(width) * u64::from(height) * 4;
+            let cached = self
+                .static_layers
+                .insert_with(layer.compiled_layer_index, bytes, || {
+                    Arc::new(CachedCpuLayerSurface::from_image(
+                        self.surfaces.take_current(),
+                    ))
+                });
+            if let Some(cached) = cached {
+                composite_cached_surface(
+                    parent,
+                    cached,
+                    layer,
+                    &mut self.stats,
+                    self.profiling_enabled
+                        .then_some(&mut self.timings.composition_cases),
+                );
+            } else {
+                let started = self.profiling_enabled.then(Instant::now);
+                blend_surface(
+                    parent,
+                    self.surfaces.current(),
+                    layer.blend_mode,
+                    layer.opacity,
+                    self.profiling_enabled
+                        .then_some(&mut self.timings.composition_cases),
+                );
+                if let Some(started) = started {
+                    self.timings.layer_composition += started.elapsed();
+                }
+                self.stats.generic_blend_surface_calls += 1;
+            }
+        } else {
+            let started = self.profiling_enabled.then(Instant::now);
+            blend_surface(
+                parent,
+                self.surfaces.current(),
+                layer.blend_mode,
+                layer.opacity,
+                self.profiling_enabled
+                    .then_some(&mut self.timings.composition_cases),
+            );
+            if let Some(started) = started {
+                self.timings.layer_composition += started.elapsed();
+            }
+            self.stats.generic_blend_surface_calls += 1;
+        }
+        self.compositions.release(depth, group_surface);
     }
-    compositions.release(depth, group_surface);
 }
 
 fn is_opaque_copy(
@@ -515,333 +444,256 @@ fn uses_direct_colour_path(layer: &EvaluatedLayer) -> bool {
             .all(EvaluatedEffect::is_basic_colour_effect)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "composition state is passed explicitly through this hot path"
-)]
-fn apply_track_matte(
-    surfaces: &mut EffectSurfacePool,
-    assets: &mut PreparedAssets,
-    layer: &EvaluatedLayer,
-    layers: &[EvaluatedLayer],
-    compositions: &mut CompositionSurfacePool,
-    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
-    matte_cache: &mut HashMap<usize, RgbaImage>,
-    depth: usize,
-    stats: &mut ComposeStats,
-    timings: &mut CpuHotPathTimings,
-    profiling_enabled: bool,
-) {
-    let Some(matte) = &layer.matte else { return };
-    let mode = match matte.mode {
-        crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
-        crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
-    };
-    let Some(source) = layers
-        .iter()
-        .find(|candidate| candidate.compiled_layer_index == matte.source_layer_identity)
-    else {
-        for pixel in surfaces.mask_local_surface().pixels_mut() {
-            *pixel = Rgba([0, 0, 0, 0]);
-        }
-        surfaces.apply_external_matte(mode, matte.invert);
-        return;
-    };
-    let width = surfaces.current().width();
-    let height = surfaces.current().height();
-    let mut saved_consumer = compositions.acquire(depth + 1, width, height);
-    saved_consumer
-        .copy_from(surfaces.current(), 0, 0)
-        .expect("matching matte save surface dimensions");
-    if let Some(cached) = matte_cache.get(&source.compiled_layer_index) {
-        surfaces
-            .mask_local_surface()
-            .copy_from(cached, 0, 0)
-            .expect("matching cached matte surface dimensions");
-    } else {
-        render_isolated_layer(
-            source,
-            layers,
-            assets,
-            surfaces,
-            compositions,
-            static_layers,
-            matte_cache,
-            depth + 1,
-            stats,
-            timings,
-            profiling_enabled,
-        );
-        matte_cache.insert(
-            source.compiled_layer_index,
-            surfaces.mask_local_surface().clone(),
-        );
-    }
-    surfaces
-        .current()
-        .copy_from(&saved_consumer, 0, 0)
-        .expect("matching matte restore surface dimensions");
-    compositions.release(depth + 1, saved_consumer);
-    surfaces.apply_external_matte(mode, matte.invert);
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_isolated_layer(
-    layer: &EvaluatedLayer,
-    scope_layers: &[EvaluatedLayer],
-    assets: &mut PreparedAssets,
-    surfaces: &mut EffectSurfacePool,
-    compositions: &mut CompositionSurfacePool,
-    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
-    matte_cache: &mut HashMap<usize, RgbaImage>,
-    depth: usize,
-    stats: &mut ComposeStats,
-    timings: &mut CpuHotPathTimings,
-    profiling_enabled: bool,
-) {
-    surfaces.clear();
-    if let EvaluatedSource::Group { composition } = &layer.source {
-        let width = surfaces.current().width();
-        let height = surfaces.current().height();
-        let mut group_surface = compositions.acquire(depth + 1, width, height);
-        compose_layers(
-            &composition.layers,
-            width,
-            height,
-            &mut group_surface,
-            assets,
-            surfaces,
-            compositions,
-            static_layers,
-            matte_cache,
-            timings,
-            profiling_enabled,
-            depth + 2,
-            stats,
-        );
-        let motion_tile = layer
-            .effects
+impl ComposeContext<'_> {
+    fn apply_track_matte(
+        &mut self,
+        layer: &EvaluatedLayer,
+        layers: &[EvaluatedLayer],
+        depth: usize,
+    ) {
+        let Some(matte) = &layer.matte else { return };
+        let mode = match matte.mode {
+            crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
+            crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
+        };
+        let Some(source) = layers
             .iter()
-            .find_map(crate::cpu::raster::motion_tile_parameters);
-        let started = profiling_enabled.then(Instant::now);
-        crate::cpu::raster::draw_surface_with_motion_tile(
-            surfaces.current(),
-            &group_surface,
-            layer.transform,
-            if uses_direct_colour_path(layer) {
-                layer.colour_transform
-            } else {
-                ColourTransform::default()
-            },
-            motion_tile,
-        );
-        if let Some(started) = started {
-            let elapsed = started.elapsed();
-            timings.transform_sampling += elapsed;
-            if motion_tile.is_some() {
-                timings.motion_tile += elapsed;
+            .find(|candidate| candidate.compiled_layer_index == matte.source_layer_identity)
+        else {
+            for pixel in self.surfaces.mask_local_surface().pixels_mut() {
+                *pixel = Rgba([0, 0, 0, 0]);
             }
+            self.surfaces.apply_external_matte(mode, matte.invert);
+            return;
+        };
+        let width = self.surfaces.current().width();
+        let height = self.surfaces.current().height();
+        let mut saved_consumer = self.compositions.acquire(depth + 1, width, height);
+        saved_consumer
+            .copy_from(self.surfaces.current(), 0, 0)
+            .expect("matching matte save surface dimensions");
+        if let Some(cached) = self.matte_cache.get(&source.compiled_layer_index) {
+            self.surfaces
+                .mask_local_surface()
+                .copy_from(cached, 0, 0)
+                .expect("matching cached matte surface dimensions");
+        } else {
+            self.render_isolated_layer(source, layers, depth + 1);
+            self.matte_cache.insert(
+                source.compiled_layer_index,
+                self.surfaces.mask_local_surface().clone(),
+            );
         }
-        compositions.release(depth + 1, group_surface);
-    } else {
-        draw_layer(
-            surfaces.current(),
-            assets,
-            layer,
-            1.0,
-            if uses_direct_colour_path(layer) {
-                layer.colour_transform
-            } else {
-                ColourTransform::default()
-            },
-            timings,
-            profiling_enabled,
-        );
+        self.surfaces
+            .current()
+            .copy_from(&saved_consumer, 0, 0)
+            .expect("matching matte restore surface dimensions");
+        self.compositions.release(depth + 1, saved_consumer);
+        self.surfaces.apply_external_matte(mode, matte.invert);
     }
-    if !uses_direct_colour_path(layer) {
-        effects::apply_chain(surfaces, &layer.effects, timings, profiling_enabled);
-    }
-    apply_masks(
-        surfaces,
-        assets,
-        layer,
-        compositions,
-        static_layers,
-        matte_cache,
-        depth,
-        stats,
-        timings,
-        profiling_enabled,
-    );
-    apply_track_matte(
-        surfaces,
-        assets,
-        layer,
-        scope_layers,
-        compositions,
-        static_layers,
-        matte_cache,
-        depth,
-        stats,
-        timings,
-        profiling_enabled,
-    );
-    if layer.opacity != 1.0 {
-        for pixel in surfaces.current().pixels_mut() {
-            pixel[3] = (f64::from(pixel[3]) * layer.opacity)
-                .round()
-                .clamp(0.0, 255.0) as u8;
-        }
-    }
-    surfaces.copy_current_to_mask_local();
-}
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "composition state is passed explicitly through this hot path"
-)]
-fn apply_masks(
-    surfaces: &mut EffectSurfacePool,
-    assets: &mut PreparedAssets,
-    layer: &EvaluatedLayer,
-    compositions: &mut CompositionSurfacePool,
-    static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
-    matte_cache: &mut HashMap<usize, RgbaImage>,
-    depth: usize,
-    stats: &mut ComposeStats,
-    timings: &mut CpuHotPathTimings,
-    profiling_enabled: bool,
-) {
-    if layer.masks.is_empty() {
-        return;
-    }
-    let started = profiling_enabled.then(Instant::now);
-    surfaces.reset_mask_coverage();
-    for mask in &layer.masks {
-        for pixel in surfaces.mask_local_surface().pixels_mut() {
-            *pixel = Rgba([0, 0, 0, 0]);
-        }
-        match mask.input.clone() {
-            EvaluatedMaskInput::Shape { shape_index } => {
-                let mask_layer = EvaluatedLayer {
-                    compiled_layer_index: usize::MAX,
-                    visible: true,
-                    content_dependency: TemporalDependency::Static,
-                    source: EvaluatedSource::Shape {
-                        shape_index,
-                        sizing: vestra_core::plan::CompiledSizing::Original,
-                    },
-                    transform: mask.transform,
-                    opacity: 1.0,
-                    effects: Vec::new(),
-                    masks: Vec::new(),
-                    matte: None,
-                    colour_transform: ColourTransform::default(),
-                    blend_mode: crate::project::BlendMode::Normal,
-                };
-                super::raster::draw_layer(
-                    surfaces.mask_local_surface(),
-                    assets,
-                    &mask_layer,
-                    1.0,
-                    ColourTransform::default(),
-                    timings,
-                    profiling_enabled,
-                );
-            }
-            EvaluatedMaskInput::Image { asset_index, mode } => {
-                let prepared = assets.raster_source(asset_index);
-                super::raster::draw_raster(
-                    surfaces.mask_local_surface(),
-                    prepared.pixels(),
-                    prepared.intrinsic_size(),
-                    crate::domain::Crop {
-                        x: 0.0,
-                        y: 0.0,
-                        width: 1.0,
-                        height: 1.0,
-                    },
-                    false,
-                    &vestra_core::plan::CompiledSizing::Original,
-                    mask.transform,
-                    1.0,
-                    ColourTransform::default(),
-                );
-                for pixel in surfaces.mask_local_surface().pixels_mut() {
-                    let coverage = crate::project::image_mask_coverage(pixel.0, mode);
-                    pixel[3] = (coverage * 255.0).round().clamp(0.0, 255.0) as u8;
+    fn render_isolated_layer(
+        &mut self,
+        layer: &EvaluatedLayer,
+        scope_layers: &[EvaluatedLayer],
+        depth: usize,
+    ) {
+        self.surfaces.clear();
+        if let EvaluatedSource::Group { composition } = &layer.source {
+            let width = self.surfaces.current().width();
+            let height = self.surfaces.current().height();
+            let mut group_surface = self.compositions.acquire(depth + 1, width, height);
+            self.compose_layers(
+                &composition.layers,
+                width,
+                height,
+                &mut group_surface,
+                depth + 2,
+            );
+            let motion_tile = layer
+                .effects
+                .iter()
+                .find_map(crate::cpu::raster::motion_tile_parameters);
+            let started = self.profiling_enabled.then(Instant::now);
+            crate::cpu::raster::draw_surface_with_motion_tile(
+                self.surfaces.current(),
+                &group_surface,
+                layer.transform,
+                if uses_direct_colour_path(layer) {
+                    layer.colour_transform
+                } else {
+                    ColourTransform::default()
+                },
+                motion_tile,
+            );
+            if let Some(started) = started {
+                let elapsed = started.elapsed();
+                self.timings.transform_sampling += elapsed;
+                if motion_tile.is_some() {
+                    self.timings.motion_tile += elapsed;
                 }
             }
-            EvaluatedMaskInput::Source { source, mode } => {
-                let mask_layer = EvaluatedLayer {
-                    compiled_layer_index: usize::MAX,
-                    visible: true,
-                    content_dependency: TemporalDependency::Dynamic,
-                    source: (*source).clone(),
-                    transform: mask.transform,
-                    opacity: 1.0,
-                    effects: Vec::new(),
-                    masks: Vec::new(),
-                    matte: None,
-                    colour_transform: ColourTransform::default(),
-                    blend_mode: crate::project::BlendMode::Normal,
-                };
-                if let EvaluatedSource::Group { composition } = &mask_layer.source {
-                    let owner_surface = surfaces.current().clone();
-                    let mut group_surface = RgbaImage::new(
-                        surfaces.mask_local_surface().width(),
-                        surfaces.mask_local_surface().height(),
-                    );
-                    for pixel in group_surface.pixels_mut() {
-                        *pixel = Rgba([0, 0, 0, 0]);
-                    }
-                    compose_layers(
-                        &composition.layers,
-                        group_surface.width(),
-                        group_surface.height(),
-                        &mut group_surface,
-                        assets,
-                        surfaces,
-                        compositions,
-                        static_layers,
-                        matte_cache,
-                        timings,
-                        profiling_enabled,
-                        depth + 1,
-                        stats,
-                    );
-                    crate::cpu::raster::draw_surface(
-                        surfaces.mask_local_surface(),
-                        &group_surface,
-                        mask.transform,
-                        ColourTransform::default(),
-                    );
-                    surfaces.begin_from(&owner_surface);
+            self.compositions.release(depth + 1, group_surface);
+        } else {
+            draw_layer(
+                self.surfaces.current(),
+                self.assets,
+                layer,
+                1.0,
+                if uses_direct_colour_path(layer) {
+                    layer.colour_transform
                 } else {
+                    ColourTransform::default()
+                },
+                self.timings,
+                self.profiling_enabled,
+            );
+        }
+        if !uses_direct_colour_path(layer) {
+            effects::apply_chain(
+                self.surfaces,
+                &layer.effects,
+                self.timings,
+                self.profiling_enabled,
+            );
+        }
+        self.apply_masks(layer, depth);
+        self.apply_track_matte(layer, scope_layers, depth);
+        if layer.opacity != 1.0 {
+            for pixel in self.surfaces.current().pixels_mut() {
+                pixel[3] = (f64::from(pixel[3]) * layer.opacity)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+            }
+        }
+        self.surfaces.copy_current_to_mask_local();
+    }
+
+    fn apply_masks(&mut self, layer: &EvaluatedLayer, depth: usize) {
+        if layer.masks.is_empty() {
+            return;
+        }
+        let started = self.profiling_enabled.then(Instant::now);
+        self.surfaces.reset_mask_coverage();
+        for mask in &layer.masks {
+            for pixel in self.surfaces.mask_local_surface().pixels_mut() {
+                *pixel = Rgba([0, 0, 0, 0]);
+            }
+            match mask.input.clone() {
+                EvaluatedMaskInput::Shape { shape_index } => {
+                    let mask_layer = EvaluatedLayer {
+                        compiled_layer_index: usize::MAX,
+                        visible: true,
+                        content_dependency: TemporalDependency::Static,
+                        source: EvaluatedSource::Shape {
+                            shape_index,
+                            sizing: vestra_core::plan::CompiledSizing::Original,
+                        },
+                        transform: mask.transform,
+                        opacity: 1.0,
+                        effects: Vec::new(),
+                        masks: Vec::new(),
+                        matte: None,
+                        colour_transform: ColourTransform::default(),
+                        blend_mode: crate::project::BlendMode::Normal,
+                    };
                     super::raster::draw_layer(
-                        surfaces.mask_local_surface(),
-                        assets,
+                        self.surfaces.mask_local_surface(),
+                        self.assets,
                         &mask_layer,
                         1.0,
                         ColourTransform::default(),
-                        timings,
-                        profiling_enabled,
+                        self.timings,
+                        self.profiling_enabled,
                     );
                 }
-                for pixel in surfaces.mask_local_surface().pixels_mut() {
-                    pixel[3] = (crate::project::mask_coverage(pixel.0, mode) * 255.0)
-                        .round()
-                        .clamp(0.0, 255.0) as u8;
+                EvaluatedMaskInput::Image { asset_index, mode } => {
+                    let prepared = self.assets.raster_source(asset_index);
+                    super::raster::draw_raster(
+                        self.surfaces.mask_local_surface(),
+                        prepared.pixels(),
+                        prepared.intrinsic_size(),
+                        crate::domain::Crop {
+                            x: 0.0,
+                            y: 0.0,
+                            width: 1.0,
+                            height: 1.0,
+                        },
+                        false,
+                        &vestra_core::plan::CompiledSizing::Original,
+                        mask.transform,
+                        1.0,
+                        ColourTransform::default(),
+                    );
+                    for pixel in self.surfaces.mask_local_surface().pixels_mut() {
+                        let coverage = crate::project::image_mask_coverage(pixel.0, mode);
+                        pixel[3] = (coverage * 255.0).round().clamp(0.0, 255.0) as u8;
+                    }
+                }
+                EvaluatedMaskInput::Source { source, mode } => {
+                    let mask_layer = EvaluatedLayer {
+                        compiled_layer_index: usize::MAX,
+                        visible: true,
+                        content_dependency: TemporalDependency::Dynamic,
+                        source: (*source).clone(),
+                        transform: mask.transform,
+                        opacity: 1.0,
+                        effects: Vec::new(),
+                        masks: Vec::new(),
+                        matte: None,
+                        colour_transform: ColourTransform::default(),
+                        blend_mode: crate::project::BlendMode::Normal,
+                    };
+                    if let EvaluatedSource::Group { composition } = &mask_layer.source {
+                        let owner_surface = self.surfaces.current().clone();
+                        let mut group_surface = RgbaImage::new(
+                            self.surfaces.mask_local_surface().width(),
+                            self.surfaces.mask_local_surface().height(),
+                        );
+                        for pixel in group_surface.pixels_mut() {
+                            *pixel = Rgba([0, 0, 0, 0]);
+                        }
+                        self.compose_layers(
+                            &composition.layers,
+                            group_surface.width(),
+                            group_surface.height(),
+                            &mut group_surface,
+                            depth + 1,
+                        );
+                        crate::cpu::raster::draw_surface(
+                            self.surfaces.mask_local_surface(),
+                            &group_surface,
+                            mask.transform,
+                            ColourTransform::default(),
+                        );
+                        self.surfaces.begin_from(&owner_surface);
+                    } else {
+                        super::raster::draw_layer(
+                            self.surfaces.mask_local_surface(),
+                            self.assets,
+                            &mask_layer,
+                            1.0,
+                            ColourTransform::default(),
+                            self.timings,
+                            self.profiling_enabled,
+                        );
+                    }
+                    for pixel in self.surfaces.mask_local_surface().pixels_mut() {
+                        pixel[3] = (crate::project::mask_coverage(pixel.0, mode) * 255.0)
+                            .round()
+                            .clamp(0.0, 255.0) as u8;
+                    }
                 }
             }
+            self.surfaces.compose_mask_surface(layer.transform);
+            self.surfaces.feather_mask_surface(mask.feather);
+            self.surfaces
+                .combine_mask_coverage(mask.operation, mask.invert, mask.strength);
         }
-        surfaces.compose_mask_surface(layer.transform);
-        surfaces.feather_mask_surface(mask.feather);
-        surfaces.combine_mask_coverage(mask.operation, mask.invert, mask.strength);
-    }
-    surfaces.apply_mask_coverage();
-    if let Some(started) = started {
-        timings.transform_sampling += started.elapsed();
+        self.surfaces.apply_mask_coverage();
+        if let Some(started) = started {
+            self.timings.transform_sampling += started.elapsed();
+        }
     }
 }
 

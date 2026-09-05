@@ -8,9 +8,7 @@
 
 use vestra_core::plan::RenderPlan;
 
-use super::frame_plan::{
-    GpuFramePlan, TextureSlot, plan_has_mask_feather, plan_has_masks, plan_requires_auxiliary,
-};
+use super::{frame_plan::TextureSlot, topology::PlanTopology};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
@@ -91,7 +89,11 @@ pub(super) struct TexturePool {
 }
 
 impl TexturePool {
-    pub(super) fn create(device: &wgpu::Device, plan: &RenderPlan) -> Self {
+    pub(super) fn create_with_topology(
+        device: &wgpu::Device,
+        plan: &RenderPlan,
+        topology: &PlanTopology,
+    ) -> Self {
         let descriptor = WorkingTextureDescriptor {
             width: plan.canvas.width,
             height: plan.canvas.height,
@@ -99,7 +101,8 @@ impl TexturePool {
             usage: WORKING_TEXTURE_USAGE,
         };
         let effect_pass_count = plan.compilation.effect_pass_count;
-        let group_depth = GpuFramePlan::required_group_depth(plan);
+        let group_depth = topology.required_group_depth();
+        let requires_auxiliary = topology.requires_auxiliary();
         Self {
             canvas_a: create_texture(device, descriptor, "vestra canvas A"),
             canvas_b: create_texture(device, descriptor, "vestra canvas B"),
@@ -109,15 +112,17 @@ impl TexturePool {
                 descriptor,
                 "vestra particle premultiplied accumulation",
             ),
-            effect_a: (effect_pass_count > 0 || plan_requires_auxiliary(plan))
+            effect_a: (effect_pass_count > 0 || requires_auxiliary)
                 .then(|| create_texture(device, descriptor, "vestra effect A")),
-            effect_b: (effect_pass_count > 1 || plan_requires_auxiliary(plan))
+            effect_b: (effect_pass_count > 1 || requires_auxiliary)
                 .then(|| create_texture(device, descriptor, "vestra effect B")),
-            auxiliary: plan_requires_auxiliary(plan)
+            auxiliary: requires_auxiliary
                 .then(|| create_texture(device, descriptor, "vestra retained effect original")),
-            mask_coverage: plan_has_masks(plan)
+            mask_coverage: topology
+                .has_masks()
                 .then(|| create_texture(device, descriptor, "vestra mask coverage state")),
-            mask_feather: plan_has_mask_feather(plan)
+            mask_feather: topology
+                .has_mask_feather()
                 .then(|| create_texture(device, descriptor, "vestra mask feather scratch")),
             group_canvas_a: (0..group_depth)
                 .map(|depth| {

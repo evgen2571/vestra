@@ -7,13 +7,18 @@
 //! so the normal path never needs a frame-sized allocation after preparation.
 
 use std::collections::{BTreeMap, BTreeSet};
-use vestra_core::plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan};
+use vestra_core::plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource};
+
+#[cfg(test)]
+use vestra_core::plan::RenderPlan;
 
 use crate::{
     Category, Diagnostic,
     kernel::{EffectKernel, kernel_for_operation},
-    render::effects::{EffectPass, compiled_effect_pass_requirements, effect_pass_plan},
+    render::effects::{EffectPass, effect_pass_plan},
 };
+
+use super::topology::PlanTopology;
 
 /// Fixed full-frame working texture roles. Effect slots are allocated when the
 /// compiled plan contains a non-transform visual effect.
@@ -211,14 +216,40 @@ impl GpuFramePlan {
         Self::build_with_static_cache(frame, &BTreeSet::new(), &BTreeSet::new())
     }
 
+    #[cfg(test)]
     pub(super) fn build_with_static_cache(
         frame: &EvaluatedFrame,
         cached_layers: &BTreeSet<usize>,
         cache_targets: &BTreeSet<usize>,
     ) -> Self {
-        let mut operations =
-            Vec::with_capacity(2 + frame.layers.len() * 4 + frame.post_effects.len() * 2);
-        let mut layers = Vec::new();
+        Self::build_inner(frame, cached_layers, cache_targets, frame.layers.len())
+    }
+
+    pub(super) fn build_with_topology(
+        frame: &EvaluatedFrame,
+        topology: &PlanTopology,
+        cached_layers: &BTreeSet<usize>,
+        cache_targets: &BTreeSet<usize>,
+    ) -> Self {
+        Self::build_inner(
+            frame,
+            cached_layers,
+            cache_targets,
+            topology.compiled_layer_count(),
+        )
+    }
+
+    fn build_inner(
+        frame: &EvaluatedFrame,
+        cached_layers: &BTreeSet<usize>,
+        cache_targets: &BTreeSet<usize>,
+        layer_capacity: usize,
+    ) -> Self {
+        let operation_capacity = 2_usize
+            .saturating_add(layer_capacity.saturating_mul(4))
+            .saturating_add(frame.post_effects.len().saturating_mul(2));
+        let mut operations = Vec::with_capacity(operation_capacity);
+        let mut layers = Vec::with_capacity(layer_capacity);
         let mut parameter_count = 0_u32;
         operations.push(GpuOperation::ClearCanvas {
             destination: TextureSlot::CanvasA,
@@ -273,50 +304,9 @@ impl GpuFramePlan {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn required_group_depth(plan: &RenderPlan) -> usize {
-        fn source_depth(source: &vestra_core::plan::CompiledVisualSource) -> usize {
-            match source {
-                vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                    1 + composition_depth(composition)
-                }
-                _ => 0,
-            }
-        }
-        fn layer_depth(layer: &vestra_core::plan::CompiledLayer) -> usize {
-            let owned_mask_depth = layer
-                .masks
-                .iter()
-                .map(|mask| match &mask.input {
-                    vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
-                        2 + source_depth(source)
-                    }
-                    _ => 0,
-                })
-                .max()
-                .unwrap_or(0);
-            source_depth(&layer.source).max(owned_mask_depth)
-        }
-        fn composition_depth(composition: &vestra_core::plan::CompiledComposition) -> usize {
-            let ordinary = composition
-                .layers
-                .iter()
-                .map(layer_depth)
-                .max()
-                .unwrap_or(0);
-            let matte_scratch = if composition.layers.iter().any(|layer| layer.matte.is_some()) {
-                4 + composition.layers.len() * 2
-            } else {
-                0
-            };
-            ordinary.max(matte_scratch)
-        }
-        let ordinary = plan.layers.iter().map(layer_depth).max().unwrap_or(0);
-        let matte_scratch = if plan.layers.iter().any(|layer| layer.matte.is_some()) {
-            4 + plan.layers.len() * 2
-        } else {
-            0
-        };
-        ordinary.max(matte_scratch)
+        PlanTopology::from_plan(plan).required_group_depth()
     }
 
     pub(super) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
@@ -1689,62 +1679,9 @@ impl TextureState {
 /// allocation is backend preparation-time only, so all frames share it.
 /// Resource topology is owned by core effect-pass planning; WGPU deliberately
 /// does not infer it from authored/compiled effect identities.
+#[cfg(test)]
 pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
-    fn layers_require_auxiliary(layers: &[vestra_core::plan::CompiledLayer]) -> bool {
-        layers.iter().any(|layer| {
-            !layer.masks.is_empty()
-                || layer.matte.is_some()
-                || layer.effects.iter().any(|timed| {
-                    compiled_effect_pass_requirements(&timed.effect).retains_original()
-                })
-                || match &layer.source {
-                    vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                        layers_require_auxiliary(&composition.layers)
-                    }
-                    _ => false,
-                }
-        })
-    }
-
-    layers_require_auxiliary(&plan.layers)
-        || plan
-            .post_effects
-            .iter()
-            .any(|timed| compiled_effect_pass_requirements(&timed.effect).retains_original())
-}
-
-pub(super) fn plan_has_masks(plan: &RenderPlan) -> bool {
-    fn layers_have_masks(layers: &[vestra_core::plan::CompiledLayer]) -> bool {
-        layers.iter().any(|layer| {
-            !layer.masks.is_empty()
-                || layer.matte.is_some()
-                || match &layer.source {
-                    vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                        layers_have_masks(&composition.layers)
-                    }
-                    _ => false,
-                }
-        })
-    }
-    layers_have_masks(&plan.layers)
-}
-
-pub(super) fn plan_has_mask_feather(plan: &RenderPlan) -> bool {
-    fn layers_have_feather(layers: &[vestra_core::plan::CompiledLayer]) -> bool {
-        layers.iter().any(|layer| {
-            layer.masks.iter().any(|mask| {
-                mask.feather.authored_track.base_value > 0.0
-                    || !mask.feather.authored_track.keyframes.is_empty()
-                    || mask.feather.has_modifiers()
-            }) || match &layer.source {
-                vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                    layers_have_feather(&composition.layers)
-                }
-                _ => false,
-            }
-        })
-    }
-    layers_have_feather(&plan.layers)
+    PlanTopology::from_plan(plan).requires_auxiliary()
 }
 
 fn invalid(operation_index: usize, message: &str) -> Diagnostic {

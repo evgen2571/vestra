@@ -9,9 +9,7 @@ use vestra_core::plan::RenderPlan;
 
 use crate::{Category, Diagnostic, render::DecodedAssets};
 
-use super::frame_plan::{
-    GpuFramePlan, plan_has_mask_feather, plan_has_masks, plan_requires_auxiliary,
-};
+use super::topology::PlanTopology;
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
 const BASE_WORKING_TEXTURE_COUNT: u64 = 4;
@@ -57,8 +55,19 @@ pub(super) struct GpuRequirements {
 }
 
 impl GpuRequirements {
+    #[cfg(test)]
     pub(super) fn from_plan(
         plan: &RenderPlan,
+        decoded: &DecodedAssets,
+        uniform_bytes: u32,
+    ) -> Result<Self, Diagnostic> {
+        let topology = PlanTopology::from_plan(plan);
+        Self::from_plan_with_topology(plan, &topology, decoded, uniform_bytes)
+    }
+
+    pub(super) fn from_plan_with_topology(
+        plan: &RenderPlan,
+        topology: &PlanTopology,
         decoded: &DecodedAssets,
         uniform_bytes: u32,
     ) -> Result<Self, Diagnostic> {
@@ -106,113 +115,10 @@ impl GpuRequirements {
             )
             .max()
             .unwrap_or(1);
-        fn source_group_count(source: &vestra_core::plan::CompiledVisualSource) -> usize {
-            match source {
-                vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                    1 + compiled_counts(&composition.layers).1
-                }
-                _ => 0,
-            }
-        }
-        fn source_layer_count(source: &vestra_core::plan::CompiledVisualSource) -> usize {
-            1 + match source {
-                vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                    compiled_counts(&composition.layers).0
-                }
-                _ => 0,
-            }
-        }
-        fn compiled_counts(layers: &[vestra_core::plan::CompiledLayer]) -> (usize, usize) {
-            layers
-                .iter()
-                .fold((0, 0), |(layer_count, group_count), layer| {
-                    let (nested_layers, nested_groups) = match &layer.source {
-                        vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                            compiled_counts(&composition.layers)
-                        }
-                        _ => (0, 0),
-                    };
-                    let owned_groups = layer
-                        .masks
-                        .iter()
-                        .filter_map(|mask| match &mask.input {
-                            vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
-                                Some(source_group_count(source))
-                            }
-                            _ => None,
-                        })
-                        .sum::<usize>();
-                    let owned_layers = layer
-                        .masks
-                        .iter()
-                        .filter_map(|mask| match &mask.input {
-                            vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
-                                Some(source_layer_count(source))
-                            }
-                            _ => None,
-                        })
-                        .sum::<usize>();
-                    (
-                        layer_count + 1 + nested_layers + owned_layers,
-                        group_count
-                            + usize::from(matches!(
-                                &layer.source,
-                                vestra_core::plan::CompiledVisualSource::Group(_)
-                            ))
-                            + nested_groups
-                            + owned_groups,
-                    )
-                })
-        }
-        fn source_mask_count(source: &vestra_core::plan::CompiledVisualSource) -> usize {
-            match source {
-                vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                    compiled_mask_count(&composition.layers)
-                }
-                _ => 0,
-            }
-        }
-        fn compiled_mask_count(layers: &[vestra_core::plan::CompiledLayer]) -> usize {
-            layers
-                .iter()
-                .map(|layer| {
-                    layer.masks.len()
-                        + layer
-                            .masks
-                            .iter()
-                            .filter_map(|mask| match &mask.input {
-                                vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
-                                    Some(source_mask_count(source))
-                                }
-                                _ => None,
-                            })
-                            .sum::<usize>()
-                        + match &layer.source {
-                            vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                                compiled_mask_count(&composition.layers)
-                            }
-                            _ => 0,
-                        }
-                })
-                .sum()
-        }
-        fn compiled_matte_count(layers: &[vestra_core::plan::CompiledLayer]) -> usize {
-            layers
-                .iter()
-                .map(|layer| {
-                    usize::from(layer.matte.is_some())
-                        + match &layer.source {
-                            vestra_core::plan::CompiledVisualSource::Group(composition) => {
-                                compiled_matte_count(&composition.layers)
-                            }
-                            _ => 0,
-                        }
-                })
-                .sum()
-        }
-        let (compiled_layer_count, compiled_group_count) = compiled_counts(&plan.layers);
-        let compiled_mask_count = compiled_mask_count(&plan.layers);
-        let compiled_matte_count = compiled_matte_count(&plan.layers);
+        let compiled_layer_count = topology.compiled_layer_count();
+        let compiled_group_count = topology.compiled_group_count();
+        let compiled_mask_count = topology.compiled_mask_count();
+        let compiled_matte_count = topology.compiled_matte_count();
         let parameter_record_count = u32::try_from(compiled_layer_count)
             .ok()
             .and_then(|count| count.checked_mul(2))
@@ -253,8 +159,8 @@ impl GpuRequirements {
         let canvas_texture_bytes =
             estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2)?;
         let layer_texture_bytes = full_frame_bytes;
-        let requires_auxiliary = plan_requires_auxiliary(plan);
-        let has_masks = plan_has_masks(plan);
+        let requires_auxiliary = topology.requires_auxiliary();
+        let has_masks = topology.has_masks();
         let effect_texture_count = if requires_auxiliary {
             2
         } else {
@@ -266,8 +172,8 @@ impl GpuRequirements {
         };
         let auxiliary_texture_count = u64::from(requires_auxiliary);
         let mask_coverage_texture_count = u64::from(has_masks);
-        let mask_feather_texture_count = u64::from(plan_has_mask_feather(plan));
-        let group_texture_count = u64::try_from(GpuFramePlan::required_group_depth(plan))
+        let mask_feather_texture_count = u64::from(topology.has_mask_feather());
+        let group_texture_count = u64::try_from(topology.required_group_depth())
             .ok()
             .and_then(|depth| depth.checked_mul(2))
             .ok_or_else(|| resource_overflow("Group texture count overflow"))?;

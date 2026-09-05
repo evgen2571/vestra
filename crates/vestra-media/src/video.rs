@@ -1,12 +1,12 @@
 //! Native, renderer-independent video media access.
 //!
-//! `VideoMediaInfo` is immutable stream metadata. `VideoDecoder` owns one
-//! mutable FFmpeg demux/decoder session and is intentionally cheap to create
-//! again for another CPU worker. Decoded frames are copied into Vestra-owned
-//! `Arc<RgbaImage>` values before they leave this module.
+//! `VideoMediaInfo` is immutable stream metadata. `VideoDecoder` owns the
+//! selection policy and cache for one mutable FFmpeg cursor, and is
+//! intentionally cheap to create again for another CPU worker. Decoded frames
+//! are copied into Vestra-owned `Arc<RgbaImage>` values before they leave this
+//! module.
 
 use std::{
-    collections::BTreeMap,
     path::Path,
     sync::{Arc, OnceLock},
     time::Instant,
@@ -16,13 +16,21 @@ use ffmpeg::{
     format::{self, Pixel},
     media::Type,
     software::scaling::{context::Context as Scaler, flag::Flags},
-    util::{frame::video::Video, rational::Rational},
+    util::rational::Rational,
 };
 use ffmpeg_next as ffmpeg;
 use image::RgbaImage;
 use vestra_core::validation::ResourceLimits;
 
 use crate::MediaError;
+
+#[path = "video_cache.rs"]
+mod video_cache;
+#[path = "video_cursor.rs"]
+mod video_cursor;
+
+use video_cache::FrameCache;
+use video_cursor::FfmpegVideoCursor;
 
 static FFMPEG_INIT: OnceLock<Result<(), String>> = OnceLock::new();
 
@@ -180,15 +188,9 @@ pub fn probe_video(path: &Path) -> Result<VideoMediaInfo, MediaError> {
 
 /// A reusable mutable decoder session. Create one per future CPU worker.
 pub struct VideoDecoder {
-    input: format::context::Input,
-    decoder: ffmpeg::decoder::Video,
-    scaler: Scaler,
+    cursor: FfmpegVideoCursor,
     info: VideoMediaInfo,
-    limits: ResourceLimits,
     cache: FrameCache,
-    pending: Option<DecodedVideoFrame>,
-    max_decoded_pts: Option<i64>,
-    draining: bool,
     metrics: VideoDecoderMetrics,
 }
 
@@ -267,15 +269,15 @@ impl VideoDecoder {
             "decoder initialized"
         );
         Ok(Self {
-            input,
-            decoder,
-            scaler,
+            cursor: FfmpegVideoCursor::new(
+                input,
+                decoder,
+                scaler,
+                info.stream_index,
+                options.limits,
+            ),
             info,
-            limits: options.limits,
             cache: FrameCache::new(options.cache_budget_bytes),
-            pending: None,
-            max_decoded_pts: None,
-            draining: false,
             metrics: VideoDecoderMetrics::default(),
         })
     }
@@ -299,7 +301,11 @@ impl VideoDecoder {
             return Err(MediaError::VideoTimestampOutOfRange { seconds });
         }
         let target = self.info.seconds_to_timestamp(seconds)?.0;
-        let final_end = self.draining.then(|| self.final_timestamp()).flatten();
+        let final_end = self
+            .cursor
+            .is_draining()
+            .then(|| self.final_timestamp())
+            .flatten();
         if let Some(cached) = self.cache.covering_at(target, final_end) {
             self.metrics.cache_hits += 1;
             tracing::trace!(
@@ -319,7 +325,10 @@ impl VideoDecoder {
             cache_hit = false,
             "video frame cache miss"
         );
-        if self.max_decoded_pts.is_some_and(|max| target < max)
+        if self
+            .cursor
+            .max_decoded_pts()
+            .is_some_and(|max| target < max)
             && let Err(error) = self.seek(target)
         {
             tracing::debug!(
@@ -335,17 +344,16 @@ impl VideoDecoder {
         let mut selected = self.cache.covering_at(target, final_end);
         while let Some(frame) = {
             let started = Instant::now();
-            let frame = self.next_frame()?;
+            let frame = self.cursor.next_frame(&mut self.metrics.actual_decodes)?;
             self.metrics.decode_time_us += started.elapsed().as_micros() as u64;
             frame
         } {
             let pts = frame.pts.0;
-            self.max_decoded_pts = Some(self.max_decoded_pts.map_or(pts, |old| old.max(pts)));
             self.cache.insert(frame.clone());
             if selects_latest_pts(selected.as_ref().map(|frame| frame.pts.0), pts, target) {
                 selected = Some(Arc::new(frame));
             } else {
-                self.pending = Some(frame);
+                self.cursor.defer(frame);
                 break;
             }
         }
@@ -366,91 +374,14 @@ impl VideoDecoder {
             reason = "requested timestamp precedes decoded range",
             "video seek started"
         );
-        let raw_seconds = self.info.time_base.ticks_to_seconds(target);
-        let micros = (raw_seconds * 1_000_000.0).round();
-        if !micros.is_finite() || micros < i64::MIN as f64 || micros > i64::MAX as f64 {
-            return Err(MediaError::VideoSeek(
-                "seek timestamp overflows i64".to_owned(),
-            ));
-        }
-        self.input
-            .seek(micros as i64, ..micros as i64)
-            .map_err(|error| MediaError::VideoSeek(error.to_string()))?;
-        self.decoder.flush();
+        self.cursor.seek(target, self.info.time_base)?;
         self.metrics.seeks += 1;
-        self.pending = None;
-        self.max_decoded_pts = None;
-        self.draining = false;
         tracing::debug!(
             target: "vestra.media.video",
             media_pts = target,
             "video seek completed"
         );
         Ok(())
-    }
-
-    fn next_frame(&mut self) -> Result<Option<DecodedVideoFrame>, MediaError> {
-        if let Some(frame) = self.pending.take() {
-            return Ok(Some(frame));
-        }
-        let mut decoded = Video::empty();
-        loop {
-            if self.decoder.receive_frame(&mut decoded).is_ok() {
-                return self.convert_frame(&decoded).map(Some);
-            }
-            if self.draining {
-                return Ok(None);
-            }
-            let mut found_packet = false;
-            for (stream, packet) in self.input.packets() {
-                if stream.index() == self.info.stream_index {
-                    self.decoder.send_packet(&packet).map_err(decode_error)?;
-                    found_packet = true;
-                    break;
-                }
-            }
-            if !found_packet {
-                self.decoder.send_eof().map_err(decode_error)?;
-                self.draining = true;
-            }
-        }
-    }
-
-    fn convert_frame(&mut self, decoded: &Video) -> Result<DecodedVideoFrame, MediaError> {
-        self.metrics.actual_decodes += 1;
-        let pts = decoded
-            .timestamp()
-            .or_else(|| decoded.pts())
-            .ok_or(MediaError::MissingVideoTimestamp)?;
-        validate_dimensions(decoded.width(), decoded.height(), &self.limits)?;
-        let mut rgba = Video::empty();
-        self.scaler
-            .run(decoded, &mut rgba)
-            .map_err(|error| MediaError::VideoPixelConversion(error.to_string()))?;
-        let width = rgba.width();
-        let height = rgba.height();
-        validate_dimensions(width, height, &self.limits)?;
-        let bytes = checked_frame_bytes(width, height)?;
-        if rgba.stride(0) < width as usize * 4
-            || rgba.data(0).len() < rgba.stride(0) * height as usize
-        {
-            return Err(MediaError::VideoPixelConversion(
-                "invalid RGBA stride".to_owned(),
-            ));
-        }
-        let mut pixels = Vec::with_capacity(bytes);
-        for row in rgba.data(0).chunks(rgba.stride(0)).take(height as usize) {
-            pixels.extend_from_slice(&row[..width as usize * 4]);
-        }
-        let image = RgbaImage::from_raw(width, height, pixels).ok_or_else(|| {
-            MediaError::VideoPixelConversion("invalid RGBA dimensions".to_owned())
-        })?;
-        Ok(DecodedVideoFrame {
-            pts: VideoTimestamp(pts),
-            width,
-            height,
-            pixels: Arc::new(image),
-        })
     }
 
     #[must_use]
@@ -577,92 +508,6 @@ fn selects_latest_pts(current: Option<i64>, candidate: i64, target: i64) -> bool
     candidate <= target && current.is_none_or(|current| candidate >= current)
 }
 
-struct FrameCache {
-    budget: u64,
-    bytes: u64,
-    clock: u64,
-    entries: BTreeMap<i64, CachedFrame>,
-}
-
-struct CachedFrame {
-    frame: Arc<DecodedVideoFrame>,
-    bytes: u64,
-    last_used: u64,
-    next_pts: Option<i64>,
-}
-
-impl FrameCache {
-    fn new(budget: u64) -> Self {
-        Self {
-            budget,
-            bytes: 0,
-            clock: 0,
-            entries: BTreeMap::new(),
-        }
-    }
-    fn covering_at(&mut self, pts: i64, final_end: Option<i64>) -> Option<Arc<DecodedVideoFrame>> {
-        let key = self
-            .entries
-            .range(..=pts)
-            .next_back()
-            .map(|(key, _)| *key)?;
-        let entry = self.entries.get_mut(&key)?;
-        let covered = entry
-            .next_pts
-            .map_or_else(|| final_end.is_some_and(|end| pts < end), |next| pts < next);
-        if !covered {
-            return None;
-        }
-        self.clock = self.clock.saturating_add(1);
-        entry.last_used = self.clock;
-        Some(Arc::clone(&entry.frame))
-    }
-    fn insert(&mut self, frame: DecodedVideoFrame) {
-        let Ok(bytes) = checked_frame_bytes(frame.width, frame.height)
-            .and_then(|bytes| u64::try_from(bytes).map_err(|_| MediaError::VideoFrameByteOverflow))
-        else {
-            return;
-        };
-        if bytes > self.budget {
-            return;
-        }
-        self.clock = self.clock.saturating_add(1);
-        if let Some(old) = self.entries.remove(&frame.pts.0) {
-            self.bytes = self.bytes.saturating_sub(old.bytes);
-        }
-        while self.bytes.saturating_add(bytes) > self.budget {
-            let Some(key) = self
-                .entries
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(key, _)| *key)
-            else {
-                break;
-            };
-            if let Some(old) = self.entries.remove(&key) {
-                self.bytes = self.bytes.saturating_sub(old.bytes);
-            }
-        }
-        if self.bytes.saturating_add(bytes) <= self.budget {
-            self.bytes += bytes;
-            if let Some((_, previous)) = self.entries.range_mut(..frame.pts.0).next_back()
-                && previous.next_pts.is_none()
-            {
-                previous.next_pts = Some(frame.pts.0);
-            }
-            self.entries.insert(
-                frame.pts.0,
-                CachedFrame {
-                    frame: Arc::new(frame),
-                    bytes,
-                    last_used: self.clock,
-                    next_pts: None,
-                },
-            );
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -738,55 +583,6 @@ mod tests {
         );
         assert_eq!(info.timestamp_to_seconds(VideoTimestamp(750)), 0.25);
         assert!(info.seconds_to_timestamp(f64::INFINITY).is_err());
-    }
-
-    #[test]
-    fn cache_is_bounded_by_rgba_bytes_and_evicts_lru() {
-        let mut cache = FrameCache::new(8);
-        let image = |value| DecodedVideoFrame {
-            pts: VideoTimestamp(value),
-            width: 1,
-            height: 1,
-            pixels: Arc::new(RgbaImage::from_pixel(
-                1,
-                1,
-                image::Rgba([value as u8, 0, 0, 255]),
-            )),
-        };
-        cache.insert(image(0));
-        cache.insert(image(1));
-        assert_eq!(cache.entries.len(), 2);
-        let _ = cache.covering_at(0, Some(1));
-        cache.insert(image(2));
-        assert!(cache.entries.contains_key(&0));
-        assert!(!cache.entries.contains_key(&1));
-        assert!(cache.bytes <= 8);
-    }
-
-    #[test]
-    fn sparse_cache_only_hits_when_the_entry_proves_its_covering_interval() {
-        let mut cache = FrameCache::new(8);
-        let image = |value| DecodedVideoFrame {
-            pts: VideoTimestamp(value),
-            width: 1,
-            height: 1,
-            pixels: Arc::new(RgbaImage::from_pixel(
-                1,
-                1,
-                image::Rgba([value as u8, 0, 0, 255]),
-            )),
-        };
-        cache.insert(image(20));
-        cache.insert(image(30));
-        let _ = cache.covering_at(20, Some(30));
-        cache.insert(image(40));
-        assert_eq!(cache.covering_at(35, None), None);
-        assert_eq!(cache.covering_at(35, Some(50)), None);
-        cache.insert(image(50));
-        assert_eq!(
-            cache.covering_at(45, None).map(|frame| frame.pts.0),
-            Some(40)
-        );
     }
 
     #[test]

@@ -38,6 +38,7 @@ use super::{
     requirements::{GpuRequirements, ResourceEstimates},
     resources::{FrameResources, SourceResources},
     texture_pool::{StaticLayerTexture, create_static_layer_texture, static_layer_texture_bytes},
+    topology::PlanTopology,
 };
 use crate::project::BlendMode;
 
@@ -53,6 +54,7 @@ pub struct WgpuBackend {
     sources: SourceResources,
     pipelines: GpuPipelines,
     pipeline_depth: usize,
+    topology: PlanTopology,
     resource_estimates: ResourceEstimates,
     last_execution: FrameExecutionMetrics,
     stats: PreparationStats,
@@ -170,8 +172,13 @@ impl WgpuBackend {
         .entered();
         validate_pipeline_depth(pipeline_depth)?;
         let started = Instant::now();
-        let requirements =
-            GpuRequirements::from_plan(plan, &decoded, parameters::PARAMETER_RECORD_BYTES as u32)?;
+        let topology = PlanTopology::from_plan(plan);
+        let requirements = GpuRequirements::from_plan_with_topology(
+            plan,
+            &topology,
+            &decoded,
+            parameters::PARAMETER_RECORD_BYTES as u32,
+        )?;
         let context = GpuContext::create(plan, requirements)?;
         // Preparation is synchronous and infrequent, so scope errors here can
         // be collected deterministically. Normal frame submission deliberately
@@ -186,7 +193,12 @@ impl WgpuBackend {
             requirements.resource_estimates_for_depth(alignment, pipeline_depth)?;
         let pipeline_started = Instant::now();
         let pipelines = GpuPipelines::create(&context.device);
-        let frame = FrameResources::create(&context.device, plan, requirements.padded_row_bytes);
+        let frame = FrameResources::create_with_topology(
+            &context.device,
+            plan,
+            &topology,
+            requirements.padded_row_bytes,
+        );
         debug_assert_eq!(
             frame.working.estimated_bytes(),
             resource_estimates.working_texture_bytes
@@ -373,6 +385,7 @@ impl WgpuBackend {
             slots,
             readback,
             pipeline_depth,
+            topology,
             resource_estimates,
             last_execution: FrameExecutionMetrics::default(),
             stats,
@@ -615,8 +628,12 @@ impl RenderBackend for WgpuBackend {
             );
             textures.insert(key, texture);
         }
-        let mut plan =
-            GpuFramePlan::build_with_static_cache(evaluated, &cached_layers, &cache_targets);
+        let mut plan = GpuFramePlan::build_with_topology(
+            evaluated,
+            &self.topology,
+            &cached_layers,
+            &cache_targets,
+        );
         if let Err(error) = plan
             .validate(self.sources.raster_textures.len())
             .and_then(|()| {

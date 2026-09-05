@@ -17,6 +17,11 @@ mod kernel;
 pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
+/// Core-owned planning types exposed through the renderer's established path.
+pub mod plan {
+    pub use vestra_core::plan::*;
+}
+
 /// Internal project values used by renderer tests and pixel production.
 /// Production path resolution and environment preflight belong to the SDK.
 pub mod project {

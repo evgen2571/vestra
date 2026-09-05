@@ -25,11 +25,11 @@ use super::{
 
 pub(super) use super::preparation::PreparedState;
 #[cfg(test)]
+pub(super) use super::preparation::prepare;
+#[cfg(test)]
 pub(super) use super::preparation::{
     audio_analysis_invocation_count, reset_audio_analysis_invocation_count,
 };
-#[cfg(test)]
-pub(super) use super::preparation::{prepare, render_prepared_frame};
 #[cfg(test)]
 use super::tests::render_prepared_with_sink;
 #[cfg(test)]

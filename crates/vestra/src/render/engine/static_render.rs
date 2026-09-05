@@ -10,7 +10,7 @@ use vestra_progress::RenderStage;
 use super::{
     failure::cleanup_error,
     metrics::{milliseconds, operation_backend_metrics},
-    preparation::{PreparedState, frame_diagnostic, frame_error, render_prepared_frame},
+    preparation::{PreparedState, frame_diagnostic, frame_error},
     runner::{LifecycleEmitter, render_prepared_with_lifecycle as render_raw},
     types::{
         RenderError, RenderFailureContext, RenderFailureStage, RenderObserverControl,
@@ -175,7 +175,7 @@ fn render_static_ffmpeg_inner(
         total_frames = plan.frame_count
     )
     .entered();
-    let frame = render_prepared_frame(prepared, 0)?;
+    let frame = prepared.render_frame(0)?;
     let frame_render = frame_started.elapsed();
     drop(_frames_span);
     let frame_bytes = frame.rgba.len() as u64;

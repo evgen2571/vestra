@@ -17,7 +17,7 @@ use crate::{
     project::ValidatedProject,
     render::{
         LifecycleEmitter, PreparedState, RenderBackendPreference, RenderError, RenderOptions,
-        RenderSummary, prepare_for_video, render_prepared_frame, render_prepared_with_lifecycle,
+        RenderSummary, prepare_for_video, render_prepared_with_lifecycle,
     },
 };
 
@@ -49,9 +49,6 @@ pub(crate) struct PreparedRender {
     prepared: PreparedState,
     /// Immutable context produced before any encoder or output operation.
     preparation_warnings: Vec<Diagnostic>,
-    requested_backend: RenderBackendPreference,
-    selected_backend: crate::render::RenderBackendKind,
-    backend_fallback: Option<crate::render::BackendFallback>,
     preparation_timings: PreparationTimings,
     plan_compile_elapsed_ms: u128,
 }
@@ -141,13 +138,13 @@ fn trace_transitions(transitions: &[vestra_core::project::TransitionPlacement]) 
 
 impl PreparedRender {
     pub(crate) const fn requested_backend(&self) -> RenderBackendPreference {
-        self.requested_backend
+        self.prepared.requested_backend()
     }
     pub(crate) const fn selected_backend(&self) -> crate::render::RenderBackendKind {
-        self.selected_backend
+        self.prepared.selected_backend()
     }
     pub(crate) fn prepared_backend_fallback(&self) -> Option<crate::render::BackendFallback> {
-        self.backend_fallback.clone()
+        self.prepared.backend_fallback().cloned()
     }
     pub(crate) fn preparation_warnings(&self) -> &[Diagnostic] {
         &self.preparation_warnings
@@ -168,12 +165,12 @@ impl PreparedRender {
         &mut self,
         frame_number: u64,
     ) -> Result<crate::render::CompletedFrame, ApplicationRenderError> {
-        render_prepared_frame(&mut self.prepared, frame_number).map_err(|error| {
-            ApplicationRenderError::Render {
+        self.prepared
+            .render_frame(frame_number)
+            .map_err(|error| ApplicationRenderError::Render {
                 error: Box::new(error),
                 plan_compile_elapsed_ms: self.plan_compile_elapsed_ms,
-            }
-        })
+            })
     }
 }
 
@@ -253,9 +250,6 @@ pub(crate) fn prepare_project(
     let audio_analysis_ms = prepared.audio_analysis_duration().as_millis();
     Ok(PreparedRender {
         metadata,
-        requested_backend: prepared.requested_backend(),
-        selected_backend: prepared.selected_backend(),
-        backend_fallback: prepared.backend_fallback().cloned(),
         prepared,
         preparation_warnings,
         preparation_timings: PreparationTimings {
@@ -288,9 +282,15 @@ pub(crate) fn render_prepared_project(
         error: Box::new(error),
         plan_compile_elapsed_ms: prepared.plan_compile_elapsed_ms,
     })?;
-    debug_assert_eq!(summary.requested_render_backend, prepared.requested_backend);
-    debug_assert_eq!(summary.render_backend, prepared.selected_backend);
-    debug_assert_eq!(summary.backend_fallback, prepared.backend_fallback);
+    debug_assert_eq!(
+        summary.requested_render_backend,
+        prepared.requested_backend()
+    );
+    debug_assert_eq!(summary.render_backend, prepared.selected_backend());
+    debug_assert_eq!(
+        summary.backend_fallback,
+        prepared.prepared_backend_fallback()
+    );
     Ok(summary)
 }
 

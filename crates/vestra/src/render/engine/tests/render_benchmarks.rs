@@ -13,7 +13,7 @@ use crate::{
     render::{CompletedFrame, RenderBackendPreference, RenderObserverControl, RenderOptions},
 };
 
-use super::super::runner::{prepare, render_prepared_frame};
+use super::super::runner::prepare;
 use super::{render_prepared, render_prepared_with_sink};
 
 const FRAME_RATE: u64 = 30;
@@ -697,8 +697,9 @@ fn measure_random_access(
     execution: &str,
 ) -> RandomAccessMeasurement {
     let started = Instant::now();
-    let _frame =
-        render_prepared_frame(prepared, frame_number).expect("random-access frame renders");
+    let _frame = prepared
+        .render_frame(frame_number)
+        .expect("random-access frame renders");
     RandomAccessMeasurement {
         workload: workload.to_owned(),
         frame_number,

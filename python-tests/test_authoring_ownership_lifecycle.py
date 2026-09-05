@@ -1,4 +1,4 @@
-"""Phase 8B ownership, transaction, and lifecycle contracts."""
+"""Ownership, transaction, and lifecycle contracts."""
 
 from copy import deepcopy
 from pathlib import Path

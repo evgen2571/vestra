@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use super::to_nanos;
+use crate::plan_time::to_nanos;
 
 #[derive(Clone)]
 struct TransitionSegment<T> {

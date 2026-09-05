@@ -17,127 +17,13 @@ mod kernel;
 pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
-pub mod plan {
-    #[cfg(not(test))]
-    pub use vestra_core::plan::*;
-    #[cfg(test)]
-    pub use vestra_core::plan::{self, *};
-
-    /// Test compatibility with the root's former planning facade. Production
-    /// code receives plans from root orchestration and does not compile them.
-    #[cfg(test)]
-    pub fn compile(
-        input: &PlanCompileInput<'_>,
-        options: CompileOptions,
-    ) -> Result<RenderPlan, crate::Diagnostic> {
-        self::compile_input(*input, options)
-    }
-
-    /// Existing renderer fixtures do not prepare procedural runtime resources.
-    #[cfg(test)]
-    pub fn evaluate(
-        plan: &RenderPlan,
-        active: &[ScheduledItem],
-        project_time: u128,
-    ) -> EvaluatedFrame {
-        vestra_core::plan::evaluate(plan, active, project_time)
-            .expect("unmodulated renderer fixture")
-    }
-
-    #[cfg(test)]
-    use vestra_core::plan::compile as compile_input;
-}
 /// Internal project values used by renderer tests and pixel production.
 /// Production path resolution and environment preflight belong to the SDK.
 pub mod project {
     pub use vestra_core::project::*;
-
-    #[cfg(test)]
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct ValidationOptions {
-        pub check_backend: bool,
-        /// Keeps migrated root test literals source-compatible.
-        pub root_fixture_compat: bool,
-    }
-
-    /// Test-only fixture loader. Production path resolution and environment
-    /// preflight belong to the SDK crate.
-    #[cfg(test)]
-    pub fn load_and_validate(
-        path: &std::path::Path,
-        _options: &ValidationOptions,
-    ) -> Result<crate::plan::PlanCompileInput<'static>, crate::Diagnostic> {
-        use std::collections::BTreeMap;
-
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../..")
-                .join(path)
-        };
-        let bytes = std::fs::read(&path).map_err(|error| {
-            crate::Diagnostic::error(
-                "VESTRA-PROJECT-READ",
-                crate::Category::Project,
-                format!("cannot read project: {error}"),
-                "",
-            )
-        })?;
-        let project = Box::leak(Box::new(
-            serde_json::from_slice::<Project>(&bytes).map_err(|error| {
-                crate::Diagnostic::error(
-                    "VESTRA-PROJECT-SHAPE",
-                    crate::Category::Project,
-                    format!("project does not match the canonical format: {error}"),
-                    "",
-                )
-            })?,
-        ));
-        let root = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-        let asset_paths = Box::leak(Box::new(
-            project
-                .assets
-                .iter()
-                .map(|asset| (asset.id.clone(), root.join(&asset.source)))
-                .collect::<BTreeMap<_, _>>(),
-        ));
-        let audio_durations = Box::leak(Box::new(BTreeMap::new()));
-        let duration = project
-            .visual
-            .clips
-            .iter()
-            .map(|clip| clip.start + clip.duration)
-            .fold(0.0_f64, f64::max);
-        let frame_rate = project.output.frame_rate.rational().map_err(|message| {
-            crate::Diagnostic::error("VESTRA-OUTPUT-FPS", crate::Category::Semantic, message, "")
-        })?;
-        let frame_count = vestra_core::timeline::frame_count(
-            vestra_core::timeline::seconds_to_nanos(duration).unwrap_or(0),
-            frame_rate.0,
-            frame_rate.1,
-        )
-        .map_err(|_| {
-            crate::Diagnostic::error(
-                "VESTRA-TIMELINE-OVERFLOW",
-                crate::Category::Semantic,
-                "project duration or frame rate cannot be represented safely",
-                "",
-            )
-        })?;
-        Ok(crate::plan::PlanCompileInput::new(
-            project,
-            vestra_core::validation::ResourceLimits::default(),
-            Box::leak(path.into_boxed_path()),
-            asset_paths,
-            audio_durations,
-            duration,
-            frame_rate,
-            frame_count,
-            &[],
-        ))
-    }
 }
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 pub use vestra_core::timeline;
 
@@ -298,7 +184,7 @@ pub mod render {
 )]
 pub fn create_backend(
     preference: RenderBackendPreference,
-    plan: &plan::RenderPlan,
+    plan: &vestra_core::plan::RenderPlan,
     decoded: &std::sync::Arc<DecodedAssets>,
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
     #[cfg(feature = "cpu")]

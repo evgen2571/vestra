@@ -9,13 +9,13 @@ use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use cosmic_text::SwashCache;
 use image::RgbaImage;
+use vestra_core::plan::RenderPlan;
 
 use crate::shape_raster::{PreparedShape, raster_dimensions};
 use crate::text::PreparedText;
 use crate::video::VideoDecoderFactory;
 use crate::{
     Category, Diagnostic,
-    plan::RenderPlan,
     render::metrics::{PreparationStats, PreparationTimings},
 };
 
@@ -24,7 +24,7 @@ pub struct DecodedAssets {
     images: Vec<Arc<RgbaImage>>,
     shapes: Vec<PreparedShape>,
     texts: Vec<PreparedText>,
-    videos: Vec<crate::plan::VideoAsset>,
+    videos: Vec<vestra_core::plan::VideoAsset>,
     video_factory: Option<Arc<dyn VideoDecoderFactory>>,
     stats: PreparationStats,
     timings: PreparationTimings,
@@ -281,11 +281,11 @@ impl DecodedAssets {
     }
 
     #[must_use]
-    pub(crate) fn video_asset(&self, asset: usize) -> Option<&crate::plan::VideoAsset> {
+    pub(crate) fn video_asset(&self, asset: usize) -> Option<&vestra_core::plan::VideoAsset> {
         self.video_assets().get(asset)
     }
 
-    fn video_assets(&self) -> &[crate::plan::VideoAsset] {
+    fn video_assets(&self) -> &[vestra_core::plan::VideoAsset] {
         // The immutable plan table is copied into the decoded bundle below.
         &self.videos
     }

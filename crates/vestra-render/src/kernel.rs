@@ -1,4 +1,4 @@
-use crate::plan::{EffectOperation, RenderPlan, compiled_effect_pass_plan};
+use vestra_core::plan::{EffectOperation, RenderPlan, compiled_effect_pass_plan};
 
 /// Renderer-owned implementation families for logical effect operations.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -164,7 +164,7 @@ pub(crate) const fn supports_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::{CompositeMode, EffectOperation};
+    use vestra_core::plan::{CompositeMode, EffectOperation};
 
     #[test]
     fn gaussian_directions_share_a_kernel() {
@@ -286,9 +286,9 @@ mod tests {
     #[test]
     fn evaluated_runtime_kernels_are_a_subset_of_compiled_requirements() {
         let scalar = |value| {
-            crate::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
+            vestra_core::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
         };
-        let point = || crate::plan::CompiledPointProperty {
+        let point = || vestra_core::plan::CompiledPointProperty {
             authored_track: crate::animation::Track::new(crate::domain::Point { x: 0.5, y: 0.5 }),
             modifiers: Vec::new(),
             x_modifiers: Vec::new(),
@@ -296,47 +296,47 @@ mod tests {
         };
         let cases = [
             (
-                crate::plan::CompiledEffect::Brightness {
+                vestra_core::plan::CompiledEffect::Brightness {
                     amount: scalar(0.25),
                 },
-                crate::plan::EvaluatedEffect::Brightness { amount: 0.25 },
+                vestra_core::plan::EvaluatedEffect::Brightness { amount: 0.25 },
             ),
             (
-                crate::plan::CompiledEffect::Contrast {
+                vestra_core::plan::CompiledEffect::Contrast {
                     amount: scalar(1.25),
                 },
-                crate::plan::EvaluatedEffect::Contrast { amount: 1.25 },
+                vestra_core::plan::EvaluatedEffect::Contrast { amount: 1.25 },
             ),
             (
-                crate::plan::CompiledEffect::Saturation {
+                vestra_core::plan::CompiledEffect::Saturation {
                     amount: scalar(1.25),
                 },
-                crate::plan::EvaluatedEffect::Saturation { amount: 1.25 },
+                vestra_core::plan::EvaluatedEffect::Saturation { amount: 1.25 },
             ),
             (
-                crate::plan::CompiledEffect::Tint {
+                vestra_core::plan::CompiledEffect::Tint {
                     colour: [255; 4],
                     amount: scalar(0.25),
                 },
-                crate::plan::EvaluatedEffect::Tint {
+                vestra_core::plan::EvaluatedEffect::Tint {
                     colour: [255; 4],
                     amount: 0.25,
                 },
             ),
             (
-                crate::plan::CompiledEffect::GaussianBlur {
+                vestra_core::plan::CompiledEffect::GaussianBlur {
                     radius: scalar(2.0),
                 },
-                crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 },
+                vestra_core::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 },
             ),
             (
-                crate::plan::CompiledEffect::MotionTile {
+                vestra_core::plan::CompiledEffect::MotionTile {
                     output_width_percent: scalar(200.0),
                     output_height_percent: scalar(150.0),
                     tile_center: point(),
                     mirror_edges: true,
                 },
-                crate::plan::EvaluatedEffect::MotionTile {
+                vestra_core::plan::EvaluatedEffect::MotionTile {
                     output_width_percent: 200.0,
                     output_height_percent: 150.0,
                     tile_center: crate::domain::Point { x: 0.5, y: 0.5 },
@@ -344,23 +344,23 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::DirectionalBlur {
+                vestra_core::plan::CompiledEffect::DirectionalBlur {
                     radius: scalar(2.0),
                     angle_degrees: scalar(10.0),
                 },
-                crate::plan::EvaluatedEffect::DirectionalBlur {
+                vestra_core::plan::EvaluatedEffect::DirectionalBlur {
                     radius: 2.0,
                     angle_degrees: 10.0,
                 },
             ),
             (
-                crate::plan::CompiledEffect::ZoomBlur {
+                vestra_core::plan::CompiledEffect::ZoomBlur {
                     radius: scalar(2.0),
                     samples: 2,
                     anchor: crate::domain::Point { x: 0.5, y: 0.5 },
                     direction: crate::project::ZoomBlurDirection::Centered,
                 },
-                crate::plan::EvaluatedEffect::ZoomBlur {
+                vestra_core::plan::EvaluatedEffect::ZoomBlur {
                     radius: 2.0,
                     samples: 2,
                     anchor: crate::domain::Point { x: 0.5, y: 0.5 },
@@ -368,23 +368,23 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::RadialBlur {
+                vestra_core::plan::CompiledEffect::RadialBlur {
                     amount: scalar(2.0),
                     center: point(),
                 },
-                crate::plan::EvaluatedEffect::RadialBlur {
+                vestra_core::plan::EvaluatedEffect::RadialBlur {
                     amount: 2.0,
                     center: crate::domain::Point { x: 0.5, y: 0.5 },
                 },
             ),
             (
-                crate::plan::CompiledEffect::Glow {
+                vestra_core::plan::CompiledEffect::Glow {
                     threshold: scalar(0.5),
                     radius: scalar(2.0),
                     intensity: scalar(1.0),
                     colour: [255; 4],
                 },
-                crate::plan::EvaluatedEffect::Glow {
+                vestra_core::plan::EvaluatedEffect::Glow {
                     threshold: 0.5,
                     radius: 2.0,
                     intensity: 1.0,
@@ -392,35 +392,35 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::Bloom {
+                vestra_core::plan::CompiledEffect::Bloom {
                     threshold: scalar(0.5),
                     radius: scalar(2.0),
                     intensity: scalar(1.0),
                 },
-                crate::plan::EvaluatedEffect::Bloom {
+                vestra_core::plan::EvaluatedEffect::Bloom {
                     threshold: 0.5,
                     radius: 2.0,
                     intensity: 1.0,
                 },
             ),
             (
-                crate::plan::CompiledEffect::ChromaticAberration {
+                vestra_core::plan::CompiledEffect::ChromaticAberration {
                     amount: scalar(0.25),
                     angle_degrees: scalar(10.0),
                 },
-                crate::plan::EvaluatedEffect::ChromaticAberration {
+                vestra_core::plan::EvaluatedEffect::ChromaticAberration {
                     amount: 0.25,
                     angle_degrees: 10.0,
                 },
             ),
             (
-                crate::plan::CompiledEffect::Vignette {
+                vestra_core::plan::CompiledEffect::Vignette {
                     amount: scalar(0.5),
                     radius: scalar(1.0),
                     softness: crate::animation::Track::new(1.0),
                     colour: [255; 4],
                 },
-                crate::plan::EvaluatedEffect::Vignette {
+                vestra_core::plan::EvaluatedEffect::Vignette {
                     amount: 0.5,
                     radius: 1.0,
                     softness: 1.0,
@@ -428,23 +428,23 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::Sharpen {
+                vestra_core::plan::CompiledEffect::Sharpen {
                     amount: scalar(1.0),
                     radius: scalar(2.0),
                 },
-                crate::plan::EvaluatedEffect::Sharpen {
+                vestra_core::plan::EvaluatedEffect::Sharpen {
                     amount: 1.0,
                     radius: 2.0,
                 },
             ),
             (
-                crate::plan::CompiledEffect::ColorAdjust {
+                vestra_core::plan::CompiledEffect::ColorAdjust {
                     exposure: scalar(0.2),
                     gamma: scalar(1.2),
                     black_point: crate::animation::Track::new(0.0),
                     white_point: crate::animation::Track::new(1.0),
                 },
-                crate::plan::EvaluatedEffect::ColorAdjust {
+                vestra_core::plan::EvaluatedEffect::ColorAdjust {
                     exposure: 0.2,
                     gamma: 1.2,
                     black_point: 0.0,
@@ -452,7 +452,7 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::CameraShake {
+                vestra_core::plan::CompiledEffect::CameraShake {
                     position_amount: scalar(1.0),
                     rotation_degrees: scalar(1.0),
                     scale_amount: scalar(1.0),
@@ -461,7 +461,7 @@ mod tests {
                     attack: 0.0,
                     decay: 1.0,
                 },
-                crate::plan::EvaluatedEffect::CameraShake {
+                vestra_core::plan::EvaluatedEffect::CameraShake {
                     local_time: 0,
                     position_amount: 1.0,
                     rotation_radians: 1.0_f64.to_radians(),
@@ -473,13 +473,13 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::MotionBlur {
+                vestra_core::plan::CompiledEffect::MotionBlur {
                     intensity: scalar(1.0),
                     shutter_angle: scalar(180.0),
                     max_radius: scalar(2.0),
                     samples: 2,
                 },
-                crate::plan::EvaluatedEffect::MotionBlur {
+                vestra_core::plan::EvaluatedEffect::MotionBlur {
                     radius: 0.0,
                     angle_degrees: 0.0,
                     intensity: 1.0,
@@ -494,10 +494,10 @@ mod tests {
             vestra_core::effect_definition::visual_effect_descriptors().count(),
             "every registered visual effect needs a runtime kernel conformance case"
         );
-        let signals = crate::plan::PreparedScalarSignals::empty();
-        let context = crate::plan::EvaluationContext::new(&signals);
+        let signals = vestra_core::plan::PreparedScalarSignals::empty();
+        let context = vestra_core::plan::EvaluationContext::new(&signals);
         for (compiled, representative) in cases {
-            let evaluated = crate::plan::evaluate_effect(&compiled, 0, 0, &context)
+            let evaluated = vestra_core::plan::evaluate_effect(&compiled, 0, 0, &context)
                 .expect("representative compiled effect evaluates");
             assert_eq!(format!("{evaluated:?}"), format!("{representative:?}"));
             let required = compiled_effect_pass_plan(&compiled)
@@ -516,23 +516,23 @@ mod tests {
     #[test]
     fn identity_topology_branches_are_checked_without_requiring_exact_equality() {
         let scalar = |value| {
-            crate::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
+            vestra_core::plan::CompiledScalarProperty::authored(crate::animation::Track::new(value))
         };
         let cases = [
             (
-                crate::plan::CompiledEffect::GaussianBlur {
+                vestra_core::plan::CompiledEffect::GaussianBlur {
                     radius: scalar(0.0),
                 },
-                crate::plan::EvaluatedEffect::GaussianBlur { radius: 0.0 },
+                vestra_core::plan::EvaluatedEffect::GaussianBlur { radius: 0.0 },
             ),
             (
-                crate::plan::CompiledEffect::Glow {
+                vestra_core::plan::CompiledEffect::Glow {
                     threshold: scalar(0.5),
                     radius: scalar(2.0),
                     intensity: scalar(0.0),
                     colour: [255; 4],
                 },
-                crate::plan::EvaluatedEffect::Glow {
+                vestra_core::plan::EvaluatedEffect::Glow {
                     threshold: 0.5,
                     radius: 2.0,
                     intensity: 0.0,
@@ -540,25 +540,25 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::Bloom {
+                vestra_core::plan::CompiledEffect::Bloom {
                     threshold: scalar(0.5),
                     radius: scalar(2.0),
                     intensity: scalar(0.0),
                 },
-                crate::plan::EvaluatedEffect::Bloom {
+                vestra_core::plan::EvaluatedEffect::Bloom {
                     threshold: 0.5,
                     radius: 2.0,
                     intensity: 0.0,
                 },
             ),
             (
-                crate::plan::CompiledEffect::MotionBlur {
+                vestra_core::plan::CompiledEffect::MotionBlur {
                     intensity: scalar(0.0),
                     shutter_angle: scalar(180.0),
                     max_radius: scalar(2.0),
                     samples: 2,
                 },
-                crate::plan::EvaluatedEffect::MotionBlur {
+                vestra_core::plan::EvaluatedEffect::MotionBlur {
                     radius: 0.0,
                     angle_degrees: 0.0,
                     intensity: 0.0,
@@ -568,13 +568,13 @@ mod tests {
                 },
             ),
             (
-                crate::plan::CompiledEffect::MotionBlur {
+                vestra_core::plan::CompiledEffect::MotionBlur {
                     intensity: scalar(1.0),
                     shutter_angle: scalar(180.0),
                     max_radius: scalar(2.0),
                     samples: 2,
                 },
-                crate::plan::EvaluatedEffect::MotionBlur {
+                vestra_core::plan::EvaluatedEffect::MotionBlur {
                     radius: 0.2,
                     angle_degrees: 0.0,
                     intensity: 1.0,

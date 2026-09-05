@@ -409,8 +409,8 @@ fn cancellation_failure_reports_frames_written_before_cancellation() {
     assert_eq!(failure_progress(24, 24), None);
 }
 
-#[path = "phase10.rs"]
-mod phase10_tests;
+#[path = "render_benchmarks.rs"]
+mod benchmark_tests;
 #[path = "selection.rs"]
 mod selection_tests;
 #[path = "staged.rs"]

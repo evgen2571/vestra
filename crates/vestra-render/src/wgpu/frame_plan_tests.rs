@@ -1,10 +1,10 @@
 use super::*;
-use crate::plan::{CompositeMode, EffectOperation, EffectResource};
+use vestra_core::plan::{CompositeMode, EffectOperation, EffectResource};
 
 fn pass(operation: EffectOperation, primary: EffectResource, output: EffectResource) -> EffectPass {
     EffectPass {
         operation,
-        inputs: crate::plan::EffectPassInputs::Single(primary),
+        inputs: vestra_core::plan::EffectPassInputs::Single(primary),
         output,
     }
 }
@@ -12,7 +12,7 @@ fn pass(operation: EffectOperation, primary: EffectResource, output: EffectResou
 fn composite(mode: CompositeMode, amount: f64) -> EffectPass {
     EffectPass {
         operation: EffectOperation::Composite { mode, amount },
-        inputs: crate::plan::EffectPassInputs::OriginalAnd(EffectResource::Temporary0),
+        inputs: vestra_core::plan::EffectPassInputs::OriginalAnd(EffectResource::Temporary0),
         output: EffectResource::Current,
     }
 }
@@ -113,21 +113,18 @@ fn liveness_allocator_preserves_original_while_later_pass_reads_it() {
     assert_eq!(bindings.original, None);
 }
 
-use crate::{
-    plan::{CompileOptions, ScheduledItem, compile, evaluate},
-    project::{ValidationOptions, load_and_validate},
-};
+use crate::test_support::{ValidationOptions, load_and_validate};
+use vestra_core::plan::{CompileOptions, ScheduledItem, compile, evaluate};
 
-fn fixture() -> crate::plan::RenderPlan {
+fn fixture() -> vestra_core::plan::RenderPlan {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
             check_backend: false,
-            ..ValidationOptions::default()
         },
     )
     .expect("fixture validates");
-    compile(&validated, CompileOptions::default()).expect("fixture compiles")
+    compile(validated, CompileOptions::default()).expect("fixture compiles")
 }
 
 fn static_frame() -> EvaluatedFrame {
@@ -136,10 +133,10 @@ fn static_frame() -> EvaluatedFrame {
         background: [0, 0, 0, 255],
         width: 4,
         height: 4,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 3,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Static,
+            content_dependency: vestra_core::plan::TemporalDependency::Static,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -151,7 +148,7 @@ fn static_frame() -> EvaluatedFrame {
             effects: Vec::new(),
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: Vec::new(),
@@ -164,24 +161,24 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
     let mut frame = static_frame();
     frame.layers[0].source = EvaluatedSource::Shape {
         shape_index: 0,
-        sizing: crate::plan::CompiledSizing::Original,
+        sizing: vestra_core::plan::CompiledSizing::Original,
     };
-    frame.layers[0].effects = vec![crate::plan::EvaluatedEffect::Brightness { amount: 0.1 }];
+    frame.layers[0].effects = vec![vestra_core::plan::EvaluatedEffect::Brightness { amount: 0.1 }];
     let transform = crate::animation::Transform2D::identity(
         crate::domain::Point { x: 0.5, y: 0.5 },
         crate::domain::Point { x: 0.5, y: 0.5 },
     );
     frame.layers[0].masks = vec![
-        crate::plan::EvaluatedMask {
-            input: crate::plan::EvaluatedMaskInput::Shape { shape_index: 1 },
+        vestra_core::plan::EvaluatedMask {
+            input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 1 },
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
             strength: 1.0,
             feather: 0.0,
             transform,
         },
-        crate::plan::EvaluatedMask {
-            input: crate::plan::EvaluatedMaskInput::Shape { shape_index: 2 },
+        vestra_core::plan::EvaluatedMask {
+            input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 2 },
             operation: crate::project::MaskOperation::Replace,
             invert: false,
             strength: 1.0,
@@ -288,12 +285,12 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
 fn track_matte_is_lowered_to_gpu_texture_operations() {
     let mut frame = static_frame();
     let mut source = frame.layers[0].clone();
-    source.effects = vec![crate::plan::EvaluatedEffect::RadialBlur {
+    source.effects = vec![vestra_core::plan::EvaluatedEffect::RadialBlur {
         amount: 1.25,
         center: crate::domain::Point { x: 0.62, y: 0.42 },
     }];
     frame.layers[0].compiled_layer_index = 4;
-    frame.layers[0].matte = Some(crate::plan::EvaluatedTrackMatte {
+    frame.layers[0].matte = Some(vestra_core::plan::EvaluatedTrackMatte {
         source_layer_identity: 3,
         mode: crate::project::MatteMode::Luma,
         invert: true,
@@ -328,7 +325,7 @@ fn track_matte_is_lowered_to_gpu_texture_operations() {
 #[test]
 fn inactive_track_matte_is_lowered_to_transparent_coverage_operations() {
     let mut frame = static_frame();
-    frame.layers[0].matte = Some(crate::plan::EvaluatedTrackMatte {
+    frame.layers[0].matte = Some(vestra_core::plan::EvaluatedTrackMatte {
         source_layer_identity: 99,
         mode: crate::project::MatteMode::Alpha,
         invert: true,
@@ -360,10 +357,10 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         crate::domain::Point { x: 0.5, y: 0.5 },
         crate::domain::Point { x: 0.5, y: 0.5 },
     );
-    let child = |index| crate::plan::EvaluatedLayer {
+    let child = |index| vestra_core::plan::EvaluatedLayer {
         compiled_layer_index: index,
         visible: true,
-        content_dependency: crate::plan::TemporalDependency::Static,
+        content_dependency: vestra_core::plan::TemporalDependency::Static,
         transform: crate::animation::Transform2D::identity(
             crate::domain::Point { x: 0.5, y: 0.5 },
             crate::domain::Point { x: 0.5, y: 0.5 },
@@ -375,15 +372,15 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         effects: Vec::new(),
         masks: Vec::new(),
         matte: None,
-        colour_transform: crate::plan::ColourTransform::default(),
+        colour_transform: vestra_core::plan::ColourTransform::default(),
         blend_mode: crate::project::BlendMode::Normal,
     };
-    let nested = crate::plan::EvaluatedLayer {
+    let nested = vestra_core::plan::EvaluatedLayer {
         compiled_layer_index: 2,
         visible: true,
-        content_dependency: crate::plan::TemporalDependency::Static,
+        content_dependency: vestra_core::plan::TemporalDependency::Static,
         source: EvaluatedSource::Group {
-            composition: crate::plan::EvaluatedComposition {
+            composition: vestra_core::plan::EvaluatedComposition {
                 layers: vec![child(3)],
             },
         },
@@ -392,7 +389,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         effects: Vec::new(),
         masks: Vec::new(),
         matte: None,
-        colour_transform: crate::plan::ColourTransform::default(),
+        colour_transform: vestra_core::plan::ColourTransform::default(),
         blend_mode: crate::project::BlendMode::Normal,
     };
     let frame = EvaluatedFrame {
@@ -400,13 +397,13 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         background: [0, 0, 0, 0],
         width: 4,
         height: 4,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 1,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Static,
+            content_dependency: vestra_core::plan::TemporalDependency::Static,
             transform,
             source: EvaluatedSource::Group {
-                composition: crate::plan::EvaluatedComposition {
+                composition: vestra_core::plan::EvaluatedComposition {
                     layers: vec![nested],
                 },
             },
@@ -414,7 +411,7 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
             effects: Vec::new(),
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: Vec::new(),
@@ -510,7 +507,7 @@ fn group_composite_uses_a_same_depth_canvas_alternate() {
     );
 }
 
-fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
+fn group_frame(effects: Vec<vestra_core::plan::EvaluatedEffect>) -> EvaluatedFrame {
     let transform = crate::animation::Transform2D::identity(
         crate::domain::Point { x: 0.5, y: 0.5 },
         crate::domain::Point { x: 0.5, y: 0.5 },
@@ -520,17 +517,17 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
         background: [0, 0, 0, 0],
         width: 4,
         height: 4,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 1,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform,
             source: EvaluatedSource::Group {
-                composition: crate::plan::EvaluatedComposition {
-                    layers: vec![crate::plan::EvaluatedLayer {
+                composition: vestra_core::plan::EvaluatedComposition {
+                    layers: vec![vestra_core::plan::EvaluatedLayer {
                         compiled_layer_index: 2,
                         visible: true,
-                        content_dependency: crate::plan::TemporalDependency::Static,
+                        content_dependency: vestra_core::plan::TemporalDependency::Static,
                         transform,
                         source: EvaluatedSource::SolidColor {
                             colour: [255, 0, 0, 255],
@@ -539,7 +536,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
                         effects: Vec::new(),
                         masks: Vec::new(),
                         matte: None,
-                        colour_transform: crate::plan::ColourTransform::default(),
+                        colour_transform: vestra_core::plan::ColourTransform::default(),
                         blend_mode: crate::project::BlendMode::Normal,
                     }],
                 },
@@ -548,7 +545,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
             effects,
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: Vec::new(),
@@ -558,7 +555,7 @@ fn group_frame(effects: Vec<crate::plan::EvaluatedEffect>) -> EvaluatedFrame {
 
 #[test]
 fn group_basic_colour_effects_are_emitted_once_after_neutral_surface_rasterization() {
-    let frame = group_frame(vec![crate::plan::EvaluatedEffect::Brightness {
+    let frame = group_frame(vec![vestra_core::plan::EvaluatedEffect::Brightness {
         amount: 0.25,
     }]);
     let plan = GpuFramePlan::build(&frame);
@@ -589,10 +586,10 @@ fn group_basic_colour_effects_are_emitted_once_after_neutral_surface_rasterizati
 #[test]
 fn group_effect_chain_preserves_author_order_and_emits_each_effect_once() {
     let frame = group_frame(vec![
-        crate::plan::EvaluatedEffect::Brightness { amount: 0.25 },
-        crate::plan::EvaluatedEffect::Contrast { amount: 1.25 },
-        crate::plan::EvaluatedEffect::Saturation { amount: 1.5 },
-        crate::plan::EvaluatedEffect::GaussianBlur { radius: 1.0 },
+        vestra_core::plan::EvaluatedEffect::Brightness { amount: 0.25 },
+        vestra_core::plan::EvaluatedEffect::Contrast { amount: 1.25 },
+        vestra_core::plan::EvaluatedEffect::Saturation { amount: 1.5 },
+        vestra_core::plan::EvaluatedEffect::GaussianBlur { radius: 1.0 },
     ]);
     let plan = GpuFramePlan::build(&frame);
     plan.validate(0)
@@ -674,7 +671,7 @@ fn zero_odd_and_even_layers_choose_the_correct_final_canvas() {
         vec![ScheduledItem(0)],
         vec![ScheduledItem(0), ScheduledItem(1)],
     ] {
-        let frame = evaluate(&plan, &active, 0);
+        let frame = evaluate(&plan, &active, 0).expect("renderer fixture evaluates");
         let gpu = GpuFramePlan::build(&frame);
         gpu.validate(plan.images.len()).expect("valid plan");
         let expected = if frame.layers.len().is_multiple_of(2) {
@@ -693,7 +690,7 @@ fn zero_odd_and_even_layers_choose_the_correct_final_canvas() {
 #[test]
 fn validation_rejects_invalid_source_and_ping_pong() {
     let plan = fixture();
-    let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = evaluate(&plan, &[ScheduledItem(0)], 0).expect("renderer fixture evaluates");
     let mut gpu = GpuFramePlan::build(&frame);
     if let GpuOperation::RenderRasterLayer { source_index, .. } = &mut gpu.operations[1] {
         *source_index = plan.images.len();
@@ -709,7 +706,7 @@ fn validation_rejects_invalid_source_and_ping_pong() {
 #[test]
 fn validation_rejects_stale_composition_and_readback_values() {
     let plan = fixture();
-    let frame = evaluate(&plan, &[ScheduledItem(0)], 0);
+    let frame = evaluate(&plan, &[ScheduledItem(0)], 0).expect("renderer fixture evaluates");
     let mut stale_composition = GpuFramePlan::build(&frame);
     let GpuOperation::CompositeLayer {
         expected_layer_value,
@@ -851,10 +848,10 @@ fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
         background: [0; 4],
         width: 7,
         height: 5,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -866,7 +863,7 @@ fn validation_rejects_initialized_but_stale_effect_canvas_and_readback_slots() {
             effects: vec![EvaluatedEffect::GaussianBlur { radius: 2.0 }],
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: vec![EvaluatedEffect::Vignette {
@@ -1231,10 +1228,10 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
         background: [0, 0, 0, 255],
         width: 9,
         height: 7,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1243,13 +1240,13 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
                 colour: [100, 80, 60, 255],
             },
             opacity: 0.75,
-            effects: vec![crate::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 }],
+            effects: vec![vestra_core::plan::EvaluatedEffect::GaussianBlur { radius: 2.0 }],
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Screen,
         }],
-        post_effects: vec![crate::plan::EvaluatedEffect::Glow {
+        post_effects: vec![vestra_core::plan::EvaluatedEffect::Glow {
             threshold: 0.5,
             radius: 2.0,
             intensity: 0.8,
@@ -1343,10 +1340,10 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
         background: [0; 4],
         width: 7,
         height: 5,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1366,7 +1363,7 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
             ],
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Normal,
         }],
         post_effects: vec![],
@@ -1389,7 +1386,7 @@ fn basic_colour_effects_have_one_authoritative_effect_pass_each() {
 
 #[test]
 fn compiler_fused_colour_transform_is_one_wgpu_operation() {
-    let transform = crate::plan::ColourTransform::from_effects([
+    let transform = vestra_core::plan::ColourTransform::from_effects([
         EvaluatedEffect::Brightness { amount: 0.1 },
         EvaluatedEffect::Contrast { amount: 1.1 },
     ]);
@@ -1398,10 +1395,10 @@ fn compiler_fused_colour_transform_is_one_wgpu_operation() {
         background: [0; 4],
         width: 7,
         height: 5,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1437,10 +1434,10 @@ fn chained_multipass_effects_retain_and_validate_their_original_values() {
         background: [0; 4],
         width: 7,
         height: 5,
-        layers: vec![crate::plan::EvaluatedLayer {
+        layers: vec![vestra_core::plan::EvaluatedLayer {
             compiled_layer_index: 0,
             visible: true,
-            content_dependency: crate::plan::TemporalDependency::Dynamic,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
             transform: crate::animation::Transform2D::identity(
                 crate::domain::Point { x: 0.5, y: 0.5 },
                 crate::domain::Point { x: 0.5, y: 0.5 },
@@ -1467,7 +1464,7 @@ fn chained_multipass_effects_retain_and_validate_their_original_values() {
             ],
             masks: Vec::new(),
             matte: None,
-            colour_transform: crate::plan::ColourTransform::default(),
+            colour_transform: vestra_core::plan::ColourTransform::default(),
             blend_mode: crate::project::BlendMode::Overlay,
         }],
         post_effects: vec![],

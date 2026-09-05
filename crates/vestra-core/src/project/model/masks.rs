@@ -35,7 +35,7 @@ pub enum MaskCoverageMode {
     Luma,
 }
 
-/// Compatibility name retained for schema-v4 and pre-release 0.1 callers.
+/// Compatibility name retained for schema-v4 callers.
 pub type ImageMaskMode = MaskCoverageMode;
 
 /// Converts one prepared encoded RGBA pixel into renderer-independent mask

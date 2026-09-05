@@ -4,7 +4,7 @@ use std::{path::Path, sync::Arc};
 
 use image::RgbaImage;
 
-use crate::plan::VideoAsset;
+use vestra_core::plan::VideoAsset;
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 pub struct VideoDecoderMetrics {

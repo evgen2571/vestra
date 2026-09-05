@@ -7,11 +7,11 @@
 //! so the normal path never needs a frame-sized allocation after preparation.
 
 use std::collections::{BTreeMap, BTreeSet};
+use vestra_core::plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan};
 
 use crate::{
     Category, Diagnostic,
     kernel::{EffectKernel, kernel_for_operation},
-    plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource, RenderPlan},
     render::effects::{EffectPass, compiled_effect_pass_requirements, effect_pass_plan},
 };
 
@@ -191,7 +191,7 @@ pub(super) struct GpuFramePlan {
     pub(super) operations: Vec<GpuOperation>,
     pub(super) parameter_count: u32,
     pub(super) final_canvas: TextureSlot,
-    pub(super) layers: Vec<crate::plan::EvaluatedLayer>,
+    pub(super) layers: Vec<vestra_core::plan::EvaluatedLayer>,
 }
 
 impl PartialEq for GpuFramePlan {
@@ -274,20 +274,20 @@ impl GpuFramePlan {
     }
 
     pub(super) fn required_group_depth(plan: &RenderPlan) -> usize {
-        fn source_depth(source: &crate::plan::CompiledVisualSource) -> usize {
+        fn source_depth(source: &vestra_core::plan::CompiledVisualSource) -> usize {
             match source {
-                crate::plan::CompiledVisualSource::Group(composition) => {
+                vestra_core::plan::CompiledVisualSource::Group(composition) => {
                     1 + composition_depth(composition)
                 }
                 _ => 0,
             }
         }
-        fn layer_depth(layer: &crate::plan::CompiledLayer) -> usize {
+        fn layer_depth(layer: &vestra_core::plan::CompiledLayer) -> usize {
             let owned_mask_depth = layer
                 .masks
                 .iter()
                 .map(|mask| match &mask.input {
-                    crate::plan::CompiledMaskInput::Source { source, .. } => {
+                    vestra_core::plan::CompiledMaskInput::Source { source, .. } => {
                         2 + source_depth(source)
                     }
                     _ => 0,
@@ -296,7 +296,7 @@ impl GpuFramePlan {
                 .unwrap_or(0);
             source_depth(&layer.source).max(owned_mask_depth)
         }
-        fn composition_depth(composition: &crate::plan::CompiledComposition) -> usize {
+        fn composition_depth(composition: &vestra_core::plan::CompiledComposition) -> usize {
             let ordinary = composition
                 .layers
                 .iter()
@@ -801,12 +801,12 @@ impl GpuFramePlan {
 
 #[allow(clippy::too_many_arguments)]
 fn append_layer(
-    layer: &crate::plan::EvaluatedLayer,
-    scope_layers: &[crate::plan::EvaluatedLayer],
+    layer: &vestra_core::plan::EvaluatedLayer,
+    scope_layers: &[vestra_core::plan::EvaluatedLayer],
     parent_canvas: TextureSlot,
     depth: usize,
     operations: &mut Vec<GpuOperation>,
-    layers: &mut Vec<crate::plan::EvaluatedLayer>,
+    layers: &mut Vec<vestra_core::plan::EvaluatedLayer>,
     parameter_count: &mut u32,
     next_value: &mut u64,
     canvas: &mut TextureSlot,
@@ -826,18 +826,18 @@ fn append_layer(
             let mut presented_source = source.clone();
             presented_source.visible = true;
             presented_source.blend_mode = crate::project::BlendMode::Normal;
-            crate::plan::EvaluatedSource::Group {
-                composition: crate::plan::EvaluatedComposition {
+            vestra_core::plan::EvaluatedSource::Group {
+                composition: vestra_core::plan::EvaluatedComposition {
                     layers: vec![presented_source],
                 },
             }
         } else {
-            crate::plan::EvaluatedSource::Group {
-                composition: crate::plan::EvaluatedComposition { layers: Vec::new() },
+            vestra_core::plan::EvaluatedSource::Group {
+                composition: vestra_core::plan::EvaluatedComposition { layers: Vec::new() },
             }
         };
-        planned_layer.masks.push(crate::plan::EvaluatedMask {
-            input: crate::plan::EvaluatedMaskInput::Source {
+        planned_layer.masks.push(vestra_core::plan::EvaluatedMask {
+            input: vestra_core::plan::EvaluatedMaskInput::Source {
                 source: Box::new(isolated_source),
                 mode: match matte.mode {
                     crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
@@ -1080,27 +1080,27 @@ fn append_layer(
 
 #[allow(clippy::too_many_arguments)]
 fn append_masks(
-    layer: &crate::plan::EvaluatedLayer,
+    layer: &vestra_core::plan::EvaluatedLayer,
     layer_index: usize,
     depth: usize,
-    layers: &mut Vec<crate::plan::EvaluatedLayer>,
+    layers: &mut Vec<vestra_core::plan::EvaluatedLayer>,
     layer_result: &mut TextureSlot,
     layer_value: &mut u64,
     operations: &mut Vec<GpuOperation>,
     parameter_count: &mut u32,
     next_value: &mut u64,
     mask_state_value: &mut Option<u64>,
-    source_scope_layers: Option<&[crate::plan::EvaluatedLayer]>,
+    source_scope_layers: Option<&[vestra_core::plan::EvaluatedLayer]>,
     cached_layers: &BTreeSet<usize>,
 ) {
-    fn source_group_depth(source: &crate::plan::EvaluatedSource) -> usize {
-        fn layer_depth(layer: &crate::plan::EvaluatedLayer) -> usize {
+    fn source_group_depth(source: &vestra_core::plan::EvaluatedSource) -> usize {
+        fn layer_depth(layer: &vestra_core::plan::EvaluatedLayer) -> usize {
             let source_depth = source_group_depth(&layer.source);
             let mask_depth = layer
                 .masks
                 .iter()
                 .filter_map(|mask| match &mask.input {
-                    crate::plan::EvaluatedMaskInput::Source { source, .. } => {
+                    vestra_core::plan::EvaluatedMaskInput::Source { source, .. } => {
                         Some(1 + source_group_depth(source))
                     }
                     _ => None,
@@ -1109,7 +1109,7 @@ fn append_masks(
                 .unwrap_or(0);
             source_depth.max(mask_depth)
         }
-        fn composition_depth(composition: &crate::plan::EvaluatedComposition) -> usize {
+        fn composition_depth(composition: &vestra_core::plan::EvaluatedComposition) -> usize {
             composition
                 .layers
                 .iter()
@@ -1118,7 +1118,7 @@ fn append_masks(
                 .unwrap_or(0)
         }
         match source {
-            crate::plan::EvaluatedSource::Group { composition } => {
+            vestra_core::plan::EvaluatedSource::Group { composition } => {
                 1 + composition_depth(composition)
             }
             _ => 0,
@@ -1127,13 +1127,13 @@ fn append_masks(
     for (mask_index, mask) in layer.masks.iter().enumerate() {
         let saved_layer_destination = if matches!(
             &mask.input,
-            crate::plan::EvaluatedMaskInput::Source { source, .. }
-                if matches!(source.as_ref(), crate::plan::EvaluatedSource::Group { .. })
+            vestra_core::plan::EvaluatedMaskInput::Source { source, .. }
+                if matches!(source.as_ref(), vestra_core::plan::EvaluatedSource::Group { .. })
         ) {
             TextureSlot::GroupCanvasB(
                 depth
                     + source_group_depth(match &mask.input {
-                        crate::plan::EvaluatedMaskInput::Source { source, .. } => source,
+                        vestra_core::plan::EvaluatedMaskInput::Source { source, .. } => source,
                         _ => unreachable!(),
                     })
                     + 1,
@@ -1143,15 +1143,16 @@ fn append_masks(
         };
         let source_is_group = matches!(
             &mask.input,
-            crate::plan::EvaluatedMaskInput::Source { source, .. }
-                if matches!(source.as_ref(), crate::plan::EvaluatedSource::Group { .. })
+            vestra_core::plan::EvaluatedMaskInput::Source { source, .. }
+                if matches!(source.as_ref(), vestra_core::plan::EvaluatedSource::Group { .. })
         );
         let saved_layer_result = *layer_result;
         // An isolated matte group uses the shared effect slots. Preserve the
         // consumer result even when it already lives in one of those slots.
-        let saved_layer_for_source =
-            matches!(&mask.input, crate::plan::EvaluatedMaskInput::Source { .. })
-                && (*layer_result == TextureSlot::Layer || source_is_group);
+        let saved_layer_for_source = matches!(
+            &mask.input,
+            vestra_core::plan::EvaluatedMaskInput::Source { .. }
+        ) && (*layer_result == TextureSlot::Layer || source_is_group);
         let saved_layer_value = *layer_value;
         if saved_layer_for_source {
             operations.push(GpuOperation::CopyForEffect {
@@ -1161,20 +1162,20 @@ fn append_masks(
             });
         }
         let (source_index, source_layer) = match &mask.input {
-            crate::plan::EvaluatedMaskInput::Source { source, mode: _ } => {
+            vestra_core::plan::EvaluatedMaskInput::Source { source, mode: _ } => {
                 let source_layer_index = layers.len();
                 append_mask_source(
-                    &crate::plan::EvaluatedLayer {
+                    &vestra_core::plan::EvaluatedLayer {
                         compiled_layer_index: usize::MAX,
                         visible: true,
-                        content_dependency: crate::plan::TemporalDependency::Dynamic,
+                        content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
                         source: (**source).clone(),
                         transform: mask.transform,
                         opacity: 1.0,
                         effects: Vec::new(),
                         masks: Vec::new(),
                         matte: None,
-                        colour_transform: crate::plan::ColourTransform::default(),
+                        colour_transform: vestra_core::plan::ColourTransform::default(),
                         blend_mode: crate::project::BlendMode::Normal,
                     },
                     depth + 1,
@@ -1187,8 +1188,10 @@ fn append_masks(
                 );
                 (source_layer_index, true)
             }
-            crate::plan::EvaluatedMaskInput::Shape { shape_index } => (*shape_index, false),
-            crate::plan::EvaluatedMaskInput::Image { asset_index, .. } => (*asset_index, false),
+            vestra_core::plan::EvaluatedMaskInput::Shape { shape_index } => (*shape_index, false),
+            vestra_core::plan::EvaluatedMaskInput::Image { asset_index, .. } => {
+                (*asset_index, false)
+            }
         };
         operations.push(GpuOperation::RenderMask {
             layer_index,
@@ -1271,13 +1274,13 @@ fn append_masks(
 
 #[allow(clippy::too_many_arguments)]
 fn append_mask_source(
-    layer: &crate::plan::EvaluatedLayer,
+    layer: &vestra_core::plan::EvaluatedLayer,
     depth: usize,
     operations: &mut Vec<GpuOperation>,
-    layers: &mut Vec<crate::plan::EvaluatedLayer>,
+    layers: &mut Vec<vestra_core::plan::EvaluatedLayer>,
     parameter_count: &mut u32,
     next_value: &mut u64,
-    source_scope_layers: Option<&[crate::plan::EvaluatedLayer]>,
+    source_scope_layers: Option<&[vestra_core::plan::EvaluatedLayer]>,
     cached_layers: &BTreeSet<usize>,
 ) {
     let layer_index = layers.len();
@@ -1505,17 +1508,17 @@ fn append_effect_chain(
         *parameter_count += 1;
         bindings.bind(pass.output, destination);
         match pass.output {
-            crate::plan::EffectResource::Current => {
+            vestra_core::plan::EffectResource::Current => {
                 *current = destination;
                 *current_value = *next_value;
             }
-            crate::plan::EffectResource::Temporary0 => {
+            vestra_core::plan::EffectResource::Temporary0 => {
                 temporary_values[0] = Some(*next_value);
             }
-            crate::plan::EffectResource::Temporary1 => {
+            vestra_core::plan::EffectResource::Temporary1 => {
                 temporary_values[1] = Some(*next_value);
             }
-            crate::plan::EffectResource::Original => {
+            vestra_core::plan::EffectResource::Original => {
                 unreachable!("effect passes cannot overwrite Original")
             }
         }
@@ -1532,17 +1535,17 @@ struct EffectResourceBindings {
 }
 
 impl EffectResourceBindings {
-    fn slot(self, resource: crate::plan::EffectResource) -> TextureSlot {
+    fn slot(self, resource: vestra_core::plan::EffectResource) -> TextureSlot {
         self.bound_slot(resource)
             .expect("effect pass references an unbound logical resource")
     }
 
-    fn bound_slot(self, resource: crate::plan::EffectResource) -> Option<TextureSlot> {
+    fn bound_slot(self, resource: vestra_core::plan::EffectResource) -> Option<TextureSlot> {
         match resource {
-            crate::plan::EffectResource::Original => self.original,
-            crate::plan::EffectResource::Current => Some(self.current),
-            crate::plan::EffectResource::Temporary0 => self.temporary0,
-            crate::plan::EffectResource::Temporary1 => self.temporary1,
+            vestra_core::plan::EffectResource::Original => self.original,
+            vestra_core::plan::EffectResource::Current => Some(self.current),
+            vestra_core::plan::EffectResource::Temporary0 => self.temporary0,
+            vestra_core::plan::EffectResource::Temporary1 => self.temporary1,
         }
     }
 
@@ -1550,18 +1553,30 @@ impl EffectResourceBindings {
         &mut self,
         passes: &[EffectPass],
         pass_index: usize,
-        output: crate::plan::EffectResource,
+        output: vestra_core::plan::EffectResource,
     ) {
-        if !resource_is_live_after(passes, pass_index, crate::plan::EffectResource::Original) {
+        if !resource_is_live_after(
+            passes,
+            pass_index,
+            vestra_core::plan::EffectResource::Original,
+        ) {
             self.original = None;
         }
-        if output != crate::plan::EffectResource::Temporary0
-            && !resource_is_live_after(passes, pass_index, crate::plan::EffectResource::Temporary0)
+        if output != vestra_core::plan::EffectResource::Temporary0
+            && !resource_is_live_after(
+                passes,
+                pass_index,
+                vestra_core::plan::EffectResource::Temporary0,
+            )
         {
             self.temporary0 = None;
         }
-        if output != crate::plan::EffectResource::Temporary1
-            && !resource_is_live_after(passes, pass_index, crate::plan::EffectResource::Temporary1)
+        if output != vestra_core::plan::EffectResource::Temporary1
+            && !resource_is_live_after(
+                passes,
+                pass_index,
+                vestra_core::plan::EffectResource::Temporary1,
+            )
         {
             self.temporary1 = None;
         }
@@ -1571,7 +1586,7 @@ impl EffectResourceBindings {
         &mut self,
         passes: &[EffectPass],
         pass_index: usize,
-        output: crate::plan::EffectResource,
+        output: vestra_core::plan::EffectResource,
         read_slots: [TextureSlot; 2],
     ) -> TextureSlot {
         self.release_dead(passes, pass_index, output);
@@ -1580,10 +1595,10 @@ impl EffectResourceBindings {
             .find(|candidate| {
                 !read_slots.contains(candidate)
                     && [
-                        crate::plan::EffectResource::Current,
-                        crate::plan::EffectResource::Original,
-                        crate::plan::EffectResource::Temporary0,
-                        crate::plan::EffectResource::Temporary1,
+                        vestra_core::plan::EffectResource::Current,
+                        vestra_core::plan::EffectResource::Original,
+                        vestra_core::plan::EffectResource::Temporary0,
+                        vestra_core::plan::EffectResource::Temporary1,
                     ]
                     .into_iter()
                     .filter(|resource| *resource != output)
@@ -1593,32 +1608,32 @@ impl EffectResourceBindings {
             .expect("effect plan requires more physical texture slots than available")
     }
 
-    fn bind(&mut self, resource: crate::plan::EffectResource, slot: TextureSlot) {
+    fn bind(&mut self, resource: vestra_core::plan::EffectResource, slot: TextureSlot) {
         match resource {
-            crate::plan::EffectResource::Original => {
+            vestra_core::plan::EffectResource::Original => {
                 unreachable!("effect passes cannot overwrite Original")
             }
-            crate::plan::EffectResource::Current => self.current = slot,
-            crate::plan::EffectResource::Temporary0 => self.temporary0 = Some(slot),
-            crate::plan::EffectResource::Temporary1 => self.temporary1 = Some(slot),
+            vestra_core::plan::EffectResource::Current => self.current = slot,
+            vestra_core::plan::EffectResource::Temporary0 => self.temporary0 = Some(slot),
+            vestra_core::plan::EffectResource::Temporary1 => self.temporary1 = Some(slot),
         }
     }
 }
 
 fn resolve_effect_resource(
     bindings: &EffectResourceBindings,
-    resource: crate::plan::EffectResource,
+    resource: vestra_core::plan::EffectResource,
     original_value: u64,
     current_value: u64,
     temporary_values: &[Option<u64>; 2],
 ) -> (TextureSlot, u64) {
     let value = match resource {
-        crate::plan::EffectResource::Original => original_value,
-        crate::plan::EffectResource::Current => current_value,
-        crate::plan::EffectResource::Temporary0 => {
+        vestra_core::plan::EffectResource::Original => original_value,
+        vestra_core::plan::EffectResource::Current => current_value,
+        vestra_core::plan::EffectResource::Temporary0 => {
             temporary_values[0].expect("ordered effect pass references initialized Temporary0")
         }
-        crate::plan::EffectResource::Temporary1 => {
+        vestra_core::plan::EffectResource::Temporary1 => {
             temporary_values[1].expect("ordered effect pass references initialized Temporary1")
         }
     };
@@ -1628,7 +1643,7 @@ fn resolve_effect_resource(
 fn resource_is_live_after(
     passes: &[EffectPass],
     pass_index: usize,
-    resource: crate::plan::EffectResource,
+    resource: vestra_core::plan::EffectResource,
 ) -> bool {
     for pass in &passes[pass_index + 1..] {
         if pass.inputs.primary() == resource || pass.inputs.secondary() == Some(resource) {
@@ -1675,7 +1690,7 @@ impl TextureState {
 /// Resource topology is owned by core effect-pass planning; WGPU deliberately
 /// does not infer it from authored/compiled effect identities.
 pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
-    fn layers_require_auxiliary(layers: &[crate::plan::CompiledLayer]) -> bool {
+    fn layers_require_auxiliary(layers: &[vestra_core::plan::CompiledLayer]) -> bool {
         layers.iter().any(|layer| {
             !layer.masks.is_empty()
                 || layer.matte.is_some()
@@ -1683,7 +1698,7 @@ pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
                     compiled_effect_pass_requirements(&timed.effect).retains_original()
                 })
                 || match &layer.source {
-                    crate::plan::CompiledVisualSource::Group(composition) => {
+                    vestra_core::plan::CompiledVisualSource::Group(composition) => {
                         layers_require_auxiliary(&composition.layers)
                     }
                     _ => false,
@@ -1699,12 +1714,12 @@ pub(super) fn plan_requires_auxiliary(plan: &RenderPlan) -> bool {
 }
 
 pub(super) fn plan_has_masks(plan: &RenderPlan) -> bool {
-    fn layers_have_masks(layers: &[crate::plan::CompiledLayer]) -> bool {
+    fn layers_have_masks(layers: &[vestra_core::plan::CompiledLayer]) -> bool {
         layers.iter().any(|layer| {
             !layer.masks.is_empty()
                 || layer.matte.is_some()
                 || match &layer.source {
-                    crate::plan::CompiledVisualSource::Group(composition) => {
+                    vestra_core::plan::CompiledVisualSource::Group(composition) => {
                         layers_have_masks(&composition.layers)
                     }
                     _ => false,
@@ -1715,14 +1730,14 @@ pub(super) fn plan_has_masks(plan: &RenderPlan) -> bool {
 }
 
 pub(super) fn plan_has_mask_feather(plan: &RenderPlan) -> bool {
-    fn layers_have_feather(layers: &[crate::plan::CompiledLayer]) -> bool {
+    fn layers_have_feather(layers: &[vestra_core::plan::CompiledLayer]) -> bool {
         layers.iter().any(|layer| {
             layer.masks.iter().any(|mask| {
                 mask.feather.authored_track.base_value > 0.0
                     || !mask.feather.authored_track.keyframes.is_empty()
                     || mask.feather.has_modifiers()
             }) || match &layer.source {
-                crate::plan::CompiledVisualSource::Group(composition) => {
+                vestra_core::plan::CompiledVisualSource::Group(composition) => {
                     layers_have_feather(&composition.layers)
                 }
                 _ => false,

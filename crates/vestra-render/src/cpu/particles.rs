@@ -1,22 +1,22 @@
 //! Bounded CPU rasterization of the renderer-independent particle state.
 
 use image::{Rgba, RgbaImage};
+use vestra_core::plan::ColourTransform;
 
 use crate::{
     blend::{blend_pixel, source_over},
-    plan::ColourTransform,
     project::{BlendMode, ParticleBlendMode, ParticlePrimitive},
 };
 
 #[cfg(test)]
-use crate::plan::CompiledParticleSystem;
+use vestra_core::plan::CompiledParticleSystem;
 
 /// Rasterizes particles into an already-cleared procedural source surface.
 /// Positions and sizes are normalized canvas values; one scalar pixel scale is
 /// used for both axes so discs remain circular on non-square surfaces.
 pub(crate) fn rasterize_instances(
     target: &mut RgbaImage,
-    particles: impl IntoIterator<Item = crate::plan::EvaluatedParticleInstance>,
+    particles: impl IntoIterator<Item = vestra_core::plan::EvaluatedParticleInstance>,
     primitive: ParticlePrimitive,
     blend_mode: ParticleBlendMode,
     colour_transform: ColourTransform,
@@ -113,7 +113,7 @@ pub(super) fn rasterize(
         target,
         system.evaluated_particles_at_with_appearance(
             time_nanos,
-            crate::plan::EvaluatedParticleAppearance::default(),
+            vestra_core::plan::EvaluatedParticleAppearance::default(),
         ),
         system.primitive,
         system.blend_mode,
@@ -140,7 +140,9 @@ fn pixel_bounds(start: f64, end: f64, limit: u32) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{domain::Point, plan::CompiledParticleBurst, project::ParticleEmitter};
+    use vestra_core::plan::CompiledParticleBurst;
+
+    use crate::{domain::Point, project::ParticleEmitter};
 
     fn system(
         primitive: ParticlePrimitive,
@@ -380,14 +382,14 @@ mod tests {
     #[test]
     fn resolved_lifetime_size_changes_cpu_pixels_without_backend_curve_evaluation() {
         let mut particle_system = system(ParticlePrimitive::Square, ParticleBlendMode::Normal);
-        particle_system.lifetime_size = Some(crate::plan::CompiledScalarLifetimeCurve {
+        particle_system.lifetime_size = Some(vestra_core::plan::CompiledScalarLifetimeCurve {
             stops: vec![
                 crate::project::ScalarLifetimeStop { t: 0.0, value: 0.5 },
                 crate::project::ScalarLifetimeStop { t: 1.0, value: 1.0 },
             ],
         });
-        let signals = crate::plan::PreparedScalarSignals::empty();
-        let context = crate::plan::EvaluationContext::new(&signals);
+        let signals = vestra_core::plan::PreparedScalarSignals::empty();
+        let context = vestra_core::plan::EvaluationContext::new(&signals);
         let at_start = particle_system
             .evaluate_particles_at(0, 0, &context)
             .expect("start particles");

@@ -36,9 +36,8 @@ use vestra_render::CpuBackend;
 use super::super::{
     BackendFallback, RenderBackendPreference, RenderObserverControl, RenderOptions,
     runner::{
-        audio_analysis_invocation_count, prepare, render_prepared_frame,
-        render_with_backend_builder, render_with_backend_builder_and_sink,
-        reset_audio_analysis_invocation_count,
+        audio_analysis_invocation_count, prepare, render_with_backend_builder,
+        render_with_backend_builder_and_sink, reset_audio_analysis_invocation_count,
     },
 };
 use super::render_prepared_with_sink;
@@ -548,8 +547,10 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
     assert_eq!(prepared.scalar_signals().len(), bands.len());
     assert_eq!(audio_analysis_invocation_count(), 1);
 
-    render_prepared_frame(&mut prepared, 0).expect("first random-access frame");
-    render_prepared_frame(&mut prepared, plan.frame_count / 2).expect("later random-access frame");
+    prepared.render_frame(0).expect("first random-access frame");
+    prepared
+        .render_frame(plan.frame_count / 2)
+        .expect("later random-access frame");
     let output = directory.path().join("prepared-reuse.mp4");
     let options = RenderOptions {
         output_override: Some(output),
@@ -569,7 +570,7 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
         },
     )
     .expect("video operation reuses prepared analysis");
-    render_prepared_frame(&mut prepared, 0).expect("frame after video");
+    prepared.render_frame(0).expect("frame after video");
     assert_eq!(audio_analysis_invocation_count(), 1);
 }
 
@@ -1144,7 +1145,7 @@ fn wgpu_frame_request_uses_the_shared_staged_completion_contract() {
         },
     )
     .expect("prepared WGPU seam");
-    let frame = render_prepared_frame(&mut prepared, 0).expect("WGPU frame completes");
+    let frame = prepared.render_frame(0).expect("WGPU frame completes");
     assert_eq!(frame.frame_number, 0);
     let workspace = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
@@ -1181,9 +1182,11 @@ fn malformed_wgpu_completion_invalidates_the_prepared_backend() {
     })
     .expect("prepared WGPU seam");
 
-    let error = render_prepared_frame(&mut prepared, 0).expect_err("invalid backend output");
+    let error = prepared
+        .render_frame(0)
+        .expect_err("invalid backend output");
     assert_eq!(error.diagnostic.code, "VESTRA-BACKEND-CONTRACT");
-    let later = render_prepared_frame(&mut prepared, 0).expect_err("state invalidated");
+    let later = prepared.render_frame(0).expect_err("state invalidated");
     assert_eq!(later.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }
 
@@ -1201,7 +1204,7 @@ fn frame_failures_preserve_complete_backend_diagnostics() {
     })
     .expect("prepared WGPU seam");
 
-    let error = render_prepared_frame(&mut prepared, 0).expect_err("device loss");
+    let error = prepared.render_frame(0).expect_err("device loss");
     assert_eq!(error.diagnostic.code, "WGPU-DEVICE-LOST");
     assert_eq!(error.diagnostic.category, Category::Backend);
     assert_eq!(error.diagnostic.severity, Severity::Fatal);
@@ -1215,7 +1218,7 @@ fn frame_failures_preserve_complete_backend_diagnostics() {
     );
     assert_eq!(error.diagnostic.related_id.as_deref(), Some("frame-100"));
     assert_eq!(error.diagnostic.message, "injected device loss");
-    let later = render_prepared_frame(&mut prepared, 0).expect_err("invalidated state");
+    let later = prepared.render_frame(0).expect_err("invalidated state");
     assert_eq!(later.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }
 
@@ -2303,7 +2306,8 @@ fn cancellation_after_frame_loop_stops_before_encoder_finalization() {
             .is_none(),
         "cancellation removes the encoder temporary output"
     );
-    let later = render_prepared_frame(&mut prepared, 0)
+    let later = prepared
+        .render_frame(0)
         .expect_err("post-submission cancellation invalidates prepared state");
     assert_eq!(later.diagnostic.code, "VESTRA-PREPARED-INVALIDATED");
 }

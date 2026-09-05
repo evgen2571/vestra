@@ -9,6 +9,7 @@ mod flashes;
 mod intervals;
 mod limits;
 mod output;
+mod particles;
 mod presets;
 mod signals;
 mod tracks;

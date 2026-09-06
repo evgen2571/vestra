@@ -17,6 +17,12 @@ use super::super::runner::prepare;
 use super::{render_prepared, render_prepared_with_sink};
 
 const FRAME_RATE: u64 = 30;
+const RENDER_BENCHMARK_TESTS: [&str; 4] = [
+    "random_access_matrix",
+    "preparation_matrix",
+    "effect_scaling_matrix",
+    "render_workload_matrix",
+];
 
 #[derive(Serialize)]
 struct Measurement {
@@ -421,13 +427,7 @@ fn write_benchmark_results<T: Serialize>(
     results: &T,
     kind: &str,
 ) -> PathBuf {
-    let output = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../target/benchmark-results")
-                .join(default_filename)
-        });
+    let output = benchmark_output_path(default_filename);
     if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
         fs::create_dir_all(parent).expect("create benchmark output directory");
     }
@@ -438,6 +438,59 @@ fn write_benchmark_results<T: Serialize>(
     )
     .unwrap_or_else(|error| panic!("write {kind} benchmark results: {error}"));
     output
+}
+
+fn benchmark_output_path(default_filename: &str) -> PathBuf {
+    let default = || {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/benchmark-results")
+            .join(default_filename)
+    };
+    let Some(override_path) = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT") else {
+        return default();
+    };
+
+    let mut args = std::env::args().skip(1);
+    let Some(filter) = args.find(|arg| !arg.starts_with('-')) else {
+        return default();
+    };
+    let exact = args.any(|arg| arg == "--exact");
+    let selected = RENDER_BENCHMARK_TESTS
+        .iter()
+        .filter(|name| {
+            if exact {
+                filter == **name || filter.ends_with(&format!("::{name}"))
+            } else {
+                name.contains(&filter) || filter.ends_with(&format!("::{name}"))
+            }
+        })
+        .count();
+    if selected == 1 {
+        PathBuf::from(override_path)
+    } else {
+        default()
+    }
+}
+
+#[test]
+fn benchmark_output_override_does_not_collide_for_multiple_benchmarks() {
+    if std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT").is_none() {
+        return;
+    }
+    let first = write_benchmark_results(
+        "render-random-access.json",
+        &serde_json::json!({"benchmark": "random-access"}),
+        "random-access",
+    );
+    let second = write_benchmark_results(
+        "render-preparation.json",
+        &serde_json::json!({"benchmark": "preparation"}),
+        "preparation",
+    );
+
+    let defaults = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/benchmark-results");
+    assert_eq!(first, defaults.join("render-random-access.json"));
+    assert_eq!(second, defaults.join("render-preparation.json"));
 }
 
 fn write_fixture(

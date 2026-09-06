@@ -467,10 +467,10 @@ fn benchmark_output_path_for(
     let selected = RENDER_BENCHMARK_TESTS
         .iter()
         .filter(|name| {
-            let matched = if selection.exact {
-                selection.filters.iter().any(|filter| *name == filter)
-            } else if selection.filters.is_empty() {
+            let matched = if selection.filters.is_empty() {
                 true
+            } else if selection.exact {
+                selection.filters.iter().any(|filter| *name == filter)
             } else {
                 selection.filters.iter().any(|filter| name.contains(filter))
             };
@@ -646,6 +646,15 @@ fn benchmark_output_path_honors_one_selected_test() {
             "effect_scaling_matrix",
             "--skip",
             "render_workload_matrix",
+        ][..],
+        &[
+            "--exact",
+            "--skip",
+            "random_access_matrix",
+            "--skip",
+            "preparation_matrix",
+            "--skip",
+            "effect_scaling_matrix",
         ][..],
         &["random_access_matrix", "does-not-match"][..],
     ];

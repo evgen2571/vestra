@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     time::Instant,
 };
 
@@ -17,12 +18,7 @@ use super::super::runner::prepare;
 use super::{render_prepared, render_prepared_with_sink};
 
 const FRAME_RATE: u64 = 30;
-const RENDER_BENCHMARK_TESTS: [&str; 4] = [
-    "render::engine::tests::benchmark_tests::random_access_matrix",
-    "render::engine::tests::benchmark_tests::preparation_matrix",
-    "render::engine::tests::benchmark_tests::effect_scaling_matrix",
-    "render::engine::tests::benchmark_tests::render_workload_matrix",
-];
+static BENCHMARK_OUTPUT_OVERRIDE_CLAIMED: OnceLock<Mutex<bool>> = OnceLock::new();
 
 #[derive(Serialize)]
 struct Measurement {
@@ -441,16 +437,20 @@ fn write_benchmark_results<T: Serialize>(
 }
 
 fn benchmark_output_path(default_filename: &str) -> PathBuf {
-    let override_path = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT").map(PathBuf::from);
-    let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
-    benchmark_output_path_for(default_filename, override_path.as_deref(), &args)
+    let Some(override_path) = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT") else {
+        let mut claimed = false;
+        return benchmark_output_path_for(default_filename, None, &mut claimed);
+    };
+    let override_path = PathBuf::from(override_path);
+    let claims = BENCHMARK_OUTPUT_OVERRIDE_CLAIMED.get_or_init(|| Mutex::new(false));
+    let mut claimed = claims.lock().expect("benchmark output claim lock");
+    benchmark_output_path_for(default_filename, Some(&override_path), &mut claimed)
 }
 
 fn benchmark_output_path_for(
     default_filename: &str,
     override_path: Option<&Path>,
-    args: &[&str],
+    claimed: &mut bool,
 ) -> PathBuf {
     let default = || {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -460,41 +460,8 @@ fn benchmark_output_path_for(
     let Some(override_path) = override_path else {
         return default();
     };
-
-    let mut filter = None;
-    let mut exact = false;
-    let mut skipped = Vec::new();
-    let mut index = 0;
-    while index < args.len() {
-        match args[index] {
-            "--exact" => exact = true,
-            "--skip" => {
-                if let Some(value) = args.get(index + 1) {
-                    skipped.push(*value);
-                    index += 1;
-                }
-            }
-            "--format" | "--logfile" | "--test-threads" | "--shuffle-seed" => {
-                index += 1;
-            }
-            value if value.starts_with("--skip=") => {
-                skipped.push(value.trim_start_matches("--skip="));
-            }
-            value if value.starts_with("--") => {}
-            value if filter.is_none() => filter = Some(value),
-            _ => {}
-        }
-        index += 1;
-    }
-    let Some(filter) = filter else {
-        return default();
-    };
-    let selected = RENDER_BENCHMARK_TESTS
-        .iter()
-        .filter(|name| !skipped.iter().any(|skip| name.contains(skip)))
-        .filter(|name| exact && **name == filter || !exact && name.contains(filter))
-        .count();
-    if selected == 1 {
+    if !*claimed {
+        *claimed = true;
         override_path.to_path_buf()
     } else {
         default()
@@ -502,52 +469,44 @@ fn benchmark_output_path_for(
 }
 
 #[test]
-fn benchmark_output_path_uses_defaults_for_unfiltered_or_broad_selection() {
-    let override_path = Path::new("/tmp/disposable-render-benchmark.json");
+fn benchmark_output_path_uses_defaults_without_override() {
     let defaults = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/benchmark-results");
+    let mut claimed = false;
 
     assert_eq!(
-        benchmark_output_path_for("render-random-access.json", Some(override_path), &[]),
+        benchmark_output_path_for("render-random-access.json", None, &mut claimed),
         defaults.join("render-random-access.json")
     );
-    assert_eq!(
-        benchmark_output_path_for("render-preparation.json", Some(override_path), &["render"]),
-        defaults.join("render-preparation.json")
-    );
+    assert!(!claimed);
 }
 
 #[test]
-fn benchmark_output_path_honors_override_for_one_selected_test() {
+fn benchmark_output_path_claims_override_only_once() {
     let override_path = Path::new("/tmp/disposable-render-benchmark.json");
-    let full_name = "render::engine::tests::benchmark_tests::render_workload_matrix";
+    let defaults = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/benchmark-results");
+    let mut claimed = false;
 
     assert_eq!(
         benchmark_output_path_for(
-            "render-workloads.json",
+            "render-random-access.json",
             Some(override_path),
-            &["render_workload_matrix"]
+            &mut claimed
         ),
         override_path
     );
     assert_eq!(
-        benchmark_output_path_for("render-workloads.json", Some(override_path), &[full_name]),
-        override_path
+        benchmark_output_path_for("render-preparation.json", Some(override_path), &mut claimed),
+        defaults.join("render-preparation.json")
     );
     assert_eq!(
         benchmark_output_path_for(
-            "render-workloads.json",
+            "render-effect-scaling.json",
             Some(override_path),
-            &[
-                "--format",
-                "terse",
-                "--test-threads",
-                "1",
-                "--exact",
-                full_name
-            ]
+            &mut claimed
         ),
-        override_path
+        defaults.join("render-effect-scaling.json")
     );
+    assert!(claimed);
 }
 
 fn write_fixture(

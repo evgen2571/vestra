@@ -17,6 +17,12 @@ use super::super::runner::prepare;
 use super::{render_prepared, render_prepared_with_sink};
 
 const FRAME_RATE: u64 = 30;
+const RENDER_BENCHMARK_TESTS: [&str; 4] = [
+    "render::engine::tests::benchmark_tests::random_access_matrix",
+    "render::engine::tests::benchmark_tests::preparation_matrix",
+    "render::engine::tests::benchmark_tests::effect_scaling_matrix",
+    "render::engine::tests::benchmark_tests::render_workload_matrix",
+];
 
 #[derive(Serialize)]
 struct Measurement {
@@ -421,13 +427,7 @@ fn write_benchmark_results<T: Serialize>(
     results: &T,
     kind: &str,
 ) -> PathBuf {
-    let output = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../target/benchmark-results")
-                .join(default_filename)
-        });
+    let output = benchmark_output_path(default_filename);
     if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
         fs::create_dir_all(parent).expect("create benchmark output directory");
     }
@@ -438,6 +438,233 @@ fn write_benchmark_results<T: Serialize>(
     )
     .unwrap_or_else(|error| panic!("write {kind} benchmark results: {error}"));
     output
+}
+
+fn benchmark_output_path(default_filename: &str) -> PathBuf {
+    let override_path = std::env::var_os("VESTRA_RENDER_BENCH_OUTPUT").map(PathBuf::from);
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    benchmark_output_path_for(default_filename, override_path.as_deref(), &args)
+}
+
+fn benchmark_output_path_for(
+    default_filename: &str,
+    override_path: Option<&Path>,
+    args: &[&str],
+) -> PathBuf {
+    let default = || {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/benchmark-results")
+            .join(default_filename)
+    };
+    let Some(override_path) = override_path else {
+        return default();
+    };
+
+    let Some(selection) = parse_libtest_args(args) else {
+        return default();
+    };
+    let selected = RENDER_BENCHMARK_TESTS
+        .iter()
+        .filter(|name| {
+            let matched = if selection.filters.is_empty() {
+                true
+            } else if selection.exact {
+                selection.filters.iter().any(|filter| *name == filter)
+            } else {
+                selection.filters.iter().any(|filter| name.contains(filter))
+            };
+            matched && !selection.skips.iter().any(|skip| name.contains(skip))
+        })
+        .count();
+    if selected == 1 {
+        override_path.to_path_buf()
+    } else {
+        default()
+    }
+}
+
+struct LibtestSelection<'a> {
+    filters: Vec<&'a str>,
+    skips: Vec<&'a str>,
+    exact: bool,
+}
+
+fn parse_libtest_args<'a>(args: &'a [&'a str]) -> Option<LibtestSelection<'a>> {
+    let mut selection = LibtestSelection {
+        filters: Vec::new(),
+        skips: Vec::new(),
+        exact: false,
+    };
+    let mut options = true;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index];
+        if !options {
+            selection.filters.push(arg);
+        } else {
+            match arg {
+                "--" => options = false,
+                "--exact" => selection.exact = true,
+                "--skip" => {
+                    let value = args.get(index + 1)?;
+                    if value.starts_with('-') {
+                        return None;
+                    }
+                    selection.skips.push(*value);
+                    index += 1;
+                }
+                "--logfile" | "--test-threads" | "--color" | "--format" | "--shuffle-seed"
+                | "-Z" => {
+                    let value = args.get(index + 1)?;
+                    if value.starts_with('-') {
+                        return None;
+                    }
+                    index += 1;
+                }
+                value if value.starts_with("--skip=") => {
+                    selection.skips.push(value.trim_start_matches("--skip="));
+                }
+                value
+                    if value.starts_with("--logfile=")
+                        || value.starts_with("--test-threads=")
+                        || value.starts_with("--color=")
+                        || value.starts_with("--format=")
+                        || value.starts_with("--shuffle-seed=") => {}
+                value if value.starts_with("-Z") && value.len() > 2 => {}
+                "--include-ignored"
+                | "--ignored"
+                | "--force-run-in-process"
+                | "--exclude-should-panic"
+                | "--test"
+                | "--bench"
+                | "--list"
+                | "--fail-fast"
+                | "-h"
+                | "--help"
+                | "--no-capture"
+                | "--nocapture"
+                | "-q"
+                | "--quiet"
+                | "--show-output"
+                | "--report-time"
+                | "--ensure-time"
+                | "--shuffle" => {}
+                value if value.starts_with('-') => return None,
+                value => selection.filters.push(value),
+            }
+        }
+        index += 1;
+    }
+    Some(selection)
+}
+
+#[test]
+fn benchmark_output_path_uses_defaults_for_non_single_selection() {
+    let defaults = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/benchmark-results");
+    let override_path = Path::new("/tmp/disposable-render-benchmark.json");
+    let cases = [
+        ("render-random-access.json", &[][..]),
+        ("render-preparation.json", &["render"][..]),
+        (
+            "render-effect-scaling.json",
+            &["random_access_matrix", "preparation_matrix"][..],
+        ),
+        (
+            "render-effect-scaling.json",
+            &["--exact", "effect_scaling_matrix"][..],
+        ),
+        (
+            "render-workloads.json",
+            &["--unknown-option", "value", "render_workload_matrix"][..],
+        ),
+    ];
+
+    for (filename, args) in cases {
+        assert_eq!(
+            benchmark_output_path_for(filename, Some(override_path), args),
+            defaults.join(filename)
+        );
+    }
+}
+
+#[test]
+fn benchmark_output_path_honors_one_selected_test() {
+    let override_path = Path::new("/tmp/disposable-render-benchmark.json");
+    let full_name = "render::engine::tests::benchmark_tests::render_workload_matrix";
+    let cases = [
+        &["render_workload_matrix"][..],
+        &[full_name][..],
+        &["--exact", full_name][..],
+        &[
+            "--logfile",
+            "/tmp/log",
+            "--test-threads",
+            "1",
+            "--skip",
+            "not-this-test",
+            "--color",
+            "never",
+            "--format",
+            "terse",
+            "--shuffle-seed",
+            "123",
+            "-Z",
+            "unstable-options",
+            "render_workload_matrix",
+        ][..],
+        &[
+            "--logfile=/tmp/log",
+            "--test-threads=1",
+            "--skip=not-this-test",
+            "--color=never",
+            "--format=terse",
+            "--shuffle-seed=123",
+            "-Zunstable-options",
+            "render_workload_matrix",
+        ][..],
+        &[
+            "--include-ignored",
+            "--force-run-in-process",
+            "--exclude-should-panic",
+            "--test",
+            "--fail-fast",
+            "-q",
+            "--quiet",
+            "--no-capture",
+            "--show-output",
+            "--report-time",
+            "--ensure-time",
+            "--shuffle",
+            "render_workload_matrix",
+        ][..],
+        &[
+            "render",
+            "--skip",
+            "render::engine::tests::benchmark_tests::preparation_matrix",
+            "--skip",
+            "effect_scaling_matrix",
+            "--skip",
+            "render_workload_matrix",
+        ][..],
+        &[
+            "--exact",
+            "--skip",
+            "random_access_matrix",
+            "--skip",
+            "preparation_matrix",
+            "--skip",
+            "effect_scaling_matrix",
+        ][..],
+        &["random_access_matrix", "does-not-match"][..],
+    ];
+
+    for args in cases {
+        assert_eq!(
+            benchmark_output_path_for("render-workloads.json", Some(override_path), args),
+            override_path
+        );
+    }
 }
 
 fn write_fixture(

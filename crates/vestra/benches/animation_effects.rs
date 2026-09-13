@@ -8,6 +8,11 @@ use vestra::{
 const WARMUP_RUNS: usize = 5;
 const MEASURED_RUNS: usize = 5;
 
+#[path = "support/production.rs"]
+mod production;
+#[path = "support/record.rs"]
+mod record;
+
 fn main() {
     #[cfg(feature = "wgpu")]
     {
@@ -41,7 +46,9 @@ fn main() {
     let project_path = output
         .path()
         .join(format!("{scenario}-{width}x{height}.json"));
-    let mut project = if matches!(
+    let mut project = if matches!(scenario.as_str(), "production_edit" | "video_heavy") {
+        production::project(&scenario, output.path(), width, height)
+    } else if matches!(
         scenario.as_str(),
         "single_video" | "mixed_dynamic" | "dedup_video"
     ) {
@@ -76,7 +83,7 @@ fn main() {
     }
     if !matches!(
         scenario.as_str(),
-        "single_video" | "mixed_dynamic" | "dedup_video"
+        "single_video" | "mixed_dynamic" | "dedup_video" | "production_edit" | "video_heavy"
     ) {
         let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../")
@@ -300,10 +307,17 @@ fn main() {
         summary.performance.peak_decoded_bytes,
         summary.adapter,
     );
+    if let Some(path) = std::env::var_os("VESTRA_BENCH_REPORT") {
+        record::write(Path::new(&path), &scenario, warmup_runs, &project, &samples);
+    }
 }
 
 fn scenario_fixture(scenario: &str) -> &'static Path {
     match scenario {
+        "masks" => Path::new("examples/projects/geometric-masks.json"),
+        "mattes" => Path::new("examples/projects/track-matte.json"),
+        "particles" => Path::new("examples/particles/sparks-bloom.json"),
+        "nested_groups" => Path::new("benchmarks/projects/nested-groups.json"),
         "baseline" | "basic_colour" | "basic_composition" | "static_heavy" => {
             Path::new("examples/projects/animation-effects.json")
         }
@@ -413,7 +427,17 @@ fn create_color_video(path: &Path, colour: &str, width: u32, height: u32, frame_
     let status = Command::new("ffmpeg")
         .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
         .arg(format!("color=c={colour}:s={size}:r={frame_rate}"))
-        .args(["-t", "3", "-an", "-c:v", "ffv1"])
+        .args([
+            "-t",
+            "3",
+            "-an",
+            "-c:v",
+            "ffv1",
+            "-fflags",
+            "+bitexact",
+            "-flags:v",
+            "+bitexact",
+        ])
         .arg(path)
         .status()
         .expect("run ffmpeg for benchmark video");
@@ -463,6 +487,7 @@ fn median_optional(values: impl Iterator<Item = Option<u128>>) -> Option<u128> {
     Some(median(values.into_iter()))
 }
 
+#[derive(serde::Serialize)]
 struct Sample {
     result: RenderResult,
     wall_ms: u128,

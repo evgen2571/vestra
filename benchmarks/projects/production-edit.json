@@ -1,0 +1,493 @@
+{
+  "schema_version": 4,
+  "name": "Field report edit",
+  "output": {
+    "path": "production.mp4",
+    "width": 1280,
+    "height": 720,
+    "frame_rate": "30/1",
+    "background": "#101018",
+    "quality": "preview",
+    "audio": true,
+    "duration_mode": "explicit",
+    "duration": 12
+  },
+  "assets": [
+    {
+      "id": "footage-a",
+      "type": "video",
+      "source": "footage-a.mkv"
+    },
+    {
+      "id": "footage-b",
+      "type": "video",
+      "source": "footage-b.mkv"
+    },
+    {
+      "id": "bed",
+      "type": "audio",
+      "source": "bed.wav"
+    },
+    {
+      "id": "font",
+      "type": "font",
+      "source": "font.ttf"
+    }
+  ],
+  "audio": {
+    "tracks": [
+      {
+        "id": "music",
+        "gain": 0.2,
+        "clips": [
+          {
+            "id": "bed",
+            "asset": "bed",
+            "start": 0,
+            "trim_start": 0,
+            "trim_end": 12,
+            "gain": 0.75
+          }
+        ]
+      }
+    ]
+  },
+  "visual": {
+    "clips": [
+      {
+        "id": "opening",
+        "source": {
+          "type": "video",
+          "asset": "footage-a"
+        },
+        "start": 0,
+        "duration": 5,
+        "source_start": 0.5,
+        "playback_rate": 1,
+        "layer": 0,
+        "opacity": {
+          "base_value": 1
+        },
+        "effects": [
+          {
+            "id": "opening-grade",
+            "type": "saturation",
+            "amount": {
+              "base_value": 0.85
+            }
+          }
+        ]
+      },
+      {
+        "id": "detail",
+        "source": {
+          "type": "video",
+          "asset": "footage-b"
+        },
+        "start": 4,
+        "duration": 5,
+        "source_start": 0.5,
+        "playback_rate": 1,
+        "layer": 0,
+        "opacity": {
+          "base_value": 1
+        },
+        "effects": [
+          {
+            "id": "detail-grade",
+            "type": "saturation",
+            "amount": {
+              "base_value": 0.85
+            }
+          }
+        ]
+      },
+      {
+        "id": "closing",
+        "source": {
+          "type": "video",
+          "asset": "footage-a"
+        },
+        "start": 8,
+        "duration": 4,
+        "source_start": 0.5,
+        "playback_rate": 1,
+        "layer": 0,
+        "opacity": {
+          "base_value": 1
+        },
+        "effects": [
+          {
+            "id": "closing-grade",
+            "type": "saturation",
+            "amount": {
+              "base_value": 0.85
+            }
+          }
+        ]
+      },
+      {
+        "id": "title-0",
+        "start": 0,
+        "duration": 4,
+        "layer": 2,
+        "opacity": {
+          "base_value": 0,
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0,
+              "interpolation": "linear"
+            },
+            {
+              "time": 0.4,
+              "value": 1,
+              "interpolation": "ease_out"
+            },
+            {
+              "time": 3.5,
+              "value": 1,
+              "interpolation": "linear"
+            },
+            {
+              "time": 4,
+              "value": 0,
+              "interpolation": "linear"
+            }
+          ]
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.8
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "source": {
+          "type": "group",
+          "transitions": [],
+          "clips": [
+            {
+              "id": "plate-0",
+              "start": 0,
+              "duration": 4,
+              "layer": 0,
+              "opacity": {
+                "base_value": 0.8
+              },
+              "source": {
+                "type": "shape",
+                "geometry": {
+                  "type": "rectangle",
+                  "width": 640,
+                  "height": 90
+                },
+                "fill": "#101820"
+              }
+            },
+            {
+              "id": "label-0",
+              "start": 0,
+              "duration": 4,
+              "layer": 1,
+              "opacity": {
+                "base_value": 1
+              },
+              "source": {
+                "type": "text",
+                "text": "FIELD NOTES",
+                "font": "font",
+                "font_size": 36,
+                "fill": "#ffffffff",
+                "align": "center"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "title-1",
+        "start": 4,
+        "duration": 4,
+        "layer": 2,
+        "opacity": {
+          "base_value": 0,
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0,
+              "interpolation": "linear"
+            },
+            {
+              "time": 0.4,
+              "value": 1,
+              "interpolation": "ease_out"
+            },
+            {
+              "time": 3.5,
+              "value": 1,
+              "interpolation": "linear"
+            },
+            {
+              "time": 4,
+              "value": 0,
+              "interpolation": "linear"
+            }
+          ]
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.8
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "source": {
+          "type": "group",
+          "transitions": [],
+          "clips": [
+            {
+              "id": "plate-1",
+              "start": 0,
+              "duration": 4,
+              "layer": 0,
+              "opacity": {
+                "base_value": 0.8
+              },
+              "source": {
+                "type": "shape",
+                "geometry": {
+                  "type": "rectangle",
+                  "width": 640,
+                  "height": 90
+                },
+                "fill": "#101820"
+              }
+            },
+            {
+              "id": "label-1",
+              "start": 0,
+              "duration": 4,
+              "layer": 1,
+              "opacity": {
+                "base_value": 1
+              },
+              "source": {
+                "type": "text",
+                "text": "A closer look",
+                "font": "font",
+                "font_size": 36,
+                "fill": "#ffffffff",
+                "align": "center"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "title-2",
+        "start": 8,
+        "duration": 4,
+        "layer": 2,
+        "opacity": {
+          "base_value": 0,
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0,
+              "interpolation": "linear"
+            },
+            {
+              "time": 0.4,
+              "value": 1,
+              "interpolation": "ease_out"
+            },
+            {
+              "time": 3.5,
+              "value": 1,
+              "interpolation": "linear"
+            },
+            {
+              "time": 4,
+              "value": 0,
+              "interpolation": "linear"
+            }
+          ]
+        },
+        "transform": {
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.8
+            }
+          },
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "scale": {
+            "base_value": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        },
+        "source": {
+          "type": "group",
+          "transitions": [],
+          "clips": [
+            {
+              "id": "plate-2",
+              "start": 0,
+              "duration": 4,
+              "layer": 0,
+              "opacity": {
+                "base_value": 0.8
+              },
+              "source": {
+                "type": "shape",
+                "geometry": {
+                  "type": "rectangle",
+                  "width": 640,
+                  "height": 90
+                },
+                "fill": "#101820"
+              }
+            },
+            {
+              "id": "label-2",
+              "start": 0,
+              "duration": 4,
+              "layer": 1,
+              "opacity": {
+                "base_value": 1
+              },
+              "source": {
+                "type": "text",
+                "text": "The next chapter",
+                "font": "font",
+                "font_size": 36,
+                "fill": "#ffffffff",
+                "align": "center"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "transitions": [
+      {
+        "id": "opening-cut",
+        "outgoing": "opening",
+        "incoming": "detail",
+        "start": 4,
+        "duration": 1,
+        "definition": {
+          "outgoing": {
+            "opacity": {
+              "keyframes": [
+                {
+                  "progress": 0,
+                  "value": 1,
+                  "interpolation": "linear"
+                },
+                {
+                  "progress": 1,
+                  "value": 0,
+                  "interpolation": "linear"
+                }
+              ]
+            }
+          },
+          "incoming": {
+            "opacity": {
+              "keyframes": [
+                {
+                  "progress": 0,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "progress": 1,
+                  "value": 1,
+                  "interpolation": "linear"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "detail-cut",
+        "outgoing": "detail",
+        "incoming": "closing",
+        "start": 8,
+        "duration": 1,
+        "definition": {
+          "outgoing": {
+            "opacity": {
+              "keyframes": [
+                {
+                  "progress": 0,
+                  "value": 1,
+                  "interpolation": "linear"
+                },
+                {
+                  "progress": 1,
+                  "value": 0,
+                  "interpolation": "linear"
+                }
+              ]
+            }
+          },
+          "incoming": {
+            "opacity": {
+              "keyframes": [
+                {
+                  "progress": 0,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "progress": 1,
+                  "value": 1,
+                  "interpolation": "linear"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "flashes": [],
+    "post_effects": []
+  }
+}

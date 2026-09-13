@@ -7,3 +7,102 @@ For every result record the revision, command, scene/project, output size/frame 
 Use separate measurements for planning/preparation, CPU frame rendering, hardware WGPU frame rendering, software WGPU fallback, audio execution, video decode, encoding and end-to-end render. Encoder, muxer and publication time can dominate a short scene; do not call that a renderer regression without a frame-only comparison. Likewise, a media decode change needs a controlled decoder workload.
 
 Do not compare llvmpipe/Lavapipe results with hardware GPU numbers or call them GPU performance. First run [GPU validation](gpu-validation.md) and capture the actual adapter. Historical benchmark files under `docs/history/benchmarks/` record their own environment and are historical evidence, not current performance claims.
+
+## Measure and compare
+
+The checked-in [CPU baseline v1](../../benchmarks/baselines/README.md) records
+all ten canonical workloads with raw samples and environment metadata. Capture
+a baseline on your own host before comparing optimizations there.
+
+Run from the repository root with Python 3.11+, Cargo, Git, and FFmpeg on PATH.
+The Rust build also needs the native dependencies documented in the build guide,
+including NASM for the bundled FFmpeg build. No Python packages are required by
+the benchmark script.
+
+```bash
+python scripts/benchmark.py run --suite smoke --output target/benchmark-results/smoke
+python scripts/benchmark.py run --suite canonical --output target/benchmark-results/before
+# Make one optimization, then measure with the same machine and settings.
+python scripts/benchmark.py run --suite canonical --output target/benchmark-results/after
+python scripts/benchmark.py compare target/benchmark-results/before/suite.json target/benchmark-results/after/suite.json
+```
+
+Use a new output directory for each run. The runner builds the existing
+`animation_effects` release benchmark and executes scenarios serially. Each
+directory contains per-scenario logs and raw JSON records. It writes `suite.json`
+only after every scenario succeeds and the source fingerprint remains unchanged.
+An interrupted or failed run retains its diagnostic files but has no completed
+suite. `--executable /absolute/path` skips building and records that the caller
+supplied the executable; the caller must ensure it matches the current sources.
+
+The versioned definition in `benchmarks/suites.json` fixes the scenario order,
+resolution, warmups, and sample count. Smoke uses 128×72, no warmup, and one
+sample to check execution. Canonical uses 1280×720, one warmup, and five samples.
+Both cover video decode, three concurrent moving-video layers, effects,
+geometric masks, track mattes, nested groups, seeded particles with bloom,
+blend modes, and the twelve-second production edit.
+
+The production edit uses deterministic synthetic moving footage in a three-shot
+timeline with overlapping dissolves, saturation correction, animated grouped
+titles, and a twelve-second audio bed. It exercises editorial operations without
+requiring downloaded footage. It does not model the decode cost of every camera
+codec. Media generation and hashing happen outside measured render intervals.
+FFV1 and WAV fixtures use bit-exact output; particle fixtures use explicit seeds.
+
+Comparison accepts individual scenario files or complete suites. It checks
+workload content identities, suite definitions, environment, frame counts,
+timing scope, and actual backend/adapter before reporting median timing and
+resource deltas. `--json` emits the same deltas for automation. A negative timing
+delta is faster. Resource counters need interpretation: more cache hits may be
+good, while more retained bytes may be an unwanted tradeoff. A zero baseline
+reports an absolute delta with no percentage.
+
+Read the raw samples as well as the median. Five samples describe this run;
+they do not establish statistical significance. Repeat baseline and candidate
+runs when differences are small or ranges overlap. Use the same power mode,
+thermal conditions, background load, toolchain, FFmpeg build, feature set, and
+environment controls. Keep an optimization only when the intended stage improves
+repeatably, resource tradeoffs are acceptable, and correctness checks still pass.
+Otherwise revert the optimization and retain the reports as evidence.
+
+## Measurement scope
+
+Every measured sample constructs a new editor and prepares the project again.
+The wall interval includes project loading and the end-to-end render, including
+encoding and publication. OS page caches are uncontrolled and often warm after
+the warmup. This is not a disk-cold measurement or a prepared-project measurement.
+Raw records retain every serialized `RenderResult`, including stage timings,
+resource counters, warnings, and actual backend selection. Millisecond stage
+timings may be zero for short work; concurrent frame work can exceed wall time.
+Resource bytes are engine counters and estimates, not process RSS measurements.
+
+Keep the existing internal benchmarks for stage isolation:
+
+```bash
+VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu preparation_matrix -- --nocapture
+VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu effect_scaling_matrix -- --nocapture
+VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu random_access_matrix -- --nocapture
+```
+
+These gated tests write under `target/benchmark-results` and retain their own
+prepared/null-sink measurement format. They complement the end-to-end suite;
+their timings must not be compared directly with its one-shot wall times.
+
+Progress is disabled in benchmarks. Live terminal progress continues to report
+smoothed FPS and ETA, with elapsed time on completion. Detailed tracing and
+external profilers remain opt-in; collect profiles in separate runs because
+instrumentation can change timings.
+
+## Hardware WGPU
+
+After the platform preflight in [GPU validation](gpu-validation.md), run:
+
+```bash
+python scripts/benchmark.py run --suite canonical --backend hardware-wgpu --output target/benchmark-results/hardware-before
+```
+
+The runner requires an actual WGPU result with an integrated or discrete adapter
+for every measured sample. CPU fallback, software WGPU, and unknown adapter
+classes fail the suite. CPU and hardware runs have separate baselines. This
+foundation's current host has no exposed hardware graphics device, so hardware
+baseline validation remains blocked here.

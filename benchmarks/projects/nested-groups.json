@@ -1,0 +1,148 @@
+{
+  "schema_version": 4,
+  "name": "Nested title composition",
+  "output": {
+    "path": "nested.mp4",
+    "width": 1280,
+    "height": 720,
+    "frame_rate": "30/1",
+    "background": "#101018",
+    "quality": "preview",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 3
+  },
+  "assets": [],
+  "visual": {
+    "clips": [
+      {
+        "id": "outer",
+        "start": 0,
+        "duration": 3,
+        "layer": 0,
+        "opacity": {
+          "base_value": 0.9
+        },
+        "effects": [
+          {
+            "id": "outer-colour",
+            "type": "brightness",
+            "amount": {
+              "base_value": 0.05
+            }
+          }
+        ],
+        "source": {
+          "type": "group",
+          "transitions": [],
+          "clips": [
+            {
+              "id": "inner",
+              "start": 0,
+              "duration": 3,
+              "layer": 0,
+              "opacity": {
+                "base_value": 0.8
+              },
+              "transform": {
+                "scale": {
+                  "base_value": {
+                    "x": 0.9,
+                    "y": 0.9
+                  },
+                  "keyframes": [
+                    {
+                      "time": 0,
+                      "value": {
+                        "x": 0.9,
+                        "y": 0.9
+                      },
+                      "interpolation": "linear"
+                    },
+                    {
+                      "time": 3,
+                      "value": {
+                        "x": 1.0,
+                        "y": 1.0
+                      },
+                      "interpolation": "linear"
+                    }
+                  ]
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  }
+                },
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  }
+                },
+                "rotation_degrees": {
+                  "base_value": 0
+                }
+              },
+              "effects": [
+                {
+                  "id": "inner-blur",
+                  "type": "gaussian_blur",
+                  "radius": {
+                    "base_value": 2
+                  }
+                }
+              ],
+              "source": {
+                "type": "group",
+                "transitions": [],
+                "clips": [
+                  {
+                    "id": "card",
+                    "start": 0,
+                    "duration": 3,
+                    "layer": 0,
+                    "opacity": {
+                      "base_value": 1
+                    },
+                    "source": {
+                      "type": "shape",
+                      "geometry": {
+                        "type": "rectangle",
+                        "width": 800,
+                        "height": 400
+                      },
+                      "fill": "#264653"
+                    }
+                  },
+                  {
+                    "id": "disc",
+                    "start": 0,
+                    "duration": 3,
+                    "layer": 1,
+                    "opacity": {
+                      "base_value": 0.7
+                    },
+                    "source": {
+                      "type": "shape",
+                      "geometry": {
+                        "type": "ellipse",
+                        "width": 300,
+                        "height": 300
+                      },
+                      "fill": "#e9c46a"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "transitions": [],
+    "flashes": [],
+    "post_effects": []
+  }
+}

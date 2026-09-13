@@ -1,0 +1,8 @@
+{
+  "suite_version": 1,
+  "scenarios": ["single_video", "mixed_dynamic", "video_heavy", "combined", "masks", "mattes", "nested_groups", "particles", "blend_modes", "production_edit"],
+  "suites": {
+    "smoke": {"width": 128, "height": 72, "warmups": 0, "samples": 1},
+    "canonical": {"width": 1280, "height": 720, "warmups": 1, "samples": 5}
+  }
+}

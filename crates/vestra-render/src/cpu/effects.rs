@@ -454,15 +454,29 @@ impl GaussianKernel {
     }
 }
 
+const NORMALIZED_CHANNELS: [f64; 256] = {
+    let mut values = [0.0; 256];
+    let mut index = 0;
+    while index < values.len() {
+        values[index] = index as f64 / 255.0;
+        index += 1;
+    }
+    values
+};
+
 fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel, horizontal: bool) {
     let width = source.width() as usize;
     let height = source.height() as usize;
     let row_stride = width * 4;
+    let (left, right, top, bottom) = convolution_bounds(source, kernel.radius as usize, horizontal);
     let source_data = source.as_raw();
     let target_data: &mut [u8] = target.as_mut();
-    for y in 0..height {
+    if (left, right, top, bottom) != (0, width, 0, height) {
+        target_data.fill(0);
+    }
+    for y in top..bottom {
         let source_row = y * row_stride;
-        for x in 0..width {
+        for x in left..right {
             let mut premultiplied = [0.0; 3];
             let mut alpha = 0.0;
             for (index, offset) in (-kernel.radius..=kernel.radius).enumerate() {
@@ -475,11 +489,11 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
                 };
                 let pixel = &source_data[source_index..source_index + 4];
                 let weight = kernel.weights[index];
-                let sample_alpha = f64::from(pixel[3]) / 255.0;
+                let sample_alpha = NORMALIZED_CHANNELS[usize::from(pixel[3])];
                 alpha += sample_alpha * weight;
                 for channel in 0..3 {
                     premultiplied[channel] +=
-                        f64::from(pixel[channel]) / 255.0 * sample_alpha * weight;
+                        NORMALIZED_CHANNELS[usize::from(pixel[channel])] * sample_alpha * weight;
                 }
             }
             let rgb = if alpha <= 0.000_000_1 {
@@ -496,6 +510,56 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
             ]);
         }
     }
+}
+
+fn convolution_bounds(
+    source: &RgbaImage,
+    radius: usize,
+    horizontal: bool,
+) -> (usize, usize, usize, usize) {
+    let width = source.width() as usize;
+    let height = source.height() as usize;
+    if width == 0 || height == 0 {
+        return (0, 0, 0, 0);
+    }
+    // Dense images rarely benefit from scanning for transparent margins.
+    if [
+        (0, 0),
+        (width - 1, 0),
+        (0, height - 1),
+        (width - 1, height - 1),
+    ]
+    .into_iter()
+    .any(|(x, y)| source.get_pixel(x as u32, y as u32)[3] != 0)
+    {
+        return (0, width, 0, height);
+    }
+    let (mut left, mut right, mut top, mut bottom) = (width, 0, height, 0);
+    for (y, row) in source.as_raw().chunks_exact(width * 4).enumerate() {
+        if let Some(first) = row.chunks_exact(4).position(|pixel| pixel[3] != 0) {
+            let last = row
+                .chunks_exact(4)
+                .rposition(|pixel| pixel[3] != 0)
+                .expect("row contains a visible pixel");
+            left = left.min(first);
+            right = right.max(last + 1);
+            top = top.min(y);
+            bottom = y + 1;
+        }
+    }
+    if right == 0 {
+        return (0, 0, 0, 0);
+    }
+    // Keep original canvas coordinates and edge clamping. A finite kernel can
+    // only spread alpha by its support along the current pass's axis.
+    if horizontal {
+        left = left.saturating_sub(radius);
+        right = right.saturating_add(radius).min(width);
+    } else {
+        top = top.saturating_sub(radius);
+        bottom = bottom.saturating_add(radius).min(height);
+    }
+    (left, right, top, bottom)
 }
 
 #[cfg(test)]
@@ -654,27 +718,117 @@ mod tests {
 
     #[test]
     fn optimized_gaussian_convolution_is_byte_identical_to_reference() {
-        let mut source = RgbaImage::new(9, 7);
-        for (index, pixel) in source.pixels_mut().enumerate() {
-            *pixel = Rgba([
-                (index * 17) as u8,
-                (index * 31) as u8,
-                (index * 47) as u8,
-                (index * 29) as u8,
-            ]);
-        }
+        for (width, height) in [(1, 1), (1, 257), (257, 1), (17, 19)] {
+            let mut source = RgbaImage::new(width, height);
+            for (index, pixel) in source.pixels_mut().enumerate() {
+                *pixel = Rgba([
+                    (index * 17) as u8,
+                    (index * 31) as u8,
+                    (index * 47) as u8,
+                    (index * 29) as u8,
+                ]);
+            }
 
-        for radius in [1.0, 2.5, 4.0] {
-            let kernel = GaussianKernel::new(radius);
-            for horizontal in [true, false] {
-                let mut optimized = RgbaImage::new(source.width(), source.height());
-                let mut reference = RgbaImage::new(source.width(), source.height());
-                convolve(&source, &mut optimized, &kernel, horizontal);
-                convolve_reference(&source, &mut reference, &kernel, horizontal);
-                assert_eq!(
-                    optimized, reference,
-                    "radius={radius}, horizontal={horizontal}"
-                );
+            for radius in [1.0, 2.5, 4.0, 16.0, 32.0] {
+                let kernel = GaussianKernel::new(radius);
+                for horizontal in [true, false] {
+                    let mut optimized = RgbaImage::new(source.width(), source.height());
+                    let mut reference = RgbaImage::new(source.width(), source.height());
+                    convolve(&source, &mut optimized, &kernel, horizontal);
+                    convolve_reference(&source, &mut reference, &kernel, horizontal);
+                    assert_eq!(
+                        optimized, reference,
+                        "size={width}x{height}, radius={radius}, horizontal={horizontal}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sparse_gaussian_matches_full_frame_reference_with_reused_targets() {
+        let mut actual = RgbaImage::from_pixel(19, 13, Rgba([255; 4]));
+        let mut expected = actual.clone();
+        let mut actual_second = actual.clone();
+        let mut expected_second = actual.clone();
+        for (left, top, right, bottom) in [
+            (3, 2, 15, 10),
+            (8, 6, 9, 7),
+            (0, 0, 1, 1),
+            (18, 12, 19, 13),
+            (0, 5, 19, 6),
+            (5, 0, 6, 13),
+            (1, 1, 18, 12),
+            (0, 0, 0, 0),
+        ] {
+            let source = RgbaImage::from_fn(19, 13, |x, y| {
+                let alpha = if (left..right).contains(&x)
+                    && (top..bottom).contains(&y)
+                    && (left != 1 || !(3..=16).contains(&x))
+                {
+                    ((x * 17 + y * 23) % 255 + 1) as u8
+                } else {
+                    0
+                };
+                Rgba([211, (x * 13) as u8, (y * 19) as u8, alpha])
+            });
+            for radius in [1.0, 2.5, 8.0, 32.0] {
+                let kernel = GaussianKernel::new(radius);
+                for horizontal in [true, false] {
+                    convolve(&source, &mut actual, &kernel, horizontal);
+                    convolve_reference(&source, &mut expected, &kernel, horizontal);
+                    assert_eq!(
+                        actual, expected,
+                        "region {left},{top},{right},{bottom}, radius {radius}, horizontal {horizontal}"
+                    );
+                }
+                convolve(&source, &mut actual, &kernel, true);
+                convolve(&actual, &mut actual_second, &kernel, false);
+                convolve_reference(&source, &mut expected, &kernel, true);
+                convolve_reference(&expected, &mut expected_second, &kernel, false);
+                assert_eq!(actual_second, expected_second, "two-pass radius {radius}");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "manual release Gaussian bounds benchmark"]
+    fn gaussian_bounds_benchmark() {
+        use std::{hint::black_box, time::Instant};
+        let (width, height) = (1280, 720);
+        for pattern in ["opaque", "near_full", "islands", "sparse"] {
+            let source = RgbaImage::from_fn(width, height, |x, y| {
+                let visible = match pattern {
+                    "opaque" => true,
+                    "near_full" => x > 0 && y > 0 && x + 1 < width && y + 1 < height,
+                    "islands" => {
+                        ((1..5).contains(&x) && (1..5).contains(&y))
+                            || ((width - 5..width - 1).contains(&x)
+                                && (height - 5..height - 1).contains(&y))
+                    }
+                    _ => {
+                        (width / 3..width * 2 / 3).contains(&x)
+                            && (height / 3..height * 2 / 3).contains(&y)
+                    }
+                };
+                Rgba([211, x as u8, y as u8, if visible { 255 } else { 0 }])
+            });
+            let mut intermediate = RgbaImage::new(width, height);
+            let mut target = RgbaImage::new(width, height);
+            for radius in [1.0, 8.0] {
+                let kernel = GaussianKernel::new(radius);
+                convolve(&source, &mut intermediate, &kernel, true);
+                convolve(&intermediate, &mut target, &kernel, false);
+                for sample in 0..5 {
+                    let started = Instant::now();
+                    convolve(&source, &mut intermediate, &kernel, true);
+                    convolve(&intermediate, &mut target, &kernel, false);
+                    black_box(target.as_raw());
+                    println!(
+                        "gaussian_bounds pattern={pattern} width={width} height={height} radius={radius} sample={sample} wall_ms={:.3} scope=prepared_two_pass",
+                        started.elapsed().as_secs_f64() * 1000.0
+                    );
+                }
             }
         }
     }

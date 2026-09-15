@@ -646,6 +646,45 @@ fn gpu_nested_group_matches_cpu_when_an_adapter_is_available() {
 }
 
 #[test]
+fn gpu_hidden_group_matte_with_child_effect_matches_cpu() {
+    for x in [2.0, 0.5] {
+        for invert in [false, true] {
+            let mut child = solid_child("child", "#FFFFFF80", 0);
+            child["effects"] = json!([{
+                "id": "blur", "type": "gaussian_blur", "radius": {"base_value": 1.0}
+            }]);
+            let mut consumer = solid_child("consumer", "#FFFFFF", 1);
+            consumer["matte"] = json!({
+                "source_layer": "group", "mode": "alpha", "invert": invert
+            });
+            let value = json!({
+                "schema_version": 3,
+                "output": {
+                    "path": "group-matte.mp4", "width": 32, "height": 32,
+                    "frame_rate": "24/1", "background": "#101018", "quality": "preview",
+                    "audio": false, "duration_mode": "explicit", "duration": 2.0
+                },
+                "assets": [],
+                "visual": {
+                    "clips": [consumer, {
+                        "id": "group", "source": {"type": "group", "clips": [child]},
+                        "start": 0.0, "duration": 2.0, "layer": 0, "visible": false,
+                        "opacity": {"base_value": 1.0},
+                        "transform": transform((x, 0.5), (1.0, 1.0), 0.0)
+                    }],
+                    "transitions": [], "flashes": [], "post_effects": []
+                }
+            });
+            render_project_parity(
+                serde_json::from_value(value).expect("matte project parses"),
+                0,
+                2,
+            );
+        }
+    }
+}
+
+#[test]
 fn gpu_group_brightness_and_mixed_effect_order_match_cpu_on_vulkan() {
     let brightness = json!({
         "effects": [{"id": "brightness", "type": "brightness", "amount": {"base_value": 0.35}}]

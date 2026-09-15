@@ -272,6 +272,27 @@ pub(crate) fn draw_surface_with_motion_tile(
         canvas.height(),
         motion_tile,
     );
+    let inverse = resolved.inverse;
+    if source.dimensions() == canvas.dimensions()
+        && motion_tile.is_none()
+        && inverse.m00 == 1.0
+        && inverse.m01 == 0.0
+        && inverse.m02 == 0.0
+        && inverse.m10 == 0.0
+        && inverse.m11 == 1.0
+        && inverse.m12 == 0.0
+    {
+        // Each destination pixel maps to the same source pixel center. Preserve
+        // colour and alpha composition without resampling four neighbours.
+        for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
+            *destination = composite_sample(
+                *destination,
+                apply_colour_transform(*source, colour_transform),
+                1.0,
+            );
+        }
+        return;
+    }
     draw_resolved_raster(canvas, source, &resolved, 1.0, colour_transform);
 }
 
@@ -683,6 +704,70 @@ mod tests {
             composite_sample(destination, sampled, 1.0),
             source_over(destination, sampled, 1.0)
         );
+    }
+
+    #[test]
+    fn surface_composition_matches_resampling_at_identity_and_nearby_transforms() {
+        for (width, height) in [(1, 1), (7, 5), (16, 16), (37, 29)] {
+            let source = RgbaImage::from_fn(width, height, |x, y| {
+                Rgba([
+                    (x * 37) as u8,
+                    (y * 61) as u8,
+                    (x * 83 + y * 29) as u8,
+                    (x * 17 + y * 71) as u8,
+                ])
+            });
+            for padding in [0, 1] {
+                for (scale, rotation, translation) in [
+                    (1.0, 0.0, 0.0),
+                    (0.9, 0.0, 0.0),
+                    (1.0, 1e-9, 0.0),
+                    (1.0, 0.0, 0.125),
+                ] {
+                    let transform = Transform2D {
+                        position: crate::domain::Point {
+                            x: 0.5 + translation,
+                            y: 0.5,
+                        },
+                        anchor: crate::domain::Point { x: 0.5, y: 0.5 },
+                        scale: crate::domain::Point { x: scale, y: scale },
+                        rotation_radians: rotation,
+                    };
+                    for colour in [
+                        ColourTransform::default(),
+                        ColourTransform::from_effects([EvaluatedEffect::Brightness {
+                            amount: 0.2,
+                        }]),
+                    ] {
+                        let mut expected =
+                            RgbaImage::from_fn(width + padding, height + padding, |x, y| {
+                                Rgba([91, 37, 123, (x * 13 + y * 53) as u8])
+                            });
+                        let mut actual = expected.clone();
+                        draw_image(
+                            &mut expected,
+                            &source,
+                            Crop {
+                                x: 0.0,
+                                y: 0.0,
+                                width: 1.0,
+                                height: 1.0,
+                            },
+                            f64::from(width),
+                            f64::from(height),
+                            transform,
+                            1.0,
+                            colour,
+                        );
+                        draw_surface(&mut actual, &source, transform, colour);
+                        assert_eq!(
+                            actual, expected,
+                            "size={width}x{height}, padding={padding}, scale={scale}, rotation={rotation}, translation={translation}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

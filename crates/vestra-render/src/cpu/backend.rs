@@ -596,6 +596,10 @@ fn estimated_frame_bytes(plan: &RenderPlan) -> u64 {
 }
 
 pub(crate) fn automatic_worker_count(plan: &RenderPlan, available_parallelism: usize) -> usize {
+    // The SDK renders a static visual plan once and reuses that frame.
+    if plan.visual_dependency == vestra_core::plan::TemporalDependency::Static {
+        return 1;
+    }
     let available = available_parallelism.max(1);
     let cpu_limit = if available > 1 { available - 1 } else { 1 };
     let estimated_worker_bytes =
@@ -664,3 +668,7 @@ impl CpuBackend {
 #[cfg(test)]
 #[path = "backend_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "work_elimination_benchmarks.rs"]
+mod work_elimination_benchmarks;

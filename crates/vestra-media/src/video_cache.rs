@@ -31,20 +31,14 @@ impl FrameCache {
         }
     }
 
-    pub(super) fn covering_at(
-        &mut self,
-        pts: i64,
-        final_end: Option<i64>,
-    ) -> Option<Arc<DecodedVideoFrame>> {
+    pub(super) fn covering_at(&mut self, pts: i64) -> Option<Arc<DecodedVideoFrame>> {
         let key = self
             .entries
             .range(..=pts)
             .next_back()
             .map(|(key, _)| *key)?;
         let entry = self.entries.get_mut(&key)?;
-        let covered = entry
-            .next_pts
-            .map_or_else(|| final_end.is_some_and(|end| pts < end), |next| pts < next);
+        let covered = entry.next_pts.is_some_and(|next| pts < next);
         if !covered {
             return None;
         }
@@ -53,7 +47,9 @@ impl FrameCache {
         Some(Arc::clone(&entry.frame))
     }
 
-    pub(super) fn insert(&mut self, frame: DecodedVideoFrame) {
+    // The cursor supplies the observed successor. Cache neighbours can be
+    // separated by discarded native frames or a seek, so they prove no interval.
+    pub(super) fn insert(&mut self, frame: Arc<DecodedVideoFrame>, next_pts: Option<i64>) {
         let Ok(bytes) = checked_frame_bytes(frame.width, frame.height)
             .and_then(|bytes| u64::try_from(bytes).map_err(|_| MediaError::VideoFrameByteOverflow))
         else {
@@ -81,18 +77,13 @@ impl FrameCache {
         }
         if self.bytes.saturating_add(bytes) <= self.budget {
             self.bytes += bytes;
-            if let Some((_, previous)) = self.entries.range_mut(..frame.pts.0).next_back()
-                && previous.next_pts.is_none()
-            {
-                previous.next_pts = Some(frame.pts.0);
-            }
             self.entries.insert(
                 frame.pts.0,
                 CachedFrame {
-                    frame: Arc::new(frame),
+                    frame,
                     bytes,
                     last_used: self.clock,
-                    next_pts: None,
+                    next_pts,
                 },
             );
         }
@@ -116,11 +107,11 @@ mod tests {
                 image::Rgba([value as u8, 0, 0, 255]),
             )),
         };
-        cache.insert(image(0));
-        cache.insert(image(1));
+        cache.insert(Arc::new(image(0)), Some(1));
+        cache.insert(Arc::new(image(1)), Some(2));
         assert_eq!(cache.entries.len(), 2);
-        let _ = cache.covering_at(0, Some(1));
-        cache.insert(image(2));
+        let _ = cache.covering_at(0);
+        cache.insert(Arc::new(image(2)), Some(3));
         assert!(cache.entries.contains_key(&0));
         assert!(!cache.entries.contains_key(&1));
         assert!(cache.bytes <= 8);
@@ -139,16 +130,12 @@ mod tests {
                 image::Rgba([value as u8, 0, 0, 255]),
             )),
         };
-        cache.insert(image(20));
-        cache.insert(image(30));
-        let _ = cache.covering_at(20, Some(30));
-        cache.insert(image(40));
-        assert_eq!(cache.covering_at(35, None), None);
-        assert_eq!(cache.covering_at(35, Some(50)), None);
-        cache.insert(image(50));
-        assert_eq!(
-            cache.covering_at(45, None).map(|frame| frame.pts.0),
-            Some(40)
-        );
+        cache.insert(Arc::new(image(20)), Some(30));
+        cache.insert(Arc::new(image(30)), Some(40));
+        let _ = cache.covering_at(20);
+        cache.insert(Arc::new(image(40)), Some(50));
+        assert_eq!(cache.covering_at(35), None);
+        cache.insert(Arc::new(image(50)), None);
+        assert_eq!(cache.covering_at(45).map(|frame| frame.pts.0), Some(40));
     }
 }

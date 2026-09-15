@@ -191,6 +191,8 @@ pub struct VideoDecoder {
     cursor: FfmpegVideoCursor,
     info: VideoMediaInfo,
     cache: FrameCache,
+    // The current presentation frame is cursor state, even with caching disabled.
+    current: Option<Arc<DecodedVideoFrame>>,
     metrics: VideoDecoderMetrics,
 }
 
@@ -278,6 +280,7 @@ impl VideoDecoder {
             ),
             info,
             cache: FrameCache::new(options.cache_budget_bytes),
+            current: None,
             metrics: VideoDecoderMetrics::default(),
         })
     }
@@ -301,12 +304,7 @@ impl VideoDecoder {
             return Err(MediaError::VideoTimestampOutOfRange { seconds });
         }
         let target = self.info.seconds_to_timestamp(seconds)?.0;
-        let final_end = self
-            .cursor
-            .is_draining()
-            .then(|| self.final_timestamp())
-            .flatten();
-        if let Some(cached) = self.cache.covering_at(target, final_end) {
+        if let Some(cached) = self.cache.covering_at(target) {
             self.metrics.cache_hits += 1;
             tracing::trace!(
                 target: "vestra.cache",
@@ -326,9 +324,9 @@ impl VideoDecoder {
             "video frame cache miss"
         );
         if self
-            .cursor
-            .max_decoded_pts()
-            .is_some_and(|max| target < max)
+            .current
+            .as_ref()
+            .is_some_and(|frame| target < frame.pts.0)
             && let Err(error) = self.seek(target)
         {
             tracing::debug!(
@@ -341,23 +339,25 @@ impl VideoDecoder {
             );
             return Err(error);
         }
-        let mut selected = self.cache.covering_at(target, final_end);
-        while let Some(frame) = {
-            let started = Instant::now();
-            let frame = self.cursor.next_frame(&mut self.metrics.actual_decodes)?;
-            self.metrics.decode_time_us += started.elapsed().as_micros() as u64;
-            frame
-        } {
-            let pts = frame.pts.0;
-            self.cache.insert(frame.clone());
-            if selects_latest_pts(selected.as_ref().map(|frame| frame.pts.0), pts, target) {
-                selected = Some(Arc::new(frame));
-            } else {
-                self.cursor.defer(frame);
-                break;
-            }
+        let started = Instant::now();
+        let frame = self
+            .cursor
+            .frame_at(target, &mut self.metrics.actual_decodes)?;
+        self.metrics.decode_time_us += started.elapsed().as_micros() as u64;
+        if let Some(frame) = frame {
+            let frame = Arc::new(frame);
+            let end = self.cursor.next_pts().or_else(|| {
+                self.cursor
+                    .is_draining()
+                    .then(|| self.final_timestamp())
+                    .flatten()
+            });
+            self.cache.insert(Arc::clone(&frame), end);
+            self.current = Some(frame);
         }
-        selected.ok_or(MediaError::VideoTimestampOutOfRange { seconds })
+        self.current
+            .clone()
+            .ok_or(MediaError::VideoTimestampOutOfRange { seconds })
     }
 
     fn final_timestamp(&self) -> Option<i64> {
@@ -375,6 +375,7 @@ impl VideoDecoder {
             "video seek started"
         );
         self.cursor.seek(target, self.info.time_base)?;
+        self.current = None;
         self.metrics.seeks += 1;
         tracing::debug!(
             target: "vestra.media.video",
@@ -652,11 +653,11 @@ mod tests {
         );
         assert_eq!(metrics.frame_requests, 6);
         assert!(metrics.actual_decodes > 0);
-        // The fixture's cache budget retains every selected frame, so this
-        // sequence is served without a cursor seek. The metric is still
-        // important: a constrained cache is covered by the eviction tests.
-        assert_eq!(metrics.seeks, 0);
-        assert!(metrics.cache_hits > 0);
+        // Only requested presentation frames are converted and cached. Going
+        // back to the previously skipped early frame needs one seek; all three
+        // later repeats must still hit the cache.
+        assert_eq!(metrics.seeks, 1);
+        assert_eq!(metrics.cache_hits, 3);
         assert!(metrics.cache_misses > 0);
     }
 
@@ -675,6 +676,165 @@ mod tests {
         let actual = evicted.frame_at(1.1).expect("frame after eviction");
         assert_eq!(actual.pts, expected.pts);
         assert_eq!(actual.pixels.as_raw(), expected.pixels.as_raw());
+    }
+
+    #[test]
+    fn sequential_holds_without_a_cache_do_not_seek_or_decode_again() {
+        let (_directory, path) = fixture();
+        let mut decoder = VideoDecoder::open_with_options(
+            &path,
+            VideoDecoderOptions {
+                cache_budget_bytes: 0,
+                ..VideoDecoderOptions::default()
+            },
+        )
+        .expect("decoder");
+        let first = decoder.frame_at(0.1).expect("first frame");
+        let decodes = decoder.metrics().actual_decodes;
+        let held = decoder.frame_at(0.2).expect("held frame");
+        assert_eq!(first.pts, held.pts);
+        assert_eq!(first.pixels, held.pixels);
+        assert_eq!(decoder.metrics().seeks, 0);
+        assert_eq!(decoder.metrics().actual_decodes, decodes);
+    }
+
+    #[test]
+    fn final_frame_holds_and_backward_seeks_work_without_duration_or_cache() {
+        let (_directory, path) = fixture();
+        for known_duration in [false, true] {
+            let mut decoder = VideoDecoder::open_with_options(
+                &path,
+                VideoDecoderOptions {
+                    cache_budget_bytes: 0,
+                    ..VideoDecoderOptions::default()
+                },
+            )
+            .expect("decoder");
+            if !known_duration {
+                decoder.info.duration_seconds = None;
+            }
+            let last = decoder.frame_at(2.6).expect("last frame");
+            let decodes = decoder.metrics().actual_decodes;
+            let held = decoder.frame_at(2.9).expect("last frame hold");
+            assert_eq!(held.pts, VideoTimestamp(2500));
+            assert_eq!(held.pixels, last.pixels);
+            assert_eq!(decoder.metrics().actual_decodes, decodes);
+            assert_eq!(decoder.metrics().seeks, 0);
+            let first = decoder.frame_at(0.1).expect("backward from EOF");
+            assert_eq!(first.pts, VideoTimestamp(0));
+            assert_eq!(*first.pixels.get_pixel(8, 8), image::Rgba([254, 0, 0, 255]));
+            assert_eq!(*last.pixels.get_pixel(8, 8), image::Rgba([0, 0, 255, 255]));
+        }
+    }
+
+    #[test]
+    fn cache_hit_ahead_of_cursor_does_not_skip_uncached_intermediate_frames() {
+        let (_directory, path) = fixture();
+        let mut decoder = VideoDecoder::open(&path).expect("decoder");
+        let later = decoder.frame_at(2.1).expect("later frame");
+        let _early = decoder.frame_at(0.1).expect("backward seek");
+        assert_eq!(decoder.frame_at(2.1).expect("cached later frame"), later);
+        let middle = decoder.frame_at(1.1).expect("uncached intermediate frame");
+        assert_eq!(middle.pts, VideoTimestamp(1000));
+        assert_eq!(
+            *middle.pixels.get_pixel(8, 8),
+            image::Rgba([1, 128, 1, 255])
+        );
+        assert_eq!(decoder.metrics().seeks, 1);
+        assert_eq!(decoder.metrics().cache_hits, 1);
+    }
+
+    #[test]
+    fn sparse_requests_and_backward_seeks_match_sequential_pixels() {
+        let (_directory, path) = fixture();
+        let mut reference = VideoDecoder::open(&path).expect("reference decoder");
+        let expected: Vec<_> = (0..6)
+            .map(|index| reference.frame_at(index as f64 * 0.5 + 0.1).expect("frame"))
+            .collect();
+        for budget in [0, 1024, 2048, 65536] {
+            let mut decoder = VideoDecoder::open_with_options(
+                &path,
+                VideoDecoderOptions {
+                    cache_budget_bytes: budget,
+                    ..VideoDecoderOptions::default()
+                },
+            )
+            .expect("decoder");
+            for index in [0, 4, 2, 5, 1, 3, 0, 5] {
+                let actual = decoder.frame_at(index as f64 * 0.5 + 0.1).expect("frame");
+                assert_eq!(
+                    actual.pts, expected[index].pts,
+                    "budget={budget}, index={index}"
+                );
+                assert_eq!(actual.pixels, expected[index].pixels);
+            }
+        }
+    }
+
+    #[test]
+    fn long_gop_sparse_and_backward_requests_match_ffmpeg_rgba() {
+        let directory = tempfile::tempdir().expect("directory");
+        let path = directory.path().join("long-gop.mkv");
+        let status = Command::new("ffmpeg")
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=s=64x48:r=12:d=3",
+                "-c:v",
+                "libx264",
+                "-g",
+                "24",
+                "-bf",
+                "3",
+                "-sc_threshold",
+                "0",
+                "-pix_fmt",
+                "yuv420p",
+            ])
+            .arg(&path)
+            .status()
+            .expect("fixture FFmpeg");
+        assert!(status.success());
+        let reference = Command::new("ffmpeg")
+            .args(["-hide_banner", "-loglevel", "error", "-i"])
+            .arg(&path)
+            .args([
+                "-sws_flags",
+                "bilinear",
+                "-pix_fmt",
+                "rgba",
+                "-f",
+                "rawvideo",
+                "pipe:1",
+            ])
+            .output()
+            .expect("reference FFmpeg");
+        assert!(reference.status.success());
+        let frame_bytes = 64 * 48 * 4;
+        assert_eq!(reference.stdout.len(), 36 * frame_bytes);
+        for budget in [0, frame_bytes as u64, frame_bytes as u64 * 4] {
+            let mut decoder = VideoDecoder::open_with_options(
+                &path,
+                VideoDecoderOptions {
+                    cache_budget_bytes: budget,
+                    ..VideoDecoderOptions::default()
+                },
+            )
+            .expect("decoder");
+            for index in [0, 18, 19, 35, 2, 23, 24, 25, 1, 35, 0] {
+                let frame = decoder.frame_at(index as f64 / 12.0 + 0.01).expect("frame");
+                assert_eq!(
+                    frame.pixels.as_raw(),
+                    &reference.stdout[index * frame_bytes..(index + 1) * frame_bytes],
+                    "budget={budget}, index={index}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -771,6 +931,42 @@ mod tests {
         assert_pixel_near(green.pixels.get_pixel(8, 8), [0, 128, 0, 255]);
         assert_pixel_near(blue.pixels.get_pixel(8, 8), [0, 0, 255, 255]);
         assert_pixel_near(yellow.pixels.get_pixel(8, 8), [255, 255, 0, 255]);
+    }
+
+    #[test]
+    fn vfr_sparse_backward_requests_respect_exact_successor_boundaries() {
+        let (_directory, path) = vfr_fixture();
+        let colours = [
+            [255, 0, 0, 255],
+            [0, 128, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 0, 255],
+        ];
+        let timestamps = [0, 120, 440, 720];
+        for budget in [0, 16 * 16 * 4] {
+            let mut decoder = VideoDecoder::open_with_options(
+                &path,
+                VideoDecoderOptions {
+                    cache_budget_bytes: budget,
+                    ..VideoDecoderOptions::default()
+                },
+            )
+            .expect("decoder");
+            for (seconds, index) in [
+                (0.72, 3),
+                (0.12, 1),
+                (0.719, 2),
+                (0.119, 0),
+                (0.44, 2),
+                (0.439, 1),
+                (0.72, 3),
+                (0.05, 0),
+            ] {
+                let frame = decoder.frame_at(seconds).expect("VFR frame");
+                assert_eq!(frame.pts, VideoTimestamp(timestamps[index]));
+                assert_pixel_near(frame.pixels.get_pixel(8, 8), colours[index]);
+            }
+        }
     }
 
     fn assert_pixel_near(actual: &image::Rgba<u8>, expected: [u8; 4]) {

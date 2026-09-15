@@ -9,7 +9,7 @@ use vestra_core::validation::ResourceLimits;
 
 use super::{
     DecodedVideoFrame, MediaError, MediaRational, VideoTimestamp, checked_frame_bytes,
-    decode_error, validate_dimensions,
+    decode_error, selects_latest_pts, validate_dimensions,
 };
 
 pub(super) struct FfmpegVideoCursor {
@@ -18,8 +18,8 @@ pub(super) struct FfmpegVideoCursor {
     scaler: Scaler,
     stream_index: usize,
     limits: ResourceLimits,
-    pending: Option<DecodedVideoFrame>,
-    max_decoded_pts: Option<i64>,
+    pending: Option<Video>,
+    rgba: Video,
     draining: bool,
 }
 
@@ -38,13 +38,15 @@ impl FfmpegVideoCursor {
             stream_index,
             limits,
             pending: None,
-            max_decoded_pts: None,
+            rgba: Video::empty(),
             draining: false,
         }
     }
 
-    pub(super) fn max_decoded_pts(&self) -> Option<i64> {
-        self.max_decoded_pts
+    pub(super) fn next_pts(&self) -> Option<i64> {
+        self.pending
+            .as_ref()
+            .and_then(|frame| frame.timestamp().or_else(|| frame.pts()))
     }
 
     pub(super) fn is_draining(&self) -> bool {
@@ -64,15 +66,38 @@ impl FfmpegVideoCursor {
             .map_err(|error| MediaError::VideoSeek(error.to_string()))?;
         self.decoder.flush();
         self.pending = None;
-        self.max_decoded_pts = None;
         self.draining = false;
         Ok(())
     }
 
-    pub(super) fn next_frame(
+    pub(super) fn frame_at(
         &mut self,
+        target: i64,
         actual_decodes: &mut u64,
     ) -> Result<Option<DecodedVideoFrame>, MediaError> {
+        let mut selected = None;
+        let mut selected_pts = None;
+        while let Some(frame) = self.next_frame(actual_decodes)? {
+            let pts = frame
+                .timestamp()
+                .or_else(|| frame.pts())
+                .ok_or(MediaError::MissingVideoTimestamp)?;
+            if pts > target {
+                self.pending = Some(frame);
+                break;
+            }
+            if selects_latest_pts(selected_pts, pts, target) {
+                selected_pts = Some(pts);
+                selected = Some(frame);
+            }
+        }
+        selected
+            .as_ref()
+            .map(|frame| self.convert_frame(frame))
+            .transpose()
+    }
+
+    fn next_frame(&mut self, actual_decodes: &mut u64) -> Result<Option<Video>, MediaError> {
         if let Some(frame) = self.pending.take() {
             return Ok(Some(frame));
         }
@@ -80,10 +105,8 @@ impl FfmpegVideoCursor {
         loop {
             if self.decoder.receive_frame(&mut decoded).is_ok() {
                 *actual_decodes += 1;
-                let frame = self.convert_frame(&decoded)?;
-                let pts = frame.pts.0;
-                self.max_decoded_pts = Some(self.max_decoded_pts.map_or(pts, |old| old.max(pts)));
-                return Ok(Some(frame));
+                validate_dimensions(decoded.width(), decoded.height(), &self.limits)?;
+                return Ok(Some(decoded));
             }
             if self.draining {
                 return Ok(None);
@@ -103,20 +126,16 @@ impl FfmpegVideoCursor {
         }
     }
 
-    pub(super) fn defer(&mut self, frame: DecodedVideoFrame) {
-        self.pending = Some(frame);
-    }
-
     fn convert_frame(&mut self, decoded: &Video) -> Result<DecodedVideoFrame, MediaError> {
         let pts = decoded
             .timestamp()
             .or_else(|| decoded.pts())
             .ok_or(MediaError::MissingVideoTimestamp)?;
         validate_dimensions(decoded.width(), decoded.height(), &self.limits)?;
-        let mut rgba = Video::empty();
         self.scaler
-            .run(decoded, &mut rgba)
+            .run(decoded, &mut self.rgba)
             .map_err(|error| MediaError::VideoPixelConversion(error.to_string()))?;
+        let rgba = &self.rgba;
         let width = rgba.width();
         let height = rgba.height();
         validate_dimensions(width, height, &self.limits)?;

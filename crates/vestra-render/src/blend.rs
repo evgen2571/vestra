@@ -28,6 +28,9 @@ impl CompositionCaseCounts {
 
 /// Composites straight-alpha source pixels over a straight-alpha destination.
 pub(crate) fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgba<u8> {
+    if source[3] == u8::MAX && opacity == 1.0 {
+        return source;
+    }
     let source_alpha = f64::from(source[3]) / 255.0 * opacity;
     let destination_alpha = f64::from(destination[3]) / 255.0;
     if source_alpha == 0.0 {
@@ -166,7 +169,15 @@ mod tests {
             [17, 83, 211],
             [241, 129, 7],
         ];
-        let opacities = [0.0, 1.0 / 255.0, 0.125, 0.5, 0.996_093_75, 1.0];
+        let opacities = [
+            0.0,
+            1.0 / 255.0,
+            0.125,
+            0.5,
+            0.996_093_75,
+            f64::from_bits(1.0_f64.to_bits() - 1),
+            1.0,
+        ];
         for source_alpha in 0..=u8::MAX {
             for destination_alpha in 0..=u8::MAX {
                 for opacity in opacities {

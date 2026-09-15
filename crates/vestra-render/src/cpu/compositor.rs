@@ -510,6 +510,8 @@ impl ComposeContext<'_> {
                 &mut group_surface,
                 depth + 2,
             );
+            // Child effects leave pixels in scratch; transform only the completed group.
+            self.surfaces.clear();
             let motion_tile = layer
                 .effects
                 .iter()
@@ -890,6 +892,40 @@ mod tests {
             masks: Vec::new(),
             matte: None,
             blend_mode: crate::project::BlendMode::Normal,
+        }
+    }
+
+    #[test]
+    fn group_matte_does_not_reuse_its_child_scratch_pixels() {
+        for x in [2.0, 0.5] {
+            for alpha in [64, 128, 255] {
+                for invert in [false, true] {
+                    let mut transform = identity_transform();
+                    transform.position.x = x;
+                    let mut child = solid_layer(3, [255, 255, 255, alpha]);
+                    child.effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
+                    let mut source = group_layer(2, vec![child], Vec::new(), transform);
+                    source.visible = false;
+                    let mut consumer = solid_layer(1, [255; 4]);
+                    consumer.matte = Some(vestra_core::plan::EvaluatedTrackMatte {
+                        source_layer_identity: 2,
+                        mode: crate::project::MatteMode::Alpha,
+                        invert,
+                    });
+                    let actual = render_test_frame(frame_with_layers(vec![consumer, source]));
+                    let coverage = if x == 0.5 { alpha } else { 0 };
+                    let coverage = if invert { 255 - coverage } else { coverage };
+                    let expected = if coverage == 0 {
+                        Rgba([0; 4])
+                    } else {
+                        Rgba([255, 255, 255, coverage])
+                    };
+                    assert!(
+                        actual.pixels().all(|pixel| *pixel == expected),
+                        "group x={x}, alpha={alpha}, invert={invert}"
+                    );
+                }
+            }
         }
     }
 

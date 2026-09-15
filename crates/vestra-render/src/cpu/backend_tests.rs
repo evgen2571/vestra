@@ -764,6 +764,57 @@ fn aggregate_hot_path_timings_sums_worker_local_durations() {
 }
 
 #[test]
+fn automatic_worker_policy_uses_one_worker_for_static_visuals() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/geometric-masks.json"),
+        &ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("fixture validates");
+    let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
+    assert_eq!(plan.visual_dependency, TemporalDependency::Static);
+    for available in [0, 1, 2, 4, 64] {
+        assert_eq!(automatic_worker_count(&plan, available), 1);
+    }
+
+    let decoded = DecodedAssets::build(&plan).expect("fixture assets prepare");
+    let mut automatic = CpuBackend::new(&plan, Arc::clone(&decoded));
+    let mut parallel = CpuBackend::new_with_worker_count(&plan, decoded, 8);
+    assert_eq!(automatic.capacity(), 1);
+    let mut expected = Vec::new();
+    for number in 0..8 {
+        let frame = evaluate(&plan, &[ScheduledItem(0)], u128::from(number) * 33_333_333)
+            .expect("static frame evaluates");
+        automatic.submit_frame(number, &frame).expect("submit");
+        expected.push(
+            automatic
+                .poll_completed(PollMode::WaitForOne)
+                .expect("poll")
+                .expect("completion"),
+        );
+        parallel
+            .submit_frame(number, &frame)
+            .expect("parallel submit");
+    }
+    let mut actual = Vec::new();
+    while parallel.in_flight() > 0 {
+        actual.push(
+            parallel
+                .poll_completed(PollMode::WaitForOne)
+                .expect("parallel poll")
+                .expect("parallel completion"),
+        );
+    }
+    actual.sort_by_key(|frame| frame.frame_number);
+    assert_eq!(actual, expected);
+    assert_eq!(automatic.stats().static_cache_misses, 1);
+    assert_eq!(automatic.stats().static_cache_hits, 7);
+    automatic.flush().expect("flush");
+    automatic.verify_idle().expect("idle");
+}
+
+#[test]
 fn automatic_worker_policy_reserves_cpu_and_applies_frame_memory_limit() {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),

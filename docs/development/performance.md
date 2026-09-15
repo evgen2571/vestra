@@ -1,5 +1,8 @@
 # Performance
 
+The [CPU efficiency report](cpu-efficiency.md) records the retained CPU work
+elimination changes, paired measurements, rejected experiments, and limits.
+
 Measure a named stage, not an undifferentiated "render time". Vestra reports preparation timing for semantic validation, preflight, plan compilation, decode, audio analysis and backend initialization. Render timing then separates track evaluation, frame rendering, encoder writes/finalization, output publication, and WGPU upload/encode/submission/readback work where applicable.
 
 For every result record the revision, command, scene/project, output size/frame rate/quality, frame count, CPU/OS, FFmpeg build, requested renderer preference, actual selected renderer, graphics backend, adapter name and classification. Record whether assets and renderer resources were cold or already prepared. A `PreparedProject` may make later frame/video operations much cheaper than a one-shot render, and that is expected rather than a comparable baseline.

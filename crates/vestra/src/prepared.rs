@@ -319,6 +319,9 @@ pub struct PreparationTimings {
 /// visual-only and do not run FFmpeg during preparation. FFmpeg reopens source
 /// audio for each encoded video, so changing audio after preparation can later
 /// pair old visual analysis with newly encoded audio.
+/// Source video is decoded on demand and sessions may reopen after inactivity;
+/// keep video files available and unchanged throughout prepared use because
+/// their resolved metadata remains part of the snapshot.
 ///
 /// `PreparedProject` is `Send` but intentionally not `Sync`: it may be moved
 /// while idle, while rendering requires exclusive `&mut self` access. Video

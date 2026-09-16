@@ -161,6 +161,8 @@ experiment remains in `rejected-candidate.patch` beside the bounded run's
 results and comparison. These runs do not isolate why scheduling changed the
 timings; they are sufficient to reject this implementation on this workload.
 
+## Hardware verification
+
 Hardware preflight on this host initially needed `DISPLAY=:0` and the explicit
 `/usr/lib/wsl/lib/nvidia-smi` path. GL adapter discovery reports
 `D3D12 (NVIDIA GeForce GTX 1650 SUPER)`, classified as a discrete GPU, through
@@ -173,9 +175,110 @@ Execution records confirm the NVIDIA adapter and GL backend. The log is
 `target/benchmark-results/media-pipeline-native-hardware-check-20260915.log`.
 Hardware performance comparisons remain to be run.
 
+## CPU source cursor candidate
+
+CPU sessions previously shared one cursor per asset in each render worker.
+Separate clips can request different times from that asset in one output frame,
+making the shared cursor seek backwards repeatedly. The first candidate keyed lazy
+sessions by the existing compiled video `source_index`. Each source retains its
+cursor across frames and prepared operations. The existing per-worker video
+cache budget is divided by compiled video-slot count instead of asset count.
+Decoder contexts and native frame storage can still grow with session count;
+they are outside the RGBA cache budget and must be measured.
+
+A repeated-frame regression with two same-asset clips at different offsets
+reported one unnecessary seek before the change, zero afterwards, and exactly
+two persistent sessions. Existing pixel assertions remain. All 139 CPU tests
+pass (nine manual benchmarks ignored). Logs are
+`media-pipeline-source-cursors-red.log` and `media-pipeline-source-cursors-tests.log`
+under benchmark results. The first canonical run in
+`media-pipeline-source-cursors-20260915` reduced video-heavy median time from
+4,867 to 4,439 ms and eliminated 82 seeks. It retained sessions for completed
+clips, however, so it is superseded by a bounded-retention variant.
+
+The next variant released sessions untouched by its just-completed frame. After
+composition, native contexts cover that worker's latest frame; during
+composition they cover the union of its previous and current frame's sources.
+Retired-session counters remain in cumulative metrics, and open count includes
+reopened sessions. This prevents historical clips from accumulating contexts.
+Review confirmed the lifecycle and counter accounting. The regression failed
+with two retained contexts instead of one before this change; all 139 CPU tests
+pass afterwards. Retention logs are
+`media-pipeline-source-cursors-retention-red.log` and
+`media-pipeline-source-cursors-retention-tests.log`.
+
+The bounded canonical run, `media-pipeline-source-cursors-retention-20260916`,
+records video-heavy at 4,393 ms (−9.7% versus native selection), with zero seeks.
+Production-edit is 9,298 versus 9,093 ms (+2.3%); several unchanged scenarios
+also rose slightly. A fresh paired timing/RSS comparison is required before
+attributing this to the candidate. The fresh pair under
+`media-pipeline-cursor-resources-20260916` showed video-heavy −11.1% and production
++0.4%. Peak RSS changed from 822,804 to 956,424 KiB for video-heavy and from
+857,508 to 720,712 KiB for production.
+
+A 24-clip, single-file workload then rejected this retirement policy: its median
+rose from 4,184 to 5,018 ms (+19.9%), opening 192 decoders instead of eight.
+Both release executables produced identical RGBA frame checksums for all 360
+frames of the 1280×720, 12-second output. The fixture, executables, five-sample
+reports, resource records, and reproduction script are under
+`media-pipeline-serial-clips-20260916`. Neither per-source variant is retained.
+
+The current pool candidate preserves one cached primary decoder per asset and
+worker. Exact same-asset/time reads share a cursor within a frame; other times
+take the next unused cursor, opening an extra only when necessary. Extra
+cursors have zero optional cache allowance and are released when unused by the
+latest frame. The primary remains available across serial clips and idle frames.
+This preserves the original total cache allowance while separating simultaneous
+timelines. Draw-order changes may require seeks when cursors change trajectories.
+
+All 140 CPU tests pass, including reordered-source pixels against a fresh
+backend, identical-time reuse, serial/idle reuse, cumulative retirement counters,
+and the total cache allowance. A decoder-open error previously bypassed the
+worker's error state and could silently omit video; a failing regression
+reproduced this and the candidate now propagates that error. The prepared SDK
+documentation clarifies that source video remains external to its snapshot.
+The final pool's serial workload comparison under
+`media-pipeline-cursor-pool-serial-20260916` records medians of 4,513 ms for native
+selection alone and 4,493 ms for the pool (−0.44%, effectively unchanged), with
+eight decoder opens in both. All 360 decoded RGBA frame checksums match. A
+separate simultaneous-offset render under
+`media-pipeline-cursor-pool-concurrent-20260916` also matches every decoded frame:
+90 frames, 1280×720, three seconds.
+
+The full canonical pair (`media-pipeline-cursor-pool-20260916` and
+`media-pipeline-native-selection-pool-pair-20260916`) had unchanged controls move
+by 2–18%, so its timing differences are inconclusive. The follow-up experiment
+under `media-pipeline-cursor-pool-alternating-20260916` alternates saved release
+executables in native/pool/pool/native order three times, after one discarded
+invocation per executable. Each invocation records one canonical sample;
+there are six samples per implementation and workload.
+
+| Workload | Native-selection median, ms | Pool median, ms | Change |
+| --- | ---: | ---: | ---: |
+| Video-heavy | 6,351 | 5,397.5 | −15.0% |
+| Production edit | 10,387.5 | 10,412.5 | +0.24% |
+
+Video-heavy consistently drops from 4,144 native decodes and 82 seeks to 2,451
+decodes and zero seeks. Decoder opens increase from 16 to 24. Peak process RSS
+ranges increase from 529,752–540,424 KiB to 618,692–629,412 KiB, about 90 MiB.
+Production keeps 16 opens and eight seeks; its RSS ranges overlap. The resource
+scope includes fixture creation and subprocesses. Timing variance remains
+substantial, and these results support a targeted video-heavy benefit, not a
+universal speedup. Raw samples, executable hashes, resource records, and the
+reproduction script are retained in the alternating-run directory.
+
+The final pool passed `./scripts/check.sh` with the GL environment above; the log
+is `media-pipeline-cursor-pool-check-20260916.log` under benchmark results. Four
+video preparation/timing/transition/crop tests also passed with both
+`VESTRA_REQUIRE_WGPU=1` and `VESTRA_REQUIRE_HARDWARE_WGPU=1`; execution records in
+`media-pipeline-cursor-pool-hardware-video-20260916.log` confirm the NVIDIA GL
+adapter. These parity tests use renderer fixtures; the real-media checksum
+comparisons above separately verify encoded CPU output. The pool is retained
+for the measured video-heavy gain, with its explicit memory tradeoff.
+
 | Requested area | Current evidence and next action |
 | --- | --- |
-| Decoder/session reuse | Sessions persist per render worker but are keyed by asset. The video-heavy fixture has three clips using two assets at different offsets, producing 82 seeks. Both CPU and WGPU already receive a stable `source_index`; measure separate cursors for these trajectories with a divided cache budget. |
+| Decoder/session reuse | The CPU pool separates simultaneous asset/time trajectories, eliminates 82 video-heavy seeks, and preserves serial reuse; measurements and memory cost are above. WGPU still uses one cursor per asset and needs measurement. |
 | Sequential decode | Native-selection change above has repeated CPU timing, peak-RSS evidence, and strict hardware correctness validation. Hardware timing remains. |
 | GOP/keyframe-aware seeking | Existing backward keyframe seek has a real long-GOP pixel oracle; measure sparse forward access. |
 | Decoded-frame caching | Explicit coverage intervals and current-frame holds tested; measure random-access tradeoffs. |
@@ -191,6 +294,6 @@ Hardware performance comparisons remain to be run.
 | Thread/resource allocation | Compare decode/render/encode allocation on video-heavy and production workloads. |
 | Stalls and idle CPU/GPU time | Use stage timings and hardware measurements to assess overlap candidates. |
 
-Native frame selection is retained on repeated CPU gains and correctness
-verification. Hardware performance and the remaining experiment matrix are
+Native frame selection and the CPU cursor pool are retained on measured CPU
+gains and correctness verification. Hardware performance and the remaining experiment matrix are
 unfinished; this report does not claim completion of Subblock 2.

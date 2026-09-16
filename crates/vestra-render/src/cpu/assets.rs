@@ -13,7 +13,7 @@ use crate::render::{
     geometry::{CropBounds, IntrinsicSize, crop_bounds},
     metrics::{PreparationStats, PreparationTimings},
 };
-use crate::video::VideoDecoderSession;
+use crate::video::{VideoDecoderMetrics, VideoDecoderSession};
 
 #[cfg(test)]
 use crate::Diagnostic;
@@ -24,12 +24,20 @@ pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
     shapes: Vec<PreparedRasterSource>,
     texts: Vec<PreparedRasterSource>,
-    video_decoders: BTreeMap<usize, Box<dyn VideoDecoderSession>>,
+    // One cached primary cursor per asset, plus uncached cursors for sources
+    // that need that asset at different times within the same output frame.
+    video_decoders: BTreeMap<usize, Vec<CpuVideoSession>>,
+    retired_video_metrics: VideoDecoderMetrics,
     video_cache_budget_bytes: u64,
     video_error: Option<String>,
     crops: ByteLruCache<CropKey, RgbaImage>,
     stats: PreparationStats,
     timings: PreparationTimings,
+}
+
+struct CpuVideoSession {
+    decoder: Box<dyn VideoDecoderSession>,
+    requested_time: Option<f64>,
 }
 
 /// Immutable source-local pixels shared by all layer presentations.
@@ -115,6 +123,7 @@ impl PreparedAssets {
             shapes: prepared_shapes,
             texts,
             video_decoders: BTreeMap::new(),
+            retired_video_metrics: VideoDecoderMetrics::default(),
             video_cache_budget_bytes,
             video_error: None,
             crops: ByteLruCache::new(crop_cache_budget_bytes),
@@ -179,22 +188,54 @@ impl PreparedAssets {
             .decoded
             .video_factory()
             .ok_or_else(|| "video decoder provider is not configured".to_owned())?;
-        if !self.video_decoders.contains_key(&asset) {
+        let sessions = self.video_decoders.entry(asset).or_default();
+        // Identical asset/time reads share their current-frame cursor.
+        // Otherwise draw order assigns the primary cursor first, keeping its
+        // cache available when only one source survives a multi-source overlap.
+        let available = sessions
+            .iter()
+            .position(|session| session.requested_time == Some(source_time))
+            .or_else(|| {
+                sessions
+                    .iter()
+                    .position(|session| session.requested_time.is_none())
+            });
+        let session_index = if let Some(index) = available {
+            index
+        } else {
             let video = self
                 .decoded
                 .video_asset(asset)
                 .ok_or_else(|| format!("video asset index {asset} is out of range"))?;
-            let decoder = factory.open_with_span(
-                video,
-                self.video_cache_budget_bytes,
-                tracing::Span::current(),
-            )?;
-            self.video_decoders.insert(asset, decoder);
-        }
-        let frame = self
-            .video_decoders
-            .get_mut(&asset)
-            .expect("video decoder inserted above")
+            let decoder = factory
+                .open_with_span(
+                    video,
+                    if sessions.is_empty() {
+                        self.video_cache_budget_bytes
+                    } else {
+                        0
+                    },
+                    tracing::Span::current(),
+                )
+                .map_err(|error| {
+                    let message = format!(
+                        "video '{}' at source time {source_time:.9}: {error}",
+                        video.path.display()
+                    );
+                    self.video_error = Some(message.clone());
+                    message
+                })?;
+            sessions.push(CpuVideoSession {
+                decoder,
+                requested_time: None,
+            });
+            self.stats.video_decoder_open_count += 1;
+            sessions.len() - 1
+        };
+        let session = &mut sessions[session_index];
+        session.requested_time = Some(source_time);
+        let frame = session
+            .decoder
             .frame_at_with_span(source_time, tracing::Span::current())
             .map_err(|error| {
                 let path = self
@@ -228,6 +269,28 @@ impl PreparedAssets {
         self.video_error.take()
     }
 
+    pub(super) fn finish_frame(&mut self) {
+        let retired = &mut self.retired_video_metrics;
+        for sessions in self.video_decoders.values_mut() {
+            let mut index = 0;
+            sessions.retain_mut(|session| {
+                let keep = session.requested_time.take().is_some() || index == 0;
+                index += 1;
+                if keep {
+                    return true;
+                }
+                let metrics = session.decoder.metrics();
+                retired.frame_requests += metrics.frame_requests;
+                retired.actual_decodes += metrics.actual_decodes;
+                retired.seeks += metrics.seeks;
+                retired.cache_hits += metrics.cache_hits;
+                retired.cache_misses += metrics.cache_misses;
+                retired.decode_time_us += metrics.decode_time_us;
+                false
+            });
+        }
+    }
+
     fn sync_cache_stats(&mut self) {
         let cache = self.crops.stats();
         self.stats.bitmap_cache_hits = cache.hits;
@@ -243,16 +306,15 @@ impl PreparedAssets {
         self.stats.cache_peak_bytes = cache.peak_bytes;
         self.stats.cache_evictions = cache.evictions;
         self.stats.cache_oversized_entries_skipped = cache.oversized_entries_skipped;
-        self.stats.video_decoder_session_count = self.video_decoders.len();
-        self.stats.video_decoder_open_count = self.video_decoders.len() as u64;
-        self.stats.video_frame_requests = 0;
-        self.stats.video_actual_decodes = 0;
-        self.stats.video_seek_count = 0;
-        self.stats.video_cache_hits = 0;
-        self.stats.video_cache_misses = 0;
-        self.stats.video_decode_time_us = 0;
-        for decoder in self.video_decoders.values() {
-            let metrics = decoder.metrics();
+        self.stats.video_decoder_session_count = self.video_decoders.values().map(Vec::len).sum();
+        self.stats.video_frame_requests = self.retired_video_metrics.frame_requests;
+        self.stats.video_actual_decodes = self.retired_video_metrics.actual_decodes;
+        self.stats.video_seek_count = self.retired_video_metrics.seeks;
+        self.stats.video_cache_hits = self.retired_video_metrics.cache_hits;
+        self.stats.video_cache_misses = self.retired_video_metrics.cache_misses;
+        self.stats.video_decode_time_us = self.retired_video_metrics.decode_time_us;
+        for session in self.video_decoders.values().flatten() {
+            let metrics = session.decoder.metrics();
             self.stats.video_frame_requests += metrics.frame_requests;
             self.stats.video_actual_decodes += metrics.actual_decodes;
             self.stats.video_seek_count += metrics.seeks;

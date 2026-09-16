@@ -210,6 +210,7 @@ impl CpuWorkerState {
         self.generic_blend_surface_calls += compose.generic_blend_surface_calls;
         self.static_cache_population_renders +=
             self.static_layers.stats().insertions - insertions_before;
+        self.assets.finish_frame();
 
         if let Some(error) = self.assets.take_video_error() {
             return Err(error);

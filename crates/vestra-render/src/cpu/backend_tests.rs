@@ -40,10 +40,21 @@ struct TimelineVideoFactory {
 
 struct TimelineVideoSession {
     requested_times: Arc<Mutex<Vec<f64>>>,
+    previous_time: Option<f64>,
+    seeks: u64,
+    requests: u64,
 }
 
 impl crate::VideoDecoderSession for TimelineVideoSession {
     fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
+        self.requests += 1;
+        if self
+            .previous_time
+            .is_some_and(|previous| seconds < previous)
+        {
+            self.seeks += 1;
+        }
+        self.previous_time = Some(seconds);
         self.requested_times.lock().unwrap().push(seconds);
         let value = (seconds * 100.0).round().clamp(0.0, 255.0) as u8;
         let colour = if seconds < 1.0 {
@@ -56,6 +67,14 @@ impl crate::VideoDecoderSession for TimelineVideoSession {
             pixels: Arc::new(image::RgbaImage::from_pixel(1, 1, image::Rgba(colour))),
         })
     }
+
+    fn metrics(&self) -> crate::VideoDecoderMetrics {
+        crate::VideoDecoderMetrics {
+            frame_requests: self.requests,
+            seeks: self.seeks,
+            ..crate::VideoDecoderMetrics::default()
+        }
+    }
 }
 
 impl crate::VideoDecoderFactory for TimelineVideoFactory {
@@ -66,6 +85,9 @@ impl crate::VideoDecoderFactory for TimelineVideoFactory {
     ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
         Ok(Box::new(TimelineVideoSession {
             requested_times: Arc::clone(&self.requested_times),
+            previous_time: None,
+            seeks: 0,
+            requests: 0,
         }))
     }
 }
@@ -330,8 +352,7 @@ fn cpu_video_to_video_transition_advances_both_endpoints() {
     assert!(pixel[0] > 0 && pixel[2] > 0 && pixel[1] == 0);
 }
 
-#[test]
-fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
+fn same_video_asset_plan() -> RenderPlan {
     let project = crate::project::Project::from_json(
         r##"{
             "schema_version": 3,
@@ -360,7 +381,7 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
     )]);
     let durations = std::collections::BTreeMap::from([("video".to_owned(), 4.0)]);
     let dimensions = std::collections::BTreeMap::from([("video".to_owned(), (1, 1))]);
-    let plan = vestra_core::plan::compile(
+    vestra_core::plan::compile(
         vestra_core::plan::PlanCompileInput::new(
             &project,
             vestra_core::validation::ResourceLimits::default(),
@@ -376,7 +397,12 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
         .with_video_dimensions(&dimensions),
         vestra_core::plan::CompileOptions::default(),
     )
-    .expect("same-asset Video fixture compiles");
+    .expect("same-asset Video fixture compiles")
+}
+
+#[test]
+fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
+    let plan = same_video_asset_plan();
     let single_worker_requests = Arc::new(Mutex::new(Vec::new()));
     let multi_worker_requests = Arc::new(Mutex::new(Vec::new()));
     let single_worker_decoded = DecodedAssets::build_with_video_factory(
@@ -407,6 +433,17 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
         .render_frame(&frame, &mut multi_output)
         .expect("same-asset Video fixture renders with multiple workers");
 
+    single_worker
+        .render_frame(&frame, &mut single_output)
+        .expect("repeated frame reuses independent source cursors");
+    let stats = single_worker.stats();
+    assert_eq!(
+        stats.video_seek_count, 0,
+        "source timelines must not alternate on one cursor"
+    );
+    assert_eq!(stats.video_decoder_session_count, 2);
+    assert_eq!(stats.video_decoder_open_count, 2);
+
     let single_requests = single_worker_requests.lock().unwrap();
     let multi_requests = multi_worker_requests.lock().unwrap();
     assert!(single_requests.contains(&0.5));
@@ -418,6 +455,127 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
     assert!(
         pixel[0] > 0 && pixel[2] > 0,
         "same-asset layers should both contribute, got {pixel:?}"
+    );
+    drop(single_requests);
+    drop(multi_requests);
+
+    // Serial clips reuse the primary asset cursor; only unused extra cursors
+    // retire, with their work preserved in cumulative metrics.
+    for item in [0, 1] {
+        let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(item)], 500_000_000)
+            .expect("single active source evaluates");
+        single_worker
+            .render_frame(&frame, &mut single_output)
+            .expect("single active source renders");
+        let stats = single_worker.stats();
+        assert_eq!(stats.video_decoder_session_count, 1);
+        assert_eq!(stats.video_decoder_open_count, 2);
+    }
+    assert_eq!(single_worker.stats().video_frame_requests, 6);
+    let empty =
+        vestra_core::plan::evaluate(&plan, &[], 500_000_000).expect("empty frame evaluates");
+    single_worker
+        .render_frame(&empty, &mut single_output)
+        .expect("empty frame renders");
+    assert_eq!(single_output.get_pixel(0, 0).0, [0, 0, 0, 0]);
+    let stats = single_worker.stats();
+    assert_eq!(stats.video_decoder_session_count, 1);
+    assert_eq!(stats.video_frame_requests, 6);
+    let frame = vestra_core::plan::evaluate(&plan, &[ScheduledItem(0)], 500_000_000)
+        .expect("reopened source evaluates");
+    single_worker
+        .render_frame(&frame, &mut single_output)
+        .expect("source reopens");
+    let stats = single_worker.stats();
+    assert_eq!(stats.video_decoder_session_count, 1);
+    assert_eq!(stats.video_decoder_open_count, 2);
+    assert_eq!(stats.video_frame_requests, 7);
+
+    let mut reversed = evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 500_000_000)
+        .expect("reordered frame evaluates");
+    reversed.layers.reverse();
+    single_worker
+        .render_frame(&reversed, &mut single_output)
+        .expect("cursors handle reordered sources");
+    let fresh_assets = DecodedAssets::build_with_video_factory(
+        &plan,
+        Some(Arc::new(TimelineVideoFactory {
+            requested_times: Arc::new(Mutex::new(Vec::new())),
+        })),
+    )
+    .expect("fresh reference prepares");
+    let mut fresh = CpuBackend::new_with_worker_count(&plan, fresh_assets, 1);
+    fresh
+        .render_frame(&reversed, &mut multi_output)
+        .expect("fresh reference renders");
+    assert_eq!(single_output, multi_output);
+    for layer in &mut reversed.layers {
+        if let EvaluatedSource::Video { source_time, .. } = &mut layer.source {
+            *source_time = 0.5;
+        }
+    }
+    fresh
+        .render_frame(&reversed, &mut multi_output)
+        .expect("identical-time sources render");
+    assert_eq!(
+        fresh.stats().video_decoder_session_count,
+        1,
+        "identical asset/time reads share the primary cursor"
+    );
+}
+
+#[test]
+fn cpu_video_reopen_failure_fails_the_frame() {
+    #[derive(Default)]
+    struct Factory {
+        opens: std::sync::atomic::AtomicUsize,
+        budgets: Mutex<Vec<u64>>,
+    }
+    impl crate::VideoDecoderFactory for Factory {
+        fn open(
+            &self,
+            _asset: &vestra_core::plan::VideoAsset,
+            cache_budget_bytes: u64,
+        ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
+            self.budgets.lock().unwrap().push(cache_budget_bytes);
+            if self.opens.fetch_add(1, Ordering::Relaxed) > 1 {
+                return Err("mock video reopen failed".to_owned());
+            }
+            Ok(Box::new(VideoFixtureSession {
+                frame: crate::VideoFrame {
+                    pts: 0,
+                    pixels: Arc::new(image::RgbaImage::from_pixel(
+                        1,
+                        1,
+                        image::Rgba([255, 0, 0, 255]),
+                    )),
+                },
+            }))
+        }
+    }
+    let plan = same_video_asset_plan();
+    let factory = Arc::new(Factory::default());
+    let decoded = DecodedAssets::build_with_video_factory(&plan, Some(factory.clone()))
+        .expect("video fixture prepares");
+    let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
+    let frame = evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 500_000_000)
+        .expect("video evaluates");
+    let empty = evaluate(&plan, &[], 500_000_000).expect("empty frame evaluates");
+    let mut output = image::RgbaImage::new(1, 1);
+    backend
+        .render_frame(&frame, &mut output)
+        .expect("initial open succeeds");
+    backend
+        .render_frame(&empty, &mut output)
+        .expect("idle video retires");
+    let error = backend
+        .render_frame(&frame, &mut output)
+        .expect_err("reopen failure must not omit video silently");
+    assert!(error.message.contains("mock video reopen failed"));
+    let budgets = factory.budgets.lock().unwrap();
+    assert!(budgets[0] > 0, "primary cursor keeps its cache allowance");
+    assert!(
+        budgets.iter().sum::<u64>() <= backend.worker_cache_budgets[0].video_cache_budget_bytes
     );
 }
 

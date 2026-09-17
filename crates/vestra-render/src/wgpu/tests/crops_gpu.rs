@@ -174,6 +174,11 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
                 "id": "video-layer", "source": {"type": "video", "asset": "used"},
                 "start": 0, "duration": 1, "layer": 0,
                 "opacity": {"base_value": 1}
+            }, {
+                "id": "consumer", "source": {"type": "solid_color", "colour": "#00ff00"},
+                "start": 0, "duration": 1, "layer": 1,
+                "opacity": {"base_value": 1},
+                "matte": {"source_layer": "video-layer", "mode": "alpha", "invert": false}
             }]}
         }"##,
     )
@@ -232,6 +237,69 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
         .expect("held-video fixture renders");
     assert_eq!(frame_requests.load(Ordering::Relaxed), 3);
     assert_eq!(backend.video_upload_count(), 0);
+
+    let mut hidden = frame.clone();
+    hidden.layers[0].visible = false;
+    backend
+        .render_frame(&hidden, &mut output)
+        .expect("hidden video renders without a source read");
+    assert_eq!(output.get_pixel(0, 0).0, [0, 0, 0, 0]);
+    assert_eq!(
+        frame_requests.load(Ordering::Relaxed),
+        3,
+        "a hidden video without consumers must not request another frame"
+    );
+
+    let mut matte_frame = vestra_core::plan::evaluate(
+        &plan,
+        &[
+            vestra_core::plan::ScheduledItem(0),
+            vestra_core::plan::ScheduledItem(1),
+        ],
+        0,
+    )
+    .expect("video matte evaluates");
+    matte_frame.layers[0].visible = false;
+    backend
+        .render_frame(&matte_frame, &mut output)
+        .expect("hidden video still supplies a visible matte consumer");
+    assert_eq!(frame_requests.load(Ordering::Relaxed), 4);
+    assert_eq!(output.get_pixel(0, 0).0, [0, 255, 0, 255]);
+
+    matte_frame.layers[0].visible = true;
+    backend
+        .render_frame(&matte_frame, &mut output)
+        .expect("visible video and matte consumer share one source read");
+    assert_eq!(frame_requests.load(Ordering::Relaxed), 5);
+    matte_frame.layers[0].visible = false;
+
+    let video_source = matte_frame.layers[0].source.clone();
+    let mask_transform = matte_frame.layers[0].transform;
+    matte_frame.layers[1].matte = None;
+    matte_frame.layers[1]
+        .masks
+        .push(vestra_core::plan::EvaluatedMask {
+            input: vestra_core::plan::EvaluatedMaskInput::Source {
+                source: Box::new(video_source),
+                mode: crate::project::MaskCoverageMode::Alpha,
+            },
+            operation: crate::project::MaskOperation::Intersect,
+            invert: false,
+            strength: 1.0,
+            feather: 0.0,
+            transform: mask_transform,
+        });
+    backend
+        .render_frame(&matte_frame, &mut output)
+        .expect("owned video mask requests its source");
+    assert_eq!(frame_requests.load(Ordering::Relaxed), 6);
+    assert_eq!(output.get_pixel(0, 0).0, [0, 255, 0, 255]);
+    matte_frame.layers[1].visible = false;
+    backend
+        .render_frame(&matte_frame, &mut output)
+        .expect("hidden mask owner needs no video read");
+    assert_eq!(frame_requests.load(Ordering::Relaxed), 6);
+    assert_eq!(output.get_pixel(0, 0).0, [0, 0, 0, 0]);
 }
 
 #[test]

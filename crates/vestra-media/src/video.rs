@@ -367,6 +367,16 @@ impl VideoDecoder {
             .map(|timestamp| timestamp.0)
     }
 
+    /// Decode one additional native lookahead frame without converting pixels.
+    ///
+    /// Retains at most two native frames outside the optional RGBA cache budget.
+    /// Errors are deferred until a request reaches them; seeking discards them.
+    pub fn prefetch(&mut self) {
+        let started = Instant::now();
+        self.cursor.prefetch(&mut self.metrics.actual_decodes);
+        self.metrics.decode_time_us += started.elapsed().as_micros() as u64;
+    }
+
     fn seek(&mut self, target: i64) -> Result<(), MediaError> {
         tracing::debug!(
             target: "vestra.media.video",
@@ -821,24 +831,69 @@ mod tests {
         assert!(reference.status.success());
         let frame_bytes = 64 * 48 * 4;
         assert_eq!(reference.stdout.len(), 36 * frame_bytes);
-        for budget in [0, frame_bytes as u64, frame_bytes as u64 * 4] {
-            let mut decoder = VideoDecoder::open_with_options(
-                &path,
-                VideoDecoderOptions {
-                    cache_budget_bytes: budget,
-                    ..VideoDecoderOptions::default()
-                },
-            )
-            .expect("decoder");
-            for index in [0, 18, 19, 35, 2, 23, 24, 25, 1, 35, 0] {
-                let frame = decoder.frame_at(index as f64 / 12.0 + 0.01).expect("frame");
-                assert_eq!(
-                    frame.pixels.as_raw(),
-                    &reference.stdout[index * frame_bytes..(index + 1) * frame_bytes],
-                    "budget={budget}, index={index}"
-                );
+        for prefetch in [false, true] {
+            for budget in [0, frame_bytes as u64, frame_bytes as u64 * 4] {
+                let mut decoder = VideoDecoder::open_with_options(
+                    &path,
+                    VideoDecoderOptions {
+                        cache_budget_bytes: budget,
+                        ..VideoDecoderOptions::default()
+                    },
+                )
+                .expect("decoder");
+                for index in [0, 18, 19, 35, 2, 23, 24, 25, 1, 35, 0] {
+                    let frame = decoder.frame_at(index as f64 / 12.0 + 0.01).expect("frame");
+                    assert_eq!(
+                        frame.pixels.as_raw(),
+                        &reference.stdout[index * frame_bytes..(index + 1) * frame_bytes],
+                        "budget={budget}, index={index}, prefetch={prefetch}"
+                    );
+                    if prefetch {
+                        decoder.prefetch();
+                    }
+                }
             }
         }
+    }
+
+    #[test]
+    fn native_prefetch_is_bounded_and_preserves_zero_cache_holds() {
+        let (_directory, path) = fixture();
+        let mut decoder = VideoDecoder::open_with_options(
+            &path,
+            VideoDecoderOptions {
+                cache_budget_bytes: 0,
+                ..VideoDecoderOptions::default()
+            },
+        )
+        .expect("decoder");
+        let first = decoder.frame_at(0.1).expect("first frame");
+        assert_eq!(decoder.metrics().actual_decodes, 2);
+        for _ in 0..100 {
+            decoder.prefetch();
+        }
+        let metrics = decoder.metrics();
+        assert_eq!(metrics.actual_decodes, 3, "one extra native frame only");
+        assert_eq!(metrics.frame_requests, 1);
+        assert_eq!(metrics.cache_misses, 1);
+        assert_eq!(metrics.cache_hits, 0);
+        let held = decoder.frame_at(0.4).expect("held frame");
+        assert!(Arc::ptr_eq(&first, &held));
+        let next = decoder.frame_at(0.6).expect("next frame");
+        assert!(next.pts > first.pts);
+        assert_eq!(decoder.metrics().actual_decodes, 3);
+        assert_eq!(decoder.metrics().seeks, 0);
+        decoder.prefetch();
+        let final_frame = decoder.frame_at(2.7).expect("final frame");
+        for _ in 0..10 {
+            decoder.prefetch();
+        }
+        let final_hold = decoder.frame_at(2.9).expect("final hold");
+        assert!(Arc::ptr_eq(&final_frame, &final_hold));
+        assert_eq!(decoder.metrics().actual_decodes, 6);
+        let early = decoder.frame_at(0.1).expect("seek after EOF");
+        assert_eq!(early.pixels, first.pixels);
+        assert_eq!(decoder.metrics().seeks, 1);
     }
 
     #[test]
@@ -947,28 +1002,33 @@ mod tests {
             [255, 255, 0, 255],
         ];
         let timestamps = [0, 120, 440, 720];
-        for budget in [0, 16 * 16 * 4] {
-            let mut decoder = VideoDecoder::open_with_options(
-                &path,
-                VideoDecoderOptions {
-                    cache_budget_bytes: budget,
-                    ..VideoDecoderOptions::default()
-                },
-            )
-            .expect("decoder");
-            for (seconds, index) in [
-                (0.72, 3),
-                (0.12, 1),
-                (0.719, 2),
-                (0.119, 0),
-                (0.44, 2),
-                (0.439, 1),
-                (0.72, 3),
-                (0.05, 0),
-            ] {
-                let frame = decoder.frame_at(seconds).expect("VFR frame");
-                assert_eq!(frame.pts, VideoTimestamp(timestamps[index]));
-                assert_pixel_near(frame.pixels.get_pixel(8, 8), colours[index]);
+        for prefetch in [false, true] {
+            for budget in [0, 16 * 16 * 4] {
+                let mut decoder = VideoDecoder::open_with_options(
+                    &path,
+                    VideoDecoderOptions {
+                        cache_budget_bytes: budget,
+                        ..VideoDecoderOptions::default()
+                    },
+                )
+                .expect("decoder");
+                for (seconds, index) in [
+                    (0.72, 3),
+                    (0.12, 1),
+                    (0.719, 2),
+                    (0.119, 0),
+                    (0.44, 2),
+                    (0.439, 1),
+                    (0.72, 3),
+                    (0.05, 0),
+                ] {
+                    let frame = decoder.frame_at(seconds).expect("VFR frame");
+                    assert_eq!(frame.pts, VideoTimestamp(timestamps[index]));
+                    assert_pixel_near(frame.pixels.get_pixel(8, 8), colours[index]);
+                    if prefetch {
+                        decoder.prefetch();
+                    }
+                }
             }
         }
     }
@@ -987,7 +1047,7 @@ mod tests {
         })
     }
 
-    fn fixture() -> (TempDir, std::path::PathBuf) {
+    pub(super) fn fixture() -> (TempDir, std::path::PathBuf) {
         let directory = tempfile::tempdir().expect("directory");
         let path = directory.path().join("colours.mkv");
         let status = Command::new("ffmpeg")

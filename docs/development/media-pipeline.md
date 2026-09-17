@@ -1,9 +1,10 @@
 # Media pipeline and concurrency
 
 This report tracks Optimization Subblock 2. Retained changes cover native frame
-selection, CPU cursor reuse, audio FFT scratch reuse, and GPU video culling.
-Buffering and worker-count experiments are also recorded below. Decoder access,
-prefetch, and asynchronous encoder experiments remain in progress.
+selection, CPU cursor reuse, audio FFT scratch reuse, GPU video culling, and
+bounded native prefetch for WGPU. Decoder-access, buffering, and worker-count
+experiments are also recorded below. Asynchronous encoder feeding remains
+in progress.
 
 ## Native frame selection candidate
 
@@ -279,25 +280,25 @@ for the measured video-heavy gain, with its explicit memory tradeoff.
 
 | Requested area | Current evidence and next action |
 | --- | --- |
-| Decoder/session reuse | The CPU pool separates simultaneous asset/time trajectories, eliminates 82 video-heavy seeks, and preserves serial reuse; measurements and memory cost are above. WGPU still uses one cursor per asset and needs measurement. |
-| Sequential decode | Native-selection change above has repeated CPU timing, peak-RSS evidence, and strict hardware correctness validation. Hardware timing remains. |
-| GOP/keyframe-aware seeking | Existing backward keyframe seek has a real long-GOP pixel oracle; measure sparse forward access. |
-| Decoded-frame caching | Explicit coverage intervals and current-frame holds tested; measure random-access tradeoffs. |
-| Decode-ahead/prefetch | One native lookahead exists; evaluate bounded additional prefetch. |
+| Decoder/session reuse | The CPU pool separates simultaneous asset/time trajectories, eliminates 82 video-heavy seeks, and preserves serial reuse. WGPU's per-asset sessions are exercised by the hardware canonical and concurrent-offset measurements below. |
+| Sequential decode | Native selection has repeated CPU timing, peak-RSS evidence, and strict hardware correctness validation; the access matrix measures sequential requests and advancing holds. |
+| GOP/keyframe-aware seeking | Real long-GOP/B-frame pixels and boundary requests verify backward keyframe seeking. The access matrix measures sparse forward and scrub costs; no unsupported forward-seek threshold is introduced. |
+| Decoded-frame caching | Explicit coverage intervals and current-frame holds tested; the access matrix measures zero/one/four-frame/64-MiB budgets and repeated scrubbing. |
+| Decode-ahead/prefetch | A bounded additional native frame improves measured GPU wall time. CPU always-on prefetch is rejected; the WGPU-only policy is retained after output checks and the repository gate. |
 | Avoiding invisible decode work | GPU-plan culling removes unused hidden video reads while preserving matte/mask dependencies; real hardware timing and exact decoded-output evidence are below. |
 | Independent video-source parallelism | CPU workers decode concurrently; the one/two/four/eight-worker sweep below measures throughput, repeated decoding, sessions, and memory. |
-| Pixel formats/conversions | Candidate reuses scaler output and delays conversion; evaluate direct RGBA handling. |
-| Decode/render/encode overlap | Existing staged CPU workers overlap with FFmpeg; evaluate coordinator stalls. |
-| Bounded stage queues | CPU command/completion and ready-frame counts are bounded; evaluate decoder/encoder queue changes. |
+| Pixel formats/conversions | Native selection reuses scaler output and converts only requested frames. Real YUV420P H.264/B-frame output is byte-checked against FFmpeg; timing evidence is above. |
+| Decode/render/encode overlap | CPU worker and GPU buffering sweeps measure the existing staged pipeline. Native prefetch overlaps decoding with composition; asynchronous feeding remains to be measured. |
+| Bounded stage queues | CPU command/completion and ready-frame counts are bounded; the prefetch candidate bounds pending native frames at two and defers errors in order. Encoder overlap remains to be evaluated. |
 | Multiple frames in flight | Hardware GL depths one/two/three measured, with an alternating two/three repeat and exact output checks; CPU worker-count sweep completed. Defaults retained. |
 | Asynchronous encoder feeding | Current frame writes synchronously feed FFmpeg stdin; experiment without weakening failure/cancellation/publication contracts. |
 | Audio buffers and analysis cache | Release measurements confirm shared FFT/decode work and prepared reuse. Scratch reuse is retained after real-WAV gains and unchanged render controls. |
 | Thread/resource allocation | Worker-count sweep retains eight on this host despite repeated native decoding; lower counts save memory but substantially slow both canonical workloads. Decoder/encoder thread settings are not independently isolated. |
-| Stalls and idle CPU/GPU time | Use stage timings and hardware measurements to assess overlap candidates. |
+| Stalls and idle CPU/GPU time | Stage timings, buffering counters, and hardware prefetch measurements assess overlap; no GPU-occupancy claim is made. Asynchronous feeding remains to be measured. |
 
-Native frame selection, the CPU cursor pool, audio FFT scratch reuse, and GPU
-video culling are retained on measured gains and correctness verification.
-Prefetch and asynchronous feeding remain unfinished; this report does not
+Native frame selection, the CPU cursor pool, audio FFT scratch reuse, GPU
+video culling, and WGPU native prefetch are retained on measured gains and
+correctness verification. Asynchronous feeding remains unfinished; this report does not
 claim completion of Subblock 2.
 
 ## Audio analysis measurements
@@ -569,3 +570,84 @@ A second release run after the guard correction passed in 82.76 seconds;
 `run-2/results.json` reproduces every request/decode/seek/cache-hit count.
 Repeated scrub medians were 4,846.6 ms without a cache and 1,218.8 ms with
 64 MiB, confirming the large repeated-access benefit.
+
+## Bounded native prefetch
+
+The decoder actor can decode one additional native frame after replying to the
+renderer. It uses its existing owner thread and retains at most two pending
+native frames, rather than one. It does not predict timestamps or convert
+speculative pixels. Already-queued demand takes priority. Prefetched errors stay
+in decode order and surface only when requested; seeking clears queued frames
+and errors. Demand-request/cache counters remain separate from native work.
+
+The actor holds its metrics lock across reply delivery, prefetch, and counter
+publication, so a subsequent statistics snapshot includes speculative work.
+Consequently statistics collection and teardown can wait for an in-progress
+prefetch. One native frame bounds storage/work count, not elapsed time: decoding
+it may read multiple packets. A disconnect observed before starting prefetch
+skips that work; shutdown racing with it may wait for that one operation.
+
+The first alternating baseline/candidate/candidate/baseline experiment uses
+one warmup and three samples per invocation on each canonical workload. Its
+saved executables, exact prototype patch, raw reports, and process resource
+records are in `target/benchmark-results/media-pipeline-prefetch-20260917`.
+The baseline is the retained culling executable. Hardware reports explicitly
+select NVIDIA GL, with a fresh accelerated-GL preflight; Vulkan remains llvmpipe.
+
+| Workload | Baseline wall median, ms | Prefetch wall median, ms | Change | Native decodes, baseline → candidate |
+| --- | ---: | ---: | ---: | --- |
+| Hardware GL video-heavy | 6,079 | 5,853.5 | −3.7% | 2,313 → 2,374 |
+| Hardware GL production | 5,081.5 | 4,497 | −11.5% | 453 → 456 |
+| CPU video-heavy | 4,354.5 | 4,307 | −1.1% | 2,451 → 2,472–2,475 |
+
+GPU peak RSS increased from 487,272–487,720 to 490,888–491,504 KiB for
+video-heavy and from 490,312–490,352 to 492,136–492,436 KiB for production.
+CPU video-heavy ranged from 1,048,636–1,061,832 to 1,063,468–1,096,000 KiB.
+The additional native frame is outside the RGBA cache budget. Speculative work
+increases actual decodes while overlapping them with composition; aggregate
+decode time therefore need not fall when wall time improves.
+
+The process stopped during the final CPU production baseline invocation.
+Completed pre-interruption baseline samples were 9,101 / 9,138 / 9,108 ms,
+versus candidate samples 9,024 / 9,054 / 9,092 and 9,041 / 9,054 / 10,158 ms.
+After confirming that the process was gone, only the missing case was rerun
+under `media-pipeline-prefetch-resume-20260917`. Its 11,230 / 11,354 / 11,246 ms
+samples show a host-session timing shift; pooling them with the earlier
+candidate would exaggerate any gain. An uninterrupted CPU production repeat
+is required before the retention decision.
+
+Twenty-one native video tests and 68 engine tests passed with prefetch enabled.
+Coverage includes queue bounds, zero-cache holds, EOF, deferred errors cleared
+by seek, and real H.264/VFR pixels. The final candidate removes the temporary
+experiment switch. Its release CLI rendered two simultaneous video offsets on
+CPU and hardware GL; each backend's 90 decoded RGBA frames match its baseline
+exactly, with 1280×720 dimensions and three-second duration. Reports, checksums,
+and executable hashes are under the candidate's `pixels` directory. The
+always-on candidate passed the repository gate (`check.log`); the subsequent
+CPU repeat and final WGPU-only policy below supersede that candidate.
+
+The uninterrupted CPU production repeat completed under
+`media-pipeline-prefetch-resume-20260917/repeat`: baseline median 11,546 ms,
+always-prefetch median 11,815.5 ms (+2.3%). Always-on CPU prefetch is rejected.
+The final policy enables prefetch only for WGPU sessions through an optional,
+default-no-op decoder-session hint. Ordinary native sessions keep prefetch
+disabled; existing custom decoder implementations remain compatible. A real
+native-session test verifies unchanged pixels/request counts and an additional
+native decode only after enabling the hint, including the metrics barrier.
+
+The WGPU-only CPU control is in the sibling `gpu-only-repeat` directory. Opening
+baseline samples were 11,043 / 11,092 / 11,069 ms; closing baseline samples were
+11,916 / 11,778 / 11,769 ms. Candidate samples were 11,083 / 11,135 / 11,146 and
+11,231 / 11,303 / 11,661 ms. The drift between controls prevents attributing the
+pooled medians (11,430.5 versus 11,188.5 ms) to a CPU speedup. It does not reproduce
+the always-on slowdown. CPU sessions perform no speculative work, as verified
+by the native-session test.
+
+The WGPU-only policy passed `./scripts/check.sh` with the GL environment above;
+the full log is `media-pipeline-prefetch-20260917/check-gpu-only.log`. Its final
+release CLI again produced identical baseline/candidate RGBA checksums for all
+90 frames on both CPU and NVIDIA GL. CPU native decodes were 1,634 in both
+variants; GPU counts were 788 versus 808, with 19 seeks in both. Final reports,
+output properties, executable hashes, and checksums are in `pixels-gpu-only`.
+The WGPU-only policy is retained for its measured GPU gains, bounded additional
+storage, and verified output/lifecycle behavior. No CPU speedup is claimed.

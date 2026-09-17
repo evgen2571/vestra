@@ -1,6 +1,9 @@
 use std::{
     collections::BTreeMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -26,6 +29,7 @@ type NativeVideoCommand = (
 struct NativeVideoSession {
     command_tx: Option<std::sync::mpsc::Sender<NativeVideoCommand>>,
     metrics: Arc<Mutex<vestra_render::VideoDecoderMetrics>>,
+    prefetch: Arc<AtomicBool>,
     join: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -42,6 +46,10 @@ impl Drop for NativeVideoSession {
 }
 
 impl vestra_render::VideoDecoderSession for NativeVideoSession {
+    fn enable_prefetch(&mut self) {
+        self.prefetch.store(true, Ordering::Release);
+    }
+
     fn frame_at(&mut self, seconds: f64) -> Result<vestra_render::VideoFrame, String> {
         let (reply_tx, reply_rx) = std::sync::mpsc::channel();
         self.command_tx
@@ -72,6 +80,8 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let metrics = Arc::new(Mutex::new(vestra_render::VideoDecoderMetrics::default()));
         let thread_metrics = Arc::clone(&metrics);
+        let prefetch = Arc::new(AtomicBool::new(false));
+        let thread_prefetch = Arc::clone(&prefetch);
         let path = asset.path.clone();
         let asset_id = asset.id.clone();
         let metadata = Arc::clone(&self.metadata);
@@ -106,7 +116,12 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                     }
                 };
                 let _ = ready_tx.send(Ok(()));
-                while let Ok((seconds, reply, span)) = command_rx.recv() {
+                let mut queued_command = None;
+                while let Ok((seconds, reply, span)) = queued_command
+                    .take()
+                    .map(Ok)
+                    .unwrap_or_else(|| command_rx.recv())
+                {
                     let _entered = span.enter();
                     let result = decoder
                         .frame_at(seconds)
@@ -116,6 +131,18 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                         })
                         .map_err(|error| error.to_string());
                     if let Ok(mut current) = thread_metrics.lock() {
+                        let successful = result.is_ok();
+                        let mut ended = reply.send(result).is_err();
+                        // Reply first so composition can overlap native decode. Keep the
+                        // metrics lock until speculative work is accounted for, and give
+                        // already-queued demand or shutdown priority over prefetch.
+                        if thread_prefetch.load(Ordering::Acquire) && successful && !ended {
+                            match command_rx.try_recv() {
+                                Ok(command) => queued_command = Some(command),
+                                Err(std::sync::mpsc::TryRecvError::Empty) => decoder.prefetch(),
+                                Err(std::sync::mpsc::TryRecvError::Disconnected) => ended = true,
+                            }
+                        }
                         let metrics = decoder.metrics();
                         *current = vestra_render::VideoDecoderMetrics {
                             frame_requests: metrics.frame_requests,
@@ -125,8 +152,13 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                             cache_misses: metrics.cache_misses,
                             decode_time_us: metrics.decode_time_us,
                         };
+                        if ended {
+                            break;
+                        }
+                    } else {
+                        let _ = reply.send(Err("video decoder metrics lock poisoned".to_owned()));
+                        break;
                     }
-                    let _ = reply.send(result);
                 }
             })
             .map_err(|error| error.to_string())?;
@@ -134,6 +166,7 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
             Ok(Ok(())) => Ok(Box::new(NativeVideoSession {
                 command_tx: Some(command_tx),
                 metrics,
+                prefetch,
                 join: Some(join),
             })),
             Ok(Err(error)) => {
@@ -695,6 +728,50 @@ mod tests {
 
     use super::NativeVideoSession;
 
+    #[test]
+    fn native_prefetch_requires_a_hint_and_metrics_wait_for_lookahead() {
+        use vestra_render::VideoDecoderFactory;
+        let directory = tempfile::tempdir().expect("directory");
+        let path = directory.path().join("video.mkv");
+        let status = std::process::Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=s=16x16:r=10:d=1",
+                "-c:v",
+                "ffv1",
+            ])
+            .arg(&path)
+            .status()
+            .expect("fixture FFmpeg");
+        assert!(status.success());
+        let factory = super::NativeVideoFactory {
+            limits: vestra_core::validation::ResourceLimits::default(),
+            metadata: Arc::new(std::collections::BTreeMap::new()),
+        };
+        let asset = vestra_core::plan::VideoAsset {
+            id: "video".to_owned(),
+            path,
+            duration_seconds: 1.0,
+            width: 16,
+            height: 16,
+        };
+        let mut decoder = factory.open(&asset, 0).expect("decoder");
+        let first = decoder.frame_at(0.01).expect("first");
+        assert_eq!(decoder.metrics().actual_decodes, 2);
+        decoder.enable_prefetch();
+        let held = decoder.frame_at(0.02).expect("hold");
+        assert_eq!(first.pixels, held.pixels);
+        let metrics = decoder.metrics();
+        assert_eq!(metrics.actual_decodes, 3);
+        assert_eq!(metrics.frame_requests, 2);
+        assert_eq!(metrics.seeks, 0);
+        drop(decoder);
+    }
+
     fn session(exited: Arc<AtomicUsize>) -> NativeVideoSession {
         let (command_tx, command_rx) = mpsc::channel();
         let join = std::thread::spawn(move || {
@@ -704,6 +781,7 @@ mod tests {
         NativeVideoSession {
             command_tx: Some(command_tx),
             metrics: Arc::new(Mutex::new(vestra_render::VideoDecoderMetrics::default())),
+            prefetch: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             join: Some(join),
         }
     }

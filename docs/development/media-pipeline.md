@@ -283,14 +283,14 @@ for the measured video-heavy gain, with its explicit memory tradeoff.
 | GOP/keyframe-aware seeking | Existing backward keyframe seek has a real long-GOP pixel oracle; measure sparse forward access. |
 | Decoded-frame caching | Explicit coverage intervals and current-frame holds tested; measure random-access tradeoffs. |
 | Decode-ahead/prefetch | One native lookahead exists; evaluate bounded additional prefetch. |
-| Avoiding invisible decode work | Candidate removes unselected-frame conversion; inspect and exercise visibility culling. |
+| Avoiding invisible decode work | GPU-plan culling removes unused hidden video reads while preserving matte/mask dependencies; real hardware timing and exact decoded-output evidence are below. |
 | Independent video-source parallelism | CPU workers already decode concurrently; compare resource allocations and source sharing. |
 | Pixel formats/conversions | Candidate reuses scaler output and delays conversion; evaluate direct RGBA handling. |
 | Decode/render/encode overlap | Existing staged CPU workers overlap with FFmpeg; evaluate coordinator stalls. |
 | Bounded stage queues | CPU command/completion and ready-frame counts are bounded; evaluate decoder/encoder queue changes. |
-| Multiple frames in flight | Existing CPU workers and WGPU slots need workload-specific depth measurements. |
+| Multiple frames in flight | Hardware GL depths one/two/three measured on canonical video-heavy and production workloads; alternating two/three repeat is running. CPU worker allocation remains to be compared. |
 | Asynchronous encoder feeding | Current frame writes synchronously feed FFmpeg stdin; experiment without weakening failure/cancellation/publication contracts. |
-| Audio buffers and analysis cache | Three release runs confirm shared FFT work and one decode across transformed-signal fan-out; prepared reuse test passes. FFT scratch-reuse candidate is under measurement, below. |
+| Audio buffers and analysis cache | Release measurements confirm shared FFT/decode work and prepared reuse. Scratch reuse is retained after real-WAV gains and unchanged render controls. |
 | Thread/resource allocation | Compare decode/render/encode allocation on video-heavy and production workloads. |
 | Stalls and idle CPU/GPU time | Use stage timings and hardware measurements to assess overlap candidates. |
 
@@ -429,3 +429,43 @@ decoded output, dependency tests, and passing repository gate. The benchmark
 console labels the adapter `other` from its raw WGPU device type; the explicit
 NVIDIA GL identity in every sample and accelerated GL preflight establish the
 hardware class independently. This is not a software-Vulkan measurement.
+
+## Hardware buffering sweep
+
+Using the same culling executable and NVIDIA GL adapter, the first sweep gives
+the following wall medians. Depths one and two have three samples after one
+warmup each; depth three uses the six control samples above.
+
+| Workload | Depth one, ms | Depth two, ms | Depth three, ms |
+| --- | ---: | ---: | ---: |
+| Video-heavy | 7,210 | 6,627 | 6,932.5 |
+| Production edit | 6,847 | 5,246 | 5,759.5 |
+
+Actual peak frames in flight match the requested depths. Video-heavy reports
+40,552,960 / 47,928,320 / 55,303,680 bytes of staging memory; production reports
+48,713,464 / 56,094,200 / 63,474,936 bytes. Each additional slot costs roughly
+7 MiB here. Blocking-poll and slot-wait counters are zero on this GL path at
+all depths; those counters do not establish GPU occupancy or absence of stalls
+inside other driver calls. Production's depth-two sample reports about 2.16 s
+in encoder writes, which motivates measuring asynchronous feeding separately.
+
+The first sweep was not interleaved. An alternating 2/3/3/2 repeat, with one
+warmup and three samples per invocation, completed in
+`media-pipeline-depth-alternating-20260917`. Its six-sample medians are:
+
+| Workload | Depth two, ms | Depth three, ms | Two versus three |
+| --- | ---: | ---: | ---: |
+| Video-heavy | 6,856 | 6,841.5 | +0.2% |
+| Production edit | 5,523.5 | 6,076.5 | −9.1% |
+
+The video-heavy timing advantage did not repeat; production's did. Depth two
+is a useful measured setting for this NVIDIA-through-GL path and production
+workload, with lower staging memory in both cases. No cross-backend default is
+changed on this single-adapter evidence; `VESTRA_WGPU_IN_FLIGHT=2` remains the
+existing explicit control.
+
+The same release CLI also rendered two simultaneous offsets of real video at
+depths one, two, and three. All 90 decoded RGBA frame checksums match across
+depths, with 1280×720 dimensions and three-second duration. Every report selects
+the NVIDIA GL adapter. Executable hash, reports, videos, checksums, and the
+verification script are in `media-pipeline-depth-pixels-20260917`.

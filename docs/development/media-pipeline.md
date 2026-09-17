@@ -1,8 +1,9 @@
 # Media pipeline and concurrency
 
-This report tracks Optimization Subblock 2. Work is in progress; the first
-candidate below has two canonical candidate measurements, and the remaining
-experiments have not yet been completed.
+This report tracks Optimization Subblock 2. Retained changes cover native frame
+selection, CPU cursor reuse, audio FFT scratch reuse, and GPU video culling.
+Buffering and worker-count experiments are also recorded below. Decoder access,
+prefetch, and asynchronous encoder experiments remain in progress.
 
 ## Native frame selection candidate
 
@@ -173,7 +174,7 @@ removing the coordinator candidate. This includes general workspace tests,
 strict renderer parity tests, and the strict CLI encoded-frame comparison.
 Execution records confirm the NVIDIA adapter and GL backend. The log is
 `target/benchmark-results/media-pipeline-native-hardware-check-20260915.log`.
-Hardware performance comparisons remain to be run.
+Subsequent hardware performance comparisons are recorded below.
 
 ## CPU source cursor candidate
 
@@ -284,19 +285,20 @@ for the measured video-heavy gain, with its explicit memory tradeoff.
 | Decoded-frame caching | Explicit coverage intervals and current-frame holds tested; measure random-access tradeoffs. |
 | Decode-ahead/prefetch | One native lookahead exists; evaluate bounded additional prefetch. |
 | Avoiding invisible decode work | GPU-plan culling removes unused hidden video reads while preserving matte/mask dependencies; real hardware timing and exact decoded-output evidence are below. |
-| Independent video-source parallelism | CPU workers already decode concurrently; compare resource allocations and source sharing. |
+| Independent video-source parallelism | CPU workers decode concurrently; the one/two/four/eight-worker sweep below measures throughput, repeated decoding, sessions, and memory. |
 | Pixel formats/conversions | Candidate reuses scaler output and delays conversion; evaluate direct RGBA handling. |
 | Decode/render/encode overlap | Existing staged CPU workers overlap with FFmpeg; evaluate coordinator stalls. |
 | Bounded stage queues | CPU command/completion and ready-frame counts are bounded; evaluate decoder/encoder queue changes. |
-| Multiple frames in flight | Hardware GL depths one/two/three measured on canonical video-heavy and production workloads; alternating two/three repeat is running. CPU worker allocation remains to be compared. |
+| Multiple frames in flight | Hardware GL depths one/two/three measured, with an alternating two/three repeat and exact output checks; CPU worker-count sweep completed. Defaults retained. |
 | Asynchronous encoder feeding | Current frame writes synchronously feed FFmpeg stdin; experiment without weakening failure/cancellation/publication contracts. |
 | Audio buffers and analysis cache | Release measurements confirm shared FFT/decode work and prepared reuse. Scratch reuse is retained after real-WAV gains and unchanged render controls. |
-| Thread/resource allocation | Compare decode/render/encode allocation on video-heavy and production workloads. |
+| Thread/resource allocation | Worker-count sweep retains eight on this host despite repeated native decoding; lower counts save memory but substantially slow both canonical workloads. Decoder/encoder thread settings are not independently isolated. |
 | Stalls and idle CPU/GPU time | Use stage timings and hardware measurements to assess overlap candidates. |
 
-Native frame selection and the CPU cursor pool are retained on measured CPU
-gains and correctness verification. Hardware performance and the remaining experiment matrix are
-unfinished; this report does not claim completion of Subblock 2.
+Native frame selection, the CPU cursor pool, audio FFT scratch reuse, and GPU
+video culling are retained on measured gains and correctness verification.
+Prefetch and asynchronous feeding remain unfinished; this report does not
+claim completion of Subblock 2.
 
 ## Audio analysis measurements
 
@@ -469,3 +471,101 @@ depths one, two, and three. All 90 decoded RGBA frame checksums match across
 depths, with 1280×720 dimensions and three-second duration. Every report selects
 the NVIDIA GL adapter. Executable hash, reports, videos, checksums, and the
 verification script are in `media-pipeline-depth-pixels-20260917`.
+
+## CPU worker allocation sweep
+
+An executable-only experiment overrides the CPU worker count to one, two, four,
+or eight. Its exact instrumentation patch and executable hash are saved under
+`target/benchmark-results/media-pipeline-cpu-workers-20260917`; the production
+source was restored before measurement. Each case uses the canonical workload
+at 1280×720, one warmup, and three measured renders. All reports select CPU,
+and the actual pipeline depth matches the requested worker count.
+
+| Workload | Workers | Wall median, ms | Native decodes | Live video sessions | Peak process RSS, KiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Video-heavy | 8 | 4,760 | 2,451 | 24 | 1,009,864 |
+| Video-heavy | 4 | 6,873 | 1,248 | 12 | 702,268 |
+| Video-heavy | 2 | 12,165 | 630 | 6 | 556,444 |
+| Video-heavy | 1 | 22,787 | 315 | 3 | 483,820 |
+| Production edit | 8 | 10,031 | 3,555 | 16 | 976,468 |
+| Production edit | 4 | 15,081 | 1,800 | 8 | 622,196 |
+| Production edit | 2 | 27,628 | 906 | 4 | 464,464 |
+| Production edit | 1 | 48,968 | 453 | 2 | 364,928 |
+
+The original process stopped before the final production/one-worker case
+produced a report. After confirming that neither its session nor its process
+remained, only that case was rerun with the same saved executable and settings
+in `media-pipeline-cpu-workers-resume-20260917`. Its three wall samples were
+48,839 / 48,968 / 49,086 ms. The interrupted artifacts remain intact. The resumed
+case was measured in a separate host session; the fixed-order sweep is evidence
+of the large resource/throughput tradeoff, not a precise scaling curve.
+
+Fewer workers reduce repeated native decoding, decoder contexts, scratch
+storage, and process memory, but substantially increase render wall time on
+both workloads. Video-heavy has no seeks at any count; production has one seek
+per worker. The current automatic cap of eight is retained on this host. RSS
+includes fixture generation and FFmpeg subprocesses and is not solely renderer
+memory. This sweep does not establish an optimal decoder or encoder thread
+count independently of render-worker allocation.
+
+## Native decoder access and cache budgets
+
+The ignored release test `video::benchmarks::video_access_benchmark_matrix`
+measures native-decoder requests separately from opening the stream. It creates
+six seconds of 1280×720, 30 fps, H.264 YUV420P footage with a 60-frame GOP and
+three B-frames. Every pattern/budget pair first compares every requested image
+byte-for-byte with an independent FFmpeg RGBA decode. Three subsequent samples
+measure requests without pixel-comparison work. Each pass opens a fresh decoder.
+
+```bash
+VESTRA_VIDEO_ACCESS_BENCH_OUTPUT=target/benchmark-results/video-access-new/results.json \
+  cargo test -p vestra-media --release video_access_benchmark_matrix -- --ignored --nocapture
+```
+
+The completed run uses a saved release executable under
+`target/benchmark-results/media-pipeline-video-access-20260917`, with its build
+record, hash, FFmpeg version, fixture hash, and `run-1/results.json`. It passed
+all pixel comparisons and all 64 passes. The following are median accumulated
+request times; decoder opening and fixture generation are excluded.
+
+| Pattern | Cache budget | Requests | Native decodes | Seeks | Cache hits | Request time, ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Sequential | 0 | 180 | 180 | 0 | 0 | 488.9 |
+| Sequential | 64 MiB | 180 | 180 | 0 | 0 | 511.1 |
+| Advancing holds | 0 | 180 | 61 | 0 | 0 | 175.7 |
+| Advancing holds | 64 MiB | 180 | 61 | 0 | 120 | 197.5 |
+| Sparse forward | 0 | 9 | 180 | 0 | 0 | 358.2 |
+| Sparse forward | 64 MiB | 9 | 180 | 0 | 0 | 356.8 |
+| Repeated scrub | 0 | 48 | 2,436 | 19 | 0 | 4,722.6 |
+| Repeated scrub | 1 frame | 48 | 2,436 | 19 | 0 | 4,759.1 |
+| Repeated scrub | 4 frames | 48 | 2,436 | 19 | 0 | 4,767.9 |
+| Repeated scrub | 64 MiB | 48 | 609 | 4 | 36 | 1,197.8 |
+
+Holds advance within each presentation interval, confirming that a disabled
+optional cache does not force repeated decoding or seeking. Sparse forward
+requests still decode intervening native frames but convert only requested
+images. The scrub sequence includes requests immediately before and after GOP
+boundaries. A 64 MiB cache holds its twelve requested images and avoids work on
+the three repeated traversals; one- and four-frame caches cannot hold that
+working set. These measurements validate the cache benefit for repeated access
+and the cost of misses, without supporting a universal cache-budget change.
+
+The fixed-order, three-sample run is exploratory; small timing differences do
+not establish significance. Process RSS includes a 663,552,000-byte independent
+reference buffer and must not be interpreted as decoder/cache memory. This
+benchmark does not compare the former eager-conversion cache or establish a
+forward-seek threshold.
+
+The full `./scripts/check.sh` gate passed with the GL environment described
+above, including workspace Clippy, tests, and schema checks; its log is
+`media-pipeline-video-access-20260917/check-fixed.log`. A package-only Clippy
+attempt omitted renderer features and failed on unrelated unused/dead renderer
+items. The first canonical attempt found a constant assertion in the new
+benchmark's release-mode guard; that guard now returns a runtime test error
+in debug builds, and the corrected canonical gate passes without relaxing
+warnings.
+
+A second release run after the guard correction passed in 82.76 seconds;
+`run-2/results.json` reproduces every request/decode/seek/cache-hit count.
+Repeated scrub medians were 4,846.6 ms without a cache and 1,218.8 ms with
+64 MiB, confirming the large repeated-access benefit.

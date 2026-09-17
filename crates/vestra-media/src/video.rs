@@ -510,6 +510,10 @@ fn selects_latest_pts(current: Option<i64>, candidate: i64, target: i64) -> bool
 }
 
 #[cfg(test)]
+#[path = "video_benchmarks.rs"]
+mod benchmarks;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::process::Command;

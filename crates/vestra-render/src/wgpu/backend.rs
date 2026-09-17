@@ -468,45 +468,22 @@ impl WgpuBackend {
         Some(ready)
     }
 
-    fn upload_video_layers(
-        &mut self,
-        layers: &[vestra_core::plan::EvaluatedLayer],
-    ) -> Result<(), Diagnostic> {
-        fn collect<'a>(
-            layer: &'a vestra_core::plan::EvaluatedLayer,
-            output: &mut Vec<&'a vestra_core::plan::EvaluatedSource>,
-        ) {
-            output.push(&layer.source);
-            if let vestra_core::plan::EvaluatedSource::Group { composition } = &layer.source {
-                for child in &composition.layers {
-                    collect(child, output);
-                }
-            }
-            for mask in &layer.masks {
-                if let vestra_core::plan::EvaluatedMaskInput::Source { source, .. } = &mask.input {
-                    output.push(source);
-                    if let vestra_core::plan::EvaluatedSource::Group { composition } =
-                        source.as_ref()
-                    {
-                        for child in &composition.layers {
-                            collect(child, output);
-                        }
-                    }
-                }
-            }
-        }
-        let mut sources = Vec::new();
-        for layer in layers {
-            collect(layer, &mut sources);
-        }
-        for source in sources {
+    fn upload_video_sources(&mut self, plan: &GpuFramePlan) -> Result<(), Diagnostic> {
+        let mut requested = BTreeSet::new();
+        for operation in &plan.operations {
+            let GpuOperation::RenderRasterLayer { layer_index, .. } = operation else {
+                continue;
+            };
             if let EvaluatedSource::Video {
                 asset_index,
                 source_index,
                 source_time,
                 ..
-            } = source
+            } = &plan.layers[*layer_index].source
             {
+                if !requested.insert(*source_index) {
+                    continue;
+                }
                 let (pts, pixels) = {
                     let decoder = self.video_decoders.get_mut(asset_index).ok_or_else(|| {
                         Diagnostic::error(
@@ -578,14 +555,8 @@ impl RenderBackend for WgpuBackend {
                 "",
             ));
         }
-        self.upload_video_layers(&evaluated.layers)?;
         let has_groups = evaluated.layers.iter().any(contains_group);
         let token = self.readback.acquire(frame_number)?;
-        let slot = &mut self.slots[token.slot_index];
-        if slot.uses > 0 {
-            self.staged.parameter_slot_reuse_count += 1;
-        }
-        slot.uses += 1;
         let mut cached_layers = BTreeSet::new();
         let mut cache_targets = BTreeSet::new();
         let mut textures = BTreeMap::new();
@@ -634,22 +605,27 @@ impl RenderBackend for WgpuBackend {
             &cached_layers,
             &cache_targets,
         );
-        if let Err(error) = plan
+        let upload_result = plan
             .validate(self.sources.raster_textures.len())
-            .and_then(|()| {
-                slot.parameters.reset();
-                encode_parameters(
-                    &mut slot.parameters,
-                    evaluated,
-                    &mut plan,
-                    &self.sources,
-                    &mut slot.particle_instances,
-                    &mut slot.particle_pixels,
-                    &mut slot.particle_upload_bytes,
-                    &mut slot.particle_uploads,
-                )
-            })
-        {
+            .and_then(|()| self.upload_video_sources(&plan));
+        let slot = &mut self.slots[token.slot_index];
+        if slot.uses > 0 {
+            self.staged.parameter_slot_reuse_count += 1;
+        }
+        slot.uses += 1;
+        if let Err(error) = upload_result.and_then(|()| {
+            slot.parameters.reset();
+            encode_parameters(
+                &mut slot.parameters,
+                evaluated,
+                &mut plan,
+                &self.sources,
+                &mut slot.particle_instances,
+                &mut slot.particle_pixels,
+                &mut slot.particle_upload_bytes,
+                &mut slot.particle_uploads,
+            )
+        }) {
             let error = self.runtime_context(error, Some(token));
             self.abort();
             return Err(error);

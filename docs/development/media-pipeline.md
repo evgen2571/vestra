@@ -366,13 +366,66 @@ workspace tests and schema checks; the log is
 `media-pipeline-audio-scratch-check-20260916.log` under benchmark results.
 Scratch reuse is retained for the measured analysis-stage improvement.
 
-## Next visibility experiment
+## WGPU visibility candidate
 
-Current WGPU submission calls `upload_video_layers` before constructing the GPU
+The previous WGPU submission called `upload_video_layers` before constructing the GPU
 frame plan. That traversal includes hidden layers and their masks, whereas
 `append_layer` in the frame planner omits hidden presentation and explicitly
 adds matte sources needed by visible consumers. A candidate should derive
 required video reads from actual raster operations, preserving hidden matte
 dependencies and owned video masks. Simply filtering uploads on `visible`
-would omit valid matte inputs. This is a source-level finding; decode counters,
-pixel parity, and hardware timing are still required before changing behavior.
+would omit valid matte inputs.
+
+A strict NVIDIA GL counter test reproduced an extra frame request for hidden
+video with no consumer. The candidate walks validated `RenderRasterLayer`
+operations instead. Upload errors after readback acquisition use the existing
+abort path to release slots and static-cache reservations. Review also found
+that a visible video reused as a matte appears in multiple operations; a
+regression reproduced duplicate requests. A per-frame set now requests each
+compiled video slot once, preserving distinct slots for different timelines.
+
+Four strict hardware video tests pass, including pixels and counters for an
+unused hidden video, a required hidden matte, an owned video mask, a hidden
+mask owner, and shared visible/matte input. Logs are
+`media-pipeline-culling-red-20260917.log`,
+`media-pipeline-culling-duplicate-red-20260917.log`, and
+`media-pipeline-culling-final-video-tests-20260917.log` under benchmark results.
+The broader repository gate passed; its log is
+`media-pipeline-culling-check-20260917.log` under benchmark results.
+
+The real-media visibility workload is a three-second 1280×720 timeline with two
+same-asset clips at different offsets, one hidden. Both saved release CLIs use
+hardware NVIDIA GL, verified in every report. Six alternating samples per
+implementation give medians of 3,392.5 ms baseline and 1,774.5 ms candidate
+(−47.7%). Requests fall from 181 to 91, native decodes from 788 to 90, and seeks
+from 19 to zero in every sample. Peak process RSS ranges are 464,620–466,452 KiB
+and 413,292–415,560 KiB. The saved baseline predates audio scratch reuse, but this
+workload has no audio or analysis and the audio change is outside its path.
+
+Both initial and final timed outputs match exactly after FFmpeg RGBA decoding:
+90 frames, 1280×720, three seconds. The fixture, saved executable hashes, raw
+reports, process resource records, and checksums are under
+`media-pipeline-culling-render-20260917`. These results establish a gain for
+hidden source avoidance; unchanged canonical video-heavy and production GPU
+controls completed under `media-pipeline-culling-gpu-controls-20260917`.
+The same script subsequently measures candidate pipeline depths one and two,
+against the depth-three control samples, with explicit adapter checks on every
+sample. Review confirmed that compiled video slot identities remain unique
+across nested groups, masks, and distinct timelines.
+
+The controls use the audio-scratch executable as baseline, so culling is the
+only runtime change. Six samples per variant (two three-sample invocations in
+baseline/candidate/candidate/baseline order) give canonical wall medians:
+
+| Hardware GL workload | Baseline, ms | Culling, ms | Change |
+| --- | ---: | ---: | ---: |
+| Video-heavy | 6,871 | 6,932.5 | +0.9% |
+| Production edit | 5,790.5 | 5,759.5 | −0.5% |
+
+Decode counts are unchanged: 2,313 and 453 respectively. These small timing
+differences do not establish a control-workload speedup or regression. The
+culling change is retained for its large measured hidden-video gain, exact
+decoded output, dependency tests, and passing repository gate. The benchmark
+console labels the adapter `other` from its raw WGPU device type; the explicit
+NVIDIA GL identity in every sample and accelerated GL preflight establish the
+hardware class independently. This is not a software-Vulkan measurement.

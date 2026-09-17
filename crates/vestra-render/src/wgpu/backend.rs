@@ -253,6 +253,7 @@ impl WgpuBackend {
                     .map_err(|error| {
                         Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
                     })?;
+                decoder.enable_prefetch();
                 let frame = decoder
                     .frame_at_with_span(0.0, tracing::Span::current())
                     .map_err(|error| {

@@ -1,6 +1,6 @@
 //! FFmpeg demux, decode, seek, and pixel-conversion state for one session.
 
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use ffmpeg::{format, software::scaling::context::Context as Scaler, util::frame::video::Video};
 use ffmpeg_next as ffmpeg;
@@ -18,7 +18,7 @@ pub(super) struct FfmpegVideoCursor {
     scaler: Scaler,
     stream_index: usize,
     limits: ResourceLimits,
-    pending: Option<Video>,
+    pending: VecDeque<Result<Video, MediaError>>,
     rgba: Video,
     draining: bool,
 }
@@ -37,7 +37,7 @@ impl FfmpegVideoCursor {
             scaler,
             stream_index,
             limits,
-            pending: None,
+            pending: VecDeque::with_capacity(2),
             rgba: Video::empty(),
             draining: false,
         }
@@ -45,7 +45,8 @@ impl FfmpegVideoCursor {
 
     pub(super) fn next_pts(&self) -> Option<i64> {
         self.pending
-            .as_ref()
+            .front()
+            .and_then(|frame| frame.as_ref().ok())
             .and_then(|frame| frame.timestamp().or_else(|| frame.pts()))
     }
 
@@ -65,7 +66,7 @@ impl FfmpegVideoCursor {
             .seek(micros as i64, ..micros as i64)
             .map_err(|error| MediaError::VideoSeek(error.to_string()))?;
         self.decoder.flush();
-        self.pending = None;
+        self.pending.clear();
         self.draining = false;
         Ok(())
     }
@@ -83,7 +84,7 @@ impl FfmpegVideoCursor {
                 .or_else(|| frame.pts())
                 .ok_or(MediaError::MissingVideoTimestamp)?;
             if pts > target {
-                self.pending = Some(frame);
+                self.pending.push_front(Ok(frame));
                 break;
             }
             if selects_latest_pts(selected_pts, pts, target) {
@@ -98,9 +99,24 @@ impl FfmpegVideoCursor {
     }
 
     fn next_frame(&mut self, actual_decodes: &mut u64) -> Result<Option<Video>, MediaError> {
-        if let Some(frame) = self.pending.take() {
-            return Ok(Some(frame));
+        if let Some(frame) = self.pending.pop_front() {
+            return frame.map(Some);
         }
+        self.decode_frame(actual_decodes)
+    }
+
+    pub(super) fn prefetch(&mut self, actual_decodes: &mut u64) {
+        if self.pending.len() >= 2 || self.pending.back().is_some_and(Result::is_err) {
+            return;
+        }
+        match self.decode_frame(actual_decodes) {
+            Ok(Some(frame)) => self.pending.push_back(Ok(frame)),
+            Ok(None) => {}
+            Err(error) => self.pending.push_back(Err(error)),
+        }
+    }
+
+    fn decode_frame(&mut self, actual_decodes: &mut u64) -> Result<Option<Video>, MediaError> {
         let mut decoded = Video::empty();
         loop {
             if self.decoder.receive_frame(&mut decoded).is_ok() {
@@ -160,5 +176,46 @@ impl FfmpegVideoCursor {
             height,
             pixels: Arc::new(image),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{VideoDecoder, VideoDecoderOptions, tests::fixture};
+    use super::MediaError;
+
+    #[test]
+    fn prefetched_error_is_deferred_until_requested_and_discarded_on_seek() {
+        let (_directory, path) = fixture();
+        let options = VideoDecoderOptions {
+            cache_budget_bytes: 0,
+            ..VideoDecoderOptions::default()
+        };
+        let mut decoder = VideoDecoder::open_with_options(&path, options).expect("decoder");
+        let first = decoder.frame_at(0.1).expect("first");
+        // Inject a failure after the existing future presentation frame.
+        decoder
+            .cursor
+            .pending
+            .push_back(Err(MediaError::MissingVideoTimestamp));
+        let decodes = decoder.metrics().actual_decodes;
+        decoder.prefetch();
+        assert_eq!(decoder.metrics().actual_decodes, decodes);
+        assert_eq!(decoder.cursor.pending.len(), 2);
+        assert_eq!(decoder.frame_at(0.4).expect("hold before error"), first);
+        assert!(matches!(
+            decoder.frame_at(0.6),
+            Err(MediaError::MissingVideoTimestamp)
+        ));
+
+        let _later = decoder.frame_at(1.1).expect("later frame");
+        decoder
+            .cursor
+            .pending
+            .push_back(Err(MediaError::MissingVideoTimestamp));
+        let early = decoder.frame_at(0.1).expect("seek clears queued error");
+        assert_eq!(early.pixels, first.pixels);
+        assert_eq!(decoder.metrics().seeks, 1);
+        assert!(decoder.frame_at(1.1).is_ok());
     }
 }

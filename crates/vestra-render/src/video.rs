@@ -25,6 +25,11 @@ pub struct VideoFrame {
 pub trait VideoDecoderSession: Send {
     fn frame_at(&mut self, seconds: f64) -> Result<VideoFrame, String>;
 
+    /// Permit bounded decode-ahead between requests when the caller can overlap
+    /// it with other work. Implementations may ignore this performance hint;
+    /// frame selection and errors for requested frames must remain unchanged.
+    fn enable_prefetch(&mut self) {}
+
     fn frame_at_with_span(
         &mut self,
         seconds: f64,

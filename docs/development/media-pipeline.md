@@ -290,10 +290,89 @@ for the measured video-heavy gain, with its explicit memory tradeoff.
 | Bounded stage queues | CPU command/completion and ready-frame counts are bounded; evaluate decoder/encoder queue changes. |
 | Multiple frames in flight | Existing CPU workers and WGPU slots need workload-specific depth measurements. |
 | Asynchronous encoder feeding | Current frame writes synchronously feed FFmpeg stdin; experiment without weakening failure/cancellation/publication contracts. |
-| Audio buffers and analysis cache | PCM parser reuses buffers and prepared projects retain analysis; execute reuse tests and isolated measurements. |
+| Audio buffers and analysis cache | Three release runs confirm shared FFT work and one decode across transformed-signal fan-out; prepared reuse test passes. FFT scratch-reuse candidate is under measurement, below. |
 | Thread/resource allocation | Compare decode/render/encode allocation on video-heavy and production workloads. |
 | Stalls and idle CPU/GPU time | Use stage timings and hardware measurements to assess overlap candidates. |
 
 Native frame selection and the CPU cursor pool are retained on measured CPU
 gains and correctness verification. Hardware performance and the remaining experiment matrix are
 unfinished; this report does not claim completion of Subblock 2.
+
+## Audio analysis measurements
+
+At revision `78fd8ae`, the existing release-build audio benchmarks were run
+three times from a saved test executable without concurrent compilation or
+other benchmarks. Records and executable hash are under
+`target/benchmark-results/media-pipeline-audio-20260916`. The synthetic matrix
+streams stereo silence and measures analysis, not FFmpeg decoding. Medians:
+
+| Duration | Frequency bands | Analysis time, ms | FFT calls |
+| --- | ---: | ---: | ---: |
+| 60 seconds | 1 | 310 | 11,992 |
+| 60 seconds | 10 | 304 | 11,992 |
+| 60 seconds | 50 | 307 | 11,992 |
+| 600 seconds | 1 | 3,064 | 119,992 |
+| 3,600 seconds | 1 | 18,436 | 719,992 |
+
+The real-WAV transformed-signal benchmark analyzes 60 seconds and applies 1,
+10, or 50 distinct transform pipelines. Every run records one master decode,
+one raw feature series, and 12,002 FFT calls at every fan-out. Transform
+preparation takes 0, 1, and 5 ms respectively at the timer's millisecond
+resolution. Analysis ranges from 372 to 478 ms. Whole-process peak RSS is
+14,784–15,148 KiB for the synthetic matrix and 58,076–58,436 KiB for the WAV
+benchmark, including fixture creation and FFmpeg subprocesses.
+
+The repository gate also executes
+`prepared_audio_analysis_is_reused_across_random_access_and_video_operations`:
+real audio analysis runs once through random-access frames, a mock-sink video
+operation, and another frame. This verifies prepared analysis reuse, not real
+encoder throughput. PCM byte/sample vectors and spectral input/output buffers
+already retain allocations between chunks.
+
+Inspection of the installed RustFFT implementation found that `Fft::process`
+allocates scratch storage per call. An unretained candidate supplies one
+analyzer-owned scratch vector to `process_with_scratch` for both channels.
+All 24 audio-analysis correctness tests pass in release mode, with three manual
+benchmarks ignored in that check. Three candidate synthetic runs have medians
+of 298/302/300 ms for the 60-second 1/10/50-band cases, 2,977 ms for ten minutes,
+and 17,937 ms for one hour. The latter is 2.7% below the baseline median.
+Records are under `media-pipeline-audio-scratch-20260916`.
+
+An additional real-WAV experiment alternates saved baseline/candidate binaries
+in baseline/candidate/candidate/baseline order three times. Six samples per
+implementation give baseline analysis medians of 380/381/384 ms and candidate
+medians of 371.5/369/368.5 ms for 1/10/50 transforms: reductions of 2.2%, 3.1%,
+and 4.0%. Decode and FFT counts remain identical. Logs and process-resource
+records are under `media-pipeline-audio-scratch-alternating-20260916`.
+These are analysis-stage gains, not end-to-end render speedups.
+
+The render comparison uses the saved CPU-pool executable as baseline and a
+fresh scratch-reuse executable, with baseline/candidate/candidate/baseline
+invocations, each containing one warmup and three samples. The completed
+video-heavy control has pooled medians of 4,711.5 and 4,679 ms (−0.7%), with
+substantial within-run variation. This workload performs no audio analysis;
+production-edit has output audio but no analysis-driven visuals. Neither can
+establish an FFT speedup. They check for broader render regressions, while the
+real-WAV measurements exercise the changed path. Records and reproduction
+script are under `media-pipeline-audio-scratch-render-20260916`.
+Production-edit completed with pooled medians of 9,664.5 ms baseline and
+9,640.5 ms candidate (−0.25%, effectively unchanged). Review of the installed
+RustFFT 6.4.1 implementation confirms that `process` delegates to
+`process_with_scratch` with the same plan-sized allocation. Sequential channel
+calls can share the workspace without clearing it; the candidate retains one
+scratch vector for the analyzer's lifetime. No transform order or normalization
+changes. The broader repository gate passed, including formatting, Clippy,
+workspace tests and schema checks; the log is
+`media-pipeline-audio-scratch-check-20260916.log` under benchmark results.
+Scratch reuse is retained for the measured analysis-stage improvement.
+
+## Next visibility experiment
+
+Current WGPU submission calls `upload_video_layers` before constructing the GPU
+frame plan. That traversal includes hidden layers and their masks, whereas
+`append_layer` in the frame planner omits hidden presentation and explicitly
+adds matte sources needed by visible consumers. A candidate should derive
+required video reads from actual raster operations, preserving hidden matte
+dependencies and owned video masks. Simply filtering uploads on `visible`
+would omit valid matte inputs. This is a source-level finding; decode counters,
+pixel parity, and hardware timing are still required before changing behavior.

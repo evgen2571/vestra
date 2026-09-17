@@ -33,6 +33,7 @@ pub(super) struct StftAnalyzer {
     rolling: VecDeque<[f32; 2]>,
     left: Vec<Complex<f64>>,
     right: Vec<Complex<f64>>,
+    fft_scratch: Vec<Complex<f64>>,
     power: Vec<f64>,
     power_prefix: Vec<f64>,
     fft: Arc<dyn rustfft::Fft<f64>>,
@@ -77,6 +78,7 @@ impl StftAnalyzer {
         rolling.extend(std::iter::repeat_n([0.0, 0.0], STFT_SIZE_FRAMES / 2));
         let mut planner = FftPlanner::<f64>::new();
         let fft = planner.plan_fft_forward(STFT_SIZE_FRAMES);
+        let fft_scratch = vec![Complex::new(0.0, 0.0); fft.get_inplace_scratch_len()];
         Ok(Self {
             window,
             window_energy,
@@ -85,6 +87,7 @@ impl StftAnalyzer {
             rolling,
             left: vec![Complex::new(0.0, 0.0); STFT_SIZE_FRAMES],
             right: vec![Complex::new(0.0, 0.0); STFT_SIZE_FRAMES],
+            fft_scratch,
             power: vec![0.0; STFT_SIZE_FRAMES / 2 + 1],
             power_prefix: vec![0.0; STFT_SIZE_FRAMES / 2 + 2],
             fft,
@@ -112,8 +115,10 @@ impl StftAnalyzer {
             self.left[index] = Complex::new(f64::from(frame[0]) * self.window[index], 0.0);
             self.right[index] = Complex::new(f64::from(frame[1]) * self.window[index], 0.0);
         }
-        self.fft.process(&mut self.left);
-        self.fft.process(&mut self.right);
+        self.fft
+            .process_with_scratch(&mut self.left, &mut self.fft_scratch);
+        self.fft
+            .process_with_scratch(&mut self.right, &mut self.fft_scratch);
         #[cfg(test)]
         {
             self.fft_calls += 2;

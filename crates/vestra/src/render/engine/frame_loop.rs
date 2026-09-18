@@ -10,12 +10,12 @@ use crate::{
     Category, Diagnostic,
     plan::{
         ActiveSchedule, EvaluationContext, PreparedScalarSignals, RenderPlan, ScheduleAction,
-        evaluate_with_context,
+        ScheduleCursor, ScheduledItem, evaluate_with_context,
     },
-    render::{CompletedFrame, PollMode, PreparationStats, RenderBackend},
+    render::{CompletedFrame, PollMode, PreparationStats, RenderBackend, RenderBackendKind},
 };
 use vestra_core::timeline::frame_time_nanos;
-use vestra_media::{FrameSink, OutputTarget};
+use vestra_media::{FrameSink, MediaError, OutputTarget};
 
 use super::{
     RenderError, RenderFailureStage, RenderObserverControl, RenderOptions, failure::cleanup_error,
@@ -41,7 +41,7 @@ pub(super) struct FrameLoopResult {
     clippy::result_large_err,
     reason = "frame failures preserve the existing structured diagnostics and cleanup context"
 )]
-pub(super) fn run<S: FrameSink + ?Sized>(
+pub(super) fn run<S: FrameSink + Send + ?Sized>(
     plan: &RenderPlan,
     scalar_signals: &PreparedScalarSignals,
     options: &RenderOptions,
@@ -68,6 +68,9 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         );
     }
     let capacity = backend.capacity();
+    // WGPU submission runs on this thread; overlap it with the blocking pipe
+    // write. CPU workers already compose concurrently, without another writer.
+    let overlap_encoder = backend.kind() == RenderBackendKind::Wgpu;
     debug_assert!(capacity > 0);
     let ready_limit = capacity;
     let mut schedule_cursor = schedule.cursor();
@@ -97,57 +100,17 @@ pub(super) fn run<S: FrameSink + ?Sized>(
             && ready_frames.len() < ready_limit
         {
             let frame_number = next_frame_to_submit;
-            let events_at_frame = schedule_cursor.events_at(frame_number);
-            if !events_at_frame.is_empty() {
-                for event in events_at_frame {
-                    match event.action {
-                        ScheduleAction::Deactivate => active.retain(|item| *item != event.item),
-                        ScheduleAction::Activate => active.push(event.item),
-                    }
-                }
-                vestra_core::plan::sort_active_items(plan, &mut active);
-            }
-            performance.active_item_consideration_count += active.len() as u64;
-            performance.maximum_active_layers = performance.maximum_active_layers.max(active.len());
-            let time = frame_time_nanos(frame_number, plan.frame_rate.0, plan.frame_rate.1)
-                .map_err(|_| {
-                    cleanup_error(
-                        output,
-                        plan,
-                        RenderFailureStage::FrameComposition,
-                        completed_frames,
-                        Some(frame_number),
-                        Diagnostic::error(
-                            "VESTRA-TIMELINE-OVERFLOW",
-                            Category::Render,
-                            "frame timestamp cannot be represented",
-                            "",
-                        ),
-                    )
-                })?;
-            let evaluation_started = Instant::now();
-            let context = EvaluationContext::new(scalar_signals);
-            let evaluated =
-                evaluate_with_context(plan, &active, time, &context).map_err(|error| {
-                    cleanup_error(
-                        output,
-                        plan,
-                        RenderFailureStage::FrameComposition,
-                        completed_frames,
-                        Some(frame_number),
-                        Diagnostic::error(
-                            "VESTRA-EVALUATION",
-                            Category::Internal,
-                            error.to_string(),
-                            "",
-                        ),
-                    )
-                })?;
-            performance.evaluated_track_count += evaluated.evaluated_track_count;
-            track_evaluation += evaluation_started.elapsed();
-
-            let compose_started = Instant::now();
-            if let Err(diagnostic) = backend.submit_frame(frame_number, &evaluated) {
+            if let Err(diagnostic) = submit_frame(
+                plan,
+                scalar_signals,
+                &mut schedule_cursor,
+                &mut active,
+                frame_number,
+                backend,
+                performance,
+                &mut track_evaluation,
+                &mut frame_composition,
+            ) {
                 backend.abort();
                 let cleanup = abort_sink(encoder);
                 let diagnostic = with_encoder_cleanup(diagnostic, cleanup);
@@ -160,7 +123,6 @@ pub(super) fn run<S: FrameSink + ?Sized>(
                     diagnostic,
                 ));
             }
-            frame_composition += compose_started.elapsed();
             next_frame_to_submit += 1;
         }
 
@@ -222,6 +184,30 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         }
 
         let written_before_poll = next_frame_to_write;
+        let can_overlap_encoder = overlap_encoder && next_frame_to_submit < plan.frame_count;
+        let mut submit_during_write =
+            |backend: &mut dyn RenderBackend, performance: &mut PreparationStats| {
+                if next_frame_to_submit < plan.frame_count
+                    && backend.in_flight() < capacity
+                    && !options.cancelled.load(Ordering::Relaxed)
+                {
+                    let frame_number = next_frame_to_submit;
+                    submit_frame(
+                        plan,
+                        scalar_signals,
+                        &mut schedule_cursor,
+                        &mut active,
+                        frame_number,
+                        backend,
+                        performance,
+                        &mut track_evaluation,
+                        &mut frame_composition,
+                    )
+                    .map_err(|diagnostic| (frame_number, diagnostic))?;
+                    next_frame_to_submit += 1;
+                }
+                Ok(())
+            };
         if let Err(error) = write_ready_frames(
             &mut ready_frames,
             &mut next_frame_to_write,
@@ -234,6 +220,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
             options,
             emit,
             &mut encoder_write,
+            can_overlap_encoder.then_some(&mut submit_during_write as &mut SubmitDuringWrite<'_>),
         ) {
             backend.abort();
             return Err(error);
@@ -403,6 +390,7 @@ pub(super) fn run<S: FrameSink + ?Sized>(
         options,
         emit,
         &mut encoder_write,
+        None,
     ) {
         backend.abort();
         return Err(error);
@@ -683,13 +671,101 @@ fn insert_completed(
 
 #[expect(
     clippy::too_many_arguments,
+    reason = "submission uses the existing schedule, backend, and timing state"
+)]
+#[expect(
+    clippy::result_large_err,
+    reason = "submission preserves structured diagnostics"
+)]
+fn submit_frame(
+    plan: &RenderPlan,
+    scalar_signals: &PreparedScalarSignals,
+    schedule_cursor: &mut ScheduleCursor<'_>,
+    active: &mut Vec<ScheduledItem>,
+    frame_number: u64,
+    backend: &mut dyn RenderBackend,
+    performance: &mut PreparationStats,
+    track_evaluation: &mut Duration,
+    frame_composition: &mut Duration,
+) -> Result<(), Diagnostic> {
+    let events = schedule_cursor.events_at(frame_number);
+    if !events.is_empty() {
+        for event in events {
+            match event.action {
+                ScheduleAction::Deactivate => active.retain(|item| *item != event.item),
+                ScheduleAction::Activate => active.push(event.item),
+            }
+        }
+        vestra_core::plan::sort_active_items(plan, active);
+    }
+    performance.active_item_consideration_count += active.len() as u64;
+    performance.maximum_active_layers = performance.maximum_active_layers.max(active.len());
+    let time =
+        frame_time_nanos(frame_number, plan.frame_rate.0, plan.frame_rate.1).map_err(|_| {
+            Diagnostic::error(
+                "VESTRA-TIMELINE-OVERFLOW",
+                Category::Render,
+                "frame timestamp cannot be represented",
+                "",
+            )
+        })?;
+    let started = Instant::now();
+    let evaluated =
+        evaluate_with_context(plan, active, time, &EvaluationContext::new(scalar_signals))
+            .map_err(|error| {
+                Diagnostic::error(
+                    "VESTRA-EVALUATION",
+                    Category::Internal,
+                    error.to_string(),
+                    "",
+                )
+            })?;
+    performance.evaluated_track_count += evaluated.evaluated_track_count;
+    *track_evaluation += started.elapsed();
+    let started = Instant::now();
+    backend.submit_frame(frame_number, &evaluated)?;
+    *frame_composition += started.elapsed();
+    Ok(())
+}
+
+type SubmitDuringWrite<'a> =
+    dyn FnMut(&mut dyn RenderBackend, &mut PreparationStats) -> Result<(), (u64, Diagnostic)> + 'a;
+
+fn write_with_overlap<S: FrameSink + Send + ?Sized>(
+    encoder: &mut S,
+    frame: &CompletedFrame,
+    work: impl FnOnce(),
+) -> Result<Duration, MediaError> {
+    std::thread::scope(|scope| {
+        let span = tracing::Span::current();
+        let writer = std::thread::Builder::new()
+            .name("vestra-encoder-write".to_owned())
+            .spawn_scoped(scope, move || {
+                let _entered = span.enter();
+                let started = Instant::now();
+                encoder.write_frame(frame).map(|()| started.elapsed())
+            })
+            .map_err(MediaError::FrameWrite)?;
+        work();
+        let wait_started = Instant::now();
+        let result = writer.join().map_err(|_| {
+            MediaError::FrameWrite(std::io::Error::other("encoder writer thread panicked"))
+        })?;
+        tracing::trace!(target: "vestra.encode", encoder_join_wait_us = wait_started.elapsed().as_micros() as u64,
+            "encoder write joined");
+        result
+    })
+}
+
+#[expect(
+    clippy::too_many_arguments,
     reason = "writing owns the existing encoder, progress, and cleanup boundaries"
 )]
 #[expect(
     clippy::result_large_err,
     reason = "write failures retain the existing structured cleanup context"
 )]
-fn write_ready_frames<S: FrameSink + ?Sized>(
+fn write_ready_frames<S: FrameSink + Send + ?Sized>(
     ready_frames: &mut BTreeMap<u64, CompletedFrame>,
     next_frame_to_write: &mut u64,
     completed_frames: &mut u64,
@@ -701,6 +777,7 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
     options: &RenderOptions,
     emit: &mut LifecycleEmitter<'_>,
     encoder_write: &mut Duration,
+    mut submit_during_write: Option<&mut SubmitDuringWrite<'_>>,
 ) -> Result<(), RenderError> {
     while let Some(frame) = ready_frames.remove(next_frame_to_write) {
         // A callback can cancel while several completed frames are already
@@ -717,28 +794,41 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
             )
             .map(|_| ());
         }
-        let write_started = Instant::now();
-        if let Err(error) = encoder.write_frame(&frame) {
-            let cleanup = abort_sink(encoder);
-            let diagnostic = with_encoder_cleanup(
-                Diagnostic::error(
-                    "VESTRA-RENDER-WRITE",
-                    Category::Render,
-                    error.to_string(),
-                    "",
-                ),
-                cleanup,
-            );
-            return Err(cleanup_error(
-                output,
-                plan,
-                RenderFailureStage::FrameWrite,
-                *completed_frames,
-                Some(frame.frame_number),
-                diagnostic,
-            ));
-        }
-        *encoder_write += write_started.elapsed();
+        let mut submission_error = None;
+        let write_result = if let Some(submit) = submit_during_write.as_deref_mut()
+            && backend.in_flight() < backend.capacity()
+        {
+            write_with_overlap(encoder, &frame, || {
+                submission_error = submit(backend, performance).err();
+            })
+        } else {
+            let started = Instant::now();
+            encoder.write_frame(&frame).map(|()| started.elapsed())
+        };
+        let write_duration = match write_result {
+            Ok(duration) => duration,
+            Err(error) => {
+                let cleanup = abort_sink(encoder);
+                let diagnostic = with_encoder_cleanup(
+                    Diagnostic::error(
+                        "VESTRA-RENDER-WRITE",
+                        Category::Render,
+                        error.to_string(),
+                        "",
+                    ),
+                    cleanup,
+                );
+                return Err(cleanup_error(
+                    output,
+                    plan,
+                    RenderFailureStage::FrameWrite,
+                    *completed_frames,
+                    Some(frame.frame_number),
+                    diagnostic,
+                ));
+            }
+        };
+        *encoder_write += write_duration;
         backend.record_written(frame.frame_number);
         *completed_frames += 1;
         *next_frame_to_write += 1;
@@ -768,6 +858,17 @@ fn write_ready_frames<S: FrameSink + ?Sized>(
                 Some(frame.frame_number),
             )
             .map(|_| ());
+        }
+        if let Some((frame_number, diagnostic)) = submission_error {
+            let cleanup = abort_sink(encoder);
+            return Err(cleanup_error(
+                output,
+                plan,
+                RenderFailureStage::FrameComposition,
+                *completed_frames,
+                Some(frame_number),
+                with_encoder_cleanup(diagnostic, cleanup),
+            ));
         }
     }
     Ok(())

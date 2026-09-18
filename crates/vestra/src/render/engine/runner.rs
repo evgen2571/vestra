@@ -77,7 +77,7 @@ where
         &RenderPlan,
         &Arc<DecodedAssets>,
     ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
-    S: FrameSink,
+    S: FrameSink + Send,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
     let mut prepared = prepare(plan, options.backend_preference, build_backend)?;
@@ -95,7 +95,7 @@ pub(crate) fn render_prepared_with_lifecycle<S, SF>(
     start_sink: SF,
 ) -> Result<RenderSummary, RenderError>
 where
-    S: FrameSink,
+    S: FrameSink + Send,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
     render_prepared_with_sink_inner(prepared, options, lifecycle, start_sink)
@@ -224,7 +224,7 @@ fn render_prepared_with_sink_inner<S, SF>(
     start_sink: SF,
 ) -> Result<RenderSummary, RenderError>
 where
-    S: FrameSink,
+    S: FrameSink + Send,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
     prepared.ensure_ready()?;

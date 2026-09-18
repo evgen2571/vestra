@@ -302,7 +302,7 @@ pub(crate) fn render_prepared_project_with_sink<S, SF>(
     start_sink: SF,
 ) -> Result<RenderSummary, ApplicationRenderError>
 where
-    S: vestra_media::FrameSink,
+    S: vestra_media::FrameSink + Send,
     SF: FnOnce(
         &vestra_media::EncoderSettings,
         &std::path::Path,

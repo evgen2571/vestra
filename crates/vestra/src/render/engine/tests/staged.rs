@@ -746,12 +746,15 @@ struct MockStagedBackend {
     configured_frame_render_work_duration: Duration,
     final_drain_failure_after_submissions: Option<u64>,
     final_drain_completion_returned: bool,
+    submit_signal: Option<std::sync::mpsc::Sender<u64>>,
+    peak_live_payloads: Option<Arc<AtomicUsize>>,
 }
 
 #[derive(Clone, Copy)]
 enum MockMode {
     Normal,
     SubmitFailure,
+    SubmitAfterFirstFailure,
     RichSubmitFailure,
     PollFailure,
     MissingCompletion,
@@ -785,6 +788,8 @@ impl MockStagedBackend {
             configured_frame_render_work_duration: Duration::ZERO,
             final_drain_failure_after_submissions: None,
             final_drain_completion_returned: false,
+            submit_signal: None,
+            peak_live_payloads: None,
         }
     }
 
@@ -875,7 +880,12 @@ impl RenderBackend for MockStagedBackend {
             .with_hint("adapter=mock; generation=7")
             .with_related_id("frame-100"));
         }
-        if matches!(self.mode, MockMode::SubmitFailure) {
+        if matches!(self.mode, MockMode::SubmitFailure)
+            || (matches!(self.mode, MockMode::SubmitAfterFirstFailure) && frame_number > 0)
+        {
+            if let Some(signal) = &self.submit_signal {
+                let _ = signal.send(frame_number);
+            }
             return Err(Diagnostic::error(
                 "MOCK-SUBMIT",
                 Category::Backend,
@@ -891,8 +901,16 @@ impl RenderBackend for MockStagedBackend {
         self.pending
             .insert(frame_number, CompletedFrame { frame_number, rgba });
         self.metrics.submitted_frames += 1;
+        if let Some(peak) = &self.peak_live_payloads {
+            let live = (self.metrics.submitted_frames - self.metrics.written_frames) as usize;
+            assert!(live <= 2 * self.capacity, "live frame payloads={live}");
+            peak.fetch_max(live, Ordering::Relaxed);
+        }
         self.metrics.peak_frames_in_flight =
             self.metrics.peak_frames_in_flight.max(self.pending.len());
+        if let Some(signal) = &self.submit_signal {
+            let _ = signal.send(frame_number);
+        }
         if let Some(cancelled) = &self.cancel_after_submit {
             cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
         }
@@ -1025,6 +1043,9 @@ impl RenderBackend for MockStagedBackend {
     }
 
     fn record_ready_queue(&mut self, length: usize, out_of_order: bool) {
+        if self.peak_live_payloads.is_some() {
+            assert!(length < 2 * self.capacity, "ready frame payloads={length}");
+        }
         self.metrics.ordered_ready_queue_peak = self.metrics.ordered_ready_queue_peak.max(length);
         if out_of_order {
             self.metrics.out_of_order_completion_count += 1;
@@ -1035,6 +1056,9 @@ impl RenderBackend for MockStagedBackend {
         None
     }
 }
+
+#[path = "async_encoder.rs"]
+mod async_encoder_tests;
 
 #[test]
 fn engine_writes_out_of_order_mock_completions_in_frame_order() {

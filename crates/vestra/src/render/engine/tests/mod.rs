@@ -40,7 +40,7 @@ pub(crate) fn render_prepared_with_sink<S, SF>(
     start_sink: SF,
 ) -> Result<super::RenderSummary, super::RenderError>
 where
-    S: FrameSink,
+    S: FrameSink + Send,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
     let render_span = tracing::Span::none();

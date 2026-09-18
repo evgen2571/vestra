@@ -3,8 +3,10 @@
 This report tracks Optimization Subblock 2. Retained changes cover native frame
 selection, CPU cursor reuse, audio FFT scratch reuse, GPU video culling, and
 bounded native prefetch for WGPU. Decoder-access, buffering, and worker-count
-experiments are also recorded below. Asynchronous encoder feeding remains
-in progress.
+experiments are also recorded below. WGPU asynchronous encoder feeding is also
+retained after performance, output, and repository verification. Every requested
+area has implementation or experimental evidence in the coverage table below;
+rejected variants and hardware-specific limitations remain explicit.
 
 ## Native frame selection candidate
 
@@ -288,13 +290,13 @@ for the measured video-heavy gain, with its explicit memory tradeoff.
 | Avoiding invisible decode work | GPU-plan culling removes unused hidden video reads while preserving matte/mask dependencies; real hardware timing and exact decoded-output evidence are below. |
 | Independent video-source parallelism | CPU workers decode concurrently; the one/two/four/eight-worker sweep below measures throughput, repeated decoding, sessions, and memory. |
 | Pixel formats/conversions | Native selection reuses scaler output and converts only requested frames. Real YUV420P H.264/B-frame output is byte-checked against FFmpeg; timing evidence is above. |
-| Decode/render/encode overlap | CPU worker and GPU buffering sweeps measure the existing staged pipeline. Native prefetch overlaps decoding with composition; asynchronous feeding remains to be measured. |
-| Bounded stage queues | CPU command/completion and ready-frame counts are bounded; the prefetch candidate bounds pending native frames at two and defers errors in order. Encoder overlap remains to be evaluated. |
+| Decode/render/encode overlap | CPU worker and GPU buffering sweeps measure the existing staged pipeline. Native prefetch overlaps decoding with composition; scoped encoder writes overlap one WGPU submission and reduce measured wall time. |
+| Bounded stage queues | CPU command/completion and ready-frame counts are bounded; prefetch bounds pending native frames at two and defers errors in order. Async feeding joins every write before another write and tests the combined payload bound, including the writer. |
 | Multiple frames in flight | Hardware GL depths one/two/three measured, with an alternating two/three repeat and exact output checks; CPU worker-count sweep completed. Defaults retained. |
-| Asynchronous encoder feeding | Current frame writes synchronously feed FFmpeg stdin; experiment without weakening failure/cancellation/publication contracts. |
+| Asynchronous encoder feeding | WGPU feeding overlaps a blocking FFmpeg pipe write with one submission. CPU feeding remains synchronous after near-neutral measurements. Ordered acknowledgements preserve failure/cancellation/publication contracts. |
 | Audio buffers and analysis cache | Release measurements confirm shared FFT/decode work and prepared reuse. Scratch reuse is retained after real-WAV gains and unchanged render controls. |
 | Thread/resource allocation | Worker-count sweep retains eight on this host despite repeated native decoding; lower counts save memory but substantially slow both canonical workloads. Decoder/encoder thread settings are not independently isolated. |
-| Stalls and idle CPU/GPU time | Stage timings, buffering counters, and hardware prefetch measurements assess overlap; no GPU-occupancy claim is made. Asynchronous feeding remains to be measured. |
+| Stalls and idle CPU/GPU time | Stage timings, buffering counters, prefetch and async-feeding measurements assess overlap. Wall-time gains do not establish GPU occupancy or eliminate stalls in every driver call. |
 
 Native frame selection, the CPU cursor pool, audio FFT scratch reuse, GPU
 video culling, and WGPU native prefetch are retained on measured gains and
@@ -333,7 +335,7 @@ encoder throughput. PCM byte/sample vectors and spectral input/output buffers
 already retain allocations between chunks.
 
 Inspection of the installed RustFFT implementation found that `Fft::process`
-allocates scratch storage per call. An unretained candidate supplies one
+allocates scratch storage per call. The scratch-reuse candidate supplies one
 analyzer-owned scratch vector to `process_with_scratch` for both channels.
 All 24 audio-analysis correctness tests pass in release mode, with three manual
 benchmarks ignored in that check. Three candidate synthetic runs have medians
@@ -613,8 +615,8 @@ versus candidate samples 9,024 / 9,054 / 9,092 and 9,041 / 9,054 / 10,158 ms.
 After confirming that the process was gone, only the missing case was rerun
 under `media-pipeline-prefetch-resume-20260917`. Its 11,230 / 11,354 / 11,246 ms
 samples show a host-session timing shift; pooling them with the earlier
-candidate would exaggerate any gain. An uninterrupted CPU production repeat
-is required before the retention decision.
+candidate would exaggerate any gain. The uninterrupted CPU production repeat
+below resolves the retention decision.
 
 Twenty-one native video tests and 68 engine tests passed with prefetch enabled.
 Coverage includes queue bounds, zero-cache holds, EOF, deferred errors cleared
@@ -651,3 +653,75 @@ variants; GPU counts were 788 versus 808, with 19 seeks in both. Final reports,
 output properties, executable hashes, and checksums are in `pixels-gpu-only`.
 The WGPU-only policy is retained for its measured GPU gains, bounded additional
 storage, and verified output/lifecycle behavior. No CPU speedup is claimed.
+
+## Scoped asynchronous encoder feeding
+
+Dynamic WGPU renders now write the next ordered frame on a scoped writer thread
+while the calling thread evaluates and submits at most one further frame into a
+free backend slot. The writer borrows the existing sink and completed frame;
+there is no pixel copy or persistent encoder queue. Every write is joined before
+another write, progress delivery, cancellation cleanup, finalization, or output
+publication. Static renders and CPU feeding keep their previous paths.
+
+A successful write is acknowledged before a speculative submission error is
+reported. A write error wins if both operations fail; cancellation from its
+progress callback wins over the speculative error. Writer panic and spawn
+failure use structured encoder failure cleanup. Tests exercise concurrent
+submission, caller-thread progress, cancellation, both error orders, panic,
+short runs, and repeated partial drains with out-of-order completions. The
+transient combined payload bound is `2 * backend capacity`, including the
+writer's borrowed frame; the ready queue stays below that bound. This adds at
+most one payload to the previous combined bound, without an unbounded queue.
+
+The release experiment used the retained WGPU-prefetch executable as baseline.
+It alternated baseline/candidate/candidate/baseline invocations, each with one
+warmup and three samples at 1280×720. The hardware cases used depth three and
+explicitly selected NVIDIA GL, confirmed by fresh accelerated-GL preflight on
+2026-09-18. Saved binaries, hashes, prototype patch, scripts, reports, and
+resource records are under `target/benchmark-results/media-pipeline-async-20260917`.
+
+| Workload | Baseline wall median, ms | Async wall median, ms | Change |
+| --- | ---: | ---: | ---: |
+| Hardware GL video-heavy | 6,130 | 5,846.5 | −4.6% |
+| Hardware GL production | 4,877.5 | 4,080.5 | −16.3% |
+| CPU video-heavy | 4,599.5 | 4,551.5 | −1.0% |
+| CPU production | 9,638.5 | 9,531 | −1.1% |
+
+CPU changes are small, and video-heavy's baseline drifted downward during the
+run. CPU feeding is therefore left unchanged. The final implementation removes
+the experiment switch and enables overlap only for WGPU. Scoped thread creation
+and joining are included in wall time. Actual writer duration is recorded
+separately from composition, and those durations overlap: they must not be
+summed to infer elapsed time. For example, production's median writer time
+rises from 2,137 to 2,451 ms while total wall time falls. Native decode counts
+stay at 2,374 for GPU video-heavy and 456 for GPU production in both variants.
+
+Peak process RSS on GPU video-heavy ranges from 493,140–493,800 KiB baseline to
+493,792–493,824 KiB candidate; production ranges from 493,132–493,192 to
+494,388–494,480 KiB. These process measurements include fixture generation and
+FFmpeg subprocesses, not just frame storage. They do not replace the tested
+payload-count bound.
+
+Non-video GL controls use the same alternating procedure. Dynamic animation
+medians are 1,551 versus 1,494.5 ms, and layered effects are 2,007 versus 2,003 ms.
+The unchanged static-mask path measures 486.5 versus 483 ms. These controls show
+no observed regression. The particle control could not run on the saved baseline:
+its 4 MiB additive upload buffer exceeds that GL device's configured 3,686,400-byte
+maximum. The CLI diagnostic is preserved in `controls/particle-diagnostic.json`;
+it is a pre-existing hardware-path limitation, not a successful particle check.
+Completed control records are in `controls` and `controls-supported`.
+
+The final WGPU-only policy passes all 64 selected engine tests without an
+experiment environment variable (`final-engine-tests.log`). Its release CLI and
+the baseline each rendered two simultaneous offsets of real video on CPU and
+NVIDIA GL. All 90 decoded RGBA frames match exactly within each backend, with
+1280×720 dimensions and three-second duration. Reports, output properties,
+checksums, saved CLIs, and hashes are in `pixels-final`.
+
+`DISPLAY=:0 VESTRA_WGPU_BACKEND=gl WGPU_BACKEND=gl ./scripts/check.sh` passed
+on the final source, including formatting, workspace build and Clippy, workspace
+tests, Python schema validation, and schema freshness. Its complete log is
+`check-final.log`. Final read-only review found no correctness blocker. Async
+feeding is retained for the measured WGPU gains; CPU feeding stays unchanged.
+These results apply to this NVIDIA-through-GL environment and measured workloads,
+not native Windows D3D12/Vulkan performance or a universal GPU-utilization claim.

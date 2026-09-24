@@ -134,7 +134,7 @@ fn main() {
     let mut wall_samples: Vec<_> = samples.iter().map(|sample| sample.wall_ms).collect();
     let mut render_samples: Vec<_> = samples
         .iter()
-        .map(|sample| sample.result.timings.total_ms)
+        .map(|sample| sample.result.timings.operation_total_ms)
         .collect();
     wall_samples.sort_unstable();
     render_samples.sort_unstable();
@@ -416,7 +416,7 @@ fn create_video_benchmark_project(
     };
 
     serde_json::json!({
-        "schema_version": 3, "name": format!("{scenario} benchmark"),
+        "schema_version": 1, "name": format!("{scenario} benchmark"),
         "output": {"path": "benchmark.mp4", "width": width, "height": height, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 3},
         "assets": assets, "visual": {"clips": clips, "transitions": transitions, "flashes": [], "post_effects": []}
     })

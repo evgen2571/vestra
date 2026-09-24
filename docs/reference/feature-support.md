@@ -15,19 +15,19 @@ not reduced renderer support.
 | Spectrum2D | supported through authoring/source wrappers | `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | not fully verified |
 | Particle system | supported | `particle_system` | adapter-mediated | supported | not fully verified |
 | Nested composition | `CompositionLayer` | `group` | direct | supported | supported |
-| Geometric layer masks | `layer.masks` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
-| Image alpha masks | `layer.masks` + `ImageMaskMode.ALPHA` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
-| Image luma masks | `layer.masks` + `ImageMaskMode.LUMA` | `masks` (schema v4) | ordinary layer presentation | supported | supported |
-| Text alpha masks | `layer.masks` + `Text` | `masks` (schema v4) | owned source presentation | supported | supported |
-| Video alpha/luma masks | `layer.masks` + `Video` | `masks` (schema v4) | owner-local source timing | supported | supported |
-| Spectrum2D masks | `layer.masks` + `Spectrum2D` | `masks` (schema v4) | audio-reactive owned source | supported | supported |
-| Particle system masks | `layer.masks` + `ParticleSystem` | `masks` (schema v4) | simulation-local source timing | supported | supported |
-| Group masks | owned `Group` source | `masks` (schema v4) | nested owned composition | supported | supported |
-| Soft feather on masks | `mask.feather` | `masks` (schema v4) | layer-local, output-pixel units | supported | supported |
-| Dynamic mask properties | keyframes, modifiers, signals | `masks` (schema v4) | layer-local transform and coverage | supported | supported |
-| Track Matte Alpha/Luma | `layer.set_matte(..., mode=MatteMode.*)` | `matte` (schema v4) | same immediate composition; referenced layer coverage | supported | supported |
-| Track Matte invert and chains | `invert=True`, acyclic references | `matte` (schema v4) | dependency-ordered isolated presentation | supported | supported |
-| Shared Track Matte source | multiple consumers may reference one layer | `matte` (schema v4) | CPU frame reuse; static WGPU cache reuse | supported | supported |
+| Geometric layer masks | `layer.masks` | `masks` (schema v1) | ordinary layer presentation | supported | supported |
+| Image alpha masks | `layer.masks` + `MaskCoverageMode.ALPHA` | `masks` (schema v1) | ordinary layer presentation | supported | supported |
+| Image luma masks | `layer.masks` + `MaskCoverageMode.LUMA` | `masks` (schema v1) | ordinary layer presentation | supported | supported |
+| Text alpha masks | `layer.masks` + `Text` | `masks` (schema v1) | owned source presentation | supported | supported |
+| Video alpha/luma masks | `layer.masks` + `Video` | `masks` (schema v1) | owner-local source timing | supported | supported |
+| Spectrum2D masks | `layer.masks` + `Spectrum2D` | `masks` (schema v1) | audio-reactive owned source | supported | supported |
+| Particle system masks | `layer.masks` + `ParticleSystem` | `masks` (schema v1) | simulation-local source timing | supported | supported |
+| Group masks | owned `Group` source | `masks` (schema v1) | nested owned composition | supported | supported |
+| Soft feather on masks | `mask.feather` | `masks` (schema v1) | layer-local, output-pixel units | supported | supported |
+| Dynamic mask properties | keyframes, modifiers, signals | `masks` (schema v1) | layer-local transform and coverage | supported | supported |
+| Track Matte Alpha/Luma | `layer.set_matte(..., mode=MatteMode.*)` | `matte` (schema v1) | same immediate composition; referenced layer coverage | supported | supported |
+| Track Matte invert and chains | `invert=True`, acyclic references | `matte` (schema v1) | dependency-ordered isolated presentation | supported | supported |
+| Shared Track Matte source | multiple consumers may reference one layer | `matte` (schema v1) | CPU frame reuse; static WGPU cache reuse | supported | supported |
 | Image crop/sizing as a mask | rejected in mask context | not serialized | use `mask.transform` instead | unsupported in v1 | unsupported in v1 |
 | Composition-space masks | not exposed | not serialized | not supported | unsupported | unsupported |
 | Visual effects | supported catalog | effect descriptors | not applicable | supported | not fully verified per effect |

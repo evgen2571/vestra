@@ -3833,7 +3833,7 @@
       "$ref": "#/$defs/output"
     },
     "schema_version": {
-      "const": 4
+      "const": 1
     },
     "visual": {
       "$ref": "#/$defs/visual"

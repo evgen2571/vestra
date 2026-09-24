@@ -30,7 +30,7 @@ def cpu_options() -> vestra.PrepareOptions:
 def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vestra.ProjectSnapshot:
     return vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "unused.mp4",
                 "width": 2,
@@ -67,7 +67,7 @@ def image_project(tmp_path: Path, image_name: str, *, duration: int = 1) -> vest
 def multi_frame_project(tmp_path: Path) -> vestra.ProjectSnapshot:
     return vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "unused.mp4",
                 "width": 2,
@@ -200,7 +200,7 @@ def test_prepared_values_are_immutable() -> None:
 def test_fractional_frame_rate_uses_native_canonical_timestamp_boundaries(tmp_path: Path) -> None:
     project = vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "unused.mp4",
                 "width": 2,

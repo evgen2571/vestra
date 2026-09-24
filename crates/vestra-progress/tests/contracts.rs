@@ -13,7 +13,7 @@ fn render_events_serialize_a_typed_lifecycle_contract() {
     assert_eq!(
         serde_json::to_value(event).expect("serializes"),
         serde_json::json!({
-            "event_schema_version": 2,
+            "event_schema_version": 1,
             "type": "progress",
             "operation_id": operation_id.value(),
             "frame": 3,
@@ -31,7 +31,7 @@ fn started_event_serializes_unknown_total_as_null() {
     assert_eq!(
         serde_json::to_value(event).expect("serializes"),
         serde_json::json!({
-            "event_schema_version": 2,
+            "event_schema_version": 1,
             "type": "started",
             "operation_id": operation_id.value(),
             "total_frames": null,

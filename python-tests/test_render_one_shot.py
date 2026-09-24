@@ -17,7 +17,7 @@ def request(output: Path, **kwargs: object) -> vestra.RenderRequest:
 def multi_frame_project(tmp_path: Path) -> vestra.ProjectSnapshot:
     return vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": False,
@@ -41,7 +41,7 @@ def test_one_shot_callback_failure_on_started_preserves_original_error(tmp_path:
         raise OneShotStartedFailure("one-shot started failure")
 
     with pytest.raises(OneShotStartedFailure, match="one-shot started failure") as raised:
-        vestra.Editor().render(vestra.ProjectSnapshot.load(FIXTURE), request(output), progress=callback)
+        vestra.Editor().render(vestra.ProjectSnapshot.load(FIXTURE), request(output), on_progress=callback)
 
     assert seen == ["started"]
     assert not output.exists()
@@ -52,7 +52,7 @@ def test_one_shot_callback_failure_on_started_preserves_original_error(tmp_path:
 def test_one_shot_preparation_failure_emits_failed_terminal_event(tmp_path: Path) -> None:
     project = vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "out.mp4", "width": 0, "height": 2, "frame_rate": "1/1",
                 "background": "#000000", "quality": "preview", "audio": False,
@@ -68,7 +68,7 @@ def test_one_shot_preparation_failure_emits_failed_terminal_event(tmp_path: Path
         vestra.Editor().render(
             project,
             request(tmp_path / "out.mp4"),
-            progress=events.append,
+            on_progress=events.append,
         )
 
     assert [event.kind for event in events] == ["started", "stage_changed", "failed"]
@@ -92,7 +92,7 @@ def test_one_shot_callback_failure_after_progress_stops_later_callbacks(tmp_path
 
     with pytest.raises(OneShotProgressFailure, match="one-shot progress failure") as raised:
         vestra.Editor().render(
-            multi_frame_project(tmp_path), request(output, preview=True), progress=callback
+            multi_frame_project(tmp_path), request(output, preview=True), on_progress=callback
         )
 
     assert seen == ["started", "stage_changed", "stage_changed", "progress"]
@@ -124,7 +124,7 @@ def test_one_shot_already_cancelled_and_progress_cancellation_clean_up(tmp_path:
     with pytest.raises(vestra.CancelledError) as progress_error:
         vestra.Editor().render(
             multi_frame_project(tmp_path), request(progress_output, preview=True),
-            progress=cancel, cancellation=progress_token,
+            on_progress=cancel, cancellation=progress_token,
         )
     assert progress_error.value.temporary_removed is True
     assert progress_token.is_cancelled
@@ -147,7 +147,7 @@ def test_one_shot_overwrite_and_event_policy(tmp_path: Path) -> None:
 
     events: list[vestra.RenderEvent] = []
     result = vestra.Editor().render(
-        vestra.ProjectSnapshot.load(FIXTURE), request(output, overwrite=True), progress=events.append
+        vestra.ProjectSnapshot.load(FIXTURE), request(output, overwrite=True), on_progress=events.append
     )
     assert result.output_path == output
     assert output.read_bytes() != original

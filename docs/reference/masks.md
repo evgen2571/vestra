@@ -22,13 +22,8 @@ out       = lerp(a, operation(a, m), strength)
 Inversion happens before the operation. The supported operations are
 `replace`, `intersect`, `union`, and `subtract`. The default is `intersect`.
 
-Schema version 4 is the current emitted project format. Vestra accepts valid
-schema version 3 projects and treats their omitted masks as an empty list
-before normalizing the in-memory project to version 4.
-Vestra keeps schema 4 for Masks v1 because the 0.1 project language is still
-evolving and has not become a stable external compatibility boundary. Image
-mask inputs therefore do not trigger a version bump; schema 3 loading remains
-supported.
+Schema version 1 is the first public project format. It includes geometric and
+image mask inputs.
 
 Masks consume coverage produced by owned sources. The supported geometric
 inputs are `Rectangle`, `Ellipse`, `Circle`, `Polygon`, and `Line`; Line masks

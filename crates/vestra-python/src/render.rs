@@ -28,23 +28,16 @@ use crate::{
 /// slot is acquired or a one-shot operation starts preparing native state.
 pub(crate) fn validate_progress(
     py: Python<'_>,
-    progress: Option<Py<PyAny>>,
     on_progress: Option<Py<PyAny>>,
 ) -> PyResult<Option<Py<PyAny>>> {
-    if progress.is_some() && on_progress.is_some() {
-        return Err(pyo3::exceptions::PyTypeError::new_err(
-            "pass only one of progress or on_progress",
-        ));
-    }
-    let callback = on_progress.or(progress);
-    if let Some(callback) = callback.as_ref()
+    if let Some(callback) = on_progress.as_ref()
         && !callback.bind(py).is_callable()
     {
         return Err(pyo3::exceptions::PyTypeError::new_err(
-            "progress must be callable or None",
+            "on_progress must be callable or None",
         ));
     }
-    Ok(callback)
+    Ok(on_progress)
 }
 
 #[pyclass(
@@ -421,8 +414,6 @@ pub(crate) struct PyRenderTimings {
     encoder_finalize_ms: u128,
     #[pyo3(get)]
     output_publish_ms: u128,
-    #[pyo3(get)]
-    total_ms: u128,
 }
 impl From<&NativeRenderTimings> for PyRenderTimings {
     fn from(v: &NativeRenderTimings) -> Self {
@@ -447,7 +438,6 @@ impl From<&NativeRenderTimings> for PyRenderTimings {
             encoder_write_ms: v.encoder_write_ms,
             encoder_finalize_ms: v.encoder_finalize_ms,
             output_publish_ms: v.output_publish_ms,
-            total_ms: v.total_ms,
         }
     }
 }
@@ -678,12 +668,11 @@ pub(crate) fn render_prepared(
     py: Python<'_>,
     prepared: &crate::prepared::PyPreparedProject,
     request: &PyPreparedVideoRenderRequest,
-    progress: Option<Py<PyAny>>,
     show_progress: bool,
     on_progress: Option<Py<PyAny>>,
     cancellation: Option<&PyCancellationToken>,
 ) -> PyResult<PyRenderResult> {
-    let progress = validate_progress(py, progress, on_progress)?;
+    let progress = validate_progress(py, on_progress)?;
     let request = request.inner.clone();
     let cancellation =
         cancellation.map_or_else(NativeCancellationToken::new, |token| token.inner.clone());
@@ -722,21 +711,16 @@ pub(crate) fn render_prepared(
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the Python bridge keeps render options explicit at the boundary"
-)]
 pub(crate) fn render_one_shot(
     py: Python<'_>,
     editor: &NativeEditor,
     project: &NativeProject,
     request: &PyRenderRequest,
-    progress: Option<Py<PyAny>>,
     show_progress: bool,
     on_progress: Option<Py<PyAny>>,
     cancellation: Option<&PyCancellationToken>,
 ) -> PyResult<PyRenderResult> {
-    let progress = validate_progress(py, progress, on_progress)?;
+    let progress = validate_progress(py, on_progress)?;
     let request = request.inner.clone();
     let cancellation =
         cancellation.map_or_else(NativeCancellationToken::new, |token| token.inner.clone());

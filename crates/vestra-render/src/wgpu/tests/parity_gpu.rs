@@ -97,7 +97,7 @@ fn group_project(
     transitions: Vec<Value>,
 ) -> crate::project::Project {
     let mut value = json!({
-        "schema_version": 3,
+        "schema_version": 1,
         "output": {
             "path": "group-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#101018", "quality": "preview",
@@ -142,7 +142,7 @@ fn transform(position: (f64, f64), scale: (f64, f64), rotation_degrees: f64) -> 
 
 fn root_group_transition_project(transition: Value) -> crate::project::Project {
     let value = json!({
-        "schema_version": 3,
+        "schema_version": 1,
         "output": {
             "path": "group-transition.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#101018", "quality": "preview",
@@ -308,7 +308,7 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
         })
         .collect::<Vec<_>>();
     serde_json::from_value(json!({
-        "schema_version": 4,
+        "schema_version": 1,
         "output": {
             "path": "motion-tile-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#00000000", "quality": "preview",
@@ -354,7 +354,7 @@ fn shape_feather_parity_project(radius: f64, transformed: bool) -> crate::projec
             .insert("transform".to_owned(), transform);
     }
     serde_json::from_value(json!({
-        "schema_version": 4,
+        "schema_version": 1,
         "output": {
             "path": "shape-feather-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#000000", "quality": "preview",
@@ -383,7 +383,7 @@ fn gpu_shape_feather_matches_cpu_at_small_medium_large_and_fractional_radii() {
 
 fn image_mask_parity_project(mode: &str, masks: Value) -> crate::project::Project {
     serde_json::from_value(json!({
-        "schema_version": 4,
+        "schema_version": 1,
         "output": {
             "path": "image-mask-parity.mp4", "width": 32, "height": 32,
             "frame_rate": "24/1", "background": "#000000", "quality": "preview",
@@ -587,7 +587,7 @@ fn evaluated_effect_pass_count(frame: &EvaluatedFrame) -> usize {
 fn gpu_nested_group_matches_cpu_when_an_adapter_is_available() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "nested-group.mp4", "width": 4, "height": 4,
                 "frame_rate": "24/1", "background": "#00000000",
@@ -658,7 +658,7 @@ fn gpu_hidden_group_matte_with_child_effect_matches_cpu() {
                 "source_layer": "group", "mode": "alpha", "invert": invert
             });
             let value = json!({
-                "schema_version": 3,
+                "schema_version": 1,
                 "output": {
                     "path": "group-matte.mp4", "width": 32, "height": 32,
                     "frame_rate": "24/1", "background": "#101018", "quality": "preview",

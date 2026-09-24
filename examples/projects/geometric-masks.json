@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Geometric masks",
   "output": {
     "path": "../output/geometric-masks.mp4",

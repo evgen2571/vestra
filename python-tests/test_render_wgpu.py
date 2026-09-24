@@ -30,7 +30,7 @@ def test_prepared_wgpu_video_render_returns_adapter_owned_result(tmp_path: Path)
     output = tmp_path / "prepared-wgpu.mp4"
     events: list[vestra.RenderEvent] = []
     result = prepared.render_video(
-        vestra.PreparedVideoRenderRequest(output), progress=events.append
+        vestra.PreparedVideoRenderRequest(output), on_progress=events.append
     )
     assert output.exists() and output.stat().st_size > 0
     assert result.selected_backend == "wgpu"

@@ -11,7 +11,7 @@ use crate::{
 
 fn project(audio: Value) -> Project {
     serde_json::from_value(json!({
-        "schema_version": 3,
+        "schema_version": 1,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000",
@@ -135,7 +135,7 @@ fn motion_tile_is_rejected_for_unsupported_sources() {
 
 fn masked_project(masks: Value) -> Project {
     serde_json::from_value(json!({
-        "schema_version": 4,
+        "schema_version": 1,
         "output": {
             "path": "out.mp4", "width": 32, "height": 32,
             "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
@@ -208,7 +208,7 @@ fn masks_accept_line_geometry_as_rendered_coverage() {
 
 fn grouped_project(clips: Vec<Value>) -> Project {
     let mut value = serde_json::json!({
-        "schema_version": 3,
+        "schema_version": 1,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
@@ -405,7 +405,7 @@ fn image_clip(id: &str, asset: &str, start: f64, duration: f64) -> Value {
 
 fn asset_usage_project(clips: Vec<Value>) -> Project {
     serde_json::from_value(json!({
-        "schema_version": 3,
+        "schema_version": 1,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000", "quality": "balanced",
@@ -456,7 +456,7 @@ fn unused_asset_warning_preserves_flat_project_behavior() {
 #[test]
 fn unused_asset_warning_traverses_owned_source_masks() {
     let project: Project = serde_json::from_value(json!({
-        "schema_version": 4,
+        "schema_version": 1,
         "output": {
             "path": "out.mp4", "width": 2, "height": 2,
             "frame_rate": "1/1", "background": "#000000", "quality": "balanced",

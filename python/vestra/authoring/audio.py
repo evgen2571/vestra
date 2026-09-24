@@ -1,4 +1,4 @@
-"""Typed schema-v2 audio timeline authoring."""
+"""Typed schema-v1 audio timeline authoring."""
 
 from dataclasses import dataclass
 

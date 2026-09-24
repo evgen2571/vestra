@@ -1,6 +1,6 @@
 [package]
 name = "vestra-progress"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Frontend-neutral render progress contracts for Vestra"
 license = "MIT"

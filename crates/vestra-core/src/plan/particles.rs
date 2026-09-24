@@ -182,12 +182,6 @@ impl CompiledParticleSystem {
         }
     }
 
-    /// Compatibility name for the canonical renderer-independent evaluator.
-    #[must_use]
-    pub fn iter_alive(&self, time_nanos: u128) -> ParticleIterator<'_> {
-        self.evaluated_particles_at(time_nanos)
-    }
-
     /// Resolves frame-global audio appearance once for this system.
     ///
     /// `time_nanos` is the system-local authored animation time and
@@ -275,7 +269,7 @@ impl CompiledParticleSystem {
         identity: ParticleIdentity,
         spawn_time_nanos: u128,
         time_nanos: u128,
-    ) -> Option<ParticleInstance> {
+    ) -> Option<EvaluatedParticleInstance> {
         let age_nanos = time_nanos.checked_sub(spawn_time_nanos)?;
         let lifetime_seconds = self.sample_range(identity, self.lifetime_range, LIFETIME);
         let lifetime_nanos = timeline::seconds_to_nanos(lifetime_seconds)?;
@@ -341,7 +335,7 @@ impl CompiledParticleSystem {
             }),
             ANGULAR_VELOCITY,
         );
-        Some(ParticleInstance {
+        Some(EvaluatedParticleInstance {
             identity,
             spawn_time_nanos,
             age_nanos,
@@ -398,9 +392,6 @@ impl Default for EvaluatedParticleAppearance {
         }
     }
 }
-
-/// Compatibility alias for the renderer-independent evaluated state.
-pub type ParticleInstance = EvaluatedParticleInstance;
 
 pub struct ParticleIterator<'a> {
     system: &'a CompiledParticleSystem,
@@ -1031,13 +1022,13 @@ mod tests {
         )
         .expect("particle system");
         assert_eq!(particles.continuous_spawn_count(10_000_000_000), 0);
-        assert_eq!(particles.iter_alive(1_000_000_000).count(), 2);
+        assert_eq!(particles.evaluated_particles_at(1_000_000_000).count(), 2);
     }
 
     #[test]
     fn active_iterator_uses_only_the_lifetime_window() {
         let particles = system(10.0, 0.25);
-        let active: Vec<_> = particles.iter_alive(10_000_000_000).collect();
+        let active: Vec<_> = particles.evaluated_particles_at(10_000_000_000).collect();
         assert!(
             active
                 .iter()
@@ -1073,7 +1064,7 @@ mod tests {
         )
         .expect("particle system");
         assert_eq!(particles.burst_range(1_000_000_000), 0..1);
-        assert_eq!(particles.iter_alive(1_000_000_000).count(), 10);
+        assert_eq!(particles.evaluated_particles_at(1_000_000_000).count(), 10);
         assert_eq!(particles.burst_range(500_000_000), 0..1);
         assert_eq!(particles.burst_range(1_000_500_000_000), 1..2);
     }
@@ -1081,11 +1072,11 @@ mod tests {
     #[test]
     fn lifetime_is_half_open() {
         let particles = system(1.0, 1.0);
-        assert_eq!(particles.iter_alive(1_000_000_000).count(), 1);
-        assert!(particles.iter_alive(1_999_999_999).count() >= 1);
+        assert_eq!(particles.evaluated_particles_at(1_000_000_000).count(), 1);
+        assert!(particles.evaluated_particles_at(1_999_999_999).count() >= 1);
         assert!(
             !particles
-                .iter_alive(2_000_000_000)
+                .evaluated_particles_at(2_000_000_000)
                 .any(|particle| particle.identity == ParticleIdentity::Continuous { ordinal: 0 })
         );
     }
@@ -1261,9 +1252,9 @@ mod tests {
             crate::project::parse_colour,
         )
         .expect("particle system");
-        assert_eq!(particles.iter_alive(0).count(), 2);
-        assert_eq!(particles.iter_alive(500_000_000).count(), 2);
-        assert_eq!(particles.iter_alive(1_000_000_000).count(), 0);
+        assert_eq!(particles.evaluated_particles_at(0).count(), 2);
+        assert_eq!(particles.evaluated_particles_at(500_000_000).count(), 2);
+        assert_eq!(particles.evaluated_particles_at(1_000_000_000).count(), 0);
     }
 
     #[test]
@@ -1282,20 +1273,26 @@ mod tests {
             crate::project::parse_colour,
         )
         .expect("particle system");
-        assert_eq!(particles.iter_alive(1_000_000_000).count(), 2);
-        assert_eq!(particles.iter_alive(1_999_999_999).count(), 2);
-        assert_eq!(particles.iter_alive(2_000_000_000).count(), 0);
+        assert_eq!(particles.evaluated_particles_at(1_000_000_000).count(), 2);
+        assert_eq!(particles.evaluated_particles_at(1_999_999_999).count(), 2);
+        assert_eq!(particles.evaluated_particles_at(2_000_000_000).count(), 0);
     }
 
     #[test]
     fn random_access_and_property_order_do_not_change_particle_values() {
         let particles = system(29.97, 2.0);
-        let direct: Vec<_> = particles.iter_alive(20_000_000_000).collect();
-        let _ = particles.iter_alive(5_000_000_000).collect::<Vec<_>>();
-        let _ = particles.iter_alive(10_000_000_000).collect::<Vec<_>>();
+        let direct: Vec<_> = particles.evaluated_particles_at(20_000_000_000).collect();
+        let _ = particles
+            .evaluated_particles_at(5_000_000_000)
+            .collect::<Vec<_>>();
+        let _ = particles
+            .evaluated_particles_at(10_000_000_000)
+            .collect::<Vec<_>>();
         assert_eq!(
             direct,
-            particles.iter_alive(20_000_000_000).collect::<Vec<_>>()
+            particles
+                .evaluated_particles_at(20_000_000_000)
+                .collect::<Vec<_>>()
         );
         let identity = direct[0].identity;
         let reversed = (
@@ -1314,7 +1311,7 @@ mod tests {
     #[test]
     fn long_duration_evaluation_does_not_grow_with_project_history() {
         let particles = system(1_000.0, 0.1);
-        let active: Vec<_> = particles.iter_alive(10_u128.pow(18)).collect();
+        let active: Vec<_> = particles.evaluated_particles_at(10_u128.pow(18)).collect();
         assert!(active.len() <= particles.maximum_live_particles as usize);
         assert!(particles.maximum_live_particles < 2_000);
     }

@@ -1,0 +1,178 @@
+name: Python release artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['.github/workflows/release.yml']
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, arch: aarch64 }
+        python: ['3.11', '3.12', '3.13', '3.14']
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build portable wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          target: ${{ matrix.platform.target }}
+          manylinux: '2_28'
+          before-script-linux: dnf install -y clang clang-devel git make nasm
+          args: --release --locked --out dist --compatibility pypi -i python${{ matrix.python }}
+      - name: Install and smoke test wheel
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m venv release-venv
+          release-venv/bin/python -m pip install dist/*.whl
+          release-venv/bin/python scripts/verify-wheel.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  macos-wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { runner: macos-15-intel, target: x86_64-apple-darwin, arch: x86_64 }
+          - { runner: macos-15, target: aarch64-apple-darwin, arch: aarch64 }
+        python: ['3.11', '3.12', '3.13', '3.14']
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install FFmpeg build and smoke tools
+        run: brew install nasm ffmpeg
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          target: ${{ matrix.platform.target }}
+          args: --release --locked --out dist --compatibility pypi -i python${{ matrix.python }}
+      - name: Install and smoke test wheel
+        run: |
+          python -m venv release-venv
+          release-venv/bin/python -m pip install dist/*.whl
+          release-venv/bin/python scripts/verify-wheel.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  windows-wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13', '3.14']
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install FFmpeg build and smoke tools
+        shell: pwsh
+        run: |
+          choco install make nasm ffmpeg -y
+          "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          target: x86_64-pc-windows-msvc
+          args: --release --locked --out dist -i python${{ matrix.python }}
+      - name: Install and smoke test wheel
+        shell: pwsh
+        run: |
+          python -m venv release-venv
+          release-venv\Scripts\python -m pip install (Get-ChildItem dist\*.whl).FullName
+          release-venv\Scripts\python scripts\verify-wheel.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-windows-x64-py${{ matrix.python }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install build and smoke tools
+        run: sudo apt-get update -qq && sudo apt-get install -y nasm ffmpeg
+      - name: Build source distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          command: sdist
+          args: --out dist
+      - name: Install and smoke test source distribution
+        run: |
+          python -m venv release-venv
+          release-venv/bin/python -m pip install dist/*.tar.gz
+          release-venv/bin/python scripts/verify-wheel.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [linux-wheels, macos-wheels, windows-wheels, sdist]
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          manifest = tomllib.loads(Path('Cargo.toml').read_text())
+          version = manifest['workspace']['package']['version']
+          assert os.environ['RELEASE_TAG'] == f'v{version}'
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

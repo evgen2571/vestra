@@ -579,7 +579,7 @@ def test_custom_transition_reuses_one_immutable_definition_across_placements() -
     )
 
 
-def test_custom_transition_lowers_through_schema_v4_generic_definition() -> None:
+def test_custom_transition_lowers_through_schema_v1_generic_definition() -> None:
     project, first, second = _project()
     custom = CustomTransition(
         outgoing=TransitionLayer(
@@ -596,7 +596,7 @@ def test_custom_transition_lowers_through_schema_v4_generic_definition() -> None
 
     snapshot = project.snapshot().to_dict()
     transition = snapshot["visual"]["transitions"][0]
-    assert snapshot["schema_version"] == 4
+    assert snapshot["schema_version"] == 1
     assert transition["id"] == "cinematic"
     assert transition["start"] == 10.0
     assert transition["duration"] == 1.25

@@ -1,12 +1,7 @@
-import os
-from pathlib import Path
-import subprocess
-import sys
-
 import vestra
 
 
-def test_modern_public_imports_preserve_the_v2_api_hierarchy() -> None:
+def test_public_imports_expose_the_authoring_and_native_project_types() -> None:
     from vestra import Project, ProjectSnapshot
     from vestra.authoring import ProjectBuilder
 
@@ -27,27 +22,6 @@ def test_project_snapshot_is_the_native_project_alias() -> None:
         output_path="out.mp4",
     ).build()
     assert isinstance(snapshot, vestra.ProjectSnapshot)
-
-
-def test_legacy_package_is_not_importable_from_the_source_tree() -> None:
-    package_root = Path(__file__).parents[1] / "python"
-    environment = os.environ | {
-        "PYTHONPATH": os.pathsep.join(
-            path for path in (str(package_root), os.environ.get("PYTHONPATH", "")) if path
-        )
-    }
-    subprocess.run(
-        [
-            sys.executable,
-            "-S",
-            "-c",
-            "import importlib.util; assert importlib.util.find_spec('video_editor') is None",
-        ],
-        check=True,
-        env=environment,
-        capture_output=True,
-        text=True,
-    )
 
 
 def test_public_import_and_version() -> None:

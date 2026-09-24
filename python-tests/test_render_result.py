@@ -18,7 +18,7 @@ def cpu_request(output: Path, *, preview: bool = False) -> vestra.RenderRequest:
 def audio_project() -> vestra.ProjectSnapshot:
     return vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "unused.mp4", "width": 2, "height": 2, "frame_rate": "1/1",
                 "background": "#102030", "quality": "preview", "audio": True,
@@ -72,7 +72,7 @@ def assert_full_result(result: vestra.RenderResult, output: Path, *, scope: vest
     with pytest.raises(AttributeError):
         result.output_path = output  # type: ignore[misc]
     with pytest.raises(AttributeError):
-        result.timings.total_ms = 1  # type: ignore[misc]
+        result.timings.operation_total_ms = 1  # type: ignore[misc]
 
 
 def test_prepared_and_one_shot_results_are_complete_immutable_snapshots(tmp_path: Path) -> None:
@@ -96,7 +96,7 @@ def test_prepared_and_one_shot_results_are_complete_immutable_snapshots(tmp_path
     prepared_output.unlink()
     assert prepared_result.output_path == prepared_output
     assert prepared_result.performance.rendered_frame_count == 1
-    assert prepared_result.timings.total_ms >= 0
+    assert prepared_result.timings.operation_total_ms >= 0
 
 
 def test_preview_and_audio_results_match_readable_streams(tmp_path: Path) -> None:

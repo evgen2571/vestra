@@ -88,7 +88,7 @@ def test_prepared_video_reuses_session_and_reports_actual_backend(
     first_output = tmp_path / "prepared-first.mp4"
     first = prepared.render_video(
         vestra.PreparedVideoRenderRequest(first_output, overwrite=True),
-        progress=events.append,
+        on_progress=events.append,
     )
     second_output = tmp_path / "prepared-second.mp4"
     second = prepared.render_video(
@@ -101,7 +101,7 @@ def test_prepared_video_reuses_session_and_reports_actual_backend(
     assert events[0].kind == "started" and events[-1].kind == "completed"
     assert events[0].operation_id == events[-1].operation_id
     assert events[0].stage is None and events[0].fraction is None
-    assert all(event.schema_version == 2 for event in events)
+    assert all(event.schema_version == 1 for event in events)
     assert all(
         event.kind != "progress" or event.stage == "rendering" for event in events
     )
@@ -112,7 +112,7 @@ def test_one_shot_progress_cancellation_and_result_stay_native(tmp_path: Path) -
     output = tmp_path / "one-shot.mp4"
     events: list[vestra.RenderEvent] = []
     result = project.render(
-        output, backend="cpu", overwrite=True, progress=events.append
+        output, backend="cpu", overwrite=True, on_progress=events.append
     )
     assert isinstance(result, vestra.RenderResult)
     assert result.selected_backend == "cpu"

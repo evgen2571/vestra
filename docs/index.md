@@ -56,10 +56,10 @@ Use [rendering](troubleshooting/rendering.md), [FFmpeg](troubleshooting/ffmpeg.m
 Read the [architecture overview](development/architecture/overview.md),
 [extension guides](development/extending/source.md), [testing](development/testing.md),
 [GPU validation](development/gpu-validation.md), [performance](development/performance.md),
-and [contributing](development/contributing.md).
+[releasing](development/releasing.md), and [contributing](development/contributing.md).
 
 ## Looking for old implementation reports?
 
-Files under [`docs/history/`](history/) record audits, migrations, and other
+Files under [`docs/history/`](history/) record audits, benchmarks, and other
 implementation work as it was understood at the time. They are historical
 records, not normative documentation for current Vestra behavior.

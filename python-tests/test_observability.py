@@ -72,7 +72,7 @@ vestra.Project(size=(2, 2), fps=1, duration=1, base_directory=path.parent).rende
     assert any(record["target"] == "vestra.render" for record in records)
 
 
-def test_python_logging_configuration_supports_stderr_plus_file_alias(
+def test_python_logging_configuration_rejects_stderr_plus_file_alias(
     tmp_path: Path,
 ) -> None:
     log_path = tmp_path / "vestra.log"
@@ -80,8 +80,8 @@ def test_python_logging_configuration_supports_stderr_plus_file_alias(
         "import vestra; vestra.configure_logging(output='stderr+file', file=__import__('sys').argv[1])",
         str(log_path),
     )
-    assert result.returncode == 0, result.stderr
-    assert log_path.is_file()
+    assert result.returncode != 0
+    assert not log_path.exists()
 
 
 @pytest.mark.parametrize(

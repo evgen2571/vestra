@@ -196,7 +196,7 @@ fn render_progress_and_root_log_share_the_operation_id() {
 }
 
 #[test]
-fn verbose_render_failure_keeps_legacy_code_only_in_user_diagnostic() {
+fn verbose_render_failure_keeps_diagnostic_code_out_of_debug_log() {
     let result = common::command()
         .args([
             "-vv",

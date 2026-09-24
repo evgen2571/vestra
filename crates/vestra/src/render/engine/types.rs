@@ -98,8 +98,6 @@ pub struct RenderTimings {
     pub encoder_write_ms: u128,
     pub encoder_finalize_ms: u128,
     pub output_publish_ms: u128,
-    /// Compatibility alias for `operation_total_ms`.
-    pub total_ms: u128,
 }
 
 #[derive(Clone, Debug, Serialize)]

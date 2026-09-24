@@ -217,6 +217,6 @@ def test_cancellation_cleans_automated_crossfade_output(tmp_path: Path) -> None:
     with pytest.raises(CancelledError):
         Editor().render(
             project.build(), RenderRequest(output, backend=BackendPreference.CPU),
-            progress=cancel_on_encoding, cancellation=token,
+            on_progress=cancel_on_encoding, cancellation=token,
         )
     assert not output.exists()

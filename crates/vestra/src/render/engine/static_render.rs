@@ -391,7 +391,7 @@ fn render_static_ffmpeg_inner(
     let timings = RenderTimings {
         frame_render_ms: milliseconds(frame_render),
         encoder_finalize_ms: milliseconds(finalize_started.elapsed()),
-        total_ms: milliseconds(started.elapsed()),
+        operation_total_ms: milliseconds(started.elapsed()),
         ..RenderTimings::default()
     };
     Ok(RenderSummary {
@@ -402,7 +402,7 @@ fn render_static_ffmpeg_inner(
         frame_count: plan.frame_count,
         audio_present: plan.encoder.audio_mix.is_some(),
         preview: plan.canvas.preview,
-        elapsed_ms: timings.total_ms,
+        elapsed_ms: timings.operation_total_ms,
         timings,
         performance,
         requested_render_backend: prepared.requested_backend,

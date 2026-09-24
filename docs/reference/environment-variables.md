@@ -13,15 +13,12 @@ discovery. `--render-backend wgpu` or `BackendPreference.WGPU` chooses Vestra's
 renderer. The selected adapter and its device classification are reported
 separately when available.
 
-`VIDEO_EDITOR_WGPU_BACKEND` is a legacy compatibility alias. Vestra reads it
-only when `VESTRA_WGPU_BACKEND` is unset; new configurations must use the
-`VESTRA_*` name. Vestra does not read `WGPU_BACKEND` for this selection.
+Vestra does not read `WGPU_BACKEND` for this selection.
 
 `VESTRA_WGPU_IN_FLIGHT` is an internal implementation tuning variable. It sets
 the WGPU pipeline depth, defaults to `3`, accepts only integers `1` through
-`3`, and produces a backend diagnostic for an invalid value. The legacy
-`VIDEO_EDITOR_WGPU_IN_FLIGHT` alias is used only when the current name is
-unset. Neither name is normal user configuration. `VESTRA_CPU_PROFILE` is a
+`3`, and produces a backend diagnostic for an invalid value. It is not normal
+user configuration. `VESTRA_CPU_PROFILE` is a
 development-only presence toggle for CPU-renderer profiling logs; its value is
 not parsed.
 

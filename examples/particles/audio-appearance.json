@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "output": {"path": "audio-particles.mp4", "width": 64, "height": 64, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1.0},
   "assets": [{"id": "tone", "type": "audio", "source": "../assets/tone.wav"}],
   "audio": {"tracks": [{"id": "music", "gain": 1.0, "clips": [{"id": "music-clip", "asset": "tone", "start": 0.0, "trim_start": 0.0, "trim_end": 1.0, "gain": 1.0}]}]},

@@ -85,17 +85,12 @@ impl PyEditor {
         }
     }
 
-    #[pyo3(signature = (project, request, *, progress = None, show_progress = true, on_progress = None, cancellation = None))]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Python keyword arguments mirror the public render API"
-    )]
+    #[pyo3(signature = (project, request, *, show_progress = true, on_progress = None, cancellation = None))]
     fn render(
         &self,
         py: Python<'_>,
         project: &PyProject,
         request: &render::PyRenderRequest,
-        progress: Option<Py<PyAny>>,
         show_progress: bool,
         on_progress: Option<Py<PyAny>>,
         cancellation: Option<&render::PyCancellationToken>,
@@ -105,7 +100,6 @@ impl PyEditor {
             &self.inner,
             &project.inner,
             request,
-            progress,
             show_progress,
             on_progress,
             cancellation,

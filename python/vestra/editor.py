@@ -758,16 +758,14 @@ class Project:
         backend: str | _native.BackendPreference = "auto",
         overwrite: bool = False,
         preview: bool = False,
-        progress: Callable[[_native.RenderEvent], object] | None = None,
         show_progress: bool = True,
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
     ) -> _native.RenderResult:
         """Render using native Auto progress by default.
 
-        ``show_progress=False`` disables the built-in presentation. ``progress``
-        is a compatibility alias for ``on_progress``; either callback replaces
-        the built-in presentation.
+        ``show_progress=False`` disables the built-in presentation.
+        ``on_progress`` replaces it with a callback.
         """
         request = _native.RenderRequest(
             _path(output, "output"),
@@ -778,7 +776,6 @@ class Project:
         return _native.Editor().render(
             self.snapshot(output=output),
             request,
-            progress=progress,
             show_progress=show_progress,
             on_progress=on_progress,
             cancellation=cancellation,

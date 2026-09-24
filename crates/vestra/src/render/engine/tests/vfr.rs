@@ -15,7 +15,7 @@ fn native_vfr_video_renders_through_layer_timing_and_holds_previous_pts() {
         &project_path,
         format!(
             r##"{{
-                "schema_version": 3,
+                "schema_version": 1,
                 "output": {{
                     "path": "output.mp4", "width": 16, "height": 16,
                     "frame_rate": "100/1", "background": "#00000000",

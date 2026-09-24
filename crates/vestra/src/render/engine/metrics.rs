@@ -222,6 +222,6 @@ pub(super) fn failure_with_context(
 }
 
 pub(super) fn failure_timings(mut timings: RenderTimings, total_started: Instant) -> RenderTimings {
-    timings.total_ms = milliseconds(total_started.elapsed());
+    timings.operation_total_ms = milliseconds(total_started.elapsed());
     timings
 }

@@ -18,8 +18,7 @@ all ten canonical workloads with raw samples and environment metadata. Capture
 a baseline on your own host before comparing optimizations there.
 
 Run from the repository root with Python 3.11+, Cargo, Git, and FFmpeg on PATH.
-The Rust build also needs the native dependencies documented in the build guide,
-including NASM for the bundled FFmpeg build. No Python packages are required by
+The Rust build also needs the native tools for bundled FFmpeg documented in the build guide. No Python packages are required by
 the benchmark script.
 
 ```bash

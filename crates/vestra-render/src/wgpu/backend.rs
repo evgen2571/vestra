@@ -25,7 +25,7 @@ use crate::{
 
 use super::{
     context::GpuContext,
-    diagnostics::{environment_value, finish_error_scopes},
+    diagnostics::finish_error_scopes,
     executor::{
         FrameBindGroups, FrameExecutionMetrics, ParticleUpload, append_particle_upload,
         encode_and_submit,
@@ -1031,7 +1031,8 @@ const DEFAULT_PIPELINE_DEPTH: usize = 3;
 const MAX_PIPELINE_DEPTH: usize = 3;
 
 fn pipeline_depth_from_environment() -> Result<usize, Diagnostic> {
-    let value = environment_value("VESTRA_WGPU_IN_FLIGHT", "VIDEO_EDITOR_WGPU_IN_FLIGHT")
+    let value = std::env::var("VESTRA_WGPU_IN_FLIGHT")
+        .ok()
         .map(|value| {
             value
                 .parse::<usize>()
@@ -1152,8 +1153,8 @@ fn encode_parameters(
                 parameters.header[3] = match mask.input {
                     vestra_core::plan::EvaluatedMaskInput::Shape { .. } => 3,
                     vestra_core::plan::EvaluatedMaskInput::Image { mode, .. } => match mode {
-                        crate::project::ImageMaskMode::Alpha => 3,
-                        crate::project::ImageMaskMode::Luma => 4,
+                        crate::project::MaskCoverageMode::Alpha => 3,
+                        crate::project::MaskCoverageMode::Luma => 4,
                     },
                     vestra_core::plan::EvaluatedMaskInput::Source { mode, .. } => match mode {
                         crate::project::MaskCoverageMode::Alpha => 3,

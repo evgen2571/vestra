@@ -22,8 +22,8 @@ cooperative render.
 For normal rendering, use `Editor::render_auto(...)`, which applies the
 default `ProgressMode::Auto` presentation. Use `render_with_progress(...)` when
 supplying a `ProgressSink`, and `render_with_observer(...)` for an observer that
-also needs cancellation control. The compatibility callback-oriented
-`Editor::render(...)` remains available but is not the recommended default.
+also needs cancellation control. `Editor::render(...)` is the callback-oriented
+entry point.
 
 ## Validation and errors
 

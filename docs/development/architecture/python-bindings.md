@@ -19,9 +19,8 @@ the typed lifecycle and may opt out of the built-in terminal presentation with
 `show_progress=False`.
 
 Native validation, preflight, preparation and rendering detach from the GIL. A
-Python `on_progress` callback (with `progress` retained as a compatibility
-alias) reacquires Python only to invoke that callback and converts the native
-RenderEvent v2. Callbacks receive `started`, `stage_changed`, `progress`, and
+Python `on_progress` callback reacquires Python only to invoke that callback and converts the native
+RenderEvent v1. Callbacks receive `started`, `stage_changed`, `progress`, and
 the terminal outcome. The callback replaces the native Auto terminal renderer;
 without a callback, ordinary rendering still uses the shared native progress
 policy. `Completed` is emitted only after output publication.

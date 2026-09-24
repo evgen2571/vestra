@@ -36,17 +36,13 @@ pub(crate) use inspection::{
 };
 pub(crate) use project::PyProject;
 
-create_exception!(
-    vestra._native,
-    VideoEditorError,
-    pyo3::exceptions::PyException
-);
-create_exception!(vestra._native, ProjectError, VideoEditorError);
-create_exception!(vestra._native, PreparationError, VideoEditorError);
-create_exception!(vestra._native, FrameRenderError, VideoEditorError);
-create_exception!(vestra._native, RenderError, VideoEditorError);
+create_exception!(vestra._native, VestraError, pyo3::exceptions::PyException);
+create_exception!(vestra._native, ProjectError, VestraError);
+create_exception!(vestra._native, PreparationError, VestraError);
+create_exception!(vestra._native, FrameRenderError, VestraError);
+create_exception!(vestra._native, RenderError, VestraError);
 create_exception!(vestra._native, CancelledError, RenderError);
-create_exception!(vestra._native, PreparedProjectBusyError, VideoEditorError);
+create_exception!(vestra._native, PreparedProjectBusyError, VestraError);
 
 fn attach_error_context(
     py: Python<'_>,
@@ -82,7 +78,7 @@ pub(crate) fn editor_error(py: Python<'_>, error: EditorError) -> PyResult<PyErr
     let error_diagnostics = diagnostics(error.diagnostics());
     let warnings = diagnostics(error.warnings());
     let message = error.to_string();
-    let exception = PyErr::new::<VideoEditorError, _>(message);
+    let exception = PyErr::new::<VestraError, _>(message);
     attach_error_context(
         py,
         &exception,
@@ -190,7 +186,7 @@ fn logging_output(value: &str, file: Option<PathBuf>) -> PyResult<LogOutput> {
             },
             |path| Ok(LogOutput::File(path)),
         ),
-        "stderr_and_file" | "stderr+file" => file.map_or_else(
+        "stderr_and_file" => file.map_or_else(
             || {
                 Err(PyValueError::new_err(
                     "a file path is required for the selected logging output",
@@ -199,7 +195,7 @@ fn logging_output(value: &str, file: Option<PathBuf>) -> PyResult<LogOutput> {
             |path| Ok(LogOutput::StderrAndFile(path)),
         ),
         _ => Err(PyValueError::new_err(
-            "output must be 'stderr', 'file', or 'stderr_and_file' (alias: 'stderr+file')",
+            "output must be 'stderr', 'file', or 'stderr_and_file'",
         )),
     }
 }
@@ -297,10 +293,7 @@ fn _test_release_detached_wait() -> PyResult<()> {
 
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add(
-        "VideoEditorError",
-        module.py().get_type::<VideoEditorError>(),
-    )?;
+    module.add("VestraError", module.py().get_type::<VestraError>())?;
     module.add("ProjectError", module.py().get_type::<ProjectError>())?;
     module.add(
         "PreparationError",
@@ -348,7 +341,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         PyList::new(
             module.py(),
             [
-                "VideoEditorError",
+                "VestraError",
                 "ProjectError",
                 "PreparationError",
                 "FrameRenderError",

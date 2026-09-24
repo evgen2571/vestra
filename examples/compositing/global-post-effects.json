@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Global post effects",
   "output": {
     "path": "../output/global-post-effects.mp4",

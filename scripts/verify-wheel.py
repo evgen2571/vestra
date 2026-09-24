@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib.metadata import version as distribution_version
 import math
 import struct
 import subprocess
@@ -88,6 +89,8 @@ def verify(output_dir: Path) -> None:
     )
 
     package_path = Path(vestra.__file__).resolve()
+    assert distribution_version("vestra") == "0.1.0"
+    assert vestra.__version__ == "0.1.0"
     if "site-packages" not in package_path.parts:
         raise AssertionError(f"vestra did not import from the installed wheel: {package_path}")
     if not (package_path.parent / "py.typed").is_file():

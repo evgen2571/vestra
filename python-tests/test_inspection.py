@@ -27,7 +27,7 @@ def test_inspection_exposes_sdk_owned_snapshot() -> None:
 def test_missing_asset_is_a_preflight_report_not_an_exception(tmp_path: Path) -> None:
     project = vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
             "assets": [{"id": "missing", "type": "image", "source": "missing.png"}],
             "visual": {"clips": []},
@@ -43,14 +43,14 @@ def test_missing_asset_is_a_preflight_report_not_an_exception(tmp_path: Path) ->
 def test_inspection_failure_retains_structured_editor_error(tmp_path: Path) -> None:
     project = vestra.ProjectSnapshot.from_dict(
         {
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
             "assets": [{"id": "missing", "type": "image", "source": "missing.png"}],
             "visual": {"clips": []},
         },
         base_directory=tmp_path,
     )
-    with pytest.raises(vestra.VideoEditorError) as captured:
+    with pytest.raises(vestra.VestraError) as captured:
         vestra.Editor().inspect(project)
     error = captured.value
     assert error.kind == "project"

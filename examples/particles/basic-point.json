@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "output": {
     "path": "particle.mp4",
     "width": 64,

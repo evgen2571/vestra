@@ -10,7 +10,7 @@ import vestra
 
 
 VALID = {
-    "schema_version": 3,
+    "schema_version": 1,
     "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"},
     "assets": [],
     "visual": {"clips": []},
@@ -54,7 +54,7 @@ def test_native_runtime_names_are_exact_public_names() -> None:
         "BackendPreference": vestra.BackendPreference,
         "Category": vestra.Category,
         "Severity": vestra.Severity,
-        "VideoEditorError": vestra.VideoEditorError,
+        "VestraError": vestra.VestraError,
         "ProjectError": vestra.ProjectError,
         "PreparationError": vestra.PreparationError,
         "FrameRenderError": vestra.FrameRenderError,
@@ -152,8 +152,8 @@ def test_every_preflight_constructor_preserves_its_exposed_state(tmp_path: Path)
 
 
 def test_from_dict_accepts_general_mappings() -> None:
-    assert vestra.ProjectSnapshot.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 4
-    assert vestra.ProjectSnapshot.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 4
+    assert vestra.ProjectSnapshot.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 1
+    assert vestra.ProjectSnapshot.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 1
 
     class DeterministicMapping(Mapping[str, object]):
         def __init__(self, values: dict[str, object]) -> None:

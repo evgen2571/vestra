@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vestra import Image, ImageMaskMode, Project
+from vestra import Image, MaskCoverageMode, Project
 from vestra.sources import Ellipse, Rectangle
 
 
@@ -21,7 +21,7 @@ def main() -> None:
     reveal.transform.scale.keyframe(1, (1.0, 1.0))
     image_luma = layer.masks.add(
         Image(str(ROOT / "examples/assets/green.png")),
-        mode=ImageMaskMode.LUMA,
+        mode=MaskCoverageMode.LUMA,
         feather=4,
         id="image-luma",
     )

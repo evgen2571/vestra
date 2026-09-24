@@ -1871,7 +1871,7 @@ fn mask_properties_classify_static_and_dynamic_content() {
     let mut image_mask = mask.clone();
     image_mask.input = crate::project::MaskInput::Image {
         asset: "red".to_owned(),
-        mode: crate::project::ImageMaskMode::Luma,
+        mode: crate::project::MaskCoverageMode::Luma,
     };
     project.visual.clips[0].masks = vec![image_mask.clone()];
     assert_eq!(

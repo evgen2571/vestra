@@ -35,8 +35,7 @@ Use `RenderRequest` with `Editor.render(...)` for one-shot rendering. Prepared
 rendering uses `PreparedVideoRenderRequest`, which contains the output path and
 overwrite policy. `project.render("output.mp4")` uses native Auto progress by
 default; `show_progress=False` disables it and `on_progress=callback` replaces
-it with a callback. The older `progress=callback` spelling remains a
-compatibility alias. Callbacks receive RenderEvent v2 values for `started`,
+it with a callback. Callbacks receive RenderEvent v1 values for `started`,
 `stage_changed`, `progress`, and the terminal outcome. `completed` occurs only
 after encoder finalization and output publication. The returned `RenderResult`
 reports the requested and selected backend and may include adapter information.

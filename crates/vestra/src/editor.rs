@@ -128,7 +128,7 @@ struct PreparationContext {
 }
 
 /// The one internal preparation coordinator serves both public reusable
-/// preparation and the compatibility one-shot render path. Only preflight
+/// preparation and the one-shot render path. Only preflight
 /// target selection differs; validation through backend construction is shared.
 enum InternalPreparationTarget<'a> {
     Public(PrepareOptions),
@@ -298,7 +298,6 @@ pub(crate) fn log_render_timing_summary(
             encoder_finalize_ms = common.8,
             output_publish_ms = common.9,
             operation_total_ms = common.10,
-            total_ms = common.10,
             elapsed_ms = common.10,
             "render timing summary"
         );
@@ -319,7 +318,6 @@ pub(crate) fn log_render_timing_summary(
             encoder_finalize_ms = common.8,
             output_publish_ms = common.9,
             operation_total_ms = common.10,
-            total_ms = common.10,
             elapsed_ms = common.10,
             "render timing summary"
         );
@@ -626,7 +624,7 @@ impl Editor {
         clippy::result_large_err,
         reason = "render diagnostics retain operation timings for CLI report output"
     )]
-    /// Compatibility observer-oriented render entry point.
+    /// Observer-oriented render entry point.
     ///
     /// New callers that want the normal [`ProgressMode::Auto`] presentation
     /// should use [`Self::render_auto`]. Callers that need observer-controlled
@@ -687,10 +685,9 @@ impl Editor {
 
     /// Renders using the default [`ProgressMode::Auto`] policy.
     ///
-    /// This is the recommended normal high-level render entry point. The
-    /// historically named [`Self::render`] remains the compatibility entry
-    /// point for observer-oriented callers; new cancellation-capable
-    /// observers should use [`Self::render_with_observer`] explicitly.
+    /// This is the normal high-level render entry point. [`Self::render`]
+    /// accepts a callback; cancellation-capable observers can use
+    /// [`Self::render_with_observer`].
     #[expect(
         clippy::result_large_err,
         reason = "render diagnostics retain operation timings for CLI report output"
@@ -702,21 +699,6 @@ impl Editor {
         cancellation: &CancellationToken,
     ) -> Result<RenderResult, EditorError> {
         self.render_with_progress(project, request, None, cancellation)
-    }
-
-    /// Compatibility alias for [`Self::render_auto`].
-    #[deprecated(note = "use Editor::render_auto for the default Auto progress policy")]
-    #[expect(
-        clippy::result_large_err,
-        reason = "render diagnostics retain operation timings for CLI report output"
-    )]
-    pub fn render_default(
-        &self,
-        project: &Project,
-        request: SdkRenderRequest,
-        cancellation: &CancellationToken,
-    ) -> Result<RenderResult, EditorError> {
-        self.render_auto(project, request, cancellation)
     }
 
     /// Renders while allowing a synchronous observer to stop before output
@@ -897,7 +879,6 @@ impl Editor {
             preparation_timings.renderer,
         );
         summary.timings.operation_total_ms = operation_started.elapsed().as_millis();
-        summary.timings.total_ms = summary.timings.operation_total_ms;
         summary.elapsed_ms = summary.timings.operation_total_ms;
         log_render_timing_summary(
             operation_id,
@@ -982,7 +963,6 @@ impl Editor {
             temporary_removed: false,
             timings: crate::RenderTimings {
                 operation_total_ms,
-                total_ms: operation_total_ms,
                 ..crate::RenderTimings::default()
             },
         }
@@ -1033,7 +1013,6 @@ impl Editor {
                 timings.preflight_ms = preflight_elapsed.as_millis();
                 timings.plan_compile_ms = plan_compile_elapsed_ms;
                 timings.operation_total_ms = operation_started.elapsed().as_millis();
-                timings.total_ms = timings.operation_total_ms;
                 EditorError::Render {
                     diagnostic: Box::new(error.diagnostic),
                     warnings: Self::operation_warnings(&all_warnings),
@@ -1075,7 +1054,6 @@ impl Editor {
             operation_total_ms,
             semantic_validation_ms: validation_elapsed.as_millis(),
             preflight_ms: preflight_elapsed.as_millis(),
-            total_ms: operation_total_ms,
             ..crate::RenderTimings::default()
         }
     }
@@ -1253,13 +1231,13 @@ mod tests {
         );
         assert_eq!(render.temporary_output_removed(), Some(true));
         assert!(render.is_cancelled());
-        assert_eq!(render.timings().total_ms, 0);
+        assert_eq!(render.timings().operation_total_ms, 0);
     }
 
     #[test]
     fn render_failure_keeps_compilation_timing_and_deduplicates_fallback_warning() {
         let project = Project::from_json(
-            r##"{"schema_version":3,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+            r##"{"schema_version":1,"output":{"path":"out.mp4","width":2,"height":2,"frame_rate":1,"background":"#000000","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
             ".",
         )
         .expect("project");
@@ -1422,7 +1400,6 @@ mod tests {
         assert!(record["fields"]["encoder_finalize_ms"].is_number());
         assert!(record["fields"]["output_publish_ms"].is_number());
         assert!(record["fields"]["operation_total_ms"].is_number());
-        assert!(record["fields"]["total_ms"].is_number());
         assert!(record["fields"]["elapsed_ms"].is_number());
     }
 

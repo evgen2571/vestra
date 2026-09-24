@@ -238,7 +238,7 @@ mod tests {
     fn empty_plan_has_no_compiled_structure() {
         let project = vestra_core::project::Project::from_json(
             r##"{
-                "schema_version": 3,
+                "schema_version": 1,
                 "output": {
                     "path": "empty.mp4", "width": 2, "height": 2,
                     "frame_rate": "1/1", "background": "#00000000",
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn owned_source_masks_include_nested_group_layers_groups_mattes_and_feather() {
         let project: vestra_core::project::Project = serde_json::from_str(r##"{
-            "schema_version": 4,
+            "schema_version": 1,
             "output": {
                 "path": "owned-mask-topology.mp4", "width": 2, "height": 2,
                 "frame_rate": "1/1", "background": "#00000000",

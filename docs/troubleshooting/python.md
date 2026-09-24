@@ -2,7 +2,7 @@
 
 ## `import vestra` fails
 
-Vestra is source-oriented in this repository. Build/install it with the documented locked environment, for example `uv sync --locked --extra dev`, then test the exact environment with `uv run python -c "import vestra"`. An import error from `_native` means the PyO3 extension was not built for that interpreter or cannot load its native dependencies. FFmpeg development-library failures during the build are covered in [FFmpeg troubleshooting](ffmpeg.md).
+For a published wheel, install with `pip install vestra`. For a source checkout, use `uv sync --locked --extra dev`. Test the selected environment with `python -c "import vestra"`. An import error from `_native` means the PyO3 extension was not built for that interpreter or cannot load its native dependencies. FFmpeg development-library failures during a source build are covered in [FFmpeg troubleshooting](ffmpeg.md).
 
 ## Runtime and type checker disagree
 
@@ -14,10 +14,9 @@ The compiled extension supplies runtime native classes; `python/vestra/_native.p
 
 ## Progress callback or cancellation behavior is surprising
 
-`render(..., on_progress=callback)` calls Python with typed v2 `RenderEvent`
+`render(..., on_progress=callback)` calls Python with typed v1 `RenderEvent`
 values for `started`, `stage_changed`, `progress`, and the terminal outcome.
-`progress=` remains a compatibility alias. The callback replaces the built-in
-Auto terminal renderer. `completed` occurs only after output publication. If
+The callback replaces the built-in Auto terminal renderer. `completed` occurs only after output publication. If
 the callback raises before terminal success, Vestra stops rendering and
 re-raises the original Python exception. A callback error while receiving
 `completed` cannot invalidate a published render. A native cleanup error may
@@ -33,8 +32,7 @@ advanced `RUST_LOG` override. Repeated global initialization raises a clear
 runtime error. `output="stderr"` requires no `file`; `output="file"` and
 `output="stderr_and_file"` require one. Supplying a file with
 `output="stderr"` is rejected rather than silently changing the destination.
-The compatibility spelling `output="stderr+file"` is accepted as an alias for
-`stderr_and_file`. JSON tracing on stderr disables native terminal progress so
+JSON tracing on stderr disables native terminal progress so
 the stream remains valid JSON Lines; JSON tracing to a file leaves native
 stderr progress available.
 

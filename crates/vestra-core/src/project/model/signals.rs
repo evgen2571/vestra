@@ -74,7 +74,7 @@ impl<'de> Deserialize<'de> for PointProperty {
 
 /// An authored scalar track plus ordered procedural modifiers.
 ///
-/// The track remains flattened so existing schema-v2 documents retain their
+/// The track remains flattened so existing schema-v1 documents retain their
 /// `base_value` and `keyframes` shape. Modifiers are applied in declaration
 /// order after authored animation.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -184,11 +184,11 @@ mod tests {
     use crate::project::Transform;
 
     #[test]
-    fn scalar_properties_keep_legacy_shape_and_roundtrip_ordered_modifiers() {
-        let legacy: ScalarProperty = serde_json::from_str(r#"{"base_value":0.5,"keyframes":[]}"#)
-            .expect("legacy scalar property");
+    fn scalar_properties_keep_optional_modifiers_and_roundtrip_ordered_modifiers() {
+        let plain: ScalarProperty = serde_json::from_str(r#"{"base_value":0.5,"keyframes":[]}"#)
+            .expect("scalar property without modifiers");
         assert_eq!(
-            serde_json::to_value(&legacy).expect("serialize"),
+            serde_json::to_value(&plain).expect("serialize"),
             serde_json::json!({"base_value": 0.5, "keyframes": []})
         );
 

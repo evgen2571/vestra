@@ -11,6 +11,14 @@ members = [
     "crates/vestra-cli",
 ]
 
+[workspace.package]
+version = "0.1.0"
+
+# ffmpeg-sys-next 8.1.0 injects -march=native into bundled FFmpeg builds.
+# Keep a local patch until upstream removes that host-specific flag.
+[patch.crates-io]
+ffmpeg-sys-next = { path = "vendor/ffmpeg-sys-next" }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unused_must_use = "deny"

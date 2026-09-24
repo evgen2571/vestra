@@ -33,12 +33,12 @@ The normal `Image` source can also provide static image coverage:
 ```python
 layer.masks.add(
     vestra.Image("gradient.png"),
-    mode=vestra.ImageMaskMode.LUMA,
+    mode=vestra.MaskCoverageMode.LUMA,
     feather=12,
 )
 image_mask = layer.masks.add(
     vestra.Image("alpha.png"),
-    mode=vestra.ImageMaskMode.ALPHA,
+    mode=vestra.MaskCoverageMode.ALPHA,
     feather=8,
 )
 image_mask.transform.scale = (0.75, 0.75)
@@ -63,8 +63,8 @@ child.masks.add(vestra.Circle(radius=240, fill="#ffffffff"))
 layer.masks.add(owned_group)
 ```
 
-`MaskCoverageMode` is the generic name; `ImageMaskMode` remains a compatibility
-alias. These are owned source masks, not references to another timeline Layer.
+`MaskCoverageMode` selects alpha or luma coverage. These are owned source masks,
+not references to another timeline Layer.
 
 `Group` is an owned nested visual composition. Child timing is local to the
 Group: omitted `duration` inherits the containing Group lifetime, while an

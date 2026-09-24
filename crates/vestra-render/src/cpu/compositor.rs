@@ -628,7 +628,7 @@ impl ComposeContext<'_> {
                         ColourTransform::default(),
                     );
                     for pixel in self.surfaces.mask_local_surface().pixels_mut() {
-                        let coverage = crate::project::image_mask_coverage(pixel.0, mode);
+                        let coverage = crate::project::mask_coverage(pixel.0, mode);
                         pixel[3] = (coverage * 255.0).round().clamp(0.0, 255.0) as u8;
                     }
                 }
@@ -1502,7 +1502,7 @@ mod tests {
     fn canonical_group_project_validates_compiles_evaluates_and_renders_on_cpu() {
         let project = crate::project::Project::from_json(
             r##"{
-                "schema_version": 3,
+                "schema_version": 1,
                 "name": "cpu group integration",
                 "output": {
                     "path": "group.mp4",
@@ -1575,7 +1575,7 @@ mod tests {
     fn root_group_crossfade_renders_the_complete_group_layers_on_cpu() {
         let project = crate::project::Project::from_json(
             r##"{
-                "schema_version": 3,
+                "schema_version": 1,
                 "output": {
                     "path": "group-transition.mp4", "width": 2, "height": 2,
                     "frame_rate": "24/1", "background": "#00000000",

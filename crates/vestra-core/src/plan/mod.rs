@@ -26,7 +26,7 @@ pub use model::*;
 pub use particles::{
     CompiledColourLifetimeCurve, CompiledParticleBurst, CompiledParticleSystem,
     CompiledScalarLifetimeCurve, EvaluatedParticleAppearance, EvaluatedParticleInstance,
-    ParticleIdentity, ParticleInstance, RATE_SCALE, StyledParticleIterator,
+    ParticleIdentity, RATE_SCALE, StyledParticleIterator,
 };
 pub(crate) use scalar_property::ScalarPropertyTarget;
 pub use scalar_property::{

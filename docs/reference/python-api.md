@@ -24,15 +24,13 @@ project.validate() -> ValidationReport
 project.prepare(*, backend="auto") -> PreparedProject
 project.render_frame(seconds, *, backend="auto") -> Frame
 project.render(output, *, backend="auto", overwrite=False, preview=False,
-               progress=None, show_progress=True, on_progress=None,
+               show_progress=True, on_progress=None,
                cancellation=None) -> RenderResult
 ```
 
 `project.render("output.mp4")` uses native Auto progress by default. Set
 `show_progress=False` to disable it, or pass `on_progress=my_callback` to
-replace the built-in terminal renderer with a callback. The older
-`progress=` spelling remains a compatibility alias and is not the preferred
-name.
+replace the built-in terminal renderer with a callback.
 
 `validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
 
@@ -48,7 +46,7 @@ layer.masks.clear()
 `Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, `feather`, and
 `transform`. Supported inputs are the existing `Rectangle`, `Ellipse`,
 `Circle`, and `Polygon` shape authoring objects, or the normal `Image` source
-with `mode=ImageMaskMode.ALPHA` or `ImageMaskMode.LUMA`. `strength`, `feather`, and
+with `mode=MaskCoverageMode.ALPHA` or `MaskCoverageMode.LUMA`. `strength`, `feather`, and
 transform properties support the normal keyframes, modifiers, and signal
 bindings. Masks are applied after layer effects and before final
 opacity/blending.
@@ -60,18 +58,18 @@ opacity/blending.
 | Type | Exact construction or methods |
 | --- | --- |
 | `ProjectSnapshot` | `load(path)`, `from_json(text, *, base_directory=None)`, `from_dict(data, *, base_directory=None)`, `to_json()`, `to_dict()`, `save(path)`. |
-| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, on_progress=None, progress=None, cancellation=None)`. `progress` is a compatibility alias. |
+| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, on_progress=None, cancellation=None)`. |
 | `PrepareOptions` | `PrepareOptions(*, backend=None)`. |
-| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, on_progress=None, progress=None, show_progress=True, cancellation=None)`. `progress` is a compatibility alias. |
+| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, on_progress=None, show_progress=True, cancellation=None)`. |
 | `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
 | `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for `PreparedProject.render_video`. |
 | `CancellationToken` | `CancellationToken()`, `cancel()`, read-only `is_cancelled`. |
 
-`RenderEvent` v2 exposes `schema_version`, `kind`, `operation_id`, `stage`,
+`RenderEvent` v1 exposes `schema_version`, `kind`, `operation_id`, `stage`,
 `frame`, `total_frames`, `fraction`, and `output_path` with the applicable
 fields optional. Its lifecycle is `started`, `stage_changed`, `progress`, and
-one terminal event: `completed`, `cancelled`, or `failed`. Pass either
-`progress` or `on_progress`, not both. Set `show_progress=False` to disable
+one terminal event: `completed`, `cancelled`, or `failed`. Pass `on_progress`
+for a callback, or set `show_progress=False` to disable
 the built-in Auto terminal presentation. Custom callbacks replace the built-in
 terminal renderer. `Completed` occurs only after encoder finalization and
 successful output publication. Rendering may reach fraction `1.0` before
@@ -104,8 +102,7 @@ vestra.configure_logging(level="debug", format="json", output="file",
 `human` or `json`. `output` is `stderr` (the default), `file`, or
 `stderr_and_file`. `file` is required for `file` and `stderr_and_file`, and
 must be omitted for `stderr`; passing a file with `output="stderr"` is an
-error. The compatibility spelling `output="stderr+file"` is equivalent to
-`stderr_and_file` and also requires `file`. `filter=` accepts an EnvFilter directive such as
+error. `filter=` accepts an EnvFilter directive such as
 `"vestra=info,vestra.render.wgpu=debug"`; `RUST_LOG` remains the advanced
 override. A second global initialization raises a clear `RuntimeError`.
 JSON tracing logs are distinct from JSON RenderEvent progress. JSON tracing on

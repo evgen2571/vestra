@@ -41,8 +41,8 @@
                 ];
               buildInputs = [ ffmpegDev ffmpegLib ];
 
-              # ffmpeg-sys-next needs the development output, while runtime
-              # commands use the package's executable output above.
+              # Runtime checks use the FFmpeg executable above. Development
+              # libraries remain available for native diagnostics.
               PKG_CONFIG_PATH = lib.makeSearchPath "lib/pkgconfig" [ ffmpegDev ];
               LD_LIBRARY_PATH = lib.makeLibraryPath [ ffmpegLib ];
 

@@ -35,9 +35,6 @@ pub enum MaskCoverageMode {
     Luma,
 }
 
-/// Compatibility name retained for schema-v4 callers.
-pub type ImageMaskMode = MaskCoverageMode;
-
 /// Converts one prepared encoded RGBA pixel into renderer-independent mask
 /// coverage. The RGB values use the prepared image's encoded byte space.
 #[must_use]
@@ -52,12 +49,6 @@ pub fn mask_coverage(pixel: [u8; 4], mode: MaskCoverageMode) -> f32 {
                 * alpha
         }
     }
-}
-
-/// Compatibility wrapper for the original image-mask helper.
-#[must_use]
-pub fn image_mask_coverage(pixel: [u8; 4], mode: ImageMaskMode) -> f32 {
-    mask_coverage(pixel, mode)
 }
 
 /// A layer-owned coverage input.
@@ -225,7 +216,7 @@ mod tests {
 
     #[test]
     fn image_mask_inputs_round_trip_with_alpha_and_luma_modes() {
-        for mode in [ImageMaskMode::Alpha, ImageMaskMode::Luma] {
+        for mode in [MaskCoverageMode::Alpha, MaskCoverageMode::Luma] {
             let mut value = mask();
             value.input = MaskInput::Image {
                 asset: "mask-image".to_owned(),
@@ -269,30 +260,24 @@ mod tests {
     }
 
     #[test]
-    fn image_mask_coverage_uses_rec709_encoded_rgb_times_alpha() {
+    fn mask_coverage_uses_rec709_encoded_rgb_times_alpha() {
+        assert_eq!(mask_coverage([12, 34, 56, 0], MaskCoverageMode::Alpha), 0.0);
         assert_eq!(
-            image_mask_coverage([12, 34, 56, 0], ImageMaskMode::Alpha),
-            0.0
-        );
-        assert_eq!(
-            image_mask_coverage([12, 34, 56, 255], ImageMaskMode::Alpha),
+            mask_coverage([12, 34, 56, 255], MaskCoverageMode::Alpha),
             1.0
         );
         assert!(
-            (image_mask_coverage([12, 34, 56, 128], ImageMaskMode::Alpha) - 128.0 / 255.0).abs()
+            (mask_coverage([12, 34, 56, 128], MaskCoverageMode::Alpha) - 128.0 / 255.0).abs()
                 < 1e-6
         );
+        assert_eq!(mask_coverage([0, 0, 0, 255], MaskCoverageMode::Luma), 0.0);
         assert_eq!(
-            image_mask_coverage([0, 0, 0, 255], ImageMaskMode::Luma),
+            mask_coverage([255, 255, 255, 0], MaskCoverageMode::Luma),
             0.0
         );
-        assert_eq!(
-            image_mask_coverage([255, 255, 255, 0], ImageMaskMode::Luma),
-            0.0
-        );
-        assert!((image_mask_coverage([255, 0, 0, 255], ImageMaskMode::Luma) - 0.2126).abs() < 1e-6);
+        assert!((mask_coverage([255, 0, 0, 255], MaskCoverageMode::Luma) - 0.2126).abs() < 1e-6);
         assert!(
-            (image_mask_coverage([0, 255, 0, 128], ImageMaskMode::Luma) - 0.7152 * (128.0 / 255.0))
+            (mask_coverage([0, 255, 0, 128], MaskCoverageMode::Luma) - 0.7152 * (128.0 / 255.0))
                 .abs()
                 < 1e-6
         );

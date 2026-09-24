@@ -160,7 +160,7 @@ impl crate::VideoDecoderFactory for VideoFixtureFactory {
 fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "unused-video.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -306,7 +306,7 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
 fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "video-timing.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -401,7 +401,7 @@ fn gpu_video_source_timing_matches_cpu_when_an_adapter_is_available() {
 fn gpu_video_to_video_transition_advances_both_sources_and_matches_cpu() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "video-transition.mp4", "width": 1, "height": 1,
                 "frame_rate": "4/1", "background": "#00000000",
@@ -514,7 +514,7 @@ fn gpu_video_to_video_transition_advances_both_sources_and_matches_cpu() {
 fn gpu_video_crop_matches_cpu_for_a_dynamic_frame_when_an_adapter_is_available() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "video-crop.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",

@@ -1,6 +1,6 @@
 # Project to plan
 
-The canonical project is portable JSON, not a render-ready scene. `vestra-core::project` deserializes its schema-v3 model and semantic validation checks IDs, timelines, output constraints, effect scopes, transition endpoints, signals and other relationships without reading assets. The SDK preflight layer then resolves relative paths against the project base directory, probes media, computes media-dependent duration facts, checks the operation target, and passes those facts to compilation.
+The canonical project is portable JSON, not a render-ready scene. `vestra-core::project` deserializes its schema-v1 model and semantic validation checks IDs, timelines, output constraints, effect scopes, transition endpoints, signals and other relationships without reading assets. The SDK preflight layer then resolves relative paths against the project base directory, probes media, computes media-dependent duration facts, checks the operation target, and passes those facts to compilation.
 
 ```text
 canonical Project

@@ -28,9 +28,8 @@ pub use audio::{
 pub use colour::parse_colour;
 pub use effects::{Effect, ZoomBlurDirection};
 pub use masks::{
-    ImageMaskMode, MASK_FEATHER_PASSES, MAX_MASK_FEATHER_PX, Mask, MaskCoverageMode, MaskInput,
-    MaskOperation, apply_mask_operation, image_mask_coverage, mask_coverage,
-    mask_feather_box_half_width,
+    MASK_FEATHER_PASSES, MAX_MASK_FEATHER_PX, Mask, MaskCoverageMode, MaskInput, MaskOperation,
+    apply_mask_operation, mask_coverage, mask_feather_box_half_width,
 };
 pub use mattes::{MatteMode, TrackMatte};
 pub use output::{DurationMode, FrameRate, Output, Quality};
@@ -148,7 +147,7 @@ mod tests {
     }
 
     #[test]
-    fn transient_timing_deserializes_without_changing_legacy_defaults() {
+    fn transient_timing_deserializes_with_defaults() {
         let shake: Effect = serde_json::from_value(serde_json::json!({
             "id": "shake", "type": "camera_shake", "start": 1.25, "duration": 0.3,
             "position_amount": {"base_value": 0.01},
@@ -167,12 +166,12 @@ mod tests {
         assert_eq!(preset.timing().start, 1.0);
         assert_eq!(preset.timing().duration, Some(0.28));
 
-        let legacy: Preset = serde_json::from_value(serde_json::json!({
+        let default_timing: Preset = serde_json::from_value(serde_json::json!({
             "type": "impact", "intensity": 1.0, "seed": 7
         }))
-        .expect("legacy preset parses");
-        assert_eq!(legacy.timing().start, 0.0);
-        assert_eq!(legacy.timing().duration, None);
+        .expect("preset with default timing parses");
+        assert_eq!(default_timing.timing().start, 0.0);
+        assert_eq!(default_timing.timing().duration, None);
     }
 
     #[test]

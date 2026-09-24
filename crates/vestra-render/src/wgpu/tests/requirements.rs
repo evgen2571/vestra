@@ -102,7 +102,7 @@ fn nested_group_requirements(
     }
     let project = Project::from_json(&format!(
         r##"{{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {{
                 "path": "nested-group.mp4", "width": 4, "height": 4,
                 "frame_rate": "24/1", "background": "#00000000",
@@ -452,7 +452,7 @@ fn group_working_texture_estimates_scale_with_depth_not_group_count() {
 fn video_requirements_charge_each_compiled_video_slot_once() {
     let project = Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "video-requirements.mp4", "width": 2, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",

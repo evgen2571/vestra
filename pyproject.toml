@@ -4,18 +4,27 @@ build-backend = "maturin"
 
 [project]
 name = "vestra"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python SDK with typed project authoring and immutable native rendering APIs"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["video editing", "video rendering", "ffmpeg"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
+
+[project.urls]
+Homepage = "https://github.com/evgen2571/vestra"
+Documentation = "https://github.com/evgen2571/vestra/tree/main/docs"
+Repository = "https://github.com/evgen2571/vestra"
+Issues = "https://github.com/evgen2571/vestra/issues"
 
 [project.optional-dependencies]
 test = ["jsonschema==4.26.0", "mypy>=1.13", "pytest>=8"]
@@ -32,6 +41,7 @@ manifest-path = "crates/vestra-python/Cargo.toml"
 module-name = "vestra._native"
 python-source = "python"
 python-packages = ["vestra"]
+include = [{ path = "vendor/ffmpeg-sys-next/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["python-tests"]

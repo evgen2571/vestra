@@ -22,15 +22,14 @@ from vestra import (
     Ellipse,
     Group,
     Image,
-    ImageMaskMode,
     Line,
+    MaskCoverageMode,
     MaskOperation,
     Polygon,
     Project,
     Rectangle,
     Text,
     Video,
-    MaskCoverageMode,
 )
 
 
@@ -362,7 +361,7 @@ def test_layer_masks_are_owned_and_lowered() -> None:
 def test_image_masks_reuse_normal_image_source_and_lower_modes() -> None:
     project = Project(size=(32, 32), fps=1, duration=1)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
-    alpha = layer.masks.add(Image("alpha.png"), mode=ImageMaskMode.ALPHA, id="alpha")
+    alpha = layer.masks.add(Image("alpha.png"), mode=MaskCoverageMode.ALPHA, id="alpha")
     luma = layer.masks.add(Image("luma.png"), mode="luma", id="luma")
     masks = project.snapshot().to_dict()["visual"]["clips"][0]["masks"]
     assert masks[0]["input"] == {"type": "image", "asset": "image-000001", "mode": "alpha"}
@@ -370,7 +369,7 @@ def test_image_masks_reuse_normal_image_source_and_lower_modes() -> None:
     assert alpha.input.path == "alpha.png"
     assert luma.input.path == "luma.png"
     with pytest.raises(TypeError):
-        layer.masks.add(Rectangle(width=4, height=4, fill="#ffffff"), mode=ImageMaskMode.ALPHA)
+        layer.masks.add(Rectangle(width=4, height=4, fill="#ffffff"), mode=MaskCoverageMode.ALPHA)
     with pytest.raises(ValueError):
         layer.masks.add(Image("bad.png"), mode="threshold")
 
@@ -608,11 +607,11 @@ def test_video_mask_rejects_unsupported_sizing_and_crop() -> None:
 @pytest.mark.parametrize(
     ("mode", "pixels", "expected"),
     [
-        (ImageMaskMode.ALPHA, [(255, 0, 0, 0), (255, 0, 0, 64), (255, 0, 0, 128), (255, 0, 0, 255)], [0, 64, 128, 255]),
-        (ImageMaskMode.LUMA, [(0, 0, 0, 255), (255, 255, 255, 255), (128, 128, 128, 255), (255, 0, 0, 255)], [0, 255, 128, 54]),
+        (MaskCoverageMode.ALPHA, [(255, 0, 0, 0), (255, 0, 0, 64), (255, 0, 0, 128), (255, 0, 0, 255)], [0, 64, 128, 255]),
+        (MaskCoverageMode.LUMA, [(0, 0, 0, 255), (255, 255, 255, 255), (128, 128, 128, 255), (255, 0, 0, 255)], [0, 255, 128, 54]),
     ],
 )
-def test_image_masks_produce_rendered_pixel_coverage(tmp_path: Path, mode: ImageMaskMode, pixels: list[tuple[int, int, int, int]], expected: list[int]) -> None:
+def test_image_masks_produce_rendered_pixel_coverage(tmp_path: Path, mode: MaskCoverageMode, pixels: list[tuple[int, int, int, int]], expected: list[int]) -> None:
     image_path = tmp_path / "mask.png"
     _write_rgba_png(image_path, 2, 2, pixels)
     project = Project(size=(2, 2), fps=1, duration=1, base_directory=tmp_path)
@@ -639,7 +638,7 @@ def test_image_luma_rendering_covers_primary_colours_and_transparent_white(tmp_p
     _write_rgba_png(image_path, 4, 2, pixels)
     project = Project(size=(4, 2), fps=1, duration=1, base_directory=tmp_path)
     layer = project.root.add(Rectangle(width=4, height=2, fill="#ff0000"))
-    layer.masks.add(Image(image_path), mode=ImageMaskMode.LUMA, operation=MaskOperation.REPLACE)
+    layer.masks.add(Image(image_path), mode=MaskCoverageMode.LUMA, operation=MaskOperation.REPLACE)
 
     rendered = project.render_frame(0, backend="cpu").to_bytes()
     coverage = [rendered[index * 4] for index in range(8)]
@@ -657,7 +656,7 @@ def test_mixed_shape_and_image_masks_preserve_order(tmp_path: Path) -> None:
     _write_rgba_png(image_path, 2, 2, [(255, 255, 255, 255), (255, 255, 255, 0)] * 2)
     project = Project(size=(2, 2), fps=1, duration=1, base_directory=tmp_path)
     layer = project.root.add(Rectangle(width=2, height=2, fill="#ff0000"))
-    layer.masks.add(Image(image_path), mode=ImageMaskMode.ALPHA, operation=MaskOperation.REPLACE)
+    layer.masks.add(Image(image_path), mode=MaskCoverageMode.ALPHA, operation=MaskOperation.REPLACE)
     layer.masks.add(Rectangle(width=2, height=2, fill="#ffffff"), operation=MaskOperation.INTERSECT)
 
     rendered = project.render_frame(0, backend="cpu").to_bytes()
@@ -672,7 +671,7 @@ def test_group_image_mask_clips_composed_result_and_keeps_child_masks_independen
     group = project.root.group(duration=1)
     child = group.add(Rectangle(width=4, height=4, fill="#00ff00"), duration=1)
     child.masks.add(Rectangle(width=2, height=4, fill="#ffffff"))
-    group.masks.add(Image(image_path), mode=ImageMaskMode.ALPHA, operation=MaskOperation.REPLACE)
+    group.masks.add(Image(image_path), mode=MaskCoverageMode.ALPHA, operation=MaskOperation.REPLACE)
 
     rendered = project.render_frame(0, backend="cpu").to_bytes()
     assert rendered[(2 * 4 + 1) * 4 : (2 * 4 + 1) * 4 + 3] == bytes((0, 255, 0))
@@ -686,8 +685,8 @@ def test_one_image_asset_is_registered_once_for_visible_and_mask_uses(tmp_path: 
     project = Project(size=(2, 2), fps=1, duration=1, base_directory=tmp_path)
     image = Image(image_path)
     layer = project.root.add(image)
-    layer.masks.add(image, mode=ImageMaskMode.ALPHA)
-    layer.masks.add(image, mode=ImageMaskMode.LUMA)
+    layer.masks.add(image, mode=MaskCoverageMode.ALPHA)
+    layer.masks.add(image, mode=MaskCoverageMode.LUMA)
 
     assets = project.snapshot().to_dict()["assets"]
     assert len(assets) == 1
@@ -698,12 +697,12 @@ def test_image_masks_render_on_cpu_and_wgpu() -> None:
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
     layer.masks.add(
         Image("examples/assets/green.png"),
-        mode=ImageMaskMode.ALPHA,
+        mode=MaskCoverageMode.ALPHA,
         feather=4,
     )
     layer.masks.add(
         Image("examples/assets/blue.png"),
-        mode=ImageMaskMode.LUMA,
+        mode=MaskCoverageMode.LUMA,
         operation=MaskOperation.UNION,
     )
     cpu = _render(project, "cpu")

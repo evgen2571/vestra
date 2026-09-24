@@ -255,7 +255,7 @@ class ProjectBuilder:
 
     @property
     def audio(self) -> AudioTimeline:
-        """Stable builder-owned schema-v2 audio timeline."""
+        """Stable builder-owned schema-v1 audio timeline."""
         return self._audio
 
     @property
@@ -581,7 +581,7 @@ class ProjectBuilder:
         if self.duration is not None:
             output["duration"] = self.duration
         data: CanonicalProject = {
-            "schema_version": 4,
+            "schema_version": 1,
             "output": output,
             "assets": [
                 {"id": asset.id, "type": asset.kind, "source": asset.source}

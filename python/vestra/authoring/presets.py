@@ -45,7 +45,7 @@ def _seed(value: int) -> int:
 
 @dataclass(frozen=True, slots=True)
 class Preset:
-    """An immutable schema-version 3 preset value."""
+    """An immutable schema-version 1 preset value."""
 
     kind: Literal["slow_drift", "zoom_punch", "impact", "heavy_impact", "focus_reveal"]
     intensity: float = 1.0

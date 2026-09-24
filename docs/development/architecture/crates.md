@@ -22,7 +22,7 @@ vestra-cli ──> vestra <── vestra-python
 | `vestra-render` | `RenderBackend` contracts, CPU and WGPU backends, decoded rendering resources, compositing, text and effects. | `vestra-core`. |
 | `vestra-media` | FFmpeg-native probing/decoding, audio analysis and graph execution, frame sinks, encoder finalization and output publication. | `vestra-core`, renderer contracts with rendering features disabled. |
 | `vestra` | Public SDK project wrapper, validation/preflight, preparation, render orchestration, results, events and errors. | Core, render and media. |
-| `vestra-progress` | Typed RenderEvent v2 lifecycle, progress modes, and shared native terminal presentation. | `vestra-core`. |
+| `vestra-progress` | Typed RenderEvent v1 lifecycle, progress modes, and shared native terminal presentation. | `vestra-core`. |
 | `vestra-observability` | Application-boundary tracing subscriber, EnvFilter/RUST_LOG policy, human/JSON formatting, and stderr/file output coordinated with progress. | `vestra-progress`. |
 | `vestra-python` | PyO3 classes and conversion between Python and the Rust SDK, including explicit observability configuration. | `vestra`, `vestra-observability`. |
 | `vestra-cli` | Clap parsing and report/result presentation; adapts CLI verbosity/progress choices to shared crates. | `vestra`, `vestra-observability`, `vestra-progress`. |

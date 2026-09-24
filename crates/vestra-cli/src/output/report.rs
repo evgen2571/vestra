@@ -266,7 +266,6 @@ mod tests {
             &RenderTimings {
                 plan_compile_ms: 7,
                 operation_total_ms: 19,
-                total_ms: 19,
                 ..RenderTimings::default()
             },
         )

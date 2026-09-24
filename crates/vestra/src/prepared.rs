@@ -444,7 +444,7 @@ impl PreparedProject {
         clippy::result_large_err,
         reason = "render failures retain diagnostics"
     )]
-    /// Compatibility observer-oriented video render entry point.
+    /// Observer-oriented video render entry point.
     ///
     /// Use [`Self::render_video_auto`] for the normal automatic presentation
     /// or [`Self::render_video_with_observer`] for observer-controlled
@@ -654,7 +654,6 @@ impl PreparedProject {
         );
         result.timing_scope = crate::RenderTimingScope::PreparedOperation;
         result.timings.operation_total_ms = operation_started.elapsed().as_millis();
-        result.timings.total_ms = result.timings.operation_total_ms;
         result.elapsed_ms = result.timings.operation_total_ms;
         crate::editor::log_render_timing_summary(
             operation_id,
@@ -694,7 +693,6 @@ fn prepared_cancelled_error(
         temporary_removed: false,
         timings: crate::RenderTimings {
             operation_total_ms,
-            total_ms: operation_total_ms,
             ..crate::RenderTimings::default()
         },
     }
@@ -747,7 +745,6 @@ fn prepared_operation_error(mut error: EditorError, started: Instant) -> EditorE
         | EditorError::Plan { timings, .. }
         | EditorError::Render { timings, .. } => {
             timings.operation_total_ms = elapsed;
-            timings.total_ms = elapsed;
         }
     }
     error
@@ -762,7 +759,7 @@ mod tests {
     #[test]
     fn editor_prepare_deduplicates_fallback_warning_and_keeps_its_report_immutable() {
         let project = Project::from_json(
-            r##"{"schema_version":3,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+            r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30/1","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
             ".",
         )
         .expect("project");

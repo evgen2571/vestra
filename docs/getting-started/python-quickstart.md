@@ -6,8 +6,8 @@ render runtime stay behind `Project.render`.
 
 ## Prerequisites
 
-Complete the [installation guide](installation.md). The commands below assume
-you run them from the repository root with `uv run`.
+Install Vestra with `pip install vestra` and complete the
+[installation guide](installation.md). The commands work in any directory.
 
 ## Create the project
 
@@ -43,10 +43,10 @@ The layer lasts one second, so it covers the complete project.
 
 ## Render it
 
-Run the file with the environment created during installation:
+Run the file with the Python interpreter where Vestra is installed:
 
 ```bash
-uv run python quickstart.py
+python quickstart.py
 ```
 
 The command writes `quickstart.mp4` in the current directory. It is a 320×180,

@@ -1,6 +1,6 @@
 [package]
 name = "vestra-render"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "CPU and WGPU frame rendering for vestra"
 license = "MIT"

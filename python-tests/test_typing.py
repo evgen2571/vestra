@@ -3,7 +3,7 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 import vestra
-from vestra import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, ProjectSnapshot, Source, Transform, VideoEditorError
+from vestra import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, ProjectSnapshot, Source, Transform, VestraError
 from vestra.authoring import (
     AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
     Preset, ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
@@ -24,12 +24,12 @@ if TYPE_CHECKING:
     nested: vestra.CompositionLayer = high_level_project.root.group("nested")
     nested.add(vestra.sources.Color("#334455"))
     assert placed_layer.composition is high_level_project.root
-    project: ProjectSnapshot = ProjectSnapshot.from_dict({"schema_version": 3, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
+    project: ProjectSnapshot = ProjectSnapshot.from_dict({"schema_version": 1, "output": {"path": "out.mp4", "width": 2, "height": 2, "frame_rate": "30/1", "background": "#000000", "quality": "balanced", "audio": False, "duration_mode": "automatic"}, "assets": [], "visual": {"clips": []}})
     report = Editor().validate(project)
     path: Path = project.base_directory
     assert report.is_valid
     assert path
-    error: VideoEditorError
+    error: VestraError
     kind: str = error.kind
     diagnostics = error.diagnostics
     warnings = error.warnings
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
         return None
 
     rendered: vestra.RenderResult = prepared.render_video(
-        request, progress=on_progress, cancellation=token
+        request, on_progress=on_progress, cancellation=token
     )
     preparation_report = prepared.preparation_report
     frame: Frame = prepared.render_frame_number(0)

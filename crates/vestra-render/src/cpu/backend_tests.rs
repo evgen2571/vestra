@@ -185,7 +185,7 @@ impl crate::VideoDecoderFactory for ColourVideoFactory {
 fn cpu_video_renderer_uses_layer_local_source_timing_end_to_end() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "fixture.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -258,7 +258,7 @@ fn cpu_video_renderer_uses_layer_local_source_timing_end_to_end() {
 fn cpu_video_to_video_transition_advances_both_endpoints() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "video-transition.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -355,7 +355,7 @@ fn cpu_video_to_video_transition_advances_both_endpoints() {
 fn same_video_asset_plan() -> RenderPlan {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "same-video.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -583,7 +583,7 @@ fn cpu_video_reopen_failure_fails_the_frame() {
 fn cpu_nested_video_renderer_uses_nested_local_time() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "nested-video.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -649,7 +649,7 @@ fn cpu_nested_video_renderer_uses_nested_local_time() {
 fn cpu_video_renderer_samples_the_authored_crop_from_a_dynamic_frame() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "fixture.mp4", "width": 1, "height": 1,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -718,7 +718,7 @@ fn cpu_video_renderer_samples_the_authored_crop_from_a_dynamic_frame() {
 fn cpu_mixed_static_and_video_sources_render_through_one_layer_pipeline() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "mixed.mp4", "width": 4, "height": 4,
                 "frame_rate": "1/1", "background": "#00000000",
@@ -1076,7 +1076,7 @@ fn cache_budget_partition_covers_static_crop_video_and_tiny_cases() {
 fn cpu_video_worker_count_benchmark() {
     let project = crate::project::Project::from_json(
         r##"{
-            "schema_version": 3,
+            "schema_version": 1,
             "output": {
                 "path": "fixture.mp4", "width": 320, "height": 180,
                 "frame_rate": "30/1", "background": "#00000000",

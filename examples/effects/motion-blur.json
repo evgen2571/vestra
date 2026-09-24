@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Motion blur",
   "output": {
     "path": "../output/motion-blur.mp4",

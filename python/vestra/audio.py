@@ -265,11 +265,6 @@ class AudioClip:
         return self._path
 
     @property
-    def source(self) -> str:
-        """Alias for :attr:`path` for callers that use source terminology."""
-        return self._path
-
-    @property
     def track(self) -> AudioTrack:
         return self._track
 

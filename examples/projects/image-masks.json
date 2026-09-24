@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Image masks",
   "output": {
     "path": "../output/image-masks.mp4",

@@ -25,18 +25,6 @@ schema_v2 = copy.deepcopy(project)
 schema_v2["schema_version"] = 2
 assert errors(schema_v2), "schema v2 must be rejected"
 
-legacy_transition = copy.deepcopy(project)
-legacy_transition["visual"]["transitions"] = [{
-    "type": "crossfade",
-    "id": "legacy",
-    "outgoing": "red-pan",
-    "incoming": "blue-in",
-    "start": 3,
-    "duration": 1,
-    "interpolation": "linear",
-}]
-assert errors(legacy_transition), "legacy transition variants must be rejected"
-
 unknown_transition_field = copy.deepcopy(project)
 unknown_transition_field["visual"]["transitions"][0]["unexpected"] = True
 assert errors(unknown_transition_field), "unknown generic transition fields must be rejected"
@@ -376,7 +364,7 @@ assert errors(null_audio_trim), "explicit null audio trim_end must not validate"
 audio_timeline = copy.deepcopy(solid_colour)
 audio_timeline["assets"] = [{"id": "audio", "type": "audio", "source": "tone.wav"}]
 audio_timeline["audio"] = {"tracks": [{"id": "music", "gain": 1, "mute": False, "clips": [{"id": "clip", "asset": "audio", "start": 0, "trim_start": 0, "gain": 1, "fade_in": 0, "fade_out": 0, "mute": False}]}]}
-assert not errors(audio_timeline), "schema-v2 audio timeline must validate"
+assert not errors(audio_timeline), "schema-v1 audio timeline must validate"
 
 audio_effect = {
     "id": "eq", "type": "parametric_eq", "frequency_hz": 120.0,
@@ -464,7 +452,3 @@ assert errors(unsupported_softness), "deferred scalar properties must not expose
 old_audio_shape = copy.deepcopy(audio_timeline)
 old_audio_shape["audio"] = {"asset": "audio", "timeline_start": 0, "trim_start": 0, "volume": 1}
 assert errors(old_audio_shape), "old global audio shape must not validate"
-
-schema_v1 = copy.deepcopy(audio_timeline)
-schema_v1["schema_version"] = 1
-assert errors(schema_v1), "schema v1 must not validate"

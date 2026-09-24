@@ -6,7 +6,7 @@ use vestra_core::plan::RenderPlan;
 use crate::{Category, Diagnostic, render::AdapterMetadata};
 
 use super::{
-    diagnostics::{diagnostic, environment_present, requested_backends},
+    diagnostics::{diagnostic, requested_backends},
     requirements::GpuRequirements,
     runtime_error::RuntimeErrorState,
     texture_pool::{WORKING_FORMAT, WORKING_TEXTURE_USAGE},
@@ -44,10 +44,7 @@ impl GpuContext {
         let adapter_request_started = Instant::now();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: environment_present(
-                "VESTRA_WGPU_FORCE_FALLBACK",
-                "VIDEO_EDITOR_WGPU_FORCE_FALLBACK",
-            ),
+            force_fallback_adapter: std::env::var_os("VESTRA_WGPU_FORCE_FALLBACK").is_some(),
             compatible_surface: None,
         }))
         .ok_or_else(|| {

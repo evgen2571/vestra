@@ -16,7 +16,7 @@ pub use terminal::{
 };
 
 /// The version of the stable serialized render-event representation.
-pub const RENDER_EVENT_SCHEMA_VERSION: u8 = 2;
+pub const RENDER_EVENT_SCHEMA_VERSION: u8 = 1;
 
 /// Coarse render stages visible to frontend-neutral progress consumers.
 ///

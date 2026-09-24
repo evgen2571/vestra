@@ -32,7 +32,7 @@ def builder(**changes: object) -> ProjectBuilder:
 
 def _native_spectrum_defaults() -> dict[str, object]:
     native = vestra.ProjectSnapshot.from_dict({
-        "schema_version": 3,
+        "schema_version": 1,
         "output": {"path": "out.mp4", "width": 64, "height": 64, "frame_rate": "10/1",
                     "background": "#000000", "quality": "balanced", "audio": False,
                     "duration_mode": "explicit", "duration": 0.2},

@@ -1,9 +1,8 @@
 # CLI quickstart
 
 This tutorial creates a minimal canonical project file, validates it, and
-renders it with `ve`. The project uses the current schema version 4 and contains
-no external assets, so it is easy to copy and inspect. Vestra also loads valid
-schema-3 projects as legacy input.
+renders it with `ve`. The project uses schema version 1 and contains no
+external assets, so it is easy to copy and inspect.
 
 ## Prerequisites
 
@@ -17,7 +16,7 @@ Save this as `solid.json`:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Minimal solid project",
   "output": {
     "path": "output.mp4",

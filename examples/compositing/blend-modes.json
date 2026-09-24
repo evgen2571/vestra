@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Blend modes",
   "output": {
     "path": "../output/blend-modes.mp4",

@@ -8,21 +8,20 @@ layers, and sources, then render it through the CPU or WGPU backend.
 
 - A high-level Python editing API built around `Project`, `Composition`,
   `Layer`, and `Source`.
-- A canonical schema version 4 for projects that can be validated and rendered
-  with the `ve` CLI. Valid schema-3 projects remain supported as legacy input.
+- A canonical schema version 1 for projects that can be validated and rendered
+  with the `ve` CLI.
 - Sources for solid colours, images, video, shapes, text, particles, and other
   current project features.
 - CPU rendering and WGPU rendering through the same project and render model.
 - Structured validation, inspection, render results, diagnostics, and progress
   events in the Rust and Python SDKs.
 
-Vestra is under active development. The source build is the supported way to
-use the project today. Public APIs and project files may change as the engine
-settles, so pin the repository revision when reproducibility matters.
+Vestra 0.1.0 is the first public release. Project schema 1 and RenderEvent
+schema 1 are its compatibility baseline.
 
 ## Quick start
 
-Set up the repository by following the [installation guide](docs/getting-started/installation.md).
+Install with `pip install vestra`, then follow the [installation guide](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md).
 
 ### Python
 
@@ -45,7 +44,7 @@ project.root.add(Color("#2f6fed"), duration=1, id="background")
 project.render(Path("quickstart.mp4"), backend="cpu", overwrite=True)
 ```
 
-The [Python quickstart](docs/getting-started/python-quickstart.md) explains
+The [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md) explains
 each part and shows how to check the result.
 
 ### CLI
@@ -57,9 +56,8 @@ ve validate project.json
 ve render project.json --output quickstart.mp4 --overwrite
 ```
 
-The [CLI quickstart](docs/getting-started/cli-quickstart.md) includes a tiny
-schema version 4 project you can copy and run. Valid schema-3 projects remain
-loadable as legacy input.
+The [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md) includes a tiny
+schema version 1 project you can copy and run.
 
 ## Rendering backends
 
@@ -67,29 +65,29 @@ Use the default `auto` choice unless you need a specific backend. `cpu` is the
 most predictable option for a first render. `wgpu` selects a WGPU adapter, but
 WGPU does not by itself mean hardware acceleration. The selected adapter and
 any fallback are reported by the render result. Hardware validation is covered
-in the [GPU validation guide](docs/development/gpu-validation.md).
+in the [GPU validation guide](https://github.com/evgen2571/vestra/blob/main/docs/development/gpu-validation.md).
 
 ## Documentation
 
-Start at the [documentation index](docs/index.md), which routes readers by
+Start at the [documentation index](https://github.com/evgen2571/vestra/blob/main/docs/index.md), which routes readers by
 task. Useful entry points include:
 
-- [Installation](docs/getting-started/installation.md)
-- [Python quickstart](docs/getting-started/python-quickstart.md)
-- [CLI quickstart](docs/getting-started/cli-quickstart.md)
-- [Authoring model](docs/concepts/authoring-model.md)
-- [Python rendering guide](docs/guides/python/rendering-and-preparation.md)
-- [CLI rendering guide](docs/guides/cli/rendering.md)
-- [Project format reference](docs/reference/project-format.md)
-- [Python API reference](docs/reference/python-api.md)
-- [Feature support matrix](docs/reference/feature-support.md)
-- [CLI reference](docs/reference/cli.md)
-- [Backend reference](docs/reference/backends.md)
-- [Signals reference](docs/reference/signals.md)
-- [Troubleshooting](docs/troubleshooting/rendering.md)
-- [Development documentation](docs/development/architecture/overview.md)
-- [Canonical project schema](schemas/project.schema.json)
-- [Runnable examples](examples/)
+- [Installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
+- [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md)
+- [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md)
+- [Authoring model](https://github.com/evgen2571/vestra/blob/main/docs/concepts/authoring-model.md)
+- [Python rendering guide](https://github.com/evgen2571/vestra/blob/main/docs/guides/python/rendering-and-preparation.md)
+- [CLI rendering guide](https://github.com/evgen2571/vestra/blob/main/docs/guides/cli/rendering.md)
+- [Project format reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/project-format.md)
+- [Python API reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
+- [Feature support matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md)
+- [CLI reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/cli.md)
+- [Backend reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/backends.md)
+- [Signals reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/signals.md)
+- [Troubleshooting](https://github.com/evgen2571/vestra/blob/main/docs/troubleshooting/rendering.md)
+- [Development documentation](https://github.com/evgen2571/vestra/blob/main/docs/development/architecture/overview.md)
+- [Canonical project schema](https://github.com/evgen2571/vestra/blob/main/schemas/project.schema.json)
+- [Runnable examples](https://github.com/evgen2571/vestra/tree/main/examples/)
 
 ## Development
 
@@ -106,6 +104,6 @@ Run `just` or `just --list` to see the available formatting, linting, testing,
 schema, GPU validation, and benchmark commands. Recipes use the active
 environment; Just is included in the Nix development shell.
 
-See the [documentation index](docs/index.md) for the current navigation.
-Historical implementation reports live under [`docs/history/`](docs/history/)
+See the [documentation index](https://github.com/evgen2571/vestra/blob/main/docs/index.md) for the current navigation.
+Historical implementation reports live under [`docs/history/`](https://github.com/evgen2571/vestra/tree/main/docs/history/)
 and are not current product documentation.

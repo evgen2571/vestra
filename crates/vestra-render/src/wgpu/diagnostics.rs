@@ -56,16 +56,6 @@ pub(super) fn instance_for_backends(backends: wgpu::Backends) -> &'static wgpu::
     }
 }
 
-pub(super) fn environment_value(canonical: &str, legacy: &str) -> Option<String> {
-    std::env::var(canonical)
-        .ok()
-        .or_else(|| std::env::var(legacy).ok())
-}
-
-pub(super) fn environment_present(canonical: &str, legacy: &str) -> bool {
-    std::env::var_os(canonical).is_some() || std::env::var_os(legacy).is_some()
-}
-
 pub(super) fn finish_error_scopes(device: &wgpu::Device, code: &str) -> Result<(), Diagnostic> {
     let internal_error = pollster::block_on(device.pop_error_scope());
     let validation_error = pollster::block_on(device.pop_error_scope());
@@ -79,7 +69,8 @@ pub(super) fn finish_error_scopes(device: &wgpu::Device, code: &str) -> Result<(
 }
 
 pub(super) fn requested_backends() -> wgpu::Backends {
-    match environment_value("VESTRA_WGPU_BACKEND", "VIDEO_EDITOR_WGPU_BACKEND")
+    match std::env::var("VESTRA_WGPU_BACKEND")
+        .ok()
         .as_deref()
         .map(str::to_ascii_lowercase)
         .as_deref()

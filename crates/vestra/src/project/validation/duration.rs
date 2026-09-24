@@ -69,7 +69,7 @@ mod tests {
     fn project(audio: serde_json::Value, output_audio: bool) -> Project {
         Project::from_value(
             json!({
-                "schema_version": 3,
+                "schema_version": 1,
                 "output": {
                     "path": "out.mp4", "width": 2, "height": 2,
                     "frame_rate": "1/1", "background": "#000000", "quality": "balanced",

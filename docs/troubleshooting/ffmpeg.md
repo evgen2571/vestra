@@ -2,13 +2,11 @@
 
 ## Build cannot find FFmpeg
 
-`vestra-media` links native FFmpeg through `ffmpeg-next` and enables its bundled
-FFmpeg build. A plain Cargo build therefore does not require `libavcodec.pc`,
-`libavformat.pc`, `libavutil.pc`, or `libswscale.pc`; it does require a C
-compiler, `make`, `git`, `nasm`, and network access for the first build. Remove
-stale build artifacts and retry with `cargo clean && cargo build` if a previous
-checkout was built with the system-library configuration. The repository Nix
-development shell supplies the required tools.
+`vestra-media` builds and statically links the FFmpeg libraries it uses through
+`ffmpeg-next`. Source builds need a C compiler, `make`, `git`, `nasm`, and
+network access for the first FFmpeg source fetch. A local patch removes the
+dependency's host-specific `-march=native` compiler flag for portable wheels.
+The repository Nix development shell supplies the build tools.
 
 ## `ffmpeg` or `ffprobe` is missing at runtime
 

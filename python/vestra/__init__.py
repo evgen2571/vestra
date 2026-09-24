@@ -46,7 +46,7 @@ from ._native import (
     PixelFormat,
     Severity,
     ValidationReport,
-    VideoEditorError,
+    VestraError,
     native_version,
     configure_logging,
 )
@@ -141,7 +141,7 @@ from .effects import (
     ZoomBlur,
     ZoomBlurDirection,
 )
-from .masks import ImageMaskMode, Mask, MaskCollection, MaskCoverageMode, MatteMode, MaskOperation
+from .masks import Mask, MaskCollection, MaskCoverageMode, MatteMode, MaskOperation
 from .authoring.values import BlendMode, Crop, CubicBezier, Interpolation, Point
 
 # Keep the native type available under its stable public snapshot name.
@@ -203,7 +203,6 @@ __all__ = [
     "Mask",
     "MaskCollection",
     "MaskOperation",
-    "ImageMaskMode",
     "MaskCoverageMode",
     "MatteMode",
     "PreflightOptions",
@@ -223,7 +222,7 @@ __all__ = [
     "PreparationTimings",
     "FrameRate",
     "Frame",
-    "VideoEditorError",
+    "VestraError",
     "ProjectError",
     "PreparationError",
     "FrameRenderError",

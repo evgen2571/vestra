@@ -1,32 +1,29 @@
 # Install Vestra
 
-Vestra is currently used from a source checkout. The Rust crates are marked
-`publish = false`, and the Python package is built locally with Maturin. There
-is no supported `pip install vestra` or `cargo install vestra` command.
+Use Python 3.11, 3.12, 3.13, or 3.14. Install the public package from PyPI:
 
-## Prerequisites
+```bash
+python -m pip install vestra==0.1.0
+python -c "import vestra; print(vestra.__version__)"
+```
 
-You need:
+Vestra uses the `ffmpeg` executable to encode output and `ffprobe` for media
+inspection. Install FFmpeg with your platform's package manager and confirm
+both commands are on `PATH`. The [Python quickstart](python-quickstart.md) renders
+a small CPU project after installation.
 
-- Python 3.11 or newer.
-- A Rust toolchain supported by the repository's `Cargo.lock` and edition 2024
-  workspace.
-- `uv` for the locked Python environment.
-- FFmpeg for runtime encoding, plus a C toolchain, `make`, `git`, and `nasm`
-  for the bundled FFmpeg build used by the Rust media crate.
+## Develop from a checkout
 
-The repository's Nix flake supplies a convenient development environment with
-Rust, Python, `uv`, `pkg-config`, FFmpeg, and the native build tools:
+Building Vestra from source also needs Rust, `uv`, a C compiler, `make`, `git`,
+and `nasm` for the bundled FFmpeg build. The repository's Nix flake
+provides a pinned development environment:
 
 ```bash
 nix develop
 ```
 
-Nix is convenient, not mandatory. On other systems, install the prerequisites
-with the platform's package manager and make sure `ffmpeg`, a C compiler,
-`make`, `git`, and `nasm` are available. The Rust media crate builds the FFmpeg
-libraries it needs, so `libavutil.pc` and the other FFmpeg development package
-files do not need to be installed or added to `PKG_CONFIG_PATH`.
+On other systems, install these tools with your package manager. The bundled
+FFmpeg build fetches its source on the first build.
 
 ## Set up a checkout
 
@@ -53,7 +50,7 @@ cargo build -p vestra-cli
 
 For a Nix-based setup, the equivalent commands can be run inside `nix develop`.
 
-## Verify the setup
+## Verify a source checkout
 
 Check the two entry points before starting a tutorial:
 

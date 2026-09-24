@@ -36,7 +36,7 @@ def test_audio_timeline_is_ordered_and_round_trips() -> None:
     assert [track.id for track in project_builder.audio.tracks] == ["music", "ambience"]
     assert [clip.id for clip in music.clips] == [first.id, second.id]
     data = project_builder.to_dict()
-    assert data["schema_version"] == 4
+    assert data["schema_version"] == 1
     assert data["output"]["audio"] is False  # type: ignore[index]
     assert data["audio"]["tracks"][0]["clips"][1]["start"] == 0.25  # type: ignore[index]
     project = project_builder.build()
@@ -92,7 +92,7 @@ def test_output_audio_is_independent_of_authored_audio() -> None:
 
 def test_schema_v1_and_old_global_audio_shape_are_rejected() -> None:
     data = builder().to_dict()
-    data["schema_version"] = 1
+    data["schema_version"] = 2
     with pytest.raises(ProjectError):
         ProjectSnapshot.from_dict(data)
 
@@ -218,7 +218,7 @@ def test_audio_effect_authoring_rejects_unknown_missing_and_invalid_parameters(p
         clip.effects.add_effect("parametric_eq", frequency_hz=120, gain_db=0)
 
 
-def test_multi_clip_audio_renders_and_preserves_legacy_shape_rejection(tmp_path: Path) -> None:
+def test_multi_clip_audio_renders(tmp_path: Path) -> None:
     project_builder = builder(output_audio=True)
     project_builder.base_directory = Path.cwd()
     project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
@@ -230,10 +230,6 @@ def test_multi_clip_audio_renders_and_preserves_legacy_shape_rejection(tmp_path:
     result = Editor().render(project_builder.build(), RenderRequest(output, backend=BackendPreference.CPU))
     assert output.exists()
     assert result.audio_present is True
-    data = builder().to_dict()
-    data["audio"] = {"asset": "tone", "timeline_start": 0, "trim_start": 0, "volume": 1}
-    with pytest.raises(ProjectError):
-        ProjectSnapshot.from_dict(data)
 
 
 def test_prepared_multi_clip_audio_renders_twice(tmp_path: Path) -> None:
@@ -305,7 +301,7 @@ def test_multi_input_render_cancellation_removes_temporary_output(tmp_path: Path
         Editor().render(
             project_builder.build(),
             RenderRequest(output, backend=BackendPreference.CPU),
-            progress=cancel_on_encoding,
+            on_progress=cancel_on_encoding,
             cancellation=token,
         )
     assert raised.value.temporary_removed is True

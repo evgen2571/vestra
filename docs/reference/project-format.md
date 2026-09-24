@@ -1,6 +1,6 @@
 # Project format
 
-This is the canonical schema-v4 JSON format. The checked-in [JSON
+This is the canonical schema-v1 JSON format. The checked-in [JSON
 Schema](../../schemas/project.schema.json) defines the complete structural
 shape. Rust semantic validation adds current engine invariants, and preflight
 checks assets, media, tools, output paths, and requested backends. Objects
@@ -11,7 +11,7 @@ not read files or probe media.
 
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
-| `schema_version` | integer | yes | Current format is `4`; Vestra accepts valid schema-`3` projects and normalizes them to `4`. |
+| `schema_version` | integer | yes | Current format is `1`. |
 | `name` | string | no | Omitted when absent. |
 | `metadata` | non-null JSON value | no | Omitted when absent. |
 | `output` | object | yes | Output contract below. |
@@ -19,11 +19,8 @@ not read files or probe media.
 | `visual` | object | yes | Root visual composition. |
 | `audio` | object | no | Audio timeline; omitted when absent. |
 
-Schema version 4 remains the evolving project language for this
-0.1 SDK. Vestra therefore keeps additive Masks v1 fields, including the image
-`MaskInput` variant, in schema 4 rather than treating them as a stable external
-compatibility boundary. The loader still accepts schema 3 and normalizes it to
-4. A future format will make a deliberate version-boundary decision.
+Schema version 1 is the first public project format for Vestra 0.1. It includes
+Masks v1 fields and the image `MaskInput` variant.
 
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |

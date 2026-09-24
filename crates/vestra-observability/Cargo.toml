@@ -1,6 +1,6 @@
 [package]
 name = "vestra-observability"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Shared tracing subscriber and output infrastructure for Vestra applications"
 license = "MIT"

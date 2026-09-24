@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Camera shake",
   "output": {
     "path": "../output/camera-shake.mp4",

@@ -1,6 +1,6 @@
 [package]
 name = "vestra-python"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Python bindings for the vestra SDK"
 license = "MIT"

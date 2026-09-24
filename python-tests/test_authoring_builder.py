@@ -23,7 +23,7 @@ def builder(**changes: object) -> ProjectBuilder:
 def test_background_only_builder_emits_canonical_project() -> None:
     data = builder().to_dict()
     assert data == {
-        "schema_version": 4,
+        "schema_version": 1,
         "output": {
             "path": "canonical-output.mp4", "width": 160, "height": 90,
             "frame_rate": "30/1", "background": "#ff0000", "quality": "balanced",

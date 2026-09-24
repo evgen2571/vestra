@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 1,
   "name": "Radial zoom blur",
   "output": {
     "path": "../output/zoom-blur.mp4",

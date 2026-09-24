@@ -593,7 +593,7 @@ where
     timings.frame_render_ms = milliseconds(frame_render);
     timings.track_evaluation_ms = milliseconds(frame_loop.track_evaluation);
     timings.encoder_write_ms = milliseconds(frame_loop.encoder_write);
-    timings.total_ms = milliseconds(total_started.elapsed());
+    timings.operation_total_ms = milliseconds(total_started.elapsed());
     if prepared.backend.kind() == RenderBackendKind::Wgpu {
         let backend_timings = prepared.backend.timings();
         timings.gpu_frame_command_encode_ms =
@@ -610,7 +610,7 @@ where
         frame_count: plan.frame_count,
         audio_present: plan.encoder.audio_mix.is_some(),
         preview: plan.canvas.preview,
-        elapsed_ms: timings.total_ms,
+        elapsed_ms: timings.operation_total_ms,
         timings,
         performance,
         requested_render_backend: prepared.requested_backend,

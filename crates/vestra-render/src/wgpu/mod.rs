@@ -91,10 +91,7 @@ pub fn probe() -> Result<crate::AdapterMetadata, crate::Diagnostic> {
     let instance = diagnostics::instance_for_backends(diagnostics::requested_backends());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
-        force_fallback_adapter: diagnostics::environment_present(
-            "VESTRA_WGPU_FORCE_FALLBACK",
-            "VIDEO_EDITOR_WGPU_FORCE_FALLBACK",
-        ),
+        force_fallback_adapter: std::env::var_os("VESTRA_WGPU_FORCE_FALLBACK").is_some(),
         compatible_surface: None,
     }))
     .ok_or_else(|| {

@@ -31,7 +31,7 @@ def test_prepared_video_render_publishes_output_and_delivers_completed(tmp_path:
     output = tmp_path / "prepared.mp4"
     events: list[vestra.RenderEvent] = []
     result = cpu_prepared().render_video(
-        vestra.PreparedVideoRenderRequest(output), progress=events.append
+        vestra.PreparedVideoRenderRequest(output), on_progress=events.append
     )
 
     assert output.exists() and output.stat().st_size > 0
@@ -78,7 +78,7 @@ def test_show_progress_false_uses_native_render_without_python_callback(
     assert native._test_callback_attach_count() == 0
 
 
-def test_on_progress_alias_receives_the_native_event_schema(tmp_path: Path) -> None:
+def test_on_progress_callback_receives_the_native_event_schema(tmp_path: Path) -> None:
     events: list[vestra.RenderEvent] = []
     output = tmp_path / "prepared-on-progress.mp4"
 
@@ -88,7 +88,7 @@ def test_on_progress_alias_receives_the_native_event_schema(tmp_path: Path) -> N
 
     assert events
     assert events[-1].kind == "completed"
-    assert all(event.schema_version == 2 for event in events)
+    assert all(event.schema_version == 1 for event in events)
 
 
 def test_one_shot_video_render_uses_one_shot_timing_scope(tmp_path: Path) -> None:
@@ -126,7 +126,7 @@ def test_callback_attachment_count_matches_forwarded_events(tmp_path: Path) -> N
     native._test_reset_callback_attach_count()
     multi_frame_prepared(tmp_path).render_video(
         vestra.PreparedVideoRenderRequest(tmp_path / "prepared-callback-count.mp4"),
-        progress=prepared_events.append,
+        on_progress=prepared_events.append,
     )
     assert prepared_events
     assert native._test_callback_attach_count() == len(prepared_events)
@@ -139,7 +139,7 @@ def test_callback_attachment_count_matches_forwarded_events(tmp_path: Path) -> N
             tmp_path / "one-shot-callback-count.mp4",
             backend=vestra.BackendPreference.CPU,
         ),
-        progress=one_shot_events.append,
+        on_progress=one_shot_events.append,
     )
     assert one_shot_events
     assert native._test_callback_attach_count() == len(one_shot_events)
@@ -170,7 +170,7 @@ def test_callback_exception_is_preserved_and_suppresses_publication(tmp_path: Pa
         raise CallbackFailure("failed immediately")
 
     with pytest.raises(CallbackFailure, match="failed immediately"):
-        prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=fail)
+        prepared.render_video(vestra.PreparedVideoRenderRequest(output), on_progress=fail)
     assert not output.exists()
     assert prepared.render_frame_number(0).frame_number == 0
 
@@ -189,7 +189,7 @@ def test_callback_failure_at_encoding_aborts_before_publication(tmp_path: Path) 
 
     with pytest.raises(EncodingFailure, match="encoding callback failed") as raised:
         cpu_prepared().render_video(
-            vestra.PreparedVideoRenderRequest(output), progress=fail_at_encoding
+            vestra.PreparedVideoRenderRequest(output), on_progress=fail_at_encoding
         )
 
     assert seen == ["started", "stage_changed", "stage_changed", "stage_changed"]
@@ -209,7 +209,7 @@ def test_callback_failure_at_finalizing_aborts_before_publication(tmp_path: Path
 
     with pytest.raises(FinalizingFailure, match="finalizing callback failed") as raised:
         cpu_prepared().render_video(
-            vestra.PreparedVideoRenderRequest(output), progress=fail_at_finalizing
+            vestra.PreparedVideoRenderRequest(output), on_progress=fail_at_finalizing
         )
 
     assert not output.exists()
@@ -228,7 +228,7 @@ def test_completed_callback_failure_does_not_invalidate_published_success(
     events: list[vestra.RenderEvent] = []
     result = cpu_prepared().render_video(
         vestra.PreparedVideoRenderRequest(output),
-        progress=lambda event: (events.append(event), fail_at_completed(event)),
+        on_progress=lambda event: (events.append(event), fail_at_completed(event)),
     )
 
     assert result.output_path == output
@@ -248,7 +248,7 @@ def test_callback_reentrancy_is_immediately_busy_and_outer_render_continues(tmp_
             prepared.render_video(vestra.PreparedVideoRenderRequest(tmp_path / "inner.mp4"))
         busy.append(True)
 
-    prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=callback)
+    prepared.render_video(vestra.PreparedVideoRenderRequest(output), on_progress=callback)
     assert busy and all(busy)
     assert output.exists()
 
@@ -267,7 +267,7 @@ def test_callback_failure_after_progress_invalidates_the_native_prepared_state(t
 
     native._test_reset_callback_attach_count()
     with pytest.raises(RuntimeError, match="after progress") as raised:
-        prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=fail_on_progress)
+        prepared.render_video(vestra.PreparedVideoRenderRequest(output), on_progress=fail_on_progress)
     assert seen == ["started", "stage_changed", "stage_changed", "progress"]
     assert native._test_callback_attach_count() == len(seen)
     assert not output.exists()
@@ -315,7 +315,7 @@ def test_callback_cancellation_removes_output_and_invalidates_after_submission(t
     with pytest.raises(vestra.CancelledError) as raised:
         prepared.render_video(
             vestra.PreparedVideoRenderRequest(output),
-            progress=cancel_on_progress,
+            on_progress=cancel_on_progress,
             cancellation=token,
         )
     assert raised.value.temporary_removed is True
@@ -353,7 +353,7 @@ def test_another_python_thread_can_cancel_while_the_callback_is_active(tmp_path:
         with pytest.raises(vestra.CancelledError):
             prepared.render_video(
                 vestra.PreparedVideoRenderRequest(output),
-                progress=wait_for_cancellation,
+                on_progress=wait_for_cancellation,
                 cancellation=token,
             )
     finally:
@@ -370,8 +370,8 @@ def test_non_callable_progress_is_rejected_before_prepared_work(tmp_path: Path) 
     output = tmp_path / "invalid-progress.mp4"
     native._test_reset_native_render_invocation_count()
 
-    with pytest.raises(TypeError, match="progress must be callable or None"):
-        prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=object())
+    with pytest.raises(TypeError, match="on_progress must be callable or None"):
+        prepared.render_video(vestra.PreparedVideoRenderRequest(output), on_progress=object())
 
     assert not output.exists()
     assert list(tmp_path.iterdir()) == []
@@ -386,11 +386,11 @@ def test_non_callable_progress_is_rejected_before_one_shot_preparation(tmp_path:
     events: list[vestra.RenderEvent] = []
     native._test_reset_native_render_invocation_count()
 
-    with pytest.raises(TypeError, match="progress must be callable or None"):
+    with pytest.raises(TypeError, match="on_progress must be callable or None"):
         vestra.Editor().render(
             vestra.ProjectSnapshot.load(FIXTURE),
             vestra.RenderRequest(output, backend=vestra.BackendPreference.CPU),
-            progress=123,
+            on_progress=123,
         )
 
     assert events == []
@@ -404,7 +404,7 @@ def test_callback_return_values_are_ignored(tmp_path: Path, value: object) -> No
     output = tmp_path / "ignored-return.mp4"
 
     result = cpu_prepared().render_video(
-        vestra.PreparedVideoRenderRequest(output), progress=lambda _: value
+        vestra.PreparedVideoRenderRequest(output), on_progress=lambda _: value
     )
 
     assert result.output_path == output
@@ -421,7 +421,7 @@ def test_uncaught_reentrant_busy_error_is_the_callback_error(tmp_path: Path) -> 
         prepared.render_frame_number(0)
 
     with pytest.raises(vestra.PreparedProjectBusyError) as raised:
-        prepared.render_video(vestra.PreparedVideoRenderRequest(output), progress=callback)
+        prepared.render_video(vestra.PreparedVideoRenderRequest(output), on_progress=callback)
 
     assert raised.value.kind == "busy"
     assert events == ["started"]
@@ -437,7 +437,7 @@ def test_callbacks_run_on_the_calling_python_thread(tmp_path: Path) -> None:
 
     cpu_prepared().render_video(
         vestra.PreparedVideoRenderRequest(output),
-        progress=lambda _: observed.append(threading.get_ident()),
+        on_progress=lambda _: observed.append(threading.get_ident()),
     )
     assert observed and observed == [caller] * len(observed)
 
@@ -451,7 +451,7 @@ def test_callbacks_run_on_the_calling_python_thread(tmp_path: Path) -> None:
         try:
             cpu_prepared().render_video(
                 vestra.PreparedVideoRenderRequest(worker_output),
-                progress=lambda _: callback_thread_ids.append(threading.get_ident()),
+                on_progress=lambda _: callback_thread_ids.append(threading.get_ident()),
             )
         except BaseException as error:
             worker_errors.append(error)
@@ -470,7 +470,7 @@ def test_render_event_snapshots_keep_the_sdk_contract(tmp_path: Path) -> None:
     events: list[vestra.RenderEvent] = []
     output = tmp_path / "event-contract.mp4"
     multi_frame_prepared(tmp_path).render_video(
-        vestra.PreparedVideoRenderRequest(output), progress=events.append
+        vestra.PreparedVideoRenderRequest(output), on_progress=events.append
     )
 
     assert [event.kind for event in events] == [
@@ -479,14 +479,14 @@ def test_render_event_snapshots_keep_the_sdk_contract(tmp_path: Path) -> None:
     ]
     started, preparing, rendering, *rest = events
     progress = [event for event in events if event.kind == "progress"]
-    assert started.schema_version == 2
+    assert started.schema_version == 1
     assert started.operation_id == events[-1].operation_id
     assert started.stage is None
     assert started.frame is None
     assert started.total_frames == 3
     assert started.fraction is None
     assert started.output_path == output
-    assert all(event.schema_version == 2 for event in events)
+    assert all(event.schema_version == 1 for event in events)
     assert preparing.stage == "preparing"
     assert rendering.stage == "rendering"
     assert [event.frame for event in progress] == [1, 2, 3]

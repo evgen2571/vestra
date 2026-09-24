@@ -1,12 +1,16 @@
 # Media pipeline and concurrency
 
-This report tracks Optimization Subblock 2. Retained changes cover native frame
-selection, CPU cursor reuse, audio FFT scratch reuse, GPU video culling, and
-bounded native prefetch for WGPU. Decoder-access, buffering, and worker-count
-experiments are also recorded below. WGPU asynchronous encoder feeding is also
-retained after performance, output, and repository verification. Every requested
+Retained changes cover native frame selection, CPU cursor reuse, audio FFT
+scratch reuse, GPU video culling, and bounded native prefetch for WGPU.
+Decoder-access, buffering, and worker-count experiments are also recorded
+below. WGPU asynchronous encoder feeding is retained after performance,
+output, and repository verification. Every requested
 area has implementation or experimental evidence in the coverage table below;
 rejected variants and hardware-specific limitations remain explicit.
+
+For the current disposition of each area, start with the
+[coverage summary](#coverage-and-current-status). The surrounding sections
+retain the measurements and decisions behind it.
 
 ## Native frame selection candidate
 
@@ -280,6 +284,8 @@ adapter. These parity tests use renderer fixtures; the real-media checksum
 comparisons above separately verify encoded CPU output. The pool is retained
 for the measured video-heavy gain, with its explicit memory tradeoff.
 
+## Coverage and current status
+
 | Requested area | Current evidence and next action |
 | --- | --- |
 | Decoder/session reuse | The CPU pool separates simultaneous asset/time trajectories, eliminates 82 video-heavy seeks, and preserves serial reuse. WGPU's per-asset sessions are exercised by the hardware canonical and concurrent-offset measurements below. |
@@ -299,9 +305,9 @@ for the measured video-heavy gain, with its explicit memory tradeoff.
 | Stalls and idle CPU/GPU time | Stage timings, buffering counters, prefetch and async-feeding measurements assess overlap. Wall-time gains do not establish GPU occupancy or eliminate stalls in every driver call. |
 
 Native frame selection, the CPU cursor pool, audio FFT scratch reuse, GPU
-video culling, and WGPU native prefetch are retained on measured gains and
-correctness verification. Asynchronous feeding remains unfinished; this report does not
-claim completion of Subblock 2.
+video culling, WGPU native prefetch, and asynchronous encoder feeding are
+retained on measured gains and correctness verification. CPU asynchronous
+feeding was rejected after near-neutral measurements.
 
 ## Audio analysis measurements
 

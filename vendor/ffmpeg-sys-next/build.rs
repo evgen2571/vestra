@@ -196,6 +196,20 @@ fn patch_windows_dependency_parser() -> io::Result<()> {
     fs::write(configure_path, patched)
 }
 
+fn patch_windows_archive_response_file() -> io::Result<()> {
+    // The object list exceeds cmd.exe's command length limit, so the shell
+    // drops the redirection and lib.exe never receives its response file.
+    let makefile_path = source().join("ffbuild/library.mak");
+    let makefile = fs::read_to_string(&makefile_path)?;
+    let old = "\t$(Q)echo $^ > $@.objs";
+    let new = "\t$(file >$@.objs,$^)";
+    let patched = makefile.replace(old, new);
+    if patched == makefile {
+        return Err(io::Error::other("FFmpeg's archive response file recipe was not found"));
+    }
+    fs::write(makefile_path, patched)
+}
+
 fn switch(configure: &mut Command, feature: &str, name: &str) {
     let arg = if env::var("CARGO_FEATURE_".to_string() + feature).is_ok() {
         "--enable-"
@@ -985,6 +999,7 @@ fn main() {
             fetch().unwrap();
             if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
                 patch_windows_dependency_parser().unwrap();
+                patch_windows_archive_response_file().unwrap();
             }
             build(sysroot.as_deref()).unwrap();
         }

@@ -183,6 +183,19 @@ fn fetch() -> io::Result<()> {
     }
 }
 
+fn patch_windows_dependency_parser() -> io::Result<()> {
+    // Native Windows make strips a backslash from FFmpeg's awk expression.
+    let configure_path = source().join("configure");
+    let configure = fs::read_to_string(&configure_path)?;
+    let old = r#"gsub(/\\/, "/")"#;
+    let new = r#"gsub(sprintf("%c%c", 92, 92), "/")"#;
+    let patched = configure.replace(old, new);
+    if patched == configure {
+        return Err(io::Error::other("FFmpeg's MSVC dependency parser was not found"));
+    }
+    fs::write(configure_path, patched)
+}
+
 fn switch(configure: &mut Command, feature: &str, name: &str) {
     let arg = if env::var("CARGO_FEATURE_".to_string() + feature).is_ok() {
         "--enable-"
@@ -970,6 +983,9 @@ fn main() {
         if fs::metadata(search().join("lib").join("libavutil.a")).is_err() {
             fs::create_dir_all(output()).expect("failed to create build directory");
             fetch().unwrap();
+            if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+                patch_windows_dependency_parser().unwrap();
+            }
             build(sysroot.as_deref()).unwrap();
         }
 

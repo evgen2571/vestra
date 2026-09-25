@@ -67,7 +67,7 @@ jobs:
             rustc --version
             cargo --version
             command -v ffmpeg
-            ffmpeg -version
+            ffmpeg -version 2>&1 | sed -n "1p"
             for library in libavcodec libavformat libavutil libswscale; do
               printf "%s=" "$library"
               pkg-config --modversion "$library"

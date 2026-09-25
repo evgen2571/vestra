@@ -17,7 +17,8 @@ matrix job and its uploaded artifact before publishing.
 
 Wheels statically link a bundled FFmpeg build. The local patch under
 `vendor/ffmpeg-sys-next` removes the dependency's host-specific
-`-march=native` compiler flag and fixes FFmpeg's MSVC dependency parser.
+`-march=native` compiler flag and fixes FFmpeg's MSVC dependency parser and
+archive response file generation.
 Source builds need Rust, a C toolchain, `make`,
 `git`, and NASM. Runtime encoding still needs the `ffmpeg` executable on
 `PATH`; media inspection uses `ffprobe`.

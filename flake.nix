@@ -45,6 +45,7 @@
               # Runtime checks use the FFmpeg executable above. Development
               # libraries remain available for native diagnostics.
               PKG_CONFIG_PATH = lib.makeSearchPath "lib/pkgconfig" [ ffmpegDev ];
+              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
               LD_LIBRARY_PATH = lib.makeLibraryPath [ ffmpegLib ];
 
               shellHook = lib.optionalString softwareWgpu ''

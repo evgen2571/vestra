@@ -18,191 +18,128 @@ env:
   RUST_BACKTRACE: "1"
 
 jobs:
-  rust-format:
-    name: Rust Format
+  style:
+    name: Style
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      native: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.native == 'true' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          # Unknown paths trigger validation too: only documentation is excluded.
+          predicate-quantifier: every
+          filters: |
+            native:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE'
       - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Check Rust formatting
-        run: nix develop .#ci --command cargo fmt --all -- --check
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - name: Check Rust/Python formatting and Python lint
+        run: nix develop .#ci --command just style
 
-  python-format:
-    name: Python Format
+  rust:
+    name: Rust
+    needs: style
+    if: needs.style.outputs.native == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Check maintained Python format surface
-        run: >-
-          nix develop .#ci --command uvx --from 'ruff>=0.12,<0.13'
-          ruff format --check
-          python/vestra/sources/base.py python/vestra/sources/__init__.py
-
-  rust-check:
-    name: Rust Check
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Query the pinned Nix toolchain, not the runner's preinstalled Rust.
+          cmd-format: nix develop .#wgpu-software --command {0}
+          key: ${{ hashFiles('flake.nix', 'flake.lock') }}
       - name: Verify native build environment
         run: |
-          set -euo pipefail
-          nix develop .#ci --command bash -euo pipefail -c '
+          nix develop .#wgpu-software --command bash -euo pipefail <<'SCRIPT'
             rustc --version
             cargo --version
             command -v ffmpeg
-            ffmpeg_version=$(ffmpeg -version 2>&1)
-            printf "%s\n" "${ffmpeg_version%%$'\n'*}"
+            ffmpeg -version
             for library in libavcodec libavformat libavutil libswscale; do
               printf "%s=" "$library"
               pkg-config --modversion "$library"
             done
-          '
-      - name: Check media crate native dependencies
-        run: nix develop .#ci --command cargo check -p vestra-media --all-features
-      - name: Check workspace
-        run: nix develop .#ci --command cargo check --workspace --all-features
-
-  rust-clippy:
-    name: Rust Clippy
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Run Clippy
-        run: >-
-          nix develop .#ci --command cargo clippy --workspace --all-targets
-          --all-features -- -D warnings
-
-  rust-tests:
-    name: Rust Tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Run workspace tests
-        run: nix develop .#ci --command cargo test --workspace --all-features
-
-  python-lint:
-    name: Python Lint
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Lint maintained Python package
-        run: nix develop .#ci --command uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra
-
-  python-tests:
-    name: Python Tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Build the native extension and run Python tests
+          SCRIPT
+      - name: Run Clippy (includes workspace compilation checks)
+        run: nix develop .#wgpu-software --command just lint-rust
+      - name: Run workspace tests and strict software WGPU correctness
         run: |
-          set -euo pipefail
-          nix develop .#ci --command bash -euo pipefail -c '
-            which python
-            python --version
-            which uv
-            uv --version
-            uv sync --locked --extra dev
-            uv run python -c "import vestra"
-            uv run pytest
-            uv run python -m compileall -q python/vestra
-          '
-
-  schema-contract:
-    name: Schema Contract
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Validate schema and native package contract
-        run: |
-          set -euo pipefail
-          nix develop .#ci --command bash -euo pipefail -c '
-            uv sync --locked --extra test
-            uv run python -c "import vestra"
-            uv run python crates/vestra-cli/tests/schema_validation.py
-            schema_tmp_dir=$(mktemp -d)
-            trap "rm -rf \"$schema_tmp_dir\"" EXIT
-            cargo run -q -p vestra-cli -- generate-schema --output "$schema_tmp_dir/project.schema.json"
-            cmp "$schema_tmp_dir/project.schema.json" schemas/project.schema.json
-          '
-
-  build-smoke:
-    name: Build Smoke
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Build Rust, CLI, and Python package
-        run: |
-          set -euo pipefail
-          nix develop .#ci --command bash -euo pipefail -c '
-            cargo build --workspace --all-features
-            target/debug/ve --help
-            rm -rf dist smoke-venv
-            uv build --wheel --out-dir dist
-            uv venv smoke-venv
-            uv pip install --python smoke-venv/bin/python dist/*.whl
-            smoke-venv/bin/python scripts/verify-wheel.py
-          '
-
-  wgpu-software-correctness:
-    name: WGPU Software Correctness
-    runs-on: ubuntu-24.04
-    timeout-minutes: 50
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v19
-      - name: Verify software adapter environment
-        run: |
-          set -euo pipefail
-          nix develop .#wgpu-software --command bash -euo pipefail -c '
+          nix develop .#wgpu-software --command bash -euo pipefail <<'SCRIPT'
             echo "WGPU SOFTWARE correctness (no hardware claim)"
-            command -v vulkaninfo
             vulkaninfo --summary
-            scripts/verify-wgpu.sh --software
-          '
+            just wgpu-software
+          SCRIPT
+      - name: Check CLI help and generated schema freshness
+        run: nix develop .#wgpu-software --command just cli-smoke schema-freshness
+
+  python:
+    name: Python
+    needs: style
+    if: needs.style.outputs.native == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v19
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cmd-format: nix develop .#ci --command {0}
+          key: ${{ hashFiles('flake.nix', 'flake.lock', 'pyproject.toml', 'uv.lock') }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ runner.arch }}-
+      - name: Build the native extension and run Python and schema tests
+        run: |
+          nix develop .#ci --command bash -euo pipefail <<'SCRIPT'
+            python --version
+            uv --version
+            just python-test
+            just schema-validation
+          SCRIPT
+      - name: Build and smoke test installed wheel (main and manual runs)
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+        run: nix develop .#ci --command just wheel-smoke
 
   ci-success:
     name: CI Success
     if: ${{ always() }}
-    needs:
-      - rust-format
-      - python-format
-      - rust-check
-      - rust-clippy
-      - rust-tests
-      - python-lint
-      - python-tests
-      - schema-contract
-      - build-smoke
-      - wgpu-software-correctness
+    needs: [style, rust, python]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require all validation jobs to pass
+      - name: Require validation to pass (allow documented skips only)
+        env:
+          STYLE_RESULT: ${{ needs.style.result }}
+          NATIVE_REQUIRED: ${{ needs.style.outputs.native }}
+          RUST_RESULT: ${{ needs.rust.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
         run: |
-          test "${{ needs.rust-format.result }}" = success
-          test "${{ needs.python-format.result }}" = success
-          test "${{ needs.rust-check.result }}" = success
-          test "${{ needs.rust-clippy.result }}" = success
-          test "${{ needs.rust-tests.result }}" = success
-          test "${{ needs.python-lint.result }}" = success
-          test "${{ needs.python-tests.result }}" = success
-          test "${{ needs.schema-contract.result }}" = success
-          test "${{ needs.build-smoke.result }}" = success
-          test "${{ needs.wgpu-software-correctness.result }}" = success
+          test "$STYLE_RESULT" = success
+          case "$NATIVE_REQUIRED" in
+            true)
+              test "$RUST_RESULT" = success
+              test "$PYTHON_RESULT" = success
+              ;;
+            false)
+              test "$RUST_RESULT" = skipped
+              test "$PYTHON_RESULT" = skipped
+              ;;
+            *) exit 1 ;;
+          esac

@@ -97,9 +97,14 @@ The repository contains the Rust workspace, Python package, CLI, examples, and
 tests. For the normal development checks, use the pinned environment and run:
 
 ```bash
-uv sync --locked --extra dev
-./scripts/check.sh
+nix develop
+just python-sync
+just check
 ```
+
+Run `just` or `just --list` to see the available formatting, linting, testing,
+schema, GPU validation, and benchmark commands. Recipes use the active
+environment; Just is included in the Nix development shell.
 
 See the [documentation index](docs/index.md) for the current navigation.
 Historical implementation reports live under [`docs/history/`](docs/history/)

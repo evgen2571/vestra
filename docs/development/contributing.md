@@ -1,5 +1,11 @@
 # Contributing
 
+Enter the pinned environment with `nix develop`, then run `just` to list the
+development commands. Use `just python-sync` to build the native Python package
+and `just check` for the canonical contributor checks. CI uses the same recipes
+for formatting, linting, Python tests, schema checks, and wheel smoke tests. The
+recipes delegate to Cargo, uv, and the existing verification scripts.
+
 Start with the smallest change that makes the intended behavior true. Preserve the current crate boundaries: canonical model and semantics in core, pixels/resources in render, FFmpeg and output paths in media, orchestration in the SDK, and presentation in CLI/Python. Use CodeGraph for an unfamiliar execution path, then inspect the named source and tests rather than searching the whole tree by habit.
 
 Several interfaces are compatibility-sensitive: public Rust and Python APIs, `_native.pyi`, canonical JSON/schema, CLI options and reports, diagnostics, time/frame/sample conversion and published output behavior. A source/effect/transition change usually needs model, compiler/evaluator, CPU, WGPU, Python/lowering, schema and reference work. Do not claim CPU/WGPU parity from matching dispatch arms alone.

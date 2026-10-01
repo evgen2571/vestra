@@ -20,12 +20,18 @@ including NASM for the bundled FFmpeg build. No Python packages are required by
 the benchmark script.
 
 ```bash
-python scripts/benchmark.py run --suite smoke --output target/benchmark-results/smoke
-python scripts/benchmark.py run --suite canonical --output target/benchmark-results/before
+just benchmark-smoke target/benchmark-results/smoke
+just benchmark target/benchmark-results/before
 # Make one optimization, then measure with the same machine and settings.
-python scripts/benchmark.py run --suite canonical --output target/benchmark-results/after
-python scripts/benchmark.py compare target/benchmark-results/before/suite.json target/benchmark-results/after/suite.json
+just benchmark target/benchmark-results/after
+just benchmark-compare target/benchmark-results/before/suite.json target/benchmark-results/after/suite.json
 ```
+
+These recipes run the existing benchmark script through `uv run --no-project`.
+Enter `nix develop` to get Just and the native tools. Use
+`just benchmark OUTPUT hardware-wgpu` for a canonical hardware suite. The script
+remains directly callable when additional options such as `--executable` are
+needed.
 
 Use a new output directory for each run. The runner builds the existing
 `animation_effects` release benchmark and executes scenarios serially. Each

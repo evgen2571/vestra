@@ -66,9 +66,10 @@ cli-smoke:
 wheel-smoke:
     #!/usr/bin/env bash
     set -euo pipefail
+    wheel_python=$(uv python find)
     rm -rf dist smoke-venv
-    uv build --wheel --out-dir dist
-    uv venv smoke-venv
+    uv build --python "$wheel_python" --wheel --out-dir dist
+    uv venv --python "$wheel_python" smoke-venv
     uv pip install --python smoke-venv/bin/python dist/*.whl
     smoke-venv/bin/python scripts/verify-wheel.py
 

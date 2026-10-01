@@ -52,6 +52,11 @@ jobs:
     if: needs.style.outputs.native == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      # Keep debug symbols out of CI artifacts so the WGPU test binary can link
+      # within the hosted runner's disk budget. Assertions remain enabled.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
@@ -60,6 +65,8 @@ jobs:
         with:
           # Query the pinned Nix toolchain, not the runner's preinstalled Rust.
           cmd-format: nix develop .#wgpu-software --command {0}
+          # Avoid restoring large artifacts built with the previous debug profile.
+          prefix-key: v1-rust-compact
           key: ${{ hashFiles('flake.nix', 'flake.lock') }}
       - name: Verify native build environment
         run: |
@@ -97,7 +104,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@v15
       - uses: Swatinem/rust-cache@v2
         with:
-          cmd-format: nix develop .#ci --command {0}
+          cmd-format: nix develop .#wgpu-software --command {0}
           key: ${{ hashFiles('flake.nix', 'flake.lock', 'pyproject.toml', 'uv.lock') }}
       - uses: actions/cache@v4
         with:
@@ -107,9 +114,10 @@ jobs:
             uv-${{ runner.os }}-${{ runner.arch }}-
       - name: Build the native extension and run Python and schema tests
         run: |
-          nix develop .#ci --command bash -euo pipefail <<'SCRIPT'
+          nix develop .#wgpu-software --command bash -euo pipefail <<'SCRIPT'
             python --version
             uv --version
+            vulkaninfo --summary
             just python-test
             just schema-validation
           SCRIPT

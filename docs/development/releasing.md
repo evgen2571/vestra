@@ -5,9 +5,9 @@ crate. Maturin reads the Python package version from `vestra-python` through
 `pyproject.toml`'s dynamic version setting. Project JSON and RenderEvent both
 use schema version 1 for the first public `0.1.0` release.
 
-Run `./scripts/check.sh` and the Python tests before building release artifacts.
-Changing the release workflow in a pull request runs its artifact matrix;
-after merge, it can also be started manually. The workflow builds and smoke
+Run `just check` and `just python-test` before building release artifacts.
+The artifact matrix runs on published releases or can be started manually;
+it does not run on pull requests. The workflow builds and smoke
 tests CPython 3.11 through 3.14 wheels on Linux x86_64 and aarch64, macOS Intel
 and Apple Silicon, and Windows x64. The workflow also builds a source
 distribution and installs it in a clean environment. Each install must pass
@@ -29,5 +29,5 @@ settings. Protect the GitHub `pypi` environment so release publication needs
 maintainer approval. Publishing a GitHub release tagged `v0.1.0` then runs the
 same artifact matrix and uploads its results through OIDC only after every
 build and smoke test passes. The workflow verifies that the tag matches the
-workspace version. Pull request and manual runs build and test artifacts
+workspace version. Manual runs build and test artifacts
 without publishing them.

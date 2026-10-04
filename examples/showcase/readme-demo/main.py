@@ -15,10 +15,12 @@ INK, PAPER, ACCENT = "#111b22", "#edf0e9", "#b8d99c"
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     width, height = size
     unit = width / 1280
-    project = Project(size=size, fps=fps, duration=10, base_directory=SHOWCASE)
+    project = Project(
+        size=size, fps=fps, duration=10, base_directory=SHOWCASE, output_audio=False
+    )
     project.root.add(Color(INK), duration=10)
     project.audio.track("audio").add(
-        "assets/rapid2-excerpt.mp3", trim_end=10, gain=0.45, fade_in=0.08, fade_out=0.5
+        "assets/synth.wav", trim_end=10, gain=0.8, fade_in=0.15, fade_out=0.5
     )
 
     def label(group, text, position, duration, font_size=44):
@@ -155,10 +157,25 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
             outgoing, incoming, transition, start=start, duration=0.4
         )
 
-    final = scene("Vestra", 8.914286, 1.085714)
-    label(final, "Layers · masks · effects · audio", (0.5, 0.52), 1.085714, 38)
-    label(final, "Video output", (0.5, 0.72), 1.085714, 28)
-    label(final, "Music: Rapid2 · PeriTune · CC BY 4.0", (0.5, 0.94), 1.085714, 18)
+    # Return to the opening layout so the final frame joins the first cleanly.
+    final = scene("Layers + keyframes", 8.9, 1.1)
+    label(final, "Position · scale · rotation", (0.5, 0.84), 1.1, 28)
+    for index, colour in enumerate((ACCENT, "#5b807b", PAPER)):
+        tile = final.add(
+            Rectangle(
+                width=230 * unit, height=200 * unit, fill=colour, corner_radius=8 * unit
+            ),
+            duration=1.1,
+            z=index + 1,
+        )
+        tile.transform.position.keyframe(0, (0.26 + index * 0.24, 0.52))
+        tile.transform.position.keyframe(
+            1.0, (-0.15, 0.6), interpolation=Interpolation.EASE_IN_OUT
+        )
+        tile.transform.rotation_degrees.keyframe(0, 8 - index * 8)
+        tile.transform.rotation_degrees.keyframe(1.0, -25)
+        tile.transform.scale.keyframe(0, 1)
+        tile.transform.scale.keyframe(1.0, 0.6)
     final.opacity.keyframe(0, 0)
     final.opacity.keyframe(0.25, 1)
     return project

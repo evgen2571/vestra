@@ -18,3 +18,6 @@ Output: `examples/output/audio-visualizer.mp4`, 1280×720, 30 fps, 12 seconds, C
 Pass `--smoke` for the full timeline at 320×180 and 6 fps, or `--output PATH`.
 The original synth bed is generated using Python's standard library; no download
 is required. [ASSETS](../ASSETS.md) records its CC0 dedication and the font license.
+
+The centered linear layout mirrors each bar above and below the baseline.
+The heading sits above the graphics and the caption below the mirrored bars.

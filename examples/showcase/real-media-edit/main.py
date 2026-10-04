@@ -1,9 +1,9 @@
-"""Video clips, reframing, transitions, titles and audio."""
+"""Video clips, reframing, transitions, titles and silent output."""
 
 import argparse
 from pathlib import Path
 
-from vestra import Crossfade, Interpolation, Project
+from vestra import Interpolation, Project
 from vestra.effects import Saturation, Vignette
 from vestra.sources import Rectangle, Text, Video
 
@@ -14,7 +14,9 @@ FONT = "assets/Manrope.ttf"
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     width, _ = size
     unit = width / 1280
-    project = Project(size=size, fps=fps, duration=14, base_directory=SHOWCASE)
+    project = Project(
+        size=size, fps=fps, duration=14, base_directory=SHOWCASE, output_audio=False
+    )
     shots = []
     for number, start in enumerate((0, 4.5, 9), 1):
         shot = project.root.add(
@@ -29,10 +31,11 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         shot.effects.add(Saturation(0.65))
         shot.effects.add(Vignette(0.25, 1.0, 0.7, "#000000"))
         shots.append(shot)
-    for previous, following, start in zip(shots, shots[1:], (4.5, 9)):
-        project.root.transitions.add(
-            previous, following, Crossfade(), start=start, duration=0.5
-        )
+    # Fade each incoming shot over the opaque outgoing shot. This keeps the
+    # dissolve fully covered, without a dip to black from two fading layers.
+    for shot in shots[1:]:
+        shot.opacity.keyframe(0, 0)
+        shot.opacity.keyframe(0.5, 1)
 
     # Title and rule move together as a small nested overlay.
     title = project.root.group(start=0.6, duration=3.6, z=5, id="title")
@@ -61,7 +64,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         z=6,
     )
     credit.transform.position = (0.5, 0.91)
-    # Finish gently instead of cutting off a moving shot and the audio bed.
+    # Finish gently instead of cutting off a moving shot.
     for shot in shots:
         if shot is shots[0]:
             shot.opacity.keyframe(0, 0)
@@ -69,9 +72,6 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         if shot is shots[-1]:
             shot.opacity.keyframe(4.2, 1)
             shot.opacity.keyframe(5, 0)
-    project.audio.track("music").add(
-        "assets/synth.wav", trim_end=14, gain=0.75, fade_in=0.4, fade_out=1
-    )
     return project
 
 

@@ -13,7 +13,7 @@ Do not compare llvmpipe/Lavapipe results with hardware GPU numbers or call them 
 
 ## Measure and compare
 
-Capture a [local baseline](../../benchmarks/baselines/README.md) with raw
+Capture a [local baseline](../../benchmarks/README.md) with raw
 samples and environment metadata before comparing optimizations. Personal
 machine captures are not portable performance targets.
 

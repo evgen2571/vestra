@@ -11,6 +11,7 @@ from vestra.sources import (
     ParticleSystem,
     RectangleEmitter,
     Spectrum2D,
+    Spectrum2DLinearLayout,
     Text,
 )
 from vestra import Point
@@ -63,9 +64,10 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
             sensitivity=1000,
             min_bar_height_ratio=0.05,
             x=0.16,
-            y=0.49,
+            y=0.40,
             width=0.68,
-            height=0.20,
+            height=0.36,
+            layout=Spectrum2DLinearLayout(anchor="center"),
             colour="#deb18d",
             bar_gap_ratio=0.5,
             attack_seconds=0.025,
@@ -85,7 +87,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         duration=12,
         z=3,
     )
-    heading.transform.position = (0.5, 0.30)
+    heading.transform.position = (0.5, 0.20)
     caption = project.root.add(
         Text(
             "Master audio → signals → graphics",
@@ -96,7 +98,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         duration=12,
         z=3,
     )
-    caption.transform.position = (0.5, 0.80)
+    caption.transform.position = (0.5, 0.86)
     # Fade the visual scene together, including Spectrum2D's adapter presentation.
     for layer in project.root.layers[1:]:
         layer.opacity.keyframe(0, 0)

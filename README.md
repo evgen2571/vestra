@@ -10,9 +10,6 @@ sources, then render through CPU or WGPU.
 · [Read the Python source](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/main.py)
 · [Asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md)
 
-Music: [Rapid2 — PeriTune](https://peritune.com/blog/2016/05/09/rapid2/),
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); trimmed and mixed.
-
 ## Quick start
 
 Use Python **3.11–3.14** and install **ffmpeg and ffprobe** on `PATH`.
@@ -74,9 +71,9 @@ include rendered videos, source and licensed assets in the checkout:
 | Project | Watch | What it shows |
 | --- | --- | --- |
 | README demo | [10-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4) | Animated layers, video, masks, image effects, transitions and audio |
-| Video editing | [14-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/real-media-edit/render.mp4) | Three footage selections, reframing, grading, titles and audio |
+| Video editing | [14-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/real-media-edit/render.mp4) | Three footage selections, reframing, grading and titles |
 | Audio + spectrum | [12-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/audio-visualizer/render.mp4) | Spectrum, master-audio signals and restrained particles |
-| Masks + groups | [8-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/compositing/render.mp4) | Nested shapes, an animated matte, masks and transforms |
+| Masks + groups | [8-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/compositing/render.mp4) | Photo cutouts, geometric masks and grouped animation |
 
 The [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md)
 remain small, deterministic projects for studying individual features.

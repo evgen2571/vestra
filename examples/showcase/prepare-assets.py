@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the licensed footage, music excerpt and original synth audio."""
+"""Reproduce the downloaded footage and original audio used by the showcases."""
 
 import argparse
 import hashlib
@@ -16,9 +16,6 @@ CITY_URL = (
     "https://upload.wikimedia.org/wikipedia/commons/d/d7/City_timelapse_video.webm"
 )
 CITY_SHA256 = "42ebfa7a64b4538497dd08891b1aa11f20545940948f06473a0e77a6d917a450"
-
-RAPID2_URL = "https://peritune.com/music/PerituneMaterial_Rapid2.mp3"
-RAPID2_SHA256 = "131c2ca46046b7bf2092abe65d1badc519090066f8c64b7e3e76f393f6454e56"
 
 
 def download(url: str, digest: str, target: Path) -> None:
@@ -77,11 +74,11 @@ def main() -> None:
     parser.add_argument(
         "--audio-only",
         action="store_true",
-        help="generate the original synth loop without network downloads",
+        help="generate audio without downloading footage",
     )
     args = parser.parse_args()
     print(
-        "Music: Rapid2 / PeriTune / CC BY 4.0. Original synth audio: CC0. Footage: City timelapse video / Location Kenya / CC BY 3.0."
+        "Original synth audio: CC0. Footage: City timelapse video / Location Kenya / CC BY 3.0."
     )
     print(
         "Read examples/showcase/ASSETS.md for source, license and redistribution requirements."
@@ -91,32 +88,6 @@ def main() -> None:
         return
     source = ROOT.parents[1] / "target/showcase-sources/city.webm"
     download(CITY_URL, CITY_SHA256, source)
-    music = ROOT.parents[1] / "target/showcase-sources/rapid2-original.mp3"
-    download(RAPID2_URL, RAPID2_SHA256, music)
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-ss",
-            "10.971428571",
-            "-i",
-            str(music),
-            "-t",
-            "12",
-            "-map_metadata",
-            "-1",
-            "-ar",
-            "48000",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "192k",
-            "-y",
-            str(ROOT / "assets/rapid2-excerpt.mp3"),
-        ],
-        check=True,
-    )
     for number, start in enumerate((3, 34, 59), 1):
         destination = ROOT / f"assets/city-{number}.mp4"
         subprocess.run(

@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn classifies_wsl_d3d12_nvidia_as_deliberate_hardware() {
         let metadata = AdapterMetadata {
-            adapter_name: "D3D12 (NVIDIA GeForce GTX 1650 SUPER)".to_owned(),
+            adapter_name: "D3D12 (NVIDIA Example GPU)".to_owned(),
             device_type: "other".to_owned(),
             graphics_backend: "gl".to_owned(),
             driver_name: String::new(),

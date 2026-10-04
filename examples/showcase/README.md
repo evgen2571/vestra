@@ -1,7 +1,8 @@
 # Showcases
 
 Four complete CPU-rendered compositions, with their Python source, rendered MP4s,
-posters and assets. Click a video to view or download it on GitHub.
+posters, silent animated previews and assets. Each project page displays its
+GIF directly on GitHub; the MP4 link opens the full video file for download.
 
 | Project | Render | Source / notes |
 | --- | --- | --- |

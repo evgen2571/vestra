@@ -2,7 +2,7 @@
 
 [Watch / download the rendered video](render.mp4)
 
-![A frame from the Vestra render](poster.jpg)
+![Animated preview of the Vestra render](preview.gif)
 
 A fourteen-second night-city edit: three real footage selections, slow reframing,
 two dissolves, muted saturation/vignette, a grouped title, attribution and an

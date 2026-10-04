@@ -63,8 +63,8 @@ caption or description as well. No author endorsement is implied.
 
 ## Rendered outputs
 
-Each showcase includes a `render.mp4` and `poster.jpg`; the hero also includes
-`preview.gif`. These are actual CPU renders of the accompanying Python projects
+Each showcase includes a `render.mp4`, `poster.jpg` and compact animated
+`preview.gif` (silent). These are actual CPU renders of the accompanying Python projects
 at 1280×720 and 30 fps. They may be viewed or downloaded directly on GitHub.
 The media edit and its poster contain the CC BY 3.0 footage above; retain the
 credit and source/license links when redistributing them. Other outputs use the

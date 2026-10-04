@@ -2,7 +2,7 @@
 
 [Watch / download the rendered video](render.mp4)
 
-![A frame from the Vestra render](poster.jpg)
+![Animated preview of the Vestra render](preview.gif)
 
 A twelve-second warm spectrum composition with a master-audio RMS signal,
 smoothed reactive geometry, seeded particles and modest bloom. Spectrum2D uses

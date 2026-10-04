@@ -2,7 +2,7 @@
 
 [Watch / download the rendered video](render.mp4)
 
-![A frame from the Vestra render](poster.jpg)
+![Animated preview of the Vestra render](preview.gif)
 
 An eight-second architectural window made from nested shapes. A hidden layer
 provides the moving alpha track matte; the group animates as one surface, and

@@ -1,8 +1,7 @@
 # Python quickstart
 
-This tutorial builds a one-second project from a solid colour and renders it
-to an MP4. It uses the high-level editing API, so preparation and the native
-render runtime stay behind `Project.render`.
+Create a one-second blue video, save it as an MP4 and play it back. This
+example needs no images, fonts or other media files.
 
 ## Prerequisites
 
@@ -27,21 +26,17 @@ project = vestra.Project(
     duration=1,
 )
 
-# A Composition contains Layer placements. Color is the Source used here.
+# Fill the canvas with blue for the whole second.
 project.root.add(Color("#2f6fed"), duration=1, id="background")
-
-report = project.validate()
-if not report.is_valid:
-    raise RuntimeError("project validation failed")
 
 output = Path("quickstart.mp4")
 result = project.render(output, backend="cpu", overwrite=True)
 print(f"rendered {result.output_path} with {result.selected_backend}")
 ```
 
-`Project` defines the canvas, frame rate, and duration. `project.root` is the
-root `Composition`. Adding a `Source` creates a `Layer` in that composition.
-The layer lasts one second, so it covers the complete project.
+`Project` sets the video size, frame rate and duration. Add visual content to
+`project.root`; each added item becomes a layer with its own timing. Here the
+blue background lasts for the whole video.
 
 ## Render it
 
@@ -60,9 +55,25 @@ backend makes the first render independent of WGPU adapter availability.
 ## Expected result
 
 You should see a line naming `quickstart.mp4` and the selected CPU backend. The
-file should exist and be playable by an MP4-capable video player. If validation
-fails, inspect the report before rendering. If encoding fails, check the FFmpeg
-runtime from the [installation guide](installation.md).
+file should exist and be playable by an MP4-capable video player.
+If rendering fails, check that `ffmpeg` and `ffprobe` are available as described
+in the [installation guide](installation.md), then see
+[Python troubleshooting](../troubleshooting/python.md).
+
+## Check a project before rendering
+
+For larger projects, you can check layer timing and other project settings
+without rendering a video:
+
+```python
+report = project.validate()
+print(f"Project settings valid: {report.is_valid}")
+```
+
+The report's `is_valid` property tells you whether these checks passed.
+Validation does not check media files, FFmpeg or graphics adapters; those are
+checked during preparation or rendering. See
+[rendering and preparation](../guides/python/rendering-and-preparation.md).
 
 ## Next steps
 

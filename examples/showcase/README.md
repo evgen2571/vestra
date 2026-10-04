@@ -6,7 +6,7 @@ GIF directly on GitHub; the MP4 link opens the full video file for download.
 
 | Project | Render | Source / notes |
 | --- | --- | --- |
-| README demo | [Watch](readme-demo/render.mp4) | [10 seconds: animated layers, media, masks, effects, transitions and audio](readme-demo/README.md) |
+| README demo | [Watch](readme-demo/render.mp4) | [10 seconds: animation, media, compositing and audio-reactive graphics](readme-demo/README.md) |
 | Video editing | [Watch](real-media-edit/render.mp4) | [14 seconds: a silent three-shot night-city edit](real-media-edit/README.md) |
 | Audio + spectrum | [Watch](audio-visualizer/render.mp4) | [12 seconds: spectrum, audio signals and particles](audio-visualizer/README.md) |
 | Masks + groups | [Watch](compositing/render.mp4) | [8 seconds: photo cutouts, masks and grouped animation](compositing/README.md) |

@@ -8,6 +8,7 @@ track = project.audio.track("music")
 clip = track.add(
     "assets/music.wav",
     start=0,
+    # Trim positions refer to the source file, giving a ten-second excerpt.
     trim_start=4,
     trim_end=14,
     gain=0.8,

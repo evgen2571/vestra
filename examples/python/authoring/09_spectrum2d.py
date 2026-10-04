@@ -31,7 +31,9 @@ background = project.add_image_clip(
 )
 audio_asset = project.add_audio_asset("examples/assets/tone.wav")
 audio_track = project.audio.add_track(id="music")
+
 audio_track.add_clip(asset=audio_asset, start=0, trim_end=3)
+# Analyse the master audio once and use it to animate the background.
 bass = project.audio.master.rms().remap(0, 1, 1, 1.08).envelope(0.02, 0.15)
 background.transform.scale.react_to(bass)
 project.add_spectrum2d_clip(start=0, duration=3, layer=1, preset="neon_circle")

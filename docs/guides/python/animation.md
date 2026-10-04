@@ -4,10 +4,10 @@ High-level properties hold a base value and optional keyframes. Keyframe times
 are seconds local to the layer or effect that owns the property.
 
 ```python
-from vestra.properties import Transform
 from vestra.sources import Image
 
 layer = project.root.add(Image("assets/photo.png"), duration=5)
+# Positions are normalized canvas coordinates; times are layer-local seconds.
 layer.transform.position.keyframe(0, (0.35, 0.5))
 layer.transform.position.keyframe(2, (0.65, 0.5))
 layer.transform.position.keyframe(4, (0.5, 0.5))

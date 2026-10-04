@@ -10,10 +10,12 @@ from vestra.sources import Image
 
 layer = project.root.add(Image("assets/photo.png"), duration=5)
 layer.effects.add(Brightness(0.1))
+# Keep the attached effect handle so its radius can be animated.
 blur = layer.effects.add(GaussianBlur(3.0))
 blur.radius.keyframe(0, 0.0)
 blur.radius.keyframe(1.0, 3.0)
 
+# Post effects process the final composition, after its layers.
 project.post_effects.add(Brightness(0.05))
 ```
 

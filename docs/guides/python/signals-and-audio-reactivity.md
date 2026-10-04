@@ -10,7 +10,8 @@ layer = project.root.add(
     Circle(radius=120, fill="#38bdf8"), duration=5
 )
 energy = project.audio.signal.band(80, 240)
-reactive = energy.remap(0.0, 0.5, 0.85, 1.25).clamp(0.85, 1.25)
+# Map audio energy to a modest scale range and prevent extreme values.
+reactive = energy.remap(input=(0, 0.5), output=(0.85, 1.25)).clamp(0.85, 1.25)
 layer.transform.scale.bind(reactive, operation="multiply")
 ```
 

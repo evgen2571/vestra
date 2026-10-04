@@ -104,3 +104,6 @@ for native environments and verification.
 Vestra's software is [MIT licensed](https://github.com/evgen2571/vestra/blob/main/LICENSE).
 Showcase images, footage, audio and fonts retain their
 [documented asset licenses](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md).
+
+Native dependencies retain their own licenses; see
+[third-party notices](https://github.com/evgen2571/vestra/blob/main/THIRD_PARTY_NOTICES.md).

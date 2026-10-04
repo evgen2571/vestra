@@ -4,6 +4,9 @@ version.workspace = true
 edition = "2024"
 description = "Python bindings for the vestra SDK"
 license = "MIT"
+repository = "https://github.com/evgen2571/vestra"
+homepage = "https://github.com/evgen2571/vestra"
+documentation = "https://github.com/evgen2571/vestra/tree/main/docs"
 publish = false
 
 [lib]

@@ -9,7 +9,40 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify release version and tag before building
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python - <<'PYTHON'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          workspace = tomllib.loads(Path('Cargo.toml').read_text())
+          version = workspace['workspace']['package']['version']
+          package = tomllib.loads(Path('pyproject.toml').read_text())['project']
+          assert version == '0.1.0', f'Unexpected release version: {version}'
+          assert package['dynamic'] == ['version']
+          assert package['license'] == 'MIT'
+          for member in workspace['workspace']['members']:
+              crate = tomllib.loads((Path(member) / 'Cargo.toml').read_text())['package']
+              assert crate['version'] == {'workspace': True}, member
+              assert crate['license'] == 'MIT', member
+          if os.environ['EVENT_NAME'] == 'release':
+              assert os.environ['RELEASE_TAG'] == f'v{version}', 'Tag/version mismatch'
+          PYTHON
   linux-wheels:
+    needs: version
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +72,13 @@ jobs:
           python -m venv release-venv
           release-venv/bin/python -m pip install dist/*.whl
           release-venv/bin/python scripts/verify-wheel.py
+      - name: Preserve corresponding FFmpeg source
+        run: python scripts/archive-ffmpeg-source.py --output source-dist/ffmpeg-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-source-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}
+          path: source-dist/*.zip
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}
@@ -46,6 +86,8 @@ jobs:
           if-no-files-found: error
 
   macos-wheels:
+    needs: version
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +114,13 @@ jobs:
           python -m venv release-venv
           release-venv/bin/python -m pip install dist/*.whl
           release-venv/bin/python scripts/verify-wheel.py
+      - name: Preserve corresponding FFmpeg source
+        run: python scripts/archive-ffmpeg-source.py --output source-dist/ffmpeg-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-source-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}
+          path: source-dist/*.zip
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}
@@ -79,6 +128,8 @@ jobs:
           if-no-files-found: error
 
   windows-wheels:
+    needs: version
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -95,6 +146,7 @@ jobs:
         shell: pwsh
         run: |
           choco install make nasm ffmpeg -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
           "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Build wheel
@@ -107,8 +159,21 @@ jobs:
         shell: pwsh
         run: |
           python -m venv release-venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           release-venv\Scripts\python -m pip install (Get-ChildItem dist\*.whl).FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           release-venv\Scripts\python scripts\verify-wheel.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve corresponding FFmpeg source
+        shell: pwsh
+        run: |
+          python scripts/archive-ffmpeg-source.py --output source-dist/ffmpeg-windows-x64-py${{ matrix.python }}.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-source-windows-x64-py${{ matrix.python }}
+          path: source-dist/*.zip
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-windows-x64-py${{ matrix.python }}
@@ -116,6 +181,8 @@ jobs:
           if-no-files-found: error
 
   sdist:
+    needs: version
+    timeout-minutes: 60
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -123,7 +190,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install build and smoke tools
-        run: sudo apt-get update -qq && sudo apt-get install -y nasm ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y clang libclang-dev make nasm ffmpeg
       - name: Build source distribution
         uses: PyO3/maturin-action@v1
         with:
@@ -133,7 +200,8 @@ jobs:
       - name: Install and smoke test source distribution
         run: |
           python -m venv release-venv
-          release-venv/bin/python -m pip install dist/*.tar.gz
+          release-venv/bin/python -m pip install maturin==1.14.1
+          release-venv/bin/python -m pip install --no-build-isolation dist/*.tar.gz
           release-venv/bin/python scripts/verify-wheel.py
       - uses: actions/upload-artifact@v4
         with:
@@ -143,7 +211,7 @@ jobs:
 
   publish:
     if: github.event_name == 'release' && github.event.action == 'published'
-    needs: [linux-wheels, macos-wheels, windows-wheels, sdist]
+    needs: [linux-wheels, macos-wheels, windows-wheels, sdist, attach]
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
@@ -174,3 +242,32 @@ jobs:
           name: sdist
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  attach:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [linux-wheels, macos-wheels, windows-wheels, sdist]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ffmpeg-source-*
+          path: source-dist
+          merge-multiple: true
+      - name: Attach tested distributions to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/*.whl dist/*.tar.gz source-dist/*.zip --clobber

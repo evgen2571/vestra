@@ -107,8 +107,8 @@ benchmark-compare before after:
 
 # Check showcase authoring/scripts without importing the native extension.
 showcase-style:
-    uvx --from 'ruff>=0.12,<0.13' ruff check examples/showcase scripts/render-showcases.py scripts/check-docs.py tests/test_showcase_assets.py tests/test_documentation_links.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/showcase scripts/render-showcases.py scripts/check-docs.py tests/test_showcase_assets.py tests/test_documentation_links.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
 
 # Reproduce the licensed footage selections and original soundtrack.
 showcase-assets:

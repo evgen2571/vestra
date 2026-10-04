@@ -1,10 +1,10 @@
-# Compose / reframe
+# Masks + groups
 
 [Watch / download the rendered video](render.mp4)
 
 ![Animated preview of the Vestra render](preview.gif)
 
-An eight-second architectural window made from nested shapes. A hidden layer
+An eight-second example of nested shapes, masking and compositing. A hidden layer
 provides the moving alpha track matte; the group animates as one surface, and
 modest directional blur/chromatic separation finish the scene.
 A geometric owned mask clips the accent rule. Geometry and typography are restrained.

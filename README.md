@@ -4,11 +4,14 @@ Vestra is a native video composition and rendering engine with a Python
 authoring API and a Rust rendering core. Describe compositions, layers and
 sources, then render through CPU or WGPU.
 
-[![A ten-second video rendered by Vestra](https://raw.githubusercontent.com/evgen2571/vestra/main/examples/showcase/readme-demo/preview.gif)](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4)
+![Animated showcase: layers, video, masks, effects, transitions and audio](examples/showcase/readme-demo/preview.gif)
 
 [Watch the full render](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4)
 · [Read the Python source](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/main.py)
 · [Asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md)
+
+Music: [Rapid2 — PeriTune](https://peritune.com/blog/2016/05/09/rapid2/),
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); trimmed and mixed.
 
 ## Quick start
 
@@ -70,10 +73,10 @@ include rendered videos, source and licensed assets in the checkout:
 
 | Project | Watch | What it shows |
 | --- | --- | --- |
-| README demo | [10-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4) | Typography, real imagery, masks, nesting and a dissolve |
-| After dark | [14-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/real-media-edit/render.mp4) | Three footage selections, reframing, grading, titles and audio |
-| Sound / form | [12-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/audio-visualizer/render.mp4) | Spectrum, master-audio signals and restrained particles |
-| Compose / reframe | [8-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/compositing/render.mp4) | Nested shapes, an animated matte, masks and transforms |
+| README demo | [10-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4) | Animated layers, video, masks, image effects, transitions and audio |
+| Video editing | [14-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/real-media-edit/render.mp4) | Three footage selections, reframing, grading, titles and audio |
+| Audio + spectrum | [12-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/audio-visualizer/render.mp4) | Spectrum, master-audio signals and restrained particles |
+| Masks + groups | [8-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/compositing/render.mp4) | Nested shapes, an animated matte, masks and transforms |
 
 The [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md)
 remain small, deterministic projects for studying individual features.

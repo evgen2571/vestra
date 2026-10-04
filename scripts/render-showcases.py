@@ -34,7 +34,7 @@ def prepare_offline(directory: Path) -> None:
     """Keep fixture inputs separate from the real, licensed showcase footage."""
     assets = directory / "assets"
     assets.mkdir()
-    for name in ("Manrope.ttf", "landscape.jpg"):
+    for name in ("Manrope.ttf", "landscape.jpg", "rapid2-excerpt.mp3"):
         shutil.copyfile(SHOWCASE / "assets" / name, assets / name)
     load(SHOWCASE / "prepare-assets.py").write_audio(assets / "synth.wav")
     for number in range(1, 4):
@@ -143,7 +143,7 @@ def main() -> None:
                 size,
                 fps,
                 duration,
-                name in ("real-media-edit", "audio-visualizer"),
+                name in ("readme-demo", "real-media-edit", "audio-visualizer"),
             )
             if args.update_results:
                 shutil.copyfile(output, SHOWCASE / name / "render.mp4")

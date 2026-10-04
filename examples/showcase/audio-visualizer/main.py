@@ -1,4 +1,4 @@
-"""A warm, linear spectrum with master-audio signals and a restrained particle field."""
+"""Spectrum, audio signals, animated geometry and particles."""
 
 import argparse
 from pathlib import Path
@@ -77,7 +77,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     spectrum.effects.add(Bloom(threshold=0.5, radius=3 * unit, intensity=0.25))
     heading = project.root.add(
         Text(
-            "SOUND / FORM",
+            "Audio + spectrum",
             font="assets/Manrope.ttf",
             font_size=34 * unit,
             fill="#f1e4db",

@@ -1,10 +1,10 @@
-# After dark
+# Video editing
 
 [Watch / download the rendered video](render.mp4)
 
 ![Animated preview of the Vestra render](preview.gif)
 
-A fourteen-second night-city edit: three real footage selections, slow reframing,
+A fourteen-second video editing example: three real footage selections, slow reframing,
 two dissolves, muted saturation/vignette, a grouped title, attribution and an
 original synth bed with fades. This demonstrates media → timeline → effects → output.
 

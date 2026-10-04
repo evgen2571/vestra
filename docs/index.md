@@ -1,65 +1,108 @@
 # Vestra documentation
 
-Vestra is a source-built video editing and rendering engine. These pages are
-organized around the task a reader is trying to complete.
-
-## New to Vestra?
-
-Begin with [installation](getting-started/installation.md), then follow the
-[Python quickstart](getting-started/python-quickstart.md) or the
+Vestra is a native video composition and rendering engine with Python authoring
+and a Rust rendering core. Start with [installation](getting-started/installation.md)
+and the [Python quickstart](getting-started/python-quickstart.md), or the
 [CLI quickstart](getting-started/cli-quickstart.md).
 
-## Understand the model
+The [showcases](../examples/showcase/README.md) include finished videos, source
+and assets. The [reference examples](../examples/README.md) focus on individual
+features. [Project schema v1](../schemas/project.schema.json) is the canonical
+machine-readable contract.
 
-Start with the [authoring model](concepts/authoring-model.md), then read about
-[time](concepts/timeline-and-time.md) and the [rendering lifecycle](concepts/rendering-lifecycle.md).
+## Getting started
 
-## Building videos in Python?
+- [CLI quickstart](getting-started/cli-quickstart.md)
+- [Install Vestra](getting-started/installation.md)
+- [Python quickstart](getting-started/python-quickstart.md)
 
-The [Python quickstart](getting-started/python-quickstart.md) covers the
-high-level `Project` editing API and a first render. Continue with the
-[Python guides](guides/python/projects-and-compositions.md) for sources,
-animation, effects, audio, nesting, and rendering.
+## Concepts
 
-## Using the CLI?
+- [Audio and signals](concepts/audio-and-signals.md)
+- [The authoring model](concepts/authoring-model.md)
+- [Effects, transitions, animation, flashes, and presets](concepts/effects-transitions-and-animation.md)
+- [Rendering backends](concepts/rendering-backends.md)
+- [The rendering lifecycle](concepts/rendering-lifecycle.md)
+- [Timeline and time](concepts/timeline-and-time.md)
 
-Start with the [CLI quickstart](getting-started/cli-quickstart.md), then read
-the [rendering guide](guides/cli/rendering.md) and
-[logging and progress guide](guides/cli/logging-and-progress.md).
+## Python guides
 
-## Need exact behavior?
+- [Animate properties](guides/python/animation.md)
+- [Add audio](guides/python/audio.md)
+- [Add effects](guides/python/effects.md)
+- [Layer masks](guides/python/masks.md)
+- [Use nested compositions](guides/python/nested-compositions.md)
+- [Projects and compositions](guides/python/projects-and-compositions.md)
+- [Render and prepare from Python](guides/python/rendering-and-preparation.md)
+- [Signals and audio reactivity](guides/python/signals-and-audio-reactivity.md)
+- [Sources and layers](guides/python/sources-and-layers.md)
+- [Transitions, flashes, and presets](guides/python/transitions-flashes-and-presets.md)
 
-The checked-in [project schema](../schemas/project.schema.json) is the current
-machine-readable project schema. The [reference](reference/project-format.md)
-pages document the exact project, API, CLI, feature, source, audio, diagnostic,
-and backend contracts.
+## CLI guides
 
-### Reference
+- [Logging and progress](guides/cli/logging-and-progress.md)
+- [Render with the CLI](guides/cli/rendering.md)
 
+## Reference
+
+- [Audio](reference/audio.md)
+- [Backends](reference/backends.md)
+- [CLI](reference/cli.md)
+- [Diagnostics](reference/diagnostics.md)
+- [Effects](reference/effects.md)
+- [Environment variables](reference/environment-variables.md)
+- [Feature support](reference/feature-support.md)
+- [Masks reference](reference/masks.md)
+- [Nested compositions](reference/nested-compositions.md)
+- [Presets and flashes](reference/presets-and-flashes.md)
 - [Project format](reference/project-format.md)
-- [Geometric masks](reference/masks.md)
 - [Python API](reference/python-api.md)
 - [Rust SDK](reference/rust-sdk.md)
-- [CLI](reference/cli.md)
-- [Feature support](reference/feature-support.md)
-- [Diagnostics](reference/diagnostics.md)
-- [Environment variables](reference/environment-variables.md)
-- [Sources](reference/sources/image.md), [effects](reference/effects.md), [transitions](reference/transitions.md), [audio](reference/audio.md), [signals](reference/signals.md), and [backends](reference/backends.md)
+- [Signals](reference/signals.md)
+- [Transitions](reference/transitions.md)
 
-## Something is failing?
+## Source reference
 
-Use [rendering](troubleshooting/rendering.md), [FFmpeg](troubleshooting/ffmpeg.md),
-[WGPU](troubleshooting/wgpu.md), or [Python](troubleshooting/python.md) help.
+- [Image source](reference/sources/image.md)
+- [Particle system source](reference/sources/particle-system.md)
+- [Shape source](reference/sources/shape.md)
+- [Solid-color source](reference/sources/solid-color.md)
+- [Spectrum2D source](reference/sources/spectrum2d.md)
+- [Text source](reference/sources/text.md)
+- [Video source](reference/sources/video.md)
 
-## Understanding or extending the engine?
+## Troubleshooting
 
-Read the [architecture overview](development/architecture/overview.md),
-[extension guides](development/extending/source.md), [testing](development/testing.md),
-[GPU validation](development/gpu-validation.md), [performance](development/performance.md),
-[releasing](development/releasing.md), and [contributing](development/contributing.md).
+- [FFmpeg and media problems](troubleshooting/ffmpeg.md)
+- [Python problems](troubleshooting/python.md)
+- [Rendering problems](troubleshooting/rendering.md)
+- [WGPU problems](troubleshooting/wgpu.md)
 
-## Looking for old implementation reports?
+## Contributor procedures
 
-Files under [`docs/history/`](history/) record audits, benchmarks, and other
-implementation work as it was understood at the time. They are historical
-records, not normative documentation for current Vestra behavior.
+- [Contributing](development/contributing.md)
+- [CPU rendering and work reuse](development/cpu-efficiency.md)
+- [GPU validation](development/gpu-validation.md)
+- [Media pipeline and concurrency](development/media-pipeline.md)
+- [Performance](development/performance.md)
+- [v0.1.0 release notes draft](development/release-notes.md)
+- [Releasing the Python package](development/releasing.md)
+- [Testing](development/testing.md)
+
+## Architecture
+
+- [CPU renderer](development/architecture/cpu-renderer.md)
+- [Crate ownership](development/architecture/crates.md)
+- [Media I/O](development/architecture/media-io.md)
+- [Architecture overview](development/architecture/overview.md)
+- [Project to plan](development/architecture/project-to-plan.md)
+- [Python binding architecture](development/architecture/python-bindings.md)
+- [Render pipeline](development/architecture/render-pipeline.md)
+- [WGPU renderer](development/architecture/wgpu-renderer.md)
+
+## Extension guides
+
+- [Add a backend](development/extending/backend.md)
+- [Add an effect](development/extending/effect.md)
+- [Add a source](development/extending/source.md)
+- [Add a transition](development/extending/transition.md)

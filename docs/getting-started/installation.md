@@ -1,69 +1,78 @@
 # Install Vestra
 
-Use Python 3.11, 3.12, 3.13, or 3.14. Install the public package from PyPI:
+Vestra 0.1.0 supports CPython 3.11–3.14. Published wheels cover Linux x86_64
+and aarch64 (glibc 2.28+), macOS Intel and Apple Silicon, and Windows x64.
+The Python wheel contains the native engine; the `ve` CLI is built separately
+from the Rust checkout.
+
+## Install into a Python project with uv
+
+In a Python project, add Vestra and use its environment to run your scripts:
 
 ```bash
-python -m pip install vestra==0.1.0
+uv add vestra
+uv run python -c "import vestra; print(vestra.__version__)"
+```
+
+For a new project, run `uv init my-video`, then `cd my-video` first.
+Follow the [Python quickstart](python-quickstart.md), save its code as
+`quickstart.py`, and run `uv run python quickstart.py` to receive
+`quickstart.mp4`.
+
+## Install with pip
+
+In your chosen Python environment:
+
+```bash
+python -m pip install vestra
 python -c "import vestra; print(vestra.__version__)"
 ```
 
-Vestra uses the `ffmpeg` executable to encode output and `ffprobe` for media
-inspection. Install FFmpeg with your platform's package manager and confirm
-both commands are on `PATH`. The [Python quickstart](python-quickstart.md) renders
-a small CPU project after installation.
+Run the same quickstart with `python quickstart.py`. Wheel users do not need
+Rust, a C compiler or NASM. If no wheel matches your platform/interpreter,
+pip may attempt a source build, which needs the tools below.
 
-## Develop from a checkout
+## Install the FFmpeg runtime
 
-Building Vestra from source also needs Rust, `uv`, a C compiler, `make`, `git`,
-and `nasm` for the bundled FFmpeg build. The repository's Nix flake
+Install FFmpeg with your platform's package manager. Both `ffmpeg` (encoding)
+and `ffprobe` (media inspection) must be available on `PATH` in the shell that
+runs Vestra:
+
+```bash
+ffmpeg -version
+ffprobe -version
+```
+
+These executables are required even though wheels bundle the native FFmpeg
+libraries used by the engine. A working Python import does not check them.
+For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
+
+## Develop or build from source
+
+A source build needs Rust, uv, a C compiler, libclang, `make`, `git`, and NASM,
+plus network access for the initial bundled FFmpeg source fetch. Runtime
+rendering still needs the FFmpeg executables above. The repository's Nix flake
 provides a pinned development environment:
 
 ```bash
 nix develop
-```
-
-On other systems, install these tools with your package manager. The bundled
-FFmpeg build fetches its source on the first build.
-
-## Set up a checkout
-
-From the repository root, create the locked development environment:
-
-```bash
-uv sync --locked --extra dev
-```
-
-The project uses Maturin as its Python build backend. `uv sync` builds the
-editable package from `crates/vestra-python`, so commands run through `uv run`
-can import the native extension:
-
-```bash
+just python-sync
 uv run python -c "import vestra; print(vestra.__version__)"
+just check
 ```
 
-To build the CLI binary, use Cargo:
+Without Nix, install equivalent tools with your platform's package manager and
+run `uv sync --locked --extra dev` from the checkout. Maturin builds the editable
+native extension from `crates/vestra-python`. See [testing](../development/testing.md)
+for contributor checks.
+
+Build the separate CLI with Cargo:
 
 ```bash
 cargo build -p vestra-cli
-./target/debug/ve version
-```
-
-For a Nix-based setup, the equivalent commands can be run inside `nix develop`.
-
-## Verify a source checkout
-
-Check the two entry points before starting a tutorial:
-
-```bash
-uv run python -c "import vestra; print(vestra.__version__)"
 cargo run -q -p vestra-cli -- version
-ffmpeg -version
 ```
 
-If the Python import fails, rerun `uv sync --locked --extra dev` and check that
-the native build can find the FFmpeg development libraries. If a render fails
-while encoding, check the FFmpeg executable. The [Python quickstart](python-quickstart.md)
-and [CLI quickstart](cli-quickstart.md) use the CPU backend so the first render
-does not depend on a hardware WGPU adapter.
-
-Next, choose a [Python first render](python-quickstart.md) or a [CLI first render](cli-quickstart.md).
+The binary is `target/debug/ve` (`ve.exe` on Windows). Add it to `PATH` if you
+want to use the short CLI commands. Continue with the
+[CLI quickstart](cli-quickstart.md) or [Python quickstart](python-quickstart.md).

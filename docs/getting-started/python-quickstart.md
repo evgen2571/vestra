@@ -6,8 +6,10 @@ render runtime stay behind `Project.render`.
 
 ## Prerequisites
 
-Install Vestra with `pip install vestra` and complete the
-[installation guide](installation.md). The commands work in any directory.
+Install Vestra with `uv add vestra` in your Python project or
+`python -m pip install vestra` in your chosen environment. Complete the
+[installation guide](installation.md), including the `ffmpeg` and `ffprobe`
+runtime checks.
 
 ## Create the project
 
@@ -46,6 +48,8 @@ The layer lasts one second, so it covers the complete project.
 Run the file with the Python interpreter where Vestra is installed:
 
 ```bash
+uv run python quickstart.py
+# Or, in the environment where pip installed Vestra:
 python quickstart.py
 ```
 

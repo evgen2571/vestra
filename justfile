@@ -20,7 +20,7 @@ fmt-check:
     uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py
 
 # Run the inexpensive CI style checks.
-style: fmt-check lint-python
+style: fmt-check lint-python showcase-style docs-check
 
 # Lint Rust and Python.
 lint: lint-rust lint-python
@@ -57,6 +57,10 @@ schema-validation:
 # Compare the checked-in schema with freshly generated output.
 schema-freshness:
     ./scripts/check-schema.sh
+
+# Check local public documentation links.
+docs-check:
+    uv run --no-project python scripts/check-docs.py
 
 # Check the CLI help command.
 cli-smoke:
@@ -100,3 +104,24 @@ benchmark output backend='cpu':
 # Compare two saved benchmark suite JSON files.
 benchmark-compare before after:
     uv run --no-project python scripts/benchmark.py compare "$1" "$2"
+
+# Check showcase authoring/scripts without importing the native extension.
+showcase-style:
+    uvx --from 'ruff>=0.12,<0.13' ruff check examples/showcase scripts/render-showcases.py scripts/check-docs.py tests/test_showcase_assets.py tests/test_documentation_links.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/showcase scripts/render-showcases.py scripts/check-docs.py tests/test_showcase_assets.py tests/test_documentation_links.py
+
+# Reproduce the licensed footage selections and original soundtrack.
+showcase-assets:
+    uv run python examples/showcase/prepare-assets.py
+
+# Render full showcase timelines cheaply with generated offline test footage.
+showcase-smoke:
+    uv run python scripts/render-showcases.py --smoke --offline --output-dir target/showcase-smoke
+
+# Render all full-resolution showcases from bundled inputs.
+showcase:
+    uv run python scripts/render-showcases.py
+
+# Replace committed videos/posters and the README GIF with fresh full renders.
+showcase-refresh:
+    uv run python scripts/render-showcases.py --preview --update-results

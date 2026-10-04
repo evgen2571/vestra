@@ -1,109 +1,106 @@
 # Vestra
 
-Vestra is a Rust video editing and rendering engine with a Python authoring API
-and a JSON-driven command-line renderer. You describe a project as compositions,
-layers, and sources, then render it through the CPU or WGPU backend.
+Vestra is a native video composition and rendering engine with a Python
+authoring API and a Rust rendering core. Describe compositions, layers and
+sources, then render through CPU or WGPU.
 
-## What Vestra provides
+[![A ten-second video rendered by Vestra](https://raw.githubusercontent.com/evgen2571/vestra/main/examples/showcase/readme-demo/preview.gif)](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4)
 
-- A high-level Python editing API built around `Project`, `Composition`,
-  `Layer`, and `Source`.
-- A canonical schema version 1 for projects that can be validated and rendered
-  with the `ve` CLI.
-- Sources for solid colours, images, video, shapes, text, particles, and other
-  current project features.
-- CPU rendering and WGPU rendering through the same project and render model.
-- Structured validation, inspection, render results, diagnostics, and progress
-  events in the Rust and Python SDKs.
-
-Vestra 0.1.0 is the first public release. Project schema 1 and RenderEvent
-schema 1 are its compatibility baseline.
+[Watch the full render](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4)
+· [Read the Python source](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/main.py)
+· [Asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md)
 
 ## Quick start
 
-Install with `pip install vestra`, then follow the [installation guide](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md).
+Use Python **3.11–3.14** and install **ffmpeg and ffprobe** on `PATH`.
+Prebuilt wheels cover Linux x86_64/aarch64, macOS Intel/Apple Silicon and
+Windows x64. Wheel users do not need a Rust or C build toolchain.
 
-### Python
-
-This small project renders one second of solid colour without an external
-asset:
-
-```python
-from pathlib import Path
-
-import vestra
-from vestra.sources import Color
-
-project = vestra.Project(
-    size=(320, 180),
-    fps=24,
-    duration=1,
-)
-project.root.add(Color("#2f6fed"), duration=1, id="background")
-
-project.render(Path("quickstart.mp4"), backend="cpu", overwrite=True)
-```
-
-The [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md) explains
-each part and shows how to check the result.
-
-### CLI
-
-Given a project file, validate it and render it with:
+For a uv project:
 
 ```bash
-ve validate project.json
-ve render project.json --output quickstart.mp4 --overwrite
+uv add vestra
+uv run python example.py
 ```
 
-The [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md) includes a tiny
-schema version 1 project you can copy and run.
+Or install and run with pip:
 
-## Rendering backends
+```bash
+python -m pip install vestra
+python example.py
+```
 
-Use the default `auto` choice unless you need a specific backend. `cpu` is the
-most predictable option for a first render. `wgpu` selects a WGPU adapter, but
-WGPU does not by itself mean hardware acceleration. The selected adapter and
-any fallback are reported by the render result. Hardware validation is covered
-in the [GPU validation guide](https://github.com/evgen2571/vestra/blob/main/docs/development/gpu-validation.md).
+Save this as `example.py` to create `output.mp4`:
+
+```python
+from vestra import Project
+from vestra.sources import Color, Rectangle
+
+project = Project(size=(640, 360), fps=30, duration=2)
+project.root.add(Color("#171d20"), duration=2)
+bar = project.root.add(Rectangle(width=240, height=8, fill="#a9c4aa"), duration=2)
+bar.transform.scale.keyframe(0, (0.05, 1))
+bar.transform.scale.keyframe(2, (1, 1))
+project.render("output.mp4", backend="cpu", overwrite=True)
+```
+
+The [installation guide](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
+covers FFmpeg, source builds and the separately built `ve` CLI.
+
+## Capabilities
+
+- Python authoring with `Project`, `Composition`, `Layer` and typed sources;
+  native Rust SDK and a JSON-driven CLI.
+- Canonical project schema v1, validation, inspection, structured diagnostics
+  and render progress events.
+- Images, video, shapes, text, particles and audio-reactive Spectrum2D.
+- Keyframes and signals, nested compositions, masks, track mattes, blend modes,
+  effects and transitions.
+- Audio mixing, trimming, fades, effects and analysis signals.
+- CPU and WGPU backends. Adapter selection and fallback are reported; WGPU can
+  use a software adapter. See [feature support](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md)
+  for the current backend limits.
+
+Vestra 0.1.0 is the first public release, with project and RenderEvent schema v1.
+
+## Examples
+
+The [showcases](https://github.com/evgen2571/vestra/blob/main/examples/showcase/README.md)
+include rendered videos, source and licensed assets in the checkout:
+
+| Project | Watch | What it shows |
+| --- | --- | --- |
+| README demo | [10-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4) | Typography, real imagery, masks, nesting and a dissolve |
+| After dark | [14-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/real-media-edit/render.mp4) | Three footage selections, reframing, grading, titles and audio |
+| Sound / form | [12-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/audio-visualizer/render.mp4) | Spectrum, master-audio signals and restrained particles |
+| Compose / reframe | [8-second video](https://github.com/evgen2571/vestra/blob/main/examples/showcase/compositing/render.mp4) | Nested shapes, an animated matte, masks and transforms |
+
+The [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md)
+remain small, deterministic projects for studying individual features.
 
 ## Documentation
 
-Start at the [documentation index](https://github.com/evgen2571/vestra/blob/main/docs/index.md), which routes readers by
-task. Useful entry points include:
-
-- [Installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
-- [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md)
-- [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md)
-- [Authoring model](https://github.com/evgen2571/vestra/blob/main/docs/concepts/authoring-model.md)
-- [Python rendering guide](https://github.com/evgen2571/vestra/blob/main/docs/guides/python/rendering-and-preparation.md)
-- [CLI rendering guide](https://github.com/evgen2571/vestra/blob/main/docs/guides/cli/rendering.md)
-- [Project format reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/project-format.md)
-- [Python API reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
-- [Feature support matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md)
-- [CLI reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/cli.md)
-- [Backend reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/backends.md)
-- [Signals reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/signals.md)
-- [Troubleshooting](https://github.com/evgen2571/vestra/blob/main/docs/troubleshooting/rendering.md)
-- [Development documentation](https://github.com/evgen2571/vestra/blob/main/docs/development/architecture/overview.md)
-- [Canonical project schema](https://github.com/evgen2571/vestra/blob/main/schemas/project.schema.json)
-- [Runnable examples](https://github.com/evgen2571/vestra/tree/main/examples/)
+Start with the [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md),
+[authoring model](https://github.com/evgen2571/vestra/blob/main/docs/concepts/authoring-model.md)
+or [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md).
+The [documentation index](https://github.com/evgen2571/vestra/blob/main/docs/index.md)
+contains the guides, API references and troubleshooting pages.
 
 ## Development
-
-The repository contains the Rust workspace, Python package, CLI, examples, and
-tests. For the normal development checks, use the pinned environment and run:
 
 ```bash
 nix develop
 just python-sync
-just check
+just style check python-test examples showcase-smoke
 ```
 
-Run `just` or `just --list` to see the available formatting, linting, testing,
-schema, GPU validation, and benchmark commands. Recipes use the active
-environment; Just is included in the Nix development shell.
+Run `just --list` for rendering, packaging, GPU and benchmark commands.
+See [contributing](https://github.com/evgen2571/vestra/blob/main/docs/development/contributing.md)
+and [testing](https://github.com/evgen2571/vestra/blob/main/docs/development/testing.md)
+for native environments and verification.
 
-See the [documentation index](https://github.com/evgen2571/vestra/blob/main/docs/index.md) for the current navigation.
-Historical implementation reports live under [`docs/history/`](https://github.com/evgen2571/vestra/tree/main/docs/history/)
-and are not current product documentation.
+## License
+
+Vestra's software is [MIT licensed](https://github.com/evgen2571/vestra/blob/main/LICENSE).
+Showcase images, footage, audio and fonts retain their
+[documented asset licenses](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md).

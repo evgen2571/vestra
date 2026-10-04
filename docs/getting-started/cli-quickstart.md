@@ -1,14 +1,19 @@
 # CLI quickstart
 
-This tutorial creates a minimal canonical project file, validates it, and
+This tutorial creates a small JSON project file, validates it, and
 renders it with `ve`. The project uses schema version 1 and contains no
 external assets, so it is easy to copy and inspect.
 
 ## Prerequisites
 
-Complete the [installation guide](installation.md). The commands below use
-`cargo run` so they work directly from a checkout. If `ve` is on your `PATH`,
-replace `cargo run -q -p vestra-cli --` with `ve`.
+The Python package does not install the `ve` CLI. Build the CLI separately
+from a repository checkout using the
+[build-from-source instructions](installation.md#build-from-source--development).
+You also need `ffmpeg` and `ffprobe` on `PATH`.
+
+Run the commands below from the checkout. They use `cargo run` to build and
+execute the CLI. If you have already added `ve` to your `PATH`, replace
+`cargo run -q -p vestra-cli --` with `ve`.
 
 ## Create a project
 
@@ -58,7 +63,7 @@ cargo run -q -p vestra-cli -- validate solid.json
 ```
 
 The command should report `project is valid`. Validation checks the JSON shape,
-schema version, project semantics, and the resources needed by the project.
+schema version, layer settings and the resources needed by the project.
 
 ## Render it
 
@@ -84,14 +89,21 @@ hardware GPU. The render result reports the selected backend.
 
 ## Inspect a failure
 
-If validation fails, keep the project path and diagnostic text together when
-checking the relevant source or test. For a machine-readable result, add
-`--format json` to `validate` or `render`. `inspect` is available when you need
-to examine the loaded project and its assets:
+Read the diagnostic message for the setting or asset that needs attention.
+Check that `solid.json` contains the complete example above. If rendering fails,
+check `ffmpeg -version` and `ffprobe -version`, then consult
+[FFmpeg troubleshooting](../troubleshooting/ffmpeg.md) or
+[rendering troubleshooting](../troubleshooting/rendering.md).
+
+Use `inspect` to see the loaded project and its assets:
 
 ```bash
 cargo run -q -p vestra-cli -- inspect solid.json
 ```
+
+For scripts that need machine-readable diagnostics, add `--format json` to
+`validate` or `render`. When reporting a problem, include the command, a small
+project that reproduces it and the diagnostic message.
 
 Continue with the [CLI rendering guide](../guides/cli/rendering.md) and the
 [logging and progress guide](../guides/cli/logging-and-progress.md). See the

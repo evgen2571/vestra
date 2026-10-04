@@ -1,9 +1,7 @@
 # Install Vestra
 
-Vestra 0.1.0 supports CPython 3.11–3.14. Published wheels cover Linux x86_64
-and aarch64 (glibc 2.28+), macOS Intel and Apple Silicon, and Windows x64.
-The Python wheel contains the native engine; the `ve` CLI is built separately
-from the Rust checkout.
+Install Vestra into a Python project with uv or pip. The Python wheel includes
+the native engine.
 
 ## Install into a Python project with uv
 
@@ -47,7 +45,16 @@ These executables are required even though wheels bundle the native FFmpeg
 libraries used by the engine. A working Python import does not check them.
 For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
 
-## Develop or build from source
+## Supported Python versions and platforms
+
+Vestra 0.1.0 supports CPython 3.11–3.14. Published wheels cover Linux x86_64
+and aarch64 (glibc 2.28+), macOS Intel and Apple Silicon, and Windows x64.
+The `ve` CLI is built separately from the Rust checkout.
+
+## Build from source / development
+
+This section is for contributors and platforms without a matching wheel.
+For contribution guidance, see [Contributing](../../CONTRIBUTING.md).
 
 A source build needs Rust, uv, a C compiler, libclang, `make`, `git`, and NASM,
 plus network access for the initial bundled FFmpeg source fetch. Runtime

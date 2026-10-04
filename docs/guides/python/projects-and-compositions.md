@@ -1,45 +1,68 @@
 # Projects and compositions
 
-Use `Project` for normal Python authoring. Set the output-wide values once,
-then add placements to `project.root`.
+A project defines the video size, frame rate and duration. Its root composition
+holds the visual layers that appear in the video.
 
 ```python
 import vestra
-from vestra.sources import Color
+from vestra.sources import Color, Rectangle
+
 
 project = vestra.Project(size=(1280, 720), fps=30, duration=5)
-background = project.root.add(Color("#111827"), duration=5, id="background")
-title = project.root.add(Color("#2563eb"), start=1, duration=2, z=1, id="title")
+project.root.add(Color("#111827"), duration=5, id="background")
 
-report = project.validate()
-if not report.is_valid:
-    raise RuntimeError("project is not valid")
+# Show a blue panel from second 1 until second 3.
+panel = project.root.add(
+    Rectangle(width=600, height=180, fill="#2563eb"),
+    start=1,
+    duration=2,
+    z=1,
+    id="panel",
+)
 ```
 
-The root composition is the normal place for top-level visual layers. Layer
-order is controlled by `z`; timing is controlled by `start` and `duration`.
-Give important layers IDs so diagnostics and later edits can identify them.
+`start` and `duration` control when a layer appears. `z` controls which layers
+appear on top: higher values draw over lower ones. IDs are optional, but naming
+important layers makes diagnostic messages and later edits easier to follow.
 
-## Create a child composition
+## Keep related layers in a group
 
-Use `group()` when a set of layers should move through the parent as one
-placement:
+Use `group()` to keep several layers together. Moving, scaling or rotating the
+group also transforms its children:
 
 ```python
 card = project.root.group(start=1, duration=3, z=2, id="card")
-card.child.add(Color("#f9fafb"), duration=3, id="card-bg")
-card.child.add(Color("#111827"), start=0.25, duration=2, z=1, id="card-text")
+
+card.child.add(
+    Rectangle(width=500, height=220, fill="#f9fafb"),
+    duration=3,
+    id="card-background",
+)
+
+# A coloured stripe appears a little after the card itself.
+card.child.add(
+    Rectangle(width=360, height=12, fill="#2563eb"),
+    start=0.25,
+    duration=2,
+    z=1,
+    id="card-stripe",
+)
+
+card.transform.rotation_degrees.keyframe(0, -5)
+card.transform.rotation_degrees.keyframe(3, 5)
 ```
 
-The child layers use child-local seconds. The group's `start` and `duration`
-are parent-local. Use nesting to keep a reusable scene or coordinated set of
-layers together, not as a substitute for ordinary layer placement.
+Children use time measured from the beginning of their group. The card starts
+at second 1 of the project, so its stripe appears at second 1.25. The group's
+rotation runs over its own three-second duration and affects both rectangles.
+See [nested compositions](nested-compositions.md) for more examples.
 
-`project.validate()` checks canonical project semantics only. It does not read
-media paths or check FFmpeg, the output path, or renderer availability. Use the
-lower-level `Editor.preflight()` when those environment checks are needed. The
-CLI `ve validate` command performs its validation preflight and therefore has a
-stronger environment-dependent meaning.
+## Set a duration
 
-When a project has no explicit duration, non-video layers need a composition
-duration from the project or an explicit layer duration.
+An explicit project duration makes the output length predictable. Without one,
+non-video layers need either an explicit layer duration or a duration supplied
+by their composition.
+
+Continue with [sources and layers](sources-and-layers.md) to add media or text,
+or [rendering and preparation](rendering-and-preparation.md) to export the
+project and understand validation and runtime checks.

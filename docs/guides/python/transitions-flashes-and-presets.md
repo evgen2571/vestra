@@ -4,11 +4,12 @@ Transitions connect two layers in the same composition. Add the layers first,
 then place a transition in that composition's transition collection.
 
 ```python
-from vestra import Crossfade, DirectionalPush
+from vestra import Crossfade
 from vestra.sources import Image
 
 outgoing = project.root.add(Image("assets/one.png"), start=0, duration=3)
 incoming = project.root.add(Image("assets/two.png"), start=2, duration=3)
+# Both layers are active from 2 to 3 seconds.
 project.root.transitions.add(
     outgoing, incoming, Crossfade(), start=2, duration=1
 )

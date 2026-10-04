@@ -8,7 +8,13 @@ import tempfile
 import wave
 from pathlib import Path
 
-from vestra import BackendPreference, Editor, FrameRate, PrepareOptions, PreparedVideoRenderRequest
+from vestra import (
+    BackendPreference,
+    Editor,
+    FrameRate,
+    PrepareOptions,
+    PreparedVideoRenderRequest,
+)
 from vestra.authoring import ProjectBuilder, Sizing
 
 
@@ -27,9 +33,8 @@ def write_reference_audio(path: Path) -> None:
         for index in range(frame_count):
             time = index / SAMPLE_RATE
             envelope = 0.35 if time >= DURATION / 2 else 0.08
-            sample = (
-                envelope * math.sin(2 * math.pi * 100 * time)
-                + 0.12 * math.sin(2 * math.pi * 4_000 * time)
+            sample = envelope * math.sin(2 * math.pi * 100 * time) + 0.12 * math.sin(
+                2 * math.pi * 4_000 * time
             )
             pcm = max(-32768, min(32767, round(sample * 32767)))
             frames.extend(struct.pack("<h", pcm))
@@ -60,8 +65,12 @@ with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
         sizing=Sizing.cover(),
     )
     asset = builder.add_audio_asset(str(audio_path), id="reference-master")
-    builder.audio.add_track(id="music").add_clip(asset=asset, start=0, trim_end=DURATION)
 
+    builder.audio.add_track(id="music").add_clip(
+        asset=asset, start=0, trim_end=DURATION
+    )
+
+    # Smooth the bass signal before using it to control visual properties.
     bass = (
         builder.audio.master.band(40, 160)
         .gain(20)
@@ -80,13 +89,17 @@ with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
     clip.effects.add_chromatic_aberration(
         amount=0,
         angle_degrees=0,
-    ).amount.modulate(builder.audio.master.band(2_000, 12_000).gain(100), mode="replace")
+    ).amount.modulate(
+        builder.audio.master.band(2_000, 12_000).gain(100), mode="replace"
+    )
 
     project = builder.build()
     validation = builder.validate()
     assert validation.is_valid
     prepared = Editor().prepare(project, PrepareOptions(backend=BackendPreference.CPU))
     result = prepared.render_video(
-        PreparedVideoRenderRequest(output_dir / "audio-reactive-reference.mp4", overwrite=True)
+        PreparedVideoRenderRequest(
+            output_dir / "audio-reactive-reference.mp4", overwrite=True
+        )
     )
     assert not result.audio_present

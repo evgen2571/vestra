@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def main() -> None:
     project = Project(size=(320, 180), fps=30, duration=1, base_directory=ROOT)
-    layer = project.root.add(Rectangle(width=320, height=180, fill="#e84a5f"), duration=1)
+    layer = project.root.add(
+        Rectangle(width=320, height=180, fill="#e84a5f"), duration=1
+    )
     reveal = layer.masks.add(
         Ellipse(width=180, height=120, fill="#ffffff"), feather=12, id="reveal"
     )

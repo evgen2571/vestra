@@ -6,6 +6,7 @@ the group in the parent, then author through its `child` composition.
 ```python
 group = project.root.group(start=1, duration=3, z=2, id="scene")
 group.child.add(Color("#0f172a"), duration=3)
+# This starts 0.5 seconds into the group, at project time 1.5 seconds.
 badge = group.child.add(Color("#f97316"), start=0.5, duration=1.5, z=1)
 badge.transform.scale.value = 0.5
 ```

@@ -7,6 +7,7 @@ installation and a quickstart, then use the guides for the features you need.
 
 - [Install Vestra](getting-started/installation.md)
 - [Python quickstart](getting-started/python-quickstart.md)
+- [JSON / CLI quickstart](getting-started/cli-quickstart.md)
 - [Showcases](../examples/showcase/README.md) and [reference examples](../examples/README.md)
 
 ## Learn Vestra
@@ -20,6 +21,11 @@ installation and a quickstart, then use the guides for the features you need.
 - [Audio](guides/python/audio.md) and [signals](guides/python/signals-and-audio-reactivity.md)
 - [Nested compositions](guides/python/nested-compositions.md)
 - [Rendering and preparation](guides/python/rendering-and-preparation.md)
+
+## JSON authoring
+
+- [Compose videos with JSON](guides/json-authoring.md)
+- [Project-format reference](reference/project-format.md)
 
 ## CLI
 

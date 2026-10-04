@@ -120,7 +120,8 @@ jobs:
             vulkaninfo --summary
             just python-test
             just schema-validation
-            just examples showcase-smoke
+            just examples
+            just showcase-smoke
             uv run pytest tests/test_documentation_links.py tests/test_showcase_assets.py tests/test_ffmpeg_source_archive.py tests/test_benchmark_compare.py tests/test_benchmark_record.py
           SCRIPT
       - name: Build and smoke test installed wheel (main and manual runs)

@@ -105,6 +105,8 @@ For scripts that need machine-readable diagnostics, add `--format json` to
 `validate` or `render`. When reporting a problem, include the command, a small
 project that reproduces it and the diagnostic message.
 
-Continue with the [CLI rendering guide](../guides/cli/rendering.md) and the
+Continue with [Compose videos with JSON](../guides/json-authoring.md) to add
+layers, animation, transitions and audio. See the
+[CLI rendering guide](../guides/cli/rendering.md) and the
 [logging and progress guide](../guides/cli/logging-and-progress.md). See the
 [documentation index](../index.md) for the current learning path.

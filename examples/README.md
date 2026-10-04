@@ -1,5 +1,11 @@
 # Examples
 
+The [showcases](showcase/README.md) contain four finished videos with Python
+source and bundled licensed assets. Watch the MP4s directly on GitHub, or render
+them with `just showcase`.
+
+The examples below are focused references and deterministic test fixtures.
+
 The JSON projects are the canonical CLI examples. Validate one from the
 repository root with:
 

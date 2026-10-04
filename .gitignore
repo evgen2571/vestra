@@ -70,3 +70,7 @@ wheels/
 target/
 
 .codegraph/
+
+# Reviewed showcase assets and rendered results are distributed with the examples.
+!examples/showcase/assets/city-*.mp4
+!examples/showcase/*/render.mp4

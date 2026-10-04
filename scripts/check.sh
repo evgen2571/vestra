@@ -11,4 +11,5 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 ./scripts/test-rust.sh
 uv run python crates/vestra-cli/tests/schema_validation.py
 ./scripts/check-schema.sh
+uv run --no-project python scripts/check-docs.py
 echo "Local contributor checks passed"

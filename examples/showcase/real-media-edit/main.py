@@ -1,4 +1,4 @@
-"""A fourteen-second night-city edit with three shots and a quiet synth bed."""
+"""Video clips, reframing, transitions, titles and audio."""
 
 import argparse
 from pathlib import Path
@@ -37,7 +37,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     # Title and rule move together as a small nested overlay.
     title = project.root.group(start=0.6, duration=3.6, z=5, id="title")
     title.add(
-        Text("AFTER DARK", font=FONT, font_size=56 * unit, fill="#f0ece4"), duration=3.6
+        Text("Video editing", font=FONT, font_size=56 * unit, fill="#f0ece4"),
+        duration=3.6,
     )
     title.transform.position = (0.5, 0.78)
     title.opacity.keyframe(0, 0)

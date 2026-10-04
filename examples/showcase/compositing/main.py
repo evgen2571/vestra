@@ -1,4 +1,4 @@
-"""A moving architectural window built from groups and an animated track matte."""
+"""Nested layers, masks, track mattes and transforms."""
 
 import argparse
 from pathlib import Path
@@ -58,7 +58,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     stripe.masks.add(Rectangle(width=width * 0.72, height=height, fill="#ffffff"))
     title = project.root.add(
         Text(
-            "COMPOSE / REFRAME",
+            "Masks + groups",
             font="assets/Manrope.ttf",
             font_size=28 * unit,
             fill="#213c4b",

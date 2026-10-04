@@ -1,10 +1,10 @@
-# Sound / form
+# Audio + spectrum
 
 [Watch / download the rendered video](render.mp4)
 
 ![Animated preview of the Vestra render](preview.gif)
 
-A twelve-second warm spectrum composition with a master-audio RMS signal,
+A twelve-second audio spectrum example with a master-audio RMS signal,
 smoothed reactive geometry, seeded particles and modest bloom. Spectrum2D uses
 prepared audio frequency analysis; the halo and particle opacity use scalar signals.
 

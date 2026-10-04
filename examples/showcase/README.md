@@ -6,13 +6,12 @@ GIF directly on GitHub; the MP4 link opens the full video file for download.
 
 | Project | Render | Source / notes |
 | --- | --- | --- |
-| README demo | [Watch](readme-demo/render.mp4) | [10 seconds: typography, landscape, masks and nesting](readme-demo/README.md) |
-| After dark | [Watch](real-media-edit/render.mp4) | [14 seconds: a three-shot night-city edit with audio](real-media-edit/README.md) |
-| Sound / form | [Watch](audio-visualizer/render.mp4) | [12 seconds: spectrum, audio signals and particles](audio-visualizer/README.md) |
-| Compose / reframe | [Watch](compositing/render.mp4) | [8 seconds: nested geometry, masks and animated matte](compositing/README.md) |
+| README demo | [Watch](readme-demo/render.mp4) | [10 seconds: animated layers, media, masks, effects, transitions and audio](readme-demo/README.md) |
+| Video editing | [Watch](real-media-edit/render.mp4) | [14 seconds: a three-shot night-city edit with audio](real-media-edit/README.md) |
+| Audio + spectrum | [Watch](audio-visualizer/render.mp4) | [12 seconds: spectrum, audio signals and particles](audio-visualizer/README.md) |
+| Masks + groups | [Watch](compositing/render.mp4) | [8 seconds: nested geometry, masks and animated matte](compositing/README.md) |
 
-All committed videos are 1280×720 at 30 fps, rendered by Vestra itself. Only
-After dark and Sound / form have audio. Read [asset credits and licenses](ASSETS.md)
+All committed videos are 1280×720 at 30 fps, rendered by Vestra itself. The README demo, Video editing and Audio + spectrum have audio. Read [asset credits and licenses](ASSETS.md)
 before redistributing inputs or outputs; third-party assets are not MIT licensed.
 
 From a checkout with FFmpeg/ffprobe and the native package installed:

@@ -1,10 +1,16 @@
-# Local benchmark baselines
+# Benchmarks
+
+The suite definition is in `suites.json`; representative projects are in
+`projects/`. The runner, Rust benchmark and comparison tests are maintained
+with the engine. Generated results belong under the ignored
+`target/benchmark-results/` directory.
 
 Capture a baseline on the machine where you will measure the candidate. The
 repository keeps suite definitions, projects and comparison tooling; personal
 machine captures are not distributed as performance targets.
 
 ```bash
+just benchmark-smoke target/benchmark-results/smoke
 just benchmark target/benchmark-results/before
 # Make one change and leave sources unchanged for the complete suite.
 just benchmark target/benchmark-results/after
@@ -23,4 +29,4 @@ create a new named baseline when workloads or the environment change.
 Reports include machine, toolchain, revision and executable metadata to make
 local comparisons meaningful. Inspect and sanitize them before sharing, and
 avoid committing home paths, environment dumps or workstation descriptions.
-See [performance methodology](../../docs/development/performance.md).
+See [performance methodology](../docs/development/performance.md).

@@ -221,3 +221,34 @@ def test_text_works_in_groups_and_generic_transition_endpoints(incoming_factory)
     assert transitioned.render_frame(0.25, backend="cpu").to_bytes()
     assert transitioned.render_frame(1.0, backend="cpu").to_bytes()
     assert transitioned.render_frame(1.75, backend="cpu").to_bytes()
+
+
+@pytest.mark.parametrize("placement", ["root", "nested", "mask", "group-mask"])
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_later_shapes_do_not_change_text_pixels(placement: str, backend: str) -> None:
+    """Later geometry must not shift text resources, including text inside masks."""
+    import vestra
+    from vestra.sources import Group
+
+    def project(with_later_sources: bool) -> vestra.Project:
+        result = vestra.Project(size=(160, 120), fps=2, duration=2)
+        if with_later_sources:
+            result.root.add(Text("AV", font=FONT, font_size=40), start=1, duration=1)
+        text = Text("ffi", font=FONT, font_size=32)
+        if placement == "root":
+            result.root.add(text, duration=1)
+        elif placement == "nested":
+            result.root.group(duration=1).group(duration=1).add(text, duration=1)
+        else:
+            layer = result.root.add(Rectangle(width=160, height=120, fill="#ff0000"), duration=1)
+            layer.masks.add(text if placement == "mask" else Group([text]))
+        if with_later_sources:
+            result.root.group(start=1, duration=1).add(
+                Rectangle(width=20, height=20, fill="#ffffff"), duration=1,
+            )
+        return result
+
+    reference = project(False).render_frame(0.25, backend=backend).to_bytes()
+    actual = project(True).render_frame(0.25, backend=backend).to_bytes()
+    assert _ink_bounds(reference, 160, 120), "reference must contain rendered text"
+    assert actual == reference

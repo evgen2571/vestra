@@ -98,6 +98,7 @@ pub fn compile(
             (0, project_duration_nanos),
         )?);
     }
+    finalize_text_indices(&mut layers, image_table.images.len() + shapes.len());
     compilation.rendered_clip_count = layers
         .iter()
         .filter(|layer| layer.start_frame < layer.end_frame)
@@ -224,6 +225,27 @@ pub fn compile(
         compilation,
         warnings: validated.warnings.to_vec(),
     })
+}
+
+fn finalize_text_indices(layers: &mut [crate::plan::CompiledLayer], offset: usize) {
+    fn resolve(source: &mut crate::plan::CompiledVisualSource, offset: usize) {
+        match source {
+            crate::plan::CompiledVisualSource::Text { text_index } => *text_index += offset,
+            crate::plan::CompiledVisualSource::Group(group) => {
+                finalize_text_indices(&mut std::sync::Arc::make_mut(group).layers, offset);
+            }
+            _ => {}
+        }
+    }
+
+    for layer in layers {
+        resolve(&mut layer.source, offset);
+        for mask in &mut layer.masks {
+            if let crate::plan::CompiledMaskInput::Source { source, .. } = &mut mask.input {
+                resolve(source, offset);
+            }
+        }
+    }
 }
 
 fn count_local_effects(layers: &[crate::plan::CompiledLayer]) -> usize {

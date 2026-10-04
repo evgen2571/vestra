@@ -119,7 +119,9 @@ pub(super) fn compile(
         }
         VisualSource::Text(text) => {
             let _ = assets::lookup_font(font_indices, &text.font, &clip.id)?;
-            let text_index = image_indices.len() + shapes.len() + texts.len();
+            // Keep a text-local index until all clips and mask sources have
+            // populated the shape table. Its final offset is not known yet.
+            let text_index = texts.len();
             texts.push(text.clone());
             CompiledVisualSource::Text { text_index }
         }

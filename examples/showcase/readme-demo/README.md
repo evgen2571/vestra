@@ -2,7 +2,7 @@
 
 [Watch / download the rendered video](render.mp4)
 
-![A frame from the Vestra render](poster.jpg)
+![Animated preview of the Vestra render](preview.gif)
 
 A restrained ten-second opening, photograph reveal, nested geometric composition,
 and final title card. It uses shapes, file-backed text, an image, keyframes,

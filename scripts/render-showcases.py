@@ -147,6 +147,20 @@ def main() -> None:
             )
             if args.update_results:
                 shutil.copyfile(output, SHOWCASE / name / "render.mp4")
+                if name != "readme-demo":
+                    run(
+                        "ffmpeg",
+                        "-v",
+                        "error",
+                        "-i",
+                        str(output),
+                        "-filter_complex",
+                        "[0:v]fps=8,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
+                        "-loop",
+                        "0",
+                        "-y",
+                        str(SHOWCASE / name / "preview.gif"),
+                    )
                 run(
                     "ffmpeg",
                     "-v",

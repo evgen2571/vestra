@@ -2,7 +2,7 @@
 
 ## `import vestra` fails
 
-For a published wheel, install with `pip install vestra`. For a source checkout, use `uv sync --locked --extra dev`. Test the selected environment with `python -c "import vestra"`. An import error from `_native` means the PyO3 extension was not built for that interpreter or cannot load its native dependencies. FFmpeg development-library failures during a source build are covered in [FFmpeg troubleshooting](ffmpeg.md).
+For a published wheel, install with `uv add vestra` or `python -m pip install vestra`. For a source checkout, use `uv sync --locked --extra dev`. Test the selected environment with `python -c "import vestra"`. An import error from `_native` means the PyO3 extension was not built for that interpreter or cannot load its native dependencies. FFmpeg development-library failures during a source build are covered in [FFmpeg troubleshooting](ffmpeg.md).
 
 ## Runtime and type checker disagree
 

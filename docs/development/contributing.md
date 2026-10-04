@@ -13,3 +13,15 @@ Several interfaces are compatibility-sensitive: public Rust and Python APIs, `_n
 Keep media and process details behind `vestra-media`; callers should ask the SDK to preflight and render rather than reimplementing FFmpeg checks. Keep validation and preflight distinct. Semantic `validate()` does not read assets, while render-target preflight may.
 
 Before proposing a change, run formatting plus focused checks and use the relevant broader command from [Testing](testing.md). Recheck generated schema, public exports/stubs and current CLI help when those contracts change. Hardware WGPU claims require the procedure in [GPU validation](gpu-validation.md). Update current documentation in the same change when user-visible behavior changes, and inspect the final diff for accidental unrelated edits.
+
+Before opening a pull request, describe the concrete behavior change and checks
+you ran. Use Issues for reproducible bugs and focused feature proposals; include
+a minimal project, expected/actual output and relevant diagnostic codes. Redact
+personal paths and environment details from logs. For GPU reports, include only
+the adapter/backend facts needed to reproduce the issue.
+
+Rendering changes need meaningful pixel/media checks in addition to compilation.
+See [testing](testing.md) and [GPU validation](gpu-validation.md). Preserve public
+Rust/Python APIs and schema v1 unless the change explicitly revises their contract.
+Software is licensed under [MIT](../../LICENSE); third-party example assets retain
+their own licenses and attribution requirements.

@@ -91,8 +91,9 @@ Do not compare a one-shot render with a prepared operation.
 
 Avoid avoidable allocation and I/O in frame loops. Keep benchmark recording
 separate from live progress/ETA. Detailed tracing and profiling remain opt-in
-and run separately from baseline timing. Preserve checked-in baselines; add a
-new named baseline when the workload definition changes.
+and run separately from baseline timing. Preserve local benchmark baselines; add a
+new named baseline when the workload definition changes. Do not commit personal
+machine captures to the public tree.
 
 ## Hardware WGPU policy
 

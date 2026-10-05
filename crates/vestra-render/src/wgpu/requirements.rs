@@ -5,7 +5,9 @@
     reason = "WGPU requirements preserve structured user-facing diagnostics"
 )]
 
-use vestra_core::plan::RenderPlan;
+use std::collections::BTreeMap;
+
+use vestra_core::plan::{CompiledLayer, CompiledMaskInput, CompiledVisualSource, RenderPlan};
 
 use crate::{Category, Diagnostic, render::DecodedAssets};
 
@@ -51,6 +53,7 @@ pub(super) struct GpuRequirements {
     pub(super) uniform_bytes: u32,
     parameter_record_count: u32,
     parameter_buffer_bytes: u64,
+    particle_buffer_bytes: u64,
     resource_estimates: ResourceEstimates,
 }
 
@@ -289,6 +292,11 @@ impl GpuRequirements {
                 .ok_or_else(|| resource_overflow("staging memory estimate overflow"))?,
             peak_parameter_buffer_bytes: parameter_buffer_bytes,
         };
+        let particles = ParticleStagingRequirements::from_layers(
+            &plan.layers,
+            copy_bytes,
+            &mut BTreeMap::new(),
+        );
         Ok(Self {
             max_texture_dimension_2d: plan
                 .canvas
@@ -301,6 +309,7 @@ impl GpuRequirements {
             uniform_bytes,
             parameter_record_count,
             parameter_buffer_bytes,
+            particle_buffer_bytes: particles.instance_bytes.max(particles.upload_bytes),
             resource_estimates,
         })
     }
@@ -402,7 +411,13 @@ impl GpuRequirements {
             max_uniform_buffers_per_shader_stage: 1,
             max_dynamic_uniform_buffers_per_pipeline_layout: 1,
             max_uniform_buffer_binding_size: self.uniform_bytes,
-            max_buffer_size: self.copy_bytes.max(self.parameter_buffer_bytes),
+            // Particle bounds sum per-source peaks, which may occur at different
+            // times. Request enough for those arenas up to the adapter's limit;
+            // particle_buffer_capacity checks each actual frame payload.
+            max_buffer_size: self.copy_bytes.max(self.parameter_buffer_bytes).max(
+                self.particle_buffer_bytes
+                    .min(adapter_limits.max_buffer_size),
+            ),
             max_compute_invocations_per_workgroup: 64,
             max_compute_workgroup_size_x: 8,
             max_compute_workgroup_size_y: 8,
@@ -466,6 +481,88 @@ impl GpuRequirements {
             peak_parameter_buffer_bytes: self.parameter_buffer_bytes(alignment)?,
             ..self.resource_estimates
         })
+    }
+}
+
+/// Conservative per-frame-slot bounds for the two separate particle arenas.
+#[derive(Clone, Copy, Default)]
+struct ParticleStagingRequirements {
+    instance_bytes: u64,
+    upload_bytes: u64,
+}
+
+impl ParticleStagingRequirements {
+    fn add(&mut self, other: Self) {
+        // Saturation preserves a conservative bound for adapter-capped requests
+        // even when a sum of independently reachable peaks exceeds u64.
+        self.instance_bytes = self.instance_bytes.saturating_add(other.instance_bytes);
+        self.upload_bytes = self.upload_bytes.saturating_add(other.upload_bytes);
+    }
+
+    fn from_layers(
+        layers: &[CompiledLayer],
+        copy_bytes: u64,
+        cache: &mut BTreeMap<usize, Self>,
+    ) -> Self {
+        let mut total = Self::default();
+        for layer in layers {
+            total.add(Self::from_layer(layer, layers, copy_bytes, cache));
+        }
+        total
+    }
+
+    fn from_layer(
+        layer: &CompiledLayer,
+        scope: &[CompiledLayer],
+        copy_bytes: u64,
+        cache: &mut BTreeMap<usize, Self>,
+    ) -> Self {
+        if let Some(requirements) = cache.get(&layer.compiled_identity) {
+            return *requirements;
+        }
+        let mut total = Self::from_source(&layer.source, copy_bytes, cache);
+        for mask in &layer.masks {
+            if let CompiledMaskInput::Source { source, .. } = &mask.input {
+                total.add(Self::from_source(source, copy_bytes, cache));
+            }
+        }
+        // Track mattes render their source again, including its masks and any
+        // nested matte chain. Compiled matte references are acyclic. Memoizing
+        // layer bounds avoids repeatedly walking shared chains.
+        if let Some(source) = layer.matte.as_ref().and_then(|matte| {
+            scope
+                .iter()
+                .find(|source| source.compiled_identity == matte.source_layer_identity)
+        }) {
+            total.add(Self::from_layer(source, scope, copy_bytes, cache));
+        }
+        cache.insert(layer.compiled_identity, total);
+        total
+    }
+
+    fn from_source(
+        source: &CompiledVisualSource,
+        copy_bytes: u64,
+        cache: &mut BTreeMap<usize, Self>,
+    ) -> Self {
+        match source {
+            CompiledVisualSource::ParticleSystem(system) => match system.blend_mode {
+                crate::project::ParticleBlendMode::Additive => Self {
+                    upload_bytes: copy_bytes,
+                    ..Self::default()
+                },
+                crate::project::ParticleBlendMode::Normal => Self {
+                    instance_bytes: system.maximum_live_particles.saturating_mul(
+                        std::mem::size_of::<super::particles::GpuParticleInstance>() as u64,
+                    ),
+                    ..Self::default()
+                },
+            },
+            CompiledVisualSource::Group(composition) => {
+                Self::from_layers(&composition.layers, copy_bytes, cache)
+            }
+            _ => Self::default(),
+        }
     }
 }
 

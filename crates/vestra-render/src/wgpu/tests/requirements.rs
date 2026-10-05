@@ -188,6 +188,124 @@ fn requested_device_limits_resolve_against_the_discovered_adapter() {
     assert_eq!(error.code, "WGPU-BINDING-LIMIT");
 }
 
+fn particle_requirements(
+    value: serde_json::Value,
+) -> (vestra_core::plan::RenderPlan, GpuRequirements) {
+    let project: Project = serde_json::from_value(value).expect("particle project parses");
+    let limits = vestra_core::validation::ResourceLimits::default();
+    let report = vestra_core::validation::validate(&project, limits);
+    assert!(report.is_valid(), "{:?}", report.diagnostics());
+    let assets = std::collections::BTreeMap::new();
+    let durations = std::collections::BTreeMap::new();
+    let input = PlanCompileInput::new(
+        &project,
+        limits,
+        std::path::Path::new("."),
+        &assets,
+        &durations,
+        2.0,
+        (24, 1),
+        48,
+        &[],
+    );
+    let plan = compile(input, CompileOptions::default()).expect("particle project compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("particle assets decode");
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("particle requirements calculate");
+    (plan, requirements)
+}
+
+fn particle_project(count: usize) -> serde_json::Value {
+    super::parity_gpu_tests::particle_upload_project(count)
+}
+
+#[test]
+fn particle_requirements_include_combined_additive_uploads() {
+    let (plan, requirements) = particle_requirements(particle_project(2));
+    let requested = requirements
+        .requested_device_limits(&plan, &wgpu::Limits::default())
+        .expect("two uploads fit adapter");
+    assert_eq!(requested.max_buffer_size, 7_372_800);
+}
+
+#[test]
+fn particle_requirements_include_padded_upload_rows() {
+    let mut project = particle_project(2);
+    project["output"]["width"] = serde_json::json!(66);
+    project["output"]["height"] = serde_json::json!(20);
+    let (plan, requirements) = particle_requirements(project);
+    let requested = requirements
+        .requested_device_limits(&plan, &wgpu::Limits::default())
+        .expect("padded uploads fit adapter");
+    assert_eq!(requested.max_buffer_size, 20_480);
+}
+
+#[test]
+fn particle_requirements_include_instance_arena_separately_from_upload_arena() {
+    let mut project = particle_project(3);
+    for clip in project["visual"]["clips"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .take(2)
+    {
+        clip["source"]["particle"]["blend_mode"] = serde_json::json!("normal");
+        clip["source"]["emission"]["bursts"][0]["count"] = serde_json::json!(65_536);
+    }
+    let (plan, requirements) = particle_requirements(project);
+    let requested = requirements
+        .requested_device_limits(&plan, &wgpu::Limits::default())
+        .expect("both arenas fit adapter");
+    // 131,072 instances at 32 bytes exceed the separate 3,686,400-byte upload.
+    assert_eq!(requested.max_buffer_size, 4_194_304);
+}
+
+#[test]
+fn particle_requirements_include_groups_source_masks_and_repeated_mattes() {
+    let mut project = particle_project(2);
+    let child = project["visual"]["clips"][0].clone();
+    project["visual"]["clips"][0]["source"] = serde_json::json!({
+        "type": "group", "clips": [child]
+    });
+    let mask_source = project["visual"]["clips"][1]["source"].clone();
+    project["visual"]["clips"][1]["masks"] = serde_json::json!([{
+        "id": "particles-mask",
+        "input": {"type": "source", "source": mask_source, "mode": "alpha"},
+        "operation": "replace"
+    }]);
+    project["visual"]["clips"][1]["matte"] = serde_json::json!({
+        "source_layer": "particles-0", "mode": "alpha", "invert": false
+    });
+    let (plan, requirements) = particle_requirements(project);
+    let requested = requirements
+        .requested_device_limits(&plan, &wgpu::Limits::default())
+        .expect("four source renders fit adapter");
+    assert_eq!(requested.max_buffer_size, 14_745_600);
+}
+
+#[test]
+fn particle_requirements_cap_conservative_peak_at_adapter_buffer_limit() {
+    let mut project = particle_project(2);
+    // These uploads never coexist, so their summed bound must not cause an
+    // adapter rejection when every real frame's payload fits.
+    project["visual"]["clips"][0]["duration"] = serde_json::json!(1.0);
+    project["visual"]["clips"][1]["start"] = serde_json::json!(1.0);
+    project["visual"]["clips"][1]["duration"] = serde_json::json!(1.0);
+    let (plan, requirements) = particle_requirements(project);
+    let adapter = wgpu::Limits {
+        max_buffer_size: 5_000_000,
+        ..wgpu::Limits::default()
+    };
+    let requested = requirements
+        .requested_device_limits(&plan, &adapter)
+        .expect("conservative peaks can be requested up to adapter capacity");
+    assert_eq!(requested.max_buffer_size, 5_000_000);
+}
+
 #[test]
 fn texture_estimates_cover_common_sizes_and_working_texture_roles() {
     for (width, height, expected) in [

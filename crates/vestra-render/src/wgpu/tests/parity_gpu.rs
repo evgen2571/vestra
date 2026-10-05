@@ -756,6 +756,43 @@ fn gpu_group_transform_transparency_opacity_and_blend_match_cpu_on_vulkan() {
 }
 
 #[test]
+fn gpu_additive_particles_render_at_non_power_of_two_buffer_limit() {
+    let project = serde_json::from_value(json!({
+        "schema_version": 1,
+        "output": {
+            "path": "particle-upload.mp4", "width": 1280, "height": 720,
+            "frame_rate": "24/1", "background": "#101018", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 2.0
+        },
+        "assets": [],
+        "visual": {
+            "clips": [{
+                "id": "particles",
+                "source": {
+                    "type": "particle_system", "seed": 41,
+                    "emitter": {"type": "point", "position": {"x": 0.5, "y": 0.5}},
+                    "emission": {"bursts": [{"time": 0.0, "count": 8}]},
+                    "particle": {
+                        "lifetime": 1.0, "size": 0.12, "speed": 0.0,
+                        "direction_spread_degrees": 0.0, "colour": "#FFD27A80",
+                        "primitive": "square", "blend_mode": "additive"
+                    }
+                },
+                "start": 0.0, "duration": 2.0, "layer": 0,
+                "opacity": {"base_value": 1.0}
+            }],
+            "transitions": [], "flashes": [], "post_effects": []
+        }
+    }))
+    .expect("particle upload project parses");
+    // The 3,686,400-byte upload fits the requested limit, but rounding its
+    // capacity to 4,194,304 bytes would exceed it.
+    if let Some(output) = render_project_parity(project, 250_000_000, 2) {
+        assert_ne!(output.get_pixel(640, 360).0, [16, 16, 24, 255]);
+    }
+}
+
+#[test]
 fn gpu_particle_system_inside_group_matches_cpu_on_vulkan() {
     let particle = json!({
         "id": "particles",

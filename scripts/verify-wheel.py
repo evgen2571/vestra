@@ -89,8 +89,8 @@ def verify(output_dir: Path) -> None:
     )
 
     package_path = Path(vestra.__file__).resolve()
-    assert distribution_version("vestra") == "0.1.0"
-    assert vestra.__version__ == "0.1.0"
+    assert distribution_version("vestra") == "0.1.1"
+    assert vestra.__version__ == "0.1.1"
     installed = distribution("vestra")
     assert installed.metadata["License-Expression"] == "MIT"
     requirement = installed.metadata["Requires-Python"].replace(" ", "")

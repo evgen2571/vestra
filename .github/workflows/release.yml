@@ -30,7 +30,7 @@ jobs:
           workspace = tomllib.loads(Path('Cargo.toml').read_text())
           version = workspace['workspace']['package']['version']
           package = tomllib.loads(Path('pyproject.toml').read_text())['project']
-          assert version == '0.1.0', f'Unexpected release version: {version}'
+          assert version == '0.1.1', f'Unexpected release version: {version}'
           assert package['dynamic'] == ['version']
           assert package['license'] == 'MIT'
           for member in workspace['workspace']['members']:

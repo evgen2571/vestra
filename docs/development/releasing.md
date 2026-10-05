@@ -27,7 +27,7 @@ Source builds need Rust, a C toolchain, `make`,
 For PyPI Trusted Publishing, register the GitHub owner `evgen2571`, repository
 `vestra`, workflow `release.yml`, and environment `pypi` in the PyPI project
 settings. Protect the GitHub `pypi` environment so release publication needs
-maintainer approval. Publishing a GitHub release tagged `v0.1.0` then runs the
+maintainer approval. Publishing a GitHub release tagged `v0.1.1` then runs the
 same artifact matrix and uploads its results through OIDC only after every
 build and smoke test passes. The workflow verifies that the tag matches the
 workspace version. Manual runs build and test artifacts

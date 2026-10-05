@@ -1469,6 +1469,16 @@ mod configuration_tests {
     }
 
     #[test]
+    fn particle_buffer_reports_combined_upload_payload_exceeding_adapter_limit() {
+        let error = particle_buffer_capacity(7_372_800, 5_000_000)
+            .expect_err("combined payload exceeds the adapter's real capacity");
+        assert_eq!(error.code, "WGPU-PARTICLE-BUFFER-LIMIT");
+        assert_eq!(error.category, crate::Category::Backend);
+        assert!(error.message.contains("7372800"));
+        assert!(error.message.contains("5000000"));
+    }
+
+    #[test]
     fn video_decoder_selection_deduplicates_only_compiled_slot_assets() {
         assert_eq!(used_video_asset_indices(&[2, 2, 0]), BTreeSet::from([0, 2]));
     }

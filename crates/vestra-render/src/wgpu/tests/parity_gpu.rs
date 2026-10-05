@@ -755,19 +755,11 @@ fn gpu_group_transform_transparency_opacity_and_blend_match_cpu_on_vulkan() {
     );
 }
 
-#[test]
-fn gpu_additive_particles_render_at_non_power_of_two_buffer_limit() {
-    let project = serde_json::from_value(json!({
-        "schema_version": 1,
-        "output": {
-            "path": "particle-upload.mp4", "width": 1280, "height": 720,
-            "frame_rate": "24/1", "background": "#101018", "quality": "preview",
-            "audio": false, "duration_mode": "explicit", "duration": 2.0
-        },
-        "assets": [],
-        "visual": {
-            "clips": [{
-                "id": "particles",
+pub(super) fn particle_upload_project(count: usize) -> Value {
+    let clips: Vec<_> = (0..count)
+        .map(|index| {
+            json!({
+                "id": format!("particles-{index}"),
                 "source": {
                     "type": "particle_system", "seed": 41,
                     "emitter": {"type": "point", "position": {"x": 0.5, "y": 0.5}},
@@ -778,15 +770,42 @@ fn gpu_additive_particles_render_at_non_power_of_two_buffer_limit() {
                         "primitive": "square", "blend_mode": "additive"
                     }
                 },
-                "start": 0.0, "duration": 2.0, "layer": 0,
+                "start": 0.0, "duration": 2.0, "layer": index,
                 "opacity": {"base_value": 1.0}
-            }],
+            })
+        })
+        .collect();
+    json!({
+        "schema_version": 1,
+        "output": {
+            "path": "particle-upload.mp4", "width": 1280, "height": 720,
+            "frame_rate": "24/1", "background": "#101018", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 2.0
+        },
+        "assets": [],
+        "visual": {
+            "clips": clips,
             "transitions": [], "flashes": [], "post_effects": []
         }
-    }))
-    .expect("particle upload project parses");
+    })
+}
+
+#[test]
+fn gpu_additive_particles_render_at_non_power_of_two_buffer_limit() {
+    let project =
+        serde_json::from_value(particle_upload_project(1)).expect("particle upload project parses");
     // The 3,686,400-byte upload fits the requested limit, but rounding its
     // capacity to 4,194,304 bytes would exceed it.
+    if let Some(output) = render_project_parity(project, 250_000_000, 2) {
+        assert_ne!(output.get_pixel(640, 360).0, [16, 16, 24, 255]);
+    }
+}
+
+#[test]
+fn gpu_multiple_additive_particles_render_beyond_single_frame_buffer_limit() {
+    // Two simultaneous sources need a 7,372,800-byte upload arena.
+    let project = serde_json::from_value(particle_upload_project(2))
+        .expect("multiple particle upload project parses");
     if let Some(output) = render_project_parity(project, 250_000_000, 2) {
         assert_ne!(output.get_pixel(640, 360).0, [16, 16, 24, 255]);
     }

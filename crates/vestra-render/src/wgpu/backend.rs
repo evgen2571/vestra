@@ -653,7 +653,10 @@ impl RenderBackend for WgpuBackend {
                 particle_buffer =
                     Some(self.context.device.create_buffer(&wgpu::BufferDescriptor {
                         label: Some("vestra particle instances"),
-                        size: required.next_power_of_two().max(32),
+                        size: particle_buffer_capacity(
+                            required,
+                            self.context.device.limits().max_buffer_size,
+                        )?,
                         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                         mapped_at_creation: false,
                     }));
@@ -682,7 +685,10 @@ impl RenderBackend for WgpuBackend {
                 particle_upload_buffer =
                     Some(self.context.device.create_buffer(&wgpu::BufferDescriptor {
                         label: Some("vestra additive particle uploads"),
-                        size: required.next_power_of_two().max(32),
+                        size: particle_buffer_capacity(
+                            required,
+                            self.context.device.limits().max_buffer_size,
+                        )?,
                         usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
                         mapped_at_creation: false,
                     }));
@@ -1029,6 +1035,25 @@ impl WgpuBackend {
 
 const DEFAULT_PIPELINE_DEPTH: usize = 3;
 const MAX_PIPELINE_DEPTH: usize = 3;
+
+fn particle_buffer_capacity(required: u64, max_buffer_size: u64) -> Result<u64, Diagnostic> {
+    if required > max_buffer_size {
+        return Err(Diagnostic::error(
+            "WGPU-PARTICLE-BUFFER-LIMIT",
+            crate::Category::Backend,
+            format!(
+                "particle buffer requires {required} bytes, exceeding device max_buffer_size {max_buffer_size}"
+            ),
+            "",
+        ));
+    }
+    // Keep geometric growth where possible without exceeding the device limit.
+    Ok(required
+        .checked_next_power_of_two()
+        .unwrap_or(max_buffer_size)
+        .max(32)
+        .min(max_buffer_size))
+}
 
 fn pipeline_depth_from_environment() -> Result<usize, Diagnostic> {
     let value = std::env::var("VESTRA_WGPU_IN_FLIGHT")
@@ -1417,6 +1442,31 @@ fn used_video_asset_indices(slot_assets: &[usize]) -> BTreeSet<usize> {
 mod configuration_tests {
     use super::*;
     use crate::render::effects::{CompositeMode, EffectOperation, EffectPass};
+
+    #[test]
+    fn particle_buffer_growth_respects_device_limit() {
+        for (required, limit, expected) in [
+            (16, 256, 32),
+            (64, 256, 64),
+            (96, 256, 128),
+            (96, 100, 100),
+            (3_686_400, 3_686_400, 3_686_400),
+            (u64::MAX - 1, u64::MAX, u64::MAX),
+        ] {
+            assert_eq!(
+                particle_buffer_capacity(required, limit).expect("payload fits device limit"),
+                expected,
+                "required={required}, limit={limit}"
+            );
+        }
+    }
+
+    #[test]
+    fn particle_buffer_rejects_payload_exceeding_device_limit() {
+        let error = particle_buffer_capacity(3_686_404, 3_686_400)
+            .expect_err("payload cannot fit device limit");
+        assert_eq!(error.code, "WGPU-PARTICLE-BUFFER-LIMIT");
+    }
 
     #[test]
     fn video_decoder_selection_deduplicates_only_compiled_slot_assets() {

@@ -1,6 +1,6 @@
 # Stylized video effects
 
-Status: in progress — technical contracts being finalized; color/dither implementation underway.
+Status: in progress — technical contracts recorded; color/dither implementation underway and acceptance pending.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
 Decisions finalized: 2026-10-08
@@ -124,6 +124,39 @@ Keep new effects post-transform by default and preserve authored ordering;
 support clip and global effects where their semantics apply. Test effects on
 video, images, masks/mattes, nested compositions and transparent inputs.
 Do not advertise GPU-only versions as complete CPU/WGPU parity.
+
+### Temporal stability and visual-quality requirements
+
+Build temporal stability **into each relevant effect** during Milestones 2–4,
+rather than postponing it to final optimization. These requirements apply to
+real moving video and deterministic arbitrary-time frame rendering. They do
+not promise that every discontinuity in source content or intentional glitch
+motion can be removed. Retain the documented effect-specific visual style:
+stabilization must not blur deliberate fine dithering, hard palette steps or
+pixel-sort glitches into an unrelated look.
+
+| Technique | Implementation policy | Effects / milestone |
+| --- | --- | --- |
+| Stable spatial pattern anchoring | **Required.** Define and test pixel-center, grid-origin and transform behavior. Keep existing output-pixel Bayer anchoring for OrderedDither; use deliberate composition/layer/source-space contracts for other effects, not a universal screen-space assumption. Patterns must be deterministic for identical time and inputs. | Dither (2), ASCII (3), halftone/CRT (4) |
+| Spatial prefiltering | **Required where cell/region analysis needs it.** Apply appropriately scaled anti-alias or filtered luminance/color analysis to avoid tracking single noisy samples. Make pixel-sort input filtering optional or avoid it when it would destroy intentional hard edges/glitches; justify any additional pass. | ASCII (3), halftone (4), pixel sorting if justified (4) |
+| Area-averaged cell analysis | **Required.** Use representative alpha-aware area statistics for character and halftone cells (including partial border cells), rather than a single pixel sample. Define behavior for transparent inputs, small cells and boundaries. | ASCII (3), halftone (4) |
+| Antialiased procedural geometry | **Required for generated geometric edges.** Reuse antialiased atlas coverage for font glyphs; smooth halftone-dot boundaries and appropriate CRT geometry analytically or with justified supersampling/filtered coverage. Keep intentionally hard pixel-art modes available. | ASCII (3), halftone/CRT (4) |
+| Controlled threshold transitions | **Selective, required when thresholds visibly chatter.** Test small luminance/parameter changes near glyph, dot, dither and sort boundaries. Use appropriate stable sampling or tunable soft transitions/hysteresis-like *stateless* mapping when beneficial; keep hard/detailed variants and palette quantization exact where intended. No history-dependent selection. | Dither (2), ASCII (3), halftone/sorting (4) |
+| Continuous animated-parameter evaluation | **Required for interpolable controls.** Keyframes, audio-modulated properties and procedural values must evaluate smoothly where specified, including nonsequential times and exact cycle boundaries. Discrete enums, glyph sets, matrix sizes and other incompatible choices remain explicitly discrete unless a transition strategy is implemented. | All applicable effects (2–4) |
+| Deterministic temporally continuous noise | **Required for any animated stochastic-looking pattern.** Prefer seeded, continuous, project-time-based noise/functions that do not re-randomize each frame; fixed spatial patterns stay fixed by default. Audio modulation and explicit periods must not introduce hidden frame-state dependence. | CRT (4); animated dither variants only if introduced (2) |
+| Stable bounded sort and segmentation | **Required.** Deterministic stable ties, bounded segments, consistent horizontal/vertical ordering, threshold eligibility and edge-block behavior. Small input changes may legitimately alter sort membership; tests must distinguish expected changes from nondeterministic reordering. | Pixel sorting (4) |
+| Multi-resolution analysis | **High priority where quality warrants it.** Choose analysis scale relative to glyph/dot cell size; avoid aliasing from tiny textures and preserve important silhouettes at varying output sizes. Prefer reuse of existing prepared resources and bounded downsampling rather than unconditional new full-frame passes. | ASCII (3), halftone (4) |
+| Temporal flicker diagnostics and regression | **Required validation.** Generate reproducible adjacent-frame and small controlled-input-change sequences plus per-frame difference/flicker metrics or diagnostic images using the [visual-regression skill](../../../.agents/skills/visual-regression/SKILL.md). Include stable-scene controls, moving subjects, threshold sweeps, effect-order comparisons and authored animation; distinguish expected scene motion/cuts and deliberate flicker from artifacts. | Start in 2, expand for 3–4, final acceptance in 5 |
+| Effect/configuration transition quality | **High priority for useful transitions.** Reuse continuous `amount`/source blending and existing keyframe interpolation first. For incompatible discrete configurations (character set, dithering matrix, palette cardinality, dot pattern), evaluate an explicit transition/crossfade only if a real visual problem justifies the additional passes/resources; otherwise document that changes are discrete. Do not create a new general transition engine. | Reusable effects/looks in 4, demonstrations in 5 |
+
+For temporal validation, capture **the same authored timestamps in different
+render orders**, controlled stationary/moving fixtures, and short frame
+sequences around quantization/glyph/segment thresholds and loop seams.
+Report actual adapter and CPU/WGPU results; numerical temporal metrics are
+diagnostics, not a universal flicker-free pass/fail threshold. Use subjective
+review alongside metrics. Measure any prefilter, downsample or crossfade
+overhead at 1080p, and test memory/resource bounds at 4K. Preserve explicit
+effects' time-origin, caching and alpha contracts from the technical design.
 
 ### Licensing and references
 
@@ -318,6 +351,12 @@ renderer rewrite.
 - [ ] Reproduce the [palette-agnostic fine-detail dither target](../../development/stylization/dithered-palette-look.md),
   preserving outlines, midtone texture, shadow clarity and temporal stability
   with user-selected colors and adjustable fine/coarse pixel structure.
+- [ ] Verify fixed output-pixel Bayer anchoring and deterministic threshold
+  coverage on both backends; control edge/tonal threshold chatter without
+  softening intentional crisp dither pixels or making patterns color-dependent.
+- [ ] Verify continuous keyframed/audio-modulated/periodic palette evolution,
+  including loop seams and random-access evaluation; introduce reproducible
+  short-sequence temporal flicker diagnostics and a stable-scene control.
 - [ ] Implement palette mapping, custom gradient/palette color modes and
   deterministic ordered dithering on both CPU/WGPU.
 - [ ] Expose time-dependent palette/rainbow controls and explicit loop periods;
@@ -336,6 +375,13 @@ behavior, public API and both backends.
   validation/preflight and reusable glyph assets.
 - [ ] Deliver density/cell controls, luminance and edge modes, monochrome,
   source-color and animated palette coloring, and hybrid source blending.
+- [ ] Use alpha-aware **area-averaged cell statistics**, appropriate spatial
+  prefiltering/multi-resolution sampling and antialiased glyph coverage.
+  Specify intentional cell anchoring, partial-cell behavior and stable
+  selection near glyph/edge thresholds without forcing blurred characters.
+- [ ] Verify glyph/edge choices and spatial detail on static and moving
+  footage across cell sizes, transforms and 1080p/4K resolutions, with
+  controlled-input-change and short-sequence flicker diagnostics.
 - [ ] Implement and verify equivalent CPU/WGPU paths, transparent/partial
   cell behavior, signal/keyframe support and applicable loop periods.
 - [ ] Verify nonsequential frames, moving footage, typical 1080p throughput
@@ -348,12 +394,27 @@ images, with no per-frame font/atlas rebuilds or GPU-to-CPU roundtrips.
 
 - [ ] Implement halftone and CRT/analog styling on CPU/WGPU, including
   applicable periodic/animated parameters.
+- [ ] For halftone, use representative alpha-aware **area-averaged** cell
+  analysis, scale-appropriate spatial prefilter/multi-resolution sampling,
+  stable lattice anchoring and antialiased procedural dot edges. Test tonal
+  boundary behavior while preserving optional crisp graphic patterns.
+- [ ] For CRT, anchor spatial scanlines/masks consistently, antialias generated
+  geometry where appropriate, and use seeded **continuous project-time noise**
+  for animated grain/jitter. Verify smooth modulation and repeatable periods.
+- [ ] Verify stable segmented sorting with deterministic ties and threshold
+  boundaries on moving inputs; keep intentional sharp glitches. Optional input
+  prefiltering must not silently change the authored sort style.
 - [ ] Implement **both** horizontal and vertical bounded segmented pixel
   sorting with explicit thresholds, stable ties and resource-limit behavior;
   optional exotic variants may be deferred, not either required direction.
 - [ ] Supply a small set of optional curated looks using current presets
   where valid and composable ordered effect recipes elsewhere. No parallel
   preset engine.
+- [ ] Animate continuous effect intensity/parameters through existing
+  keyframes and blending. Assess configuration changes between discrete
+  styles; offer explicit crossfading where worthwhile and affordable, or
+  document their step-change behavior without adding a general transition
+  subsystem.
 - [ ] Verify order, global/clip scope, stacking, masks/mattes, color/alpha
   parity and error paths for each effect.
 
@@ -367,6 +428,11 @@ and known resource/performance limits.
   halftone/CRT and composed preset/recipe looks.
 - [ ] Demonstrate a repeating music-background scene; separately note
   footage/audio-loop requirements.
+- [ ] Produce short deterministic image/frame-sequence temporal diagnostics
+  across static controls, moving subjects, slow tonal threshold sweeps,
+  procedural loops, effect transitions and intentionally discontinuous
+  effects. Record visual/contact-sheet inspection, appropriate metrics,
+  expected-vs-unwanted changes and actual CPU/WGPU adapter results.
 - [ ] Run focused/full Rust/Python/schema/docs checks, software WGPU tests,
   hardware WGPU tests where available, and compare measured 1080p workloads
   and 4K/resource-limit behavior against baselines.
@@ -401,6 +467,20 @@ Completion: reproducible visual showcase and honest CPU/WGPU capability claims.
 - [ ] Dithered palette styling matches the visual detail and tonal structure
   of its design reference with at least three meaningfully different palettes;
   reject coarse/noisy low-detail outputs regardless of color choice.
+- [ ] Dither/ASCII/halftone/CRT patterns obey documented spatial anchoring
+  and pixel/border rules under scaling/transforms, with area-based analysis
+  and antialiased geometry where required; intentional crispness remains.
+- [ ] Interpolable parameters and applicable procedural noise evolve
+  continuously under project-time and loop-period tests; random-access
+  frame evaluation is repeatable. Discrete configuration transitions are
+  either intentionally stepped or given documented compatible blending.
+- [ ] Pixel sorting maintains stable ties/segmentation with both directions;
+  threshold-edge changes are deterministic and distinguishable from expected
+  source-driven glitch motion.
+- [ ] Reproducible automated temporal diagnostic sequences and human-reviewed
+  render comparisons cover stable/animated footage and known discontinuities;
+  unintended flicker is investigated with CPU/WGPU evidence, not declared
+  absent solely from aggregate metrics.
 - [ ] Licenses/attribution for code, fonts, glyphs and showcase footage are
   preserved, with reproducible example inputs.
 - [ ] Targeted tests plus `just check`, `just python-test`,
@@ -409,14 +489,27 @@ Completion: reproducible visual showcase and honest CPU/WGPU capability claims.
 
 ## Progress and verification
 
-All **product choices** are finalized, and the current work consists solely
-of documentation. Implementation, design-level parameter selection,
-rendering and performance verification remain outstanding.
-Next action: complete the two unchecked parts of Milestone 1 by deriving
-concrete effect contracts/resource topologies from current code.
+All **product choices** are finalized. Milestone 1 technical contracts are
+recorded in this plan. The branch contains an initial PaletteMap/OrderedDither
+implementation across core, CPU, WGPU and public authoring, with focused
+tests, examples and benchmark suite definitions. Milestone 2 remains unchecked:
+visual quality, complete validation, actual 1080p/4K measurements and hardware
+evidence have not been confirmed by this documentation update.
+
+Next action: finish Milestone 2 verification and temporal diagnostics, then
+apply the requirements in this plan to Milestones 3–5 as each effect lands.
+This update changes planning requirements only; no rendering code or test
+results are implied.
 
 ## Decisions and discoveries
 
+- 2026-10-08: Add effect-specific temporal-stability and visual-quality
+  requirements throughout Milestones 2–5: pattern anchoring, appropriate
+  prefiltering and area averages, antialiasing, selective threshold stability,
+  smooth parameter/noise motion, stable segmentation, multi-resolution
+  analysis, regression diagnostics and deliberate configuration transitions.
+  Prefer stateless deterministic approaches and reuse current render passes;
+  do not blur intentional pixel-art/glitch aesthetics.
 - 2026-10-08: AcerolaFX example4 is a **fine-detail dither/palette quality
   reference**, not a fixed red palette or ASCII requirement; changing the
   authored palette must preserve the effect's pattern and tonal structure.
@@ -434,6 +527,8 @@ concrete effect contracts/resource topologies from current code.
 
 ## Completion / handoff
 
-Not complete; no effect code has been implemented in this documentation stage.
-Proceed with the remaining *technical* design tasks, not more user preference
-questions.
+Not complete. Technical design is documented and an initial color/dither
+implementation has landed; the remaining acceptance, effect families and
+showcase work are pending. Proceed with Milestone 2 verification and the
+new quality requirements before treating it as finished, then continue
+through the existing Milestones 3–5.

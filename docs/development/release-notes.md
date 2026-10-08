@@ -1,4 +1,9 @@
-# v0.1.0 release notes draft
+# v0.1.0 release summary (historical)
+
+Vestra v0.1.0 was published on October 5, 2026. These are historical release
+notes, not a pending release checklist. See the [published v0.1.0](https://github.com/evgen2571/vestra/releases/tag/v0.1.0),
+[v0.1.1](https://github.com/evgen2571/vestra/releases/tag/v0.1.1), and
+[maintainer release procedure](releasing.md).
 
 Vestra's first public release introduces a Python authoring API backed by a
 native Rust video composition and rendering engine.
@@ -31,6 +36,3 @@ not imply complete visual CPU/WGPU parity. See the
 [feature matrix](../reference/feature-support.md). Hardware WGPU availability
 and driver behavior depend on the environment. Text requires a font file, and
 the Python package does not install the CLI.
-
-Maintainer: publish this draft only after the complete hosted artifact matrix
-passes on the release revision and the [release checklist](releasing.md) is complete.

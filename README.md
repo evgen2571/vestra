@@ -71,7 +71,8 @@ just check
 ```
 
 See the contributing guide above and [testing](https://github.com/evgen2571/vestra/blob/main/docs/development/testing.md)
-for setup and verification details.
+for setup and verification details. Coding agents can start with
+[AGENTS.md](AGENTS.md); complex implementation work follows [PLANS.md](PLANS.md).
 
 ## License
 

@@ -39,7 +39,8 @@ nix develop
 just python-sync
 ```
 
-Run `just` to list available commands. If you do not use Nix, follow the native
+Run `just` to list available commands. Coding agents should read
+[AGENTS.md](AGENTS.md); substantial changes use the [plan convention](PLANS.md). If you do not use Nix, follow the native
 setup instructions in [installation](docs/getting-started/installation.md#build-from-source--development)
 and [testing](docs/development/testing.md). Rendering requires `ffmpeg` and
 `ffprobe` on `PATH`.

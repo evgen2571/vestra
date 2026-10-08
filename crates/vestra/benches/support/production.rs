@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 
-fn generate(path: &Path, filter: &str, duration: &str, codec: &[&str]) {
+pub(super) fn generate(path: &Path, filter: &str, duration: &str, codec: &[&str]) {
     let status = Command::new("ffmpeg")
         .args([
             "-y", "-v", "error", "-f", "lavfi", "-i", filter, "-t", duration,

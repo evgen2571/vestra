@@ -86,6 +86,11 @@ pub const MIN_POSITIVE_PROPERTY_VALUE: f64 = 1e-6;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScalarPropertyTarget {
+    PaletteMapAmount,
+    PaletteMapPhase,
+    OrderedDitherAmount,
+    OrderedDitherPhase,
+    OrderedDitherStrength,
     BrightnessAmount,
     ContrastAmount,
     SaturationAmount,
@@ -144,7 +149,9 @@ impl ScalarPropertyTarget {
             NonNegative as RuntimeNonNegative, PositiveFloor,
         };
         match self {
-            Self::BrightnessAmount
+            Self::PaletteMapPhase
+            | Self::OrderedDitherPhase
+            | Self::BrightnessAmount
             | Self::ContrastAmount
             | Self::SaturationAmount
             | Self::DirectionalBlurAngleDegrees
@@ -153,17 +160,20 @@ impl ScalarPropertyTarget {
                 runtime_constraint: RuntimeFinite,
                 authored_validation: Finite,
             },
-            Self::TintAmount | Self::GlowThreshold | Self::VignetteAmount => {
-                ScalarPropertyDefinition {
-                    runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
-                    authored_validation: Range {
-                        min: Some(0.0),
-                        max: Some(1.0),
-                        min_exclusive: false,
-                        max_exclusive: false,
-                    },
-                }
-            }
+            Self::PaletteMapAmount
+            | Self::OrderedDitherAmount
+            | Self::OrderedDitherStrength
+            | Self::TintAmount
+            | Self::GlowThreshold
+            | Self::VignetteAmount => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
             Self::BloomThreshold => Self::GlowThreshold.definition(),
             Self::GaussianBlurRadius
             | Self::DirectionalBlurRadius
@@ -322,6 +332,8 @@ pub enum EffectParameterKind {
     ScalarProperty,
     PlainTrack,
     Colour,
+    Palette,
+    Period,
     Integer,
     Number,
     Point2d,
@@ -425,6 +437,23 @@ impl EffectParameterDescriptor {
         }
     }
 
+    const fn palette() -> Self {
+        Self {
+            integer_minimum: Some(2),
+            integer_maximum: Some(16),
+            ..Self::simple("palette", EffectParameterKind::Palette)
+        }
+    }
+
+    const fn period() -> Self {
+        Self {
+            required: false,
+            minimum: Some(0.0),
+            minimum_exclusive: true,
+            ..Self::simple("period", EffectParameterKind::Period)
+        }
+    }
+
     const fn optional_enum_default(
         name: &'static str,
         values: &'static [&'static str],
@@ -450,6 +479,9 @@ impl ScalarPropertyTarget {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::PaletteMapAmount | Self::OrderedDitherAmount => "amount",
+            Self::PaletteMapPhase | Self::OrderedDitherPhase => "phase",
+            Self::OrderedDitherStrength => "strength",
             Self::BrightnessAmount => "amount",
             Self::ContrastAmount => "amount",
             Self::SaturationAmount => "amount",
@@ -608,6 +640,20 @@ visual_effect_catalog! {
         temporal: FromProperties, retains_original: false,
         scalar_properties: [], plain_tracks: [], parameters: []
     },
+    PaletteMap => {
+        id: "palette_map",
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
+        temporal: FromProperties, retains_original: false,
+        scalar_properties: [PaletteMapAmount, PaletteMapPhase], plain_tracks: [],
+        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow"], "gradient"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapPhase), EffectParameterDescriptor::period()]
+    },
+    OrderedDither => {
+        id: "ordered_dither",
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
+        temporal: FromProperties, retains_original: false,
+        scalar_properties: [OrderedDitherAmount, OrderedDitherPhase, OrderedDitherStrength], plain_tracks: [],
+        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow"], "nearest"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherPhase), EffectParameterDescriptor::period(), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherStrength), EffectParameterDescriptor::optional_enum_default("matrix", &["bayer2", "bayer4", "bayer8"], "bayer8"), EffectParameterDescriptor::integer("scale", 1, 32)]
+    },
     Brightness => {
         id: "brightness",
         class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -724,6 +770,8 @@ impl crate::project::Effect {
     #[must_use]
     pub(crate) const fn kind(&self) -> VisualEffectKind {
         match self {
+            Self::PaletteMap { .. } => VisualEffectKind::PaletteMap,
+            Self::OrderedDither { .. } => VisualEffectKind::OrderedDither,
             Self::Brightness { .. } => VisualEffectKind::Brightness,
             Self::Contrast { .. } => VisualEffectKind::Contrast,
             Self::Saturation { .. } => VisualEffectKind::Saturation,
@@ -852,6 +900,8 @@ mod tests {
                         serde_json::json!({"base_value": number})
                     }
                     EffectParameterKind::Colour => serde_json::json!("#ffffff"),
+                    EffectParameterKind::Palette => serde_json::json!(["#000000", "#ffffff"]),
+                    EffectParameterKind::Period => serde_json::json!(number),
                     EffectParameterKind::Integer => {
                         serde_json::json!(parameter.integer_minimum.unwrap_or(2))
                     }

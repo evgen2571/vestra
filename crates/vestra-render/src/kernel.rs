@@ -3,6 +3,8 @@ use vestra_core::plan::{EffectOperation, RenderPlan, compiled_effect_pass_plan};
 /// Renderer-owned implementation families for logical effect operations.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum EffectKernel {
+    PaletteMap,
+    OrderedDither,
     ColourTransform,
     GaussianBlur,
     HighlightExtract,
@@ -19,6 +21,8 @@ pub(crate) enum EffectKernel {
 #[must_use]
 pub(crate) const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
     match operation {
+        EffectOperation::PaletteMap { .. } => EffectKernel::PaletteMap,
+        EffectOperation::OrderedDither { .. } => EffectKernel::OrderedDither,
         EffectOperation::ApplyColourTransform { .. } => EffectKernel::ColourTransform,
         EffectOperation::GaussianHorizontal { .. } | EffectOperation::GaussianVertical { .. } => {
             EffectKernel::GaussianBlur
@@ -35,7 +39,9 @@ pub(crate) const fn kernel_for_operation(operation: &EffectOperation) -> EffectK
 }
 
 impl EffectKernel {
-    pub(crate) const ALL: [Self; 10] = [
+    pub(crate) const ALL: [Self; 12] = [
+        Self::PaletteMap,
+        Self::OrderedDither,
         Self::ColourTransform,
         Self::GaussianBlur,
         Self::HighlightExtract,
@@ -86,6 +92,8 @@ impl EffectKernelSet {
 impl EffectKernel {
     const fn index(self) -> u32 {
         match self {
+            Self::PaletteMap => 10,
+            Self::OrderedDither => 11,
             Self::ColourTransform => 0,
             Self::GaussianBlur => 1,
             Self::HighlightExtract => 2,
@@ -294,7 +302,44 @@ mod tests {
             x_modifiers: Vec::new(),
             y_modifiers: Vec::new(),
         };
+        let palette = vestra_core::stylization::EvaluatedPalette {
+            colours: [[255; 4]; 16],
+            len: 2,
+        };
         let cases = [
+            (
+                vestra_core::plan::CompiledEffect::PaletteMap {
+                    palette,
+                    mode: crate::project::PaletteMode::Gradient,
+                    amount: scalar(1.0),
+                    phase: scalar(0.0),
+                    period: None,
+                },
+                vestra_core::plan::EvaluatedEffect::PaletteMap {
+                    palette,
+                    amount: 1.0,
+                    nearest: false,
+                },
+            ),
+            (
+                vestra_core::plan::CompiledEffect::OrderedDither {
+                    palette,
+                    mode: crate::project::PaletteMode::Nearest,
+                    amount: scalar(1.0),
+                    phase: scalar(0.0),
+                    period: None,
+                    strength: scalar(1.0),
+                    matrix: crate::project::DitherMatrix::Bayer8,
+                    scale: 1,
+                },
+                vestra_core::plan::EvaluatedEffect::OrderedDither {
+                    palette,
+                    amount: 1.0,
+                    strength: 1.0,
+                    matrix: crate::project::DitherMatrix::Bayer8,
+                    scale: 1,
+                },
+            ),
             (
                 vestra_core::plan::CompiledEffect::Brightness {
                     amount: scalar(0.25),

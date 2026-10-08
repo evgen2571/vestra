@@ -1,6 +1,6 @@
 # Stylized video effects
 
-Status: planned — product decisions finalized; implementation and low-level technical design remain.
+Status: in progress — technical contracts being finalized; color/dither implementation underway.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
 Decisions finalized: 2026-10-08
@@ -164,15 +164,150 @@ or tested need justifies changes. Keep design notes in this plan.
 
 ## Milestones
 
+### Technical contracts and resource map (2026-10-08)
+
+All new effects use post-transform image coordinates, preserve authored order,
+and support layers (including groups/video) and global post-effects. Working
+RGB is encoded byte space, straight alpha. Tone selection uses integer
+`54*R + 183*G + 19*B`, normalized by 65280; this approximates Rec.709
+luminance without device-dependent threshold rounding. Fully transparent
+pixels keep their input bytes for color-only operations and contribute no
+color to neighborhood analysis. Color palettes contain 2–16 opaque colors
+in authored dark-to-light order; colors never determine pattern geometry.
+
+| Effect / tag | Public contract | Pass topology / resources |
+| --- | --- | --- |
+| `PaletteMap` / `palette_map` | Palette; `mode=gradient\|nearest\|rainbow`; bindable `amount` [0,1], `phase` in cycles; optional positive finite `period` in seconds | Single Current→Current pass; 16 packed RGBA colors in uniform record; no persistent/frame assets |
+| `OrderedDither` / `ordered_dither` | Palette/color animation as above; bindable `strength` [0,1]; `matrix=bayer2\|bayer4\|bayer8`; integer `scale` [1,32] pixels; amount [0,1] | Single Current→Current pass; integer Bayer indexing anchored at (0,0), no random/time-varying threshold pattern |
+| `Ascii` / `ascii` | Built-in/custom character sequences and optional Font asset; cell dimensions/density; luminance/edge/hybrid selection; mono/source/palette/rainbow coloring; glyph/background intensity and source mix; explicit palette period | Cell analysis Current→Temporary0; resolve OriginalAnd(Temporary0)→Current; retain original in existing auxiliary slot; prepared atlas binding, no readback/history |
+| `Halftone` / `halftone` | Bindable cell size [2,64] px, finite screen angle, amount [0,1], softness [0,2] px; luminance/source/RGB screens; opaque foreground/background; invert | Single pass; rotated pixel-center lattice and alpha-aware sampled cell tone; analytic dots |
+| `PixelSort` / `pixel_sort` | Horizontal/vertical; ascending/descending; bindable lower/upper thresholds [0,1]; block length [2,256], amount [0,1] | Single pass; CPU stable bounded runs; GPU shared-memory segmented bitonic sort, kernel-specific block/line dispatch, ≤8 KiB shared storage |
+| `Crt` / `crt` | Curvature, scanline/phosphor strengths and spacing, grain, jitter, flicker, rolling-band width/strength; bindable amount/phase; optional positive finite period and fixed seed | Single pass; alpha-aware inverse sampling; periodic sinusoidal/hash-coefficient motion; no history textures |
+
+Palette defaults are black/white, amount=1, phase=0, period disabled;
+PaletteMap defaults to gradient interpolation, OrderedDither to nearest,
+strength=1, Bayer8, scale=1. Dithering selects adjacent authored tone levels
+by `floor(tone*(N-1)+0.5+strength*(threshold-0.5))`, clamped to the palette.
+Scale enlarges threshold cells without smoothing source detail. Matrix
+thresholds are centered ranks `(rank+0.5)/(size*size)`; endpoints stay calm.
+OrderedDither always selects discrete colors; mode controls palette generation,
+with gradient/nearest both using the authored discrete palette in this effect.
+
+Color animation is evaluated in core: effective phase is
+`(authored_phase + owner_local_seconds/period) mod 1`, or authored phase alone
+when period is absent. Custom palette motion continuously interpolates each
+stop toward its cyclic successor; rainbow generates 16 HSV stops with hue
+`phase+i/15`, saturation=1 and value=`i/15`. The core evaluates colors once
+per effect/frame into RGBA bytes shared by both backends. Keyframes/signals
+modulate authored phase, amount and strength before procedural phase is added.
+Period itself is static, validated positive/finite, and marks the effect
+dynamic even with constant source/properties. Nanosecond owner time determines
+phase; random frame access does not change results. Bytes impose normal
+1/255 color quantization, with continuous underlying cycle and equal boundaries.
+
+Pixel-sort thresholds select contiguous eligible runs within fixed blocks;
+alpha-zero/ineligible pixels break runs. Complete RGBA pixels move, integer
+luminance ties preserve original position in both directions/orders. Final
+partial blocks are bounded. Amount blends original/sorted in premultiplied
+space. Authored lower>upper is invalid; evaluated crossing makes eligibility
+empty. No unbounded full-row/full-column sort is implied.
+
+Halftone dots use radius `sqrt(tone)*cell_size/sqrt(2)` to reach cell corners
+at white, rather than leave dark texture in full highlights. Screen rotation
+is anchored to canvas origin. RGB screens have fixed channel angle offsets.
+CRT inverse curvature may create transparent borders; scanlines, masks/grain
+do not create alpha. Periodic grain interpolates fixed seeded sine/cosine
+coefficients, never hashes frame/time indices; jitter/flicker/rolling band use
+periodic functions. Existing Bloom/Glow/ChromaticAberration/ColorAdjust remain
+independent effects used in optional looks.
+
+Recipes will be plain functions returning fresh ordered effects, compatible
+with video/global/group stacks and editable after attachment. Existing image
+presets remain image presets. No additional preset renderer/catalog is needed.
+
+Validation fixtures: hand-derived ramps, all Bayer ranks, transparent/partial
+alpha, thin silhouettes/textures, same scene with monochrome/cool/warm palettes,
+nonsequential t and t+period, moving synthetic video, clip/global/mask/group
+stacking. Color/dither target max channel error ≤1 before composition, ≤2
+after composition, with zero pixels beyond the chosen tolerance. Spatial
+threshold choices must match exactly. ASCII/halftone/CRT tolerances will be
+fixed from actual rendered edges, not widened to conceal shader failures.
+Benchmark prepared-frame and full moving-video costs at 1080p; verify 4K and
+device limits separately. Use existing benchmark/adapter tooling.
+
+ASCII asset contract: `font` is an optional Font asset ID (resolved by SDK
+preflight against the project base directory); omission selects bundled DejaVu
+Sans, reusing the repository's licensed test font. First font face only;
+no system fallback. Characters are independent Unicode scalars, 1–256 entries
+in authored dark-to-light order, with duplicates retained as intentional
+weighting. No ligatures, grapheme/bidi/contextual shaping. Reject controls
+except ordinary space, missing glyphs, and invisible non-space glyphs at
+preflight/preparation with resource-specific diagnostics. `edge_characters`
+contains exactly four directional scalars in horizontal/vertical/slash/backslash
+order; coverage is checked against the chosen font as well.
+
+The API uses `Ascii` (`ascii`) with `glyph_style=characters|geometric`:
+the geometric option is the explicit pseudo-ASCII family, using density-ranked
+dot/line/cross masks through the same analysis and resolve contract. Python may
+expose `PseudoAscii` as a convenience selecting geometric style. Built-in
+standard/dense/blocks sets expand to ordinary character strings in authoring.
+Default characters are ` .:-=+*#%@`, edges `-|/\\`, cell_width=8 and
+cell_height=12 pixels (bindable, rounded once by core; ranges 2–64 and 2–128),
+mode=`hybrid` (`fill|edges|hybrid`), edge_threshold=.15 [0,1],
+edge_strength=1 [0,4], invert=false, source_mix=0 [0,1], amount=1 [0,1].
+Foreground coloring uses `color_mode=monochrome|source|palette|rainbow`,
+foreground white, background opaque black, ordered palette black/white,
+phase=0 cycles and optional positive finite period. Color-only phase is
+evaluated through the same palette code as Milestone 2. Background may be
+transparent; final glyph/background support is intersected with source alpha.
+`source_mix` and amount mix in premultiplied space, preserving transparent
+borders and hybrid footage detail.
+
+Fixed atlas tiles are 32×48 pixels on 16 columns, with a shared baseline and
+antialiased glyph coverage. Up to 256 fill +4 edge glyphs require 512×816
+RGBA8 (≤1.6 MiB), prepared once in shared DecodedAssets and uploaded once to
+WGPU. Resource keys include font/face, ordered characters and fixed raster
+settings; cell-size animation never rebuilds fonts/atlases. Existing source
+pixel, per-asset and aggregate byte limits apply before allocation; report
+atlas bytes in preparation/backend counters. Preserve the font's complete
+Bitstream/DejaVu license in `licenses/` and third-party notices.
+
+Each cell's alpha-weighted RGB mean and selected glyph/edge information occupy
+two RGBA8 metadata texels in Temporary0. Glyph indices use two bytes (maximum
+259). Cells include only actual pixels at partial borders; luma/edge analysis
+ignores hidden transparent RGB. Fill selection uses mean tone; edge selection
+uses video-safe image gradients with deterministic orientation bins and ties,
+never game depth/normal buffers. Resolve uses original pixel alpha and color,
+cell metadata and prepared atlas. Add one prepared atlas sampled binding to
+the effect layout (three sampled textures), a prepared resource index and
+cell-grid dispatch extent. Existing Original/Temporary0/Current slots suffice;
+there is no arbitrary render graph or per-frame font rasterization/readback.
+
+Remaining defaults/ranges: Halftone cell_size=6, angle_degrees=15, softness=.5,
+mode=luminance (`luminance|source|rgb`), foreground white/background black,
+invert=false, amount=1. PixelSort direction=horizontal, order=ascending,
+lower_threshold=.15, upper_threshold=.9, segment_length=64, amount=1.
+CRT amount=1, curvature=.08 [0,.5], scanline_strength=.2 [0,1],
+scanline_spacing=2 [1,8] pixels, mask_strength=.15 [0,1],
+mask_spacing=1 integer [1,6] pixels, grain=.025 [0,.25], jitter=.35 [0,8]
+pixels, flicker=.025 [0,.25], rolling_strength=.06 [0,1],
+rolling_width=.12 [.01,1] height fraction, phase=0, period disabled and seed=0.
+All continuous controls are bindable scalar properties; static modes, colors,
+glyph strings/font, integer sort/mask limits and period remain authored values.
+Periodic CRT controls use integer cycle counts and fixed seeded sinusoidal
+coefficients; fractional scanline spacing changes spatial frequency without
+changing the number of temporal cycles. Exact shader geometry/raster details
+will be tested before each family's implementation is accepted.
+
 ### 1. Documentation and technical design
 
 - [x] Add agent guidance, resumable plan convention and effect architecture page.
 - [x] Expand effect extension guide and documentation navigation.
 - [x] Record all 13 product decisions, including custom fonts, preset
   compatibility and explicit period semantics.
-- [ ] Specify and review effect API schemas/parameters, full effect inventory,
+- [x] Specify and review effect API schemas/parameters, full effect inventory,
   algorithms, RGB/alpha/border contracts, glyph handling and visual fixtures.
-- [ ] Map each effect's CPU/WGPU pass/resource topology and identify justified
+- [x] Map each effect's CPU/WGPU pass/resource topology and identify justified
   extensions to prepared resources and renderer limits.
 
 Completion: implementation-ready technical contracts without an unrelated

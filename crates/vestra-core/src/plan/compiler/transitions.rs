@@ -310,6 +310,20 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
     let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
     let track = |value: &mut crate::project::Track<f64>| map_project_track(value, duration);
     match effect {
+        Effect::PaletteMap { amount, phase, .. } => {
+            scalar(amount);
+            scalar(phase);
+        }
+        Effect::OrderedDither {
+            amount,
+            phase,
+            strength,
+            ..
+        } => {
+            scalar(amount);
+            scalar(phase);
+            scalar(strength);
+        }
         Effect::Brightness { amount, .. }
         | Effect::Contrast { amount, .. }
         | Effect::Saturation { amount, .. } => scalar(amount),

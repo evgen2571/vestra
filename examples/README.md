@@ -26,6 +26,7 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 | `compositing/` | Blend modes and global post-effects. |
 | `python/high-level/11_masks.py` | Layer-owned geometric masks and mask coverage. |
 | `python/high-level/12_effect_expansion_stress.py` | Motion Tile, directional/radial blur, RGB split, transforms, masks, mattes, and a nested group. |
+| `python/high-level/13_palette_dither.py` | Asset-free fine Bayer dithering, three custom palettes, and a looping rainbow phase. |
 | `projects/` | Complete projects, including animation, audio mixing, and `track-matte.json`. |
 | `particles/` | Deterministic ParticleSystem configurations, including audio-reactive appearance. |
 | `python/high-level/` | The normal `Project`, `Composition`, `Layer`, and source API, including shape and text rendering. |

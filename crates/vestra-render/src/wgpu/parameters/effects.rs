@@ -18,6 +18,20 @@ macro_rules! effect_parameters {
     };
 }
 
+// Packed RGBA colors match WGSL array<vec4<u32>, 4> at byte 48.
+effect_parameters!(PaletteParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    amount: u32,
+    strength: f32,
+    count: u32,
+    nearest: u32,
+    bits: u32,
+    scale: u32,
+    _padding1: [u32; 2],
+    colours: [u32; 16]
+});
 // WGSL layout: colour_row0 @ 16, colour_offset @ 64, size = 80 bytes.
 effect_parameters!(ColourTransformParameters {
     canvas_width: u32,
@@ -110,6 +124,8 @@ effect_parameters!(ColorAdjustParameters {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(in crate::wgpu) enum EffectKernelParameters {
+    PaletteMap(PaletteParameters),
+    OrderedDither(PaletteParameters),
     ColourTransform(ColourTransformParameters),
     GaussianBlur(GaussianBlurParameters),
     HighlightExtract(HighlightExtractParameters),
@@ -125,6 +141,8 @@ pub(in crate::wgpu) enum EffectKernelParameters {
 impl EffectKernelParameters {
     pub(in crate::wgpu) const fn kernel(self) -> EffectKernel {
         match self {
+            Self::PaletteMap(_) => EffectKernel::PaletteMap,
+            Self::OrderedDither(_) => EffectKernel::OrderedDither,
             Self::ColourTransform(_) => EffectKernel::ColourTransform,
             Self::GaussianBlur(_) => EffectKernel::GaussianBlur,
             Self::HighlightExtract(_) => EffectKernel::HighlightExtract,
@@ -145,6 +163,36 @@ pub(in crate::wgpu) fn effect_parameters(
     pass: EffectPass,
 ) -> EffectKernelParameters {
     match pass.operation {
+        EffectOperation::PaletteMap {
+            palette,
+            amount,
+            nearest,
+        } => EffectKernelParameters::PaletteMap(palette_parameters(
+            width, height, &palette, amount, 0.0, nearest, 0, 1,
+        )),
+        EffectOperation::OrderedDither {
+            palette,
+            amount,
+            strength,
+            matrix,
+            scale,
+        } => {
+            let bits = match matrix {
+                vestra_core::project::DitherMatrix::Bayer2 => 1,
+                vestra_core::project::DitherMatrix::Bayer4 => 2,
+                vestra_core::project::DitherMatrix::Bayer8 => 3,
+            };
+            EffectKernelParameters::OrderedDither(palette_parameters(
+                width,
+                height,
+                &palette,
+                amount,
+                strength,
+                true,
+                bits,
+                u32::from(scale),
+            ))
+        }
         EffectOperation::ApplyColourTransform { transform } => {
             EffectKernelParameters::ColourTransform(ColourTransformParameters {
                 canvas_width: width,
@@ -335,11 +383,57 @@ fn line_parameters(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one packed record mirrors shared WGSL palette fields"
+)]
+fn palette_parameters(
+    width: u32,
+    height: u32,
+    palette: &vestra_core::stylization::EvaluatedPalette,
+    amount: f64,
+    strength: f64,
+    nearest: bool,
+    bits: u32,
+    scale: u32,
+) -> PaletteParameters {
+    PaletteParameters {
+        canvas_width: width,
+        canvas_height: height,
+        _padding: [0; 2],
+        amount: (amount * 65535.0).round() as u32,
+        strength: strength as f32,
+        count: palette.len,
+        nearest: u32::from(nearest),
+        bits,
+        scale,
+        _padding1: [0; 2],
+        colours: palette.colours.map(u32::from_le_bytes),
+    }
+}
+
 #[cfg(test)]
 mod effect_parameter_layout_tests {
     use super::*;
     use crate::wgpu::parameters::PARAMETER_RECORD_BYTES;
     use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn palette_record_matches_wgsl_and_preserves_packed_color_channels() {
+        assert_eq!(offset_of!(PaletteParameters, amount), 16);
+        assert_eq!(offset_of!(PaletteParameters, bits), 32);
+        assert_eq!(offset_of!(PaletteParameters, colours), 48);
+        assert_eq!(size_of::<PaletteParameters>(), 112);
+        assert_eq!(align_of::<PaletteParameters>(), 16);
+        assert!(size_of::<PaletteParameters>() <= PARAMETER_RECORD_BYTES as usize);
+        let palette = vestra_core::stylization::EvaluatedPalette {
+            colours: [[17, 34, 51, 255]; 16],
+            len: 2,
+        };
+        let packed = palette_parameters(32, 24, &palette, 0.5, 1.0, true, 3, 2);
+        assert_eq!(packed.colours[0], 0xff332211);
+        assert_eq!(packed.count, 2);
+    }
 
     #[test]
     fn highlight_extract_matches_wgsl_layout() {
@@ -359,6 +453,7 @@ mod effect_parameter_layout_tests {
     #[test]
     fn every_effect_parameter_fits_the_uniform_record() {
         let sizes = [
+            size_of::<PaletteParameters>(),
             size_of::<ColourTransformParameters>(),
             size_of::<GaussianBlurParameters>(),
             size_of::<HighlightExtractParameters>(),
@@ -370,6 +465,7 @@ mod effect_parameter_layout_tests {
             size_of::<ColorAdjustParameters>(),
         ];
         let alignments = [
+            align_of::<PaletteParameters>(),
             align_of::<ColourTransformParameters>(),
             align_of::<GaussianBlurParameters>(),
             align_of::<HighlightExtractParameters>(),

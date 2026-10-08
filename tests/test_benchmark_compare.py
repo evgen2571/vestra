@@ -185,3 +185,59 @@ def test_suite_comparison_rejects_incomplete_or_mislabeled_results(
                 sample["result"]["width"] = 64
     with pytest.raises(ValueError, match="incomplete|incompatible"):
         benchmark.compare_documents(before, after)
+
+
+def test_stylization_suite_selects_only_three_fullhd_workloads():
+    manifest = json.loads(
+        (Path(benchmark.__file__).parents[1] / "benchmarks/suites.json").read_text()
+    )
+    assert hasattr(benchmark, "suite_configuration")
+    settings, scenarios = benchmark.suite_configuration(manifest, "stylization-1080p")
+    assert settings == {"width": 1920, "height": 1080, "warmups": 1, "samples": 3}
+    assert scenarios == ["stylization_baseline", "palette_video", "dither_video"]
+    assert benchmark.suite_configuration(manifest, "canonical") == (
+        {"width": 1280, "height": 720, "warmups": 1, "samples": 5},
+        [
+            "single_video",
+            "mixed_dynamic",
+            "video_heavy",
+            "combined",
+            "masks",
+            "mattes",
+            "nested_groups",
+            "particles",
+            "blend_modes",
+            "production_edit",
+        ],
+    )
+
+
+def test_stylization_smoke_selects_same_workloads_at_small_resolution():
+    manifest = json.loads(
+        (Path(benchmark.__file__).parents[1] / "benchmarks/suites.json").read_text()
+    )
+    assert hasattr(benchmark, "suite_configuration")
+    settings, scenarios = benchmark.suite_configuration(manifest, "stylization-smoke")
+    assert settings == {"width": 128, "height": 72, "warmups": 0, "samples": 1}
+    assert scenarios == ["stylization_baseline", "palette_video", "dither_video"]
+
+
+def test_suite_override_does_not_mutate_manifest_or_export_scenarios_as_environment():
+    manifest = {
+        "scenarios": ["canonical"],
+        "suites": {
+            "focused": {
+                "width": 64,
+                "height": 64,
+                "samples": 1,
+                "warmups": 0,
+                "scenarios": ["palette_video"],
+            }
+        },
+    }
+    original = copy.deepcopy(manifest)
+    assert hasattr(benchmark, "suite_configuration")
+    settings, scenarios = benchmark.suite_configuration(manifest, "focused")
+    assert "scenarios" not in settings
+    assert scenarios == ["palette_video"]
+    assert manifest == original

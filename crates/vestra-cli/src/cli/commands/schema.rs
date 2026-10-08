@@ -276,11 +276,22 @@ fn parameter_schema(parameter: &vestra::EffectParameterDescriptor) -> Value {
             }
         }
         EffectParameterKind::Colour => json!({"$ref": "#/$defs/colour"}),
+        EffectParameterKind::Palette => json!({
+            "type": "array",
+            "minItems": parameter.integer_minimum,
+            "maxItems": parameter.integer_maximum,
+            "items": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}([fF]{2})?$"}
+        }),
         EffectParameterKind::Integer => json!({
             "type": "integer", "minimum": parameter.integer_minimum, "maximum": parameter.integer_maximum
         }),
-        EffectParameterKind::Number => {
-            let mut result = Map::from_iter([(String::from("type"), json!("number"))]);
+        EffectParameterKind::Number | EffectParameterKind::Period => {
+            let value_type = if parameter.kind == EffectParameterKind::Period {
+                json!(["number", "null"])
+            } else {
+                json!("number")
+            };
+            let mut result = Map::from_iter([(String::from("type"), value_type)]);
             if let Some(minimum) = parameter.minimum {
                 result.insert(
                     if parameter.minimum_exclusive {
@@ -325,6 +336,36 @@ mod tests {
     fn schema() -> Value {
         serde_json::from_str(include_str!("../../../../../schemas/project.schema.json"))
             .expect("checked-in schema is valid JSON")
+    }
+
+    #[test]
+    fn palette_effects_have_bounded_opaque_palettes_and_optional_periods() {
+        let schema = schema();
+        for id in ["palette_map", "ordered_dither"] {
+            let branch = &schema["$defs"][format!("{id}_effect")];
+            let properties = &branch["properties"];
+            assert_eq!(properties["palette"]["minItems"], 2);
+            assert_eq!(properties["palette"]["maxItems"], 16);
+            assert_eq!(properties["period"]["exclusiveMinimum"], json!(0.0));
+            assert_eq!(properties["period"]["type"], json!(["number", "null"]));
+            assert!(
+                !branch["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("period"))
+            );
+            assert_eq!(
+                properties["mode"]["enum"],
+                json!(["gradient", "nearest", "rainbow"])
+            );
+        }
+        let dither = &schema["$defs"]["ordered_dither_effect"]["properties"];
+        assert_eq!(
+            dither["matrix"]["enum"],
+            json!(["bayer2", "bayer4", "bayer8"])
+        );
+        assert_eq!(dither["scale"]["minimum"], 1);
+        assert_eq!(dither["scale"]["maximum"], 32);
     }
 
     #[test]

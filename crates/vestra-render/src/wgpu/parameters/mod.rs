@@ -10,7 +10,7 @@ pub(super) use effects::EffectKernelParameters;
 pub(super) use effects::{
     ChromaticAberrationParameters, ColorAdjustParameters, ColourTransformParameters,
     CompositeParameters, GaussianBlurParameters, HighlightExtractParameters, LineBlurParameters,
-    VignetteParameters, ZoomBlurParameters, effect_parameters,
+    PaletteParameters, VignetteParameters, ZoomBlurParameters, effect_parameters,
 };
 pub(super) use source::{
     LayerParameters, MaskFeatherParameters, MaskParameters, ParticleParameters,
@@ -28,6 +28,7 @@ const fn max_parameter_size(left: usize, right: usize) -> u64 {
 /// Largest record reserved by the dynamic uniform arena.
 pub(super) const PARAMETER_RECORD_BYTES: u64 = {
     let mut size = std::mem::size_of::<LayerParameters>();
+    size = max_parameter_size(size, std::mem::size_of::<PaletteParameters>()) as usize;
     size = max_parameter_size(size, std::mem::size_of::<ColourTransformParameters>()) as usize;
     size =
         max_parameter_size(size as usize, std::mem::size_of::<GaussianBlurParameters>()) as usize;

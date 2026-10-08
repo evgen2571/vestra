@@ -30,3 +30,33 @@ Reports include machine, toolchain, revision and executable metadata to make
 local comparisons meaningful. Inspect and sanitize them before sharing, and
 avoid committing home paths, environment dumps or workstation descriptions.
 See [performance methodology](../docs/development/performance.md).
+
+The focused color/dither suite measures a single full-frame moving FFV1 video
+at 1920×1080, 30 fps and 90 frames. It records three separate workloads:
+`stylization_baseline` (no effects), `palette_video` (smooth palette mapping),
+and `dither_video` (fine Bayer8 dithering). All three use the same deterministic
+`testsrc2` input; no titles, shapes, audio or additional layers are included.
+Palette and dither color phase has an explicit three-second period. Media
+creation is outside measured render intervals. The canonical ten-scenario
+suite retains its settings and workload order.
+
+```bash
+python scripts/benchmark.py run --suite stylization-smoke --backend cpu --output target/benchmark-results/stylization-smoke
+python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before
+# Repeat after a source-stable change with the same backend and machine.
+python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-after
+just benchmark-compare target/benchmark-results/stylization-before/suite.json target/benchmark-results/stylization-after/suite.json
+```
+
+The Full HD suite uses one warmup and three measured samples per scenario;
+`stylization-smoke` uses 128×72, no warmup and one sample. For hardware results,
+select `--backend hardware-wgpu` after adapter discovery and keep a separate
+baseline. The existing runner rejects CPU fallback and software adapters.
+The no-effects control reports its actual execution path, so use the recorded
+frame/decode/encode stages to interpret overhead rather than attributing all
+wall-time differences to shader execution.
+
+For a 4K resource/correctness smoke check, use the built benchmark directly
+with `VESTRA_BENCH_WIDTH=3840`, `VESTRA_BENCH_HEIGHT=2160`,
+`VESTRA_BENCH_SCENARIO=dither_video`, `VESTRA_BENCH_WARMUPS=0`, and
+`VESTRA_BENCH_SAMPLES=1`. This is not the versioned 1080p baseline.

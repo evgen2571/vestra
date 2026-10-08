@@ -308,6 +308,8 @@ fn supported_kernels() -> impl Iterator<Item = EffectKernel> {
 impl EffectKernel {
     const fn label(self) -> &'static str {
         match self {
+            Self::PaletteMap => "vestra.effect.palette-map",
+            Self::OrderedDither => "vestra.effect.ordered-dither",
             Self::ColourTransform => "vestra.effect.colour-transform",
             Self::GaussianBlur => "vestra.effect.gaussian-blur",
             Self::HighlightExtract => "vestra.effect.highlight-extract",
@@ -323,6 +325,16 @@ impl EffectKernel {
 
     pub(super) const fn source(self) -> &'static str {
         match self {
+            Self::PaletteMap => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/palette_common.wgsl"),
+                include_str!("../shaders/effects/palette_map.wgsl")
+            ),
+            Self::OrderedDither => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/palette_common.wgsl"),
+                include_str!("../shaders/effects/ordered_dither.wgsl")
+            ),
             Self::ColourTransform => concat!(
                 include_str!("../shaders/effects/common.wgsl"),
                 include_str!("../shaders/effects/colour_transform.wgsl")

@@ -144,6 +144,20 @@ fn execute_effect_pass(
     pass: &EffectPass,
 ) {
     match pass.operation {
+        EffectOperation::PaletteMap {
+            palette,
+            amount,
+            nearest,
+        } => super::stylization::palette_map(source, target, &palette, amount, nearest),
+        EffectOperation::OrderedDither {
+            palette,
+            amount,
+            strength,
+            matrix,
+            scale,
+        } => super::stylization::ordered_dither(
+            source, target, &palette, amount, strength, matrix, scale,
+        ),
         EffectOperation::ApplyColourTransform { transform } => {
             apply_colour_transform(source, target, transform)
         }
@@ -607,6 +621,122 @@ fn convolve_reference(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn canonical_stylization(value: serde_json::Value) -> EvaluatedEffect {
+        let mut project: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/wgpu-small-rgba.json"
+        ))
+        .expect("canonical fixture");
+        let id = value["id"].as_str().expect("test effect id").to_owned();
+        project["visual"]["post_effects"] = serde_json::json!([value]);
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/stylization/cpu-tests");
+        std::fs::create_dir_all(&directory).expect("test directory");
+        let path = directory.join(format!("{id}.json"));
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&project).expect("serialize fixture"),
+        )
+        .expect("write fixture");
+        let input = crate::test_support::load_and_validate(
+            &path,
+            &crate::test_support::ValidationOptions::default(),
+        )
+        .expect("stylization canonical model accepted");
+        let plan =
+            vestra_core::plan::compile(input, Default::default()).expect("stylization compiles");
+        let signals = vestra_core::plan::PreparedScalarSignals::empty();
+        vestra_core::plan::evaluate_effect(
+            &plan.post_effects[0].effect,
+            0,
+            1_000_000_000,
+            &vestra_core::plan::EvaluationContext::new(&signals),
+        )
+        .expect("stylization evaluates")
+    }
+
+    #[test]
+    fn palette_gradient_maps_authored_tones_and_preserves_alpha_and_hidden_rgb() {
+        let effect = canonical_stylization(serde_json::json!({
+            "type":"palette_map", "id":"gradient",
+            "palette":["#100020","#e0ff80"], "mode":"gradient",
+            "amount":{"base_value":1.0}, "phase":{"base_value":0.0}
+        }));
+        let source = RgbaImage::from_raw(
+            4,
+            1,
+            vec![
+                0, 0, 0, 255, 128, 128, 128, 128, 255, 255, 255, 255, 128, 0, 255, 0,
+            ],
+        )
+        .expect("source pixels");
+        let output = render_effect(&source, effect);
+        assert_eq!(
+            output.as_raw(),
+            &[
+                16, 0, 32, 255, 120, 128, 80, 128, 224, 255, 128, 255, 128, 0, 255, 0
+            ]
+        );
+    }
+
+    #[test]
+    fn ordered_dither_has_literal_bayer_ranks_and_palette_independent_structure() {
+        for (id, palette, dark, light) in [
+            (
+                "mono",
+                ["#000000", "#ffffff"],
+                [0, 0, 0, 128],
+                [255, 255, 255, 128],
+            ),
+            (
+                "cool",
+                ["#101020", "#30e0ff"],
+                [16, 16, 32, 128],
+                [48, 224, 255, 128],
+            ),
+            (
+                "warm",
+                ["#200800", "#ffbc60"],
+                [32, 8, 0, 128],
+                [255, 188, 96, 128],
+            ),
+        ] {
+            let effect = canonical_stylization(serde_json::json!({
+                "type":"ordered_dither", "id":id, "palette":palette,
+                "mode":"nearest", "amount":{"base_value":1.0},
+                "strength":{"base_value":1.0}, "phase":{"base_value":0.0},
+                "matrix":"bayer2", "scale":1
+            }));
+            let source = RgbaImage::from_pixel(2, 2, Rgba([128, 128, 128, 128]));
+            let output = render_effect(&source, effect);
+            assert_eq!(
+                output.pixels().map(|p| p.0).collect::<Vec<_>>(),
+                vec![dark, light, light, dark],
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn dither_scale_expands_threshold_cells_without_changing_tone_or_alpha() {
+        let effect = canonical_stylization(serde_json::json!({
+            "type":"ordered_dither", "id":"scale", "palette":["#000000","#ffffff"],
+            "mode":"nearest", "amount":{"base_value":1.0},
+            "strength":{"base_value":1.0}, "phase":{"base_value":0.0},
+            "matrix":"bayer2", "scale":2
+        }));
+        let mut source = RgbaImage::from_pixel(4, 4, Rgba([128, 128, 128, 255]));
+        source.put_pixel(3, 3, Rgba([99, 11, 240, 0]));
+        let output = render_effect(&source, effect);
+        let values = output.pixels().map(|p| p[0]).collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 0, 99
+            ]
+        );
+        assert_eq!(output.get_pixel(3, 3), source.get_pixel(3, 3));
+    }
 
     fn render_effect(source: &RgbaImage, effect: EvaluatedEffect) -> RgbaImage {
         let mut surfaces = EffectSurfacePool::new(source.width(), source.height());

@@ -46,6 +46,10 @@ def _valid_generic_parameters(definition: object) -> dict[str, object]:
                 if minimum is not None and maximum is not None
                 else (float(minimum) + 1.0 if minimum is not None else 0.5)
             )
+        elif kind == "palette":
+            values[str(parameter["name"])] = ["#000000", "#ffffff"]
+        elif kind == "period":
+            continue
         elif kind == "colour":
             values[str(parameter["name"])] = "#ffffff"
         elif kind == "integer":
@@ -534,7 +538,7 @@ def test_generic_effect_catalog_is_read_only_and_complete() -> None:
     assert set(ids) == {
         "brightness", "contrast", "saturation", "tint", "gaussian_blur", "directional_blur",
         "motion_tile", "zoom_blur", "radial_blur", "glow", "chromatic_aberration", "vignette", "sharpen", "color_adjust",
-        "camera_shake", "motion_blur", "bloom",
+        "camera_shake", "motion_blur", "bloom", "palette_map", "ordered_dither",
     }
     with pytest.raises(TypeError):
         definitions[0]["id"] = "changed"  # type: ignore[index]

@@ -24,7 +24,7 @@ from .effects import (
     ClipEffectCollection, ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect,
     Effect, GenericEffect, GaussianBlurEffect, GlowEffect, MotionBlurEffect, PostEffectCollection,
     SaturationEffect, SharpenEffect, TintEffect, VignetteEffect, ZoomBlurDirection,
-    ZoomBlurEffect,
+    ZoomBlurEffect, PaletteMapEffect, OrderedDitherEffect, PaletteMode, DitherMatrix,
     available_effects, effect_definition,
 )
 from .flashes import Flash, FlashCollection
@@ -115,6 +115,7 @@ __all__ = [
     "VignetteEffect",
     "ZoomBlurDirection",
     "ZoomBlurEffect",
+    "PaletteMapEffect", "OrderedDitherEffect", "PaletteMode", "DitherMatrix",
     "available_effects",
     "effect_definition",
     "available_audio_effects",

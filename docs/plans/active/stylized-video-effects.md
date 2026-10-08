@@ -23,6 +23,11 @@ backend-neutral compilation, evaluation and ordered effect passes; CPU/WGPU
 renderers; Python effect classes; keyframes and audio-reactive scalar signals;
 licensed showcases and benchmarks.
 
+Visual quality target for Milestone 2:
+[detailed dithered-palette stylization](../../development/stylization/dithered-palette-look.md).
+The goal is the reference's **fine pixel structure and tonal detail** with
+arbitrary palettes, not a red-only effect or an additional effect family.
+
 Read [effect extension](../../development/extending/effect.md),
 [effect architecture](../../development/architecture/effect-pipeline.md),
 [testing](../../development/testing.md),
@@ -175,6 +180,9 @@ renderer rewrite.
 
 ### 2. Color and foundational primitives
 
+- [ ] Reproduce the [palette-agnostic fine-detail dither target](../../development/stylization/dithered-palette-look.md),
+  preserving outlines, midtone texture, shadow clarity and temporal stability
+  with user-selected colors and adjustable fine/coarse pixel structure.
 - [ ] Implement palette mapping, custom gradient/palette color modes and
   deterministic ordered dithering on both CPU/WGPU.
 - [ ] Expose time-dependent palette/rainbow controls and explicit loop periods;
@@ -255,6 +263,9 @@ Completion: reproducible visual showcase and honest CPU/WGPU capability claims.
   is tested where supported, with clear device-limit diagnostics otherwise.
 - [ ] Optional looks reuse existing image-only presets where valid and
   composable effect chains for footage/global output.
+- [ ] Dithered palette styling matches the visual detail and tonal structure
+  of its design reference with at least three meaningfully different palettes;
+  reject coarse/noisy low-detail outputs regardless of color choice.
 - [ ] Licenses/attribution for code, fonts, glyphs and showcase footage are
   preserved, with reproducible example inputs.
 - [ ] Targeted tests plus `just check`, `just python-test`,
@@ -271,6 +282,9 @@ concrete effect contracts/resource topologies from current code.
 
 ## Decisions and discoveries
 
+- 2026-10-08: AcerolaFX example4 is a **fine-detail dither/palette quality
+  reference**, not a fixed red palette or ASCII requirement; changing the
+  authored palette must preserve the effect's pattern and tonal structure.
 - 2026-10-08: Reuse the canonical effect descriptors, core pass planner and
   bounded render resources; extend only for justified needs.
 - 2026-10-08: Keep effects reusable beyond music mixes.

@@ -26,6 +26,10 @@ around the codebase. Agents should also consult [AGENTS.md](../../AGENTS.md),
 - [Media I/O](architecture/media-io.md)
 - [Python binding architecture](architecture/python-bindings.md)
 
+## Stylization references
+
+- [Detailed, palette-independent dithered look](stylization/dithered-palette-look.md)
+
 ## Extension guides
 
 - [Add a source](extending/source.md)

@@ -49,4 +49,6 @@ and effect options, project formats, backend support and core concepts.
 
 See [Contributing](../CONTRIBUTING.md) for setup and contribution guidance, and
 the [development documentation](development/README.md) for testing, architecture,
-performance, extensions and release procedures.
+performance, extensions and release procedures. Agent contributors can start
+with [AGENTS.md](../AGENTS.md), use [PLANS.md](../PLANS.md) for larger tasks,
+and consult the [active stylization plan](plans/active/stylized-video-effects.md).

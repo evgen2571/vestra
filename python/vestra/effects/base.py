@@ -7,7 +7,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Iterable, Mapping, Self, TypeVar, cast
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection
+from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, DitherMatrix, _palette
 from ..authoring.effects import available_effects as _native_effects
 from ..authoring.effects import effect_definition
 from ..authoring.values import Color, Point, color_to_canonical
@@ -96,13 +96,16 @@ def _property(parameter: Mapping[str, object], value: object) -> ScalarProperty:
         if parameter["kind"] == "scalar_property"
         else ScalarProperty
     )
-    return property_type(
-        _validate_number(parameter, value),
+    result = property_type(
+        _validate_number(parameter, value.value if isinstance(value, ScalarProperty) else value),
         minimum=minimum,
         maximum=maximum,
         minimum_exclusive=bool(parameter["minimum_exclusive"]),
         maximum_exclusive=bool(parameter["maximum_exclusive"]),
     )
+    if isinstance(value, ScalarProperty):
+        _copy_property(value, result)
+    return result
 
 
 def _copy_property(source: ScalarProperty, target: ScalarProperty) -> None:
@@ -185,6 +188,12 @@ class Effect:
         if kind == "colour":
             self._values[name] = color_to_canonical(cast(Color | str, value))
             return
+        if kind == "palette":
+            self._values[name] = _palette(parameter, value)
+            return
+        if kind == "period":
+            self._values[name] = None if value is None else _validate_number(parameter, value)
+            return
         if kind == "integer":
             self._values[name] = _integer(
                 value,
@@ -215,7 +224,7 @@ class Effect:
             self._values[name] = _enum(
                 value,
                 name,
-                ZoomBlurDirection,
+                PaletteMode if name == "mode" else DitherMatrix if name == "matrix" else ZoomBlurDirection,
                 tuple(cast(tuple[object, ...], parameter["enum_values"])),
             )
             return
@@ -283,6 +292,8 @@ class Effect:
         for name, value in list(result.items()):
             if isinstance(value, Enum):
                 result[name] = value.value
+            elif name == "palette":
+                result[name] = list(cast(tuple[str, ...], value))
         return result
 
     def _property_items(self) -> tuple[tuple[str, ScalarProperty | PointProperty], ...]:
@@ -320,6 +331,10 @@ class Effect:
                 data[name] = (
                     value.to_canonical() if isinstance(value, Point) else value.value
                 )
+            elif name == "palette":
+                data[name] = list(cast(tuple[str, ...], value))
+            elif name == "period" and value is None:
+                data.pop(name)
         return data
 
     def copy(self) -> Self:

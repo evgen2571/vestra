@@ -5,6 +5,30 @@ use super::{ActiveInterval, Point, PointProperty, ScalarProperty, Track};
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
+    PaletteMap {
+        id: String,
+        palette: Vec<String>,
+        #[serde(default)]
+        mode: PaletteMode,
+        amount: ScalarProperty,
+        phase: ScalarProperty,
+        #[serde(default)]
+        period: Option<f64>,
+    },
+    OrderedDither {
+        id: String,
+        palette: Vec<String>,
+        #[serde(default = "default_dither_palette_mode")]
+        mode: PaletteMode,
+        amount: ScalarProperty,
+        phase: ScalarProperty,
+        #[serde(default)]
+        period: Option<f64>,
+        strength: ScalarProperty,
+        #[serde(default)]
+        matrix: DitherMatrix,
+        scale: u8,
+    },
     Brightness {
         id: String,
         amount: ScalarProperty,
@@ -118,7 +142,9 @@ impl Effect {
     #[must_use]
     pub fn id(&self) -> &str {
         match self {
-            Self::Brightness { id, .. }
+            Self::PaletteMap { id, .. }
+            | Self::OrderedDither { id, .. }
+            | Self::Brightness { id, .. }
             | Self::Contrast { id, .. }
             | Self::Saturation { id, .. }
             | Self::Tint { id, .. }
@@ -150,6 +176,36 @@ impl Effect {
 #[cfg(test)]
 mod tests {
     use super::Effect;
+
+    #[test]
+    fn stylization_palette_effects_round_trip_with_defaults() {
+        for effect_type in ["palette_map", "ordered_dither"] {
+            let value = serde_json::json!({
+                "type": effect_type, "id": "style", "palette": ["#001122", "#ffeecc"],
+                "amount": {"base_value": 1.0}, "phase": {"base_value": 0.0},
+                "strength": {"base_value": 1.0}, "scale": 1
+            });
+            let mut value = value;
+            if effect_type == "palette_map" {
+                value.as_object_mut().unwrap().remove("strength");
+                value.as_object_mut().unwrap().remove("scale");
+            }
+            let effect =
+                serde_json::from_value::<Effect>(value).expect("stylization is canonical JSON");
+            let encoded = serde_json::to_value(&effect).unwrap();
+            assert_eq!(
+                encoded["mode"],
+                if effect_type == "palette_map" {
+                    "gradient"
+                } else {
+                    "nearest"
+                }
+            );
+            assert_eq!(encoded["period"], serde_json::Value::Null);
+            assert_eq!(effect.id(), "style");
+            assert_eq!(serde_json::from_value::<Effect>(encoded).unwrap(), effect);
+        }
+    }
 
     #[test]
     fn motion_tile_deserializes_with_dynamic_extent_properties() {
@@ -198,4 +254,39 @@ pub enum ZoomBlurDirection {
     Outward,
     #[default]
     Centered,
+}
+
+/// Palette interpretation, shared by color mapping and ordered dithering.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PaletteMode {
+    #[default]
+    Gradient,
+    Nearest,
+    Rainbow,
+}
+
+/// Deterministic, screen-anchored ordered-dither matrix.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DitherMatrix {
+    Bayer2,
+    Bayer4,
+    #[default]
+    Bayer8,
+}
+
+impl DitherMatrix {
+    #[must_use]
+    pub const fn size(self) -> u32 {
+        match self {
+            Self::Bayer2 => 2,
+            Self::Bayer4 => 4,
+            Self::Bayer8 => 8,
+        }
+    }
+}
+
+fn default_dither_palette_mode() -> PaletteMode {
+    PaletteMode::Nearest
 }

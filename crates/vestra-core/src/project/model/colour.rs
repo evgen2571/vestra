@@ -1,7 +1,7 @@
 #[must_use]
 pub fn parse_colour(value: &str) -> Option<[u8; 4]> {
     let body = value.strip_prefix('#')?;
-    if body.len() != 6 && body.len() != 8 {
+    if !body.is_ascii() || (body.len() != 6 && body.len() != 8) {
         return None;
     }
     let red = u8::from_str_radix(&body[0..2], 16).ok()?;
@@ -13,4 +13,13 @@ pub fn parse_colour(value: &str) -> Option<[u8; 4]> {
         255
     };
     Some([red, green, blue, alpha])
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn malformed_unicode_color_is_rejected_without_panicking() {
+        assert_eq!(super::parse_colour("#aéabc"), None);
+        assert_eq!(super::parse_colour("#aéabcde"), None);
+    }
 }

@@ -78,6 +78,15 @@ fn normalize_source(layer: &mut CompiledLayer) -> usize {
 
 fn normalize_effect(effect: &mut CompiledEffect) -> usize {
     match effect {
+        CompiledEffect::PaletteMap { amount, phase, .. } => {
+            normalize_track(amount) + normalize_track(phase)
+        }
+        CompiledEffect::OrderedDither {
+            amount,
+            phase,
+            strength,
+            ..
+        } => normalize_track(amount) + normalize_track(phase) + normalize_track(strength),
         CompiledEffect::ColourTransform { .. } => 0,
         CompiledEffect::Brightness { amount } => normalize_track(&mut amount.authored_track),
         CompiledEffect::Contrast { amount }
@@ -254,7 +263,9 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         CompiledEffect::Bloom { intensity, .. } => {
             intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)
         }
-        CompiledEffect::Vignette { amount, .. } => {
+        CompiledEffect::PaletteMap { amount, .. }
+        | CompiledEffect::OrderedDither { amount, .. }
+        | CompiledEffect::Vignette { amount, .. } => {
             amount.keyframes.is_empty() && effect_amount_is_identity(amount.base_value)
         }
         CompiledEffect::Sharpen { amount, radius } => {

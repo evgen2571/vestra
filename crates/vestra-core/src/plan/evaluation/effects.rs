@@ -17,6 +17,18 @@ pub enum EvaluatedEffect {
     ColourTransform {
         transform: ColourTransform,
     },
+    PaletteMap {
+        palette: crate::stylization::EvaluatedPalette,
+        amount: f64,
+        nearest: bool,
+    },
+    OrderedDither {
+        palette: crate::stylization::EvaluatedPalette,
+        amount: f64,
+        strength: f64,
+        matrix: crate::project::DitherMatrix,
+        scale: u8,
+    },
     Brightness {
         amount: f64,
     },
@@ -116,7 +128,9 @@ impl EvaluatedEffect {
             Self::ColourTransform { transform } => *transform == ColourTransform::default(),
             Self::Brightness { amount } => *amount == 0.0,
             Self::Contrast { amount } | Self::Saturation { amount } => *amount == 1.0,
-            Self::Tint { amount, .. }
+            Self::PaletteMap { amount, .. }
+            | Self::OrderedDither { amount, .. }
+            | Self::Tint { amount, .. }
             | Self::ChromaticAberration { amount, .. }
             | Self::Vignette { amount, .. } => effect_amount_is_identity(*amount),
             Self::GaussianBlur { radius } => gaussian_radius_is_identity(*radius),
@@ -168,6 +182,45 @@ pub fn evaluate(
     Ok(match effect {
         CompiledEffect::ColourTransform { transform } => EvaluatedEffect::ColourTransform {
             transform: *transform,
+        },
+        CompiledEffect::PaletteMap {
+            palette,
+            mode,
+            amount,
+            phase,
+            period,
+        } => EvaluatedEffect::PaletteMap {
+            palette: crate::stylization::evaluate_palette(
+                palette,
+                *mode,
+                phase.evaluate(authored_time, project_time, context)?,
+                *period,
+                authored_time,
+            ),
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            nearest: *mode == crate::project::PaletteMode::Nearest,
+        },
+        CompiledEffect::OrderedDither {
+            palette,
+            mode,
+            amount,
+            phase,
+            period,
+            strength,
+            matrix,
+            scale,
+        } => EvaluatedEffect::OrderedDither {
+            palette: crate::stylization::evaluate_palette(
+                palette,
+                *mode,
+                phase.evaluate(authored_time, project_time, context)?,
+                *period,
+                authored_time,
+            ),
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            strength: strength.evaluate(authored_time, project_time, context)?,
+            matrix: *matrix,
+            scale: *scale,
         },
         CompiledEffect::Brightness { amount } => EvaluatedEffect::Brightness {
             amount: amount.evaluate(authored_time, project_time, context)?,
@@ -380,6 +433,49 @@ mod tests {
             }],
             constraint,
         }
+    }
+
+    #[test]
+    fn stylization_binds_amount_and_phase_to_project_signal_time() {
+        let signals = PreparedScalarSignals::new(vec![
+            PreparedScalarSignal::new(10_000_000_000, 1_000_000_000, vec![0.0, 0.0, 0.25]).unwrap(),
+        ]);
+        let effect = CompiledEffect::PaletteMap {
+            palette: crate::stylization::compile_palette(&[
+                "#000000".to_owned(),
+                "#ffffff".to_owned(),
+            ])
+            .unwrap(),
+            mode: crate::project::PaletteMode::Gradient,
+            amount: property(
+                Track::new(0.5),
+                ScalarModifierOperation::Add,
+                0,
+                ScalarPropertyConstraint::ClosedRange { min: 0.0, max: 1.0 },
+            ),
+            phase: property(
+                Track::new(0.0),
+                ScalarModifierOperation::Add,
+                0,
+                ScalarPropertyConstraint::Finite,
+            ),
+            period: None,
+        };
+        let evaluated = evaluate(
+            &effect,
+            0,
+            12_000_000_000,
+            &EvaluationContext::new(&signals),
+        )
+        .unwrap();
+        let EvaluatedEffect::PaletteMap {
+            amount, palette, ..
+        } = evaluated
+        else {
+            panic!("palette evaluated");
+        };
+        assert_eq!(amount, 0.75);
+        assert_eq!(&palette.colours[..2], &[[128, 128, 128, 255]; 2]);
     }
 
     #[test]

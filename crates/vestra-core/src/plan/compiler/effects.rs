@@ -14,6 +14,54 @@ pub(super) fn compile(
         };
     }
     Ok(match effect {
+        crate::project::Effect::PaletteMap {
+            palette,
+            mode,
+            amount,
+            phase,
+            period,
+            ..
+        } => crate::plan::CompiledEffect::PaletteMap {
+            palette: crate::stylization::compile_palette(palette).ok_or_else(|| {
+                Diagnostic::error(
+                    "VESTRA-PLAN-PALETTE",
+                    Category::Internal,
+                    "validated palette is invalid",
+                    "",
+                )
+            })?,
+            mode: *mode,
+            amount: scalar!(amount, ScalarPropertyTarget::PaletteMapAmount),
+            phase: scalar!(phase, ScalarPropertyTarget::PaletteMapPhase),
+            period: *period,
+        },
+        crate::project::Effect::OrderedDither {
+            palette,
+            mode,
+            amount,
+            phase,
+            period,
+            strength,
+            matrix,
+            scale,
+            ..
+        } => crate::plan::CompiledEffect::OrderedDither {
+            palette: crate::stylization::compile_palette(palette).ok_or_else(|| {
+                Diagnostic::error(
+                    "VESTRA-PLAN-PALETTE",
+                    Category::Internal,
+                    "validated palette is invalid",
+                    "",
+                )
+            })?,
+            mode: *mode,
+            amount: scalar!(amount, ScalarPropertyTarget::OrderedDitherAmount),
+            phase: scalar!(phase, ScalarPropertyTarget::OrderedDitherPhase),
+            period: *period,
+            strength: scalar!(strength, ScalarPropertyTarget::OrderedDitherStrength),
+            matrix: *matrix,
+            scale: *scale,
+        },
         crate::project::Effect::Brightness { amount, .. } => {
             crate::plan::CompiledEffect::Brightness {
                 amount: scalar!(amount, ScalarPropertyTarget::BrightnessAmount),
@@ -235,4 +283,54 @@ pub(super) fn compile_timed(
         effect: compile(effect, id, interner)?,
         dependency: crate::plan::TemporalDependency::Static,
     })
+}
+
+#[cfg(test)]
+mod stylization_tests {
+    use super::*;
+    use crate::plan::{CompiledEffect, EvaluatedEffect, EvaluationContext, PreparedScalarSignals};
+
+    #[test]
+    fn authored_stylization_compiles_and_preserves_parameters_at_frame_time() {
+        let authored: crate::project::Effect = serde_json::from_value(serde_json::json!({
+            "type": "ordered_dither", "id": "dither", "palette": ["#000000", "#ffcc88"],
+            "amount": {"base_value": 0.8}, "phase": {"base_value": 0.0},
+            "strength": {"base_value": 0.6}, "scale": 3, "matrix": "bayer4", "period": 2.0
+        }))
+        .unwrap();
+        let compiled = compile(&authored, "dither", &mut ScalarSignalInterner::default()).unwrap();
+        assert!(matches!(
+            compiled,
+            CompiledEffect::OrderedDither {
+                mode: crate::project::PaletteMode::Nearest,
+                ..
+            }
+        ));
+        let signals = PreparedScalarSignals::empty();
+        let evaluated = crate::plan::evaluate_effect(
+            &compiled,
+            1_000_000_000,
+            5_000_000_000,
+            &EvaluationContext::new(&signals),
+        )
+        .unwrap();
+        let EvaluatedEffect::OrderedDither {
+            palette,
+            amount,
+            strength,
+            matrix,
+            scale,
+        } = evaluated
+        else {
+            panic!("dither evaluated");
+        };
+        assert_eq!(
+            &palette.colours[..2],
+            &[[255, 204, 136, 255], [0, 0, 0, 255]]
+        );
+        assert_eq!(amount, 0.8);
+        assert_eq!(strength, 0.6);
+        assert_eq!(matrix, crate::project::DitherMatrix::Bayer4);
+        assert_eq!(scale, 3);
+    }
 }

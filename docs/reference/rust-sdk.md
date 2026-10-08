@@ -25,6 +25,37 @@ supplying a `ProgressSink`, and `render_with_observer(...)` for an observer that
 also needs cancellation control. `Editor::render(...)` is the callback-oriented
 entry point.
 
+Visual effects use the canonical JSON/value route. With a mutable
+`serde_json::Value` project document, add an ordered layer `effects` array or
+`visual.post_effects` array, then load, prepare, and render through the SDK.
+For example, this applies palette coloring followed by loopable fine dithering:
+
+```rust
+use serde_json::json;
+use std::time::Duration;
+use vestra::{BackendPreference, Editor, PrepareOptions, Project};
+
+document["visual"]["post_effects"] = json!([
+    {"id": "palette", "type": "palette_map",
+     "palette": ["#001122", "#ffeecc"], "mode": "gradient",
+     "amount": {"base_value": 1}, "phase": {"base_value": 0}},
+    {"id": "dither", "type": "ordered_dither",
+     "palette": ["#001122", "#ffeecc"], "mode": "nearest",
+     "amount": {"base_value": 1}, "phase": {"base_value": 0},
+     "period": 2, "strength": {"base_value": 1}, "matrix": "bayer8", "scale": 1}
+]);
+let project = Project::from_value(document, ".")?;
+let mut prepared = Editor::new().prepare(
+    &project, PrepareOptions::new(BackendPreference::Cpu),
+)?;
+let frame = prepared.render_frame(Duration::from_millis(500))?;
+```
+
+The calling crate needs `serde_json` for the value and `json!` macro. Palette
+colors remain in authored dark-to-light order. Periods use owner-local seconds;
+source media, keyframes, and audio must separately repeat for a whole scene to
+loop. See the [effect reference](effects.md) for the canonical field contracts.
+
 ## Validation and errors
 
 `ValidationReport` is canonical semantic validation. `PreflightReport` adds

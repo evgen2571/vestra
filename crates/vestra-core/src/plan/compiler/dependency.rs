@@ -91,6 +91,8 @@ pub(super) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
         dynamic |= !static_track(track);
     });
     dynamic |= match effect {
+        CompiledEffect::PaletteMap { period, .. }
+        | CompiledEffect::OrderedDither { period, .. } => period.is_some(),
         CompiledEffect::MotionTile { tile_center, .. }
         | CompiledEffect::RadialBlur {
             center: tile_center,
@@ -147,6 +149,43 @@ mod tests {
 
     fn scalar(value: f64) -> crate::plan::CompiledScalarProperty {
         crate::plan::CompiledScalarProperty::authored(Track::new(value))
+    }
+
+    #[test]
+    fn stylization_period_keyframes_and_signals_invalidate_static_cache() {
+        let mut effect = CompiledEffect::PaletteMap {
+            palette: crate::stylization::compile_palette(&[
+                "#000000".to_owned(),
+                "#ffffff".to_owned(),
+            ])
+            .unwrap(),
+            mode: crate::project::PaletteMode::Gradient,
+            amount: scalar(1.0),
+            phase: scalar(0.0),
+            period: None,
+        };
+        assert_eq!(effect_dependency(&effect), TemporalDependency::Static);
+        if let CompiledEffect::PaletteMap { period, .. } = &mut effect {
+            *period = Some(2.0);
+        }
+        assert_eq!(effect_dependency(&effect), TemporalDependency::Dynamic);
+        if let CompiledEffect::PaletteMap { period, phase, .. } = &mut effect {
+            *period = None;
+            phase.authored_track.keyframes.push(Keyframe {
+                time: 1,
+                value: 0.5,
+                interpolation: Interpolation::Linear,
+            });
+        }
+        assert_eq!(effect_dependency(&effect), TemporalDependency::Dynamic);
+        if let CompiledEffect::PaletteMap { phase, .. } = &mut effect {
+            phase.authored_track.keyframes.clear();
+            phase.modifiers.push(crate::plan::CompiledScalarModifier {
+                operation: crate::plan::ScalarModifierOperation::Add,
+                signal: crate::plan::ScalarSignalId::new(0),
+            });
+        }
+        assert_eq!(effect_dependency(&effect), TemporalDependency::Dynamic);
     }
 
     fn transform() -> crate::plan::CompiledTransformTracks {

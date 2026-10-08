@@ -37,6 +37,23 @@ shader or changing working resources, read the
    [Python guide](../../guides/python/effects.md) and
    [support matrix](../../reference/feature-support.md) for verified behavior.
 
+## Additional contracts for font and time-driven effects
+
+For glyph effects, specify a built-in licensed glyph resource and portable
+custom character/font authoring. Resolve font paths in preflight, validate
+glyph coverage and invalid resources, prepare/cache an atlas, and ensure both
+renderers render the same selections without rebuilding it per frame.
+
+For periodic effects, define a positive finite loop duration in seconds,
+evaluation-time origin, phase wrap and how keyframes/signals combine with
+generated motion. Test arbitrary/nonsequential frame requests and timestamps
+separated by a full period. Do not promise source video/audio loops.
+
+When exposing convenient looks, remember existing cinematic presets are
+Image-only and one per image layer. Use composable effect recipes for video
+and global effects instead of inventing a second incompatible preset engine.
+See the [active feature decisions](../../plans/active/stylized-video-effects.md).
+
 ## Acceptance checklist
 
 - Descriptor range/default/type/scope checks, serialization, generated schema,

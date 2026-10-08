@@ -96,6 +96,49 @@ noise; for halftone define dot/channel geometry; for pixel sorting define
 bounded segments, comparator, stable ties and GPU memory/time cost.
 Unbounded arbitrary full-frame sorting is not a reasonable default.
 
+## Approved behavior for stylization work
+
+The [active stylization plan](../../plans/active/stylized-video-effects.md)
+records 13 approved product decisions. For this work the public contract
+requires both **CPU and WGPU**, clip/global applicability when meaningful,
+advanced ASCII controls, built-in and **custom characters/fonts**, animated
+source/mono/palette/rainbow colors, deterministic periodic effects with an
+explicit **positive loop period**, and 1080p-first performance with 4K
+correctness/resource handling. Bounded pixel sorting must support both
+horizontal and vertical segments. This list describes *planned requirements*;
+it is not current feature-support evidence.
+
+### Custom font and glyph assets
+
+Treat custom font files as prepared resources, not as implicit font paths
+opened inside a frame/shader dispatch. Keep the source-of-truth specification
+portable through public authoring/JSON, with path resolution and inspection
+at preflight rather than core validation. Define legal character sets,
+unsupported Unicode/glyph handling, atlas layout and deterministic raster
+parity. Cache atlas resources across frames; match glyph selection semantics
+on CPU and WGPU. Track attribution for bundled font or glyph files.
+
+### Loopable effects and invalidation
+
+For phase-driven looks expose explicit finite positive cycle duration in
+timeline seconds where that effect supports periodic animation. The periodic
+component must be a pure function of evaluated time and authored parameters,
+with equivalent start/end phase, frame-order-independent evaluation and
+correct static/dynamic cache invalidation. Define scope-appropriate time origin
+and interactions with keyframes and audio signals. A looping **effect** does
+not automatically make source media/audio or the entire composition seamless.
+
+### Presets, parity and resolution
+
+Vestra's existing cinematic preset collection currently accepts only an
+Image layer and one preset per such layer; do not represent this as generic
+video/global preset support. Use independent effect stacks and thin reusable
+recipes for other sources, reusing the existing preset machinery only if
+compatible. Public effect behavior should match on CPU and WGPU within
+specified reasonable tolerances, not be GPU-exclusive. Benchmark representative
+1080p workloads; test resource bounds and correctness at 4K when possible.
+Any unavailable hardware validation remains explicitly unverified.
+
 ## Verification
 
 Require canonical serialization/validation/schema, authoring interfaces,

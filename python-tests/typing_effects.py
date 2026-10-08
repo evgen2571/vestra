@@ -10,6 +10,10 @@ from vestra.effects import (
     GaussianBlur,
     Glow,
     MotionBlur,
+    PaletteMap,
+    OrderedDither,
+    PaletteMode,
+    DitherMatrix,
     Saturation,
     Sharpen,
     Tint,
@@ -37,3 +41,6 @@ layer.effects.add(Sharpen(0.5, 1))
 layer.effects.add(ColorAdjust(0, 1, 0.2, 0.8))
 layer.effects.add(CameraShake(1, 1, 0.1, 1, 1, 0, 1))
 layer.effects.add(MotionBlur(1, 180, 2, 2))
+
+layer.effects.add(PaletteMap(["#000000", "#ffffff"], mode=PaletteMode.GRADIENT, period=2)).phase.bind(signal)
+layer.effects.add(OrderedDither(matrix=DitherMatrix.BAYER4, scale=2)).strength.keyframe(1, 0.5)

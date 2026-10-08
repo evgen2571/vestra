@@ -10,6 +10,7 @@ mod scalar_property;
 mod schedule;
 mod signals;
 
+pub use crate::stylization::EvaluatedPalette;
 pub use compiler::{CompileOptions, compile};
 pub use effect_passes::{
     CompositeMode, EffectOperation, EffectPass, EffectPassInputs, EffectPassPlan,

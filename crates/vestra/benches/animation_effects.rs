@@ -46,7 +46,12 @@ fn main() {
     let project_path = output
         .path()
         .join(format!("{scenario}-{width}x{height}.json"));
-    let mut project = if matches!(scenario.as_str(), "production_edit" | "video_heavy") {
+    let mut project = if matches!(
+        scenario.as_str(),
+        "stylization_baseline" | "palette_video" | "dither_video"
+    ) {
+        create_stylization_benchmark_project(&scenario, output.path(), width, height)
+    } else if matches!(scenario.as_str(), "production_edit" | "video_heavy") {
         production::project(&scenario, output.path(), width, height)
     } else if matches!(
         scenario.as_str(),
@@ -83,7 +88,14 @@ fn main() {
     }
     if !matches!(
         scenario.as_str(),
-        "single_video" | "mixed_dynamic" | "dedup_video" | "production_edit" | "video_heavy"
+        "single_video"
+            | "mixed_dynamic"
+            | "dedup_video"
+            | "production_edit"
+            | "video_heavy"
+            | "stylization_baseline"
+            | "palette_video"
+            | "dither_video"
     ) {
         let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../")
@@ -339,6 +351,51 @@ fn scenario_fixture(scenario: &str) -> &'static Path {
         "short_sequence" | "long_sequence" => Path::new("examples/projects/animation-effects.json"),
         _ => panic!("unknown VESTRA_BENCH_SCENARIO: {scenario}"),
     }
+}
+
+fn create_stylization_benchmark_project(
+    scenario: &str,
+    directory: &Path,
+    width: u32,
+    height: u32,
+) -> serde_json::Value {
+    use serde_json::json;
+
+    let footage = directory.join("stylization.mkv");
+    production::generate(
+        &footage,
+        &format!("testsrc2=size={width}x{height}:rate=30"),
+        "3",
+        &["-an", "-c:v", "ffv1"],
+    );
+    let mut effects = Vec::new();
+    if scenario != "stylization_baseline" {
+        let mut effect = json!({
+            "id": "stylization",
+            "type": if scenario == "palette_video" { "palette_map" } else { "ordered_dither" },
+            "palette": ["#071827", "#27565d", "#69b49c", "#fff0c0"],
+            "mode": if scenario == "palette_video" { "gradient" } else { "nearest" },
+            "amount": {"base_value": 1}, "phase": {"base_value": 0}, "period": 3
+        });
+        if scenario == "dither_video" {
+            effect["strength"] = json!({"base_value": 1});
+            effect["matrix"] = json!("bayer8");
+            effect["scale"] = json!(1);
+        }
+        effects.push(effect);
+    }
+    json!({
+        "schema_version": 1, "name": format!("{scenario} benchmark"),
+        "output": {"path": "benchmark.mp4", "width": width, "height": height,
+            "frame_rate": "30/1", "background": "#000000", "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 3},
+        "assets": [{"id": "footage", "type": "video", "source": footage.canonicalize().expect("moving benchmark footage")}],
+        "visual": {"clips": [{
+            "id": "footage", "source": {"type": "video", "asset": "footage"},
+            "start": 0, "duration": 3, "source_start": 0, "playback_rate": 1,
+            "sizing": {"mode": "cover"}, "layer": 0, "opacity": {"base_value": 1}, "effects": effects
+        }], "transitions": [], "flashes": [], "post_effects": []}
+    })
 }
 
 fn create_video_benchmark_project(

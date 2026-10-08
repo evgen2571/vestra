@@ -119,6 +119,43 @@ pub(super) fn validate_colour_points(
     }
 }
 
+fn validate_palette(
+    palette: &[String],
+    period: Option<f64>,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if !(2..=16).contains(&palette.len()) {
+        invalid_effect(
+            errors,
+            "VESTRA-PALETTE-LENGTH",
+            "palette requires between 2 and 16 colors",
+            path,
+            "palette",
+        );
+    }
+    for (index, colour) in palette.iter().enumerate() {
+        if !matches!(parse_colour(colour), Some([_, _, _, 255])) {
+            invalid_effect(
+                errors,
+                "VESTRA-PALETTE-COLOUR",
+                "palette colors must be opaque #RRGGBB or #RRGGBBFF",
+                path,
+                &format!("palette/{index}"),
+            );
+        }
+    }
+    if period.is_some_and(|value| !positive(value)) {
+        invalid_effect(
+            errors,
+            "VESTRA-EFFECT-PERIOD",
+            "effect period must be finite and positive seconds",
+            path,
+            "period",
+        );
+    }
+}
+
 pub(super) fn validate_global(
     effects: &[crate::project::Effect],
     duration: f64,
@@ -196,6 +233,65 @@ pub(super) fn validate_parameters(
         );
     };
     match effect {
+        crate::project::Effect::PaletteMap {
+            palette,
+            amount,
+            phase,
+            period,
+            ..
+        } => {
+            validate_palette(palette, *period, path, errors);
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::PaletteMapAmount,
+                errors,
+            );
+            track(
+                phase,
+                "phase",
+                ScalarPropertyTarget::PaletteMapPhase,
+                errors,
+            );
+        }
+        crate::project::Effect::OrderedDither {
+            palette,
+            amount,
+            phase,
+            period,
+            strength,
+            scale,
+            ..
+        } => {
+            validate_palette(palette, *period, path, errors);
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::OrderedDitherAmount,
+                errors,
+            );
+            track(
+                phase,
+                "phase",
+                ScalarPropertyTarget::OrderedDitherPhase,
+                errors,
+            );
+            track(
+                strength,
+                "strength",
+                ScalarPropertyTarget::OrderedDitherStrength,
+                errors,
+            );
+            if !(1..=32).contains(scale) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-DITHER-SCALE",
+                    "dither scale must be between 1 and 32 pixels",
+                    path,
+                    "scale",
+                );
+            }
+        }
         crate::project::Effect::Brightness { amount, .. } => track(
             amount,
             "amount",
@@ -621,6 +717,74 @@ mod tests {
         let mut errors = Vec::new();
         validate_parameters(effect, 2.0, "/effect", 16, &mut errors, true);
         errors
+    }
+
+    #[test]
+    fn stylization_rejects_palette_period_and_dither_bounds() {
+        let authored = serde_json::json!({
+            "type": "ordered_dither", "id": "dither", "palette": ["#000000", "#ffffff"],
+            "amount": {"base_value": 1.0}, "phase": {"base_value": 0.0},
+            "strength": {"base_value": 1.0}, "scale": 1, "period": 2.0
+        });
+        let valid: Effect = serde_json::from_value(authored.clone()).unwrap();
+        assert!(validation_errors(&valid).is_empty());
+        for (field, replacement, code) in [
+            (
+                "palette",
+                serde_json::json!(["#000000"]),
+                "VESTRA-PALETTE-LENGTH",
+            ),
+            (
+                "palette",
+                serde_json::json!(vec!["#ffffff"; 17]),
+                "VESTRA-PALETTE-LENGTH",
+            ),
+            (
+                "palette",
+                serde_json::json!(["#000000", "#fffffffe"]),
+                "VESTRA-PALETTE-COLOUR",
+            ),
+            (
+                "palette",
+                serde_json::json!(["#000000", "white"]),
+                "VESTRA-PALETTE-COLOUR",
+            ),
+            ("period", serde_json::json!(0.0), "VESTRA-EFFECT-PERIOD"),
+            ("period", serde_json::json!(-1.0), "VESTRA-EFFECT-PERIOD"),
+            ("scale", serde_json::json!(0), "VESTRA-DITHER-SCALE"),
+            ("scale", serde_json::json!(33), "VESTRA-DITHER-SCALE"),
+            (
+                "amount",
+                serde_json::json!({"base_value": 1.1}),
+                "VESTRA-TRACK-VALUE",
+            ),
+            (
+                "strength",
+                serde_json::json!({"base_value": -0.1}),
+                "VESTRA-TRACK-VALUE",
+            ),
+        ] {
+            let mut value = authored.clone();
+            value[field] = replacement;
+            let effect: Effect = serde_json::from_value(value).unwrap();
+            assert!(
+                validation_errors(&effect)
+                    .iter()
+                    .any(|error| error.code == code),
+                "{field} should report {code}"
+            );
+        }
+        for period_value in [f64::NAN, f64::INFINITY] {
+            let mut effect = valid.clone();
+            if let Effect::OrderedDither { period, .. } = &mut effect {
+                *period = Some(period_value);
+            }
+            assert!(
+                validation_errors(&effect)
+                    .iter()
+                    .any(|error| error.code == "VESTRA-EFFECT-PERIOD")
+            );
+        }
     }
 
     #[test]

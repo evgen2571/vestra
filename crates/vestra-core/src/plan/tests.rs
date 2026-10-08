@@ -2131,3 +2131,78 @@ fn disabled_output_audio_preserves_the_authored_master_mix() {
     assert!(plan.encoder.audio_mix.is_none());
     assert!(plan.audio_mix.has_authored_material());
 }
+
+#[test]
+fn nested_palette_period_uses_child_time_and_signal_uses_root_time() {
+    let mut project = canonical_project();
+    let mut child = project.visual.clips[0].clone();
+    child.id = "palette-child".to_owned();
+    child.start = 0.75;
+    child.duration = 4.25;
+    child.opacity = Track::constant(1.0).into();
+    child.effects = vec![
+        serde_json::from_value(serde_json::json!({
+            "id": "animated-palette", "type": "palette_map", "palette": ["#000000", "#ffffff"],
+            "amount": {"base_value": 0.75}, "phase": {"base_value": 0.0}, "period": 2.0
+        }))
+        .unwrap(),
+    ];
+    if let Effect::PaletteMap { phase, .. } = &mut child.effects[0] {
+        phase.modifiers.push(ScalarModifier {
+            operation: ProjectScalarModifierOperation::Add,
+            signal: ScalarSignal {
+                source: ScalarSignalSource::Audio {
+                    tap: ProjectAudioAnalysisTap::Master,
+                    feature: ProjectAudioScalarFeature::Rms,
+                },
+                transforms: vec![],
+            },
+        });
+    }
+    let mut parent = child.clone();
+    parent.id = "offset-group".to_owned();
+    parent.start = 1.0;
+    parent.duration = 5.0;
+    parent.transform = None;
+    parent.effects.clear();
+    parent.source = VisualSource::Group(Group {
+        clips: vec![child],
+        transitions: vec![],
+    });
+    project.visual.clips = vec![parent];
+    project.visual.transitions.clear();
+    let plan = compile_project(project);
+    assert_eq!(
+        plan.layers[0].content_dependency,
+        TemporalDependency::Dynamic
+    );
+    // Root-time samples at2.25s and4.25s are.125. Local-time samples at.5s
+    // and2.5s are0, so using local time for signals would produce wrong colors.
+    let mut values = vec![0.0; 18];
+    values[9] = 0.125;
+    values[17] = 0.125;
+    let signals = PreparedScalarSignals::new(vec![
+        PreparedScalarSignal::new(0, 250_000_000, values).unwrap(),
+    ]);
+    let context = EvaluationContext::new(&signals);
+    for time in [4_250_000_000, 2_250_000_000, 4_250_000_000] {
+        let frame =
+            evaluate_with_context(&plan, &[super::ScheduledItem(0)], time, &context).unwrap();
+        let super::EvaluatedSource::Group { composition } = &frame.layers[0].source else {
+            panic!("evaluated group");
+        };
+        let super::EvaluatedEffect::PaletteMap {
+            palette, amount, ..
+        } = &composition.layers[0].effects[0]
+        else {
+            panic!("evaluated palette");
+        };
+        // Child local times.5s and2.5s both yield phase.25. Add the root
+        // signal.125: phase.375 rotates two colors by.75 of a stop.
+        assert_eq!(
+            &palette.colours[..2],
+            &[[191, 191, 191, 255], [64, 64, 64, 255]]
+        );
+        assert_eq!(*amount, 0.75);
+    }
+}

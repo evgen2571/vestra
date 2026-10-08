@@ -17,6 +17,7 @@ pub mod effect_definition;
 pub mod effects;
 pub mod operation_id;
 pub mod output;
+pub mod stylization;
 /// Deterministic output configuration, never media process behavior.
 pub mod media {
     pub use crate::output::EncoderSettings;

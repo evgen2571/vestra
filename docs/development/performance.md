@@ -114,3 +114,22 @@ for every measured sample. CPU fallback, software WGPU, and unknown adapter
 classes fail the suite. CPU and hardware runs have separate baselines. If
 hardware is unavailable, keep that validation explicitly outstanding; software
 WGPU results cannot substitute for it.
+
+## Focused palette and dither workloads
+
+The [focused stylization suite](../../benchmarks/README.md) isolates moving
+video with no effect, Palette Map, and Ordered Dither. Run
+`python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before`
+for 1920×1080 at 30 fps, 90 frames, one warmup and three samples per workload.
+Use `--suite stylization-smoke` for execution checks and
+`--backend hardware-wgpu` for a separately verified hardware baseline.
+All three scenarios generate identical full-frame `testsrc2` video without
+additional graphics or audio. Generation is excluded from measured intervals.
+
+The focused suite uses the existing record schema, stage/resource counters,
+source-stability gate, and comparison compatibility checks. Canonical and
+smoke suites continue to use their original ten scenarios. Suite-local
+scenario selection is recorded explicitly in `suite.json`; comparisons reject
+changed scenario sets, dimensions, or sample/warmup counts. A 4K correctness
+check can override dimensions when running the same benchmark directly, but
+must be reported separately from the versioned 1080p measurements.

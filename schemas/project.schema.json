@@ -1027,6 +1027,12 @@
     "effect": {
       "oneOf": [
         {
+          "$ref": "#/$defs/palette_map_effect"
+        },
+        {
+          "$ref": "#/$defs/ordered_dither_effect"
+        },
+        {
           "$ref": "#/$defs/brightness_effect"
         },
         {
@@ -1821,6 +1827,122 @@
       ],
       "type": "object"
     },
+    "ordered_dither_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "matrix": {
+          "default": "bayer8",
+          "enum": [
+            "bayer2",
+            "bayer4",
+            "bayer8"
+          ]
+        },
+        "mode": {
+          "default": "nearest",
+          "enum": [
+            "gradient",
+            "nearest",
+            "rainbow"
+          ]
+        },
+        "palette": {
+          "items": {
+            "pattern": "^#[0-9A-Fa-f]{6}([fF]{2})?$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": "array"
+        },
+        "period": {
+          "exclusiveMinimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "scale": {
+          "maximum": 32,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "strength": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "ordered_dither"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "palette",
+        "amount",
+        "phase",
+        "strength",
+        "scale"
+      ],
+      "type": "object"
+    },
     "output": {
       "additionalProperties": false,
       "properties": {
@@ -1880,6 +2002,80 @@
         "quality",
         "audio",
         "duration_mode"
+      ],
+      "type": "object"
+    },
+    "palette_map_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mode": {
+          "default": "gradient",
+          "enum": [
+            "gradient",
+            "nearest",
+            "rainbow"
+          ]
+        },
+        "palette": {
+          "items": {
+            "pattern": "^#[0-9A-Fa-f]{6}([fF]{2})?$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": "array"
+        },
+        "period": {
+          "exclusiveMinimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "type": {
+          "const": "palette_map"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "palette",
+        "amount",
+        "phase"
       ],
       "type": "object"
     },

@@ -138,3 +138,6 @@ mod parity_gpu_tests;
 #[cfg(test)]
 #[path = "tests/resources_gpu.rs"]
 mod resource_gpu_tests;
+#[cfg(test)]
+#[path = "tests/stylization.rs"]
+mod stylization_tests;

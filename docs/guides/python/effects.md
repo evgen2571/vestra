@@ -43,3 +43,30 @@ are exposed as properties can be animated or bound to a signal.
 Choose a representative effect first, then validate. Exact parameter ranges
 and the complete effect catalog belong to the API reference. An effect does not
 change a layer's start or duration.
+
+
+For fine palette dithering, use a dark-to-light set of opaque colors and an
+output-pixel pattern scale of one:
+
+```python
+from vestra.effects import OrderedDither, PaletteMap, PaletteMode
+
+palette = ("#071827", "#27565d", "#69b49c", "#fff0c0")
+dither = layer.effects.add(OrderedDither(palette, matrix="bayer8", scale=1))
+dither.strength.keyframe(0, 0.25)
+dither.strength.keyframe(1, 1)
+
+# An explicit two-second procedural color loop.
+color = project.post_effects.add(PaletteMap(mode=PaletteMode.RAINBOW, period=2))
+color.amount = 0.25
+color.phase.bind(project.audio.signal.rms(), operation="add")
+```
+
+The Bayer pattern stays fixed in output pixel coordinates. To adjust tonal
+separation before quantization, place `ColorAdjust` or `Contrast` earlier in
+the stack. Palette Map's `gradient` mode gives smooth coloring; `nearest`
+gives discrete tonal bands. Dither always quantizes to discrete colors.
+An explicit `period` loops procedural palette phase; the source clip and audio
+continue on their normal timelines. See the [effect reference](../../reference/effects.md)
+for exact ranges and the [palette example](../../../examples/python/high-level/13_palette_dither.py)
+for an asset-free recipe.

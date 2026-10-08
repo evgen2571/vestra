@@ -452,3 +452,34 @@ assert errors(unsupported_softness), "deferred scalar properties must not expose
 old_audio_shape = copy.deepcopy(audio_timeline)
 old_audio_shape["audio"] = {"asset": "audio", "timeline_start": 0, "trim_start": 0, "volume": 1}
 assert errors(old_audio_shape), "old global audio shape must not validate"
+
+# Palette coloring and ordered thresholds share opaque palette/loop contracts.
+for effect_type in ("palette_map", "ordered_dither"):
+    palette_project = copy.deepcopy(solid_colour)
+    palette_effect = {
+        "id": "palette-look", "type": effect_type,
+        "palette": ["#071827", "#3f8879", "#fff0c0ff"],
+        "amount": {"base_value": 1, "keyframes": [{"time": 0.05, "value": 0.5, "interpolation": "linear"}]},
+        "phase": {"base_value": 0}, "period": 2,
+    }
+    if effect_type == "ordered_dither":
+        palette_effect.update(strength={"base_value": 1}, scale=1)
+    palette_project["visual"]["clips"][0]["effects"] = [palette_effect]
+    assert not errors(palette_project), f"{effect_type} must accept animated custom palettes"
+    for field, value in (
+        ("palette", []), ("palette", ["#000000"]), ("palette", ["#ffffff"] * 17),
+        ("palette", ["#000000", "#ffffff80"]), ("period", 0), ("period", -1),
+        ("mode", "rgb"), ("amount", {"base_value": 2}),
+        ("amount", {"base_value": 1, "keyframes": [{"time": 0.05, "value": -0.1, "interpolation": "linear"}]}),
+    ):
+        invalid_palette = copy.deepcopy(palette_project)
+        invalid_palette["visual"]["clips"][0]["effects"][0][field] = value
+        assert errors(invalid_palette), f"{effect_type} must reject {field}={value!r}"
+    for period in (None, 0.01):
+        palette_effect["period"] = period
+        assert not errors(palette_project), f"{effect_type} accepts optional positive period"
+    if effect_type == "ordered_dither":
+        for field, value in (("matrix", "random"), ("scale", 0), ("scale", 33), ("strength", {"base_value": -0.1})):
+            invalid_dither = copy.deepcopy(palette_project)
+            invalid_dither["visual"]["clips"][0]["effects"][0][field] = value
+            assert errors(invalid_dither), f"ordered_dither must reject {field}={value!r}"

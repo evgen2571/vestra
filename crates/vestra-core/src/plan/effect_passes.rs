@@ -86,6 +86,18 @@ pub enum EffectOperation {
     ApplyColourTransform {
         transform: ColourTransform,
     },
+    PaletteMap {
+        palette: crate::stylization::EvaluatedPalette,
+        amount: f64,
+        nearest: bool,
+    },
+    OrderedDither {
+        palette: crate::stylization::EvaluatedPalette,
+        amount: f64,
+        strength: f64,
+        matrix: crate::project::DitherMatrix,
+        scale: u8,
+    },
     GaussianHorizontal {
         radius: f64,
     },
@@ -228,6 +240,33 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
 pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
     let current = EffectResource::Current;
     match effect {
+        CompiledEffect::PaletteMap { palette, mode, .. } => {
+            EffectPassPlan::new(&[EffectPass::new(
+                EffectOperation::PaletteMap {
+                    palette: *palette,
+                    amount: 1.0,
+                    nearest: *mode == crate::project::PaletteMode::Nearest,
+                },
+                current,
+                current,
+            )])
+        }
+        CompiledEffect::OrderedDither {
+            palette,
+            matrix,
+            scale,
+            ..
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::OrderedDither {
+                palette: *palette,
+                amount: 1.0,
+                strength: 1.0,
+                matrix: *matrix,
+                scale: *scale,
+            },
+            current,
+            current,
+        )]),
         CompiledEffect::ColourTransform { .. }
         | CompiledEffect::Brightness { .. }
         | CompiledEffect::Contrast { .. }
@@ -398,6 +437,36 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
     }
     let current = EffectResource::Current;
     match effect {
+        EvaluatedEffect::PaletteMap {
+            palette,
+            amount,
+            nearest,
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::PaletteMap {
+                palette: *palette,
+                amount: *amount,
+                nearest: *nearest,
+            },
+            current,
+            current,
+        )]),
+        EvaluatedEffect::OrderedDither {
+            palette,
+            amount,
+            strength,
+            matrix,
+            scale,
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::OrderedDither {
+                palette: *palette,
+                amount: *amount,
+                strength: *strength,
+                matrix: *matrix,
+                scale: *scale,
+            },
+            current,
+            current,
+        )]),
         EvaluatedEffect::ColourTransform { transform } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::ApplyColourTransform {
                 transform: *transform,

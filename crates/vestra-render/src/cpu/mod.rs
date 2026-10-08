@@ -9,6 +9,7 @@ pub(super) mod effects;
 pub(super) mod particles;
 pub(super) mod raster;
 pub(super) mod spectrum2d;
+pub(super) mod stylization;
 pub(super) mod surfaces;
 pub(super) mod vignette;
 pub(super) mod worker;

@@ -107,6 +107,8 @@ pub(in crate::wgpu) fn push_effect_parameters(
     parameters: EffectKernelParameters,
 ) -> Result<u32, crate::Diagnostic> {
     match parameters {
+        EffectKernelParameters::PaletteMap(value)
+        | EffectKernelParameters::OrderedDither(value) => arena.push(&value),
         EffectKernelParameters::ColourTransform(value) => arena.push(&value),
         EffectKernelParameters::GaussianBlur(value) => arena.push(&value),
         EffectKernelParameters::HighlightExtract(value) => arena.push(&value),

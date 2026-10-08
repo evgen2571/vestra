@@ -370,6 +370,23 @@ pub enum CompiledEffect {
     ColourTransform {
         transform: ColourTransform,
     },
+    PaletteMap {
+        palette: crate::stylization::EvaluatedPalette,
+        mode: crate::project::PaletteMode,
+        amount: CompiledScalarProperty,
+        phase: CompiledScalarProperty,
+        period: Option<f64>,
+    },
+    OrderedDither {
+        palette: crate::stylization::EvaluatedPalette,
+        mode: crate::project::PaletteMode,
+        amount: CompiledScalarProperty,
+        phase: CompiledScalarProperty,
+        period: Option<f64>,
+        strength: CompiledScalarProperty,
+        matrix: crate::project::DitherMatrix,
+        scale: u8,
+    },
     Brightness {
         amount: CompiledScalarProperty,
     },
@@ -461,6 +478,8 @@ impl CompiledEffect {
             Self::ColourTransform { .. } => {
                 crate::effect_definition::VisualEffectKind::ColourTransform
             }
+            Self::PaletteMap { .. } => crate::effect_definition::VisualEffectKind::PaletteMap,
+            Self::OrderedDither { .. } => crate::effect_definition::VisualEffectKind::OrderedDither,
             Self::Brightness { .. } => crate::effect_definition::VisualEffectKind::Brightness,
             Self::Contrast { .. } => crate::effect_definition::VisualEffectKind::Contrast,
             Self::Saturation { .. } => crate::effect_definition::VisualEffectKind::Saturation,
@@ -508,6 +527,20 @@ impl CompiledEffect {
         };
         match self {
             Self::ColourTransform { .. } => {}
+            Self::PaletteMap { amount, phase, .. } => {
+                visit(ScalarPropertyTarget::PaletteMapAmount, amount);
+                visit(ScalarPropertyTarget::PaletteMapPhase, phase);
+            }
+            Self::OrderedDither {
+                amount,
+                phase,
+                strength,
+                ..
+            } => {
+                visit(ScalarPropertyTarget::OrderedDitherAmount, amount);
+                visit(ScalarPropertyTarget::OrderedDitherPhase, phase);
+                visit(ScalarPropertyTarget::OrderedDitherStrength, strength);
+            }
             Self::Brightness { amount } => visit(ScalarPropertyTarget::BrightnessAmount, amount),
             Self::Contrast { amount } => visit(ScalarPropertyTarget::ContrastAmount, amount),
             Self::Saturation { amount } => visit(ScalarPropertyTarget::SaturationAmount, amount),

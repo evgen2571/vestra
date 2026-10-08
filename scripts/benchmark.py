@@ -143,7 +143,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="run a release benchmark suite")
-    run.add_argument("--suite", choices=("smoke", "canonical"), default="canonical")
+    manifest = json.loads((ROOT / "benchmarks/suites.json").read_text())
+    run.add_argument("--suite", choices=tuple(manifest["suites"]), default="canonical")
     run.add_argument("--backend", choices=("cpu", "hardware-wgpu"), default="cpu")
     run.add_argument(
         "--executable", type=Path, help="prebuilt release benchmark executable"
@@ -260,10 +261,17 @@ def build_benchmark(backend: str) -> Path:
     raise ValueError("Cargo did not report the benchmark executable")
 
 
+def suite_configuration(manifest: dict, name: str) -> tuple[dict, list[str]]:
+    """Resolve suite-local workloads without changing canonical suite settings."""
+    settings = dict(manifest["suites"][name])
+    scenarios = list(settings.pop("scenarios", manifest["scenarios"]))
+    return settings, scenarios
+
+
 def run_suite(args: argparse.Namespace) -> None:
     """Run workloads serially and publish a suite only after every render succeeds."""
     manifest = json.loads((ROOT / "benchmarks/suites.json").read_text())
-    settings = manifest["suites"][args.suite]
+    settings, scenarios = suite_configuration(manifest, args.suite)
     source = source_identity()
     executable = (
         args.executable.resolve() if args.executable else build_benchmark(args.backend)
@@ -276,7 +284,7 @@ def run_suite(args: argparse.Namespace) -> None:
         "recorded_at": datetime.now().astimezone().isoformat(),
     }
     records = []
-    for scenario in manifest["scenarios"]:
+    for scenario in scenarios:
         print(f"Measuring {scenario} ({args.suite}, {args.backend})", flush=True)
         report = (args.output / f"{scenario}.json").resolve()
         environment = {
@@ -320,7 +328,7 @@ def run_suite(args: argparse.Namespace) -> None:
             "name": args.suite,
             "backend": args.backend,
             "settings": settings,
-            "scenarios": manifest["scenarios"],
+            "scenarios": scenarios,
         },
         "records": records,
     }

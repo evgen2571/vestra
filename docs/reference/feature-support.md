@@ -35,6 +35,8 @@ not reduced renderer support.
 | Directional Blur | `DirectionalBlur`, dynamic scalar properties | `directional_blur` | post-transform | supported | supported |
 | Radial Blur | `RadialBlur`, dynamic scalar and point properties | `radial_blur` | post-transform | supported | supported |
 | Chromatic Aberration | `ChromaticAberration`, dynamic scalar properties | `chromatic_aberration` | post-transform | supported | supported |
+| Palette mapping | `PaletteMap`, animatable amount/phase | `palette_map` | layer post-transform/global post-composition; optional local-time color loop | not fully verified | not fully verified |
+| Ordered dithering | `OrderedDither`, Bayer matrices, palette and scale | `ordered_dither` | layer post-transform/global post-composition; fixed output-pixel pattern | not fully verified | not fully verified |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |
 

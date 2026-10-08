@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 from enum import Enum
 from functools import lru_cache
 from types import MappingProxyType
@@ -44,6 +45,18 @@ class ZoomBlurDirection(Enum):
     INWARD = "inward"
     OUTWARD = "outward"
     CENTERED = "centered"
+
+
+class PaletteMode(Enum):
+    GRADIENT = "gradient"
+    NEAREST = "nearest"
+    RAINBOW = "rainbow"
+
+
+class DitherMatrix(Enum):
+    BAYER2 = "bayer2"
+    BAYER4 = "bayer4"
+    BAYER8 = "bayer8"
 
 
 @lru_cache(maxsize=1)
@@ -103,6 +116,19 @@ def _validate_descriptor_value(parameter: Mapping[str, object], value: float) ->
         raise ValueError(f"{parameter['name']} is outside its authored range")
 
 
+def _palette(parameter: Mapping[str, object], value: object) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise TypeError("palette must be a sequence of colors")
+    minimum = cast(int, parameter["integer_minimum"])
+    maximum = cast(int, parameter["integer_maximum"])
+    if not minimum <= len(value) <= maximum:
+        raise ValueError(f"palette must contain {minimum}..{maximum} colors")
+    colors = tuple(color_to_canonical(item) for item in value)
+    if any(len(color) == 9 and color[-2:] != "ff" for color in colors):
+        raise ValueError("palette colors must be opaque")
+    return colors
+
+
 def _canonical_parameter(
     parameter: Mapping[str, object], value: object, owner: _Owner, *, validate_descriptor_values: bool,
 ) -> object:
@@ -126,6 +152,14 @@ def _canonical_parameter(
         return track.to_canonical()
     if kind == "colour":
         return color_to_canonical(cast(Color | str, value))
+    if kind == "palette":
+        return list(_palette(parameter, value))
+    if kind == "period":
+        if value is None:
+            return None
+        number = _number(cast(int | float, value), name)
+        _validate_descriptor_value(parameter, number)
+        return number
     if kind == "integer":
         minimum = cast(int | None, parameter["integer_minimum"])
         maximum = cast(int | None, parameter["integer_maximum"])
@@ -184,6 +218,8 @@ def _build_registered_effect(
         )
         if parameter["kind"] == "active_interval":
             values.update(cast(Mapping[str, object], canonical))
+        elif parameter["kind"] == "period" and canonical is None:
+            continue
         else:
             values[name] = canonical
     for name, parameter in descriptors.items():
@@ -430,7 +466,7 @@ class GenericEffect(Effect):
                         canonical["component_modifiers"] = components
                 data[key] = canonical
             else:
-                data[key] = value
+                data[key] = list(value) if isinstance(value, list) else value
         return data
 
     def parameter_track(self, name: str) -> ScalarTrack:
@@ -878,6 +914,69 @@ class MotionBlurEffect(Effect):
 EffectType = TypeVar("EffectType", bound=Effect)
 
 
+class PaletteMapEffect(GenericEffect):
+    """Palette coloring with builder-owned animatable amount and phase tracks."""
+
+    __slots__ = ()
+    _effect_type = "palette_map"
+
+    @classmethod
+    def _create_palette(
+        cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object],
+    ) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(
+            cls._effect_type, owner, scope, identifier, parameters,
+            validate_descriptor_values=True,
+        )
+        values.pop("id")
+        values.pop("type")
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    def _set_parameter(self, name: str, value: object) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), name)
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if parameter["kind"] == "period" and canonical is None:
+            self._data.pop(name, None)
+        else:
+            self._data[name] = canonical
+
+    @property
+    def palette(self) -> tuple[str, ...]: return tuple(cast(list[str], self._data["palette"]))
+    @palette.setter
+    def palette(self, value: Sequence[Color | str]) -> None: self._set_parameter("palette", value)
+    @property
+    def amount(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("amount"))
+    @property
+    def phase(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("phase"))
+    @property
+    def period(self) -> float | None: return cast(float | None, self._data.get("period"))
+    @period.setter
+    def period(self, value: int | float | None) -> None: self._set_parameter("period", value)
+    @property
+    def mode(self) -> PaletteMode: return PaletteMode(self._data["mode"])
+    @mode.setter
+    def mode(self, value: PaletteMode | str) -> None: self._set_parameter("mode", value)
+
+
+class OrderedDitherEffect(PaletteMapEffect):
+    """Ordered Bayer quantization with a palette-independent threshold pattern."""
+
+    __slots__ = ()
+    _effect_type = "ordered_dither"
+
+    @property
+    def strength(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("strength"))
+    @property
+    def matrix(self) -> DitherMatrix: return DitherMatrix(self._data["matrix"])
+    @matrix.setter
+    def matrix(self, value: DitherMatrix | str) -> None: self._set_parameter("matrix", value)
+    @property
+    def scale(self) -> int: return cast(int, self._data["scale"])
+    @scale.setter
+    def scale(self, value: int) -> None: self._set_parameter("scale", value)
+
+
 class _EffectCollection:
     __slots__ = ("_owner", "_ids", "_scope", "_items")
     _owner: _Owner
@@ -933,6 +1032,28 @@ class _EffectCollection:
     def add_vignette(self, *, amount: int | float, radius: int | float, softness: int | float, colour: Color | str, id: str | None = None) -> VignetteEffect: return self._append(VignetteEffect._create, id, amount, radius, softness, colour)
     def add_sharpen(self, *, amount: int | float, radius: int | float, id: str | None = None) -> SharpenEffect: return self._append(SharpenEffect._create, id, amount, radius)
     def add_color_adjust(self, *, exposure: int | float, gamma: int | float, black_point: int | float, white_point: int | float, id: str | None = None) -> ColorAdjustEffect: return self._append(ColorAdjustEffect._create, id, exposure, gamma, black_point, white_point)
+
+    def add_palette_map(
+        self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
+        amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
+        period: int | float | None = None, mode: PaletteMode | str = PaletteMode.GRADIENT,
+        id: str | None = None,
+    ) -> PaletteMapEffect:
+        return self._append(PaletteMapEffect._create_palette, id, {
+            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode,
+        })
+
+    def add_ordered_dither(
+        self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
+        amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
+        period: int | float | None = None, mode: PaletteMode | str = PaletteMode.NEAREST,
+        strength: int | float | ScalarTrack = 1, matrix: DitherMatrix | str = DitherMatrix.BAYER8,
+        scale: int = 1, id: str | None = None,
+    ) -> OrderedDitherEffect:
+        return self._append(OrderedDitherEffect._create_palette, id, {
+            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode,
+            "strength": strength, "matrix": matrix, "scale": scale,
+        })
 
 
 class ClipEffectCollection(_EffectCollection):

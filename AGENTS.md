@@ -11,6 +11,9 @@ and working contract, not as a duplicate of architecture documentation.
    the active execution plan. Small localized fixes need no plan.
 4. Verify the current branch, environment and relevant test commands.
 
+Use the relevant [Vestra repository skill](.agents/skills/README.md) for
+specialized, repeatable workflows. Don't load unrelated skill guides.
+
 ## Task routing
 
 | Task | Read first |

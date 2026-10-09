@@ -14,10 +14,14 @@ fn public_value_project_renders_ordered_palette_effects_and_periodic_seeks() {
                 "frame_rate": "4/1", "background": "#808080", "quality": "preview",
                 "audio": false, "duration_mode": "explicit", "duration": 4},
             "assets": [],
-            "visual": {"clips": [], "post_effects": [
-                {"id": "red-ramp", "type": "palette_map", "palette": ["#000000", "#ff0000"],
+            "visual": {"clips": [{"id": "background", "source": {
+                "type": "solid_color", "colour": "#808080"}, "start": 0,
+                "duration": 4, "layer": 0, "opacity": {"base_value": 1}}], "post_effects": [
+                {"id": "red-ramp", "type": "palette_map",
+                    "palette": ["#000000", "#ff0000"],
                     "mode": "gradient", "amount": {"base_value": 1}, "phase": {"base_value": 0}},
-                {"id": "fine-dither", "type": "ordered_dither", "palette": ["#000000", "#ffffff"],
+                {"id": "fine-dither", "type": "ordered_dither",
+                    "palette": ["#000000", "#ffffff"],
                     "mode": "nearest", "amount": {"base_value": 1}, "phase": {"base_value": 0},
                     "period": 2, "strength": {"base_value": 1}, "matrix": "bayer4", "scale": 1}
             ]}
@@ -26,7 +30,8 @@ fn public_value_project_renders_ordered_palette_effects_and_periodic_seeks() {
     )
     .expect("load effects through public value API");
     let editor = Editor::new();
-    assert!(editor.validate(&project).is_valid());
+    let validation = editor.validate(&project);
+    assert!(validation.is_valid(), "{validation:?}");
     let mut prepared = editor
         .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
         .expect("prepare public effect project");

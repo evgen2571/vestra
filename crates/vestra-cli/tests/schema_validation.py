@@ -483,3 +483,37 @@ for effect_type in ("palette_map", "ordered_dither"):
             invalid_dither = copy.deepcopy(palette_project)
             invalid_dither["visual"]["clips"][0]["effects"][0][field] = value
             assert errors(invalid_dither), f"ordered_dither must reject {field}={value!r}"
+
+
+# Every stylized family carries bounded animated controls and discrete config.
+for example_name, invalid_fields in {
+    "ascii": [
+        ("characters", ""), ("characters", "#" * 257), ("characters", "a\n"),
+        ("edge_characters", "-|/"), ("edge_characters", "-|/\\#"),
+        ("font", ""), ("mode", "gradient"), ("glyph_style", "bitmap"),
+        ("color_mode", "nearest"), ("period", 0),
+        ("cell_width", {"base_value": 1}), ("cell_height", {"base_value": 129}),
+        ("edge_strength", {"base_value": 4.1}), ("source_mix", {"base_value": -0.1}),
+        ("palette", ["#000000", "#ffffff80"]),
+    ],
+    "halftone": [("mode", "cmyk"), ("cell_size", {"base_value": 1}), ("softness", {"base_value": 2.1})],
+    "pixel-sort-horizontal": [("direction", "diagonal"), ("order", "unstable"), ("segment_length", 257), ("segment_length", 2.5), ("lower_threshold", {"base_value": -0.1})],
+    "crt": [("seed", -1), ("mask_spacing", 7), ("period", 0), ("grain", {"base_value": 0.3}), ("rolling_width", {"base_value": 0})],
+}.items():
+    stylized = json.loads((ROOT / f"examples/effects/{example_name}.json").read_text())
+    assert not errors(stylized), f"{example_name} canonical fixture"
+    effect = stylized["visual"]["clips"][0]["effects"][0]
+    for field, value in invalid_fields:
+        malformed = copy.deepcopy(stylized)
+        malformed["visual"]["clips"][0]["effects"][0][field] = value
+        assert errors(malformed), f"{example_name} rejects {field}={value!r}"
+    unknown = copy.deepcopy(stylized)
+    unknown["visual"]["clips"][0]["effects"][0]["undocumented"] = 1
+    assert errors(unknown), f"{example_name} rejects unknown customization"
+    for mode_field in ("mode", "color_mode", "glyph_style", "direction", "order"):
+        if mode_field in effect:
+            definition = schema["$defs"][f"{effect['type']}_effect"]["properties"][mode_field]
+            for choice in definition["enum"]:
+                variant = copy.deepcopy(stylized)
+                variant["visual"]["clips"][0]["effects"][0][mode_field] = choice
+                assert not errors(variant), f"{example_name} accepts {mode_field}={choice}"

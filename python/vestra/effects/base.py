@@ -7,7 +7,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Iterable, Mapping, Self, TypeVar, cast
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, PaletteInterpolation, DitherMatrix, HalftoneMode, PixelSortDirection, PixelSortOrder, AsciiMode, AsciiColorMode, AsciiGlyphStyle, _palette, _palette_stops
+from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, PaletteInputFilter, PaletteInterpolation, DitherMatrix, HalftoneMode, PixelSortDirection, PixelSortOrder, AsciiMode, AsciiColorMode, AsciiGlyphStyle, _palette, _palette_stops
 from ..authoring.effects import available_effects as _native_effects
 from ..authoring.effects import effect_definition
 from ..authoring.values import Color, Point, color_to_canonical
@@ -240,7 +240,7 @@ class Effect:
             self._values[name] = _enum(
                 value,
                 name,
-                PaletteInterpolation if name == "interpolation" else AsciiGlyphStyle if name == "glyph_style" else AsciiColorMode if name == "color_mode" else AsciiMode if self.effect_type == "ascii" and name == "mode" else HalftoneMode if self.effect_type == "halftone" and name == "mode" else PixelSortOrder if self.effect_type == "pixel_sort" and name == "order" else PixelSortDirection if self.effect_type == "pixel_sort" and name == "direction" else PaletteMode if name == "mode" else DitherMatrix if name == "matrix" else ZoomBlurDirection,
+                PaletteInputFilter if name == "input_filter" else PaletteInterpolation if name == "interpolation" else AsciiGlyphStyle if name == "glyph_style" else AsciiColorMode if name == "color_mode" else AsciiMode if self.effect_type == "ascii" and name == "mode" else HalftoneMode if self.effect_type == "halftone" and name == "mode" else PixelSortOrder if self.effect_type == "pixel_sort" and name == "order" else PixelSortDirection if self.effect_type == "pixel_sort" and name == "direction" else PaletteMode if name == "mode" else DitherMatrix if name == "matrix" else ZoomBlurDirection,
                 tuple(cast(tuple[object, ...], parameter["enum_values"])),
             )
             return

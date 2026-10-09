@@ -315,6 +315,7 @@ impl EffectKernel {
             Self::Crt => "vestra.effect.crt",
             Self::AsciiAnalyze => "vestra.effect.ascii-analyze",
             Self::AsciiResolve => "vestra.effect.ascii-resolve",
+            Self::PaletteInputAnalyze => "vestra.effect.palette-input-analyze",
             Self::PaletteMap => "vestra.effect.palette-map",
             Self::OrderedDither => "vestra.effect.ordered-dither",
             Self::ColourTransform => "vestra.effect.colour-transform",
@@ -363,6 +364,10 @@ impl EffectKernel {
                 include_str!("../shaders/effects/common.wgsl"),
                 include_str!("../shaders/effects/ascii_common.wgsl"),
                 include_str!("../shaders/effects/ascii_resolve.wgsl")
+            ),
+            Self::PaletteInputAnalyze => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/palette_input_analyze.wgsl")
             ),
             Self::PaletteMap => concat!(
                 include_str!("../shaders/effects/common.wgsl"),

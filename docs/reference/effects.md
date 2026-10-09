@@ -121,8 +121,27 @@ image, preserving its alpha and hidden RGB. It does not blend against the adjust
 input. Amount zero remains identity; neutral exposure/gamma retain the legacy
 single pass and do not require retained-source resources. An animated or bound
 tone property conservatively prepares resources for its active frames. Tone
-preparation is opt-in and adds a full-resolution pass and retained image storage;
-local contrast/detail and independent analysis filtering are still pending.
+preparation is opt-in and adds a full-resolution pass and retained image storage.
+
+`input_detail` (default `0`, range 0–4) applies unsharp detail enhancement before
+tone response and quantization. `input_detail_radius` (default `1`, range 0–16)
+is its Gaussian radius in output pixels, rounded to quarter pixels. Both are
+bindable. Start with amount `1.5`/radius `1` for fine detail, or amount `0.5`/radius
+`8` for broader local contrast. Amount rounds to Q16 before processing; zero
+amount or a radius rounding to zero skips the detail passes.
+
+Detail reuses the existing horizontal/vertical Gaussian and unsharp operations.
+Its Gaussian profile uses symmetric integer Q16 weights totaling 65536, with
+the center receiving the normalization remainder. Filtering clamps borders,
+accumulates premultiplied byte colors and alpha, and rounds upward at half ties.
+Transparent neighbors contribute no hidden RGB. Legacy standalone Gaussian
+effects retain their floating-point profile. Unsharp retains original alpha;
+the final palette amount still blends against the original image.
+
+Active detail adds three full-resolution passes: four including quantization,
+or five with active tone. These controls are opt-in; animated/bound properties
+conservatively reserve their resources. Independent analysis filtering remains
+pending.
 
 `PaletteMode.GRADIENT` interpolates adjacent palette stops and
 `PaletteMode.NEAREST` chooses the nearest tonal stop. `PaletteMode.RAINBOW`

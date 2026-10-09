@@ -544,3 +544,38 @@ def test_advanced_input_detail_tracks_match_generic_defaults(kind):
     generic = builder.post_effects.add_effect(kind, **parameters)
     assert generic.to_canonical()["input_detail"]["base_value"] == 0
     assert generic.to_canonical()["input_detail_radius"]["base_value"] == 1
+
+
+@pytest.mark.parametrize("name", ["PaletteMap", "OrderedDither"])
+def test_input_analysis_controls_are_independent_bindable_and_bounded(name):
+    project = vestra.Project(size=(4, 4), fps=2, duration=2)
+    layer = project.root.add(vestra.sources.Color("#808080"), duration=2)
+    effect = layer.effects.add(effect_class(name)(input_scale=4, input_filter="linear"))
+    assert effect.input_filter is effects.PaletteInputFilter.LINEAR
+    effect.input_scale.keyframe(1, 8)
+    effect.input_scale.bind(project.audio.signal.rms(), operation="add")
+    data = project.snapshot().to_dict()["visual"]["clips"][0]["effects"][0]
+    assert data["input_scale"]["keyframes"][0]["value"] == 8
+    assert data["input_scale"]["modifiers"][0]["operation"] == "add"
+    assert data["input_filter"] == "linear"
+    if name == "OrderedDither": assert data["scale"] == 1
+    effect.input_filter = effects.PaletteInputFilter.AREA
+    for invalid in (0, 257, float("nan")):
+        with pytest.raises(ValueError): effect.input_scale = invalid
+    with pytest.raises(ValueError): effect.input_filter = "cubic"
+
+
+@pytest.mark.parametrize("kind", ["palette_map", "ordered_dither"])
+def test_advanced_input_analysis_matches_generic_defaults(kind):
+    builder = ProjectBuilder(width=4, height=4, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4", duration=1)
+    builder.add_solid_color_clip(colour="#808080", start=0, duration=1, layer=0)
+    typed = getattr(builder.post_effects, "add_" + kind)(input_scale=4, input_filter="linear")
+    typed.input_scale.keyframe(time=0.5, value=2)
+    typed.input_filter = "nearest"
+    assert typed.input_filter.value == "nearest"
+    assert builder.validate().is_valid
+    parameters = dict(palette=["#000000", "#ffffff"], amount=1, phase=0)
+    if kind == "ordered_dither": parameters.update(strength=1, scale=1)
+    generic = builder.post_effects.add_effect(kind, **parameters)
+    assert generic.to_canonical()["input_scale"]["base_value"] == 1
+    assert generic.to_canonical()["input_filter"] == "area"

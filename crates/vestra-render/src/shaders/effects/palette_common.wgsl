@@ -5,8 +5,15 @@ struct Params {
     colours: array<vec4<u32>, 4>,
     features: array<vec4<u32>, 4>,
     stops: array<vec4<u32>, 4>,
+    input_parameters: vec4<u32>,
 };
 @group(0) @binding(3) var<uniform> params: Params;
+
+fn input_coordinate(position: vec2<u32>) -> vec2<i32> {
+    let scale = params.input_parameters.x;
+    if (scale == 1u) { return vec2<i32>(position); }
+    return vec2<i32>(position / scale * scale);
+}
 
 fn tonal_stop(index: u32) -> u32 { return params.stops[index / 4u][index % 4u]; }
 

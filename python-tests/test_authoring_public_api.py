@@ -37,7 +37,7 @@ PUBLIC_NAMES = {
     "HalftoneEffect", "PixelSortEffect", "CrtEffect", "HalftoneMode",
     "PixelSortDirection", "PixelSortOrder", "AsciiEffect", "AsciiMode",
     "AsciiColorMode", "AsciiGlyphStyle", "PaletteMapEffect", "OrderedDitherEffect",
-    "PaletteMode", "DitherMatrix",
+    "PaletteMode", "PaletteInputFilter", "PaletteInterpolation", "DitherMatrix",
 }
 
 

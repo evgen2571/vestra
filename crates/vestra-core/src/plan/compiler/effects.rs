@@ -163,6 +163,8 @@ pub(super) fn compile(
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
+            input_filter,
             interpolation,
             palette,
             stops,
@@ -183,6 +185,8 @@ pub(super) fn compile(
                 input_detail_radius,
                 ScalarPropertyTarget::PaletteMapInputDetailRadius
             ),
+            input_scale: scalar!(input_scale, ScalarPropertyTarget::PaletteMapInputScale),
+            input_filter: *input_filter,
             interpolation: *interpolation,
             stops: stops
                 .as_deref()
@@ -216,6 +220,8 @@ pub(super) fn compile(
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
+            input_filter,
             interpolation,
             palette,
             stops,
@@ -240,6 +246,8 @@ pub(super) fn compile(
                 input_detail_radius,
                 ScalarPropertyTarget::OrderedDitherInputDetailRadius
             ),
+            input_scale: scalar!(input_scale, ScalarPropertyTarget::OrderedDitherInputScale),
+            input_filter: *input_filter,
             interpolation: *interpolation,
             stops: stops
                 .as_deref()
@@ -499,6 +507,50 @@ pub(super) fn compile_timed(
 mod stylization_tests {
     use super::*;
     use crate::plan::{CompiledEffect, EvaluatedEffect, EvaluationContext, PreparedScalarSignals};
+
+    #[test]
+    fn palette_input_analysis_is_independent_of_threshold_scale() {
+        for effect_type in ["palette_map", "ordered_dither"] {
+            for filter in ["nearest", "linear", "area"] {
+                let mut value = serde_json::json!({
+                    "type": effect_type, "id": "analysis", "palette": ["#000000", "#ffffff"],
+                    "amount": {"base_value": 0.5}, "phase": {"base_value": 0},
+                    "input_scale": {"base_value": 4}, "input_filter": filter
+                });
+                if effect_type == "ordered_dither" {
+                    value["strength"] = serde_json::json!({"base_value": 1});
+                    value["scale"] = serde_json::json!(1);
+                }
+                let authored = serde_json::from_value(value.clone()).unwrap();
+                let compiled =
+                    compile(&authored, "analysis", &mut ScalarSignalInterner::default()).unwrap();
+                assert_eq!(compiled.estimated_pass_count(), 2);
+                let signals = PreparedScalarSignals::empty();
+                let evaluated = crate::plan::evaluate_effect(
+                    &compiled,
+                    0,
+                    0,
+                    &EvaluationContext::new(&signals),
+                )
+                .unwrap();
+                let plan = crate::plan::effect_pass_plan(&evaluated);
+                assert_eq!(plan.len(), 2);
+                assert_eq!(
+                    plan.as_slice()[1].inputs,
+                    crate::plan::EffectPassInputs::OriginalAnd(
+                        crate::plan::EffectResource::Temporary1
+                    )
+                );
+                value["input_scale"] = serde_json::json!({"base_value": 1});
+                let neutral = serde_json::from_value(value.clone()).unwrap();
+                let neutral =
+                    compile(&neutral, "analysis", &mut ScalarSignalInterner::default()).unwrap();
+                assert_eq!(neutral.estimated_pass_count(), 1);
+                value["input_filter"] = serde_json::json!("cubic");
+                assert!(serde_json::from_value::<crate::project::Effect>(value).is_err());
+            }
+        }
+    }
 
     #[test]
     fn palette_input_detail_reuses_sharpen_before_tone_and_quantization() {

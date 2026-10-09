@@ -25,7 +25,7 @@ from .effects import (
     Effect, GenericEffect, GaussianBlurEffect, GlowEffect, MotionBlurEffect, PostEffectCollection,
     SaturationEffect, SharpenEffect, TintEffect, VignetteEffect, ZoomBlurDirection,
     HalftoneEffect, PixelSortEffect, CrtEffect, HalftoneMode, PixelSortDirection, PixelSortOrder,
-    ZoomBlurEffect, PaletteMapEffect, OrderedDitherEffect, PaletteMode, PaletteInterpolation, DitherMatrix,
+    ZoomBlurEffect, PaletteMapEffect, OrderedDitherEffect, PaletteMode, PaletteInputFilter, PaletteInterpolation, DitherMatrix,
     AsciiEffect, AsciiMode, AsciiColorMode, AsciiGlyphStyle,
     available_effects, effect_definition,
 )
@@ -119,7 +119,7 @@ __all__ = [
     "ZoomBlurEffect",
     "HalftoneEffect", "PixelSortEffect", "CrtEffect", "HalftoneMode", "PixelSortDirection", "PixelSortOrder",
     "AsciiEffect", "AsciiMode", "AsciiColorMode", "AsciiGlyphStyle",
-    "PaletteMapEffect", "OrderedDitherEffect", "PaletteMode", "PaletteInterpolation", "DitherMatrix",
+    "PaletteMapEffect", "OrderedDitherEffect", "PaletteMode", "PaletteInputFilter", "PaletteInterpolation", "DitherMatrix",
     "available_effects",
     "effect_definition",
     "available_audio_effects",

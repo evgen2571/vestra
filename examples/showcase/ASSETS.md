@@ -67,6 +67,9 @@ The [stylized effects scene](stylized-effects/README.md) generates its moving
 video and periodic harmonic soundtrack locally with FFmpeg. The analytic image and
 motion expressions are original project work distributed under MIT; no external
 footage or audio is downloaded. Generated media remains under `target/`.
+The blue-noise threshold tile is also original MIT-licensed project work,
+reproducible with `scripts/generate-blue-noise.py`; it contains no downloaded
+texture or third-party shader code.
 The custom ASCII example uses `tests/assets/VestraTest-Regular.ttf` (DejaVu
 Sans), with its complete Bitstream Vera/DejaVu notice in
 [the adjacent license](../../tests/assets/VestraTest-Regular.ttf.license).

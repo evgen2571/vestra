@@ -1,9 +1,11 @@
 use std::{fs, path::Path, process::Command, time::Instant};
 
 use vestra::{
-    AdapterDeviceType, BackendPreference as RenderBackendPreference, CancellationToken, Editor,
-    RenderRequest, RenderResult,
+    BackendPreference as RenderBackendPreference, CancellationToken, Editor, RenderRequest,
+    RenderResult,
 };
+
+use vestra_render::AdapterPerformanceClass;
 
 const WARMUP_RUNS: usize = 5;
 const MEASURED_RUNS: usize = 5;
@@ -51,6 +53,12 @@ fn main() {
         "stylization_baseline"
             | "palette_video"
             | "dither_video"
+            | "blue_noise_video"
+            | "rgb_dither_video"
+            | "hue_dither_video"
+            | "channel_dither_video"
+            | "oklab_dither_video"
+            | "nonuniform_dither_video"
             | "ascii_video"
             | "halftone_video"
             | "sort_horizontal_video"
@@ -103,6 +111,12 @@ fn main() {
             | "stylization_baseline"
             | "palette_video"
             | "dither_video"
+            | "blue_noise_video"
+            | "rgb_dither_video"
+            | "hue_dither_video"
+            | "channel_dither_video"
+            | "oklab_dither_video"
+            | "nonuniform_dither_video"
             | "ascii_video"
             | "halftone_video"
             | "sort_horizontal_video"
@@ -234,7 +248,7 @@ fn main() {
     } else {
         summary.total_frames as f64 * 1_000.0 / wall_samples[median_index] as f64
     };
-    let adapter_class = summary.adapter.as_ref().map(|adapter| adapter.device_type);
+    let adapter_class = summary.adapter.as_ref().map(record::adapter_class);
     if let Some(adapter) = summary.adapter.as_ref() {
         println!(
             "WGPU adapter: name={} backend={} device_type={} driver={} driver_info={} class={} software={}",
@@ -243,8 +257,8 @@ fn main() {
             adapter.device_type.as_str(),
             adapter.driver_name,
             adapter.driver_info,
-            adapter.device_type.as_str(),
-            adapter.is_software(),
+            record::adapter_class(adapter).as_str(),
+            record::adapter_class(adapter).is_software(),
         );
     }
     println!(
@@ -279,15 +293,15 @@ fn main() {
         summary.performance.estimated_staging_memory_bytes,
     );
     match adapter_class {
-        Some(AdapterDeviceType::Cpu) => println!(
+        Some(AdapterPerformanceClass::Cpu | AdapterPerformanceClass::Software) => println!(
             "Software WGPU adapter benchmark. This result verifies execution and measurement infrastructure; it is not representative of hardware-GPU performance."
         ),
-        Some(AdapterDeviceType::IntegratedGpu | AdapterDeviceType::DiscreteGpu) => {
+        Some(AdapterPerformanceClass::IntegratedGpu | AdapterPerformanceClass::DiscreteGpu) => {
             println!(
                 "Hardware WGPU adapter benchmark. Adapter metadata above identifies the measured device."
             )
         }
-        Some(AdapterDeviceType::VirtualGpu | AdapterDeviceType::Other) => println!(
+        Some(AdapterPerformanceClass::VirtualGpu | AdapterPerformanceClass::Unknown) => println!(
             "WGPU adapter class is not a confirmed hardware GPU. Performance status is not inferred."
         ),
         None if selected_backend == "wgpu" => println!(
@@ -298,7 +312,7 @@ fn main() {
     println!(
         "{scenario} {width}x{height}: requested_backend={backend_preference:?} selected_backend={} adapter_class={} requested_wgpu_pipeline_depth={pipeline_depth} actual_backend_pipeline_depth={} frame_count={} warmups={warmup_runs} samples={measured_runs} effective_fps={effective_fps:.2} wall_median={}ms wall_range={}..{}ms render_median={}ms render_range={}..{}ms track_evaluation={}ms frame_render={}ms encode_write={}ms encode_finalize={}ms gpu_init_ms={:?} adapter_request_ms={:?} device_request_ms={:?} pipeline_creation_ms={:?} texture_upload_ms={:?} command_encode_ms={:?} submission_ms={:?} readback_wait_ms={:?} row_repack_ms={:?} peak_in_flight={} blocking_polls={} slot_waits={} staging_memory_bytes={} cache_current={} cache_peak={} bytes cache_peak_entries={} scratch_retained_bytes={} decoded_peak={} bytes adapter={:?}",
         selected_backend,
-        adapter_class.map_or("none", AdapterDeviceType::as_str),
+        adapter_class.map_or("none", AdapterPerformanceClass::as_str),
         summary.performance.pipeline_depth,
         summary.total_frames,
         wall_samples[median_index],
@@ -383,18 +397,58 @@ fn create_stylization_benchmark_project(
     let palette = json!(["#071827", "#27565d", "#69b49c", "#fff0c0"]);
     let effect = match scenario {
         "stylization_baseline" => None,
-        "palette_video" | "dither_video" => {
+        "palette_video"
+        | "dither_video"
+        | "blue_noise_video"
+        | "rgb_dither_video"
+        | "hue_dither_video"
+        | "channel_dither_video"
+        | "oklab_dither_video"
+        | "nonuniform_dither_video" => {
             let mut effect = json!({
                 "id": "stylization",
                 "type": if scenario == "palette_video" { "palette_map" } else { "ordered_dither" },
                 "palette": palette,
-                "mode": if scenario == "palette_video" { "gradient" } else { "nearest" },
+                "mode": match scenario {
+                    "palette_video" => "gradient",
+                    "rgb_dither_video" => "nearest_rgb",
+                    "hue_dither_video" => "nearest_hue",
+                    "channel_dither_video" => "rgb_channels",
+                    "oklab_dither_video" => "nearest_oklab",
+                    _ => "nearest",
+                },
                 "amount": {"base_value": 1}, "phase": {"base_value": 0}, "period": 3
             });
-            if scenario == "dither_video" {
+            if scenario != "palette_video" {
                 effect["strength"] = json!({"base_value": 1});
-                effect["matrix"] = json!("bayer8");
+                effect["matrix"] = json!(if matches!(
+                    scenario,
+                    "blue_noise_video"
+                        | "rgb_dither_video"
+                        | "hue_dither_video"
+                        | "channel_dither_video"
+                        | "oklab_dither_video"
+                        | "nonuniform_dither_video"
+                ) {
+                    "blue_noise"
+                } else {
+                    "bayer8"
+                });
+                if matches!(
+                    scenario,
+                    "blue_noise_video"
+                        | "rgb_dither_video"
+                        | "hue_dither_video"
+                        | "channel_dither_video"
+                        | "oklab_dither_video"
+                        | "nonuniform_dither_video"
+                ) {
+                    effect["seed"] = json!(37);
+                }
                 effect["scale"] = json!(1);
+            }
+            if scenario == "nonuniform_dither_video" {
+                effect["stops"] = json!([0.0, 0.18, 0.55, 1.0]);
             }
             Some(effect)
         }
@@ -588,6 +642,7 @@ fn median_optional(values: impl Iterator<Item = Option<u128>>) -> Option<u128> {
 
 #[derive(serde::Serialize)]
 struct Sample {
+    #[serde(serialize_with = "record::serialize_result")]
     result: RenderResult,
     wall_ms: u128,
 }

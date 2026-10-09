@@ -77,3 +77,37 @@ For a 4K resource/correctness smoke check, use the built benchmark directly
 with `VESTRA_BENCH_WIDTH=3840`, `VESTRA_BENCH_HEIGHT=2160`,
 `VESTRA_BENCH_SCENARIO=dither_video`, `VESTRA_BENCH_WARMUPS=0`, and
 `VESTRA_BENCH_SAMPLES=1`. This is not the versioned 1080p baseline.
+
+The `dither-patterns-smoke` and `dither-patterns-1080p` suites compare the same
+FFV1 control, legacy Bayer8, and stationary blue-noise dithering (`seed=37`).
+The 1080p suite uses one warmup and three measured 90-frame samples per workload.
+The original suites retain their workload lists so prior captures remain usable.
+Run these suites with the existing runner and either `cpu` or `hardware-wgpu`.
+
+The `chromatic-dither-smoke` and `chromatic-dither-1080p` suites compare the
+FFV1 control and blue noise in luminance, RGB and hue-aware modes, using the same
+editable four-color palette, seed, animation and sample settings. Their workload
+lists are separate so historical pattern and effect suites retain their meaning.
+
+The two-workload `channel-dither-smoke`/`channel-dither-1080p` suites compare
+luminance blue noise with independent four-level RGB channels (64 output colors).
+Both use the same generated FFV1 input, stationary blue-noise seed and sample
+settings. Channel mode ignores palette phase; the luminance mode retains its
+existing three-second palette cycle. The source remains identical.
+
+The three-workload `perceptual-dither-smoke`/`perceptual-dither-1080p` suites
+compare luminance, RGB and Oklab blue noise over that same input, palette, seed
+and procedural phase. They use the usual smoke/1080p warmup and sample counts.
+
+Benchmark samples explicitly include the selected adapter and Vestra's shared
+`performance_class`, even though ordinary SDK result JSON omits adapter data.
+Hardware verification uses this conservative classification; in particular,
+WSL Mesa GL can report `device_type=other` for a D3D12-backed NVIDIA GPU.
+Software, virtual and unknown classifications remain ineligible for hardware
+suites. Raw device metadata is retained alongside the classification.
+
+`tonal-stops-smoke` and `tonal-stops-1080p` compare the unchanged uniform
+blue-noise scenario with `nonuniform_dither_video`, using the same four colors
+at positions `(0, 0.18, 0.55, 1)`. The uneven-stop path searches at most 15
+intervals per pixel. Both scenarios retain the existing source, periodic palette
+animation, encoder and frame count.

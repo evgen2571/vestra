@@ -2,9 +2,42 @@
 
 use std::{fs, path::Path, process::Command};
 
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::Sample;
+
+pub(super) fn adapter_class(
+    adapter: &vestra::AdapterInfo,
+) -> vestra_render::AdapterPerformanceClass {
+    vestra_render::AdapterMetadata {
+        adapter_name: adapter.adapter_name.clone(),
+        device_type: adapter.device_type.as_str().to_owned(),
+        graphics_backend: adapter.graphics_backend.as_str().to_owned(),
+        driver_name: adapter.driver_name.clone(),
+        driver_info: adapter.driver_info.clone(),
+        vendor_id: adapter.vendor_id,
+        device_id: adapter.device_id,
+    }
+    .performance_class()
+}
+
+pub(super) fn serialize_result<S: serde::Serializer>(
+    result: &vestra::RenderResult,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut value = serde_json::to_value(result).map_err(serde::ser::Error::custom)?;
+    // SDK reports omit adapter metadata; measurements need the actual device.
+    value["adapter"] = match &result.adapter {
+        Some(adapter) => {
+            let mut value = serde_json::to_value(adapter).map_err(serde::ser::Error::custom)?;
+            value["performance_class"] = adapter_class(adapter).as_str().into();
+            value
+        }
+        None => Value::Null,
+    };
+    value.serialize(serializer)
+}
 
 fn command(program: &str, args: &[&str]) -> String {
     let output = Command::new(program)

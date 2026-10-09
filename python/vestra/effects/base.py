@@ -7,7 +7,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Iterable, Mapping, Self, TypeVar, cast
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, DitherMatrix, HalftoneMode, PixelSortDirection, PixelSortOrder, AsciiMode, AsciiColorMode, AsciiGlyphStyle, _palette
+from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, DitherMatrix, HalftoneMode, PixelSortDirection, PixelSortOrder, AsciiMode, AsciiColorMode, AsciiGlyphStyle, _palette, _palette_stops
 from ..authoring.effects import available_effects as _native_effects
 from ..authoring.effects import effect_definition
 from ..authoring.values import Color, Point, color_to_canonical
@@ -201,6 +201,9 @@ class Effect:
         if kind == "colour":
             self._values[name] = color_to_canonical(cast(Color | str, value))
             return
+        if kind == "palette_stops":
+            self._values[name] = _palette_stops(value)
+            return
         if kind == "palette":
             self._values[name] = _palette(parameter, value)
             return
@@ -346,7 +349,9 @@ class Effect:
                 )
             elif name == "palette":
                 data[name] = list(cast(tuple[str, ...], value))
-            elif name in {"period", "font"} and value is None:
+            elif name == "stops" and value is not None:
+                data[name] = list(cast(tuple[float, ...], value))
+            elif name in {"period", "font", "stops"} and value is None:
                 data.pop(name)
         return data
 

@@ -1,4 +1,4 @@
-"""Palette coloring and deterministic ordered Bayer dithering."""
+"""Palette coloring and deterministic Bayer/blue-noise dithering."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .base import Effect
 
 
 class PaletteMap(Effect):
-    """Map source luminance through a dark-to-light palette or rainbow ramp."""
+    """Map source colors through a palette or quantize RGB channels."""
 
     __slots__ = ()
     effect_type = "palette_map"
@@ -22,6 +22,8 @@ class PaletteMap(Effect):
         palette: Sequence[Color | str] = ("#000000", "#ffffff"),
         *,
         mode: PaletteMode | str = PaletteMode.GRADIENT,
+        levels: int = 4,
+        stops: Sequence[int | float] | None = None,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -32,6 +34,8 @@ class PaletteMap(Effect):
             {
                 "palette": palette,
                 "mode": mode,
+                "levels": levels,
+                "stops": stops,
                 "amount": amount,
                 "phase": phase,
                 "period": period,
@@ -54,6 +58,22 @@ class PaletteMap(Effect):
     @mode.setter
     def mode(self, value: PaletteMode | str) -> None:
         self._set_value("mode", value)
+
+    @property
+    def stops(self) -> tuple[float, ...] | None:
+        return cast(tuple[float, ...] | None, self._values.get("stops"))
+
+    @stops.setter
+    def stops(self, value: Sequence[int | float] | None) -> None:
+        self._set_value("stops", value)
+
+    @property
+    def levels(self) -> int:
+        return cast(int, self._values["levels"])
+
+    @levels.setter
+    def levels(self, value: int) -> None:
+        self._set_value("levels", value)
 
     @property
     def amount(self) -> BindableScalarProperty:
@@ -81,7 +101,7 @@ class PaletteMap(Effect):
 
 
 class OrderedDither(PaletteMap):
-    """Quantize source luminance using a stationary ordered Bayer pattern."""
+    """Quantize source colors using a stationary Bayer or blue-noise pattern."""
 
     __slots__ = ()
     effect_type = "ordered_dither"
@@ -91,12 +111,15 @@ class OrderedDither(PaletteMap):
         palette: Sequence[Color | str] = ("#000000", "#ffffff"),
         *,
         mode: PaletteMode | str = PaletteMode.NEAREST,
+        levels: int = 4,
+        stops: Sequence[int | float] | None = None,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
         strength: int | float | ScalarProperty = 1,
         matrix: DitherMatrix | str = DitherMatrix.BAYER8,
         scale: int = 1,
+        seed: int = 0,
         id: str | None = None,
     ) -> None:
         Effect.__init__(self)
@@ -104,12 +127,15 @@ class OrderedDither(PaletteMap):
             {
                 "palette": palette,
                 "mode": mode,
+                "levels": levels,
+                "stops": stops,
                 "amount": amount,
                 "phase": phase,
                 "period": period,
                 "strength": strength,
                 "matrix": matrix,
                 "scale": scale,
+                "seed": seed,
             },
             id=id,
         )
@@ -137,3 +163,11 @@ class OrderedDither(PaletteMap):
     @scale.setter
     def scale(self, value: int) -> None:
         self._set_value("scale", value)
+
+    @property
+    def seed(self) -> int:
+        return cast(int, self._values["seed"])
+
+    @seed.setter
+    def seed(self, value: int) -> None:
+        self._set_value("seed", value)

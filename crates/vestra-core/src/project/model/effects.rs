@@ -98,8 +98,12 @@ pub enum Effect {
     PaletteMap {
         id: String,
         palette: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stops: Option<Vec<f64>>,
         #[serde(default)]
         mode: PaletteMode,
+        #[serde(default = "default_channel_levels")]
+        levels: u16,
         amount: ScalarProperty,
         phase: ScalarProperty,
         #[serde(default)]
@@ -108,8 +112,12 @@ pub enum Effect {
     OrderedDither {
         id: String,
         palette: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stops: Option<Vec<f64>>,
         #[serde(default = "default_dither_palette_mode")]
         mode: PaletteMode,
+        #[serde(default = "default_channel_levels")]
+        levels: u16,
         amount: ScalarProperty,
         phase: ScalarProperty,
         #[serde(default)]
@@ -118,6 +126,8 @@ pub enum Effect {
         #[serde(default)]
         matrix: DitherMatrix,
         scale: u8,
+        #[serde(default)]
+        seed: u32,
     },
     Brightness {
         id: String,
@@ -358,6 +368,10 @@ pub enum PaletteMode {
     Gradient,
     Nearest,
     Rainbow,
+    NearestRgb,
+    NearestHue,
+    RgbChannels,
+    NearestOklab,
 }
 
 /// Deterministic, screen-anchored ordered-dither matrix.
@@ -368,6 +382,7 @@ pub enum DitherMatrix {
     Bayer4,
     #[default]
     Bayer8,
+    BlueNoise,
 }
 
 impl DitherMatrix {
@@ -377,8 +392,13 @@ impl DitherMatrix {
             Self::Bayer2 => 2,
             Self::Bayer4 => 4,
             Self::Bayer8 => 8,
+            Self::BlueNoise => 32,
         }
     }
+}
+
+fn default_channel_levels() -> u16 {
+    4
 }
 
 fn default_dither_palette_mode() -> PaletteMode {

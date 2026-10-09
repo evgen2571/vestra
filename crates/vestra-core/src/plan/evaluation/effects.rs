@@ -54,16 +54,22 @@ pub enum EvaluatedEffect {
         seed: u64,
     },
     PaletteMap {
+        stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
-        nearest: bool,
+        mode: crate::project::PaletteMode,
+        levels: u16,
     },
     OrderedDither {
+        stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
         strength: f64,
+        mode: crate::project::PaletteMode,
+        levels: u16,
         matrix: crate::project::DitherMatrix,
         scale: u8,
+        seed: u32,
     },
     Brightness {
         amount: f64,
@@ -341,12 +347,15 @@ pub fn evaluate(
             seed: *seed,
         },
         CompiledEffect::PaletteMap {
+            stops,
             palette,
             mode,
+            levels,
             amount,
             phase,
             period,
         } => EvaluatedEffect::PaletteMap {
+            stops: *stops,
             palette: crate::stylization::evaluate_palette(
                 palette,
                 *mode,
@@ -355,18 +364,23 @@ pub fn evaluate(
                 authored_time,
             ),
             amount: amount.evaluate(authored_time, project_time, context)?,
-            nearest: *mode == crate::project::PaletteMode::Nearest,
+            mode: *mode,
+            levels: *levels,
         },
         CompiledEffect::OrderedDither {
+            stops,
             palette,
             mode,
+            levels,
             amount,
             phase,
             period,
             strength,
             matrix,
             scale,
+            seed,
         } => EvaluatedEffect::OrderedDither {
+            stops: *stops,
             palette: crate::stylization::evaluate_palette(
                 palette,
                 *mode,
@@ -376,8 +390,11 @@ pub fn evaluate(
             ),
             amount: amount.evaluate(authored_time, project_time, context)?,
             strength: strength.evaluate(authored_time, project_time, context)?,
+            mode: *mode,
+            levels: *levels,
             matrix: *matrix,
             scale: *scale,
+            seed: *seed,
         },
         CompiledEffect::Brightness { amount } => EvaluatedEffect::Brightness {
             amount: amount.evaluate(authored_time, project_time, context)?,
@@ -629,12 +646,14 @@ mod tests {
             PreparedScalarSignal::new(10_000_000_000, 1_000_000_000, vec![0.0, 0.0, 0.25]).unwrap(),
         ]);
         let effect = CompiledEffect::PaletteMap {
+            stops: None,
             palette: crate::stylization::compile_palette(&[
                 "#000000".to_owned(),
                 "#ffffff".to_owned(),
             ])
             .unwrap(),
             mode: crate::project::PaletteMode::Gradient,
+            levels: 4,
             amount: property(
                 Track::new(0.5),
                 ScalarModifierOperation::Add,

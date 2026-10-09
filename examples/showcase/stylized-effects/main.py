@@ -20,6 +20,11 @@ from vestra.effects.recipes import analog_monitor, halftone_print, sorted_neon
 ROOT = Path(__file__).resolve().parents[3]
 PERIOD = 4
 PALETTE = ("#071827", "#27565d", "#69b49c", "#fff0c0")
+PALETTES = {
+    "ocean": PALETTE,
+    "ember": ("#201222", "#7a3446", "#d07758", "#ffe2a1"),
+    "mono": ("#050505", "#4e4e4e", "#adadad", "#f8f8f8"),
+}
 LOOKS = (
     "ascii",
     "custom-ascii",
@@ -30,6 +35,7 @@ LOOKS = (
     "crt",
     "palette",
     "dither",
+    "dither-blue-noise",
     "analog-monitor",
     "halftone-print",
     "sorted-neon",
@@ -88,7 +94,15 @@ def prepare_assets(directory: Path, size: tuple[int, int], fps: int) -> None:
 
 
 def build_project(
-    look: str, directory: Path, size: tuple[int, int], fps: int
+    look: str,
+    directory: Path,
+    size: tuple[int, int],
+    fps: int,
+    *,
+    palette: tuple[str, ...] = PALETTE,
+    mode: str = "nearest",
+    levels: int = 4,
+    stops: tuple[float, ...] | None = None,
 ) -> Project:
     project = Project(size=size, fps=fps, duration=2 * PERIOD, base_directory=directory)
     for start in (0, PERIOD):
@@ -97,7 +111,7 @@ def build_project(
         )
         if look == "ascii":
             effect = Ascii(
-                color_mode="palette", palette=PALETTE, period=PERIOD, source_mix=0.12
+                color_mode="palette", palette=palette, period=PERIOD, source_mix=0.12
             )
         elif look == "custom-ascii":
             effect = Ascii(
@@ -119,8 +133,17 @@ def build_project(
             effect = Crt(period=PERIOD, seed=37)
         elif look == "palette":
             effect = PaletteMap(mode="rainbow", period=PERIOD)
-        elif look == "dither":
-            effect = OrderedDither(PALETTE, matrix="bayer8", scale=1, period=PERIOD)
+        elif look in {"dither", "dither-blue-noise"}:
+            effect = OrderedDither(
+                palette,
+                mode=mode,
+                levels=levels,
+                stops=stops,
+                matrix="blue_noise" if look == "dither-blue-noise" else "bayer8",
+                seed=37,
+                scale=1,
+                period=PERIOD,
+            )
         elif look == "analog-monitor":
             effect = analog_monitor(period=PERIOD)
         elif look == "halftone-print":
@@ -145,14 +168,49 @@ def main() -> None:
     parser.add_argument("--look", choices=LOOKS, default="ascii")
     parser.add_argument("--backend", choices=("cpu", "wgpu"), default="cpu")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--palette", choices=tuple(PALETTES), default="ocean")
+    parser.add_argument(
+        "--mode",
+        choices=(
+            "nearest",
+            "nearest_rgb",
+            "nearest_hue",
+            "rgb_channels",
+            "nearest_oklab",
+        ),
+        default="nearest",
+    )
+    parser.add_argument("--levels", type=int, default=4)
+    parser.add_argument(
+        "--stops",
+        type=float,
+        nargs="+",
+        help="Tonal positions, one per palette color, endpoints 0 and 1",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     size, fps = ((320, 180), 6) if args.smoke else ((1920, 1080), 30)
     directory = ROOT / "target/stylized-showcase" / ("smoke" if args.smoke else "1080p")
     prepare_assets(directory, size, fps)
-    project = build_project(args.look, directory, size, fps)
-    project.snapshot().save(directory / f"{args.look}.json")
-    output = args.output or directory / f"{args.look}-{args.backend}.mp4"
+    project = build_project(
+        args.look,
+        directory,
+        size,
+        fps,
+        palette=PALETTES[args.palette],
+        mode=args.mode,
+        levels=args.levels,
+        stops=None if args.stops is None else tuple(args.stops),
+    )
+    name = args.look if args.palette == "ocean" else f"{args.look}-{args.palette}"
+    if args.look in {"dither", "dither-blue-noise"} and args.mode != "nearest":
+        name += f"-{args.mode}"
+    if args.look in {"dither", "dither-blue-noise"} and args.mode == "rgb_channels":
+        name += f"-{args.levels}"
+    if args.stops is not None:
+        name += "-nonuniform"
+    project.snapshot().save(directory / f"{name}.json")
+    output = args.output or directory / f"{name}-{args.backend}.mp4"
     project.render(str(output), backend=args.backend, overwrite=True)
 
 

@@ -1,7 +1,7 @@
 # Stylized effects
 
 This reproducible scene synthesizes periodic moving footage and a four-second
-440 Hz soundtrack with FFmpeg. It repeats both inputs twice, with matched
+original harmonic soundtrack with FFmpeg. It repeats both inputs twice, with matched
 effect periods and continuous intensity keyframes. No media download is needed.
 
 ```bash
@@ -18,7 +18,7 @@ ASCII example uses the bundled font, palette animation, edges and source blendin
 Generated assets, canonical JSON and renders stay under `target/stylized-showcase/`.
 
 The source uses periodic analytic motion; repeated source frames are not added
-at the seam. The sine soundtrack also completes an integer number of cycles.
+at the seam. The bass pulse and three-note chord also complete an integer number of cycles.
 Other footage, audio and authored animation must align separately to loop:
 an effect's `period` does not make arbitrary footage seamless.
 

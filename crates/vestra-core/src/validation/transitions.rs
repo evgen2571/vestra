@@ -895,6 +895,7 @@ mod generic_transition_tests {
 
 pub(super) fn validate(
     visual: &crate::project::Visual,
+    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes: usize,
     maximum_effects: usize,
     errors: &mut Vec<Diagnostic>,
@@ -903,6 +904,7 @@ pub(super) fn validate(
         &visual.transitions,
         &visual.clips,
         "/visual",
+        assets,
         maximum_keyframes,
         maximum_effects,
         errors,
@@ -911,6 +913,7 @@ pub(super) fn validate(
         &visual.clips,
         "/visual/clips",
         0,
+        assets,
         maximum_keyframes,
         maximum_effects,
         errors,
@@ -921,33 +924,52 @@ fn validate_nested_groups(
     clips: &[crate::project::Clip],
     path: &str,
     group_depth: usize,
+    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes: usize,
     maximum_effects: usize,
     errors: &mut Vec<Diagnostic>,
 ) {
     for (index, clip) in clips.iter().enumerate() {
-        if let crate::project::VisualSource::Group(group) = &clip.source {
-            let child_depth = group_depth.saturating_add(1);
-            if child_depth > super::visual::MAX_GROUP_NESTING_DEPTH {
-                continue;
+        let sources = std::iter::once((&clip.source, format!("{path}/{index}/source"))).chain(
+            clip.masks
+                .iter()
+                .enumerate()
+                .filter_map(|(mask_index, mask)| {
+                    if let crate::project::MaskInput::Source { source, .. } = &mask.input {
+                        Some((
+                            source.as_ref(),
+                            format!("{path}/{index}/masks/{mask_index}/input/source"),
+                        ))
+                    } else {
+                        None
+                    }
+                }),
+        );
+        for (source, source_path) in sources {
+            if let crate::project::VisualSource::Group(group) = source {
+                let child_depth = group_depth.saturating_add(1);
+                if child_depth > super::visual::MAX_GROUP_NESTING_DEPTH {
+                    continue;
+                }
+                validate_scope(
+                    &group.transitions,
+                    &group.clips,
+                    &source_path,
+                    assets,
+                    maximum_keyframes,
+                    maximum_effects,
+                    errors,
+                );
+                validate_nested_groups(
+                    &group.clips,
+                    &format!("{source_path}/clips"),
+                    child_depth,
+                    assets,
+                    maximum_keyframes,
+                    maximum_effects,
+                    errors,
+                );
             }
-            let source_path = format!("{path}/{index}/source");
-            validate_scope(
-                &group.transitions,
-                &group.clips,
-                &source_path,
-                maximum_keyframes,
-                maximum_effects,
-                errors,
-            );
-            validate_nested_groups(
-                &group.clips,
-                &format!("{source_path}/clips"),
-                child_depth,
-                maximum_keyframes,
-                maximum_effects,
-                errors,
-            );
         }
     }
 }
@@ -956,6 +978,7 @@ fn validate_scope(
     placements: &[crate::project::TransitionPlacement],
     scope_clips: &[crate::project::Clip],
     scope_path: &str,
+    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes: usize,
     maximum_effects: usize,
     errors: &mut Vec<Diagnostic>,
@@ -982,6 +1005,14 @@ fn validate_scope(
                 &placement.definition.incoming,
             ),
         ] {
+            for (effect_index, effect) in presentation.effects.iter().enumerate() {
+                super::effects::validate_assets(
+                    effect,
+                    assets,
+                    &format!("{path}/definition/{name}/effects/{effect_index}"),
+                    errors,
+                );
+            }
             if let Some(clip) = clips.get(endpoint.as_str()) {
                 let authored_count = clip.effects.len();
                 let transition_count = presentation.effects.len();

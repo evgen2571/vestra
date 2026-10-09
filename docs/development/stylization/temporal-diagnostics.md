@@ -84,3 +84,8 @@ compares actual CPU/WGPU output, and records persistent, working, effect,
 parameter and readback byte estimates. Estimates exclude driver metadata and
 device texture padding. The test is correctness/resource validation; PNG saving
 and debug builds make its elapsed time unsuitable as a performance benchmark.
+
+To isolate CRT curvature at sub-byte transparent border coverage, run
+`gpu_stylization_crt_1080p_and_4k_transparent_border_parity` with the same
+ignored-test flags. This reuses the full-resolution fixtures and raw RGBA
+comparison, including RGB values in pixels whose alpha rounds to zero.

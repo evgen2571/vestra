@@ -340,7 +340,7 @@ fn noise(x: u32, y: u32, seed: u32, phase: f32) -> f32 {
     let h = hash(x.wrapping_mul(374761393) ^ y.wrapping_mul(668265263) ^ seed);
     let a = (h & 65535) as f32 / 32767.5 - 1.0;
     let b = (h >> 16) as f32 / 32767.5 - 1.0;
-    a * phase.cos() + b * phase.sin()
+    a.mul_add(phase.cos(), b * phase.sin())
 }
 pub(super) fn crt(source: &RgbaImage, target: &mut RgbaImage, operation: EffectOperation) {
     let EffectOperation::Crt {
@@ -363,15 +363,12 @@ pub(super) fn crt(source: &RgbaImage, target: &mut RgbaImage, operation: EffectO
     };
     let phase = phase as f32;
     let seed = (seed as u32) ^ ((seed >> 32) as u32);
+    let sampling = crate::crt::Sampling::new(curvature, jitter, seed, phase);
     let width = source.width() as f32;
     let height = source.height() as f32;
     for (x, y, out) in target.enumerate_pixels_mut() {
         let original = rgba(*source.get_pixel(x, y));
-        let nx = (x as f32 + 0.5) / width * 2.0 - 1.0;
-        let ny = (y as f32 + 0.5) / height * 2.0 - 1.0;
-        let sx = (nx * (1.0 + curvature as f32 * ny * ny) + 1.0) * width / 2.0
-            + jitter as f32 * noise(0, y / 4, seed, phase);
-        let sy = (ny * (1.0 + curvature as f32 * nx * nx) + 1.0) * height / 2.0;
+        let [sx, sy] = sampling.position(x, y, source.width(), source.height());
         let edge = (sx.min(width - sx).min(sy.min(height - sy)) + 0.5).clamp(0.0, 1.0);
         let mut screen = sample(source, sx, sy);
         screen[3] *= edge;
@@ -395,6 +392,11 @@ pub(super) fn crt(source: &RgbaImage, target: &mut RgbaImage, operation: EffectO
             *v = (*v * light * mask + n).clamp(0.0, 1.0);
         }
         *out = bytes(mix(original, screen, amount as f32));
+        // Curvature can leave sub-byte coverage; match transparent compositing
+        // after alpha quantization instead of retaining invisible straight RGB.
+        if out[3] == 0 {
+            *out = Rgba([0; 4]);
+        }
     }
 }
 
@@ -471,6 +473,32 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn crt_clears_colour_when_curved_edge_alpha_rounds_to_zero() {
+        let source = RgbaImage::from_pixel(6, 6, Rgba([60, 157, 79, 1]));
+        let mut target = source.clone();
+        crt(
+            &source,
+            &mut target,
+            EffectOperation::Crt {
+                amount: 1.0,
+                curvature: 0.4,
+                scanline_strength: 0.0,
+                scanline_spacing: 2.0,
+                mask_strength: 0.0,
+                mask_spacing: 1,
+                grain: 0.0,
+                jitter: 0.0,
+                flicker: 0.0,
+                rolling_strength: 0.0,
+                rolling_width: 0.12,
+                phase: 0.0,
+                seed: 0,
+            },
+        );
+        assert_eq!(*target.get_pixel(0, 0), Rgba([0; 4]));
+        assert_eq!(*target.get_pixel(1, 1), *source.get_pixel(1, 1));
     }
     #[test]
     fn default_scanline_spacing_alternates_and_one_pixel_spacing_is_filtered() {

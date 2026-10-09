@@ -267,10 +267,10 @@ pub(in crate::wgpu) fn effect_parameters(
                 rolling_strength as f32,
                 rolling_width as f32,
                 phase as f32,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
+                (curvature as f32 * 32768.0).round(),
+                (jitter as f32 * 256.0).round(),
+                ((phase as f32).sin() * 32768.0).round(),
+                ((phase as f32).cos() * 32768.0).round(),
                 0.0,
             ];
             p.flags = [

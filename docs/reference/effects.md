@@ -126,9 +126,13 @@ without a GPU readback or whole-frame staging allocation.
 (0.01–1 of canvas height), `phase=0` (finite cycles), `period=None`
 (optional positive finite seconds), and `seed=0` (unsigned 64-bit integer).
 All numeric controls except mask spacing, period and seed are bindable.
-Inverse-curvature sampling is alpha-aware; antialiased borders may become
-transparent. Scanlines are pixel-footprint integrated and anchored at the first
-output-row center. Phosphor masks are fixed output-pixel stripes. Grain/jitter
+Inverse-curvature sampling is alpha-aware. CPU and WGPU use shared Q15
+normalized coordinates and curvature, then a 1/256-pixel sampling lattice.
+Zero curvature preserves exact pixel centers; jitter coefficients are prepared
+once per frame. Integer arithmetic stays bounded at the 8192-pixel canvas limit. Antialiased borders may become transparent; pixels whose final byte
+alpha is zero have zero RGB. Scanlines are pixel-footprint integrated and
+anchored at the first output-row center. Phosphor masks are fixed output-pixel
+stripes. Grain/jitter
 use fixed seeded sine/cosine coefficients, continuous owner-local time and no
 frame counter. `period` repeats the procedural component, independently of the
 source, audio or other animation. Modulo phase evaluation supports negative or

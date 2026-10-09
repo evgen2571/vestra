@@ -1588,3 +1588,39 @@ fn validation_rejects_kernel_pass_mismatch() {
         "WGPU-FRAME-PLAN"
     );
 }
+
+#[test]
+fn source_matte_restores_single_pass_effect_and_mask_into_effect_b() {
+    let mut frame = static_frame();
+    let mut matte = frame.layers[0].clone();
+    matte.compiled_layer_index = 4;
+    matte.visible = false;
+    let transform = frame.layers[0].transform;
+    frame.layers[0].effects = vec![EvaluatedEffect::Brightness { amount: 0.1 }];
+    frame.layers[0]
+        .masks
+        .push(vestra_core::plan::EvaluatedMask {
+            input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
+            operation: crate::project::MaskOperation::Intersect,
+            invert: false,
+            strength: 1.0,
+            feather: 0.0,
+            transform,
+        });
+    frame.layers[0].matte = Some(vestra_core::plan::EvaluatedTrackMatte {
+        source_layer_identity: 4,
+        mode: crate::project::MatteMode::Alpha,
+        invert: false,
+    });
+    frame.layers.push(matte);
+    let plan = GpuFramePlan::build(&frame);
+    assert!(plan.operations.iter().any(|operation| matches!(
+        operation,
+        GpuOperation::CopyForEffect {
+            destination: TextureSlot::EffectB,
+            ..
+        }
+    )));
+    plan.validate(1)
+        .expect("restoring masked effect result into EffectB is valid");
+}

@@ -548,6 +548,7 @@ impl GpuFramePlan {
                         destination,
                         TextureSlot::Auxiliary
                             | TextureSlot::EffectA
+                            | TextureSlot::EffectB
                             | TextureSlot::Layer
                             | TextureSlot::GroupCanvasA(_)
                             | TextureSlot::GroupCanvasB(_)

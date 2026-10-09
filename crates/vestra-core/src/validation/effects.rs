@@ -538,6 +538,10 @@ pub(super) fn validate_parameters(
             }
         }
         crate::project::Effect::PaletteMap {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             palette,
             stops,
             mode,
@@ -547,6 +551,30 @@ pub(super) fn validate_parameters(
             period,
             ..
         } => {
+            track(
+                input_exposure,
+                "input_exposure",
+                ScalarPropertyTarget::PaletteMapInputExposure,
+                errors,
+            );
+            track(
+                input_gamma,
+                "input_gamma",
+                ScalarPropertyTarget::PaletteMapInputGamma,
+                errors,
+            );
+            track(
+                input_detail,
+                "input_detail",
+                ScalarPropertyTarget::PaletteMapInputDetail,
+                errors,
+            );
+            track(
+                input_detail_radius,
+                "input_detail_radius",
+                ScalarPropertyTarget::PaletteMapInputDetailRadius,
+                errors,
+            );
             validate_palette(palette, *period, path, errors);
             validate_channel_levels(*levels, path, errors);
             validate_palette_stops(stops.as_deref(), palette.len(), *mode, path, errors);
@@ -564,6 +592,10 @@ pub(super) fn validate_parameters(
             );
         }
         crate::project::Effect::OrderedDither {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             palette,
             stops,
             mode,
@@ -575,6 +607,30 @@ pub(super) fn validate_parameters(
             scale,
             ..
         } => {
+            track(
+                input_exposure,
+                "input_exposure",
+                ScalarPropertyTarget::OrderedDitherInputExposure,
+                errors,
+            );
+            track(
+                input_gamma,
+                "input_gamma",
+                ScalarPropertyTarget::OrderedDitherInputGamma,
+                errors,
+            );
+            track(
+                input_detail,
+                "input_detail",
+                ScalarPropertyTarget::OrderedDitherInputDetail,
+                errors,
+            );
+            track(
+                input_detail_radius,
+                "input_detail_radius",
+                ScalarPropertyTarget::OrderedDitherInputDetailRadius,
+                errors,
+            );
             validate_palette(palette, *period, path, errors);
             validate_channel_levels(*levels, path, errors);
             validate_palette_stops(stops.as_deref(), palette.len(), *mode, path, errors);

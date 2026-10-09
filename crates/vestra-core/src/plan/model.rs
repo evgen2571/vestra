@@ -420,6 +420,10 @@ pub enum CompiledEffect {
     },
     PaletteMap {
         interpolation: crate::project::PaletteInterpolation,
+        input_exposure: CompiledScalarProperty,
+        input_gamma: CompiledScalarProperty,
+        input_detail: CompiledScalarProperty,
+        input_detail_radius: CompiledScalarProperty,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         mode: crate::project::PaletteMode,
@@ -430,6 +434,10 @@ pub enum CompiledEffect {
     },
     OrderedDither {
         interpolation: crate::project::PaletteInterpolation,
+        input_exposure: CompiledScalarProperty,
+        input_gamma: CompiledScalarProperty,
+        input_detail: CompiledScalarProperty,
+        input_detail_radius: CompiledScalarProperty,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         mode: crate::project::PaletteMode,
@@ -658,16 +666,48 @@ impl CompiledEffect {
                 visit(ScalarPropertyTarget::CrtRollingWidth, rolling_width);
                 visit(ScalarPropertyTarget::CrtPhase, phase);
             }
-            Self::PaletteMap { amount, phase, .. } => {
+            Self::PaletteMap {
+                input_exposure,
+                input_gamma,
+                input_detail,
+                input_detail_radius,
+                amount,
+                phase,
+                ..
+            } => {
+                visit(
+                    ScalarPropertyTarget::PaletteMapInputExposure,
+                    input_exposure,
+                );
+                visit(ScalarPropertyTarget::PaletteMapInputGamma, input_gamma);
+                visit(ScalarPropertyTarget::PaletteMapInputDetail, input_detail);
+                visit(
+                    ScalarPropertyTarget::PaletteMapInputDetailRadius,
+                    input_detail_radius,
+                );
                 visit(ScalarPropertyTarget::PaletteMapAmount, amount);
                 visit(ScalarPropertyTarget::PaletteMapPhase, phase);
             }
             Self::OrderedDither {
+                input_exposure,
+                input_gamma,
+                input_detail,
+                input_detail_radius,
                 amount,
                 phase,
                 strength,
                 ..
             } => {
+                visit(
+                    ScalarPropertyTarget::OrderedDitherInputExposure,
+                    input_exposure,
+                );
+                visit(ScalarPropertyTarget::OrderedDitherInputGamma, input_gamma);
+                visit(ScalarPropertyTarget::OrderedDitherInputDetail, input_detail);
+                visit(
+                    ScalarPropertyTarget::OrderedDitherInputDetailRadius,
+                    input_detail_radius,
+                );
                 visit(ScalarPropertyTarget::OrderedDitherAmount, amount);
                 visit(ScalarPropertyTarget::OrderedDitherPhase, phase);
                 visit(ScalarPropertyTarget::OrderedDitherStrength, strength);
@@ -821,7 +861,28 @@ impl CompiledEffect {
     /// Conservative logical pass count before effect tracks are evaluated.
     #[must_use]
     pub const fn estimated_pass_count(&self) -> usize {
-        self.definition().estimated_pass_count
+        match self {
+            Self::PaletteMap {
+                input_exposure,
+                input_gamma,
+                input_detail,
+                input_detail_radius,
+                ..
+            }
+            | Self::OrderedDither {
+                input_exposure,
+                input_gamma,
+                input_detail,
+                input_detail_radius,
+                ..
+            } => super::effect_passes::compiled_palette_input_pass_count(
+                input_exposure,
+                input_gamma,
+                input_detail,
+                input_detail_radius,
+            ),
+            _ => self.definition().estimated_pass_count,
+        }
     }
 }
 

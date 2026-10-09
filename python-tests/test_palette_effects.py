@@ -126,6 +126,8 @@ def test_scalar_animation_and_signals_survive_high_level_lowering(name):
     effect.amount.keyframe(0.5, 0.25)
     effect.phase.keyframe(1, 0.5)
     effect.phase.bind(project.audio.signal.rms(), operation="add")
+    effect.input_exposure.bind(project.audio.signal.rms(), operation="add")
+    effect.input_gamma.bind(project.audio.signal.rms(), operation="multiply")
     if name == "OrderedDither":
         effect.strength.keyframe(1, 0.75)
         effect.strength.bind(project.audio.signal.rms(), operation="multiply")
@@ -134,6 +136,8 @@ def test_scalar_animation_and_signals_survive_high_level_lowering(name):
     assert data["amount"]["keyframes"][0]["value"] == 0.25
     assert data["phase"]["keyframes"][0]["value"] == 0.5
     assert data["phase"]["modifiers"][0]["operation"] == "add"
+    assert data["input_exposure"]["modifiers"][0]["operation"] == "add"
+    assert data["input_gamma"]["modifiers"][0]["operation"] == "multiply"
     if name == "OrderedDither":
         assert data["strength"]["modifiers"][0]["operation"] == "multiply"
     effect.amount.value = 0.8
@@ -463,3 +467,80 @@ def test_advanced_interpolation_control_is_editable_and_validates(factory):
     assert effect.to_canonical()["interpolation"] == "rgb"
     with pytest.raises(ValueError):
         effect.interpolation = "hsv"
+
+
+@pytest.mark.parametrize("name", ["PaletteMap", "OrderedDither"])
+def test_input_tone_changes_quantization_and_preserves_original_blend(name):
+    project = vestra.Project(size=(4, 4), fps=2, duration=2)
+    layer = project.root.add(vestra.sources.Color("#404040"), duration=2)
+    options = {"mode": "nearest"}
+    if name == "OrderedDither":
+        options["strength"] = 0
+    effect = layer.effects.add(effect_class(name)(amount=0.5, input_exposure=1, **options))
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes([160, 160, 160, 255]) * 16
+    effect.input_exposure = 0
+    effect.input_gamma.keyframe(0, 1)
+    effect.input_gamma.keyframe(1, 2)
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes([32, 32, 32, 255]) * 16
+    assert project.render_frame(1, backend="cpu").to_bytes() == bytes([160, 160, 160, 255]) * 16
+    effect.amount = 0
+    assert project.render_frame(1, backend="cpu").to_bytes() == bytes([64, 64, 64, 255]) * 16
+    for invalid in (0, -1, 9, float("nan")):
+        with pytest.raises(ValueError):
+            effect.input_gamma = invalid
+    for invalid in (-9, 9, float("inf")):
+        with pytest.raises(ValueError):
+            effect.input_exposure = invalid
+
+
+@pytest.mark.parametrize("kind", ["palette_map", "ordered_dither"])
+def test_generic_and_advanced_input_tone_defaults_are_canonical_tracks(kind):
+    builder = ProjectBuilder(width=4, height=4, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4", duration=1)
+    builder.add_solid_color_clip(colour="#404040", start=0, duration=1, layer=0)
+    parameters = dict(palette=["#000000", "#ffffff"], amount=1, phase=0)
+    if kind == "ordered_dither":
+        parameters.update(strength=1, scale=1)
+    generic = builder.post_effects.add_effect(kind, **parameters)
+    assert generic.to_canonical()["input_gamma"]["base_value"] == 1
+    assert generic.to_canonical()["input_exposure"]["base_value"] == 0
+    typed = getattr(builder.post_effects, "add_" + kind)(input_gamma=2, input_exposure=0.5)
+    assert typed.input_gamma.base_value == 2
+    assert typed.input_exposure.base_value == 0.5
+    assert builder.validate().is_valid
+
+
+@pytest.mark.parametrize("name", ["PaletteMap", "OrderedDither"])
+def test_input_detail_controls_are_bindable_editable_and_bounded(name):
+    project = vestra.Project(size=(4, 4), fps=2, duration=2)
+    layer = project.root.add(vestra.sources.Color("#808080"), duration=2)
+    effect = layer.effects.add(effect_class(name)(input_detail=1.5, input_detail_radius=4))
+    effect.input_detail.keyframe(1, 0.5)
+    effect.input_detail_radius.bind(project.audio.signal.rms(), operation="add")
+    data = project.snapshot().to_dict()["visual"]["clips"][0]["effects"][0]
+    assert data["input_detail"]["keyframes"][0]["value"] == 0.5
+    assert data["input_detail_radius"]["modifiers"][0]["operation"] == "add"
+    for invalid in (-1, 4.1, float("nan")):
+        with pytest.raises(ValueError):
+            effect.input_detail = invalid
+    for invalid in (-1, 16.1, float("inf")):
+        with pytest.raises(ValueError):
+            effect.input_detail_radius = invalid
+    effect.input_detail = 0
+    effect.input_detail_radius = 0
+    assert effect.to_canonical()["input_detail"]["base_value"] == 0
+
+
+@pytest.mark.parametrize("kind", ["palette_map", "ordered_dither"])
+def test_advanced_input_detail_tracks_match_generic_defaults(kind):
+    builder = ProjectBuilder(width=4, height=4, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4", duration=1)
+    builder.add_solid_color_clip(colour="#808080", start=0, duration=1, layer=0)
+    typed = getattr(builder.post_effects, "add_" + kind)(input_detail=1.5, input_detail_radius=8)
+    assert typed.input_detail.base_value == 1.5
+    assert typed.input_detail_radius.base_value == 8
+    typed.input_detail.keyframe(time=0.5, value=0)
+    assert builder.validate().is_valid
+    parameters = dict(palette=["#000000", "#ffffff"], amount=1, phase=0)
+    if kind == "ordered_dither": parameters.update(strength=1, scale=1)
+    generic = builder.post_effects.add_effect(kind, **parameters)
+    assert generic.to_canonical()["input_detail"]["base_value"] == 0
+    assert generic.to_canonical()["input_detail_radius"]["base_value"] == 1

@@ -55,6 +55,10 @@ pub enum EvaluatedEffect {
     },
     PaletteMap {
         interpolation: crate::project::PaletteInterpolation,
+        input_exposure: f64,
+        input_gamma: f64,
+        input_detail: f64,
+        input_detail_radius: f64,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
@@ -63,6 +67,10 @@ pub enum EvaluatedEffect {
     },
     OrderedDither {
         interpolation: crate::project::PaletteInterpolation,
+        input_exposure: f64,
+        input_gamma: f64,
+        input_detail: f64,
+        input_detail_radius: f64,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
@@ -350,6 +358,10 @@ pub fn evaluate(
             seed: *seed,
         },
         CompiledEffect::PaletteMap {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             interpolation,
             stops,
             palette,
@@ -359,6 +371,14 @@ pub fn evaluate(
             phase,
             period,
         } => EvaluatedEffect::PaletteMap {
+            input_exposure: input_exposure.evaluate(authored_time, project_time, context)?,
+            input_gamma: input_gamma.evaluate(authored_time, project_time, context)?,
+            input_detail: input_detail.evaluate(authored_time, project_time, context)?,
+            input_detail_radius: input_detail_radius.evaluate(
+                authored_time,
+                project_time,
+                context,
+            )?,
             interpolation: *interpolation,
             stops: *stops,
             palette: crate::stylization::evaluate_palette(
@@ -374,6 +394,10 @@ pub fn evaluate(
             levels: *levels,
         },
         CompiledEffect::OrderedDither {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             interpolation,
             stops,
             palette,
@@ -387,6 +411,14 @@ pub fn evaluate(
             scale,
             seed,
         } => EvaluatedEffect::OrderedDither {
+            input_exposure: input_exposure.evaluate(authored_time, project_time, context)?,
+            input_gamma: input_gamma.evaluate(authored_time, project_time, context)?,
+            input_detail: input_detail.evaluate(authored_time, project_time, context)?,
+            input_detail_radius: input_detail_radius.evaluate(
+                authored_time,
+                project_time,
+                context,
+            )?,
             interpolation: *interpolation,
             stops: *stops,
             palette: crate::stylization::evaluate_palette(
@@ -655,6 +687,10 @@ mod tests {
             PreparedScalarSignal::new(10_000_000_000, 1_000_000_000, vec![0.0, 0.0, 0.25]).unwrap(),
         ]);
         let effect = CompiledEffect::PaletteMap {
+            input_exposure: crate::plan::CompiledScalarProperty::authored(Track::new(0.0)),
+            input_gamma: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
+            input_detail: crate::plan::CompiledScalarProperty::authored(Track::new(0.0)),
+            input_detail_radius: crate::plan::CompiledScalarProperty::authored(Track::new(1.0)),
             interpolation: crate::project::PaletteInterpolation::Rgb,
             stops: None,
             palette: crate::stylization::compile_palette(&[

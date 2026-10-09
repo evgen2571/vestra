@@ -102,6 +102,14 @@ pub enum Effect {
         stops: Option<Vec<f64>>,
         #[serde(default)]
         interpolation: PaletteInterpolation,
+        #[serde(default = "default_input_exposure")]
+        input_exposure: ScalarProperty,
+        #[serde(default = "default_input_gamma")]
+        input_gamma: ScalarProperty,
+        #[serde(default = "default_input_detail")]
+        input_detail: ScalarProperty,
+        #[serde(default = "default_input_detail_radius")]
+        input_detail_radius: ScalarProperty,
         #[serde(default)]
         mode: PaletteMode,
         #[serde(default = "default_channel_levels")]
@@ -118,6 +126,14 @@ pub enum Effect {
         stops: Option<Vec<f64>>,
         #[serde(default)]
         interpolation: PaletteInterpolation,
+        #[serde(default = "default_input_exposure")]
+        input_exposure: ScalarProperty,
+        #[serde(default = "default_input_gamma")]
+        input_gamma: ScalarProperty,
+        #[serde(default = "default_input_detail")]
+        input_detail: ScalarProperty,
+        #[serde(default = "default_input_detail_radius")]
+        input_detail_radius: ScalarProperty,
         #[serde(default = "default_dither_palette_mode")]
         mode: PaletteMode,
         #[serde(default = "default_channel_levels")]
@@ -438,4 +454,18 @@ pub enum AsciiColorMode {
     Source,
     Palette,
     Rainbow,
+}
+
+fn default_input_exposure() -> ScalarProperty {
+    Track::constant(0.0).into()
+}
+fn default_input_gamma() -> ScalarProperty {
+    Track::constant(1.0).into()
+}
+
+fn default_input_detail() -> ScalarProperty {
+    Track::constant(0.0).into()
+}
+fn default_input_detail_radius() -> ScalarProperty {
+    Track::constant(1.0).into()
 }

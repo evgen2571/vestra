@@ -21,12 +21,18 @@ fn composite(mode: CompositeMode, amount: f64) -> EffectPass {
 fn liveness_allocator_keeps_simultaneous_temporaries_in_distinct_slots() {
     let passes = [
         pass(
-            EffectOperation::GaussianHorizontal { radius: 1.0 },
+            EffectOperation::GaussianHorizontal {
+                integer: false,
+                radius: 1.0,
+            },
             EffectResource::Current,
             EffectResource::Temporary0,
         ),
         pass(
-            EffectOperation::GaussianVertical { radius: 1.0 },
+            EffectOperation::GaussianVertical {
+                integer: false,
+                radius: 1.0,
+            },
             EffectResource::Current,
             EffectResource::Temporary1,
         ),
@@ -80,7 +86,10 @@ fn liveness_allocator_preserves_original_while_later_pass_reads_it() {
             EffectResource::Temporary0,
         ),
         pass(
-            EffectOperation::GaussianVertical { radius: 1.0 },
+            EffectOperation::GaussianVertical {
+                integer: false,
+                radius: 1.0,
+            },
             EffectResource::Temporary0,
             EffectResource::Temporary1,
         ),
@@ -970,12 +979,18 @@ fn effect_operation(
 fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
     let gaussian = [
         pass(
-            EffectOperation::GaussianHorizontal { radius: 2.0 },
+            EffectOperation::GaussianHorizontal {
+                integer: false,
+                radius: 2.0,
+            },
             EffectResource::Current,
             EffectResource::Temporary0,
         ),
         pass(
-            EffectOperation::GaussianVertical { radius: 2.0 },
+            EffectOperation::GaussianVertical {
+                integer: false,
+                radius: 2.0,
+            },
             EffectResource::Temporary0,
             EffectResource::Current,
         ),
@@ -1044,7 +1059,10 @@ fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
     assert_eq!(
         *actual,
         pass(
-            EffectOperation::GaussianHorizontal { radius: 2.0 },
+            EffectOperation::GaussianHorizontal {
+                integer: false,
+                radius: 2.0
+            },
             EffectResource::Current,
             EffectResource::Temporary0
         )
@@ -1120,12 +1138,18 @@ fn multipass_effects_keep_pass_identity_and_alternate_effect_slots() {
                 EffectResource::Temporary0,
             ),
             pass(
-                EffectOperation::GaussianHorizontal { radius: 3.0 },
+                EffectOperation::GaussianHorizontal {
+                    integer: false,
+                    radius: 3.0,
+                },
                 EffectResource::Temporary0,
                 EffectResource::Temporary1,
             ),
             pass(
-                EffectOperation::GaussianVertical { radius: 3.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 3.0,
+                },
                 EffectResource::Temporary1,
                 EffectResource::Temporary0,
             ),
@@ -1133,12 +1157,18 @@ fn multipass_effects_keep_pass_identity_and_alternate_effect_slots() {
         ],
         vec![
             pass(
-                EffectOperation::GaussianHorizontal { radius: 2.0 },
+                EffectOperation::GaussianHorizontal {
+                    integer: false,
+                    radius: 2.0,
+                },
                 EffectResource::Original,
                 EffectResource::Temporary0,
             ),
             pass(
-                EffectOperation::GaussianVertical { radius: 2.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 2.0,
+                },
                 EffectResource::Temporary0,
                 EffectResource::Temporary1,
             ),

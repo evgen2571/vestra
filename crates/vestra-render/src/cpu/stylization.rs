@@ -12,6 +12,7 @@ use vestra_core::{
 )]
 pub(super) fn palette_map(
     source: &RgbaImage,
+    analysis: Option<&RgbaImage>,
     target: &mut RgbaImage,
     palette: &EvaluatedPalette,
     stops: Option<&[u16; 16]>,
@@ -34,9 +35,13 @@ pub(super) fn palette_map(
     });
     let last = palette.len - 1;
     let amount = (amount * 65535.0).round() as u32;
-    for (input, output) in source.pixels().zip(target.pixels_mut()) {
-        if input[3] == 0 {
-            *output = *input;
+    for ((base, input), output) in source
+        .pixels()
+        .zip(analysis.unwrap_or(source).pixels())
+        .zip(target.pixels_mut())
+    {
+        if base[3] == 0 {
+            *output = *base;
             continue;
         }
         let position = luminance_key(input.0) * last;
@@ -79,7 +84,7 @@ pub(super) fn palette_map(
                 interpolation,
             )
         };
-        output.0 = mix_rgb(input.0, colour, amount);
+        output.0 = mix_rgb(base.0, colour, amount);
     }
 }
 
@@ -119,6 +124,7 @@ fn gradient_colour(
 )]
 pub(super) fn ordered_dither(
     source: &RgbaImage,
+    analysis: Option<&RgbaImage>,
     target: &mut RgbaImage,
     palette: &EvaluatedPalette,
     stops: Option<&[u16; 16]>,
@@ -143,9 +149,14 @@ pub(super) fn ordered_dither(
         .map(|p| vestra_core::stylization::chromatic_features(p, mode));
     let last = palette.len - 1;
     let width = source.width();
-    for (index, (input, output)) in source.pixels().zip(target.pixels_mut()).enumerate() {
-        if input[3] == 0 {
-            *output = *input;
+    for (index, ((base, input), output)) in source
+        .pixels()
+        .zip(analysis.unwrap_or(source).pixels())
+        .zip(target.pixels_mut())
+        .enumerate()
+    {
+        if base[3] == 0 {
+            *output = *base;
             continue;
         }
         let x = index as u32 % width / scale;
@@ -205,7 +216,7 @@ pub(super) fn ordered_dither(
         } else {
             palette.colours[selected]
         };
-        output.0 = mix_rgb(input.0, colour, amount);
+        output.0 = mix_rgb(base.0, colour, amount);
     }
 }
 
@@ -314,6 +325,56 @@ mod tests {
     use image::Rgba;
 
     #[test]
+    fn prepared_input_keeps_original_rgb_and_hidden_alpha_for_blending() {
+        let mut palette = EvaluatedPalette {
+            colours: [[0, 0, 0, 255]; 16],
+            len: 2,
+        };
+        palette.colours[1] = [255; 4];
+        let source = RgbaImage::from_fn(2, 1, |x, _| {
+            if x == 0 {
+                Rgba([64, 64, 64, 128])
+            } else {
+                Rgba([27, 39, 51, 0])
+            }
+        });
+        let mut analysis = source.clone();
+        super::super::colour_adjust::apply(&source, &mut analysis, 1.0, 1.0, 0.0, 1.0);
+        for dither in [false, true] {
+            let mut output = source.clone();
+            if dither {
+                ordered_dither(
+                    &source,
+                    Some(&analysis),
+                    &mut output,
+                    &palette,
+                    None,
+                    0.5,
+                    0.0,
+                    DitherMatrix::BlueNoise,
+                    1,
+                    0,
+                    PaletteMode::Nearest,
+                    4,
+                );
+            } else {
+                palette_map(
+                    &source,
+                    Some(&analysis),
+                    &mut output,
+                    &palette,
+                    None,
+                    0.5,
+                    PaletteMode::Nearest,
+                    4,
+                    vestra_core::project::PaletteInterpolation::Rgb,
+                );
+            }
+            assert_eq!(output.as_raw(), &[160, 160, 160, 128, 27, 39, 51, 0]);
+        }
+    }
+
+    #[test]
     fn oklab_gradient_preserves_partial_and_hidden_alpha() {
         let mut palette = EvaluatedPalette {
             colours: [[0, 0, 0, 255]; 16],
@@ -332,6 +393,7 @@ mod tests {
         let mut output = source.clone();
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             Some(&stops),
@@ -348,6 +410,7 @@ mod tests {
         );
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             Some(&stops),
@@ -373,6 +436,7 @@ mod tests {
         let mut output = source.clone();
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             Some(&stops),
@@ -384,6 +448,7 @@ mod tests {
         assert!(output.pixels().all(|p| p.0 == [128, 0, 0, 128]));
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             Some(&stops),
@@ -401,6 +466,7 @@ mod tests {
         ] {
             ordered_dither(
                 &source,
+                None,
                 &mut output,
                 &palette,
                 Some(&stops),
@@ -420,6 +486,7 @@ mod tests {
             );
             ordered_dither(
                 &source,
+                None,
                 &mut output,
                 &palette,
                 Some(&stops),
@@ -440,6 +507,7 @@ mod tests {
         let mut output = source.clone();
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             Some(&stops),
@@ -456,6 +524,7 @@ mod tests {
         let mut output = source.clone();
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             Some(&stops),
@@ -485,6 +554,7 @@ mod tests {
         let mut output = source.clone();
         palette_map(
             &source,
+            None,
             &mut output,
             &palette,
             None,
@@ -496,6 +566,7 @@ mod tests {
         assert_eq!(source, output);
         ordered_dither(
             &source,
+            None,
             &mut output,
             &palette,
             None,
@@ -520,6 +591,7 @@ mod tests {
         let mut output = source.clone();
         ordered_dither(
             &source,
+            None,
             &mut output,
             &palette,
             None,
@@ -538,6 +610,7 @@ mod tests {
         assert!(output.pixels().all(|p| p[3] == 128));
         ordered_dither(
             &source,
+            None,
             &mut output,
             &palette,
             None,
@@ -553,6 +626,7 @@ mod tests {
         for strength in [0.0, 0.5, 1.0] {
             ordered_dither(
                 &source,
+                None,
                 &mut output,
                 &palette,
                 None,
@@ -569,6 +643,7 @@ mod tests {
         let hidden = RgbaImage::from_pixel(32, 32, Rgba([37, 92, 154, 0]));
         ordered_dither(
             &hidden,
+            None,
             &mut output,
             &palette,
             None,
@@ -595,6 +670,7 @@ mod tests {
             let mut output = source.clone();
             palette_map(
                 &source,
+                None,
                 &mut output,
                 &palette,
                 None,
@@ -607,6 +683,7 @@ mod tests {
             for strength in [0.0, 1.0] {
                 ordered_dither(
                     &source,
+                    None,
                     &mut output,
                     &palette,
                     None,
@@ -627,6 +704,7 @@ mod tests {
             let hidden = RgbaImage::from_pixel(32, 32, Rgba([37, 92, 154, 0]));
             palette_map(
                 &hidden,
+                None,
                 &mut output,
                 &palette,
                 None,
@@ -638,6 +716,7 @@ mod tests {
             assert_eq!(hidden, output);
             ordered_dither(
                 &hidden,
+                None,
                 &mut output,
                 &palette,
                 None,
@@ -678,6 +757,7 @@ mod tests {
             let mut output = source.clone();
             ordered_dither(
                 &source,
+                None,
                 &mut output,
                 &palette,
                 None,
@@ -699,6 +779,7 @@ mod tests {
         let mut output = source.clone();
         ordered_dither(
             &source,
+            None,
             &mut output,
             &palette,
             None,
@@ -731,6 +812,7 @@ mod tests {
             let mut b = source.clone();
             ordered_dither(
                 &source,
+                None,
                 &mut a,
                 &palette,
                 None,
@@ -744,6 +826,7 @@ mod tests {
             );
             ordered_dither(
                 &source,
+                None,
                 &mut b,
                 &palette,
                 None,

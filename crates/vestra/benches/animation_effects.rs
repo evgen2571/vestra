@@ -60,6 +60,9 @@ fn main() {
             | "channel_dither_video"
             | "oklab_dither_video"
             | "nonuniform_dither_video"
+            | "tone_dither_video"
+            | "detail_dither_video"
+            | "contrast_dither_video"
             | "ascii_video"
             | "halftone_video"
             | "sort_horizontal_video"
@@ -119,6 +122,9 @@ fn main() {
             | "channel_dither_video"
             | "oklab_dither_video"
             | "nonuniform_dither_video"
+            | "tone_dither_video"
+            | "detail_dither_video"
+            | "contrast_dither_video"
             | "ascii_video"
             | "halftone_video"
             | "sort_horizontal_video"
@@ -407,7 +413,10 @@ fn create_stylization_benchmark_project(
         | "hue_dither_video"
         | "channel_dither_video"
         | "oklab_dither_video"
-        | "nonuniform_dither_video" => {
+        | "nonuniform_dither_video"
+        | "tone_dither_video"
+        | "detail_dither_video"
+        | "contrast_dither_video" => {
             let mut effect = json!({
                 "id": "stylization",
                 "type": if matches!(scenario, "palette_video" | "oklab_palette_video") { "palette_map" } else { "ordered_dither" },
@@ -432,6 +441,9 @@ fn create_stylization_benchmark_project(
                         | "channel_dither_video"
                         | "oklab_dither_video"
                         | "nonuniform_dither_video"
+                        | "tone_dither_video"
+                        | "detail_dither_video"
+                        | "contrast_dither_video"
                 ) {
                     "blue_noise"
                 } else {
@@ -445,6 +457,9 @@ fn create_stylization_benchmark_project(
                         | "channel_dither_video"
                         | "oklab_dither_video"
                         | "nonuniform_dither_video"
+                        | "tone_dither_video"
+                        | "detail_dither_video"
+                        | "contrast_dither_video"
                 ) {
                     effect["seed"] = json!(37);
                 }
@@ -452,6 +467,18 @@ fn create_stylization_benchmark_project(
             }
             if scenario == "oklab_palette_video" {
                 effect["interpolation"] = json!("oklab");
+            }
+            if matches!(
+                scenario,
+                "tone_dither_video" | "detail_dither_video" | "contrast_dither_video"
+            ) {
+                effect["input_exposure"] = json!({"base_value": 0.5});
+                effect["input_gamma"] = json!({"base_value": 1.5});
+            }
+            if matches!(scenario, "detail_dither_video" | "contrast_dither_video") {
+                effect["input_detail"] = json!({"base_value": if scenario == "contrast_dither_video" { 0.5 } else { 1.5 }});
+                effect["input_detail_radius"] =
+                    json!({"base_value": if scenario == "contrast_dither_video" { 8 } else { 1 }});
             }
             if scenario == "nonuniform_dither_video" {
                 effect["stops"] = json!([0.0, 0.18, 0.55, 1.0]);

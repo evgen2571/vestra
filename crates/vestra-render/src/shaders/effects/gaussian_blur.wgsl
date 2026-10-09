@@ -1,10 +1,29 @@
 struct Params {
     canvas_width: u32, canvas_height: u32, _padding: vec2<u32>,
     radius: f32, direction: u32, _padding1: vec2<u32>,
+    weights: array<vec4<u32>, 9>,
 };
 @group(0) @binding(3) var<uniform> params: Params;
 
+fn integer_gaussian(coord: vec2<i32>) -> vec4<f32> {
+    var sum = vec4<u32>(0u);
+    for (var offset = -32; offset <= 32; offset += 1) {
+        let index = u32(abs(offset));
+        if (index > params._padding1.y) { continue; }
+        var step = vec2<i32>(0, offset);
+        if (params.direction == 0u) { step = vec2<i32>(offset, 0); }
+        let pixel = vec4<u32>(round(load_edge(source, coord + step) * 255.0));
+        let weight = params.weights[index / 4u][index % 4u];
+        sum += vec4<u32>(pixel.rgb * pixel.a, pixel.a) * weight;
+    }
+    if (sum.a == 0u) { return vec4<f32>(0.0); }
+    let rgb = (sum.rgb + vec3<u32>(sum.a / 2u)) / sum.a;
+    let alpha = (sum.a + 32768u) / 65536u;
+    return vec4<f32>(vec4<u32>(rgb, alpha)) / 255.0;
+}
+
 fn gaussian(coord: vec2<i32>) -> vec4<f32> {
+    if (params._padding1.x != 0u) { return integer_gaussian(coord); }
     let radius = clamp(params.radius, 0.0, 32.0);
     let support = i32(ceil(max(radius, 1.0)));
     let sigma = max(radius / 3.0, 0.5);

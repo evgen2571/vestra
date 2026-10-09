@@ -116,3 +116,9 @@ animation, encoder and frame count.
 Oklab gradient mapping with the existing periodic four-color palette video.
 Both use identical decode/encode settings; end-to-end results include output
 encoding cost and do not isolate inverse color-conversion shader cost.
+
+
+`input-tone-{smoke,1080p}` compares the same seeded blue-noise video with neutral
+input and with `input_exposure=0.5`, `input_gamma=1.5`. The active case includes
+its full-resolution `ColorAdjust` pass and retained source. These end-to-end
+measurements include decode/encode and output-dependent encoding cost.

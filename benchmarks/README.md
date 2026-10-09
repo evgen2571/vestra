@@ -56,6 +56,23 @@ The no-effects control reports its actual execution path, so use the recorded
 frame/decode/encode stages to interpret overhead rather than attributing all
 wall-time differences to shader execution.
 
+The complete suite uses that same footage and adds the canonical ASCII and halftone examples,
+horizontal and vertical bounded sorting, and seeded periodic CRT workloads. Effect settings come from the corresponding
+`examples/effects/` JSON, with procedural periods set to three seconds.
+The original three-workload suites retain their definitions for comparisons.
+
+```bash
+uv run --no-project python scripts/benchmark.py run --suite stylized-effects-smoke --backend cpu --output target/benchmark-results/effects-smoke
+uv run --no-project python scripts/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/effects-cpu
+VESTRA_WGPU_BACKEND=gl uv run --no-project python scripts/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/effects-hardware
+```
+
+Both complete suites contain eight workloads; resolution, warmups and samples
+match their three-workload counterparts. ASCII preparation includes its cached
+bundled atlas. All samples retain preparation, decode, frame, encoding and
+resource measurements. Keep sources unchanged during each suite and run
+workloads serially, without concurrent compilation or other benchmarks.
+
 For a 4K resource/correctness smoke check, use the built benchmark directly
 with `VESTRA_BENCH_WIDTH=3840`, `VESTRA_BENCH_HEIGHT=2160`,
 `VESTRA_BENCH_SCENARIO=dither_video`, `VESTRA_BENCH_WARMUPS=0`, and

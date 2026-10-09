@@ -57,7 +57,17 @@ fn generate(output: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 property
                     .as_object_mut()
                     .expect("descriptor default property is an object")
-                    .insert("default".into(), json!(default));
+                    .insert(
+                        "default".into(),
+                        if matches!(
+                            parameter.kind,
+                            EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack
+                        ) {
+                            json!({"base_value": default})
+                        } else {
+                            json!(default)
+                        },
+                    );
             }
             if parameter.required {
                 required.push(parameter.name);
@@ -359,6 +369,14 @@ mod tests {
         for id in ["palette_map", "ordered_dither"] {
             let branch = &schema["$defs"][format!("{id}_effect")];
             let properties = &branch["properties"];
+            assert_eq!(
+                properties["input_exposure"]["default"],
+                json!({"base_value": 0})
+            );
+            assert_eq!(
+                properties["input_gamma"]["default"],
+                json!({"base_value": 1})
+            );
             assert_eq!(properties["palette"]["minItems"], 2);
             assert_eq!(properties["palette"]["maxItems"], 16);
             assert_eq!(properties["period"]["exclusiveMinimum"], json!(0.0));

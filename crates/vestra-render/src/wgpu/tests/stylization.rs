@@ -19,6 +19,201 @@ const EMBER: [&str; 5] = ["#080508", "#351120", "#9e3341", "#efa463", "#fff1c5"]
 const OCEAN: [&str; 5] = ["#040b19", "#18324c", "#277d89", "#88c1bc", "#eef8d9"];
 const VIOLET: [&str; 5] = ["#090714", "#34234f", "#7d528a", "#ca95bd", "#f7eddf"];
 
+#[test]
+fn gpu_stylization_input_exposure_negative_stop_keeps_upward_half_byte_ties() {
+    let source = RgbaImage::from_fn(256, 4, |x, _| Rgba([x as u8, x as u8, x as u8, 128]));
+    let mut effect = palette(&MONO, "gradient");
+    effect["input_exposure"] = json!({"base_value": -1.0});
+    let name = "input-exposure-half-byte";
+    let Some(mut backends) = Backends::new(fixture(
+        name,
+        &source,
+        &project(256, 4, vec![image_clip(vec![])], vec![effect]),
+    )) else {
+        return;
+    };
+    let output = backends.render(name, 0, 0);
+    for x in 0..256 {
+        assert_eq!(
+            output.get_pixel(x, 0).0,
+            [
+                x.div_ceil(2) as u8,
+                x.div_ceil(2) as u8,
+                x.div_ceil(2) as u8,
+                128
+            ]
+        );
+    }
+}
+
+#[test]
+#[ignore = "explicit staged detail quantization rounding diagnostic"]
+fn gpu_stylization_input_detail_rounding_stages() {
+    let source = rich_source(320, 180);
+    let sharpen = json!({"type": "sharpen", "id": "detail", "amount": {"base_value": 1.5}, "radius": {"base_value": 1}});
+    let gamma = json!({"type": "color_adjust", "id": "tone", "exposure": {"base_value": 0}, "gamma": {"base_value": 1.5},
+        "black_point": {"base_value": 0}, "white_point": {"base_value": 1}});
+    let mut differences = Vec::new();
+    for (name, effects) in [
+        (
+            "blur",
+            vec![json!({"type": "gaussian_blur", "id": "blur", "radius": {"base_value": 1}})],
+        ),
+        (
+            "detail8",
+            vec![
+                json!({"type": "palette_map", "id": "detail", "palette": MONO, "mode": "gradient",
+            "amount": {"base_value": 1}, "phase": {"base_value": 0}, "input_detail": {"base_value": 0.5}, "input_detail_radius": {"base_value": 8}}),
+            ],
+        ),
+        ("sharpen", vec![sharpen.clone()]),
+        ("gamma", vec![gamma.clone()]),
+        ("sharpen-gamma", vec![sharpen, gamma]),
+    ] {
+        let name = format!("input-detail-stage-{name}");
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(320, 180, vec![image_clip(vec![])], effects),
+        )) else {
+            return;
+        };
+        let (_, _, difference) = backends.render_pair(&name, 0, 0);
+        eprintln!("DETAIL_STAGE {name} {difference:?}");
+        if difference.maximum_absolute_channel_error > 0 {
+            differences.push((name, difference));
+        }
+    }
+    assert!(
+        differences.is_empty(),
+        "detail rounding differences: {differences:?}"
+    );
+}
+
+#[test]
+fn gpu_stylization_input_detail_preserves_blend_source_and_scene_contrast() {
+    for (kind, mut effect) in [
+        ("map", palette(&MONO, "nearest")),
+        ("dither", dither(&MONO, "blue_noise", 1)),
+    ] {
+        effect["input_detail"] = json!({"base_value": 4.0});
+        effect["amount"] = json!({"base_value": 0.5});
+        if kind == "dither" {
+            effect["strength"] = json!({"base_value": 0.0});
+        }
+        let source = RgbaImage::from_fn(8, 8, |x, y| {
+            let value = if x == 4 && y == 4 { 127 } else { 96 };
+            Rgba([value, value, value, 128])
+        });
+        let name = format!("input-detail-original-{kind}");
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(8, 8, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        assert_eq!(
+            backends.render(&name, 0, 0).get_pixel(4, 4).0,
+            [191, 191, 191, 128]
+        );
+    }
+    let source = rich_source(320, 180);
+    for colours in [&MONO_FIVE[..], &EMBER[..], &OCEAN[..]] {
+        for (radius, detail) in [(1.0, 1.5), (8.0, 0.5)] {
+            for (kind, mut effect) in [
+                ("map", palette(colours, "gradient")),
+                ("bayer", dither(colours, "bayer8", 1)),
+                ("blue", dither(colours, "blue_noise", 1)),
+            ] {
+                effect["input_detail"] = json!({"base_value": 0.0, "keyframes": [
+                    {"time": 0.0, "value": 0.0, "interpolation": "linear"},
+                    {"time": 2.0, "value": detail, "interpolation": "linear"}]});
+                effect["input_detail_radius"] = json!({"base_value": radius});
+                effect["input_gamma"] = json!({"base_value": 1.5});
+                let name = format!("input-detail-{kind}-{radius}-{}", colours[1]);
+                let Some(mut backends) = Backends::new(fixture(
+                    &name,
+                    &source,
+                    &project(320, 180, vec![image_clip(vec![])], vec![effect.clone()]),
+                )) else {
+                    return;
+                };
+                let frames =
+                    [0, 777_000_000, 2_000_000_000, 0].map(|time| backends.render(&name, time, 0));
+                assert_eq!(frames[0], frames[3]);
+                assert_ne!(frames[0], frames[2]);
+                let mut contact = RgbaImage::new(960, 180);
+                for (index, frame) in [&source, &frames[0], &frames[2]].into_iter().enumerate() {
+                    image::imageops::replace(&mut contact, frame, (index * 320) as i64, 0);
+                }
+                contact
+                    .save(artifact_directory(&name).join("contact.png"))
+                    .expect("save detail contact sheet");
+            }
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_input_tone_changes_quantization_without_changing_blend_source() {
+    for (kind, mut effect) in [
+        ("map", palette(&MONO, "nearest")),
+        ("dither", dither(&MONO, "blue_noise", 1)),
+    ] {
+        effect["amount"] = json!({"base_value": 0.5});
+        effect["input_exposure"] = json!({"base_value": 1.0});
+        if kind == "dither" {
+            effect["strength"] = json!({"base_value": 0.0});
+        }
+        let source = RgbaImage::from_pixel(16, 16, Rgba([64, 64, 64, 128]));
+        let name = format!("input-tone-original-{kind}");
+        let plan = fixture(
+            &name,
+            &source,
+            &project(16, 16, vec![image_clip(vec![effect])], vec![]),
+        );
+        let Some(mut backends) = Backends::new(plan) else {
+            return;
+        };
+        let output = backends.render(&name, 0, 0);
+        assert!(output.pixels().all(|p| p.0 == [160, 160, 160, 128]));
+    }
+    for colours in [&MONO_FIVE[..], &EMBER[..], &OCEAN[..]] {
+        for (kind, mut effect) in [
+            ("map", palette(colours, "gradient")),
+            ("bayer", dither(colours, "bayer8", 1)),
+            ("blue", dither(colours, "blue_noise", 1)),
+        ] {
+            effect["input_gamma"] = json!({"base_value": 1.0, "keyframes": [
+                {"time": 0.0, "value": 1.0, "interpolation": "linear"},
+                {"time": 2.0, "value": 2.0, "interpolation": "linear"}]});
+            effect["input_exposure"] = json!({"base_value": 0.5});
+            let name = format!("input-tone-{kind}-{}", colours[1]);
+            let source = rich_source(320, 180);
+            let plan = fixture(
+                &name,
+                &source,
+                &project(320, 180, vec![image_clip(vec![effect])], vec![]),
+            );
+            let Some(mut backends) = Backends::new(plan) else {
+                return;
+            };
+            let frames =
+                [0, 777_000_000, 2_000_000_000, 0].map(|time| backends.render(&name, time, 0));
+            assert_eq!(frames[0], frames[3]);
+            assert_ne!(frames[0], frames[2]);
+            let mut contact = RgbaImage::new(960, 180);
+            for (index, frame) in [&source, &frames[0], &frames[2]].into_iter().enumerate() {
+                image::imageops::replace(&mut contact, frame, (index * 320) as i64, 0);
+            }
+            contact
+                .save(artifact_directory(&name).join("contact.png"))
+                .expect("save tone contact sheet");
+        }
+    }
+}
+
 fn artifact_directory(name: &str) -> PathBuf {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/stylization/frames")
@@ -1853,6 +2048,64 @@ fn gpu_stylization_oklab_interpolation_1080p_and_4k_match_cpu() {
         };
         backends.render(&name, 0, 0);
         assert!(backends.gpu.resource_estimates().total_persistent_bytes < 512 * 1024 * 1024);
+    }
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K prepared quantization input correctness and resources"]
+fn gpu_stylization_input_tone_1080p_and_4k_match_cpu() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let source = rich_source(width, height);
+        let name = format!("{resolution}-input-tone-blue-noise");
+        let mut effect = dither(&EMBER, "blue_noise", 1);
+        effect["input_exposure"] = json!({"base_value": 0.5});
+        effect["input_gamma"] = json!({"base_value": 1.5});
+        effect["amount"] = json!({"base_value": 0.5});
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(width, height, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        backends.render(&name, 0, 0);
+        let resources = backends.gpu.resource_estimates();
+        eprintln!(
+            "INPUT_TONE_RESOURCES {resolution} persistent={} staging={}",
+            resources.total_persistent_bytes, resources.total_staging_bytes
+        );
+        assert!(resources.total_persistent_bytes < 512 * 1024 * 1024);
+    }
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K integer detail preparation correctness and resources"]
+fn gpu_stylization_input_detail_1080p_and_4k_match_cpu() {
+    for (resolution, width, height, radius, detail) in [
+        ("1080p-contrast", 1920, 1080, 8.0, 0.5),
+        ("4k-detail", 3840, 2160, 1.0, 1.5),
+    ] {
+        let source = rich_source(width, height);
+        let name = format!("{resolution}-input-detail-blue-noise");
+        let mut effect = dither(&EMBER, "blue_noise", 1);
+        effect["input_detail"] = json!({"base_value": detail});
+        effect["input_detail_radius"] = json!({"base_value": radius});
+        effect["input_gamma"] = json!({"base_value": 1.5});
+        effect["amount"] = json!({"base_value": 0.5});
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(width, height, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        backends.render(&name, 0, 0);
+        let resources = backends.gpu.resource_estimates();
+        eprintln!(
+            "INPUT_DETAIL_RESOURCES {resolution} persistent={} staging={}",
+            resources.total_persistent_bytes, resources.total_staging_bytes
+        );
+        assert!(resources.total_persistent_bytes < 512 * 1024 * 1024);
     }
 }
 

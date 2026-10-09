@@ -114,7 +114,7 @@ fn inverse_lms_root(value: i32) -> i32 {
 fn gradient_colour(lower: u32, upper: u32, fraction: u32, span: u32) -> vec3<u32> {
     if (fraction == 0u || all(palette_bytes(lower) == palette_bytes(upper))) { return palette_bytes(lower); }
     if (fraction == span) { return palette_bytes(upper); }
-    if (params._padding.y == 0u) {
+    if ((params._padding.y & 1u) == 0u) {
         return (palette_bytes(lower) * (span - fraction) + palette_bytes(upper) * fraction + vec3<u32>(span / 2u)) / span;
     }
     let feature = (palette_feature(lower) * (span - fraction) + palette_feature(upper) * fraction + vec3<u32>(span / 2u)) / span;

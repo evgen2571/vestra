@@ -506,6 +506,10 @@ mod tests {
         let signals = PreparedScalarSignals::empty();
         let context = EvaluationContext::new(&signals);
         let mut effect = CompiledEffect::PaletteMap {
+            input_exposure: scalar(0.0),
+            input_gamma: scalar(1.0),
+            input_detail: scalar(0.0),
+            input_detail_radius: scalar(1.0),
             interpolation: crate::project::PaletteInterpolation::Rgb,
             stops: None,
             palette: palette(),
@@ -518,6 +522,10 @@ mod tests {
         let evaluated =
             crate::plan::evaluate_effect(&effect, 500_000_000, 9_000_000_000, &context).unwrap();
         let EvaluatedEffect::PaletteMap {
+            input_exposure: _,
+            input_gamma: _,
+            input_detail: _,
+            input_detail_radius: _,
             interpolation: _,
             stops,
             palette,

@@ -303,7 +303,8 @@ def _build_registered_effect(
         if parameter["required"]:
             raise TypeError(f"missing required parameter {name!r} for effect {effect_type!r}")
         if parameter["default"] is not None:
-            values[name] = parameter["default"]
+            values[name] = _canonical_parameter(parameter, parameter["default"], owner,
+                validate_descriptor_values=validate_descriptor_values)
         elif parameter["kind"] == "active_interval":
             values.update(ActiveInterval().to_canonical())
     return {"id": identifier, "type": effect_type, **values}
@@ -1272,6 +1273,16 @@ class PaletteMapEffect(GenericEffect):
     def mode(self, value: PaletteMode | str) -> None: self._set_parameter("mode", value)
 
     @property
+    def input_exposure(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_exposure"))
+    @property
+    def input_gamma(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_gamma"))
+
+    @property
+    def input_detail(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_detail"))
+    @property
+    def input_detail_radius(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_detail_radius"))
+
+    @property
     def interpolation(self) -> PaletteInterpolation: return PaletteInterpolation(self._data["interpolation"])
     @interpolation.setter
     def interpolation(self, value: PaletteInterpolation | str) -> None: self._set_parameter("interpolation", value)
@@ -1526,6 +1537,8 @@ class _EffectCollection:
 
     def add_palette_map(
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
+        input_exposure: int | float | ScalarTrack = 0, input_gamma: int | float | ScalarTrack = 1,
+        input_detail: int | float | ScalarTrack = 0, input_detail_radius: int | float | ScalarTrack = 1,
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.GRADIENT,
         levels: int = 4, stops: Sequence[int | float] | None = None,
@@ -1533,11 +1546,13 @@ class _EffectCollection:
         id: str | None = None,
     ) -> PaletteMapEffect:
         return self._append(PaletteMapEffect._create_palette, id, {
-            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
+            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
         })
 
     def add_ordered_dither(
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
+        input_exposure: int | float | ScalarTrack = 0, input_gamma: int | float | ScalarTrack = 1,
+        input_detail: int | float | ScalarTrack = 0, input_detail_radius: int | float | ScalarTrack = 1,
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.NEAREST,
         levels: int = 4, stops: Sequence[int | float] | None = None,
@@ -1546,7 +1561,7 @@ class _EffectCollection:
         scale: int = 1, seed: int = 0, id: str | None = None,
     ) -> OrderedDitherEffect:
         return self._append(OrderedDitherEffect._create_palette, id, {
-            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
+            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
             "strength": strength, "matrix": matrix, "scale": scale, "seed": seed,
         })
 

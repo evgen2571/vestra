@@ -492,6 +492,9 @@ change the behavior of projects authored against the existing defaults.
   local contrast and optional edge/detail preservation. Share existing
   `ColorAdjust` where sufficient; don't alter original source colors
   unintentionally to change threshold eligibility.
+  - [x] Bindable entering-signal exposure/gamma using existing ColorAdjust, with
+    the original retained for blending; focused tonal CPU/WGPU acceptance.
+  - [ ] Local contrast and optional edge/detail preservation.
 - [ ] Make filtered input/analysis resolution **independent** of threshold
   pattern size. Define nearest/linear/area filtering, lattice alignment,
   aspect ratio/partial borders and texture-budget limits. Keep true
@@ -1262,3 +1265,73 @@ measurements before closing acceptance and moving this plan.
   Verified every sample's workload and backend; hardware selected NVIDIA GL
   DiscreteGpu throughout. 4K resource estimates remain 298,601,472 persistent
   and 398,134,272 staging bytes, excluding driver metadata/padding.
+
+
+### Entering-signal exposure/gamma increment — 2026-10-09
+
+- Added optional bindable `input_exposure`/`input_gamma` to PaletteMap and
+  OrderedDither in canonical Rust/JSON, shared descriptors, compilation/evaluation,
+  scalar dependency visits, Python high-level/advanced/generic APIs and schema.
+  Defaults are 0/1. Constraints reuse ColorAdjust exposure (−8..8) and gamma
+  (strictly positive through 8), including existing runtime constraints/floors.
+- Active tone reuses the existing full-resolution ColorAdjust operation with
+  neutral black/white points. Quantization reads the adjusted image while its
+  final amount blends against retained original RGB/alpha. CPU and GPU use the
+  existing OriginalAnd resource flow; GPU source is the processed image and
+  auxiliary is the original. A spare parameter bit distinguishes this input;
+  Oklab interpolation remains independent, and the record stays 240 bytes.
+- Neutral compiled controls need no original/temporary preparation and retain
+  one-pass output/metrics. Animated or bound controls conservatively reserve
+  resources for active frames; amount zero still skips the effect. The public
+  preparation requirement and pass-count functions remain const. No new shader
+  pipeline, GPU readback, per-pixel allocation or frame history was introduced.
+- Core: 325 passed/1 ignored; focused compile/evaluation test refreshed after
+  preserving neutral pass counts. CPU stylization: 8 passed, including literal
+  partial-alpha blend and hidden RGB. High-level/advanced/generic/typing API
+  checks: 183 passed after native rebuild. All-target/all-feature workspace
+  Clippy, schema generation/check and the focused schema test passed. Generic
+  optional scalar defaults now use canonical tracks; schema defaults are track
+  objects instead of scalar numbers. One earlier Python catalog run raced schema
+  regeneration (182 passed/1 failed); refreshed schema and subsequent full
+  focused run passed. The showcase formatting check was corrected with Ruff;
+  style and 309 documentation-link checks then passed.
+- Actual GL/NVIDIA and software Vulkan/llvmpipe independently passed the focused
+  render test with exact RGBA parity: partial-alpha literal map/dither blending,
+  plus map/Bayer8/blue-noise across monochrome/ember/ocean, animated gamma at
+  0, .777s, 2s and repeated 0. The reference literal is original gray64, exposure1,
+  nearest white, amount0.5 => gray160; blending from adjusted gray128 would be
+  incorrect. These checks do not close all chromatic/tone/stack/mask combinations.
+- Explicit hardware 1080p/4K blue-noise tone correctness passed exactly, including
+  fractional amount. Persistent/staging estimates: 1080p **91,242,240/116,125,440**
+  bytes; 4K **364,957,440/464,490,240** bytes, excluding driver metadata/padding.
+  Active tone adds retained/prepared image storage versus the previous one-pass
+  4K persistent estimate 298,601,472 bytes; the option remains opt-in.
+- Inspected source/animated-tone contact sheets under
+  `target/stylization/frames/gl/input-tone-{map,bayer,blue}-<palette>/contact.png`.
+  Ember gamma visibly lifts midtones while preserving figure/moon/line contrast;
+  contact panels are source, exposure0.5/gamma1, exposure0.5/gamma2. Inspected the
+  public FFV1-source preview frame `target/stylization/input-tone-video-frame.png`;
+  the oval subject remains visible. New public preview
+  `target/stylized-showcase/smoke/dither-blue-noise-ember-tone-cpu.mp4` is 8 seconds,
+  48 frames at 320×180, generated with `--input-exposure 0.5 --input-gamma 1.5`.
+  Full playback/moving-subject acceptance remains open in Milestone 7.
+- Captured `input-tone-1080p` sequentially on CPU/hardware GL, with frozen source
+  and no concurrent render/test/build during timings: one warmup/three samples,
+  90 frames at 1920×1080/30fps, FFV1 output. End-to-end wall medians/ranges (ms):
+  CPU neutral blue noise **4734 (4596–4736)**, tone **4663 (4645–4827)**;
+  hardware neutral **2945 (2936–3113)**, tone **3042 (2987–3102)**. Ranges overlap
+  for both backends; no speed difference is established. Decoding/encoding and
+  changed-output encoding cost are included; this does not isolate pass cost.
+- Reports: `target/benchmark-results/input-tone-{cpu,hardware}-20261009/suite.json`.
+  Both match final input source SHA256
+  `28647e9bfdecf4b2dfbc08bb80e8ac5a3a7614a76b639d29f97e5b3fe8244c06`, dirty
+  revision `1553308` plus this increment. Release executable SHA256 CPU
+  `398c587d79259177e6ced27e3118d3b21594549328c7bdbfae3006f8101d43de`, hardware
+  `b1aeddf19f1f8c6347dc54d75dc1d0411ef76ae74a36c5b41a418ad0fe159af2`.
+  Every sample's resolution, frame count, workload and actual backend was checked;
+  hardware selected GL, discrete_gpu, D3D12 NVIDIA GTX 1650 SUPER throughout.
+- Milestones 5–7 remain incomplete. Next: entering-signal local contrast/detail,
+  sharing Sharpen's existing Gaussian/unsharp passes before tone and quantization
+  while keeping the same retained original; then independent input filtering/
+  analysis resolution. Remaining effect families, expanded combination acceptance
+  and complete final verification gates remain unexecuted, not passed.

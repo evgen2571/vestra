@@ -14,6 +14,8 @@
 pub use vestra_core::{Category, Diagnostic, Severity, animation, domain};
 mod ascii;
 mod crt;
+#[cfg(any(feature = "cpu", feature = "wgpu"))]
+mod gaussian;
 mod halftone;
 mod kernel;
 

@@ -73,3 +73,14 @@ palette colors, retaining discrete dither output. The `palette` look also uses
 this control for gradient segments. The default `rgb` retains the original
 encoded RGB interpolation. Output gamut handling is documented in the
 [effect reference](../../../docs/reference/effects.md).
+
+
+Lift the quantization input with the existing tone response, independently of
+palette animation and pattern scale:
+
+```bash
+uv run python examples/showcase/stylized-effects/main.py --look dither-blue-noise --palette ember --input-exposure 0.5 --input-gamma 1.5 --backend cpu --smoke
+```
+
+Tone controls are bindable in Python; the final amount keeps the original image
+as its blend source. Their full-resolution preparation pass is opt-in.

@@ -63,3 +63,9 @@ layer.effects.add(OrderedDither(stops=(0, 1))).stops = (0.0, 1.0)
 
 layer.effects.add(PaletteMap(interpolation="oklab")).interpolation = "rgb"
 layer.effects.add(OrderedDither(interpolation="oklab"))
+
+layer.effects.add(PaletteMap(input_gamma=1.5)).input_exposure.bind(signal)
+layer.effects.add(OrderedDither(input_exposure=0.5)).input_gamma.keyframe(1, 2)
+
+layer.effects.add(PaletteMap(input_detail=1, input_detail_radius=8)).input_detail.bind(signal)
+layer.effects.add(OrderedDither(input_detail=1.5)).input_detail_radius.keyframe(1, 2)

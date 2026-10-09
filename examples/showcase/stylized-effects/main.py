@@ -104,6 +104,10 @@ def build_project(
     levels: int = 4,
     stops: tuple[float, ...] | None = None,
     interpolation: str = "rgb",
+    input_exposure: float = 0,
+    input_gamma: float = 1,
+    input_detail: float = 0,
+    input_detail_radius: float = 1,
 ) -> Project:
     project = Project(size=size, fps=fps, duration=2 * PERIOD, base_directory=directory)
     for start in (0, PERIOD):
@@ -134,7 +138,13 @@ def build_project(
             effect = Crt(period=PERIOD, seed=37)
         elif look == "palette":
             effect = PaletteMap(
-                mode="rainbow", period=PERIOD, interpolation=interpolation
+                mode="rainbow",
+                period=PERIOD,
+                interpolation=interpolation,
+                input_exposure=input_exposure,
+                input_gamma=input_gamma,
+                input_detail=input_detail,
+                input_detail_radius=input_detail_radius,
             )
         elif look in {"dither", "dither-blue-noise"}:
             effect = OrderedDither(
@@ -143,6 +153,10 @@ def build_project(
                 levels=levels,
                 stops=stops,
                 interpolation=interpolation,
+                input_exposure=input_exposure,
+                input_gamma=input_gamma,
+                input_detail=input_detail,
+                input_detail_radius=input_detail_radius,
                 matrix="blue_noise" if look == "dither-blue-noise" else "bayer8",
                 seed=37,
                 scale=1,
@@ -185,6 +199,10 @@ def main() -> None:
         default="nearest",
     )
     parser.add_argument("--levels", type=int, default=4)
+    parser.add_argument("--input-exposure", type=float, default=0)
+    parser.add_argument("--input-detail", type=float, default=0)
+    parser.add_argument("--input-detail-radius", type=float, default=1)
+    parser.add_argument("--input-gamma", type=float, default=1)
     parser.add_argument("--interpolation", choices=("rgb", "oklab"), default="rgb")
     parser.add_argument(
         "--stops",
@@ -207,6 +225,10 @@ def main() -> None:
         levels=args.levels,
         stops=None if args.stops is None else tuple(args.stops),
         interpolation=args.interpolation,
+        input_exposure=args.input_exposure,
+        input_gamma=args.input_gamma,
+        input_detail=args.input_detail,
+        input_detail_radius=args.input_detail_radius,
     )
     name = args.look if args.palette == "ocean" else f"{args.look}-{args.palette}"
     if args.look in {"dither", "dither-blue-noise"} and args.mode != "nearest":
@@ -217,6 +239,10 @@ def main() -> None:
         name += "-nonuniform"
     if args.interpolation != "rgb":
         name += f"-{args.interpolation}"
+    if args.input_exposure != 0 or args.input_gamma != 1:
+        name += "-tone"
+    if args.input_detail != 0:
+        name += "-detail"
     project.snapshot().save(directory / f"{name}.json")
     output = args.output or directory / f"{name}-{args.backend}.mp4"
     project.render(str(output), backend=args.backend, overwrite=True)

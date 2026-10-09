@@ -187,6 +187,22 @@
         "nonuniform_dither_video"
       ]
     },
+    "input-detail-smoke": {
+      "width": 128, "height": 72, "warmups": 0, "samples": 1,
+      "scenarios": ["tone_dither_video", "detail_dither_video", "contrast_dither_video"]
+    },
+    "input-detail-1080p": {
+      "width": 1920, "height": 1080, "warmups": 1, "samples": 3,
+      "scenarios": ["tone_dither_video", "detail_dither_video", "contrast_dither_video"]
+    },
+    "input-tone-smoke": {
+      "width": 128, "height": 72, "warmups": 0, "samples": 1,
+      "scenarios": ["blue_noise_video", "tone_dither_video"]
+    },
+    "input-tone-1080p": {
+      "width": 1920, "height": 1080, "warmups": 1, "samples": 3,
+      "scenarios": ["blue_noise_video", "tone_dither_video"]
+    },
     "palette-interpolation-smoke": {
       "width": 128,
       "height": 72,

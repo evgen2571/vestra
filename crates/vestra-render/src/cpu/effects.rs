@@ -1,17 +1,19 @@
-use std::{cell::RefCell, time::Instant};
+use std::time::Instant;
 
 use image::{GenericImage, Rgba, RgbaImage};
 use vestra_core::plan::{ColourTransform, EffectOperation, EffectResource, EvaluatedEffect};
 
 use crate::{
     render::effects::{
-        EffectPass, canonical_gaussian_radius, effect_pass_plan, gaussian_radius_is_identity,
-        sampling_blur_radius_is_identity,
+        EffectPass, effect_pass_plan, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
     },
     render::metrics::CpuHotPathTimings,
 };
 
 use super::surfaces::EffectSurfacePool;
+#[cfg(test)]
+use crate::gaussian::gaussian_kernel_cache_len;
+use crate::gaussian::{GaussianKernel, with_gaussian_kernel};
 
 /// Executes the backend-neutral logical pass plan against CPU surfaces.
 pub(super) fn apply_chain(
@@ -176,6 +178,7 @@ fn execute_effect_pass(
         }
         EffectOperation::Crt { .. } => super::analog::crt(source, target, pass.operation),
         EffectOperation::PaletteMap {
+            input_adjusted,
             interpolation,
             stops,
             palette,
@@ -184,6 +187,11 @@ fn execute_effect_pass(
             levels,
         } => super::stylization::palette_map(
             source,
+            if input_adjusted {
+                Some(secondary.expect("prepared palette input"))
+            } else {
+                None
+            },
             target,
             &palette,
             stops.as_ref(),
@@ -193,6 +201,7 @@ fn execute_effect_pass(
             interpolation,
         ),
         EffectOperation::OrderedDither {
+            input_adjusted,
             interpolation: _,
             stops,
             mode,
@@ -205,6 +214,11 @@ fn execute_effect_pass(
             seed,
         } => super::stylization::ordered_dither(
             source,
+            if input_adjusted {
+                Some(secondary.expect("prepared palette input"))
+            } else {
+                None
+            },
             target,
             &palette,
             stops.as_ref(),
@@ -219,11 +233,11 @@ fn execute_effect_pass(
         EffectOperation::ApplyColourTransform { transform } => {
             apply_colour_transform(source, target, transform)
         }
-        EffectOperation::GaussianHorizontal { radius } => {
-            gaussian_pass(source, target, radius, true)
+        EffectOperation::GaussianHorizontal { radius, integer } => {
+            gaussian_pass(source, target, radius, true, integer)
         }
-        EffectOperation::GaussianVertical { radius } => {
-            gaussian_pass(source, target, radius, false)
+        EffectOperation::GaussianVertical { radius, integer } => {
+            gaussian_pass(source, target, radius, false, integer)
         }
         EffectOperation::HighlightExtract { threshold, colour } => {
             highlight_extract(source, target, threshold, colour)
@@ -274,13 +288,23 @@ fn execute_effect_pass(
     }
 }
 
-fn gaussian_pass(source: &RgbaImage, target: &mut RgbaImage, radius: f64, horizontal: bool) {
+fn gaussian_pass(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    radius: f64,
+    horizontal: bool,
+    integer: bool,
+) {
     if gaussian_radius_is_identity(radius) {
         target.copy_from(source, 0, 0).expect("matching surfaces");
         return;
     }
     with_gaussian_kernel(radius, |kernel| {
-        convolve(source, target, kernel, horizontal)
+        if integer {
+            convolve_integer(source, target, kernel, horizontal);
+        } else {
+            convolve(source, target, kernel, horizontal);
+        }
     });
 }
 
@@ -472,61 +496,6 @@ pub(crate) fn blur(
     }
 }
 
-#[derive(Clone)]
-struct GaussianKernel {
-    weights: Vec<f64>,
-    radius: i32,
-}
-
-thread_local! {
-    static GAUSSIAN_KERNEL_CACHE: RefCell<Vec<(u16, GaussianKernel)>> = const { RefCell::new(Vec::new()) };
-}
-
-fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKernel) -> T) -> T {
-    let key = (canonical_gaussian_radius(radius) * 4.0) as u16;
-    GAUSSIAN_KERNEL_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
-        let index = cache
-            .iter()
-            .position(|(cached, _)| *cached == key)
-            .unwrap_or_else(|| {
-                if cache.len() == 16 {
-                    cache.remove(0);
-                }
-                cache.push((key, GaussianKernel::new(canonical_gaussian_radius(radius))));
-                cache.len() - 1
-            });
-        work(&cache[index].1)
-    })
-}
-
-#[cfg(test)]
-fn gaussian_kernel_cache_len() -> usize {
-    GAUSSIAN_KERNEL_CACHE.with(|cache| cache.borrow().len())
-}
-
-impl GaussianKernel {
-    fn new(radius: f64) -> Self {
-        let radius = radius.clamp(0.0, 32.0);
-        let support = radius.ceil().max(1.0) as i32;
-        let sigma = (radius / 3.0).max(0.5);
-        let mut weights = Vec::with_capacity((support * 2 + 1) as usize);
-        let mut sum = 0.0;
-        for offset in -support..=support {
-            let weight = (-0.5 * (f64::from(offset) / sigma).powi(2)).exp();
-            weights.push(weight);
-            sum += weight;
-        }
-        for weight in &mut weights {
-            *weight /= sum;
-        }
-        Self {
-            weights,
-            radius: support,
-        }
-    }
-}
-
 const NORMALIZED_CHANNELS: [f64; 256] = {
     let mut values = [0.0; 256];
     let mut index = 0;
@@ -581,6 +550,68 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
                 rgb[2],
                 (alpha * 255.0).round() as u8,
             ]);
+        }
+    }
+}
+
+fn convolve_integer(
+    source: &RgbaImage,
+    target: &mut RgbaImage,
+    kernel: &GaussianKernel,
+    horizontal: bool,
+) {
+    let (width, height) = source.dimensions();
+    for (x, y, output) in target.enumerate_pixels_mut() {
+        let mut sum = [0_u32; 4];
+        for offset in -kernel.radius..=kernel.radius {
+            let (sx, sy) = if horizontal {
+                ((x as i32 + offset).clamp(0, width as i32 - 1) as u32, y)
+            } else {
+                (x, (y as i32 + offset).clamp(0, height as i32 - 1) as u32)
+            };
+            let pixel = source.get_pixel(sx, sy).0.map(u32::from);
+            let weight = kernel.integer_weights[offset.unsigned_abs() as usize];
+            sum[3] += pixel[3] * weight;
+            for c in 0..3 {
+                sum[c] += pixel[c] * pixel[3] * weight;
+            }
+        }
+        if sum[3] == 0 {
+            *output = Rgba([0; 4]);
+            continue;
+        }
+        *output = Rgba(
+            [
+                (sum[0] + sum[3] / 2) / sum[3],
+                (sum[1] + sum[3] / 2) / sum[3],
+                (sum[2] + sum[3] / 2) / sum[3],
+                (sum[3] + 32768) / 65536,
+            ]
+            .map(|v| v as u8),
+        );
+    }
+}
+
+#[cfg(test)]
+mod integer_gaussian_tests {
+    use super::*;
+    #[test]
+    fn integer_profile_preserves_constant_partial_alpha_at_every_radius() {
+        for quarter in 0..=128 {
+            let kernel = GaussianKernel::new(f64::from(quarter) / 4.0);
+            for colour in [[255; 4], [17, 99, 201, 128], [255, 0, 0, 0]] {
+                let source = RgbaImage::from_pixel(2, 2, Rgba(colour));
+                let expected = if colour[3] == 0 {
+                    RgbaImage::new(2, 2)
+                } else {
+                    source.clone()
+                };
+                for horizontal in [false, true] {
+                    let mut target = RgbaImage::from_pixel(2, 2, Rgba([1, 2, 3, 4]));
+                    convolve_integer(&source, &mut target, &kernel, horizontal);
+                    assert_eq!(target, expected);
+                }
+            }
         }
     }
 }

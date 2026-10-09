@@ -131,6 +131,7 @@ pub enum EffectOperation {
         seed: u64,
     },
     PaletteMap {
+        input_adjusted: bool,
         interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
@@ -139,6 +140,7 @@ pub enum EffectOperation {
         levels: u16,
     },
     OrderedDither {
+        input_adjusted: bool,
         interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
@@ -151,9 +153,11 @@ pub enum EffectOperation {
         seed: u32,
     },
     GaussianHorizontal {
+        integer: bool,
         radius: f64,
     },
     GaussianVertical {
+        integer: bool,
         radius: f64,
     },
     HighlightExtract {
@@ -278,7 +282,31 @@ impl EffectPassPlan {
 /// without matching authored effect identities themselves.
 #[must_use]
 pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> EffectPassRequirements {
-    if effect.definition().retains_original {
+    let input_active = match effect {
+        CompiledEffect::PaletteMap {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
+            ..
+        }
+        | CompiledEffect::OrderedDither {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
+            ..
+        } => {
+            compiled_palette_input_pass_count(
+                input_exposure,
+                input_gamma,
+                input_detail,
+                input_detail_radius,
+            ) > 1
+        }
+        _ => false,
+    };
+    if effect.definition().retains_original || input_active {
         EffectPassRequirements::RETAINS_ORIGINAL
     } else {
         EffectPassRequirements::NONE
@@ -335,14 +363,19 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             invert: false,
         }),
         CompiledEffect::PaletteMap {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             interpolation,
             stops,
             palette,
             mode,
             levels,
             ..
-        } => EffectPassPlan::new(&[EffectPass::new(
+        } => palette_input_pass_plan(
             EffectOperation::PaletteMap {
+                input_adjusted: false,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -350,10 +383,24 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 mode: *mode,
                 levels: *levels,
             },
-            current,
-            current,
-        )]),
+            if compiled_palette_input_is_identity(input_exposure, input_gamma) {
+                0.0
+            } else {
+                1.0
+            },
+            1.0,
+            if compiled_palette_detail_is_identity(input_detail, input_detail_radius) {
+                0.0
+            } else {
+                1.0
+            },
+            1.0,
+        ),
         CompiledEffect::OrderedDither {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             interpolation,
             stops,
             mode,
@@ -363,8 +410,9 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             scale,
             seed,
             ..
-        } => EffectPassPlan::new(&[EffectPass::new(
+        } => palette_input_pass_plan(
             EffectOperation::OrderedDither {
+                input_adjusted: false,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -376,9 +424,19 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 scale: *scale,
                 seed: *seed,
             },
-            current,
-            current,
-        )]),
+            if compiled_palette_input_is_identity(input_exposure, input_gamma) {
+                0.0
+            } else {
+                1.0
+            },
+            1.0,
+            if compiled_palette_detail_is_identity(input_detail, input_detail_radius) {
+                0.0
+            } else {
+                1.0
+            },
+            1.0,
+        ),
         CompiledEffect::ColourTransform { .. }
         | CompiledEffect::Brightness { .. }
         | CompiledEffect::Contrast { .. }
@@ -392,12 +450,18 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
         )]),
         CompiledEffect::GaussianBlur { .. } => EffectPassPlan::new(&[
             EffectPass::new(
-                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectOperation::GaussianHorizontal {
+                    integer: false,
+                    radius: 1.0,
+                },
                 current,
                 EffectResource::Temporary0,
             ),
             EffectPass::new(
-                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Temporary0,
                 current,
             ),
@@ -413,12 +477,18 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 EffectResource::Temporary0,
             ),
             EffectPass::new(
-                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectOperation::GaussianHorizontal {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Temporary0,
                 EffectResource::Temporary1,
             ),
             EffectPass::new(
-                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Temporary1,
                 EffectResource::Temporary0,
             ),
@@ -426,12 +496,18 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
         ]),
         CompiledEffect::Sharpen { .. } => EffectPassPlan::new(&[
             EffectPass::new(
-                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectOperation::GaussianHorizontal {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Original,
                 EffectResource::Temporary0,
             ),
             EffectPass::new(
-                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Temporary0,
                 EffectResource::Temporary1,
             ),
@@ -520,6 +596,7 @@ fn highlight_bloom_pass_plan(
         ),
         EffectPass::new(
             EffectOperation::GaussianHorizontal {
+                integer: false,
                 radius: canonical_gaussian_radius(radius),
             },
             EffectResource::Temporary0,
@@ -527,6 +604,7 @@ fn highlight_bloom_pass_plan(
         ),
         EffectPass::new(
             EffectOperation::GaussianVertical {
+                integer: false,
                 radius: canonical_gaussian_radius(radius),
             },
             EffectResource::Temporary1,
@@ -637,14 +715,19 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             },
         ]),
         EvaluatedEffect::PaletteMap {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             interpolation,
             stops,
             palette,
             amount,
             mode,
             levels,
-        } => EffectPassPlan::new(&[EffectPass::new(
+        } => palette_input_pass_plan(
             EffectOperation::PaletteMap {
+                input_adjusted: false,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -652,10 +735,16 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
                 mode: *mode,
                 levels: *levels,
             },
-            current,
-            current,
-        )]),
+            *input_exposure,
+            *input_gamma,
+            *input_detail,
+            *input_detail_radius,
+        ),
         EvaluatedEffect::OrderedDither {
+            input_exposure,
+            input_gamma,
+            input_detail,
+            input_detail_radius,
             interpolation,
             stops,
             mode,
@@ -666,8 +755,9 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             matrix,
             scale,
             seed,
-        } => EffectPassPlan::new(&[EffectPass::new(
+        } => palette_input_pass_plan(
             EffectOperation::OrderedDither {
+                input_adjusted: false,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -679,9 +769,11 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
                 scale: *scale,
                 seed: *seed,
             },
-            current,
-            current,
-        )]),
+            *input_exposure,
+            *input_gamma,
+            *input_detail,
+            *input_detail_radius,
+        ),
         EvaluatedEffect::ColourTransform { transform } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::ApplyColourTransform {
                 transform: *transform,
@@ -692,6 +784,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
         EvaluatedEffect::GaussianBlur { radius } => EffectPassPlan::new(&[
             EffectPass::new(
                 EffectOperation::GaussianHorizontal {
+                    integer: false,
                     radius: canonical_gaussian_radius(*radius),
                 },
                 current,
@@ -699,6 +792,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             ),
             EffectPass::new(
                 EffectOperation::GaussianVertical {
+                    integer: false,
                     radius: canonical_gaussian_radius(*radius),
                 },
                 EffectResource::Temporary0,
@@ -720,6 +814,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
         EvaluatedEffect::Sharpen { amount, radius } => EffectPassPlan::new(&[
             EffectPass::new(
                 EffectOperation::GaussianHorizontal {
+                    integer: false,
                     radius: canonical_gaussian_radius(*radius),
                 },
                 EffectResource::Original,
@@ -727,6 +822,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             ),
             EffectPass::new(
                 EffectOperation::GaussianVertical {
+                    integer: false,
                     radius: canonical_gaussian_radius(*radius),
                 },
                 EffectResource::Temporary0,
@@ -839,6 +935,100 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
     }
 }
 
+const fn compiled_scalar_is_constant(
+    property: &crate::plan::CompiledScalarProperty,
+    value: f64,
+) -> bool {
+    property.authored_track.base_value == value
+        && property.authored_track.keyframes.is_empty()
+        && property.modifiers.is_empty()
+}
+
+const fn compiled_palette_input_is_identity(
+    exposure: &crate::plan::CompiledScalarProperty,
+    gamma: &crate::plan::CompiledScalarProperty,
+) -> bool {
+    compiled_scalar_is_constant(exposure, 0.0) && compiled_scalar_is_constant(gamma, 1.0)
+}
+
+const fn compiled_palette_detail_is_identity(
+    detail: &crate::plan::CompiledScalarProperty,
+    radius: &crate::plan::CompiledScalarProperty,
+) -> bool {
+    compiled_scalar_is_constant(detail, 0.0) || compiled_scalar_is_constant(radius, 0.0)
+}
+
+pub(crate) const fn compiled_palette_input_pass_count(
+    exposure: &crate::plan::CompiledScalarProperty,
+    gamma: &crate::plan::CompiledScalarProperty,
+    detail: &crate::plan::CompiledScalarProperty,
+    radius: &crate::plan::CompiledScalarProperty,
+) -> usize {
+    1 + (!compiled_palette_input_is_identity(exposure, gamma)) as usize
+        + 3 * (!compiled_palette_detail_is_identity(detail, radius)) as usize
+}
+
+fn palette_input_pass_plan(
+    mut operation: EffectOperation,
+    exposure: f64,
+    gamma: f64,
+    detail: f64,
+    radius: f64,
+) -> EffectPassPlan {
+    let detail = (detail * 65536.0).round() / 65536.0;
+    let detail_active = !crate::effects::effect_amount_is_identity(detail)
+        && !crate::effects::gaussian_radius_is_identity(radius);
+    let tone_active = exposure != 0.0 || gamma != 1.0;
+    if !detail_active && !tone_active {
+        return EffectPassPlan::new(&[EffectPass::new(
+            operation,
+            EffectResource::Current,
+            EffectResource::Current,
+        )]);
+    }
+    match &mut operation {
+        EffectOperation::PaletteMap { input_adjusted, .. }
+        | EffectOperation::OrderedDither { input_adjusted, .. } => *input_adjusted = true,
+        _ => unreachable!("palette input preparation only lowers palette operations"),
+    }
+    let mut plan = EffectPassPlan::new(&[]);
+    let mut input = EffectResource::Original;
+    if detail_active {
+        let mut sharpen = effect_pass_plan(&EvaluatedEffect::Sharpen {
+            amount: detail,
+            radius,
+        });
+        for pass in &mut sharpen.passes {
+            match &mut pass.operation {
+                EffectOperation::GaussianHorizontal { integer, .. }
+                | EffectOperation::GaussianVertical { integer, .. } => *integer = true,
+                _ => {}
+            }
+        }
+        plan.passes.extend_from_slice(sharpen.as_slice());
+        input = EffectResource::Current;
+    }
+    if tone_active {
+        plan.passes.push(EffectPass::new(
+            EffectOperation::ColorAdjust {
+                exposure,
+                gamma,
+                black_point: 0.0,
+                white_point: 1.0,
+            },
+            input,
+            EffectResource::Temporary0,
+        ));
+        input = EffectResource::Temporary0;
+    }
+    plan.passes.push(EffectPass {
+        operation,
+        inputs: EffectPassInputs::OriginalAnd(input),
+        output: EffectResource::Current,
+    });
+    plan
+}
+
 fn ascii_pass_plan(parameters: crate::ascii::AsciiParameters) -> EffectPassPlan {
     EffectPassPlan::new(&[
         EffectPass::new(
@@ -891,12 +1081,18 @@ mod tests {
                     EffectResource::Temporary0
                 ),
                 EffectPass::new(
-                    EffectOperation::GaussianHorizontal { radius: 3.0 },
+                    EffectOperation::GaussianHorizontal {
+                        integer: false,
+                        radius: 3.0
+                    },
                     EffectResource::Temporary0,
                     EffectResource::Temporary1
                 ),
                 EffectPass::new(
-                    EffectOperation::GaussianVertical { radius: 3.0 },
+                    EffectOperation::GaussianVertical {
+                        integer: false,
+                        radius: 3.0
+                    },
                     EffectResource::Temporary1,
                     EffectResource::Temporary0
                 ),
@@ -917,11 +1113,17 @@ mod tests {
         ));
         assert!(matches!(
             bloom.as_slice()[1].operation,
-            EffectOperation::GaussianHorizontal { radius: 3.0 }
+            EffectOperation::GaussianHorizontal {
+                integer: false,
+                radius: 3.0
+            }
         ));
         assert!(matches!(
             bloom.as_slice()[2].operation,
-            EffectOperation::GaussianVertical { radius: 3.0 }
+            EffectOperation::GaussianVertical {
+                integer: false,
+                radius: 3.0
+            }
         ));
         assert!(matches!(
             bloom.as_slice()[3].operation,
@@ -942,12 +1144,18 @@ mod tests {
             effect_pass_plan(&EvaluatedEffect::GaussianBlur { radius: 2.0 }).as_slice(),
             &[
                 EffectPass::new(
-                    EffectOperation::GaussianHorizontal { radius: 2.0 },
+                    EffectOperation::GaussianHorizontal {
+                        integer: false,
+                        radius: 2.0
+                    },
                     EffectResource::Current,
                     EffectResource::Temporary0
                 ),
                 EffectPass::new(
-                    EffectOperation::GaussianVertical { radius: 2.0 },
+                    EffectOperation::GaussianVertical {
+                        integer: false,
+                        radius: 2.0
+                    },
                     EffectResource::Temporary0,
                     EffectResource::Current
                 ),
@@ -961,12 +1169,18 @@ mod tests {
             .as_slice(),
             &[
                 EffectPass::new(
-                    EffectOperation::GaussianHorizontal { radius: 2.0 },
+                    EffectOperation::GaussianHorizontal {
+                        integer: false,
+                        radius: 2.0
+                    },
                     EffectResource::Original,
                     EffectResource::Temporary0
                 ),
                 EffectPass::new(
-                    EffectOperation::GaussianVertical { radius: 2.0 },
+                    EffectOperation::GaussianVertical {
+                        integer: false,
+                        radius: 2.0
+                    },
                     EffectResource::Temporary0,
                     EffectResource::Temporary1
                 ),
@@ -1015,12 +1229,18 @@ mod tests {
     fn effect_pass_plan_grows_beyond_inline_capacity_without_losing_order() {
         let passes = [
             EffectPass::new(
-                EffectOperation::GaussianHorizontal { radius: 1.0 },
+                EffectOperation::GaussianHorizontal {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Current,
                 EffectResource::Temporary0,
             ),
             EffectPass::new(
-                EffectOperation::GaussianVertical { radius: 1.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 1.0,
+                },
                 EffectResource::Temporary0,
                 EffectResource::Current,
             ),

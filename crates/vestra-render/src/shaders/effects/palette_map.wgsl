@@ -2,7 +2,9 @@
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas_width || id.y >= params.canvas_height) { return; }
     let pixel = textureLoad(source, vec2<i32>(id.xy), 0);
-    if (pixel.a == 0.0) { textureStore(output, vec2<i32>(id.xy), pixel); return; }
+    var base = pixel;
+    if ((params._padding.y & 2u) != 0u) { base = textureLoad(auxiliary, vec2<i32>(id.xy), 0); }
+    if (base.a == 0.0) { textureStore(output, vec2<i32>(id.xy), base); return; }
     let position = luminance_key(pixel.rgb) * (params.count - 1u);
     var colour: vec3<u32>;
     if (params.mode == 2u) {
@@ -24,5 +26,5 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         let fraction = position % 65280u;
         colour = gradient_colour(lower, upper, fraction, 65280u);
     }
-    textureStore(output, vec2<i32>(id.xy), mix_palette(pixel, colour));
+    textureStore(output, vec2<i32>(id.xy), mix_palette(base, colour));
 }

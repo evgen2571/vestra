@@ -1489,7 +1489,10 @@ mod configuration_tests {
             320,
             180,
             EffectPass::new(
-                EffectOperation::GaussianVertical { radius: 4.0 },
+                EffectOperation::GaussianVertical {
+                    integer: false,
+                    radius: 4.0,
+                },
                 vestra_core::plan::EffectResource::Current,
                 vestra_core::plan::EffectResource::Current,
             ),

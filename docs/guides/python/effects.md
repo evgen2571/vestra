@@ -186,3 +186,20 @@ look.interpolation = PaletteInterpolation.RGB
 static control. RGB is the compatible default; Oklab affects gradient mapping and
 animated authored palette colors. Dither output remains discrete palette colors.
 Amounts and phase continue to support keyframes and signal binding.
+
+
+Use entering-signal tone controls to lift shadows without changing the source
+used for a partial blend:
+
+```python
+from vestra.effects import OrderedDither
+
+look = OrderedDither(("#080508", "#9e3341", "#efa463", "#fff1c5"),
+                     matrix="blue_noise", input_exposure=0.5, input_gamma=1.5)
+look.input_gamma.keyframe(0, 1)
+look.input_gamma.keyframe(2, 1.5)
+```
+
+`PaletteMap` and both advanced authoring methods expose the same controls.
+Exposure and gamma can bind to signals. Neutral values preserve existing output;
+the final `amount` always blends against the original image.

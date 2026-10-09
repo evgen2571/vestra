@@ -258,3 +258,40 @@ def test_suite_override_does_not_mutate_manifest_or_export_scenarios_as_environm
     assert "scenarios" not in settings
     assert scenarios == ["palette_video"]
     assert manifest == original
+
+
+@pytest.mark.parametrize(
+    "classification,accepted",
+    [
+        ("discrete_gpu", True),
+        ("integrated_gpu", True),
+        ("software", False),
+        ("unknown", False),
+    ],
+)
+def test_hardware_suite_uses_renderer_classification_for_wrapped_adapters(
+    classification, accepted
+):
+    result = {
+        "render_backend": "wgpu",
+        "adapter": {"device_type": "other", "performance_class": classification},
+    }
+    if accepted:
+        benchmark.require_backend(result, "hardware-wgpu")
+    else:
+        with pytest.raises(ValueError, match="hardware-GPU blocked"):
+            benchmark.require_backend(result, "hardware-wgpu")
+
+
+def test_hardware_suite_rejects_software_classification_even_with_hardware_device_type():
+    with pytest.raises(ValueError, match="hardware-GPU blocked"):
+        benchmark.require_backend(
+            {
+                "render_backend": "wgpu",
+                "adapter": {
+                    "device_type": "discretegpu",
+                    "performance_class": "software",
+                },
+            },
+            "hardware-wgpu",
+        )

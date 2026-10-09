@@ -286,6 +286,11 @@ fn parameter_schema(parameter: &vestra::EffectParameterDescriptor) -> Value {
         },
         EffectParameterKind::Font => json!({"type": "string", "minLength": 1}),
         EffectParameterKind::Colour => json!({"$ref": "#/$defs/colour"}),
+        EffectParameterKind::PaletteStops => json!({
+            "type": ["array", "null"], "minItems": 2, "maxItems": 16,
+            "items": {"type": "number", "minimum": 0, "maximum": 1},
+            "description": "Increasing tonal positions, one per palette color, endpoints 0 and 1; gradient/nearest modes only; distinct after rounding to 1/65280."
+        }),
         EffectParameterKind::Palette => json!({
             "type": "array",
             "minItems": parameter.integer_minimum,
@@ -366,16 +371,27 @@ mod tests {
             );
             assert_eq!(
                 properties["mode"]["enum"],
-                json!(["gradient", "nearest", "rainbow"])
+                json!([
+                    "gradient",
+                    "nearest",
+                    "rainbow",
+                    "nearest_rgb",
+                    "nearest_hue",
+                    "rgb_channels",
+                    "nearest_oklab"
+                ])
             );
         }
         let dither = &schema["$defs"]["ordered_dither_effect"]["properties"];
         assert_eq!(
             dither["matrix"]["enum"],
-            json!(["bayer2", "bayer4", "bayer8"])
+            json!(["bayer2", "bayer4", "bayer8", "blue_noise"])
         );
         assert_eq!(dither["scale"]["minimum"], 1);
         assert_eq!(dither["scale"]["maximum"], 32);
+        assert_eq!(dither["seed"]["default"], 0);
+        assert_eq!(dither["seed"]["type"], "integer");
+        assert_eq!(dither["seed"]["maximum"], u32::MAX);
     }
 
     #[test]
@@ -506,7 +522,7 @@ mod tests {
                     assert!(required.iter().any(|item| item == parameter.name));
                 }
                 if let Some(default) = parameter.default {
-                    assert_eq!(properties[parameter.name]["default"], default);
+                    assert_eq!(properties[parameter.name]["default"], json!(default));
                 }
             }
         }
@@ -523,7 +539,7 @@ mod tests {
                 );
                 if let Some(default) = parameter.default {
                     assert!(!required.iter().any(|item| item == parameter.name));
-                    assert_eq!(properties[parameter.name]["default"], default);
+                    assert_eq!(properties[parameter.name]["default"], json!(default));
                 } else {
                     assert!(required.iter().any(|item| item == parameter.name));
                 }

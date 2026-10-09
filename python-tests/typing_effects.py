@@ -49,3 +49,14 @@ layer.effects.add(OrderedDither(matrix=DitherMatrix.BAYER4, scale=2)).strength.k
 layer.effects.add(Halftone(mode=HalftoneMode.SOURCE)).cell_size.bind(signal)
 layer.effects.add(PixelSort(direction=PixelSortDirection.VERTICAL, order=PixelSortOrder.DESCENDING)).amount.keyframe(0, 0.5)
 project.post_effects.add(Crt(period=2)).phase.bind(signal)
+
+layer.effects.add(OrderedDither(matrix=DitherMatrix.BLUE_NOISE, seed=37)).seed = 42
+
+layer.effects.add(PaletteMap(mode=PaletteMode.NEAREST_RGB))
+layer.effects.add(OrderedDither(mode=PaletteMode.NEAREST_HUE))
+layer.effects.add(OrderedDither(mode=PaletteMode.RGB_CHANNELS, levels=6)).levels = 3
+
+layer.effects.add(PaletteMap(mode=PaletteMode.NEAREST_OKLAB))
+
+layer.effects.add(PaletteMap(["#000000", "#ff0000", "#ffffff"], stops=(0, 0.25, 1))).stops = None
+layer.effects.add(OrderedDither(stops=(0, 1))).stops = (0.0, 1.0)

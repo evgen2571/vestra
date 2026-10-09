@@ -70,6 +70,10 @@ class PaletteMode(Enum):
     GRADIENT = "gradient"
     NEAREST = "nearest"
     RAINBOW = "rainbow"
+    NEAREST_RGB = "nearest_rgb"
+    NEAREST_HUE = "nearest_hue"
+    RGB_CHANNELS = "rgb_channels"
+    NEAREST_OKLAB = "nearest_oklab"
 
 
 class HalftoneMode(Enum):
@@ -92,6 +96,7 @@ class DitherMatrix(Enum):
     BAYER2 = "bayer2"
     BAYER4 = "bayer4"
     BAYER8 = "bayer8"
+    BLUE_NOISE = "blue_noise"
 
 
 @lru_cache(maxsize=1)
@@ -164,6 +169,20 @@ def _palette(parameter: Mapping[str, object], value: object) -> tuple[str, ...]:
     return colors
 
 
+def _palette_stops(value: object) -> tuple[float, ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise TypeError("stops must be a sequence of numbers or None")
+    stops = tuple(_number(item, "stops") for item in value)
+    if not 2 <= len(stops) <= 16 or stops[0] != 0 or stops[-1] != 1:
+        raise ValueError("stops require 2..16 positions with endpoints 0 and 1")
+    rounded = tuple(int(stop * 65280 + 0.5) for stop in stops)
+    if any(not 0 <= stop <= 1 for stop in stops) or any(a >= b for a, b in zip(rounded, rounded[1:])):
+        raise ValueError("stops must increase after rounding to 1/65280")
+    return stops
+
+
 def _canonical_parameter(
     parameter: Mapping[str, object], value: object, owner: _Owner, *, validate_descriptor_values: bool,
 ) -> object:
@@ -200,6 +219,9 @@ def _canonical_parameter(
         return value.id
     if kind == "colour":
         return color_to_canonical(cast(Color | str, value))
+    if kind == "palette_stops":
+        stops = _palette_stops(value)
+        return None if stops is None else list(stops)
     if kind == "palette":
         return list(_palette(parameter, value))
     if kind == "period":
@@ -266,7 +288,7 @@ def _build_registered_effect(
         )
         if parameter["kind"] == "active_interval":
             values.update(cast(Mapping[str, object], canonical))
-        elif parameter["kind"] in {"period", "font"} and canonical is None:
+        elif parameter["kind"] in {"period", "font", "palette_stops"} and canonical is None:
             continue
         else:
             values[name] = canonical
@@ -1222,7 +1244,7 @@ class PaletteMapEffect(GenericEffect):
     def _set_parameter(self, name: str, value: object) -> None:
         parameter = _parameter_descriptor(effect_definition(self.kind), name)
         canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if parameter["kind"] in {"period", "font"} and canonical is None:
+        if parameter["kind"] in {"period", "font", "palette_stops"} and canonical is None:
             self._data.pop(name, None)
         else:
             self._data[name] = canonical
@@ -1244,9 +1266,21 @@ class PaletteMapEffect(GenericEffect):
     @mode.setter
     def mode(self, value: PaletteMode | str) -> None: self._set_parameter("mode", value)
 
+    @property
+    def stops(self) -> tuple[float, ...] | None:
+        value = self._data.get("stops")
+        return None if value is None else tuple(cast(list[float], value))
+    @stops.setter
+    def stops(self, value: Sequence[int | float] | None) -> None: self._set_parameter("stops", value)
+
+    @property
+    def levels(self) -> int: return cast(int, self._data["levels"])
+    @levels.setter
+    def levels(self, value: int) -> None: self._set_parameter("levels", value)
+
 
 class OrderedDitherEffect(PaletteMapEffect):
-    """Ordered Bayer quantization with a palette-independent threshold pattern."""
+    """Bayer/blue-noise quantization with a palette-independent threshold pattern."""
 
     __slots__ = ()
     _effect_type = "ordered_dither"
@@ -1261,6 +1295,11 @@ class OrderedDitherEffect(PaletteMapEffect):
     def scale(self) -> int: return cast(int, self._data["scale"])
     @scale.setter
     def scale(self, value: int) -> None: self._set_parameter("scale", value)
+
+    @property
+    def seed(self) -> int: return cast(int, self._data["seed"])
+    @seed.setter
+    def seed(self, value: int) -> None: self._set_parameter("seed", value)
 
 
 class AsciiEffect(PaletteMapEffect):
@@ -1479,22 +1518,24 @@ class _EffectCollection:
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.GRADIENT,
+        levels: int = 4, stops: Sequence[int | float] | None = None,
         id: str | None = None,
     ) -> PaletteMapEffect:
         return self._append(PaletteMapEffect._create_palette, id, {
-            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode,
+            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops,
         })
 
     def add_ordered_dither(
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.NEAREST,
+        levels: int = 4, stops: Sequence[int | float] | None = None,
         strength: int | float | ScalarTrack = 1, matrix: DitherMatrix | str = DitherMatrix.BAYER8,
-        scale: int = 1, id: str | None = None,
+        scale: int = 1, seed: int = 0, id: str | None = None,
     ) -> OrderedDitherEffect:
         return self._append(OrderedDitherEffect._create_palette, id, {
-            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode,
-            "strength": strength, "matrix": matrix, "scale": scale,
+            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops,
+            "strength": strength, "matrix": matrix, "scale": scale, "seed": seed,
         })
 
 

@@ -560,6 +560,7 @@ pub enum EffectParameterKind {
     PlainTrack,
     Colour,
     Palette,
+    PaletteStops,
     Period,
     Integer,
     Number,
@@ -570,6 +571,14 @@ pub enum EffectParameterKind {
     ActiveInterval,
     String,
     Font,
+}
+
+/// A descriptor default in its canonical JSON type.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum EffectParameterDefault {
+    String(&'static str),
+    Integer(u64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -585,7 +594,7 @@ pub struct EffectParameterDescriptor {
     pub integer_maximum: Option<u64>,
     pub minimum_exclusive: bool,
     pub maximum_exclusive: bool,
-    pub default: Option<&'static str>,
+    pub default: Option<EffectParameterDefault>,
     pub enum_values: &'static [&'static str],
 }
 
@@ -674,6 +683,13 @@ impl EffectParameterDescriptor {
         }
     }
 
+    const fn palette_stops() -> Self {
+        Self {
+            required: false,
+            ..Self::simple("stops", EffectParameterKind::PaletteStops)
+        }
+    }
+
     const fn period() -> Self {
         Self {
             required: false,
@@ -690,7 +706,7 @@ impl EffectParameterDescriptor {
     ) -> Self {
         Self {
             required: false,
-            default: Some(default),
+            default: Some(EffectParameterDefault::String(default)),
             enum_values: values,
             ..Self::simple(name, EffectParameterKind::Enum)
         }
@@ -909,14 +925,14 @@ visual_effect_catalog! {
         class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [PaletteMapAmount, PaletteMapPhase], plain_tracks: [],
-        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow"], "gradient"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapPhase), EffectParameterDescriptor::period()]
+        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::palette_stops(), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(4)), ..EffectParameterDescriptor::integer("levels", 2, 256) }, EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"], "gradient"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapPhase), EffectParameterDescriptor::period()]
     },
     OrderedDither => {
         id: "ordered_dither",
         class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
         temporal: FromProperties, retains_original: false,
         scalar_properties: [OrderedDitherAmount, OrderedDitherPhase, OrderedDitherStrength], plain_tracks: [],
-        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow"], "nearest"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherPhase), EffectParameterDescriptor::period(), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherStrength), EffectParameterDescriptor::optional_enum_default("matrix", &["bayer2", "bayer4", "bayer8"], "bayer8"), EffectParameterDescriptor::integer("scale", 1, 32)]
+        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::palette_stops(), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(4)), ..EffectParameterDescriptor::integer("levels", 2, 256) }, EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"], "nearest"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherPhase), EffectParameterDescriptor::period(), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherStrength), EffectParameterDescriptor::optional_enum_default("matrix", &["bayer2", "bayer4", "bayer8", "blue_noise"], "bayer8"), EffectParameterDescriptor::integer("scale", 1, 32), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::integer("seed", 0, u32::MAX as u64) }]
     },
     Brightness => {
         id: "brightness",
@@ -1176,6 +1192,7 @@ mod tests {
                     }
                     EffectParameterKind::Font => serde_json::json!("font"),
                     EffectParameterKind::Colour => serde_json::json!("#ffffff"),
+                    EffectParameterKind::PaletteStops => serde_json::json!([0.0, 1.0]),
                     EffectParameterKind::Palette => serde_json::json!(["#000000", "#ffffff"]),
                     EffectParameterKind::Period => serde_json::json!(number),
                     EffectParameterKind::Integer => {
@@ -1187,7 +1204,9 @@ mod tests {
                     }
                     EffectParameterKind::Boolean => serde_json::json!(true),
                     EffectParameterKind::Enum => {
-                        serde_json::json!(parameter.default.unwrap_or(parameter.enum_values[0]))
+                        serde_json::json!(parameter.default.unwrap_or(
+                            super::EffectParameterDefault::String(parameter.enum_values[0])
+                        ))
                     }
                     EffectParameterKind::ActiveInterval => {
                         value.insert("start".to_owned(), serde_json::json!(0.0));

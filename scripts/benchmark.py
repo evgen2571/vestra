@@ -346,9 +346,13 @@ def require_backend(result: dict, backend: str) -> None:
     """Keep software adapters out of hardware measurement suites."""
     if backend == "hardware-wgpu":
         adapter = result.get("adapter") or {}
-        if result["render_backend"] != "wgpu" or adapter.get("device_type") not in {
+        if result["render_backend"] != "wgpu" or adapter.get(
+            "performance_class", adapter.get("device_type")
+        ) not in {
             "integratedgpu",
             "discretegpu",
+            "integrated_gpu",
+            "discrete_gpu",
         }:
             raise ValueError(
                 "hardware-GPU blocked: render did not select a confirmed hardware adapter"

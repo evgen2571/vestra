@@ -62,10 +62,35 @@ color.amount = 0.25
 color.phase.bind(project.audio.signal.rms(), operation="add")
 ```
 
-The Bayer pattern stays fixed in output pixel coordinates. To adjust tonal
+Bayer and blue-noise patterns stay fixed in output pixel coordinates. For a
+less regular fine texture, use `OrderedDither(palette, matrix="blue_noise",
+seed=37, scale=1)`. The seed shifts/reflects a fixed seamless 32×32 tile; it does
+not change over time. Bayer defaults and output remain unchanged. To adjust tonal
 separation before quantization, place `ColorAdjust` or `Contrast` earlier in
 the stack. Palette Map's `gradient` mode gives smooth coloring; `nearest`
 gives discrete tonal bands. Dither always quantizes to discrete colors.
+Use `mode="nearest_rgb"` to retain source colors with an arbitrary palette, or
+`mode="nearest_hue"` to emphasize hue and saturation. These modes also work with
+`PaletteMap`. Chromatic dithering mixes the two closest colors; colors need not
+be ordered from dark to light. Compare both on the generated moving footage:
+
+```bash
+uv run python examples/showcase/stylized-effects/main.py --look dither-blue-noise --palette ember --mode nearest_rgb --smoke
+uv run python examples/showcase/stylized-effects/main.py --look dither-blue-noise --palette ember --mode nearest_hue --smoke
+```
+
+For an RGB color cube instead of an authored palette, use
+`OrderedDither(mode="rgb_channels", levels=4, matrix="blue_noise")` or
+`PaletteMap(mode="rgb_channels", levels=4)`. Two levels give eight RGB colors;
+four give 64 colors; 256 preserve the source bytes. Palette phase does not alter
+this mode. In the showcase, select `--mode rgb_channels --levels 4`.
+
+Use `mode="nearest_oklab"` for perceptual palette matching. It interprets source
+bytes as sRGB and uses a fixed-point Oklab approximation, matching lightness and
+chroma together. It preserves exact palette inputs and retains authored order.
+Compare it with `nearest_rgb` on the same footage and palette using the showcase's
+`--mode nearest_oklab` option. Neither mode alters the selected palette bytes.
+
 An explicit `period` loops procedural palette phase; the source clip and audio
 continue on their normal timelines. See the [effect reference](../../reference/effects.md)
 for exact ranges and the [palette example](../../../examples/python/high-level/13_palette_dither.py)
@@ -128,3 +153,22 @@ existing keyframe/audio-signal properties. Palette/rainbow periods repeat the
 effect's colors, while footage/audio must separately align for a looping video.
 See the [ASCII reference](../../reference/effects.md#cinematic-ascii-and-pseudo-ascii)
 for area filtering, anchoring, prepared glyph resources and discrete controls.
+
+Nonuniform tonal palettes use `stops` on `PaletteMap` or `OrderedDither`:
+
+```python
+from vestra.effects import OrderedDither
+
+look = OrderedDither(
+    ("#080508", "#351120", "#9e3341", "#efa463", "#fff1c5"),
+    stops=(0, 0.12, 0.35, 0.7, 1), matrix="blue_noise", scale=1,
+)
+look.stops = (0, 0.18, 0.42, 0.8, 1)
+look.stops = None  # Restore uniform tonal positions.
+```
+
+The advanced `add_palette_map` and `add_ordered_dither` methods accept the same
+control. Positions are static, one per color, strictly increasing with endpoints
+zero and one, and distinct after rounding to `1/65280`. Native project validation
+checks palette cardinality and restricts stops to `gradient`/`nearest` modes.
+Phase remains bindable and animates colors through those fixed positions.

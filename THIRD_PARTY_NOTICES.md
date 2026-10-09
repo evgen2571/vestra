@@ -31,6 +31,15 @@ Cargo dependencies and vendored crate. Other Rust dependencies retain the
 licenses declared by their respective Cargo packages; `Cargo.lock` identifies
 resolved versions.
 
+## Oklab constants
+
+The perceptual palette metric uses mathematical coefficients from
+[Björn Ottosson's original Oklab definition](https://bottosson.github.io/posts/oklab/),
+whose conversion code is offered under a public-domain option. Vestra's integer
+conversion, rounding, constant generator and WGSL implementation are original
+MIT-licensed code. The sRGB transfer function follows
+[CSS Color 4](https://www.w3.org/TR/css-color-4/#color-conversion-code).
+
 ## Showcase assets
 
 The showcase's photo and synthesized audio are CC0, footage is CC BY 3.0, and

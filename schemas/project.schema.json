@@ -2582,12 +2582,19 @@
           "minLength": 1,
           "type": "string"
         },
+        "levels": {
+          "default": 4,
+          "maximum": 256,
+          "minimum": 2,
+          "type": "integer"
+        },
         "matrix": {
           "default": "bayer8",
           "enum": [
             "bayer2",
             "bayer4",
-            "bayer8"
+            "bayer8",
+            "blue_noise"
           ]
         },
         "mode": {
@@ -2595,7 +2602,11 @@
           "enum": [
             "gradient",
             "nearest",
-            "rainbow"
+            "rainbow",
+            "nearest_rgb",
+            "nearest_hue",
+            "rgb_channels",
+            "nearest_oklab"
           ]
         },
         "palette": {
@@ -2621,6 +2632,26 @@
           "maximum": 32,
           "minimum": 1,
           "type": "integer"
+        },
+        "seed": {
+          "default": 0,
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stops": {
+          "description": "Increasing tonal positions, one per palette color, endpoints 0 and 1; gradient/nearest modes only; distinct after rounding to 1/65280.",
+          "items": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "strength": {
           "allOf": [
@@ -2760,12 +2791,22 @@
           "minLength": 1,
           "type": "string"
         },
+        "levels": {
+          "default": 4,
+          "maximum": 256,
+          "minimum": 2,
+          "type": "integer"
+        },
         "mode": {
           "default": "gradient",
           "enum": [
             "gradient",
             "nearest",
-            "rainbow"
+            "rainbow",
+            "nearest_rgb",
+            "nearest_hue",
+            "rgb_channels",
+            "nearest_oklab"
           ]
         },
         "palette": {
@@ -2786,6 +2827,20 @@
         },
         "phase": {
           "$ref": "#/$defs/scalar_property"
+        },
+        "stops": {
+          "description": "Increasing tonal positions, one per palette color, endpoints 0 and 1; gradient/nearest modes only; distinct after rounding to 1/65280.",
+          "items": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "type": {
           "const": "palette_map"

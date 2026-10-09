@@ -169,12 +169,14 @@ mod tests {
     #[test]
     fn stylization_period_keyframes_and_signals_invalidate_static_cache() {
         let mut effect = CompiledEffect::PaletteMap {
+            stops: None,
             palette: crate::stylization::compile_palette(&[
                 "#000000".to_owned(),
                 "#ffffff".to_owned(),
             ])
             .unwrap(),
             mode: crate::project::PaletteMode::Gradient,
+            levels: 4,
             amount: scalar(1.0),
             phase: scalar(0.0),
             period: None,

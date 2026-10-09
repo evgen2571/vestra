@@ -131,16 +131,22 @@ pub enum EffectOperation {
         seed: u64,
     },
     PaletteMap {
+        stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
-        nearest: bool,
+        mode: crate::project::PaletteMode,
+        levels: u16,
     },
     OrderedDither {
+        stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
         strength: f64,
+        mode: crate::project::PaletteMode,
+        levels: u16,
         matrix: crate::project::DitherMatrix,
         scale: u8,
+        seed: u32,
     },
     GaussianHorizontal {
         radius: f64,
@@ -326,29 +332,43 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             background: [0, 0, 0, 255],
             invert: false,
         }),
-        CompiledEffect::PaletteMap { palette, mode, .. } => {
-            EffectPassPlan::new(&[EffectPass::new(
-                EffectOperation::PaletteMap {
-                    palette: *palette,
-                    amount: 1.0,
-                    nearest: *mode == crate::project::PaletteMode::Nearest,
-                },
-                current,
-                current,
-            )])
-        }
+        CompiledEffect::PaletteMap {
+            stops,
+            palette,
+            mode,
+            levels,
+            ..
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::PaletteMap {
+                stops: *stops,
+                palette: *palette,
+                amount: 1.0,
+                mode: *mode,
+                levels: *levels,
+            },
+            current,
+            current,
+        )]),
         CompiledEffect::OrderedDither {
+            stops,
+            mode,
+            levels,
             palette,
             matrix,
             scale,
+            seed,
             ..
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::OrderedDither {
+                stops: *stops,
                 palette: *palette,
                 amount: 1.0,
                 strength: 1.0,
+                mode: *mode,
+                levels: *levels,
                 matrix: *matrix,
                 scale: *scale,
+                seed: *seed,
             },
             current,
             current,
@@ -611,31 +631,43 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             },
         ]),
         EvaluatedEffect::PaletteMap {
+            stops,
             palette,
             amount,
-            nearest,
+            mode,
+            levels,
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::PaletteMap {
+                stops: *stops,
                 palette: *palette,
                 amount: *amount,
-                nearest: *nearest,
+                mode: *mode,
+                levels: *levels,
             },
             current,
             current,
         )]),
         EvaluatedEffect::OrderedDither {
+            stops,
+            mode,
+            levels,
             palette,
             amount,
             strength,
             matrix,
             scale,
+            seed,
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::OrderedDither {
+                stops: *stops,
                 palette: *palette,
                 amount: *amount,
                 strength: *strength,
+                mode: *mode,
+                levels: *levels,
                 matrix: *matrix,
                 scale: *scale,
+                seed: *seed,
             },
             current,
             current,

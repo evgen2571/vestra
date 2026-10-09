@@ -366,12 +366,15 @@ impl EffectKernel {
             ),
             Self::PaletteMap => concat!(
                 include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/oklab_constants.wgsl"),
                 include_str!("../shaders/effects/palette_common.wgsl"),
                 include_str!("../shaders/effects/palette_map.wgsl")
             ),
             Self::OrderedDither => concat!(
                 include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/oklab_constants.wgsl"),
                 include_str!("../shaders/effects/palette_common.wgsl"),
+                include_str!("../shaders/effects/blue_noise.wgsl"),
                 include_str!("../shaders/effects/ordered_dither.wgsl")
             ),
             Self::ColourTransform => concat!(

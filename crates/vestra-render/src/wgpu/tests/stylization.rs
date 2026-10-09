@@ -22,6 +22,7 @@ const VIOLET: [&str; 5] = ["#090714", "#34234f", "#7d528a", "#ca95bd", "#f7eddf"
 fn artifact_directory(name: &str) -> PathBuf {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/stylization/frames")
+        .join(std::env::var("VESTRA_WGPU_BACKEND").unwrap_or_else(|_| "auto".to_owned()))
         .join(name);
     fs::create_dir_all(&directory).expect("create stylization artifact directory");
     directory
@@ -137,6 +138,33 @@ impl Backends {
             .render_frame(&frame, &mut gpu)
             .expect("WGPU stylization frame");
         let directory = artifact_directory(name);
+        let adapter = self.gpu.adapter().expect("adapter metadata");
+        fs::write(
+            directory.join("adapter.json"),
+            serde_json::to_vec_pretty(&json!({
+                "adapter": adapter.adapter_name,
+                "backend": adapter.graphics_backend,
+                "classification": format!("{:?}", adapter.performance_class()),
+            }))
+            .expect("serialize adapter metadata"),
+        )
+        .expect("save adapter metadata");
+        let resources = self.gpu.resource_estimates();
+        fs::write(
+            directory.join("resources.json"),
+            serde_json::to_vec_pretty(&json!({
+                "source_texture_bytes": resources.source_texture_bytes,
+                "working_texture_bytes": resources.working_texture_bytes,
+                "effect_texture_bytes": resources.effect_texture_bytes,
+                "readback_buffer_bytes": resources.readback_buffer_bytes,
+                "parameter_buffer_bytes": resources.parameter_buffer_bytes,
+                "total_persistent_bytes": resources.total_persistent_bytes,
+                "total_staging_bytes": resources.total_staging_bytes,
+                "note": "renderer estimates exclude driver metadata and device texture padding",
+            }))
+            .expect("serialize resource estimates"),
+        )
+        .expect("save resource estimates");
         cpu.save(directory.join(format!("cpu-{time}.png")))
             .expect("save CPU frame");
         gpu.save(directory.join(format!("wgpu-{time}.png")))
@@ -467,7 +495,11 @@ fn gpu_stylization_palette_and_dither_preserve_alpha_through_nested_masks_and_ma
         .zip(control_gpu.pixels())
         .enumerate()
     {
-        assert_eq!(cpu[3], gpu[3], "styled alpha parity at {index}");
+        assert_eq!(
+            i16::from(cpu[3]) - i16::from(gpu[3]),
+            i16::from(original_cpu[3]) - i16::from(original_gpu[3]),
+            "effect must not add to inherited alpha sampling error at {index}"
+        );
         assert_eq!(
             cpu[3], original_cpu[3],
             "CPU effect altered mask/matte alpha at {index}"
@@ -601,5 +633,808 @@ fn gpu_stylization_uniform_palette_dither_threshold_matches_cpu_at_each_stage() 
     assert!(
         failures.is_empty(),
         "uniform byte-space threshold parity: {failures:?}"
+    );
+}
+
+fn save_temporal_metrics(name: &str, frames: &[(u128, RgbaImage)]) {
+    let metrics = frames
+        .windows(2)
+        .map(|pair| {
+            json!({"from_ns": pair[0].0, "to_ns": pair[1].0,
+                "difference": compare_rgba(pair[0].1.as_raw(), pair[1].1.as_raw(), 0)})
+        })
+        .collect::<Vec<_>>();
+    fs::write(
+        artifact_directory(name).join("temporal.json"),
+        serde_json::to_vec_pretty(&metrics).expect("serialize temporal metrics"),
+    )
+    .expect("save temporal metrics");
+}
+
+#[test]
+fn gpu_stylization_temporal_stationary_and_moving_patterns_stay_output_anchored() {
+    for moving in [false, true] {
+        let name = if moving {
+            "temporal-moving"
+        } else {
+            "temporal-stationary"
+        };
+        let source = RgbaImage::from_pixel(96, 64, Rgba([128, 128, 128, 255]));
+        let mut clip = image_clip(vec![]);
+        clip["transform"]["scale"] = json!({"base_value": {"x": 0.5, "y": 0.5}});
+        if moving {
+            clip["transform"]["position"] = json!({"base_value": {"x": 0.375, "y": 0.5},
+                "keyframes": [
+                    {"time": 0.0, "value": {"x": 0.375, "y": 0.5}, "interpolation": "linear"},
+                    {"time": 1.0, "value": {"x": 0.625, "y": 0.5}, "interpolation": "linear"}]});
+        }
+        let plan = fixture(
+            name,
+            &source,
+            &project(96, 64, vec![clip], vec![dither(&MONO, "bayer2", 1)]),
+        );
+        let Some(mut backends) = Backends::new(plan) else {
+            return;
+        };
+        let times = [0, 250_000_000, 500_000_000, 750_000_000, 1_000_000_000];
+        let frames = times
+            .into_iter()
+            .map(|time| (time, backends.render(name, time, 0)))
+            .collect::<Vec<_>>();
+        for (_, frame) in &frames {
+            // All translations are whole pixels; this shared interior stays gray.
+            for y in 20..44 {
+                for x in 40..56 {
+                    let value = if (x + y) % 2 == 0 { 0 } else { 255 };
+                    assert_eq!(frame.get_pixel(x, y).0, [value, value, value, 255]);
+                }
+            }
+        }
+        if moving {
+            assert_ne!(
+                frames[0].1, frames[4].1,
+                "fixture must include actual source movement"
+            );
+        } else {
+            assert!(
+                frames.windows(2).all(|pair| pair[0].1 == pair[1].1),
+                "a stationary scene must not flicker"
+            );
+        }
+        assert_eq!(
+            frames[1].1,
+            backends.render(name, times[1], 0),
+            "random-access repeat"
+        );
+        save_temporal_metrics(name, &frames);
+    }
+}
+
+#[test]
+fn gpu_stylization_temporal_threshold_sweep_changes_only_monotone_bayer_coverage() {
+    let name = "temporal-threshold-sweep";
+    let source = RgbaImage::from_pixel(64, 48, Rgba([255, 255, 255, 255]));
+    let mut clip = image_clip(vec![]);
+    clip["opacity"] = json!({"base_value": 0.45, "keyframes": [
+        {"time": 0.0, "value": 0.45, "interpolation": "linear"},
+        {"time": 1.0, "value": 0.55, "interpolation": "linear"}]});
+    let mut value = project(64, 48, vec![clip], vec![dither(&MONO, "bayer8", 1)]);
+    value["output"]["background"] = json!("#000000");
+    let Some(mut backends) = Backends::new(fixture(name, &source, &value)) else {
+        return;
+    };
+    let frames = (0..=8)
+        .map(|index| {
+            let time = index * 125_000_000;
+            (time, backends.render(name, time, 0))
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(frames[0].1, frames[8].1, "sweep must cross tone thresholds");
+    for pair in frames.windows(2) {
+        for (before, after) in pair[0].1.pixels().zip(pair[1].1.pixels()) {
+            assert!(
+                before[0] <= after[0],
+                "increasing tone cannot reverse a fixed Bayer decision"
+            );
+        }
+    }
+    assert_eq!(
+        frames[3].1,
+        backends.render(name, frames[3].0, 0),
+        "threshold rendering is stateless"
+    );
+    save_temporal_metrics(name, &frames);
+}
+
+#[test]
+fn gpu_stylization_temporal_period_seam_is_continuous_for_animated_colors() {
+    for mode in ["gradient", "rainbow"] {
+        let name = format!("temporal-seam-{mode}");
+        let mut effect = palette(&EMBER, mode);
+        effect["period"] = json!(2.0);
+        let source = rich_source(96, 64);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(96, 64, vec![image_clip(vec![effect])], vec![]),
+        )) else {
+            return;
+        };
+        let times = [
+            1_999_000_000,
+            1_999_999_999,
+            2_000_000_000,
+            2_000_000_001,
+            2_001_000_000,
+        ];
+        let frames = times
+            .into_iter()
+            .map(|time| (time, backends.render(&name, time, 1)))
+            .collect::<Vec<_>>();
+        let seam = compare_rgba(frames[1].1.as_raw(), frames[3].1.as_raw(), 1);
+        assert!(
+            seam.maximum_absolute_channel_error <= 1,
+            "period seam: {seam:?}"
+        );
+        assert_eq!(
+            frames[2].1,
+            backends.render(&name, 0, 1),
+            "exact cycle boundary"
+        );
+        assert_eq!(
+            frames[0].1,
+            backends.render(&name, times[0], 1),
+            "nonsequential seam repeat"
+        );
+        save_temporal_metrics(&name, &frames);
+    }
+}
+
+#[test]
+fn gpu_stylization_half_alpha_mask_uses_cpu_half_up_byte_rounding() {
+    for (alpha, expected) in [(1, 1), (3, 2), (255, 128)] {
+        let name = format!("half-alpha-{alpha}");
+        let source = RgbaImage::from_pixel(16, 8, Rgba([32, 64, 96, alpha]));
+        let mut clip = image_clip(vec![]);
+        clip["masks"] = json!([{"id": "half", "input": {"type": "shape",
+            "geometry": {"type": "rectangle", "width": 16.0, "height": 8.0},
+            "fill": "#ffffff"}, "operation": "subtract", "strength": 0.5}]);
+        let Some(mut backends) =
+            Backends::new(fixture(&name, &source, &project(16, 8, vec![clip], vec![])))
+        else {
+            return;
+        };
+        let (cpu, gpu, _) = backends.render_pair(&name, 0, 0);
+        assert_eq!(cpu.get_pixel(8, 4)[3], expected, "CPU half-alpha {alpha}");
+        assert_eq!(gpu.get_pixel(8, 4)[3], expected, "WGPU half-alpha {alpha}");
+    }
+}
+
+fn scalar_fields(mut effect: Value, fields: &[&str]) -> Value {
+    for field in fields {
+        effect[*field] = json!({"base_value": effect[*field]});
+    }
+    effect
+}
+
+fn ascii_effect(glyph_style: &str, mode: &str, color_mode: &str) -> Value {
+    scalar_fields(
+        json!({"type": "ascii", "id": "ascii", "characters": " .:-=+*#%@",
+        "edge_characters": "-|/\\", "glyph_style": glyph_style, "mode": mode,
+        "color_mode": color_mode, "foreground": "#ffffff", "background": "#000000",
+        "palette": EMBER, "invert": false, "amount": 1.0, "phase": 0.0,
+        "cell_width": 8.0, "cell_height": 12.0, "edge_threshold": 0.15,
+        "edge_strength": 1.0, "source_mix": 0.0}),
+        &[
+            "amount",
+            "phase",
+            "cell_width",
+            "cell_height",
+            "edge_threshold",
+            "edge_strength",
+            "source_mix",
+        ],
+    )
+}
+
+fn halftone_effect(mode: &str) -> Value {
+    scalar_fields(
+        json!({"type": "halftone", "id": "halftone", "cell_size": 6.0,
+        "angle_degrees": 15.0, "softness": 0.5, "mode": mode,
+        "foreground": "#ffffff", "background": "#000000", "invert": false,
+        "amount": 1.0}),
+        &["cell_size", "angle_degrees", "softness", "amount"],
+    )
+}
+
+fn sort_effect(direction: &str) -> Value {
+    scalar_fields(
+        json!({"type": "pixel_sort", "id": "sort", "direction": direction,
+        "order": "ascending", "lower_threshold": 0.15, "upper_threshold": 0.9,
+        "segment_length": 32, "amount": 1.0}),
+        &["lower_threshold", "upper_threshold", "amount"],
+    )
+}
+
+fn crt_effect() -> Value {
+    scalar_fields(
+        json!({"type": "crt", "id": "crt", "amount": 1.0, "curvature": 0.08,
+        "scanline_strength": 0.2, "scanline_spacing": 2.0, "mask_strength": 0.15,
+        "mask_spacing": 1, "grain": 0.025, "jitter": 0.35, "flicker": 0.025,
+        "rolling_strength": 0.06, "rolling_width": 0.12, "phase": 0.0, "seed": 7}),
+        &[
+            "amount",
+            "curvature",
+            "scanline_strength",
+            "scanline_spacing",
+            "mask_strength",
+            "grain",
+            "jitter",
+            "flicker",
+            "rolling_strength",
+            "rolling_width",
+            "phase",
+        ],
+    )
+}
+
+fn remaining_families() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "ascii-characters",
+            ascii_effect("characters", "hybrid", "source"),
+        ),
+        (
+            "ascii-geometric",
+            ascii_effect("geometric", "fill", "palette"),
+        ),
+        ("halftone-luminance", halftone_effect("luminance")),
+        ("halftone-source", halftone_effect("source")),
+        ("halftone-rgb", halftone_effect("rgb")),
+        ("sort-horizontal", sort_effect("horizontal")),
+        ("sort-vertical", sort_effect("vertical")),
+        ("crt", crt_effect()),
+    ]
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K all-family correctness and resource validation"]
+fn gpu_stylization_all_families_1080p_and_4k_resource_validation() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let source = rich_source(width, height);
+        for (family, effect) in remaining_families() {
+            let name = format!("{resolution}-{family}");
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(width, height, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let (cpu, gpu, difference) = backends.render_pair(&name, 250_000_000, 3);
+            assert_eq!(cpu.dimensions(), (width, height));
+            assert_eq!(gpu.dimensions(), (width, height));
+            assert!(
+                difference.maximum_absolute_channel_error <= 3,
+                "{name}: {difference:?}"
+            );
+            assert_ne!(cpu, source, "{name} must exercise actual stylization");
+            let resources = backends.gpu.resource_estimates();
+            eprintln!(
+                "STYLIZATION_RESOURCES fixture={name} persistent_bytes={} working_bytes={} staging_bytes={}",
+                resources.total_persistent_bytes,
+                resources.working_texture_bytes,
+                resources.total_staging_bytes
+            );
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_temporal_remaining_families_amount_and_random_access() {
+    let source = rich_source(96, 64);
+    for (family, mut effect) in remaining_families() {
+        let name = format!("temporal-amount-{family}");
+        effect["amount"] = json!({"base_value": 0.0, "keyframes": [
+            {"time": 0.0, "value": 0.0, "interpolation": "linear"},
+            {"time": 1.0, "value": 1.0, "interpolation": "linear"}]});
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(96, 64, vec![image_clip(vec![effect])], vec![]),
+        )) else {
+            return;
+        };
+        let times = [0, 250_000_000, 500_000_000, 750_000_000, 1_000_000_000];
+        let frames = times
+            .into_iter()
+            .map(|time| (time, backends.render(&name, time, 3)))
+            .collect::<Vec<_>>();
+        assert_eq!(frames[0].1, source, "{family} amount zero is identity");
+        assert_ne!(frames[4].1, source, "{family} full amount applies effect");
+        assert_eq!(
+            frames[2].1,
+            backends.render(&name, times[2], 3),
+            "{family} out-of-order repeat"
+        );
+        save_temporal_metrics(&name, &frames);
+    }
+}
+
+#[test]
+fn gpu_stylization_temporal_crt_seeded_noise_period_seam_and_random_access() {
+    let name = "temporal-crt-period";
+    let source = rich_source(96, 64);
+    let mut effect = crt_effect();
+    effect["period"] = json!(2.0);
+    let Some(mut backends) = Backends::new(fixture(
+        name,
+        &source,
+        &project(96, 64, vec![image_clip(vec![])], vec![effect]),
+    )) else {
+        return;
+    };
+    let times = [
+        0,
+        1_999_000_000,
+        1_999_999_999,
+        2_000_000_000,
+        2_000_000_001,
+        2_001_000_000,
+    ];
+    let frames = times
+        .into_iter()
+        .map(|time| (time, backends.render(name, time, 3)))
+        .collect::<Vec<_>>();
+    assert_eq!(frames[0].1, frames[3].1, "CRT exact periodic endpoint");
+    let seam = compare_rgba(frames[2].1.as_raw(), frames[4].1.as_raw(), 1);
+    assert!(
+        seam.maximum_absolute_channel_error <= 1,
+        "CRT noise seam: {seam:?}"
+    );
+    assert_eq!(
+        frames[1].1,
+        backends.render(name, times[1], 3),
+        "CRT out-of-order repeat"
+    );
+    save_temporal_metrics(name, &frames);
+}
+
+#[test]
+fn gpu_stylization_temporal_remaining_families_static_controls_and_moving_subjects() {
+    let source = rich_source(96, 64);
+    for moving in [false, true] {
+        for (family, mut effect) in remaining_families() {
+            let name = format!(
+                "temporal-{}-{family}",
+                if moving { "motion" } else { "static" }
+            );
+            if family == "crt" {
+                // Isolate source motion from the intentionally animated analog controls.
+                for property in ["grain", "jitter", "flicker", "rolling_strength"] {
+                    effect[property] = json!({"base_value": 0.0});
+                }
+            }
+            let mut clip = image_clip(vec![]);
+            if moving {
+                clip["transform"]["position"] = json!({"base_value": {"x": 0.5, "y": 0.5},
+                    "keyframes": [
+                        {"time": 0.0, "value": {"x": 0.5, "y": 0.5}, "interpolation": "linear"},
+                        {"time": 1.0, "value": {"x": 0.625, "y": 0.5}, "interpolation": "linear"}]});
+            }
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(96, 64, vec![clip], vec![effect]),
+            )) else {
+                return;
+            };
+            let times = [0, 250_000_000, 500_000_000, 750_000_000, 1_000_000_000];
+            let frames = times
+                .into_iter()
+                .map(|time| (time, backends.render(&name, time, 3)))
+                .collect::<Vec<_>>();
+            if moving {
+                assert_ne!(
+                    frames[0].1, frames[4].1,
+                    "{family} moving fixture must change"
+                );
+            } else {
+                assert!(
+                    frames.windows(2).all(|pair| pair[0].1 == pair[1].1),
+                    "{family} stationary control must not flicker"
+                );
+            }
+            assert_eq!(
+                frames[1].1,
+                backends.render(&name, times[1], 3),
+                "{family} random-access source motion"
+            );
+            save_temporal_metrics(&name, &frames);
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_temporal_ascii_and_halftone_tonal_cell_threshold_sweeps() {
+    for (family, effect) in [
+        ("ascii", ascii_effect("characters", "fill", "monochrome")),
+        ("halftone-soft", halftone_effect("luminance")),
+        ("halftone-crisp", {
+            let mut effect = halftone_effect("luminance");
+            effect["softness"] = json!({"base_value": 0.0});
+            effect
+        }),
+    ] {
+        let name = format!("temporal-threshold-{family}");
+        // Non-multiple dimensions exercise area analysis in partial border cells.
+        let source = RgbaImage::from_pixel(98, 66, Rgba([255, 255, 255, 255]));
+        let mut clip = image_clip(vec![]);
+        clip["opacity"] = json!({"base_value": 0.4, "keyframes": [
+            {"time": 0.0, "value": 0.4, "interpolation": "linear"},
+            {"time": 1.0, "value": 0.6, "interpolation": "linear"}]});
+        let mut value = project(98, 66, vec![clip], vec![effect]);
+        value["output"]["background"] = json!("#000000");
+        let Some(mut backends) = Backends::new(fixture(&name, &source, &value)) else {
+            return;
+        };
+        let frames = (0..=8)
+            .map(|index| {
+                let time = index * 125_000_000;
+                (time, backends.render(&name, time, 3))
+            })
+            .collect::<Vec<_>>();
+        assert_ne!(
+            frames[0].1, frames[8].1,
+            "{family} sweep must change cell coverage"
+        );
+        assert_eq!(
+            frames[3].1,
+            backends.render(&name, frames[3].0, 3),
+            "{family} thresholds are stateless"
+        );
+        save_temporal_metrics(&name, &frames);
+    }
+}
+
+#[test]
+fn gpu_stylization_temporal_sort_ties_segments_and_threshold_membership_are_stable() {
+    let red = Rgba([19, 0, 0, 255]);
+    let blue = Rgba([0, 0, 54, 255]);
+    // Byte luminance keys are exactly equal: 54*19 == 19*54.
+    let gray = |tone| Rgba([tone, tone, tone, 255]);
+    let pixels = [
+        gray(128),
+        red,
+        blue,
+        gray(64),
+        gray(0),
+        gray(64),
+        blue,
+        red,
+        gray(128),
+        gray(0),
+    ];
+    for direction in ["horizontal", "vertical"] {
+        let (width, height) = if direction == "horizontal" {
+            (10, 2)
+        } else {
+            (2, 10)
+        };
+        let source = RgbaImage::from_fn(width, height, |x, y| {
+            pixels[if direction == "horizontal" { x } else { y } as usize]
+        });
+        for (order, expected) in [
+            (
+                "ascending",
+                [
+                    red,
+                    blue,
+                    gray(64),
+                    gray(128),
+                    gray(0),
+                    blue,
+                    red,
+                    gray(64),
+                    gray(128),
+                    gray(0),
+                ],
+            ),
+            (
+                "descending",
+                [
+                    gray(128),
+                    gray(64),
+                    red,
+                    blue,
+                    gray(0),
+                    gray(64),
+                    blue,
+                    red,
+                    gray(128),
+                    gray(0),
+                ],
+            ),
+        ] {
+            let name = format!("temporal-sort-ties-{direction}-{order}");
+            let mut effect = sort_effect(direction);
+            effect["order"] = json!(order);
+            effect["segment_length"] = json!(8);
+            effect["upper_threshold"] = json!({"base_value": 1.0});
+            effect["lower_threshold"] = json!({"base_value": 0.015,
+                "keyframes": [
+                    {"time": 0.0, "value": 0.015, "interpolation": "linear"},
+                    {"time": 1.0, "value": 0.016, "interpolation": "linear"}]});
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(width, height, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let first = backends.render(&name, 0, 0);
+            for line in 0..2 {
+                let observed = (0..10)
+                    .map(|position| {
+                        let (x, y) = if direction == "horizontal" {
+                            (position, line)
+                        } else {
+                            (line, position)
+                        };
+                        *first.get_pixel(x, y)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    observed, expected,
+                    "stable equal-tone colors and ineligible separators in {direction}/{order} line {line}"
+                );
+            }
+            let frames = [0, 500_000_000, 750_000_000, 1_000_000_000]
+                .into_iter()
+                .map(|time| (time, backends.render(&name, time, 0)))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                frames[3].1, source,
+                "ineligible tie colors split remaining runs"
+            );
+            assert_eq!(
+                first,
+                backends.render(&name, 0, 0),
+                "threshold revisit restores exact tie order"
+            );
+            save_temporal_metrics(&name, &frames);
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_temporal_ascii_color_periods_repeat_with_cached_atlases() {
+    let source = rich_source(96, 64);
+    for color_mode in ["palette", "rainbow"] {
+        for global in [false, true] {
+            let name = format!(
+                "temporal-ascii-period-{color_mode}-{}",
+                if global { "global" } else { "clip" }
+            );
+            let mut effect = ascii_effect("characters", "hybrid", color_mode);
+            effect["period"] = json!(2.0);
+            let (clip_effects, post_effects) = if global {
+                (vec![], vec![effect])
+            } else {
+                (vec![effect], vec![])
+            };
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(96, 64, vec![image_clip(clip_effects)], post_effects),
+            )) else {
+                return;
+            };
+            let later = backends.render(&name, 2_250_000_000, 3);
+            let middle = backends.render(&name, 900_000_000, 3);
+            let early = backends.render(&name, 250_000_000, 3);
+            assert_eq!(
+                early, later,
+                "{color_mode} generated color repeats after period"
+            );
+            assert_ne!(
+                early, middle,
+                "ASCII atlas caching must preserve animated color"
+            );
+            let frames = [
+                0,
+                1_999_000_000,
+                1_999_999_999,
+                2_000_000_000,
+                2_000_000_001,
+                2_001_000_000,
+            ]
+            .into_iter()
+            .map(|time| (time, backends.render(&name, time, 3)))
+            .collect::<Vec<_>>();
+            assert_eq!(frames[0].1, frames[3].1, "ASCII exact period boundary");
+            let seam = compare_rgba(frames[2].1.as_raw(), frames[4].1.as_raw(), 1);
+            assert!(
+                seam.maximum_absolute_channel_error <= 1,
+                "ASCII color seam {color_mode}: {seam:?}"
+            );
+            assert_eq!(
+                early,
+                backends.render(&name, 250_000_000, 3),
+                "ASCII color nonsequential repeat"
+            );
+            save_temporal_metrics(&name, &frames);
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_halftone_analysis_scale_rotation_and_transparent_border_parity() {
+    let source = RgbaImage::from_fn(98, 66, |x, y| {
+        if (x + y) % 7 == 0 {
+            Rgba([255, 0, 255, 0])
+        } else {
+            Rgba([
+                (x * 2) as u8,
+                (y * 3) as u8,
+                ((x + y) * 3 % 256) as u8,
+                if (x + y) % 3 == 0 { 64 } else { 255 },
+            ])
+        }
+    });
+    for mode in ["luminance", "source", "rgb"] {
+        for size in [2.0, 6.0, 64.0] {
+            for angle in [0.0, 15.0, 45.0, 90.0] {
+                let name = format!("halftone-cells-{mode}-{size}-{angle}");
+                let mut effect = halftone_effect(mode);
+                effect["cell_size"] = json!({"base_value": size});
+                effect["angle_degrees"] = json!({"base_value": angle});
+                let Some(mut backends) = Backends::new(fixture(
+                    &name,
+                    &source,
+                    &project(98, 66, vec![image_clip(vec![])], vec![effect]),
+                )) else {
+                    return;
+                };
+                let output = backends.render(&name, 0, 3);
+                for (original, rendered) in source.pixels().zip(output.pixels()) {
+                    assert_eq!(
+                        original[3], rendered[3],
+                        "halftone cell must preserve per-pixel alpha"
+                    );
+                    if original[3] == 0 {
+                        assert_eq!(rendered.0, [0, 0, 0, 0], "hidden RGB cannot create dots");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_remaining_families_clip_global_masks_matte_and_order() {
+    let source = rich_source(96, 64);
+    for (family, effect) in remaining_families() {
+        let mut plain = Vec::new();
+        for global in [false, true] {
+            let name = format!("scope-{family}-{}", if global { "global" } else { "clip" });
+            let (clip_effects, post_effects) = if global {
+                (vec![], vec![effect.clone()])
+            } else {
+                (vec![effect.clone()], vec![])
+            };
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(96, 64, vec![image_clip(clip_effects)], post_effects),
+            )) else {
+                return;
+            };
+            plain.push(backends.render(&name, 250_000_000, 3));
+        }
+        assert_eq!(
+            plain[0], plain[1],
+            "{family} equivalent plain clip/global input"
+        );
+        let name = format!("masked-matte-{family}");
+        let mut clip = image_clip(vec![effect.clone()]);
+        clip["masks"] = json!([{"id": "rect", "input": {"type": "shape",
+            "geometry": {"type": "rectangle", "width": 78.0, "height": 52.0},
+            "fill": "#ffffff"}}]);
+        clip["matte"] = json!({"source_layer": "matte", "mode": "alpha", "invert": false});
+        let matte = json!({"id": "matte", "source": {"type": "shape",
+            "geometry": {"type": "rectangle", "width": 96.0, "height": 64.0},
+            "fill": "#ffffff80"}, "start": 0.0, "duration": 6.0, "layer": 1,
+            "visible": false, "opacity": {"base_value": 1.0}});
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(96, 64, vec![clip, matte], vec![]),
+        )) else {
+            return;
+        };
+        let output = backends.render(&name, 250_000_000, 3);
+        assert_eq!(
+            output.get_pixel(0, 0)[3],
+            0,
+            "{family} masked canvas corner"
+        );
+        assert!(
+            output.pixels().any(|pixel| pixel[3] == 128),
+            "{family} partial matte alpha"
+        );
+        let mut ordered = Vec::new();
+        let inverse = palette(&["#ffffff", "#000000"], "gradient");
+        for (order, effects) in [
+            ("before", vec![effect.clone(), inverse.clone()]),
+            ("after", vec![inverse.clone(), effect.clone()]),
+        ] {
+            let name = format!("order-{family}-{order}");
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(96, 64, vec![image_clip(vec![])], effects),
+            )) else {
+                return;
+            };
+            ordered.push(backends.render(&name, 250_000_000, 3));
+        }
+        assert_ne!(
+            ordered[0], ordered[1],
+            "{family} preserves noncommuting authored effect order"
+        );
+    }
+}
+
+#[test]
+fn gpu_stylization_ascii_min_max_cells_custom_characters_and_font() {
+    let source = rich_source(130, 130);
+    for (name, width, height, custom_font) in [
+        ("ascii-min-cells", 2.0, 2.0, false),
+        ("ascii-max-cells", 64.0, 128.0, false),
+        ("ascii-custom-glyphs-font", 7.0, 11.0, true),
+    ] {
+        let mut effect = ascii_effect("characters", "hybrid", "source");
+        effect["cell_width"] = json!({"base_value": width});
+        effect["cell_height"] = json!({"base_value": height});
+        effect["source_mix"] = json!({"base_value": 0.2});
+        effect["characters"] = json!(" .oO@░▒▓█");
+        let mut value = project(130, 130, vec![image_clip(vec![effect])], vec![]);
+        if custom_font {
+            value["visual"]["clips"][0]["effects"][0]["font"] = json!("custom-font");
+            let font = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/DejaVuSans.ttf");
+            value["assets"]
+                .as_array_mut()
+                .expect("assets")
+                .push(json!({"id": "custom-font",
+                "type": "font", "source": font}));
+        }
+        let Some(mut backends) = Backends::new(fixture(name, &source, &value)) else {
+            return;
+        };
+        let output = backends.render(name, 0, 3);
+        assert_ne!(output, source, "custom/partial glyphs must actually render");
+        assert!(
+            output.pixels().all(|pixel| pixel[3] == 255),
+            "glyph background preserves source alpha"
+        );
+    }
+}
+
+#[test]
+fn gpu_stylization_half_opacity_compositor_uses_cpu_half_up_byte_rounding() {
+    let name = "half-opacity-compositor";
+    let source = RgbaImage::from_pixel(16, 8, Rgba([255, 255, 255, 255]));
+    let mut clip = image_clip(vec![]);
+    clip["opacity"] = json!({"base_value": 0.5});
+    let mut value = project(16, 8, vec![clip], vec![]);
+    value["output"]["background"] = json!("#000000");
+    let Some(mut backends) = Backends::new(fixture(name, &source, &value)) else {
+        return;
+    };
+    let output = backends.render(name, 0, 0);
+    assert!(
+        output.pixels().all(|pixel| pixel.0 == [128, 128, 128, 255]),
+        "byte127.5 must round to128 before downstream cell/threshold analysis"
     );
 }

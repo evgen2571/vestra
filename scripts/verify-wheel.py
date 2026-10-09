@@ -96,7 +96,7 @@ def verify(output_dir: Path) -> None:
     requirement = installed.metadata["Requires-Python"].replace(" ", "")
     assert ">=3.11" in requirement and "<3.15" in requirement
     included = {Path(str(path)).name for path in installed.files or ()}
-    assert {"LICENSE", "FFmpeg-LGPL-2.1.txt", "THIRD_PARTY_NOTICES.md", "_native.pyi"} <= included
+    assert {"LICENSE", "FFmpeg-LGPL-2.1.txt", "DejaVuSans.txt", "THIRD_PARTY_NOTICES.md", "_native.pyi"} <= included
 
     if "site-packages" not in package_path.parts:
         raise AssertionError(f"vestra did not import from the installed wheel: {package_path}")
@@ -119,6 +119,8 @@ def verify(output_dir: Path) -> None:
         base_directory=output_dir,
     )
     builder.add_solid_color_clip(colour="#101018", start=0.0, duration=3.0, layer=0)
+    # Preparation must find the bundled glyphs without repository or system fonts.
+    builder.post_effects.add_ascii(characters=" .#", cell_width=4, cell_height=6)
     outgoing_asset = builder.add_audio_asset(tone_440.name)
     incoming_asset = builder.add_audio_asset(tone_880.name)
     music = builder.audio.add_track(id="music")

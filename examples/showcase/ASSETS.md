@@ -64,7 +64,7 @@ caption or description as well. No author endorsement is implied.
 ## Stylized effects synthetic inputs
 
 The [stylized effects scene](stylized-effects/README.md) generates its moving
-video and 440 Hz sine soundtrack locally with FFmpeg. The analytic image and
+video and periodic harmonic soundtrack locally with FFmpeg. The analytic image and
 motion expressions are original project work distributed under MIT; no external
 footage or audio is downloaded. Generated media remains under `target/`.
 The custom ASCII example uses `tests/assets/VestraTest-Regular.ttf` (DejaVu

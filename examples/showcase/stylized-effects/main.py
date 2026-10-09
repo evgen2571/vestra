@@ -74,7 +74,11 @@ def prepare_assets(directory: Path, size: tuple[int, int], fps: int) -> None:
             "-f",
             "lavfi",
             "-i",
-            f"sine=frequency=440:sample_rate=48000:duration={PERIOD}",
+            "aevalsrc=0.09*sin(2*PI*110*t)*(0.65+0.35*cos(4*PI*t))"
+            "+0.06*sin(2*PI*220*t)*(0.6+0.4*cos(2*PI*t/4))"
+            "+0.06*sin(2*PI*275*t)*(0.6+0.4*cos(2*PI*t/4-2*PI/3))"
+            "+0.06*sin(2*PI*330*t)*(0.6+0.4*cos(2*PI*t/4-4*PI/3))"
+            f":sample_rate=48000:duration={PERIOD}",
             "-c:a",
             "pcm_s16le",
             str(directory / "music.wav"),

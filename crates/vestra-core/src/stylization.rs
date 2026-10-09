@@ -58,6 +58,7 @@ pub(crate) fn evaluate_palette(
     phase: f64,
     period: Option<f64>,
     local_time: u128,
+    interpolation: crate::project::PaletteInterpolation,
 ) -> EvaluatedPalette {
     // Reduce time before adding phase so large authored phases cannot lose the
     // procedural component. This is a pure local-timeline function, no history.
@@ -91,6 +92,10 @@ pub(crate) fn evaluate_palette(
     for (index, stop) in result.colours[..count].iter_mut().enumerate() {
         let a = palette.colours[(index + whole) % count];
         let b = palette.colours[(index + whole + 1) % count];
+        if interpolation == crate::project::PaletteInterpolation::Oklab {
+            *stop = interpolate_oklab(a, b, (fraction * 65280.0).round() as u32, 65280);
+            continue;
+        }
         for channel in 0..3 {
             stop[channel] = (f64::from(a[channel]) * (1.0 - fraction)
                 + f64::from(b[channel]) * fraction)
@@ -167,6 +172,44 @@ fn oklab_features(pixel: [u8; 4]) -> [u32; 3] {
     [lab[0] as u32, (lab[1] + 512) as u32, (lab[2] + 512) as u32]
 }
 
+fn interpolate_oklab(a: [u8; 4], b: [u8; 4], fraction: u32, span: u32) -> [u8; 4] {
+    if fraction == 0 || a == b {
+        return a;
+    }
+    if fraction == span {
+        return b;
+    }
+    interpolate_oklab_features(oklab_features(a), oklab_features(b), fraction, span)
+}
+
+/// Interpolate biased Q10 Oklab coordinates and clip the result to sRGB gamut.
+/// Inputs are palette features; `0 <= fraction <= span <= 65280` and `span > 0`.
+#[must_use]
+pub fn interpolate_oklab_features(a: [u32; 3], b: [u32; 3], fraction: u32, span: u32) -> [u8; 4] {
+    let feature: [i32; 3] = std::array::from_fn(|c| {
+        ((a[c] * (span - fraction) + b[c] * fraction + span / 2) / span) as i32
+    });
+    let lab = [feature[0], feature[1] - 512, feature[2] - 512];
+    let linear = oklab::LAB_TO_LMS.map(|row| {
+        let sum: i32 = row.iter().zip(lab).map(|(a, b)| a * b).sum();
+        let root = (sum.signum() * ((sum.abs() + 16384) / 32768)).clamp(-1100, 1100);
+        let cube = root * root * root;
+        cube.signum() * ((cube.abs() + 8192) / 16384)
+    });
+    let rgb = oklab::LMS_TO_RGB.map(|row| {
+        let sum: i32 = row.iter().zip(linear).map(|(a, b)| a * b).sum();
+        let value = (sum.signum() * ((sum.abs() + 2048) / 4096)).clamp(0, 65536) as u32;
+        let upper = oklab::SRGB_LINEAR.partition_point(|&v| v < value).min(255);
+        let lower = upper.saturating_sub(1);
+        if value.abs_diff(oklab::SRGB_LINEAR[lower]) < value.abs_diff(oklab::SRGB_LINEAR[upper]) {
+            lower as u8
+        } else {
+            upper as u8
+        }
+    });
+    [rgb[0], rgb[1], rgb[2], 255]
+}
+
 fn cube_root_q10(value: u32) -> u32 {
     let target = value * 16384;
     let (mut lower, mut upper) = (0, 1025);
@@ -195,6 +238,34 @@ pub fn chromatic_distance(a: [u32; 3], b: [u32; 3], mode: PaletteMode) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn oklab_interpolation_keeps_endpoints_and_differs_from_encoded_rgb() {
+        let red = [255, 0, 0, 255];
+        let blue = [0, 0, 255, 255];
+        assert_eq!(interpolate_oklab(red, blue, 0, 65280), red);
+        assert_eq!(interpolate_oklab(red, blue, 65280, 65280), blue);
+        let middle = interpolate_oklab(red, blue, 32640, 65280);
+        assert!((137..=143).contains(&middle[0]));
+        assert!((81..=87).contains(&middle[1]));
+        assert!((159..=165).contains(&middle[2]));
+        assert_eq!(middle[3], 255);
+        for colour in [red, blue, [1, 2, 3, 255], [27, 39, 51, 255]] {
+            assert_eq!(interpolate_oklab(colour, colour, 12345, 65280), colour);
+        }
+        for step in 0..=255 {
+            let output = interpolate_oklab([0, 0, 0, 255], [255; 4], step * 256, 65280);
+            let linear = (f64::from(step) / 255.0).powi(3);
+            let encoded = if linear <= 0.0031308 {
+                12.92 * linear
+            } else {
+                1.055 * linear.powf(1.0 / 2.4) - 0.055
+            };
+            let expected = (encoded * 255.0).round() as u8;
+            assert!(output[0].abs_diff(expected) <= 1);
+            assert_eq!(output[0], output[1]);
+            assert_eq!(output[0], output[2]);
+        }
+    }
     use crate::{
         animation::Track,
         plan::{
@@ -333,12 +404,26 @@ mod tests {
     #[test]
     fn palette_rotation_interpolates_authored_order_without_sorting() {
         let authored = compile_palette(&["#ff0000".to_owned(), "#0000ff".to_owned()]).unwrap();
-        let at_quarter = evaluate_palette(&authored, PaletteMode::Gradient, 0.25, None, 0);
+        let at_quarter = evaluate_palette(
+            &authored,
+            PaletteMode::Gradient,
+            0.25,
+            None,
+            0,
+            crate::project::PaletteInterpolation::Rgb,
+        );
         assert_eq!(
             &at_quarter.colours[..2],
             &[[128, 0, 128, 255], [128, 0, 128, 255]]
         );
-        let at_half = evaluate_palette(&authored, PaletteMode::Gradient, 0.5, None, 0);
+        let at_half = evaluate_palette(
+            &authored,
+            PaletteMode::Gradient,
+            0.5,
+            None,
+            0,
+            crate::project::PaletteInterpolation::Rgb,
+        );
         assert_eq!(&at_half.colours[..2], &[[0, 0, 255, 255], [255, 0, 0, 255]]);
     }
 
@@ -352,8 +437,22 @@ mod tests {
         ] {
             for time in [7_450_000_000, 0, 500_000_000, 1_250_000_000] {
                 assert_eq!(
-                    evaluate_palette(&authored, mode, -0.25, Some(2.0), time),
-                    evaluate_palette(&authored, mode, -0.25, Some(2.0), time + 2_000_000_000)
+                    evaluate_palette(
+                        &authored,
+                        mode,
+                        -0.25,
+                        Some(2.0),
+                        time,
+                        crate::project::PaletteInterpolation::Rgb
+                    ),
+                    evaluate_palette(
+                        &authored,
+                        mode,
+                        -0.25,
+                        Some(2.0),
+                        time + 2_000_000_000,
+                        crate::project::PaletteInterpolation::Rgb
+                    )
                 );
             }
         }
@@ -363,8 +462,22 @@ mod tests {
     fn palette_animation_is_continuous_across_loop_seam() {
         let authored = palette();
         for mode in [PaletteMode::Gradient, PaletteMode::Rainbow] {
-            let before = evaluate_palette(&authored, mode, 0.0, Some(2.0), 1_999_999_000);
-            let after = evaluate_palette(&authored, mode, 0.0, Some(2.0), 2_000_001_000);
+            let before = evaluate_palette(
+                &authored,
+                mode,
+                0.0,
+                Some(2.0),
+                1_999_999_000,
+                crate::project::PaletteInterpolation::Rgb,
+            );
+            let after = evaluate_palette(
+                &authored,
+                mode,
+                0.0,
+                Some(2.0),
+                2_000_001_000,
+                crate::project::PaletteInterpolation::Rgb,
+            );
             for (a, b) in before.colours.iter().zip(after.colours) {
                 assert!(a.iter().zip(b).all(|(&a, b)| a.abs_diff(b) <= 1));
             }
@@ -373,7 +486,14 @@ mod tests {
 
     #[test]
     fn rainbow_retains_dark_and_bright_tonal_endpoints() {
-        let evaluated = evaluate_palette(&palette(), PaletteMode::Rainbow, 0.0, None, 0);
+        let evaluated = evaluate_palette(
+            &palette(),
+            PaletteMode::Rainbow,
+            0.0,
+            None,
+            0,
+            crate::project::PaletteInterpolation::Rgb,
+        );
         assert_eq!(evaluated.len, 16);
         assert_eq!(evaluated.colours[0], [0, 0, 0, 255]);
         assert_eq!(evaluated.colours[15], [255, 0, 0, 255]);
@@ -386,6 +506,7 @@ mod tests {
         let signals = PreparedScalarSignals::empty();
         let context = EvaluationContext::new(&signals);
         let mut effect = CompiledEffect::PaletteMap {
+            interpolation: crate::project::PaletteInterpolation::Rgb,
             stops: None,
             palette: palette(),
             mode: PaletteMode::Nearest,
@@ -397,6 +518,7 @@ mod tests {
         let evaluated =
             crate::plan::evaluate_effect(&effect, 500_000_000, 9_000_000_000, &context).unwrap();
         let EvaluatedEffect::PaletteMap {
+            interpolation: _,
             stops,
             palette,
             amount,

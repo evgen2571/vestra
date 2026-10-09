@@ -186,6 +186,26 @@
         "blue_noise_video",
         "nonuniform_dither_video"
       ]
+    },
+    "palette-interpolation-smoke": {
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "palette_video",
+        "oklab_palette_video"
+      ]
+    },
+    "palette-interpolation-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "palette_video",
+        "oklab_palette_video"
+      ]
     }
   }
 }

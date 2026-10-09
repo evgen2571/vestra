@@ -1741,6 +1741,56 @@ fn gpu_stylization_nonuniform_stops_match_literal_ramp_and_animated_scenes() {
 }
 
 #[test]
+fn gpu_stylization_oklab_interpolation_preserves_stops_and_animated_colour_parity() {
+    let source = RgbaImage::from_fn(256, 32, |x, _| Rgba([x as u8, x as u8, x as u8, 255]));
+    for custom in [false, true] {
+        let name = format!("oklab-interpolation-ramp-{custom}");
+        let mut effect = palette(&["#ff0000", "#0000ff", "#ffffff"], "gradient");
+        effect["interpolation"] = json!("oklab");
+        if custom {
+            effect["stops"] = json!([0.0, 64.0 / 255.0, 1.0]);
+        }
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(256, 32, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let output = backends.render(&name, 0, 0);
+        assert_eq!(output.get_pixel(0, 0).0, [255, 0, 0, 255]);
+        assert_eq!(output.get_pixel(255, 0).0, [255; 4]);
+        if custom {
+            assert_eq!(output.get_pixel(64, 0).0, [0, 0, 255, 255]);
+            assert!((81..=87).contains(&output.get_pixel(32, 0)[1]));
+        }
+    }
+    let source = rich_source(320, 180);
+    for matrix in ["map", "bayer8", "blue_noise"] {
+        let name = format!("oklab-interpolation-animated-{matrix}");
+        let mut effect = if matrix == "map" {
+            palette(&EMBER, "gradient")
+        } else {
+            dither(&EMBER, matrix, 1)
+        };
+        effect["interpolation"] = json!("oklab");
+        effect["stops"] = json!([0.0, 0.12, 0.35, 0.7, 1.0]);
+        effect["period"] = json!(2.0);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(320, 180, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let first = backends.render(&name, 0, 0);
+        assert_ne!(first, backends.render(&name, 777_000_000, 0));
+        assert_eq!(first, backends.render(&name, 2_000_000_000, 0));
+        assert_eq!(first, backends.render(&name, 0, 0));
+    }
+}
+
+#[test]
 #[ignore = "explicit 1080p/4K chromatic palette correctness and resource validation"]
 fn gpu_stylization_chromatic_1080p_and_4k_match_cpu() {
     for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
@@ -1772,6 +1822,27 @@ fn gpu_stylization_nonuniform_stops_1080p_and_4k_match_cpu() {
         let source = rich_source(width, height);
         let name = format!("{resolution}-nonuniform-blue-noise");
         let mut effect = dither(&EMBER, "blue_noise", 1);
+        effect["stops"] = json!([0.0, 0.12, 0.35, 0.7, 1.0]);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(width, height, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        backends.render(&name, 0, 0);
+        assert!(backends.gpu.resource_estimates().total_persistent_bytes < 512 * 1024 * 1024);
+    }
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K Oklab gradient correctness and resource validation"]
+fn gpu_stylization_oklab_interpolation_1080p_and_4k_match_cpu() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let source = rich_source(width, height);
+        let name = format!("{resolution}-oklab-gradient");
+        let mut effect = palette(&EMBER, "gradient");
+        effect["interpolation"] = json!("oklab");
         effect["stops"] = json!([0.0, 0.12, 0.35, 0.7, 1.0]);
         let Some(mut backends) = Backends::new(fixture(
             &name,

@@ -54,6 +54,7 @@ pub enum EvaluatedEffect {
         seed: u64,
     },
     PaletteMap {
+        interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
@@ -61,6 +62,7 @@ pub enum EvaluatedEffect {
         levels: u16,
     },
     OrderedDither {
+        interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
@@ -268,6 +270,7 @@ pub fn evaluate(
                 phase.evaluate(authored_time, project_time, context)?,
                 *period,
                 authored_time,
+                crate::project::PaletteInterpolation::Rgb,
             );
             EvaluatedEffect::Ascii { parameters }
         }
@@ -347,6 +350,7 @@ pub fn evaluate(
             seed: *seed,
         },
         CompiledEffect::PaletteMap {
+            interpolation,
             stops,
             palette,
             mode,
@@ -355,6 +359,7 @@ pub fn evaluate(
             phase,
             period,
         } => EvaluatedEffect::PaletteMap {
+            interpolation: *interpolation,
             stops: *stops,
             palette: crate::stylization::evaluate_palette(
                 palette,
@@ -362,12 +367,14 @@ pub fn evaluate(
                 phase.evaluate(authored_time, project_time, context)?,
                 *period,
                 authored_time,
+                *interpolation,
             ),
             amount: amount.evaluate(authored_time, project_time, context)?,
             mode: *mode,
             levels: *levels,
         },
         CompiledEffect::OrderedDither {
+            interpolation,
             stops,
             palette,
             mode,
@@ -380,6 +387,7 @@ pub fn evaluate(
             scale,
             seed,
         } => EvaluatedEffect::OrderedDither {
+            interpolation: *interpolation,
             stops: *stops,
             palette: crate::stylization::evaluate_palette(
                 palette,
@@ -387,6 +395,7 @@ pub fn evaluate(
                 phase.evaluate(authored_time, project_time, context)?,
                 *period,
                 authored_time,
+                *interpolation,
             ),
             amount: amount.evaluate(authored_time, project_time, context)?,
             strength: strength.evaluate(authored_time, project_time, context)?,
@@ -646,6 +655,7 @@ mod tests {
             PreparedScalarSignal::new(10_000_000_000, 1_000_000_000, vec![0.0, 0.0, 0.25]).unwrap(),
         ]);
         let effect = CompiledEffect::PaletteMap {
+            interpolation: crate::project::PaletteInterpolation::Rgb,
             stops: None,
             palette: crate::stylization::compile_palette(&[
                 "#000000".to_owned(),

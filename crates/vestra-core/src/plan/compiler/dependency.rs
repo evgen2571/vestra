@@ -169,6 +169,7 @@ mod tests {
     #[test]
     fn stylization_period_keyframes_and_signals_invalidate_static_cache() {
         let mut effect = CompiledEffect::PaletteMap {
+            interpolation: crate::project::PaletteInterpolation::Rgb,
             stops: None,
             palette: crate::stylization::compile_palette(&[
                 "#000000".to_owned(),

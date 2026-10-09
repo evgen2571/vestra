@@ -67,3 +67,9 @@ uv run python examples/showcase/stylized-effects/main.py --look dither-blue-nois
 
 `--stops` requires one increasing position per palette color and tonal
 `--mode nearest` (the default); chromatic/channel modes reject this control.
+
+Add `--interpolation oklab` to use perceptual interpolation for the animated
+palette colors, retaining discrete dither output. The `palette` look also uses
+this control for gradient segments. The default `rgb` retains the original
+encoded RGB interpolation. Output gamut handling is documented in the
+[effect reference](../../../docs/reference/effects.md).

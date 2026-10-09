@@ -6,6 +6,10 @@ use vestra_core::{
     stylization::EvaluatedPalette,
 };
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "consumes canonical palette controls"
+)]
 pub(super) fn palette_map(
     source: &RgbaImage,
     target: &mut RgbaImage,
@@ -14,10 +18,20 @@ pub(super) fn palette_map(
     amount: f64,
     mode: PaletteMode,
     levels: u16,
+    interpolation: vestra_core::project::PaletteInterpolation,
 ) {
-    let features = palette
-        .colours
-        .map(|p| vestra_core::stylization::chromatic_features(p, mode));
+    let features = palette.colours.map(|p| {
+        vestra_core::stylization::chromatic_features(
+            p,
+            if interpolation == vestra_core::project::PaletteInterpolation::Oklab
+                && matches!(mode, PaletteMode::Gradient | PaletteMode::Rainbow)
+            {
+                PaletteMode::NearestOklab
+            } else {
+                mode
+            },
+        )
+    });
     let last = palette.len - 1;
     let amount = (amount * 65535.0).round() as u32;
     for (input, output) in source.pixels().zip(target.pixels_mut()) {
@@ -39,11 +53,15 @@ pub(super) fn palette_map(
             if mode == PaletteMode::Nearest {
                 palette.colours[lower + usize::from(fraction * 2 >= span)]
             } else {
-                std::array::from_fn(|c| {
-                    let a = u32::from(palette.colours[lower][c]);
-                    let b = u32::from(palette.colours[lower + 1][c]);
-                    ((a * (span - fraction) + b * fraction + span / 2) / span) as u8
-                })
+                gradient_colour(
+                    palette,
+                    &features,
+                    lower,
+                    lower + 1,
+                    fraction,
+                    span,
+                    interpolation,
+                )
             }
         } else if mode == PaletteMode::Nearest {
             palette.colours[((position + 32640) / 65280) as usize]
@@ -51,14 +69,48 @@ pub(super) fn palette_map(
             let lower = position / 65280;
             let upper = (lower + 1).min(last);
             let fraction = position % 65280;
-            std::array::from_fn(|c| {
-                let a = u32::from(palette.colours[lower as usize][c]);
-                let b = u32::from(palette.colours[upper as usize][c]);
-                ((a * (65280 - fraction) + b * fraction + 32640) / 65280) as u8
-            })
+            gradient_colour(
+                palette,
+                &features,
+                lower as usize,
+                upper as usize,
+                fraction,
+                65280,
+                interpolation,
+            )
         };
         output.0 = mix_rgb(input.0, colour, amount);
     }
+}
+
+fn gradient_colour(
+    palette: &EvaluatedPalette,
+    features: &[[u32; 3]; 16],
+    lower: usize,
+    upper: usize,
+    fraction: u32,
+    span: u32,
+    interpolation: vestra_core::project::PaletteInterpolation,
+) -> [u8; 4] {
+    if fraction == 0 || palette.colours[lower] == palette.colours[upper] {
+        return palette.colours[lower];
+    }
+    if fraction == span {
+        return palette.colours[upper];
+    }
+    if interpolation == vestra_core::project::PaletteInterpolation::Oklab {
+        return vestra_core::stylization::interpolate_oklab_features(
+            features[lower],
+            features[upper],
+            fraction,
+            span,
+        );
+    }
+    std::array::from_fn(|c| {
+        let a = u32::from(palette.colours[lower][c]);
+        let b = u32::from(palette.colours[upper][c]);
+        ((a * (span - fraction) + b * fraction + span / 2) / span) as u8
+    })
 }
 
 #[allow(
@@ -262,6 +314,52 @@ mod tests {
     use image::Rgba;
 
     #[test]
+    fn oklab_gradient_preserves_partial_and_hidden_alpha() {
+        let mut palette = EvaluatedPalette {
+            colours: [[0, 0, 0, 255]; 16],
+            len: 3,
+        };
+        palette.colours[1] = [255; 4];
+        palette.colours[2] = [255, 0, 0, 255];
+        let stops = [0, 32768, 65280, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let source = RgbaImage::from_fn(5, 1, |x, _| {
+            if x == 4 {
+                return Rgba([27, 39, 51, 0]);
+            }
+            let c = [0, 64, 128, 255][x as usize];
+            Rgba([c, c, c, 128])
+        });
+        let mut output = source.clone();
+        palette_map(
+            &source,
+            &mut output,
+            &palette,
+            Some(&stops),
+            1.0,
+            PaletteMode::Gradient,
+            4,
+            vestra_core::project::PaletteInterpolation::Oklab,
+        );
+        assert_eq!(
+            output.as_raw(),
+            &[
+                0, 0, 0, 128, 99, 99, 99, 128, 255, 255, 255, 128, 255, 0, 0, 128, 27, 39, 51, 0
+            ]
+        );
+        palette_map(
+            &source,
+            &mut output,
+            &palette,
+            Some(&stops),
+            0.0,
+            PaletteMode::Gradient,
+            4,
+            vestra_core::project::PaletteInterpolation::Oklab,
+        );
+        assert_eq!(source, output);
+    }
+
+    #[test]
     fn nonuniform_stops_have_literal_tones_and_dither_coverage() {
         let mut palette = EvaluatedPalette {
             colours: [[0, 0, 0, 255]; 16],
@@ -281,6 +379,7 @@ mod tests {
             1.0,
             PaletteMode::Gradient,
             4,
+            vestra_core::project::PaletteInterpolation::Rgb,
         );
         assert!(output.pixels().all(|p| p.0 == [128, 0, 0, 128]));
         palette_map(
@@ -291,6 +390,7 @@ mod tests {
             1.0,
             PaletteMode::Nearest,
             4,
+            vestra_core::project::PaletteInterpolation::Rgb,
         );
         assert!(output.pixels().all(|p| p.0 == [255, 0, 0, 128]));
         for matrix in [
@@ -346,6 +446,7 @@ mod tests {
             1.0,
             PaletteMode::Gradient,
             4,
+            vestra_core::project::PaletteInterpolation::Rgb,
         );
         assert_eq!(
             output.as_raw(),
@@ -361,6 +462,7 @@ mod tests {
             1.0,
             PaletteMode::Gradient,
             4,
+            vestra_core::project::PaletteInterpolation::Rgb,
         );
         assert_eq!(source, output);
     }
@@ -381,7 +483,16 @@ mod tests {
         palette.colours[1] = b;
         let source = RgbaImage::from_pixel(32, 32, Rgba([1, 255, 255, 128]));
         let mut output = source.clone();
-        palette_map(&source, &mut output, &palette, None, 1.0, mode, 4);
+        palette_map(
+            &source,
+            &mut output,
+            &palette,
+            None,
+            1.0,
+            mode,
+            4,
+            vestra_core::project::PaletteInterpolation::Rgb,
+        );
         assert_eq!(source, output);
         ordered_dither(
             &source,
@@ -482,7 +593,16 @@ mod tests {
         for mode in [PaletteMode::NearestRgb, PaletteMode::NearestHue] {
             let source = RgbaImage::from_pixel(32, 32, Rgba([127, 0, 127, 128]));
             let mut output = source.clone();
-            palette_map(&source, &mut output, &palette, None, 1.0, mode, 4);
+            palette_map(
+                &source,
+                &mut output,
+                &palette,
+                None,
+                1.0,
+                mode,
+                4,
+                vestra_core::project::PaletteInterpolation::Rgb,
+            );
             assert!(output.pixels().all(|p| p.0 == [255, 0, 0, 128]));
             for strength in [0.0, 1.0] {
                 ordered_dither(
@@ -505,7 +625,16 @@ mod tests {
                 assert!(output.pixels().all(|p| p[3] == 128));
             }
             let hidden = RgbaImage::from_pixel(32, 32, Rgba([37, 92, 154, 0]));
-            palette_map(&hidden, &mut output, &palette, None, 1.0, mode, 4);
+            palette_map(
+                &hidden,
+                &mut output,
+                &palette,
+                None,
+                1.0,
+                mode,
+                4,
+                vestra_core::project::PaletteInterpolation::Rgb,
+            );
             assert_eq!(hidden, output);
             ordered_dither(
                 &hidden,

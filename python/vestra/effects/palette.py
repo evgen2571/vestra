@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import cast
 
-from ..authoring.effects import DitherMatrix, PaletteMode
+from ..authoring.effects import DitherMatrix, PaletteMode, PaletteInterpolation
 from ..authoring.values import Color
 from ..properties import BindableScalarProperty, ScalarProperty
 from .base import Effect
@@ -24,6 +24,7 @@ class PaletteMap(Effect):
         mode: PaletteMode | str = PaletteMode.GRADIENT,
         levels: int = 4,
         stops: Sequence[int | float] | None = None,
+        interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -36,6 +37,7 @@ class PaletteMap(Effect):
                 "mode": mode,
                 "levels": levels,
                 "stops": stops,
+                "interpolation": interpolation,
                 "amount": amount,
                 "phase": phase,
                 "period": period,
@@ -58,6 +60,14 @@ class PaletteMap(Effect):
     @mode.setter
     def mode(self, value: PaletteMode | str) -> None:
         self._set_value("mode", value)
+
+    @property
+    def interpolation(self) -> PaletteInterpolation:
+        return cast(PaletteInterpolation, self._values["interpolation"])
+
+    @interpolation.setter
+    def interpolation(self, value: PaletteInterpolation | str) -> None:
+        self._set_value("interpolation", value)
 
     @property
     def stops(self) -> tuple[float, ...] | None:
@@ -113,6 +123,7 @@ class OrderedDither(PaletteMap):
         mode: PaletteMode | str = PaletteMode.NEAREST,
         levels: int = 4,
         stops: Sequence[int | float] | None = None,
+        interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -129,6 +140,7 @@ class OrderedDither(PaletteMap):
                 "mode": mode,
                 "levels": levels,
                 "stops": stops,
+                "interpolation": interpolation,
                 "amount": amount,
                 "phase": phase,
                 "period": period,

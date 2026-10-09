@@ -442,6 +442,7 @@ mod tests {
             ),
             (
                 vestra_core::plan::CompiledEffect::PaletteMap {
+                    interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
                     mode: crate::project::PaletteMode::Gradient,
@@ -451,6 +452,7 @@ mod tests {
                     period: None,
                 },
                 vestra_core::plan::EvaluatedEffect::PaletteMap {
+                    interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
                     amount: 1.0,
@@ -461,6 +463,7 @@ mod tests {
             ),
             (
                 vestra_core::plan::CompiledEffect::OrderedDither {
+                    interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
                     mode: crate::project::PaletteMode::Nearest,
@@ -474,6 +477,7 @@ mod tests {
                     scale: 1,
                 },
                 vestra_core::plan::EvaluatedEffect::OrderedDither {
+                    interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
                     amount: 1.0,

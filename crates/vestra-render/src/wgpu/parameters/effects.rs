@@ -285,6 +285,7 @@ pub(in crate::wgpu) fn effect_parameters(
             EffectKernelParameters::Crt(p)
         }
         EffectOperation::PaletteMap {
+            interpolation,
             stops,
             palette,
             amount,
@@ -301,8 +302,10 @@ pub(in crate::wgpu) fn effect_parameters(
             0,
             1,
             levels,
+            interpolation,
         )),
         EffectOperation::OrderedDither {
+            interpolation,
             stops,
             mode,
             levels,
@@ -330,6 +333,7 @@ pub(in crate::wgpu) fn effect_parameters(
                 bits,
                 u32::from(scale),
                 levels,
+                interpolation,
             );
             parameters.seed = seed;
             EffectKernelParameters::OrderedDither(parameters)
@@ -539,11 +543,15 @@ fn palette_parameters(
     bits: u32,
     scale: u32,
     levels: u16,
+    interpolation: vestra_core::project::PaletteInterpolation,
 ) -> PaletteParameters {
     PaletteParameters {
         canvas_width: width,
         canvas_height: height,
-        _padding: [u32::from(stops.is_some()), 0],
+        _padding: [
+            u32::from(stops.is_some()),
+            u32::from(interpolation == vestra_core::project::PaletteInterpolation::Oklab),
+        ],
         stops: stops.copied().unwrap_or([0; 16]).map(u32::from),
         amount: (amount * 65535.0).round() as u32,
         strength: strength as f32,
@@ -563,7 +571,20 @@ fn palette_parameters(
         levels: u32::from(levels),
         colours: palette.colours.map(u32::from_le_bytes),
         features: palette.colours.map(|p| {
-            let f = vestra_core::stylization::chromatic_features(p, mode);
+            let f = vestra_core::stylization::chromatic_features(
+                p,
+                if interpolation == vestra_core::project::PaletteInterpolation::Oklab
+                    && matches!(
+                        mode,
+                        vestra_core::project::PaletteMode::Gradient
+                            | vestra_core::project::PaletteMode::Rainbow
+                    )
+                {
+                    vestra_core::project::PaletteMode::NearestOklab
+                } else {
+                    mode
+                },
+            );
             f[0] | (f[1] << 11) | (f[2] << 21)
         }),
     }
@@ -714,6 +735,7 @@ mod effect_parameter_layout_tests {
             3,
             2,
             4,
+            vestra_core::project::PaletteInterpolation::Rgb,
         );
         assert_eq!(packed.colours[0], 0xff332211);
         assert_eq!(packed.count, 2);

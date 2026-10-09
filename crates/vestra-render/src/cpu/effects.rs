@@ -176,6 +176,7 @@ fn execute_effect_pass(
         }
         EffectOperation::Crt { .. } => super::analog::crt(source, target, pass.operation),
         EffectOperation::PaletteMap {
+            interpolation,
             stops,
             palette,
             amount,
@@ -189,8 +190,10 @@ fn execute_effect_pass(
             amount,
             mode,
             levels,
+            interpolation,
         ),
         EffectOperation::OrderedDither {
+            interpolation: _,
             stops,
             mode,
             levels,

@@ -111,3 +111,8 @@ blue-noise scenario with `nonuniform_dither_video`, using the same four colors
 at positions `(0, 0.18, 0.55, 1)`. The uneven-stop path searches at most 15
 intervals per pixel. Both scenarios retain the existing source, periodic palette
 animation, encoder and frame count.
+
+`palette-interpolation-smoke` and `palette-interpolation-1080p` compare RGB and
+Oklab gradient mapping with the existing periodic four-color palette video.
+Both use identical decode/encode settings; end-to-end results include output
+encoding cost and do not isolate inverse color-conversion shader cost.

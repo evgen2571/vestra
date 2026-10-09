@@ -60,3 +60,6 @@ layer.effects.add(PaletteMap(mode=PaletteMode.NEAREST_OKLAB))
 
 layer.effects.add(PaletteMap(["#000000", "#ff0000", "#ffffff"], stops=(0, 0.25, 1))).stops = None
 layer.effects.add(OrderedDither(stops=(0, 1))).stops = (0.0, 1.0)
+
+layer.effects.add(PaletteMap(interpolation="oklab")).interpolation = "rgb"
+layer.effects.add(OrderedDither(interpolation="oklab"))

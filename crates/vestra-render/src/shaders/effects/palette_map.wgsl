@@ -14,8 +14,7 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         if (params.mode == 1u) {
             colour = palette_bytes(interval.x + select(0u, 1u, interval.y * 2u >= interval.z));
         } else {
-            colour = (palette_bytes(interval.x) * (interval.z - interval.y)
-                + palette_bytes(interval.x + 1u) * interval.y + vec3<u32>(interval.z / 2u)) / interval.z;
+            colour = gradient_colour(interval.x, interval.x + 1u, interval.y, interval.z);
         }
     } else if (params.mode == 1u) {
         colour = palette_bytes((position + 32640u) / 65280u);
@@ -23,7 +22,7 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         let lower = position / 65280u;
         let upper = min(lower + 1u, params.count - 1u);
         let fraction = position % 65280u;
-        colour = (palette_bytes(lower) * (65280u - fraction) + palette_bytes(upper) * fraction + vec3<u32>(32640u)) / 65280u;
+        colour = gradient_colour(lower, upper, fraction, 65280u);
     }
     textureStore(output, vec2<i32>(id.xy), mix_palette(pixel, colour));
 }

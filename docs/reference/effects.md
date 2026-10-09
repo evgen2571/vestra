@@ -165,6 +165,12 @@ semantics with antialiased density-ranked dots, lines and crosses.
 | `source_mix`, `amount` | `0`, `1` | Bindable 0..1; mix original and styled output in premultiplied space. Either `amount=0` or `source_mix=1` preserves the input. |
 | `phase`, `period` | `0`, `None` | Bindable finite phase in cycles; optional static positive finite period in owner-local seconds. Palette/rainbow motion repeats deterministically. |
 
+Cell dimensions evaluate to whole pixels, rounded to the nearest integer
+before either renderer runs. Keyframes and signals therefore resize the grid
+in discrete one-pixel steps; cell sizing is not a continuously interpolated
+geometry control. Use `amount` or `source_mix` fades around deliberate grid
+changes when a smooth transition is desired.
+
 The cell grid is anchored at the current composition canvas origin. Pixel
 centers are `(x+.5, y+.5)`; transforms move footage through this fixed grid,
 rather than moving the glyph lattice. Each cell visits its actual covered

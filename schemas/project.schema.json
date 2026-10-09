@@ -2672,6 +2672,14 @@
             "base_value": 0
           }
         },
+        "input_filter": {
+          "default": "area",
+          "enum": [
+            "nearest",
+            "linear",
+            "area"
+          ]
+        },
         "input_gamma": {
           "allOf": [
             {
@@ -2690,6 +2698,36 @@
                       "value": {
                         "exclusiveMinimum": 0.0,
                         "maximum": 8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 1
+          }
+        },
+        "input_scale": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 256.0,
+                  "minimum": 1.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 256.0,
+                        "minimum": 1.0,
                         "type": "number"
                       }
                     }
@@ -3008,6 +3046,14 @@
             "base_value": 0
           }
         },
+        "input_filter": {
+          "default": "area",
+          "enum": [
+            "nearest",
+            "linear",
+            "area"
+          ]
+        },
         "input_gamma": {
           "allOf": [
             {
@@ -3026,6 +3072,36 @@
                       "value": {
                         "exclusiveMinimum": 0.0,
                         "maximum": 8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 1
+          }
+        },
+        "input_scale": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 256.0,
+                  "minimum": 1.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 256.0,
+                        "minimum": 1.0,
                         "type": "number"
                       }
                     }

@@ -203,3 +203,18 @@ look.input_gamma.keyframe(2, 1.5)
 `PaletteMap` and both advanced authoring methods expose the same controls.
 Exposure and gamma can bind to signals. Neutral values preserve existing output;
 the final `amount` always blends against the original image.
+
+Preserve small edges before quantization with `input_detail=1.5` and
+`input_detail_radius=1`. For broader local contrast, try `0.5` and `8` instead.
+Both controls are bindable on `PaletteMap`, `OrderedDither` and their advanced
+authoring counterparts:
+
+```python
+look.input_detail = 1.5
+look.input_detail_radius = 1
+look.input_detail.keyframe(0, 0)
+look.input_detail.keyframe(2, 1.5)
+```
+
+Detail runs before exposure/gamma and adds three full-resolution passes when
+active. Its default zero amount preserves existing output.

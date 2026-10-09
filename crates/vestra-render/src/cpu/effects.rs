@@ -179,6 +179,7 @@ fn execute_effect_pass(
         EffectOperation::Crt { .. } => super::analog::crt(source, target, pass.operation),
         EffectOperation::PaletteMap {
             input_adjusted,
+            input_scale,
             interpolation,
             stops,
             palette,
@@ -192,6 +193,7 @@ fn execute_effect_pass(
             } else {
                 None
             },
+            input_scale,
             target,
             &palette,
             stops.as_ref(),
@@ -202,6 +204,7 @@ fn execute_effect_pass(
         ),
         EffectOperation::OrderedDither {
             input_adjusted,
+            input_scale,
             interpolation: _,
             stops,
             mode,
@@ -219,6 +222,7 @@ fn execute_effect_pass(
             } else {
                 None
             },
+            input_scale,
             target,
             &palette,
             stops.as_ref(),
@@ -230,6 +234,9 @@ fn execute_effect_pass(
             mode,
             levels,
         ),
+        EffectOperation::PaletteInputAnalyze { scale, filter } => {
+            super::input_analysis::analyze(source, target, scale, filter)
+        }
         EffectOperation::ApplyColourTransform { transform } => {
             apply_colour_transform(source, target, transform)
         }

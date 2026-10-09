@@ -69,3 +69,6 @@ layer.effects.add(OrderedDither(input_exposure=0.5)).input_gamma.keyframe(1, 2)
 
 layer.effects.add(PaletteMap(input_detail=1, input_detail_radius=8)).input_detail.bind(signal)
 layer.effects.add(OrderedDither(input_detail=1.5)).input_detail_radius.keyframe(1, 2)
+
+layer.effects.add(PaletteMap(input_scale=4, input_filter="area")).input_scale.bind(project.audio.signal.rms())
+layer.effects.add(OrderedDither(input_scale=4, input_filter="linear")).input_filter = "nearest"

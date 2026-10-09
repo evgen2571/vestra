@@ -1,6 +1,6 @@
 # Stylized video effects
 
-Status: in progress — initial effect families implemented; advanced artistic controls, visual regression, hardware quality and performance acceptance underway.
+Status: in progress — feature freeze; release validation and reference-quality demonstration remaining.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
 Initial decisions finalized: 2026-10-08; advanced-customization extension approved: 2026-10-09
@@ -16,6 +16,49 @@ ordered dithering, halftone, bounded horizontal/vertical pixel sorting, and
 CRT/analog styling. Reuse existing Bloom, Glow, ChromaticAberration and
 ColorAdjust instead of duplicating them. The 2026-10-09 extension adds artist-facing
 controls and regression acceptance before declaring the branch complete.
+
+## Release scope decision — 2026-10-10
+
+The user has stopped feature expansion and superseded the unfinished optional
+2026-10-09 customization extension. Preserve the original family requirements
+and all historical evidence below; unchecked optional work is **deferred**, not
+complete. Finish the currently implemented palette input-analysis functionality
+(`f39ae45`) and validate the existing controls. Add a capability only if actual
+reference comparisons establish the smallest concrete blocker to convincing
+fine-detail dithering. Do not begin another phase or change the architecture.
+
+Remaining release work, in order:
+
+- [ ] Synchronize input-analysis schema; resolve Clippy; verify public contracts,
+  CPU/software/hardware parity, borders/alpha and regression coverage.
+- [ ] Reproduce reference-inspired fine-detail dithering on repository-generated
+  footage using existing controls and arbitrary authored palettes.
+- [ ] Render a short demonstration and source/comparison images for monochrome
+  and two chromatic palettes; inspect detail, silhouettes, spatial and temporal
+  artifacts. Implement only a demonstrated essential missing capability.
+- [ ] Reproduce the reported ASCII black-output issue deterministically; fix
+  confirmed defects and verify readable output without optional customization.
+- [ ] Run regressions for every original family and fix release blockers.
+- [ ] Finish canonical CI, Python/schema/docs, strict software and hardware WGPU,
+  targeted 1080p rendering and resource checks. Reuse valid unchanged expensive
+  acceptance evidence rather than repeat it without cause.
+- [ ] Update documentation, examples, acceptance status and draft PR; commit
+  changes as `type: short description`; stop when the branch is ready to merge.
+
+Explicitly deferred optional work: custom threshold textures; automatic palette
+creation; extra ASCII tone/density/brightness/spacing/fill-edge controls; new
+halftone geometry, print/CMYK/dot-gain modes; additional sorting metrics/regions;
+new CRT phosphor/scanline/color-bleed modes; expanded look catalogs and acceptance
+for those unimplemented modes. Existing built-in/custom glyphs, all original
+families, horizontal/vertical sorting, original animation/scope/alpha/resource
+contracts and reference quality remain required. Input-scale/filter controls
+already implemented are release work, not deferred proposals.
+
+Milestones 5–7 and the extended checklist below remain as historical requirements.
+Their optional unfinished entries are **deferred** under this decision, not merge
+gates and not checked complete. The original-family acceptance checklist remains
+a gate; its advanced other-family customization entry is deferred. The release
+checklist above is the authoritative remaining scope.
 
 ## Verified starting point and references
 
@@ -424,8 +467,9 @@ and known resource/performance limits.
 
 ### Advanced artistic-control extension (approved 2026-10-09)
 
-The technical contracts and default algorithms above describe the **existing
-first implementation**, not the final intended feature set. Milestones 5–7
+Historical extension: unfinished optional additions are **deferred** by the
+2026-10-10 release scope decision. The technical contracts and default algorithms
+above describe the **existing first implementation**. Milestones 5–7
 extend these contracts; new parameter names/ranges, schema changes and pass
 topology require explicit design/validation before coding. Do not silently
 change the behavior of projects authored against the existing defaults.
@@ -487,14 +531,15 @@ change the behavior of projects authored against the existing defaults.
     preserved through phase animation; legacy uniform output retained.
   - [x] Controllable encoded RGB/Oklab interpolation space.
   Permit carefully bounded deterministic palette generation only if useful.
-- [ ] Add **tone response and detail controls** that operate on the signal
+- [x] Add **tone response and detail controls** that operate on the signal
   *entering quantization*: gamma/curves or shadow-mid-highlight shaping,
   local contrast and optional edge/detail preservation. Share existing
   `ColorAdjust` where sufficient; don't alter original source colors
   unintentionally to change threshold eligibility.
   - [x] Bindable entering-signal exposure/gamma using existing ColorAdjust, with
     the original retained for blending; focused tonal CPU/WGPU acceptance.
-  - [ ] Local contrast and optional edge/detail preservation.
+  - [x] Local contrast and optional edge/detail preservation, with focused
+    CPU/software/hardware parity, nested-alpha, 1080p performance and 4K evidence.
 - [ ] Make filtered input/analysis resolution **independent** of threshold
   pattern size. Define nearest/linear/area filtering, lattice alignment,
   aspect ratio/partial borders and texture-budget limits. Keep true
@@ -762,11 +807,11 @@ CI and native Windows backend-specific validation are **unverified** so far.
 
 ## Completion / handoff
 
-Not complete. Initial families and their public interfaces are implemented;
-Milestones 5–6 add approved advanced controls and Milestone 7 integrates
-visual/temporal/performance acceptance. Finish feature-specific verification,
-hardware quality/resource checks, comprehensive checks and serial 1080p
-measurements before closing acceptance and moving this plan.
+Not complete. All original families and their public interfaces are implemented.
+Finish the 2026-10-10 release checklist above: input-analysis verification,
+reference demonstration, ASCII diagnosis, final checks and PR/documentation.
+Unfinished optional extension work is deferred; historical entries retain the
+scope and evidence that applied when they were written.
 
 ### Restored environment and public examples (2026-10-09)
 
@@ -1335,3 +1380,174 @@ measurements before closing acceptance and moving this plan.
   while keeping the same retained original; then independent input filtering/
   analysis resolution. Remaining effect families, expanded combination acceptance
   and complete final verification gates remain unexecuted, not passed.
+
+### Entering-signal detail/local contrast increment — 2026-10-09
+
+- Committed tone/detail implementation as `5c77367`. Added bindable
+  `input_detail` (0–4, default 0) and `input_detail_radius` (0–16 output pixels,
+  default 1) across canonical descriptors/model/schema, validation, compile/
+  evaluation/dependencies and both Python authoring interfaces. Radius uses
+  existing quarter-pixel rounding; amplitude rounds to Q16 before activity.
+- Reuses Sharpen's three operations before optional ColorAdjust and palette
+  quantization. Original input remains the final blend source. Neutral controls
+  retain one pass; active detail uses four, detail plus tone five. Compilation
+  conservatively reserves resources for animation/bindings.
+- New detail uses shared cached symmetric Q16 Gaussian weights normalized to
+  65536, alpha-aware integer accumulation and upward half-tie rounding. Legacy
+  float Gaussian behavior remains unchanged. A single legacy float-blur byte
+  difference at radius 8 amplified during quantization; fixed weights eliminate
+  that ambiguity for the new controls. Tests cover normalization/accumulator
+  bounds and constant partial alpha for all 129 quarter-pixel radii through 32.
+- Fixed GPU unsharp cancellation around half-byte ties by subtracting recovered
+  byte values. Fixed negative-exposure WGSL ties-to-even versus Rust upward ties;
+  the regression checks all 256 grays at exposure −1 with alpha 128. These are
+  justified corrections to intended CPU byte behavior, also affecting standalone
+  GPU Sharpen/ColorAdjust at rounding boundaries.
+- GL/NVIDIA and software Vulkan/llvmpipe passed exact animated RGBA parity for
+  map/Bayer8/blue noise, three palettes, radii 1/8 and repeated arbitrary-time
+  evaluation. Literal partial-alpha fixtures prove original-source blending.
+  Explicit GL checks passed local contrast at 1080p and fine detail at 4K.
+  Persistent/staging estimates: **91,244,544/116,127,744** bytes at 1080p;
+  **364,959,744/464,492,544** at 4K, excluding driver overhead. Coarse radius-8
+  detail at 4K remains unverified. Gaussian uniforms are 176 bytes within the
+  existing 256-byte record; palette records remain 240 bytes.
+- Inspected six GL blue-noise contact sheets for all three palettes at both
+  radii, with source/tone-only/detail panels. Subject, moon and thin lines remain
+  recognizable; broader radius increases local edge contrast. Inspected a frame
+  from the public tone/detail preview; ffprobe confirms 320×180, 8 seconds and
+  48 video frames. Full moving-preview/playback acceptance remains open.
+- Commit checks: core 326 passed/1 ignored, palette API 106 passed, explicit
+  staged GL rounding 1 passed, formatting/diff/docs checks passed. Clippy failed
+  because a moved helper left its lint expectation attached to the wrong function;
+  restored the annotation to the palette helper in the following worktree.
+- Refreshed workspace all-target/all-feature Clippy passed; native Python rebuilt;
+  palette/advanced/typing tests 171 passed; schema/style/docs checks passed.
+  Refreshed GL tone/detail/negative-exposure tests: 3 passed/3 explicitly ignored.
+  CPU-only compilation passed with existing warnings. WGPU-only compilation
+  fails at the pre-existing CPU particle rasterizer dependency (also present at
+  `1553308`), outside this increment; combined CPU/WGPU compilation passes.
+- Public docs and showcase CLI now describe fine detail and broad local contrast.
+  Local-contrast acceptance remains unchecked until remaining size/combination
+  checks finish.
+  Independent input filtering, Milestone 6 families and complete Milestone 7
+  acceptance/final gates remain outstanding.
+- Captured `input-detail-1080p` sequentially on CPU and actual GL/NVIDIA, with
+  frozen implementation and no concurrent test/build/render during measurements.
+  One warmup/three samples, 90 frames at 1920×1080/30fps, FFV1 output. End-to-end
+  wall medians/ranges (ms), tone/fine-detail/broad-contrast respectively:
+  CPU **5389 (5228–5821) / 7260 (6979–7444) / 11241 (10605–12008)**;
+  hardware **3211 (3163–3316) / 3227 (3075–3564) / 3109 (3063–3141)**.
+  CPU ranges separate in this run. Hardware fine-detail overlaps tone; broad
+  contrast is slightly below tone here, but output-dependent encoding and noise
+  prevent treating that as an isolated shader speed improvement. Detailed stage
+  samples remain in the raw reports; these figures include decode/encode.
+- Reports `target/benchmark-results/input-detail-{cpu,hardware}-20261009/suite.json`
+  match captured source SHA256
+  `e554743ab24fde85f3873e1afbc6005e3c349460234001b3bfd41a90ccb135b6`.
+  CPU executable SHA256
+  `b7c8b9502682e76c7b053e4d9cbd67a2342dfcd7e2005728f1744854bc496fb3`;
+  hardware executable
+  `1f287d5492c673d6686109d67af13c6bb67c446d892434a47d15b488a0cd9d29`.
+  Checked all sample dimensions/frame counts/backend and one-warmup/three-sample
+  settings. Every hardware sample reports GL, discrete_gpu and D3D12 NVIDIA GTX
+  1650 SUPER. This capture supersedes no historical tone result: newer rounding/
+  detail changes have a distinct source fingerprint.
+- Broader `just check` exposed an outdated CLI catalog assertion expecting raw
+  numeric scalar defaults. The schema intentionally emits canonical track objects.
+  Updated the assertion to require a single-field track object and compare its
+  base value against every scalar descriptor default; focused regression passed.
+  This test-only edit changes the source fingerprint after capture without changing
+  measured runtime behavior. Refreshed `just check` passed: 1067 tests, 24 explicitly
+  ignored, workspace build/Clippy/formatting plus schema validation/freshness and
+  309 documentation links. Full Python
+  finished with 828 passed/1 failed: the public export snapshot omitted the already
+  intentionally exported `PaletteInterpolation`. Added it to the exact expected
+  names; all 11 public API tests passed afterward. A subsequent full Python rerun
+  remains outstanding. Documentation links and final diff check pass. WGPU-only
+  particle feature dependency remains unaddressed in this increment.
+- Added the missing 4K radius-8 contrast case to explicit detail correctness/
+  resource coverage; actual GL/NVIDIA passed exact RGBA parity for all three
+  1080p/4K cases (150.20 seconds). Fine and broad 4K detail both estimate
+  **364,959,744 persistent / 464,492,544 staging** bytes. This closes the earlier
+  explicitly unverified broad-radius size case. Released control and mask GPU
+  backends before constructing subsequent fixture backends in two composed tests,
+  preserving output assertions while bounding live contexts on WSL GL. The broad
+  gate above predates these test-only edits; their focused refresh remains pending.
+- Inspected source and styled contact sheets sampled once per second from the
+  offline FFV1 moving-oval preview. The source subject and horizontal fine stripes
+  remain visible across the tonal/color cycle; this does not replace full playback
+  or all-palette moving-video acceptance. Artifacts:
+  `target/stylization/input-detail-{source-video,video}-contact.png`.
+- New nested-mask/matte detail regression passed exact RGBA parity on GL/NVIDIA:
+  animated radius-8 detail plus gamma and partial amount, clip PaletteMap versus
+  global blue-noise OrderedDither, two nested groups, rectangular mask, hidden
+  half-alpha matte, arbitrary-time requests 0/.5/1/0. Both scenarios change detail
+  visibly in their frame bytes, repeat the first frame exactly, and preserve every
+  baseline mask/matte alpha byte. Software Vulkan refresh and context-lifetime
+  fixture checks are running sequentially before the full Python rerun. Expanded
+  workspace Clippy passed after the new coverage.
+- Software Vulkan/llvmpipe also passed the nested-alpha/random-access regression
+  exactly (61.13 seconds). Tone/detail implementation acceptance is now checked;
+  expanded analysis-resolution combinations, all-palette moving previews, full
+  playback and complete final Milestone 7 gates remain separate open requirements.
+
+### Independent quantization input lattice — historical proposal
+
+Implemented in checkpoint `f39ae45`; schema, Clippy and rendered acceptance
+remain unverified at the start of the 2026-10-10 release closure.
+
+- Proposed contract: optional bindable `input_scale` in output pixels, default 1,
+  bounded to 1–256 and rounded to integer cell spans; discrete `input_filter`
+  selecting nearest, linear or area analysis. The existing dither `scale` remains
+  exclusively the threshold-pattern size. Cell origin stays at output (0,0),
+  square spans preserve aspect ratio, and partial right/bottom cells use their
+  actual in-bounds extent. Scale 1 must remain exact legacy identity for every
+  filter selection.
+- Analyze after detail and tone, then quantize each output pixel from its cell's
+  filtered input while retaining original RGB/alpha for amount. Nearest selects
+  the cell-center sample; linear uses alpha-aware bilinear center sampling; area
+  uses alpha-weighted means over all covered pixels. Specify center ties, integer
+  normalization and fully transparent cells in independent literal fixtures.
+- Reuse the sparse representative-pixel analysis pattern already established by
+  HalftoneAnalyze: each cell computes once, the final palette shader looks up its
+  representative, and existing bounded full-resolution temporary textures retain
+  the logical lower-resolution lattice. This does not promise reduced physical
+  texture storage. Avoid per-output-pixel repeated area loops, CPU readbacks, a new
+  renderer graph or separate source semantics.
+- Before finalizing: verify packed palette record capacity, preparation pass/
+  resource counts, maximum-area accumulator bounds, edge dispatch and public
+  descriptors/schema/Python coverage. Then compare three palettes and all filters
+  on identical detail/alpha/moving fixtures with fine threshold scale, 1080p
+  timing and 4K limits. This is a proposed next implementation unit, not a checked
+  feature or accepted performance claim.
+
+
+### Release closure: input-analysis verification — 2026-10-10
+
+- Scope is frozen under the release decision above; optional new artistic modes
+  are deferred. The working tree started clean at `f39ae45`.
+- Reproduced CI run `37992110029` failures: Rust Clippy rejected manually
+  checked division; Python rejected stale generated schema fields. Regenerated
+  the schema and represented nonzero alpha with `NonZeroU32`, preserving the
+  literal rounding/transparent-cell behavior without disabling lints.
+- New actual-frame combination regression exposed a CPU surface-pool panic
+  with detail + tone + filtered input. Tone now writes logical `Current` so
+  analysis can reuse the bounded three-surface pool; no new surface or renderer
+  architecture. Updated the two planner expectations for this resource flow.
+- Focused core palette tests: **3 passed**. Palette/analog/high-level/public
+  Python contracts after forced native rebuild: **145 passed**. The initial
+  full Python attempt used a stale extension and was terminated; it is not
+  passing evidence. Rebuilt full Python verification is running.
+- CPU/filter and actual WGPU checks: **6 passed, 1 explicitly ignored** on
+  both GL/D3D12 NVIDIA GTX 1650 SUPER (**DiscreteGpu**) and Vulkan llvmpipe
+  (**Software**). Literal nearest/linear/area values, partial border cells,
+  original half-alpha blending, scale-1 identity, tone/detail combinations,
+  animated scale and out-of-order repeats all compare with zero byte error.
+- Explicit input-analysis **1080p/4K** test: **1 passed**, all three filters,
+  including maximum 256-pixel area cells, exact CPU/hardware parity. Persistent /
+  staging estimates: **91,242,240 / 116,125,440 bytes** at 1080p and
+  **364,957,440 / 464,490,240 bytes** at 4K; excludes driver overhead.
+- Canonical checks, strict GPU recipes and reference/ASCII demonstration remain
+  running or pending. No whole-branch acceptance or merge readiness claimed.
+  Logs are under `target/release-closure/`; frame evidence under the existing
+  `target/stylization/frames/{gl,vulkan}/input-analysis-*` directories.

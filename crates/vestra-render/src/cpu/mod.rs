@@ -8,6 +8,7 @@ pub(super) mod chromatic;
 pub(super) mod colour_adjust;
 pub(super) mod compositor;
 pub(super) mod effects;
+mod input_analysis;
 pub(super) mod particles;
 pub(super) mod raster;
 pub(super) mod spectrum2d;

@@ -60,7 +60,14 @@ effect_parameters!(PaletteParameters {
     levels: u32,
     colours: [u32; 16],
     features: [u32; 16],
-    stops: [u32; 16]
+    stops: [u32; 16],
+    input_parameters: [u32; 4]
+});
+effect_parameters!(InputAnalysisParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    scale: u32,
+    mode: u32
 });
 // WGSL layout: colour_row0 @ 16, colour_offset @ 64, size = 80 bytes.
 effect_parameters!(ColourTransformParameters {
@@ -161,6 +168,7 @@ pub(in crate::wgpu) enum EffectKernelParameters {
     Halftone(AnalogParameters),
     PixelSort(AnalogParameters),
     Crt(AnalogParameters),
+    PaletteInputAnalyze(InputAnalysisParameters),
     PaletteMap(PaletteParameters),
     OrderedDither(PaletteParameters),
     ColourTransform(ColourTransformParameters),
@@ -184,6 +192,7 @@ impl EffectKernelParameters {
             Self::Halftone(_) => EffectKernel::Halftone,
             Self::PixelSort(_) => EffectKernel::PixelSort,
             Self::Crt(_) => EffectKernel::Crt,
+            Self::PaletteInputAnalyze(_) => EffectKernel::PaletteInputAnalyze,
             Self::PaletteMap(_) => EffectKernel::PaletteMap,
             Self::OrderedDither(_) => EffectKernel::OrderedDither,
             Self::ColourTransform(_) => EffectKernel::ColourTransform,
@@ -287,6 +296,7 @@ pub(in crate::wgpu) fn effect_parameters(
         }
         EffectOperation::PaletteMap {
             input_adjusted,
+            input_scale,
             interpolation,
             stops,
             palette,
@@ -306,9 +316,11 @@ pub(in crate::wgpu) fn effect_parameters(
             levels,
             interpolation,
             input_adjusted,
+            input_scale,
         )),
         EffectOperation::OrderedDither {
             input_adjusted,
+            input_scale,
             interpolation,
             stops,
             mode,
@@ -339,9 +351,22 @@ pub(in crate::wgpu) fn effect_parameters(
                 levels,
                 interpolation,
                 input_adjusted,
+                input_scale,
             );
             parameters.seed = seed;
             EffectKernelParameters::OrderedDither(parameters)
+        }
+        EffectOperation::PaletteInputAnalyze { scale, filter } => {
+            EffectKernelParameters::PaletteInputAnalyze(InputAnalysisParameters {
+                canvas_width: width,
+                canvas_height: height,
+                scale: u32::from(scale),
+                mode: match filter {
+                    crate::project::PaletteInputFilter::Nearest => 0,
+                    crate::project::PaletteInputFilter::Linear => 1,
+                    crate::project::PaletteInputFilter::Area => 2,
+                },
+            })
         }
         EffectOperation::ApplyColourTransform { transform } => {
             EffectKernelParameters::ColourTransform(ColourTransformParameters {
@@ -523,10 +548,6 @@ fn line_parameters(
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one packed record mirrors shared WGSL palette fields"
-)]
 fn gaussian_parameters(
     width: u32,
     height: u32,
@@ -563,6 +584,10 @@ fn gaussian_parameters(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one packed record mirrors shared WGSL palette fields"
+)]
 fn palette_parameters(
     width: u32,
     height: u32,
@@ -576,10 +601,12 @@ fn palette_parameters(
     levels: u16,
     interpolation: vestra_core::project::PaletteInterpolation,
     input_adjusted: bool,
+    input_scale: u16,
 ) -> PaletteParameters {
     PaletteParameters {
         canvas_width: width,
         canvas_height: height,
+        input_parameters: [u32::from(input_scale), 0, 0, 0],
         _padding: [
             u32::from(stops.is_some()),
             u32::from(interpolation == vestra_core::project::PaletteInterpolation::Oklab)
@@ -750,7 +777,8 @@ mod effect_parameter_layout_tests {
         assert_eq!(offset_of!(PaletteParameters, amount), 16);
         assert_eq!(offset_of!(PaletteParameters, bits), 32);
         assert_eq!(offset_of!(PaletteParameters, colours), 48);
-        assert_eq!(size_of::<PaletteParameters>(), 240);
+        assert_eq!(size_of::<PaletteParameters>(), 256);
+        assert_eq!(offset_of!(PaletteParameters, input_parameters), 240);
         assert_eq!(align_of::<PaletteParameters>(), 16);
         assert!(size_of::<PaletteParameters>() <= PARAMETER_RECORD_BYTES as usize);
         let palette = vestra_core::stylization::EvaluatedPalette {
@@ -770,6 +798,7 @@ mod effect_parameter_layout_tests {
             4,
             vestra_core::project::PaletteInterpolation::Rgb,
             false,
+            1,
         );
         assert_eq!(packed.colours[0], 0xff332211);
         assert_eq!(packed.count, 2);

@@ -542,6 +542,7 @@ pub(super) fn validate_parameters(
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
             palette,
             stops,
             mode,
@@ -575,6 +576,12 @@ pub(super) fn validate_parameters(
                 ScalarPropertyTarget::PaletteMapInputDetailRadius,
                 errors,
             );
+            track(
+                input_scale,
+                "input_scale",
+                ScalarPropertyTarget::PaletteMapInputScale,
+                errors,
+            );
             validate_palette(palette, *period, path, errors);
             validate_channel_levels(*levels, path, errors);
             validate_palette_stops(stops.as_deref(), palette.len(), *mode, path, errors);
@@ -596,6 +603,7 @@ pub(super) fn validate_parameters(
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
             palette,
             stops,
             mode,
@@ -629,6 +637,12 @@ pub(super) fn validate_parameters(
                 input_detail_radius,
                 "input_detail_radius",
                 ScalarPropertyTarget::OrderedDitherInputDetailRadius,
+                errors,
+            );
+            track(
+                input_scale,
+                "input_scale",
+                ScalarPropertyTarget::OrderedDitherInputScale,
                 errors,
             );
             validate_palette(palette, *period, path, errors);

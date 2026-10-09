@@ -540,7 +540,21 @@ mod tests {
                     assert!(required.iter().any(|item| item == parameter.name));
                 }
                 if let Some(default) = parameter.default {
-                    assert_eq!(properties[parameter.name]["default"], json!(default));
+                    let serialized = &properties[parameter.name]["default"];
+                    let value = match parameter.kind {
+                        EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack => {
+                            assert_eq!(serialized.as_object().expect("track default").len(), 1);
+                            &serialized["base_value"]
+                        }
+                        _ => serialized,
+                    };
+                    assert_eq!(
+                        value,
+                        &json!(default),
+                        "{} {}",
+                        descriptor.id,
+                        parameter.name
+                    );
                 }
             }
         }

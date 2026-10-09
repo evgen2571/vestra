@@ -173,6 +173,8 @@ mod tests {
             input_gamma: scalar(1.0),
             input_detail: scalar(0.0),
             input_detail_radius: scalar(1.0),
+            input_scale: scalar(1.0),
+            input_filter: crate::project::PaletteInputFilter::Area,
             interpolation: crate::project::PaletteInterpolation::Rgb,
             stops: None,
             palette: crate::stylization::compile_palette(&[

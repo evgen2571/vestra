@@ -110,6 +110,10 @@ pub enum Effect {
         input_detail: ScalarProperty,
         #[serde(default = "default_input_detail_radius")]
         input_detail_radius: ScalarProperty,
+        #[serde(default = "default_input_scale")]
+        input_scale: ScalarProperty,
+        #[serde(default)]
+        input_filter: PaletteInputFilter,
         #[serde(default)]
         mode: PaletteMode,
         #[serde(default = "default_channel_levels")]
@@ -134,6 +138,10 @@ pub enum Effect {
         input_detail: ScalarProperty,
         #[serde(default = "default_input_detail_radius")]
         input_detail_radius: ScalarProperty,
+        #[serde(default = "default_input_scale")]
+        input_scale: ScalarProperty,
+        #[serde(default)]
+        input_filter: PaletteInputFilter,
         #[serde(default = "default_dither_palette_mode")]
         mode: PaletteMode,
         #[serde(default = "default_channel_levels")]
@@ -403,6 +411,16 @@ pub enum PaletteInterpolation {
     Oklab,
 }
 
+/// Spatial filtering of the signal entering palette quantization.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaletteInputFilter {
+    Nearest,
+    Linear,
+    #[default]
+    Area,
+}
+
 /// Deterministic, screen-anchored ordered-dither matrix.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -467,5 +485,9 @@ fn default_input_detail() -> ScalarProperty {
     Track::constant(0.0).into()
 }
 fn default_input_detail_radius() -> ScalarProperty {
+    Track::constant(1.0).into()
+}
+
+fn default_input_scale() -> ScalarProperty {
     Track::constant(1.0).into()
 }

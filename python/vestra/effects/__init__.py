@@ -1,6 +1,6 @@
 """Public visual effect descriptors for the high-level editing API."""
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, PaletteInterpolation, DitherMatrix
+from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, PaletteInputFilter, PaletteInterpolation, DitherMatrix
 from .ascii import Ascii, PseudoAscii, CHARACTER_SETS
 from ..authoring.effects import AsciiGlyphStyle, AsciiMode, AsciiColorMode
 from .base import Effect, EffectStack, available_effects
@@ -19,7 +19,7 @@ __all__ = [
     "Saturation", "Tint", "GaussianBlur", "DirectionalBlur", "MotionTile", "ZoomBlur", "RadialBlur",
     "ZoomBlurDirection", "Glow", "Bloom", "ChromaticAberration", "Vignette",
     "Halftone", "PixelSort", "Crt", "HalftoneMode", "PixelSortDirection", "PixelSortOrder",
-    "PaletteMap", "OrderedDither", "PaletteMode", "PaletteInterpolation", "DitherMatrix", "Sharpen", "ColorAdjust", "CameraShake", "MotionBlur", "available_effects",
+    "PaletteMap", "OrderedDither", "PaletteMode", "PaletteInputFilter", "PaletteInterpolation", "DitherMatrix", "Sharpen", "ColorAdjust", "CameraShake", "MotionBlur", "available_effects",
 ]
 
 for _name in __all__:

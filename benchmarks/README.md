@@ -122,3 +122,9 @@ encoding cost and do not isolate inverse color-conversion shader cost.
 input and with `input_exposure=0.5`, `input_gamma=1.5`. The active case includes
 its full-resolution `ColorAdjust` pass and retained source. These end-to-end
 measurements include decode/encode and output-dependent encoding cost.
+
+`input-detail-{smoke,1080p}` compares that tone case with fine detail
+(`input_detail=1.5`, radius `1`) and broad local contrast (`0.5`, radius `8`).
+The latter two include three additional full-resolution preparation passes.
+The 1080p suite uses one warmup and three measured samples per scenario; compare
+sample ranges and actual adapter metadata before drawing performance conclusions.

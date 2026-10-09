@@ -201,11 +201,17 @@ mod tests {
     #[test]
     fn gaussian_directions_share_a_kernel() {
         assert_eq!(
-            kernel_for_operation(&EffectOperation::GaussianHorizontal { radius: 1.0 }),
+            kernel_for_operation(&EffectOperation::GaussianHorizontal {
+                integer: false,
+                radius: 1.0
+            }),
             EffectKernel::GaussianBlur
         );
         assert_eq!(
-            kernel_for_operation(&EffectOperation::GaussianVertical { radius: 1.0 }),
+            kernel_for_operation(&EffectOperation::GaussianVertical {
+                integer: false,
+                radius: 1.0
+            }),
             EffectKernel::GaussianBlur
         );
     }
@@ -266,8 +272,14 @@ mod tests {
             EffectOperation::ApplyColourTransform {
                 transform: Default::default(),
             },
-            EffectOperation::GaussianHorizontal { radius: 1.0 },
-            EffectOperation::GaussianVertical { radius: 1.0 },
+            EffectOperation::GaussianHorizontal {
+                integer: false,
+                radius: 1.0,
+            },
+            EffectOperation::GaussianVertical {
+                integer: false,
+                radius: 1.0,
+            },
             EffectOperation::HighlightExtract {
                 threshold: 0.5,
                 colour: [255; 4],
@@ -442,6 +454,10 @@ mod tests {
             ),
             (
                 vestra_core::plan::CompiledEffect::PaletteMap {
+                    input_exposure: scalar(0.0),
+                    input_gamma: scalar(1.0),
+                    input_detail: scalar(0.0),
+                    input_detail_radius: scalar(1.0),
                     interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
@@ -452,6 +468,10 @@ mod tests {
                     period: None,
                 },
                 vestra_core::plan::EvaluatedEffect::PaletteMap {
+                    input_exposure: 0.0,
+                    input_gamma: 1.0,
+                    input_detail: 0.0,
+                    input_detail_radius: 1.0,
                     interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
@@ -463,6 +483,10 @@ mod tests {
             ),
             (
                 vestra_core::plan::CompiledEffect::OrderedDither {
+                    input_exposure: scalar(0.0),
+                    input_gamma: scalar(1.0),
+                    input_detail: scalar(0.0),
+                    input_detail_radius: scalar(1.0),
                     interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,
@@ -477,6 +501,10 @@ mod tests {
                     scale: 1,
                 },
                 vestra_core::plan::EvaluatedEffect::OrderedDither {
+                    input_exposure: 0.0,
+                    input_gamma: 1.0,
+                    input_detail: 0.0,
+                    input_detail_radius: 1.0,
                     interpolation: crate::project::PaletteInterpolation::Rgb,
                     stops: None,
                     palette,

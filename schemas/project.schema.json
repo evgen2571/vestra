@@ -2582,6 +2582,126 @@
           "minLength": 1,
           "type": "string"
         },
+        "input_detail": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 4.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 4.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 0
+          }
+        },
+        "input_detail_radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 16.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 16.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 1
+          }
+        },
+        "input_exposure": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 8.0,
+                  "minimum": -8.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 8.0,
+                        "minimum": -8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 0
+          }
+        },
+        "input_gamma": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMinimum": 0.0,
+                  "maximum": 8.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 1
+          }
+        },
         "interpolation": {
           "default": "rgb",
           "enum": [
@@ -2797,6 +2917,126 @@
         "id": {
           "minLength": 1,
           "type": "string"
+        },
+        "input_detail": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 4.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 4.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 0
+          }
+        },
+        "input_detail_radius": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 16.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 16.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 1
+          }
+        },
+        "input_exposure": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 8.0,
+                  "minimum": -8.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 8.0,
+                        "minimum": -8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 0
+          }
+        },
+        "input_gamma": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "exclusiveMinimum": 0.0,
+                  "maximum": 8.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 8.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "default": {
+            "base_value": 1
+          }
         },
         "interpolation": {
           "default": "rgb",

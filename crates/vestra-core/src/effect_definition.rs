@@ -112,6 +112,14 @@ pub enum ScalarPropertyTarget {
     CrtRollingStrength,
     CrtRollingWidth,
     CrtPhase,
+    PaletteMapInputExposure,
+    PaletteMapInputGamma,
+    PaletteMapInputDetail,
+    PaletteMapInputDetailRadius,
+    OrderedDitherInputExposure,
+    OrderedDitherInputGamma,
+    OrderedDitherInputDetail,
+    OrderedDitherInputDetailRadius,
     PaletteMapAmount,
     PaletteMapPhase,
     OrderedDitherAmount,
@@ -467,6 +475,18 @@ impl ScalarPropertyTarget {
                     max_exclusive: false,
                 },
             },
+            Self::PaletteMapInputExposure | Self::OrderedDitherInputExposure => {
+                Self::ColorAdjustExposure.definition()
+            }
+            Self::PaletteMapInputGamma | Self::OrderedDitherInputGamma => {
+                Self::ColorAdjustGamma.definition()
+            }
+            Self::PaletteMapInputDetail | Self::OrderedDitherInputDetail => {
+                Self::SharpenAmount.definition()
+            }
+            Self::PaletteMapInputDetailRadius | Self::OrderedDitherInputDetailRadius => {
+                Self::SharpenRadius.definition()
+            }
             Self::ColorAdjustExposure => ScalarPropertyDefinition {
                 runtime_constraint: RuntimeRange {
                     min: -8.0,
@@ -752,6 +772,12 @@ impl ScalarPropertyTarget {
             Self::PaletteMapAmount | Self::OrderedDitherAmount => "amount",
             Self::PaletteMapPhase | Self::OrderedDitherPhase => "phase",
             Self::OrderedDitherStrength => "strength",
+            Self::PaletteMapInputDetail | Self::OrderedDitherInputDetail => "input_detail",
+            Self::PaletteMapInputDetailRadius | Self::OrderedDitherInputDetailRadius => {
+                "input_detail_radius"
+            }
+            Self::PaletteMapInputExposure | Self::OrderedDitherInputExposure => "input_exposure",
+            Self::PaletteMapInputGamma | Self::OrderedDitherInputGamma => "input_gamma",
             Self::BrightnessAmount => "amount",
             Self::ContrastAmount => "amount",
             Self::SaturationAmount => "amount",
@@ -922,17 +948,17 @@ visual_effect_catalog! {
     Crt => { id: "crt", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1, temporal: FromProperties, retains_original: false, scalar_properties: [CrtAmount, CrtCurvature, CrtScanlineStrength, CrtScanlineSpacing, CrtMaskStrength, CrtGrain, CrtJitter, CrtFlicker, CrtRollingStrength, CrtRollingWidth, CrtPhase], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtCurvature), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtScanlineStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtScanlineSpacing), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtMaskStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtGrain), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtJitter), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtFlicker), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtRollingStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtRollingWidth), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtPhase), EffectParameterDescriptor::integer("mask_spacing", 1, 6), EffectParameterDescriptor::period(), EffectParameterDescriptor::integer("seed", 0, 18446744073709551615)] },
     PaletteMap => {
         id: "palette_map",
-        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 5,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [PaletteMapAmount, PaletteMapPhase], plain_tracks: [],
-        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::palette_stops(), EffectParameterDescriptor::optional_enum_default("interpolation", &["rgb", "oklab"], "rgb"), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(4)), ..EffectParameterDescriptor::integer("levels", 2, 256) }, EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"], "gradient"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapPhase), EffectParameterDescriptor::period()]
+        scalar_properties: [PaletteMapInputExposure, PaletteMapInputGamma, PaletteMapInputDetail, PaletteMapInputDetailRadius, PaletteMapAmount, PaletteMapPhase], plain_tracks: [],
+        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::palette_stops(), EffectParameterDescriptor::optional_enum_default("interpolation", &["rgb", "oklab"], "rgb"), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(4)), ..EffectParameterDescriptor::integer("levels", 2, 256) }, EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"], "gradient"), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapInputExposure) }, EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(1)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapInputGamma) }, EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapInputDetail) }, EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(1)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapInputDetailRadius) }, EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PaletteMapPhase), EffectParameterDescriptor::period()]
     },
     OrderedDither => {
         id: "ordered_dither",
-        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 5,
         temporal: FromProperties, retains_original: false,
-        scalar_properties: [OrderedDitherAmount, OrderedDitherPhase, OrderedDitherStrength], plain_tracks: [],
-        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::palette_stops(), EffectParameterDescriptor::optional_enum_default("interpolation", &["rgb", "oklab"], "rgb"), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(4)), ..EffectParameterDescriptor::integer("levels", 2, 256) }, EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"], "nearest"), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherPhase), EffectParameterDescriptor::period(), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherStrength), EffectParameterDescriptor::optional_enum_default("matrix", &["bayer2", "bayer4", "bayer8", "blue_noise"], "bayer8"), EffectParameterDescriptor::integer("scale", 1, 32), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::integer("seed", 0, u32::MAX as u64) }]
+        scalar_properties: [OrderedDitherInputExposure, OrderedDitherInputGamma, OrderedDitherInputDetail, OrderedDitherInputDetailRadius, OrderedDitherAmount, OrderedDitherPhase, OrderedDitherStrength], plain_tracks: [],
+        parameters: [EffectParameterDescriptor::palette(), EffectParameterDescriptor::palette_stops(), EffectParameterDescriptor::optional_enum_default("interpolation", &["rgb", "oklab"], "rgb"), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(4)), ..EffectParameterDescriptor::integer("levels", 2, 256) }, EffectParameterDescriptor::optional_enum_default("mode", &["gradient", "nearest", "rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"], "nearest"), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherInputExposure) }, EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(1)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherInputGamma) }, EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherInputDetail) }, EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(1)), ..EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherInputDetailRadius) }, EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherPhase), EffectParameterDescriptor::period(), EffectParameterDescriptor::scalar(ScalarPropertyTarget::OrderedDitherStrength), EffectParameterDescriptor::optional_enum_default("matrix", &["bayer2", "bayer4", "bayer8", "blue_noise"], "bayer8"), EffectParameterDescriptor::integer("scale", 1, 32), EffectParameterDescriptor { required: false, default: Some(EffectParameterDefault::Integer(0)), ..EffectParameterDescriptor::integer("seed", 0, u32::MAX as u64) }]
     },
     Brightness => {
         id: "brightness",

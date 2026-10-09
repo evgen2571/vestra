@@ -72,14 +72,15 @@ effect_parameters!(ColourTransformParameters {
     colour_row2: [f32; 4],
     colour_offset: [f32; 4]
 });
-// WGSL layout: radius @ 16, direction @ 20, size = 32 bytes.
+// WGSL layout: radius @ 16, direction @ 20, weights @ 32, size = 176 bytes.
 effect_parameters!(GaussianBlurParameters {
     canvas_width: u32,
     canvas_height: u32,
     _padding: [u32; 2],
     radius: f32,
     direction: u32,
-    _padding1: [u32; 2]
+    _padding1: [u32; 2],
+    weights: [[u32; 4]; 9]
 });
 // WGSL layout: threshold @ 16, colour @ 32, size = 48 bytes.
 effect_parameters!(HighlightExtractParameters {
@@ -285,6 +286,7 @@ pub(in crate::wgpu) fn effect_parameters(
             EffectKernelParameters::Crt(p)
         }
         EffectOperation::PaletteMap {
+            input_adjusted,
             interpolation,
             stops,
             palette,
@@ -303,8 +305,10 @@ pub(in crate::wgpu) fn effect_parameters(
             1,
             levels,
             interpolation,
+            input_adjusted,
         )),
         EffectOperation::OrderedDither {
+            input_adjusted,
             interpolation,
             stops,
             mode,
@@ -334,6 +338,7 @@ pub(in crate::wgpu) fn effect_parameters(
                 u32::from(scale),
                 levels,
                 interpolation,
+                input_adjusted,
             );
             parameters.seed = seed;
             EffectKernelParameters::OrderedDither(parameters)
@@ -369,25 +374,15 @@ pub(in crate::wgpu) fn effect_parameters(
                 ],
             })
         }
-        EffectOperation::GaussianHorizontal { radius } => {
-            EffectKernelParameters::GaussianBlur(GaussianBlurParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                radius: radius.clamp(0.0, 32.0) as f32,
-                direction: 0,
-                _padding1: [0; 2],
-            })
+        EffectOperation::GaussianHorizontal { radius, integer } => {
+            EffectKernelParameters::GaussianBlur(gaussian_parameters(
+                width, height, radius, integer, 0,
+            ))
         }
-        EffectOperation::GaussianVertical { radius } => {
-            EffectKernelParameters::GaussianBlur(GaussianBlurParameters {
-                canvas_width: width,
-                canvas_height: height,
-                _padding: [0; 2],
-                radius: radius.clamp(0.0, 32.0) as f32,
-                direction: 1,
-                _padding1: [0; 2],
-            })
+        EffectOperation::GaussianVertical { radius, integer } => {
+            EffectKernelParameters::GaussianBlur(gaussian_parameters(
+                width, height, radius, integer, 1,
+            ))
         }
         EffectOperation::HighlightExtract { threshold, colour } => {
             EffectKernelParameters::HighlightExtract(HighlightExtractParameters {
@@ -532,6 +527,42 @@ fn line_parameters(
     clippy::too_many_arguments,
     reason = "one packed record mirrors shared WGSL palette fields"
 )]
+fn gaussian_parameters(
+    width: u32,
+    height: u32,
+    radius: f64,
+    integer: bool,
+    direction: u32,
+) -> GaussianBlurParameters {
+    let (support, weights) = if integer {
+        crate::gaussian::with_gaussian_kernel(radius, |kernel| {
+            (
+                kernel.radius as u32,
+                std::array::from_fn(|row| {
+                    std::array::from_fn(|column| {
+                        kernel
+                            .integer_weights
+                            .get(row * 4 + column)
+                            .copied()
+                            .unwrap_or(0)
+                    })
+                }),
+            )
+        })
+    } else {
+        (0, [[0; 4]; 9])
+    };
+    GaussianBlurParameters {
+        canvas_width: width,
+        canvas_height: height,
+        _padding: [0; 2],
+        radius: radius.clamp(0.0, 32.0) as f32,
+        direction,
+        _padding1: [u32::from(integer), support],
+        weights,
+    }
+}
+
 fn palette_parameters(
     width: u32,
     height: u32,
@@ -544,13 +575,15 @@ fn palette_parameters(
     scale: u32,
     levels: u16,
     interpolation: vestra_core::project::PaletteInterpolation,
+    input_adjusted: bool,
 ) -> PaletteParameters {
     PaletteParameters {
         canvas_width: width,
         canvas_height: height,
         _padding: [
             u32::from(stops.is_some()),
-            u32::from(interpolation == vestra_core::project::PaletteInterpolation::Oklab),
+            u32::from(interpolation == vestra_core::project::PaletteInterpolation::Oklab)
+                | (u32::from(input_adjusted) << 1),
         ],
         stops: stops.copied().unwrap_or([0; 16]).map(u32::from),
         amount: (amount * 65535.0).round() as u32,
@@ -736,6 +769,7 @@ mod effect_parameter_layout_tests {
             2,
             4,
             vestra_core::project::PaletteInterpolation::Rgb,
+            false,
         );
         assert_eq!(packed.colours[0], 0xff332211);
         assert_eq!(packed.count, 2);
@@ -758,6 +792,8 @@ mod effect_parameter_layout_tests {
 
     #[test]
     fn every_effect_parameter_fits_the_uniform_record() {
+        assert_eq!(offset_of!(GaussianBlurParameters, weights), 32);
+        assert_eq!(size_of::<GaussianBlurParameters>(), 176);
         let sizes = [
             size_of::<PaletteParameters>(),
             size_of::<ColourTransformParameters>(),

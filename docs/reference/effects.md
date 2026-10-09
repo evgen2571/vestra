@@ -107,6 +107,23 @@ neighbor colors return authored bytes directly. Phase fractions round to
 Source alpha and blend amount retain their existing semantics. Integer conversion
 can introduce small rounding steps; interpolation adds no passes or textures.
 
+`input_exposure` (default `0`, −8 to 8 stops) and `input_gamma` (default `1`,
+strictly positive through 8) adjust the signal entering either palette effect.
+Both use ordinary bindable scalar properties with local effect time and the same
+constraints as `ColorAdjust`. Each encoded RGB channel is adjusted as
+`clamp(channel / 255 * 2**exposure, 0, 1)**(1/max(gamma,0.001))` and rounded to a byte before
+matching/quantization. Gamma above one lifts midtones; exposure can clip highlights.
+This applies to tonal, RGB, hue, Oklab and channel-count modes alike.
+
+An active tone control reuses a `ColorAdjust` pass with neutral black/white points.
+The final amount blends the quantized result against the retained **original**
+image, preserving its alpha and hidden RGB. It does not blend against the adjusted
+input. Amount zero remains identity; neutral exposure/gamma retain the legacy
+single pass and do not require retained-source resources. An animated or bound
+tone property conservatively prepares resources for its active frames. Tone
+preparation is opt-in and adds a full-resolution pass and retained image storage;
+local contrast/detail and independent analysis filtering are still pending.
+
 `PaletteMode.GRADIENT` interpolates adjacent palette stops and
 `PaletteMode.NEAREST` chooses the nearest tonal stop. `PaletteMode.RAINBOW`
 generates a 16-stop hue ramp with increasing brightness. Ordered Dither always

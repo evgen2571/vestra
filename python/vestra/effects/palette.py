@@ -25,6 +25,10 @@ class PaletteMap(Effect):
         levels: int = 4,
         stops: Sequence[int | float] | None = None,
         interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
+        input_exposure: int | float | ScalarProperty = 0,
+        input_gamma: int | float | ScalarProperty = 1,
+        input_detail: int | float | ScalarProperty = 0,
+        input_detail_radius: int | float | ScalarProperty = 1,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -38,6 +42,10 @@ class PaletteMap(Effect):
                 "levels": levels,
                 "stops": stops,
                 "interpolation": interpolation,
+                "input_exposure": input_exposure,
+                "input_gamma": input_gamma,
+                "input_detail": input_detail,
+                "input_detail_radius": input_detail_radius,
                 "amount": amount,
                 "phase": phase,
                 "period": period,
@@ -60,6 +68,38 @@ class PaletteMap(Effect):
     @mode.setter
     def mode(self, value: PaletteMode | str) -> None:
         self._set_value("mode", value)
+
+    @property
+    def input_exposure(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["input_exposure"])
+
+    @input_exposure.setter
+    def input_exposure(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("input_exposure", value)
+
+    @property
+    def input_gamma(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["input_gamma"])
+
+    @input_gamma.setter
+    def input_gamma(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("input_gamma", value)
+
+    @property
+    def input_detail(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["input_detail"])
+
+    @input_detail.setter
+    def input_detail(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("input_detail", value)
+
+    @property
+    def input_detail_radius(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["input_detail_radius"])
+
+    @input_detail_radius.setter
+    def input_detail_radius(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("input_detail_radius", value)
 
     @property
     def interpolation(self) -> PaletteInterpolation:
@@ -124,6 +164,10 @@ class OrderedDither(PaletteMap):
         levels: int = 4,
         stops: Sequence[int | float] | None = None,
         interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
+        input_exposure: int | float | ScalarProperty = 0,
+        input_gamma: int | float | ScalarProperty = 1,
+        input_detail: int | float | ScalarProperty = 0,
+        input_detail_radius: int | float | ScalarProperty = 1,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -141,6 +185,10 @@ class OrderedDither(PaletteMap):
                 "levels": levels,
                 "stops": stops,
                 "interpolation": interpolation,
+                "input_exposure": input_exposure,
+                "input_gamma": input_gamma,
+                "input_detail": input_detail,
+                "input_detail_radius": input_detail_radius,
                 "amount": amount,
                 "phase": phase,
                 "period": period,

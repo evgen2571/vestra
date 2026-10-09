@@ -100,6 +100,7 @@ pub(super) fn compose(
         &frame.post_effects,
         context.timings,
         context.profiling_enabled,
+        context.assets.glyph_atlases(),
     );
     context.stats
 }
@@ -180,6 +181,7 @@ impl ComposeContext<'_> {
                         &layer.effects,
                         self.timings,
                         self.profiling_enabled,
+                        self.assets.glyph_atlases(),
                     );
                 }
                 self.apply_masks(layer, depth);
@@ -253,6 +255,7 @@ impl ComposeContext<'_> {
                 &layer.effects,
                 self.timings,
                 self.profiling_enabled,
+                self.assets.glyph_atlases(),
             );
             self.apply_masks(layer, depth);
             self.apply_track_matte(layer, layers, depth);
@@ -341,6 +344,7 @@ impl ComposeContext<'_> {
                 &layer.effects,
                 self.timings,
                 self.profiling_enabled,
+                self.assets.glyph_atlases(),
             );
         }
         self.apply_masks(layer, depth);
@@ -557,6 +561,7 @@ impl ComposeContext<'_> {
                 &layer.effects,
                 self.timings,
                 self.profiling_enabled,
+                self.assets.glyph_atlases(),
             );
         }
         self.apply_masks(layer, depth);
@@ -1862,6 +1867,7 @@ mod tests {
             &[EvaluatedEffect::Brightness { amount: 0.2 }],
             &mut crate::render::metrics::CpuHotPathTimings::default(),
             false,
+            &[],
         );
         assert_ne!(surfaces.current().get_pixel(2, 2), before.get_pixel(2, 2));
     }

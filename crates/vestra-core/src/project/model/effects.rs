@@ -2,9 +2,99 @@ use serde::{Deserialize, Serialize};
 
 use super::{ActiveInterval, Point, PointProperty, ScalarProperty, Track};
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HalftoneMode {
+    #[default]
+    Luminance,
+    Source,
+    Rgb,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PixelSortDirection {
+    #[default]
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PixelSortOrder {
+    #[default]
+    Ascending,
+    Descending,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
+    Ascii {
+        id: String,
+        characters: String,
+        edge_characters: String,
+        #[serde(default)]
+        font: Option<String>,
+        glyph_style: AsciiGlyphStyle,
+        mode: AsciiMode,
+        color_mode: AsciiColorMode,
+        foreground: String,
+        background: String,
+        palette: Vec<String>,
+        invert: bool,
+        #[serde(default)]
+        period: Option<f64>,
+        amount: ScalarProperty,
+        phase: ScalarProperty,
+        cell_width: ScalarProperty,
+        cell_height: ScalarProperty,
+        edge_threshold: ScalarProperty,
+        edge_strength: ScalarProperty,
+        source_mix: ScalarProperty,
+    },
+
+    Halftone {
+        id: String,
+        cell_size: ScalarProperty,
+        angle_degrees: ScalarProperty,
+        softness: ScalarProperty,
+        amount: ScalarProperty,
+        #[serde(default)]
+        mode: HalftoneMode,
+        foreground: String,
+        background: String,
+        invert: bool,
+    },
+    PixelSort {
+        id: String,
+        lower_threshold: ScalarProperty,
+        upper_threshold: ScalarProperty,
+        amount: ScalarProperty,
+        #[serde(default)]
+        direction: PixelSortDirection,
+        #[serde(default)]
+        order: PixelSortOrder,
+        segment_length: u16,
+    },
+    Crt {
+        id: String,
+        amount: ScalarProperty,
+        curvature: ScalarProperty,
+        scanline_strength: ScalarProperty,
+        scanline_spacing: ScalarProperty,
+        mask_strength: ScalarProperty,
+        grain: ScalarProperty,
+        jitter: ScalarProperty,
+        flicker: ScalarProperty,
+        rolling_strength: ScalarProperty,
+        rolling_width: ScalarProperty,
+        phase: ScalarProperty,
+        mask_spacing: u8,
+        #[serde(default)]
+        period: Option<f64>,
+        seed: u64,
+    },
     PaletteMap {
         id: String,
         palette: Vec<String>,
@@ -142,7 +232,11 @@ impl Effect {
     #[must_use]
     pub fn id(&self) -> &str {
         match self {
-            Self::PaletteMap { id, .. }
+            Self::Halftone { id, .. } => id,
+            Self::PixelSort { id, .. } => id,
+            Self::Crt { id, .. } => id,
+            Self::Ascii { id, .. }
+            | Self::PaletteMap { id, .. }
             | Self::OrderedDither { id, .. }
             | Self::Brightness { id, .. }
             | Self::Contrast { id, .. }
@@ -289,4 +383,26 @@ impl DitherMatrix {
 
 fn default_dither_palette_mode() -> PaletteMode {
     PaletteMode::Nearest
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AsciiGlyphStyle {
+    Characters,
+    Geometric,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AsciiMode {
+    Fill,
+    Edges,
+    Hybrid,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AsciiColorMode {
+    Monochrome,
+    Source,
+    Palette,
+    Rainbow,
 }

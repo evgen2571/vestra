@@ -48,8 +48,10 @@ def _valid_generic_parameters(definition: object) -> dict[str, object]:
             )
         elif kind == "palette":
             values[str(parameter["name"])] = ["#000000", "#ffffff"]
-        elif kind == "period":
+        elif kind in {"period", "font"}:
             continue
+        elif kind == "string":
+            values[str(parameter["name"])] = "-|/\\" if parameter["name"] == "edge_characters" else " .:-=+*#%@"
         elif kind == "colour":
             values[str(parameter["name"])] = "#ffffff"
         elif kind == "integer":
@@ -538,7 +540,7 @@ def test_generic_effect_catalog_is_read_only_and_complete() -> None:
     assert set(ids) == {
         "brightness", "contrast", "saturation", "tint", "gaussian_blur", "directional_blur",
         "motion_tile", "zoom_blur", "radial_blur", "glow", "chromatic_aberration", "vignette", "sharpen", "color_adjust",
-        "camera_shake", "motion_blur", "bloom", "palette_map", "ordered_dither",
+        "camera_shake", "motion_blur", "bloom", "palette_map", "ordered_dither", "ascii", "halftone", "pixel_sort", "crt",
     }
     with pytest.raises(TypeError):
         definitions[0]["id"] = "changed"  # type: ignore[index]

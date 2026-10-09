@@ -275,6 +275,16 @@ fn parameter_schema(parameter: &vestra::EffectParameterDescriptor) -> Value {
                 ]})
             }
         }
+        EffectParameterKind::String => match parameter.name {
+            "characters" => {
+                json!({"type": "string", "minLength": 1, "maxLength": 256, "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F]"}})
+            }
+            "edge_characters" => {
+                json!({"type": "string", "minLength": 4, "maxLength": 4, "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F]"}})
+            }
+            _ => json!({"type": "string", "minLength": 1}),
+        },
+        EffectParameterKind::Font => json!({"type": "string", "minLength": 1}),
         EffectParameterKind::Colour => json!({"$ref": "#/$defs/colour"}),
         EffectParameterKind::Palette => json!({
             "type": "array",

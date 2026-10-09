@@ -18,6 +18,98 @@ fn scalar(track: Track<f64>) -> CompiledScalarProperty {
     CompiledScalarProperty::authored(track)
 }
 
+fn stylization_requirements(
+    name: &str,
+) -> (
+    vestra_core::plan::RenderPlan,
+    std::sync::Arc<crate::DecodedAssets>,
+    GpuRequirements,
+) {
+    let input = load_and_validate(
+        &std::path::PathBuf::from(format!("examples/effects/{name}.json")),
+        &ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("stylization example validates");
+    let plan = compile(input, CompileOptions::default()).expect("stylization compiles");
+    let decoded = crate::DecodedAssets::build(&plan).expect("stylization resources prepare");
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .expect("stylization resource requirements");
+    (plan, decoded, requirements)
+}
+
+#[test]
+fn glyph_requirements_include_atlas_dimensions_mips_and_bindings() {
+    let (plan, decoded, requirements) = stylization_requirements("ascii");
+    let atlas_bytes: u64 = decoded
+        .glyph_atlases()
+        .iter()
+        .map(|atlas| atlas.byte_len())
+        .sum();
+    assert!(requirements.max_texture_dimension_2d >= 512);
+    let estimates = requirements.resource_estimates(256).unwrap();
+    assert!(estimates.source_texture_bytes >= atlas_bytes);
+    assert_eq!(
+        estimates.source_texture_count as usize,
+        plan.images.len()
+            + plan.shapes.len()
+            + plan.texts.len()
+            + plan.video_slot_count()
+            + decoded.glyph_atlases().len()
+    );
+    for limits in [
+        wgpu::Limits {
+            max_texture_dimension_2d: 511,
+            ..wgpu::Limits::default()
+        },
+        wgpu::Limits {
+            max_bindings_per_bind_group: 4,
+            ..wgpu::Limits::default()
+        },
+        wgpu::Limits {
+            max_sampled_textures_per_shader_stage: 2,
+            ..wgpu::Limits::default()
+        },
+    ] {
+        assert!(
+            requirements
+                .requested_device_limits(&plan, &limits)
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn sorting_requirements_request_and_validate_the_wide_shared_workgroup() {
+    let (plan, _, requirements) = stylization_requirements("pixel-sort-horizontal");
+    let requested = requirements
+        .requested_device_limits(&plan, &wgpu::Limits::default())
+        .unwrap();
+    assert_eq!(requested.max_compute_workgroup_size_x, 64);
+    assert_eq!(requested.max_compute_workgroup_storage_size, 7168);
+    for limits in [
+        wgpu::Limits {
+            max_compute_workgroup_size_x: 63,
+            ..wgpu::Limits::default()
+        },
+        wgpu::Limits {
+            max_compute_workgroup_storage_size: 7167,
+            ..wgpu::Limits::default()
+        },
+    ] {
+        assert!(
+            requirements
+                .requested_device_limits(&plan, &limits)
+                .is_err()
+        );
+    }
+}
+
 #[test]
 fn motion_tile_parameters_are_packed_without_an_adapter() {
     let effects = [vestra_core::plan::EvaluatedEffect::MotionTile {
@@ -168,8 +260,8 @@ fn project_requirements_construct_the_requested_device_limits() {
         requirements.uniform_bytes
     );
     assert_eq!(requested.max_bind_groups, 1);
-    assert_eq!(requested.max_bindings_per_bind_group, 4);
-    assert_eq!(requested.max_sampled_textures_per_shader_stage, 2);
+    assert_eq!(requested.max_bindings_per_bind_group, 5);
+    assert_eq!(requested.max_sampled_textures_per_shader_stage, 3);
     assert_eq!(requested.max_storage_textures_per_shader_stage, 1);
     assert_eq!(requested.max_compute_workgroup_size_x, 8);
     assert_eq!(requested.max_compute_workgroup_size_y, 8);

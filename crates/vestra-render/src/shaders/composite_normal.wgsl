@@ -38,5 +38,8 @@ fn blend(destination: vec4<f32>, unscaled_source: vec4<f32>) -> vec4<f32> {
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas_width || id.y >= params.canvas_height) { return; }
     let coord = vec2<i32>(id.xy);
-    textureStore(output, coord, clamp(blend(textureLoad(canvas, coord, 0), textureLoad(layer, coord, 0)), vec4<f32>(0.0), vec4<f32>(1.0)));
+    // Match CPU byte rounding explicitly: normalized storage conversion differs
+    // between GL and Vulkan at half-byte boundaries (for example 127.5).
+    let rgba = clamp(blend(textureLoad(canvas, coord, 0), textureLoad(layer, coord, 0)), vec4<f32>(0.0), vec4<f32>(1.0));
+    textureStore(output, coord, floor(rgba * 255.0 + vec4<f32>(0.5)) / 255.0);
 }

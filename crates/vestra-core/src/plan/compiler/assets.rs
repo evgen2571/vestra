@@ -135,13 +135,24 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
             crate::project::VisualSource::Text(text) => {
                 ids.insert(text.font.as_str());
             }
-            crate::project::VisualSource::Group(group) => collect_fonts(&group.clips, ids),
+            crate::project::VisualSource::Group(group) => {
+                collect_fonts(&group.clips, ids);
+                collect_transition_fonts(&group.transitions, ids);
+            }
             _ => {}
         }
     }
 
     fn collect_fonts<'a>(clips: &'a [crate::project::Clip], ids: &mut BTreeSet<&'a str>) {
         for clip in clips {
+            for effect in &clip.effects {
+                if let crate::project::Effect::Ascii {
+                    font: Some(font), ..
+                } = effect
+                {
+                    ids.insert(font);
+                }
+            }
             for mask in &clip.masks {
                 if let crate::project::MaskInput::Source { source, .. } = &mask.input {
                     collect_font_source(source, ids);
@@ -151,12 +162,45 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
                 crate::project::VisualSource::Text(text) => {
                     ids.insert(text.font.as_str());
                 }
-                crate::project::VisualSource::Group(group) => collect_fonts(&group.clips, ids),
+                crate::project::VisualSource::Group(group) => {
+                    collect_fonts(&group.clips, ids);
+                    collect_transition_fonts(&group.transitions, ids);
+                }
                 _ => {}
             }
         }
     }
+    fn collect_transition_fonts<'a>(
+        transitions: &'a [crate::project::TransitionPlacement],
+        ids: &mut BTreeSet<&'a str>,
+    ) {
+        for transition in transitions {
+            for effect in transition
+                .definition
+                .outgoing
+                .effects
+                .iter()
+                .chain(&transition.definition.incoming.effects)
+            {
+                if let crate::project::Effect::Ascii {
+                    font: Some(font), ..
+                } = effect
+                {
+                    ids.insert(font);
+                }
+            }
+        }
+    }
     collect_fonts(&project.visual.clips, &mut font_ids);
+    collect_transition_fonts(&project.visual.transitions, &mut font_ids);
+    for effect in &project.visual.post_effects {
+        if let crate::project::Effect::Ascii {
+            font: Some(font), ..
+        } = effect
+        {
+            font_ids.insert(font);
+        }
+    }
     let fonts: Vec<_> = project
         .assets
         .iter()

@@ -37,6 +37,10 @@ not reduced renderer support.
 | Chromatic Aberration | `ChromaticAberration`, dynamic scalar properties | `chromatic_aberration` | post-transform | supported | supported |
 | Palette mapping | `PaletteMap`, animatable amount/phase | `palette_map` | layer post-transform/global post-composition; optional local-time color loop | not fully verified | not fully verified |
 | Ordered dithering | `OrderedDither`, Bayer matrices, palette and scale | `ordered_dither` | layer post-transform/global post-composition; fixed output-pixel pattern | not fully verified | not fully verified |
+| ASCII / pseudo-ASCII | `Ascii`, `PseudoAscii`, characters/custom fonts, bindable controls | `ascii`, character/geometric glyph style | clip/global, fixed composition grid; area analysis and prepared font coverage | supported by focused alpha/partial/tiny-cell tests | verified on software Vulkan and hardware GL/D3D12 NVIDIA for random-access periodic colors and tonal threshold fixtures |
+| Halftone | `Halftone`, luminance/source/RGB, bindable geometry/intensity | `halftone` | layer/group post-transform and global; rotated area-analysis cells | supported, focused visual/alpha tests | implemented; software Vulkan frame parity verified, hardware acceptance pending |
+| Bounded pixel sorting | `PixelSort`, both directions/orders, bindable thresholds/intensity | `pixel_sort` | layer/group post-transform and global; sharp stable segmented runs | supported, tie/threshold tests | implemented; software Vulkan literal ties/threshold parity verified, hardware acceptance pending |
+| CRT styling | `Crt`, continuous seeded noise and explicit period | `crt` | layer/group post-transform and global; inverse-sampled alpha | supported, scanline/phase tests | implemented; software Vulkan period/random-access frame parity verified, hardware acceptance pending |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |
 

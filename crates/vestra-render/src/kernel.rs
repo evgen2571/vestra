@@ -3,6 +3,12 @@ use vestra_core::plan::{EffectOperation, RenderPlan, compiled_effect_pass_plan};
 /// Renderer-owned implementation families for logical effect operations.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum EffectKernel {
+    AsciiAnalyze,
+    AsciiResolve,
+    HalftoneAnalyze,
+    Halftone,
+    PixelSort,
+    Crt,
     PaletteMap,
     OrderedDither,
     ColourTransform,
@@ -21,6 +27,12 @@ pub(crate) enum EffectKernel {
 #[must_use]
 pub(crate) const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
     match operation {
+        EffectOperation::AsciiAnalyze { .. } => EffectKernel::AsciiAnalyze,
+        EffectOperation::AsciiResolve { .. } => EffectKernel::AsciiResolve,
+        EffectOperation::HalftoneAnalyze { .. } => EffectKernel::HalftoneAnalyze,
+        EffectOperation::Halftone { .. } => EffectKernel::Halftone,
+        EffectOperation::PixelSort { .. } => EffectKernel::PixelSort,
+        EffectOperation::Crt { .. } => EffectKernel::Crt,
         EffectOperation::PaletteMap { .. } => EffectKernel::PaletteMap,
         EffectOperation::OrderedDither { .. } => EffectKernel::OrderedDither,
         EffectOperation::ApplyColourTransform { .. } => EffectKernel::ColourTransform,
@@ -39,7 +51,13 @@ pub(crate) const fn kernel_for_operation(operation: &EffectOperation) -> EffectK
 }
 
 impl EffectKernel {
-    pub(crate) const ALL: [Self; 12] = [
+    pub(crate) const ALL: [Self; 18] = [
+        Self::AsciiAnalyze,
+        Self::AsciiResolve,
+        Self::HalftoneAnalyze,
+        Self::Halftone,
+        Self::PixelSort,
+        Self::Crt,
         Self::PaletteMap,
         Self::OrderedDither,
         Self::ColourTransform,
@@ -92,6 +110,12 @@ impl EffectKernelSet {
 impl EffectKernel {
     const fn index(self) -> u32 {
         match self {
+            Self::AsciiAnalyze => 15,
+            Self::AsciiResolve => 16,
+            Self::HalftoneAnalyze => 12,
+            Self::Halftone => 13,
+            Self::PixelSort => 14,
+            Self::Crt => 17,
             Self::PaletteMap => 10,
             Self::OrderedDither => 11,
             Self::ColourTransform => 0,
@@ -306,7 +330,116 @@ mod tests {
             colours: [[255; 4]; 16],
             len: 2,
         };
+        let ascii = vestra_core::ascii::AsciiParameters {
+            atlas: 0,
+            glyph_count: 10,
+            glyph_style: crate::project::AsciiGlyphStyle::Characters,
+            mode: crate::project::AsciiMode::Hybrid,
+            color_mode: crate::project::AsciiColorMode::Monochrome,
+            foreground: [255; 4],
+            background: [0, 0, 0, 255],
+            palette,
+            invert: false,
+            cell_width: 8,
+            cell_height: 12,
+            edge_threshold: 0.15,
+            edge_strength: 1.0,
+            source_mix: 0.0,
+            amount: 1.0,
+        };
         let cases = [
+            (
+                vestra_core::plan::CompiledEffect::Ascii {
+                    glyphs: vestra_core::ascii::GlyphAtlasSpec {
+                        font: None,
+                        characters: " .:-=+*#%@".into(),
+                        edge_characters: "-|/\\".into(),
+                    },
+                    parameters: ascii,
+                    period: None,
+                    amount: scalar(1.0),
+                    phase: scalar(0.0),
+                    cell_width: scalar(8.0),
+                    cell_height: scalar(12.0),
+                    edge_threshold: scalar(0.15),
+                    edge_strength: scalar(1.0),
+                    source_mix: scalar(0.0),
+                },
+                vestra_core::plan::EvaluatedEffect::Ascii { parameters: ascii },
+            ),
+            (
+                vestra_core::plan::CompiledEffect::Halftone {
+                    cell_size: scalar(6.0),
+                    angle_degrees: scalar(15.0),
+                    softness: scalar(0.5),
+                    amount: scalar(1.0),
+                    mode: vestra_core::project::HalftoneMode::Luminance,
+                    foreground: [255; 4],
+                    background: [0, 0, 0, 255],
+                    invert: false,
+                },
+                vestra_core::plan::EvaluatedEffect::Halftone {
+                    cell_size: 6.0,
+                    angle_degrees: 15.0,
+                    softness: 0.5,
+                    amount: 1.0,
+                    mode: vestra_core::project::HalftoneMode::Luminance,
+                    foreground: [255; 4],
+                    background: [0, 0, 0, 255],
+                    invert: false,
+                },
+            ),
+            (
+                vestra_core::plan::CompiledEffect::PixelSort {
+                    lower_threshold: scalar(0.15),
+                    upper_threshold: scalar(0.9),
+                    amount: scalar(1.0),
+                    direction: vestra_core::project::PixelSortDirection::Horizontal,
+                    order: vestra_core::project::PixelSortOrder::Ascending,
+                    segment_length: 64,
+                },
+                vestra_core::plan::EvaluatedEffect::PixelSort {
+                    lower_threshold: 0.15,
+                    upper_threshold: 0.9,
+                    amount: 1.0,
+                    direction: vestra_core::project::PixelSortDirection::Horizontal,
+                    order: vestra_core::project::PixelSortOrder::Ascending,
+                    segment_length: 64,
+                },
+            ),
+            (
+                vestra_core::plan::CompiledEffect::Crt {
+                    amount: scalar(1.0),
+                    curvature: scalar(0.08),
+                    scanline_strength: scalar(0.2),
+                    scanline_spacing: scalar(2.0),
+                    mask_strength: scalar(0.15),
+                    grain: scalar(0.025),
+                    jitter: scalar(0.35),
+                    flicker: scalar(0.025),
+                    rolling_strength: scalar(0.06),
+                    rolling_width: scalar(0.12),
+                    phase: scalar(0.0),
+                    mask_spacing: 1,
+                    period: None,
+                    seed: 0,
+                },
+                vestra_core::plan::EvaluatedEffect::Crt {
+                    amount: 1.0,
+                    curvature: 0.08,
+                    scanline_strength: 0.2,
+                    scanline_spacing: 2.0,
+                    mask_strength: 0.15,
+                    grain: 0.025,
+                    jitter: 0.35,
+                    flicker: 0.025,
+                    rolling_strength: 0.06,
+                    rolling_width: 0.12,
+                    phase: 0.0,
+                    mask_spacing: 1,
+                    seed: 0,
+                },
+            ),
             (
                 vestra_core::plan::CompiledEffect::PaletteMap {
                     palette,

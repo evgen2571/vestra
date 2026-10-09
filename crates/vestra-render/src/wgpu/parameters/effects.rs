@@ -18,6 +18,33 @@ macro_rules! effect_parameters {
     };
 }
 
+effect_parameters!(AnalogParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    _padding: [u32; 2],
+    values: [f32; 16],
+    flags: [u32; 4]
+});
+
+effect_parameters!(AsciiParameters {
+    canvas_width: u32,
+    canvas_height: u32,
+    cell_width: u32,
+    cell_height: u32,
+    glyph_count: u32,
+    glyph_style: u32,
+    mode: u32,
+    color_mode: u32,
+    foreground: u32,
+    background: u32,
+    invert: u32,
+    count: u32,
+    edge_threshold: f32,
+    edge_strength: f32,
+    source_mix: f32,
+    amount: f32,
+    colours: [u32; 16]
+});
 // Packed RGBA colors match WGSL array<vec4<u32>, 4> at byte 48.
 effect_parameters!(PaletteParameters {
     canvas_width: u32,
@@ -124,6 +151,12 @@ effect_parameters!(ColorAdjustParameters {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(in crate::wgpu) enum EffectKernelParameters {
+    AsciiAnalyze(AsciiParameters),
+    AsciiResolve(AsciiParameters),
+    HalftoneAnalyze(AnalogParameters),
+    Halftone(AnalogParameters),
+    PixelSort(AnalogParameters),
+    Crt(AnalogParameters),
     PaletteMap(PaletteParameters),
     OrderedDither(PaletteParameters),
     ColourTransform(ColourTransformParameters),
@@ -141,6 +174,12 @@ pub(in crate::wgpu) enum EffectKernelParameters {
 impl EffectKernelParameters {
     pub(in crate::wgpu) const fn kernel(self) -> EffectKernel {
         match self {
+            Self::AsciiAnalyze(_) => EffectKernel::AsciiAnalyze,
+            Self::AsciiResolve(_) => EffectKernel::AsciiResolve,
+            Self::HalftoneAnalyze(_) => EffectKernel::HalftoneAnalyze,
+            Self::Halftone(_) => EffectKernel::Halftone,
+            Self::PixelSort(_) => EffectKernel::PixelSort,
+            Self::Crt(_) => EffectKernel::Crt,
             Self::PaletteMap(_) => EffectKernel::PaletteMap,
             Self::OrderedDither(_) => EffectKernel::OrderedDither,
             Self::ColourTransform(_) => EffectKernel::ColourTransform,
@@ -163,6 +202,85 @@ pub(in crate::wgpu) fn effect_parameters(
     pass: EffectPass,
 ) -> EffectKernelParameters {
     match pass.operation {
+        EffectOperation::AsciiAnalyze { parameters } => {
+            EffectKernelParameters::AsciiAnalyze(ascii_parameters(width, height, parameters))
+        }
+        EffectOperation::AsciiResolve { parameters } => {
+            EffectKernelParameters::AsciiResolve(ascii_parameters(width, height, parameters))
+        }
+
+        EffectOperation::HalftoneAnalyze { .. } => EffectKernelParameters::HalftoneAnalyze(
+            halftone_parameters((width, height), pass.operation),
+        ),
+        EffectOperation::Halftone { .. } => {
+            EffectKernelParameters::Halftone(halftone_parameters((width, height), pass.operation))
+        }
+        EffectOperation::PixelSort {
+            direction,
+            order,
+            lower_threshold,
+            upper_threshold,
+            segment_length,
+            amount,
+        } => {
+            let mut p = AnalogParameters::zeroed();
+            p.canvas_width = width;
+            p.canvas_height = height;
+            p.values[0] = (lower_threshold * 65280.0).ceil() as f32;
+            p.values[1] = (upper_threshold * 65280.0).floor() as f32;
+            p.values[2] = amount as f32;
+            p.flags = [
+                u32::from(direction == vestra_core::project::PixelSortDirection::Vertical),
+                u32::from(order == vestra_core::project::PixelSortOrder::Descending),
+                u32::from(segment_length),
+                u32::from(lower_threshold > upper_threshold),
+            ];
+            EffectKernelParameters::PixelSort(p)
+        }
+        EffectOperation::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            mask_spacing,
+            seed,
+        } => {
+            let mut p = AnalogParameters::zeroed();
+            p.canvas_width = width;
+            p.canvas_height = height;
+            p.values = [
+                amount as f32,
+                curvature as f32,
+                scanline_strength as f32,
+                scanline_spacing as f32,
+                mask_strength as f32,
+                grain as f32,
+                jitter as f32,
+                flicker as f32,
+                rolling_strength as f32,
+                rolling_width as f32,
+                phase as f32,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ];
+            p.flags = [
+                (seed as u32) ^ ((seed >> 32) as u32),
+                u32::from(mask_spacing),
+                0,
+                0,
+            ];
+            EffectKernelParameters::Crt(p)
+        }
         EffectOperation::PaletteMap {
             palette,
             amount,
@@ -412,11 +530,130 @@ fn palette_parameters(
     }
 }
 
+fn ascii_parameters(
+    width: u32,
+    height: u32,
+    p: vestra_core::ascii::AsciiParameters,
+) -> AsciiParameters {
+    use vestra_core::project::{AsciiColorMode, AsciiGlyphStyle, AsciiMode};
+    AsciiParameters {
+        canvas_width: width,
+        canvas_height: height,
+        cell_width: p.cell_width,
+        cell_height: p.cell_height,
+        glyph_count: p.glyph_count,
+        glyph_style: u32::from(p.glyph_style == AsciiGlyphStyle::Geometric)
+            | (crate::ascii::coverage_level(p.cell_width, p.cell_height) << 1),
+        mode: match p.mode {
+            AsciiMode::Fill => 0,
+            AsciiMode::Edges => 1,
+            AsciiMode::Hybrid => 2,
+        },
+        color_mode: match p.color_mode {
+            AsciiColorMode::Monochrome => 0,
+            AsciiColorMode::Source => 1,
+            AsciiColorMode::Palette => 2,
+            AsciiColorMode::Rainbow => 3,
+        },
+        foreground: u32::from_le_bytes(p.foreground),
+        background: u32::from_le_bytes(p.background),
+        invert: u32::from(p.invert),
+        count: p.palette.len,
+        edge_threshold: p.edge_threshold as f32,
+        edge_strength: p.edge_strength as f32,
+        source_mix: p.source_mix as f32,
+        amount: p.amount as f32,
+        colours: p.palette.colours.map(u32::from_le_bytes),
+    }
+}
+
+fn halftone_parameters(
+    (width, height): (u32, u32),
+    operation: EffectOperation,
+) -> AnalogParameters {
+    let (cell_size, angle_degrees, softness, amount, mode, foreground, background, invert) =
+        match operation {
+            EffectOperation::HalftoneAnalyze {
+                cell_size,
+                angle_degrees,
+                mode,
+            } => (
+                cell_size,
+                angle_degrees,
+                0.0,
+                1.0,
+                mode,
+                [255; 4],
+                [0, 0, 0, 255],
+                false,
+            ),
+            EffectOperation::Halftone {
+                cell_size,
+                angle_degrees,
+                softness,
+                amount,
+                mode,
+                foreground,
+                background,
+                invert,
+            } => (
+                cell_size,
+                angle_degrees,
+                softness,
+                amount,
+                mode,
+                foreground,
+                background,
+                invert,
+            ),
+            _ => unreachable!(),
+        };
+    let size = cell_size;
+    let angle = angle_degrees;
+    let mut p = AnalogParameters::zeroed();
+    p.canvas_width = width;
+    p.canvas_height = height;
+    p.values[0] = size as f32;
+    let angle = angle.rem_euclid(360.0) as f32 * std::f32::consts::PI / 180.0;
+    for ch in 0..3 {
+        let (s, c) = (angle + ch as f32 * std::f32::consts::PI / 3.0).sin_cos();
+        p.values[1 + ch * 2] = s;
+        p.values[2 + ch * 2] = c;
+    }
+    p.values[7] = softness as f32;
+    p.values[8] = amount as f32;
+    for ch in 0..3 {
+        p.values[9 + ch] = f32::from(foreground[ch]) / 255.0;
+        p.values[12 + ch] = f32::from(background[ch]) / 255.0;
+    }
+    p.flags = [
+        match mode {
+            vestra_core::project::HalftoneMode::Luminance => 0,
+            vestra_core::project::HalftoneMode::Source => 1,
+            vestra_core::project::HalftoneMode::Rgb => 2,
+        },
+        u32::from(invert),
+        0,
+        0,
+    ];
+    p
+}
+
 #[cfg(test)]
 mod effect_parameter_layout_tests {
     use super::*;
     use crate::wgpu::parameters::PARAMETER_RECORD_BYTES;
     use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn ascii_record_matches_shared_wgsl_layout() {
+        assert_eq!(offset_of!(AsciiParameters, glyph_count), 16);
+        assert_eq!(offset_of!(AsciiParameters, foreground), 32);
+        assert_eq!(offset_of!(AsciiParameters, edge_threshold), 48);
+        assert_eq!(offset_of!(AsciiParameters, colours), 64);
+        assert_eq!(size_of::<AsciiParameters>(), 128);
+        assert_eq!(align_of::<AsciiParameters>(), 16);
+    }
 
     #[test]
     fn palette_record_matches_wgsl_and_preserves_packed_color_channels() {

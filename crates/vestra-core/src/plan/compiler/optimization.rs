@@ -78,6 +78,72 @@ fn normalize_source(layer: &mut CompiledLayer) -> usize {
 
 fn normalize_effect(effect: &mut CompiledEffect) -> usize {
     match effect {
+        CompiledEffect::Ascii {
+            amount,
+            phase,
+            cell_width,
+            cell_height,
+            edge_threshold,
+            edge_strength,
+            source_mix,
+            ..
+        } => {
+            normalize_track(amount)
+                + normalize_track(phase)
+                + normalize_track(cell_width)
+                + normalize_track(cell_height)
+                + normalize_track(edge_threshold)
+                + normalize_track(edge_strength)
+                + normalize_track(source_mix)
+        }
+        CompiledEffect::Halftone {
+            cell_size,
+            angle_degrees,
+            softness,
+            amount,
+            ..
+        } => {
+            normalize_track(cell_size)
+                + normalize_track(angle_degrees)
+                + normalize_track(softness)
+                + normalize_track(amount)
+        }
+        CompiledEffect::PixelSort {
+            lower_threshold,
+            upper_threshold,
+            amount,
+            ..
+        } => {
+            normalize_track(lower_threshold)
+                + normalize_track(upper_threshold)
+                + normalize_track(amount)
+        }
+        CompiledEffect::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            ..
+        } => {
+            normalize_track(amount)
+                + normalize_track(curvature)
+                + normalize_track(scanline_strength)
+                + normalize_track(scanline_spacing)
+                + normalize_track(mask_strength)
+                + normalize_track(grain)
+                + normalize_track(jitter)
+                + normalize_track(flicker)
+                + normalize_track(rolling_strength)
+                + normalize_track(rolling_width)
+                + normalize_track(phase)
+        }
         CompiledEffect::PaletteMap { amount, phase, .. } => {
             normalize_track(amount) + normalize_track(phase)
         }
@@ -263,7 +329,8 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         CompiledEffect::Bloom { intensity, .. } => {
             intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)
         }
-        CompiledEffect::PaletteMap { amount, .. }
+        CompiledEffect::Ascii { amount, .. }
+        | CompiledEffect::PaletteMap { amount, .. }
         | CompiledEffect::OrderedDither { amount, .. }
         | CompiledEffect::Vignette { amount, .. } => {
             amount.keyframes.is_empty() && effect_amount_is_identity(amount.base_value)
@@ -273,6 +340,21 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
                 && radius.keyframes.is_empty()
                 && (effect_amount_is_identity(amount.base_value)
                     || gaussian_radius_is_identity(radius.base_value))
+        }
+        CompiledEffect::Halftone { amount, .. } => {
+            amount.keyframes.is_empty()
+                && amount.modifiers.is_empty()
+                && effect_amount_is_identity(amount.base_value)
+        }
+        CompiledEffect::PixelSort { amount, .. } => {
+            amount.keyframes.is_empty()
+                && amount.modifiers.is_empty()
+                && effect_amount_is_identity(amount.base_value)
+        }
+        CompiledEffect::Crt { amount, .. } => {
+            amount.keyframes.is_empty()
+                && amount.modifiers.is_empty()
+                && effect_amount_is_identity(amount.base_value)
         }
         CompiledEffect::MotionBlur { intensity, .. } => {
             intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)

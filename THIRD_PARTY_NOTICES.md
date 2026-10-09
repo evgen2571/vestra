@@ -36,3 +36,13 @@ resolved versions.
 The showcase's photo and synthesized audio are CC0, footage is CC BY 3.0, and
 Manrope is SIL OFL 1.1. Attribution, source links, modifications and distribution
 terms are recorded in [showcase asset credits](examples/showcase/ASSETS.md).
+
+## Bundled ASCII glyph font
+
+`crates/vestra-render/assets/DejaVuSans.ttf` is the repository's DejaVu-derived
+VestraTest face, bundled as an immutable default font for ASCII effects.
+It is embedded in the native renderer; no system font fallback is used.
+The complete Bitstream Vera / DejaVu notice is distributed in
+[licenses/DejaVuSans.txt](licenses/DejaVuSans.txt) and beside the font as
+`crates/vestra-render/assets/DejaVuSans.LICENSE`. DejaVu changes are public domain;
+the original font retains the Bitstream copyright and redistribution terms.

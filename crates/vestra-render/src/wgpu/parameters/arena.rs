@@ -113,6 +113,7 @@ pub(in crate::wgpu) fn push_effect_parameters(
         EffectKernelParameters::Halftone(value) => arena.push(&value),
         EffectKernelParameters::PixelSort(value) => arena.push(&value),
         EffectKernelParameters::Crt(value) => arena.push(&value),
+        EffectKernelParameters::PaletteInputAnalyze(value) => arena.push(&value),
         EffectKernelParameters::PaletteMap(value)
         | EffectKernelParameters::OrderedDither(value) => arena.push(&value),
         EffectKernelParameters::ColourTransform(value) => arena.push(&value),

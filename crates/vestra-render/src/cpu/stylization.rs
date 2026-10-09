@@ -13,6 +13,7 @@ use vestra_core::{
 pub(super) fn palette_map(
     source: &RgbaImage,
     analysis: Option<&RgbaImage>,
+    input_scale: u16,
     target: &mut RgbaImage,
     palette: &EvaluatedPalette,
     stops: Option<&[u16; 16]>,
@@ -35,15 +36,25 @@ pub(super) fn palette_map(
     });
     let last = palette.len - 1;
     let amount = (amount * 65535.0).round() as u32;
-    for ((base, input), output) in source
+    let input_scale = u32::from(input_scale);
+    let analysis = analysis.unwrap_or(source);
+    for (index, ((base, input), output)) in source
         .pixels()
-        .zip(analysis.unwrap_or(source).pixels())
+        .zip(analysis.pixels())
         .zip(target.pixels_mut())
+        .enumerate()
     {
         if base[3] == 0 {
             *output = *base;
             continue;
         }
+        let input = if input_scale > 1 {
+            let x = index as u32 % source.width() / input_scale * input_scale;
+            let y = index as u32 / source.width() / input_scale * input_scale;
+            analysis.get_pixel(x, y)
+        } else {
+            input
+        };
         let position = luminance_key(input.0) * last;
         let colour = if mode == PaletteMode::RgbChannels {
             channel_quantize(input.0, levels, 0, 0)
@@ -125,6 +136,7 @@ fn gradient_colour(
 pub(super) fn ordered_dither(
     source: &RgbaImage,
     analysis: Option<&RgbaImage>,
+    input_scale: u16,
     target: &mut RgbaImage,
     palette: &EvaluatedPalette,
     stops: Option<&[u16; 16]>,
@@ -148,10 +160,12 @@ pub(super) fn ordered_dither(
         .colours
         .map(|p| vestra_core::stylization::chromatic_features(p, mode));
     let last = palette.len - 1;
+    let input_scale = u32::from(input_scale);
+    let analysis = analysis.unwrap_or(source);
     let width = source.width();
     for (index, ((base, input), output)) in source
         .pixels()
-        .zip(analysis.unwrap_or(source).pixels())
+        .zip(analysis.pixels())
         .zip(target.pixels_mut())
         .enumerate()
     {
@@ -159,6 +173,13 @@ pub(super) fn ordered_dither(
             *output = *base;
             continue;
         }
+        let input = if input_scale > 1 {
+            let x = index as u32 % width / input_scale * input_scale;
+            let y = index as u32 / width / input_scale * input_scale;
+            analysis.get_pixel(x, y)
+        } else {
+            input
+        };
         let x = index as u32 % width / scale;
         let y = index as u32 / width / scale;
         let rank = if matrix == DitherMatrix::BlueNoise {
@@ -346,6 +367,7 @@ mod tests {
                 ordered_dither(
                     &source,
                     Some(&analysis),
+                    1,
                     &mut output,
                     &palette,
                     None,
@@ -361,6 +383,7 @@ mod tests {
                 palette_map(
                     &source,
                     Some(&analysis),
+                    1,
                     &mut output,
                     &palette,
                     None,
@@ -394,6 +417,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             Some(&stops),
@@ -411,6 +435,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             Some(&stops),
@@ -437,6 +462,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             Some(&stops),
@@ -449,6 +475,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             Some(&stops),
@@ -467,6 +494,7 @@ mod tests {
             ordered_dither(
                 &source,
                 None,
+                1,
                 &mut output,
                 &palette,
                 Some(&stops),
@@ -487,6 +515,7 @@ mod tests {
             ordered_dither(
                 &source,
                 None,
+                1,
                 &mut output,
                 &palette,
                 Some(&stops),
@@ -508,6 +537,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             Some(&stops),
@@ -525,6 +555,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             Some(&stops),
@@ -555,6 +586,7 @@ mod tests {
         palette_map(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             None,
@@ -567,6 +599,7 @@ mod tests {
         ordered_dither(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             None,
@@ -592,6 +625,7 @@ mod tests {
         ordered_dither(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             None,
@@ -611,6 +645,7 @@ mod tests {
         ordered_dither(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             None,
@@ -627,6 +662,7 @@ mod tests {
             ordered_dither(
                 &source,
                 None,
+                1,
                 &mut output,
                 &palette,
                 None,
@@ -644,6 +680,7 @@ mod tests {
         ordered_dither(
             &hidden,
             None,
+            1,
             &mut output,
             &palette,
             None,
@@ -671,6 +708,7 @@ mod tests {
             palette_map(
                 &source,
                 None,
+                1,
                 &mut output,
                 &palette,
                 None,
@@ -684,6 +722,7 @@ mod tests {
                 ordered_dither(
                     &source,
                     None,
+                    1,
                     &mut output,
                     &palette,
                     None,
@@ -705,6 +744,7 @@ mod tests {
             palette_map(
                 &hidden,
                 None,
+                1,
                 &mut output,
                 &palette,
                 None,
@@ -717,6 +757,7 @@ mod tests {
             ordered_dither(
                 &hidden,
                 None,
+                1,
                 &mut output,
                 &palette,
                 None,
@@ -758,6 +799,7 @@ mod tests {
             ordered_dither(
                 &source,
                 None,
+                1,
                 &mut output,
                 &palette,
                 None,
@@ -780,6 +822,7 @@ mod tests {
         ordered_dither(
             &source,
             None,
+            1,
             &mut output,
             &palette,
             None,
@@ -813,6 +856,7 @@ mod tests {
             ordered_dither(
                 &source,
                 None,
+                1,
                 &mut a,
                 &palette,
                 None,
@@ -827,6 +871,7 @@ mod tests {
             ordered_dither(
                 &source,
                 None,
+                1,
                 &mut b,
                 &palette,
                 None,

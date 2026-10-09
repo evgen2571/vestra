@@ -156,6 +156,75 @@ fn gpu_stylization_input_detail_preserves_blend_source_and_scene_contrast() {
 }
 
 #[test]
+fn gpu_stylization_input_detail_nested_mask_matte_and_random_access() {
+    let source = rich_source(96, 64);
+    let mut clip = image_clip(vec![]);
+    clip["masks"] = json!([{"id": "rect", "input": {"type": "shape",
+        "geometry": {"type": "rectangle", "width": 78.0, "height": 52.0},
+        "fill": "#ffffff"}}]);
+    let inner = json!({"id": "inner", "source": {"type": "group", "clips": [clip]},
+        "start": 0.0, "duration": 6.0, "layer": 0, "opacity": {"base_value": 1.0}});
+    let outer = json!({"id": "outer", "source": {"type": "group", "clips": [inner]},
+        "start": 0.0, "duration": 6.0, "layer": 0, "opacity": {"base_value": 1.0},
+        "matte": {"source_layer": "matte", "mode": "alpha", "invert": false}});
+    let matte = json!({"id": "matte", "source": {"type": "shape",
+        "geometry": {"type": "rectangle", "width": 96.0, "height": 64.0},
+        "fill": "#ffffff80"}, "start": 0.0, "duration": 6.0, "layer": 1,
+        "visible": false, "opacity": {"base_value": 1.0}});
+    let control = project(96, 64, vec![outer, matte], vec![]);
+    let Some(mut baseline) =
+        Backends::new(fixture("input-detail-nested-control", &source, &control))
+    else {
+        return;
+    };
+    let original = baseline.render("input-detail-nested-control", 0, 0);
+    assert_eq!(original.get_pixel(0, 0)[3], 0);
+    assert_eq!(original.get_pixel(48, 32)[3], 128);
+    drop(baseline);
+    for (name, global, mut effect) in [
+        (
+            "input-detail-nested-map",
+            false,
+            palette(&EMBER, "gradient"),
+        ),
+        (
+            "input-detail-nested-dither",
+            true,
+            dither(&OCEAN, "blue_noise", 1),
+        ),
+    ] {
+        effect["input_detail"] = json!({"base_value": 0.0, "keyframes": [
+            {"time": 0.0, "value": 0.0, "interpolation": "linear"},
+            {"time": 1.0, "value": 1.5, "interpolation": "linear"}]});
+        effect["input_detail_radius"] = json!({"base_value": 8.0});
+        effect["input_gamma"] = json!({"base_value": 1.5});
+        effect["amount"] = json!({"base_value": 0.5});
+        let mut value = control.clone();
+        if global {
+            value["visual"]["post_effects"] = json!([effect]);
+        } else {
+            value["visual"]["clips"][0]["source"]["clips"][0]["source"]["clips"][0]["effects"] =
+                json!([effect]);
+        }
+        let Some(mut backends) = Backends::new(fixture(name, &source, &value)) else {
+            return;
+        };
+        let frames = [0, 500_000_000, 1_000_000_000, 0].map(|time| backends.render(name, time, 0));
+        assert_eq!(frames[0], frames[3]);
+        assert_ne!(frames[0], frames[2]);
+        for frame in &frames {
+            assert!(
+                frame
+                    .pixels()
+                    .zip(original.pixels())
+                    .all(|(a, b)| a[3] == b[3]),
+                "{name} changed mask/matte alpha"
+            );
+        }
+    }
+}
+
+#[test]
 fn gpu_stylization_input_tone_changes_quantization_without_changing_blend_source() {
     for (kind, mut effect) in [
         ("map", palette(&MONO, "nearest")),
@@ -679,6 +748,7 @@ fn gpu_stylization_palette_and_dither_preserve_alpha_through_nested_masks_and_ma
         baseline_difference.maximum_absolute_channel_error <= 3,
         "pixel-aligned control has unexpected sampling error: {baseline_difference:?}"
     );
+    drop(control_backends);
     let plan = fixture(name, &source, &value);
     let Some(mut backends) = Backends::new(plan) else {
         return;
@@ -1581,6 +1651,7 @@ fn gpu_stylization_remaining_families_clip_global_masks_matte_and_order() {
             output.pixels().any(|pixel| pixel[3] == 128),
             "{family} partial matte alpha"
         );
+        drop(backends);
         let mut ordered = Vec::new();
         let inverse = palette(&["#ffffff", "#000000"], "gradient");
         for (order, effects) in [
@@ -2084,6 +2155,7 @@ fn gpu_stylization_input_detail_1080p_and_4k_match_cpu() {
     for (resolution, width, height, radius, detail) in [
         ("1080p-contrast", 1920, 1080, 8.0, 0.5),
         ("4k-detail", 3840, 2160, 1.0, 1.5),
+        ("4k-contrast", 3840, 2160, 8.0, 0.5),
     ] {
         let source = rich_source(width, height);
         let name = format!("{resolution}-input-detail-blue-noise");

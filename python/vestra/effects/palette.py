@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import cast
 
-from ..authoring.effects import DitherMatrix, PaletteMode, PaletteInterpolation
+from ..authoring.effects import DitherMatrix, PaletteMode, PaletteInputFilter, PaletteInterpolation
 from ..authoring.values import Color
 from ..properties import BindableScalarProperty, ScalarProperty
 from .base import Effect
@@ -29,6 +29,8 @@ class PaletteMap(Effect):
         input_gamma: int | float | ScalarProperty = 1,
         input_detail: int | float | ScalarProperty = 0,
         input_detail_radius: int | float | ScalarProperty = 1,
+        input_scale: int | float | ScalarProperty = 1,
+        input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -46,6 +48,8 @@ class PaletteMap(Effect):
                 "input_gamma": input_gamma,
                 "input_detail": input_detail,
                 "input_detail_radius": input_detail_radius,
+                "input_scale": input_scale,
+                "input_filter": input_filter,
                 "amount": amount,
                 "phase": phase,
                 "period": period,
@@ -100,6 +104,22 @@ class PaletteMap(Effect):
     @input_detail_radius.setter
     def input_detail_radius(self, value: int | float | ScalarProperty) -> None:
         self._set_property("input_detail_radius", value)
+
+    @property
+    def input_scale(self) -> BindableScalarProperty:
+        return cast(BindableScalarProperty, self._properties["input_scale"])
+
+    @input_scale.setter
+    def input_scale(self, value: int | float | ScalarProperty) -> None:
+        self._set_property("input_scale", value)
+
+    @property
+    def input_filter(self) -> PaletteInputFilter:
+        return cast(PaletteInputFilter, self._values["input_filter"])
+
+    @input_filter.setter
+    def input_filter(self, value: PaletteInputFilter | str) -> None:
+        self._set_value("input_filter", value)
 
     @property
     def interpolation(self) -> PaletteInterpolation:
@@ -168,6 +188,8 @@ class OrderedDither(PaletteMap):
         input_gamma: int | float | ScalarProperty = 1,
         input_detail: int | float | ScalarProperty = 0,
         input_detail_radius: int | float | ScalarProperty = 1,
+        input_scale: int | float | ScalarProperty = 1,
+        input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
         amount: int | float | ScalarProperty = 1,
         phase: int | float | ScalarProperty = 0,
         period: int | float | None = None,
@@ -189,6 +211,8 @@ class OrderedDither(PaletteMap):
                 "input_gamma": input_gamma,
                 "input_detail": input_detail,
                 "input_detail_radius": input_detail_radius,
+                "input_scale": input_scale,
+                "input_filter": input_filter,
                 "amount": amount,
                 "phase": phase,
                 "period": period,

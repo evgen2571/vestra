@@ -424,6 +424,8 @@ pub enum CompiledEffect {
         input_gamma: CompiledScalarProperty,
         input_detail: CompiledScalarProperty,
         input_detail_radius: CompiledScalarProperty,
+        input_scale: CompiledScalarProperty,
+        input_filter: crate::project::PaletteInputFilter,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         mode: crate::project::PaletteMode,
@@ -438,6 +440,8 @@ pub enum CompiledEffect {
         input_gamma: CompiledScalarProperty,
         input_detail: CompiledScalarProperty,
         input_detail_radius: CompiledScalarProperty,
+        input_scale: CompiledScalarProperty,
+        input_filter: crate::project::PaletteInputFilter,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         mode: crate::project::PaletteMode,
@@ -671,6 +675,7 @@ impl CompiledEffect {
                 input_gamma,
                 input_detail,
                 input_detail_radius,
+                input_scale,
                 amount,
                 phase,
                 ..
@@ -685,6 +690,7 @@ impl CompiledEffect {
                     ScalarPropertyTarget::PaletteMapInputDetailRadius,
                     input_detail_radius,
                 );
+                visit(ScalarPropertyTarget::PaletteMapInputScale, input_scale);
                 visit(ScalarPropertyTarget::PaletteMapAmount, amount);
                 visit(ScalarPropertyTarget::PaletteMapPhase, phase);
             }
@@ -693,6 +699,7 @@ impl CompiledEffect {
                 input_gamma,
                 input_detail,
                 input_detail_radius,
+                input_scale,
                 amount,
                 phase,
                 strength,
@@ -708,6 +715,7 @@ impl CompiledEffect {
                     ScalarPropertyTarget::OrderedDitherInputDetailRadius,
                     input_detail_radius,
                 );
+                visit(ScalarPropertyTarget::OrderedDitherInputScale, input_scale);
                 visit(ScalarPropertyTarget::OrderedDitherAmount, amount);
                 visit(ScalarPropertyTarget::OrderedDitherPhase, phase);
                 visit(ScalarPropertyTarget::OrderedDitherStrength, strength);
@@ -867,6 +875,7 @@ impl CompiledEffect {
                 input_gamma,
                 input_detail,
                 input_detail_radius,
+                input_scale,
                 ..
             }
             | Self::OrderedDither {
@@ -874,12 +883,14 @@ impl CompiledEffect {
                 input_gamma,
                 input_detail,
                 input_detail_radius,
+                input_scale,
                 ..
             } => super::effect_passes::compiled_palette_input_pass_count(
                 input_exposure,
                 input_gamma,
                 input_detail,
                 input_detail_radius,
+                input_scale,
             ),
             _ => self.definition().estimated_pass_count,
         }

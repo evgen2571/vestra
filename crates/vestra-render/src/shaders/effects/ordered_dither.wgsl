@@ -21,7 +21,7 @@ fn bayer_rank(x: u32, y: u32) -> u32 {
 @compute @workgroup_size(8, 8)
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas_width || id.y >= params.canvas_height) { return; }
-    let pixel = textureLoad(source, vec2<i32>(id.xy), 0);
+    let pixel = textureLoad(source, input_coordinate(id.xy), 0);
     var base = pixel;
     if ((params._padding.y & 2u) != 0u) { base = textureLoad(auxiliary, vec2<i32>(id.xy), 0); }
     if (base.a == 0.0) { textureStore(output, vec2<i32>(id.xy), base); return; }

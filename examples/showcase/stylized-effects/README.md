@@ -84,3 +84,14 @@ uv run python examples/showcase/stylized-effects/main.py --look dither-blue-nois
 
 Tone controls are bindable in Python; the final amount keeps the original image
 as its blend source. Their full-resolution preparation pass is opt-in.
+
+Add fine detail before the same tone and palette processing:
+
+```bash
+uv run python examples/showcase/stylized-effects/main.py --look dither-blue-noise --palette ember --input-exposure 0.5 --input-gamma 1.5 --input-detail 1.5 --input-detail-radius 1 --backend cpu --smoke
+```
+
+For broader local contrast, use `--input-detail 0.5 --input-detail-radius 8`.
+Try the same settings with `--palette mono` and `--palette ocean`. Detail adds
+three full-resolution passes and defaults to zero; all controls remain editable
+ordinary effect properties in Python.

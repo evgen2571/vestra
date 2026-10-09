@@ -66,6 +66,12 @@ class AsciiColorMode(Enum):
     RAINBOW = "rainbow"
 
 
+class PaletteInputFilter(Enum):
+    NEAREST = "nearest"
+    LINEAR = "linear"
+    AREA = "area"
+
+
 class PaletteInterpolation(Enum):
     RGB = "rgb"
     OKLAB = "oklab"
@@ -1283,6 +1289,13 @@ class PaletteMapEffect(GenericEffect):
     def input_detail_radius(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_detail_radius"))
 
     @property
+    def input_scale(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_scale"))
+    @property
+    def input_filter(self) -> PaletteInputFilter: return PaletteInputFilter(self._data["input_filter"])
+    @input_filter.setter
+    def input_filter(self, value: PaletteInputFilter | str) -> None: self._set_parameter("input_filter", value)
+
+    @property
     def interpolation(self) -> PaletteInterpolation: return PaletteInterpolation(self._data["interpolation"])
     @interpolation.setter
     def interpolation(self, value: PaletteInterpolation | str) -> None: self._set_parameter("interpolation", value)
@@ -1539,6 +1552,7 @@ class _EffectCollection:
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
         input_exposure: int | float | ScalarTrack = 0, input_gamma: int | float | ScalarTrack = 1,
         input_detail: int | float | ScalarTrack = 0, input_detail_radius: int | float | ScalarTrack = 1,
+        input_scale: int | float | ScalarTrack = 1, input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.GRADIENT,
         levels: int = 4, stops: Sequence[int | float] | None = None,
@@ -1546,13 +1560,14 @@ class _EffectCollection:
         id: str | None = None,
     ) -> PaletteMapEffect:
         return self._append(PaletteMapEffect._create_palette, id, {
-            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
+            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "input_scale": input_scale, "input_filter": input_filter, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
         })
 
     def add_ordered_dither(
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
         input_exposure: int | float | ScalarTrack = 0, input_gamma: int | float | ScalarTrack = 1,
         input_detail: int | float | ScalarTrack = 0, input_detail_radius: int | float | ScalarTrack = 1,
+        input_scale: int | float | ScalarTrack = 1, input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.NEAREST,
         levels: int = 4, stops: Sequence[int | float] | None = None,
@@ -1561,7 +1576,7 @@ class _EffectCollection:
         scale: int = 1, seed: int = 0, id: str | None = None,
     ) -> OrderedDitherEffect:
         return self._append(OrderedDitherEffect._create_palette, id, {
-            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
+            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "input_scale": input_scale, "input_filter": input_filter, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
             "strength": strength, "matrix": matrix, "scale": scale, "seed": seed,
         })
 

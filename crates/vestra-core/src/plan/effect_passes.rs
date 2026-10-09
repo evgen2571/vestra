@@ -132,6 +132,7 @@ pub enum EffectOperation {
     },
     PaletteMap {
         input_adjusted: bool,
+        input_scale: u16,
         interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
@@ -141,6 +142,7 @@ pub enum EffectOperation {
     },
     OrderedDither {
         input_adjusted: bool,
+        input_scale: u16,
         interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
@@ -151,6 +153,10 @@ pub enum EffectOperation {
         matrix: crate::project::DitherMatrix,
         scale: u8,
         seed: u32,
+    },
+    PaletteInputAnalyze {
+        scale: u16,
+        filter: crate::project::PaletteInputFilter,
     },
     GaussianHorizontal {
         integer: bool,
@@ -288,6 +294,7 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
             ..
         }
         | CompiledEffect::OrderedDither {
@@ -295,6 +302,7 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
             ..
         } => {
             compiled_palette_input_pass_count(
@@ -302,6 +310,7 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
                 input_gamma,
                 input_detail,
                 input_detail_radius,
+                input_scale,
             ) > 1
         }
         _ => false,
@@ -367,6 +376,8 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
+            input_filter,
             interpolation,
             stops,
             palette,
@@ -376,6 +387,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
         } => palette_input_pass_plan(
             EffectOperation::PaletteMap {
                 input_adjusted: false,
+                input_scale: 1,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -395,12 +407,20 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 1.0
             },
             1.0,
+            if compiled_scalar_is_constant(input_scale, 1.0) {
+                1.0
+            } else {
+                2.0
+            },
+            *input_filter,
         ),
         CompiledEffect::OrderedDither {
             input_exposure,
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
+            input_filter,
             interpolation,
             stops,
             mode,
@@ -413,6 +433,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
         } => palette_input_pass_plan(
             EffectOperation::OrderedDither {
                 input_adjusted: false,
+                input_scale: 1,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -436,6 +457,12 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
                 1.0
             },
             1.0,
+            if compiled_scalar_is_constant(input_scale, 1.0) {
+                1.0
+            } else {
+                2.0
+            },
+            *input_filter,
         ),
         CompiledEffect::ColourTransform { .. }
         | CompiledEffect::Brightness { .. }
@@ -719,6 +746,8 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
+            input_filter,
             interpolation,
             stops,
             palette,
@@ -728,6 +757,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
         } => palette_input_pass_plan(
             EffectOperation::PaletteMap {
                 input_adjusted: false,
+                input_scale: 1,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -739,12 +769,16 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             *input_gamma,
             *input_detail,
             *input_detail_radius,
+            *input_scale,
+            *input_filter,
         ),
         EvaluatedEffect::OrderedDither {
             input_exposure,
             input_gamma,
             input_detail,
             input_detail_radius,
+            input_scale,
+            input_filter,
             interpolation,
             stops,
             mode,
@@ -758,6 +792,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
         } => palette_input_pass_plan(
             EffectOperation::OrderedDither {
                 input_adjusted: false,
+                input_scale: 1,
                 interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
@@ -773,6 +808,8 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             *input_gamma,
             *input_detail,
             *input_detail_radius,
+            *input_scale,
+            *input_filter,
         ),
         EvaluatedEffect::ColourTransform { transform } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::ApplyColourTransform {
@@ -963,9 +1000,11 @@ pub(crate) const fn compiled_palette_input_pass_count(
     gamma: &crate::plan::CompiledScalarProperty,
     detail: &crate::plan::CompiledScalarProperty,
     radius: &crate::plan::CompiledScalarProperty,
+    scale: &crate::plan::CompiledScalarProperty,
 ) -> usize {
     1 + (!compiled_palette_input_is_identity(exposure, gamma)) as usize
         + 3 * (!compiled_palette_detail_is_identity(detail, radius)) as usize
+        + (!compiled_scalar_is_constant(scale, 1.0)) as usize
 }
 
 fn palette_input_pass_plan(
@@ -974,12 +1013,15 @@ fn palette_input_pass_plan(
     gamma: f64,
     detail: f64,
     radius: f64,
+    scale: f64,
+    filter: crate::project::PaletteInputFilter,
 ) -> EffectPassPlan {
+    let scale = scale.round().clamp(1.0, 256.0) as u16;
     let detail = (detail * 65536.0).round() / 65536.0;
     let detail_active = !crate::effects::effect_amount_is_identity(detail)
         && !crate::effects::gaussian_radius_is_identity(radius);
     let tone_active = exposure != 0.0 || gamma != 1.0;
-    if !detail_active && !tone_active {
+    if !detail_active && !tone_active && scale == 1 {
         return EffectPassPlan::new(&[EffectPass::new(
             operation,
             EffectResource::Current,
@@ -987,8 +1029,19 @@ fn palette_input_pass_plan(
         )]);
     }
     match &mut operation {
-        EffectOperation::PaletteMap { input_adjusted, .. }
-        | EffectOperation::OrderedDither { input_adjusted, .. } => *input_adjusted = true,
+        EffectOperation::PaletteMap {
+            input_adjusted,
+            input_scale,
+            ..
+        }
+        | EffectOperation::OrderedDither {
+            input_adjusted,
+            input_scale,
+            ..
+        } => {
+            *input_adjusted = true;
+            *input_scale = scale;
+        }
         _ => unreachable!("palette input preparation only lowers palette operations"),
     }
     let mut plan = EffectPassPlan::new(&[]);
@@ -1020,6 +1073,14 @@ fn palette_input_pass_plan(
             EffectResource::Temporary0,
         ));
         input = EffectResource::Temporary0;
+    }
+    if scale > 1 {
+        plan.passes.push(EffectPass::new(
+            EffectOperation::PaletteInputAnalyze { scale, filter },
+            input,
+            EffectResource::Temporary1,
+        ));
+        input = EffectResource::Temporary1;
     }
     plan.passes.push(EffectPass {
         operation,

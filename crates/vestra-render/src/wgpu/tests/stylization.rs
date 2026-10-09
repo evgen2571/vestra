@@ -274,67 +274,70 @@ fn gpu_stylization_ordered_dither_bayer2_has_literal_fine_checker_pattern() {
 
 #[test]
 fn gpu_stylization_fine_dither_preserves_scene_detail_with_three_distinct_palettes() {
-    let source = rich_source(640, 360);
-    let mut reference_indices = None;
-    for (name, colours) in [
-        ("monochrome", &MONO_FIVE),
-        ("ember", &EMBER),
-        ("ocean", &OCEAN),
-    ] {
-        let plan = fixture(
-            name,
-            &source,
-            &project(
-                640,
-                360,
-                vec![image_clip(vec![])],
-                vec![dither(colours, "bayer8", 1)],
-            ),
-        );
-        let Some(mut backends) = Backends::new(plan) else {
-            return;
-        };
-        let output = backends.render(name, 0, 0);
-        assert_ne!(output, source, "stylization must alter source colors");
-        let colours_used = output
-            .pixels()
-            .map(|pixel| pixel.0)
-            .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(
-            colours_used.len(),
-            colours.len(),
-            "all tone stops should appear"
-        );
-        let stops = colours
-            .iter()
-            .map(|colour| {
-                vestra_core::project::parse_colour(colour).expect("valid authored palette stop")
-            })
-            .collect::<Vec<_>>();
-        let indices = output
-            .pixels()
-            .map(|pixel| {
-                stops
-                    .iter()
-                    .position(|stop| *stop == pixel.0)
-                    .expect("full-strength nearest dither must emit an authored palette stop")
-            })
-            .collect::<Vec<_>>();
-        if let Some(reference) = &reference_indices {
-            assert_eq!(
-                &indices, reference,
-                "palette hue must not change spatial tone structure"
+    for matrix in ["bayer8", "blue_noise"] {
+        let source = rich_source(640, 360);
+        let mut reference_indices = None;
+        for (name, colours) in [
+            ("monochrome", &MONO_FIVE),
+            ("ember", &EMBER),
+            ("ocean", &OCEAN),
+        ] {
+            let name = &format!("{name}-{matrix}");
+            let plan = fixture(
+                name,
+                &source,
+                &project(
+                    640,
+                    360,
+                    vec![image_clip(vec![])],
+                    vec![dither(colours, matrix, 1)],
+                ),
             );
-        } else {
-            reference_indices = Some(indices);
+            let Some(mut backends) = Backends::new(plan) else {
+                return;
+            };
+            let output = backends.render(name, 0, 0);
+            assert_ne!(output, source, "stylization must alter source colors");
+            let colours_used = output
+                .pixels()
+                .map(|pixel| pixel.0)
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                colours_used.len(),
+                colours.len(),
+                "all tone stops should appear"
+            );
+            let stops = colours
+                .iter()
+                .map(|colour| {
+                    vestra_core::project::parse_colour(colour).expect("valid authored palette stop")
+                })
+                .collect::<Vec<_>>();
+            let indices = output
+                .pixels()
+                .map(|pixel| {
+                    stops
+                        .iter()
+                        .position(|stop| *stop == pixel.0)
+                        .expect("full-strength nearest dither must emit an authored palette stop")
+                })
+                .collect::<Vec<_>>();
+            if let Some(reference) = &reference_indices {
+                assert_eq!(
+                    &indices, reference,
+                    "palette hue must not change spatial tone structure"
+                );
+            } else {
+                reference_indices = Some(indices);
+            }
+            let changes = (0..640 - 1)
+                .filter(|x| output.get_pixel(*x, 12) != output.get_pixel(*x + 1, 12))
+                .count();
+            assert!(
+                changes > 80,
+                "fine ordered pattern lost tonal texture: {changes}"
+            );
         }
-        let changes = (0..640 - 1)
-            .filter(|x| output.get_pixel(*x, 12) != output.get_pixel(*x + 1, 12))
-            .count();
-        assert!(
-            changes > 80,
-            "fine ordered pattern lost tonal texture: {changes}"
-        );
     }
 }
 
@@ -375,6 +378,7 @@ fn gpu_stylization_periodic_palette_invalidates_static_image_cache_for_out_of_or
     for (kind, animated) in [
         ("palette", palette(&EMBER, "gradient")),
         ("dither", dither(&EMBER, "bayer8", 1)),
+        ("blue-noise", dither(&EMBER, "blue_noise", 1)),
         ("rainbow", palette(&EMBER, "rainbow")),
     ] {
         for global in [false, true] {
@@ -548,22 +552,25 @@ fn gpu_stylization_palette_and_dither_preserve_alpha_through_nested_masks_and_ma
 fn gpu_stylization_1080p_and_4k_match_cpu_with_fine_patterns() {
     for (name, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
         let source = rich_source(width, height);
-        let plan = fixture(
-            name,
-            &source,
-            &project(
-                width,
-                height,
-                vec![image_clip(vec![palette(&EMBER, "gradient")])],
-                vec![dither(&EMBER, "bayer8", 1)],
-            ),
-        );
-        let Some(mut backends) = Backends::new(plan) else {
-            return;
-        };
-        let output = backends.render(name, 0, 0);
-        assert_eq!(output.dimensions(), (width, height));
-        assert!(output.pixels().all(|pixel| pixel[3] == 255));
+        for matrix in ["bayer8", "blue_noise"] {
+            let name = &format!("{name}-{matrix}");
+            let plan = fixture(
+                name,
+                &source,
+                &project(
+                    width,
+                    height,
+                    vec![image_clip(vec![palette(&EMBER, "gradient")])],
+                    vec![dither(&EMBER, matrix, 1)],
+                ),
+            );
+            let Some(mut backends) = Backends::new(plan) else {
+                return;
+            };
+            let output = backends.render(name, 0, 0);
+            assert_eq!(output.dimensions(), (width, height));
+            assert!(output.pixels().all(|pixel| pixel[3] == 255));
+        }
     }
 }
 
@@ -1453,4 +1460,398 @@ fn gpu_stylization_half_opacity_compositor_uses_cpu_half_up_byte_rounding() {
         output.pixels().all(|pixel| pixel.0 == [128, 128, 128, 255]),
         "byte127.5 must round to128 before downstream cell/threshold analysis"
     );
+}
+
+#[test]
+fn gpu_stylization_blue_noise_is_seeded_spatial_and_preserves_palette_detail() {
+    let source = rich_source(320, 180);
+    let mut outputs = Vec::new();
+    for seed in [0, 37, u32::MAX] {
+        let name = format!("blue-noise-{seed}");
+        let mut effect = dither(&EMBER, "blue_noise", 1);
+        effect["seed"] = json!(seed);
+        let plan = fixture(
+            &name,
+            &source,
+            &project(320, 180, vec![image_clip(vec![])], vec![effect]),
+        );
+        let Some(mut backends) = Backends::new(plan) else {
+            return;
+        };
+        let output = backends.render(&name, 2_000_000_000, 0);
+        assert_eq!(
+            output,
+            backends.render(&name, 0, 0),
+            "pattern must not change with frame time"
+        );
+        assert!(
+            output.pixels().filter(|p| p[0] > 100).count() > 1000,
+            "well-exposed source must retain highlights"
+        );
+        outputs.push(output);
+    }
+    assert_ne!(outputs[0], outputs[1]);
+    assert_ne!(outputs[0], outputs[2]);
+}
+
+#[test]
+fn gpu_stylization_chromatic_quantization_preserves_palette_colors_and_source_detail() {
+    let colours = ["#ff0000", "#00ff00", "#0000ff", "#ffffff", "#000000"];
+    let source = rich_source(320, 180);
+    for mode in ["nearest", "nearest_rgb", "nearest_hue", "nearest_oklab"] {
+        for matrix in ["map", "bayer8", "blue_noise"] {
+            let name = format!("chromatic-{mode}-{matrix}");
+            let effect = if matrix == "map" {
+                palette(&colours, mode)
+            } else {
+                let mut effect = dither(&colours, matrix, 1);
+                effect["mode"] = json!(mode);
+                effect
+            };
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(320, 180, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let output = backends.render(&name, 0, 0);
+            assert_eq!(output, backends.render(&name, 2_000_000_000, 0));
+            assert!(output.pixels().any(|p| p[0] == 255));
+            assert!(output.pixels().any(|p| p[0] == 0));
+            if mode == "nearest_oklab" && matrix == "map" {
+                assert_eq!(output.get_pixel(137, 110).0, [255, 0, 0, 255]);
+                assert_eq!(output.get_pixel(96, 110).0, [0, 0, 0, 255]);
+            }
+        }
+    }
+    for (mode, expected) in [
+        ("nearest_rgb", [50, 50, 50, 255]),
+        ("nearest_hue", [255, 0, 0, 255]),
+    ] {
+        let source = RgbaImage::from_pixel(4, 4, Rgba([50, 0, 0, 255]));
+        let name = format!("chromatic-literal-{mode}");
+        let effect = palette(&["#323232", "#ff0000"], mode);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(4, 4, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        assert!(
+            backends
+                .render(&name, 0, 0)
+                .pixels()
+                .all(|p| p.0 == expected)
+        );
+    }
+}
+
+#[test]
+fn gpu_stylization_oklab_lightness_and_exact_matches_have_literal_results() {
+    for (label, input, colours, expected) in [
+        (
+            "lightness",
+            [104, 104, 104, 255],
+            ["#000000", "#ffffff"],
+            [255, 255, 255, 255],
+        ),
+        (
+            "rounded-tie",
+            [1, 255, 255, 128],
+            ["#00ffff", "#01ffff"],
+            [1, 255, 255, 128],
+        ),
+    ] {
+        for matrix in ["map", "blue_noise"] {
+            let source = RgbaImage::from_pixel(32, 32, Rgba(input));
+            let name = format!("oklab-{label}-{matrix}");
+            let mut effect = if matrix == "map" {
+                palette(&colours, "nearest_oklab")
+            } else {
+                dither(&colours, matrix, 1)
+            };
+            effect["mode"] = json!("nearest_oklab");
+            if label == "lightness" {
+                effect["strength"] = json!({"base_value": 0.0});
+            }
+            if matrix == "map" {
+                effect.as_object_mut().unwrap().remove("strength");
+            }
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(32, 32, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            assert!(
+                backends
+                    .render(&name, 0, 0)
+                    .pixels()
+                    .all(|p| p.0 == expected)
+            );
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_oklab_matches_three_palettes_with_visible_figure() {
+    let source = rich_source(320, 180);
+    let mono = [
+        "#000000", "#202020", "#404040", "#606060", "#808080", "#a0a0a0", "#c0c0c0", "#e0e0e0",
+        "#ffffff",
+    ];
+    for (label, colours) in [
+        ("mono", &mono[..]),
+        ("ember", &EMBER[..]),
+        ("ocean", &OCEAN[..]),
+    ] {
+        for matrix in ["map", "bayer8", "blue_noise"] {
+            let name = format!("oklab-{label}-{matrix}");
+            let mut effect = if matrix == "map" {
+                palette(colours, "nearest_oklab")
+            } else {
+                dither(colours, matrix, 1)
+            };
+            effect["mode"] = json!("nearest_oklab");
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(320, 180, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let output = backends.render(&name, 0, 0);
+            let mean = |x0: u32, x1: u32, y0: u32, y1: u32| -> u64 {
+                (y0..y1)
+                    .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+                    .map(|(x, y)| {
+                        let p = output.get_pixel(x, y);
+                        u64::from(p[0]) + u64::from(p[1]) + u64::from(p[2])
+                    })
+                    .sum()
+            };
+            assert!(
+                mean(130, 140, 105, 115) > mean(90, 100, 105, 115),
+                "{name}: figure must contrast with its mountain background"
+            );
+            assert!(
+                mean(238, 248, 38, 48) > 54000,
+                "{name}: moon highlight must survive"
+            );
+        }
+    }
+}
+
+#[test]
+fn gpu_stylization_nonuniform_stops_match_literal_ramp_and_animated_scenes() {
+    let source = RgbaImage::from_fn(256, 32, |x, _| Rgba([x as u8, x as u8, x as u8, 255]));
+    for mode in [
+        "gradient",
+        "nearest",
+        "bayer2",
+        "bayer4",
+        "bayer8",
+        "blue_noise",
+    ] {
+        let name = format!("nonuniform-ramp-{mode}");
+        let mut effect = if matches!(mode, "gradient" | "nearest") {
+            palette(&["#000000", "#ff0000", "#ffffff"], mode)
+        } else {
+            dither(&["#000000", "#ff0000", "#ffffff"], mode, 1)
+        };
+        effect["stops"] = json!([0.0, 64.0 / 255.0, 1.0]);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(256, 32, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let output = backends.render(&name, 0, 0);
+        assert_eq!(output.get_pixel(0, 0).0, [0, 0, 0, 255]);
+        assert_eq!(output.get_pixel(64, 0).0, [255, 0, 0, 255]);
+        assert_eq!(output.get_pixel(255, 0).0, [255; 4]);
+        if mode == "gradient" {
+            assert_eq!(output.get_pixel(32, 0).0, [128, 0, 0, 255]);
+        } else if mode == "nearest" {
+            assert_eq!(output.get_pixel(32, 0).0, [255, 0, 0, 255]);
+        } else if mode != "blue_noise" {
+            assert_eq!(
+                (0..32)
+                    .filter(|&y| output.get_pixel(32, y)[0] == 255)
+                    .count(),
+                16
+            );
+        }
+    }
+    // A blue-noise permutation balances a whole tile, not each individual column.
+    let source = RgbaImage::from_pixel(32, 32, Rgba([32, 32, 32, 255]));
+    let name = "nonuniform-blue-noise-coverage";
+    let mut effect = dither(&["#000000", "#ff0000", "#ffffff"], "blue_noise", 1);
+    effect["stops"] = json!([0.0, 64.0 / 255.0, 1.0]);
+    let Some(mut backends) = Backends::new(fixture(
+        name,
+        &source,
+        &project(32, 32, vec![image_clip(vec![])], vec![effect]),
+    )) else {
+        return;
+    };
+    let output = backends.render(name, 0, 0);
+    assert_eq!(output.pixels().filter(|p| p[0] == 255).count(), 512);
+    let source = rich_source(320, 180);
+    for (label, colours) in [
+        ("mono", &MONO_FIVE[..]),
+        ("ember", &EMBER[..]),
+        ("ocean", &OCEAN[..]),
+    ] {
+        let name = format!("nonuniform-{label}-blue_noise");
+        let mut effect = dither(colours, "blue_noise", 1);
+        effect["stops"] = json!([0.0, 0.12, 0.35, 0.7, 1.0]);
+        effect["period"] = json!(2.0);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(320, 180, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let first = backends.render(&name, 0, 0);
+        backends.render(&name, 777_000_000, 0);
+        assert_eq!(first, backends.render(&name, 2_000_000_000, 0));
+        assert_eq!(first, backends.render(&name, 0, 0));
+        let sum = |x0: u32| -> u32 {
+            (105..115)
+                .flat_map(|y| (x0..x0 + 10).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    first.get_pixel(x, y).0[..3]
+                        .iter()
+                        .map(|&c| u32::from(c))
+                        .sum::<u32>()
+                })
+                .sum()
+        };
+        assert!(
+            sum(130) > sum(90),
+            "{name}: figure must retain tonal contrast"
+        );
+    }
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K chromatic palette correctness and resource validation"]
+fn gpu_stylization_chromatic_1080p_and_4k_match_cpu() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let source = rich_source(width, height);
+        for mode in ["nearest_rgb", "nearest_hue", "nearest_oklab"] {
+            let name = format!("{resolution}-{mode}-blue_noise");
+            let mut effect = dither(&EMBER, "blue_noise", 1);
+            effect["mode"] = json!(mode);
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(width, height, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let output = backends.render(&name, 0, 0);
+            assert_eq!(output.dimensions(), (width, height));
+            assert!(output.pixels().all(|p| p[3] == 255));
+            assert!(output.pixels().any(|p| p[0] == 255));
+            assert!(output.pixels().any(|p| p[0] == 8));
+        }
+    }
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K nonuniform tonal correctness and resource validation"]
+fn gpu_stylization_nonuniform_stops_1080p_and_4k_match_cpu() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let source = rich_source(width, height);
+        let name = format!("{resolution}-nonuniform-blue-noise");
+        let mut effect = dither(&EMBER, "blue_noise", 1);
+        effect["stops"] = json!([0.0, 0.12, 0.35, 0.7, 1.0]);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(width, height, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        backends.render(&name, 0, 0);
+        assert!(backends.gpu.resource_estimates().total_persistent_bytes < 512 * 1024 * 1024);
+    }
+}
+
+#[test]
+fn gpu_stylization_channel_levels_preserve_detail_and_match_cpu_exactly() {
+    let source = rich_source(320, 180);
+    for levels in [2, 4, 8, 256] {
+        for matrix in ["map", "bayer8", "blue_noise"] {
+            let name = format!("channels-{levels}-{matrix}");
+            let mut effect = if matrix == "map" {
+                palette(&EMBER, "rgb_channels")
+            } else {
+                dither(&EMBER, matrix, 1)
+            };
+            effect["mode"] = json!("rgb_channels");
+            effect["levels"] = json!(levels);
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(320, 180, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let output = backends.render(&name, 0, 0);
+            assert_eq!(output, backends.render(&name, 2_000_000_000, 0));
+            let values: Vec<u8> = (0..levels)
+                .map(|i| ((i * 255 + (levels - 1) / 2) / (levels - 1)) as u8)
+                .collect();
+            assert!(
+                output
+                    .pixels()
+                    .all(|p| p[3] == 255 && p.0[..3].iter().all(|c| values.contains(c)))
+            );
+            assert!(output.pixels().any(|p| p[0] >= 240));
+            assert!(output.pixels().any(|p| p[0] == 0));
+            if levels == 256 {
+                assert_eq!(output, source);
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "explicit 1080p/4K channel quantization correctness and resources"]
+fn gpu_stylization_channel_levels_1080p_and_4k() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        let source = rich_source(width, height);
+        for levels in [2, 256] {
+            let name = format!("{resolution}-channels-{levels}-blue_noise");
+            let mut effect = dither(&EMBER, "blue_noise", 1);
+            effect["mode"] = json!("rgb_channels");
+            effect["levels"] = json!(levels);
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(width, height, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let output = backends.render(&name, 0, 0);
+            assert!(output.pixels().all(|p| p[3] == 255));
+            if levels == 256 {
+                assert_eq!(output, source);
+            } else {
+                assert!(
+                    output
+                        .pixels()
+                        .all(|p| p.0[..3].iter().all(|c| [0, 255].contains(c)))
+                );
+            }
+        }
+    }
 }

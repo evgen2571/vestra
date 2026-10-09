@@ -160,12 +160,27 @@ pub(super) fn compile(
         },
         crate::project::Effect::PaletteMap {
             palette,
+            stops,
             mode,
+            levels,
             amount,
             phase,
             period,
             ..
         } => crate::plan::CompiledEffect::PaletteMap {
+            stops: stops
+                .as_deref()
+                .map(|values| {
+                    crate::stylization::compile_stops(values, palette.len()).ok_or_else(|| {
+                        Diagnostic::error(
+                            "VESTRA-PLAN-PALETTE",
+                            Category::Internal,
+                            "validated stops are invalid",
+                            "",
+                        )
+                    })
+                })
+                .transpose()?,
             palette: crate::stylization::compile_palette(palette).ok_or_else(|| {
                 Diagnostic::error(
                     "VESTRA-PLAN-PALETTE",
@@ -175,21 +190,38 @@ pub(super) fn compile(
                 )
             })?,
             mode: *mode,
+            levels: *levels,
             amount: scalar!(amount, ScalarPropertyTarget::PaletteMapAmount),
             phase: scalar!(phase, ScalarPropertyTarget::PaletteMapPhase),
             period: *period,
         },
         crate::project::Effect::OrderedDither {
             palette,
+            stops,
             mode,
+            levels,
             amount,
             phase,
             period,
             strength,
             matrix,
             scale,
+            seed,
             ..
         } => crate::plan::CompiledEffect::OrderedDither {
+            stops: stops
+                .as_deref()
+                .map(|values| {
+                    crate::stylization::compile_stops(values, palette.len()).ok_or_else(|| {
+                        Diagnostic::error(
+                            "VESTRA-PLAN-PALETTE",
+                            Category::Internal,
+                            "validated stops are invalid",
+                            "",
+                        )
+                    })
+                })
+                .transpose()?,
             palette: crate::stylization::compile_palette(palette).ok_or_else(|| {
                 Diagnostic::error(
                     "VESTRA-PLAN-PALETTE",
@@ -199,12 +231,14 @@ pub(super) fn compile(
                 )
             })?,
             mode: *mode,
+            levels: *levels,
             amount: scalar!(amount, ScalarPropertyTarget::OrderedDitherAmount),
             phase: scalar!(phase, ScalarPropertyTarget::OrderedDitherPhase),
             period: *period,
             strength: scalar!(strength, ScalarPropertyTarget::OrderedDitherStrength),
             matrix: *matrix,
             scale: *scale,
+            seed: *seed,
         },
         crate::project::Effect::Brightness { amount, .. } => {
             crate::plan::CompiledEffect::Brightness {
@@ -447,6 +481,8 @@ mod stylization_tests {
             compiled,
             CompiledEffect::OrderedDither {
                 mode: crate::project::PaletteMode::Nearest,
+
+                levels: 4,
                 ..
             }
         ));
@@ -459,15 +495,19 @@ mod stylization_tests {
         )
         .unwrap();
         let EvaluatedEffect::OrderedDither {
+            stops,
             palette,
             amount,
             strength,
             matrix,
             scale,
+            seed,
+            ..
         } = evaluated
         else {
             panic!("dither evaluated");
         };
+        assert!(stops.is_none());
         assert_eq!(
             &palette.colours[..2],
             &[[255, 204, 136, 255], [0, 0, 0, 255]]
@@ -476,5 +516,6 @@ mod stylization_tests {
         assert_eq!(strength, 0.6);
         assert_eq!(matrix, crate::project::DitherMatrix::Bayer4);
         assert_eq!(scale, 3);
+        assert_eq!(seed, 0);
     }
 }

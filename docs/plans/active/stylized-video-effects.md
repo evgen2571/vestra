@@ -464,22 +464,28 @@ change the behavior of projects authored against the existing defaults.
 
 ### 5. Advanced dithering and palette mapping
 
-- [ ] Establish baseline renders from repository-generated source footage and
+- [x] Establish baseline renders from repository-generated source footage and
   the existing `OrderedDither`/`PaletteMap` API. Capture gaps against the
   [fine-detail reference](../../development/stylization/dithered-palette-look.md)
   rather than assuming an exact reference shader configuration.
-- [ ] Add reproducible **blue-noise dithering** alongside Bayer, with authored
+- [x] Add reproducible **blue-noise dithering** alongside Bayer, with authored
   selection, seed/tile/origin policy and optional validated custom threshold
   textures if resource contracts can be kept portable. Preserve original
   Bayer behavior; no accidental temporal re-randomization.
-- [ ] Support distinct **quantization modes**: current luminance-indexed
+- [x] Support distinct **quantization modes**: current luminance-indexed
   palette, RGB/channel-count quantization, at least one hue-aware mode and
   perceptual nearest-palette matching. Specify color-space conversions,
   rounding, tie-breaking, gamut treatment and alpha policy consistently
   across CPU/WGPU.
+  - [x] Luminance, RGB nearest-palette and integer hue-aware matching.
+  - [x] Independent RGB channel-count quantization, 2–256 levels per channel.
+  - [x] Perceptual nearest-palette matching.
 - [ ] Support **nonuniform tonal palette stops** and controllable palette
   interpolation in an appropriate color space (e.g. RGB and OKLab); preserve
   stops/order under animation and document chromatic vs luminance modes.
+  - [x] Static nonuniform positions for tonal gradient/nearest mapping and dithering,
+    preserved through phase animation; legacy uniform output retained.
+  - [ ] Controllable interpolation space.
   Permit carefully bounded deterministic palette generation only if useful.
 - [ ] Add **tone response and detail controls** that operate on the signal
   *entering quantization*: gamma/curves or shadow-mid-highlight shaping,
@@ -799,3 +805,369 @@ measurements before closing acceptance and moving this plan.
 - PR opened as draft at the user's request while final canonical checks and
   source-stable serial CPU/hardware 1080p benchmark captures remain pending.
   No final acceptance or performance claim is made at this checkpoint.
+
+### Advanced dither pattern implementation (2026-10-09)
+
+- Milestone 5 starts from the unchanged Bayer8/encoded-luminance implementation.
+  Actual 640×360 source/Bayer/blue-noise frames in monochrome, ember and ocean
+  are captured under `target/stylization/frames/gl/`. Inspected
+  `target/stylization/three-palette-patterns.png`: both patterns retain silhouettes,
+  thin lines, gradients, dark regions and highlights. Blue noise removes the
+  regular Bayer grid; shadow-subject contrast remains limited by the existing
+  tone response. Independent tone/detail/analysis controls remain required.
+- Added opt-in `matrix="blue_noise"` and discrete unsigned 32-bit `seed=0`
+  across canonical Rust/JSON, descriptors/schema, advanced/high-level Python,
+  compile/evaluate/pass IR, CPU and WGSL. Omitted seeds preserve old projects;
+  Bayer ignores seeds and retains its existing defaults and literal output.
+- Pattern contract: original 32×32 toroidal void-and-cluster rank tile, 1024
+  thresholds `(rank+.5)/1024`, anchored to output pixels after integer `scale`.
+  Fold seed with `seed ^ (seed >> 13) ^ (seed >> 26)`; use low 10 bits for tile
+  origin, then transpose/x/y-reflection bits. Seeds select transforms and can
+  alias. No per-frame randomization, temporal state, extra texture/buffer binding,
+  readback, pass or frame allocation. Custom threshold textures are not added:
+  the optional path would need a new portable asset/preflight contract.
+- `scripts/generate-blue-noise.py` reproduces both renderer rank tables and
+  asserts permutation/coverage and suppressed low-frequency energy at 12.5%,
+  25%, 50%, 75% and 87.5% cutoffs. Tables are project-original MIT work.
+- Numeric descriptor defaults now retain canonical JSON types through
+  `EffectParameterDefault::{String,Integer}` (also exported by the Rust SDK).
+  This prevents generic authoring from emitting string `"0"` for integer seed.
+  Existing enum defaults retain their serialized values.
+- Tests first failed on the missing seed constructor and `blue_noise` variant.
+  Focused Python palette/showcase tests: **49 passed**. CPU tone-coverage/alpha
+  and legacy Bayer-seed checks: **2 passed**. Seeded arbitrary-time actual-frame
+  parity: **passed with max RGBA error 0** on GL D3D12/NVIDIA GTX 1650 SUPER
+  (**DiscreteGpu**) and Vulkan llvmpipe (**Software**). Three palettes retain
+  exactly identical tone-index geometry on hardware.
+- Explicit hardware 1080p/4K test ran both Bayer8 and blue noise: **passed**
+  with exact CPU/WGPU output and unchanged opaque support. Resource estimates
+  are saved with each fixture; blue noise adds no frame-sized working resource.
+- Editable examples now accept Bayer/blue-noise and seeds; the generated FFV1
+  showcase adds `dither-blue-noise` and `--palette mono|ember|ocean`. Rendered
+  and inspected 320×180 ember CPU and ocean hardware-WGPU video frames; videos
+  contain 48 H.264 frames over eight seconds with the generated AAC soundtrack.
+- Renderer/core/CLI all-target Clippy and focused Ruff passed. Schema freshness
+  and schema validation passed; docs: **308 links, zero missing** at this point.
+  A full check found a stale matrix-enum expectation; updated it with blue-noise
+  and integer-seed bounds/default checks. Full verification and source-stable
+  1080p pattern benchmarks are running, not yet claimed passed.
+- Milestones 5–7 and all broader acceptance items remain open. Next: finish
+  pattern verification/performance capture, then define and implement the
+  quantization/color-space, uneven stops, tone/detail and independent analysis
+  contracts before advancing to the other-family controls.
+
+- Full contributor checkpoint: `VESTRA_WGPU_BACKEND=gl just check` **passed**
+  (1043 Rust tests passed, 16 ignored; explicit pattern 1080p/4K check was run
+  separately). `just python-test` **760 passed**, compileall passed. Added blue-noise
+  typing usage and ran the four focused effect typing checks successfully.
+- The first strict hardware benchmark capture reproduced two recorder bugs:
+  SDK render-result JSON omits the selected adapter, and the old benchmark
+  classification used raw `device_type=other` rather than Vestra's existing
+  GL/D3D12 hardware classification. Fixed benchmark-only sample serialization
+  and reused `AdapterMetadata::performance_class()` for both logging and runner
+  validation. No renderer/SDK serialization or hardware policy was broadened.
+  New negative tests still reject software even with a hardware raw device type;
+  benchmark-tool tests **26 passed**, bench Clippy/build passed. Hardware/CPU
+  captures are being regenerated with that recorder and frozen sources.
+
+- Source-stable serial `dither-patterns-1080p` captures now completed with the
+  corrected benchmark recorder; both report source fingerprint `53b10617c7d5…`.
+  Same original FFV1 input, 1920×1080/30 fps, 90 frames, one warmup and three
+  samples per workload. CPU/hardware captures are respectively under
+  `target/benchmark-results/dither-patterns-cpu-recorded-20261009/` and
+  `target/benchmark-results/dither-patterns-hardware-recorded-20261009/`.
+
+  | Workload | CPU median wall ms (range) | Hardware GL median wall ms (range) |
+  | --- | --- | --- |
+  | No-effect FFV1 control | 3375 (3368–3424) | 2604 (2594–2631) |
+  | Bayer8 | 4170 (4124–4197) | 2463 (2450–2526) |
+  | Blue noise, seed 37 | 4263 (4201–4265) | 2447 (2424–2463) |
+
+  All hardware samples selected GL D3D12/NVIDIA GTX 1650 SUPER, classified
+  `discrete_gpu`, with no CPU fallback. These are end-to-end preview/H.264
+  measurements, including preparation, decoding and encoding; they do not
+  isolate shader time or promise real-time performance. GPU aggregate frame
+  work medians: control 792 ms, Bayer 904 ms, blue noise 940 ms per 90 frames.
+  CPU aggregate frame work is concurrent across eight workers and exceeds
+  wall time; it is not per-frame latency. Blue-noise CPU wall cost is about
+  2.2% above Bayer in this capture; hardware wall sample ranges overlap.
+- Pattern resource estimates match Bayer exactly: 1080p persistent/staging
+  82,947,840 / 107,831,040 bytes; 4K 331,779,840 / 431,312,640 bytes for the
+  composed palette-plus-dither fixture. Driver/program overhead is excluded.
+- Latest palette/benchmark regression tests: **63 passed**. Dedicated full
+  `just wgpu-software` / `just wgpu-hardware` recipes remain pending for final
+  branch acceptance; focused software/hardware rendering and the complete GL
+  contributor checkpoint above are separate evidence.
+
+### Chromatic palette matching increment — 2026-10-09
+
+- Added opt-in `nearest_rgb` and `nearest_hue` to Palette Map and Ordered Dither,
+  through Rust/canonical JSON/descriptors/Python/CPU/WGPU. Existing luminance,
+  gradient and rainbow contracts remain unchanged. RGB uses encoded byte-space
+  squared distance. Hue-aware matching uses integer HSV, circular hue weighted
+  by shared saturation, and squared saturation/value differences. Full formulas,
+  rounding, ordered ties, gamut and alpha rules are in the effects reference.
+- Chromatic dithering chooses the two nearest entries using inverse squared
+  distance probabilities, rounded to 1/4096 and scaled by strength. Zero strength
+  is ordinary nearest matching; an exact palette input never dithers away from
+  that entry. Duplicate entries and equal-distance ties have defined behavior.
+  These modes do not yet provide perceptual matching or channel-count controls;
+  the Milestone 5 quantization checkbox remains open.
+- Palette features are prepared once per effect. WGPU adds 64 bytes of packed
+  features inside the existing 256-byte parameter record, with no new bindings,
+  passes, frame textures or readbacks. Legacy pattern resource contracts remain.
+- Focused public tests: **42 passed**, including exact palette preservation for
+  both new modes/effects and a literal dark-red example distinguishing RGB from
+  HSV matching. Core/CPU regressions verify hue wrapping, achromatic behavior,
+  ordered ties, duplicate entries, zero/full strength and transparent RGB/alpha.
+- Actual frame tests passed with **zero byte error** on hardware GL/D3D12 NVIDIA
+  and software Vulkan llvmpipe: legacy/RGB/hue map, Bayer8 and blue noise on the
+  same detailed scene, plus literal distance cases and repeated timestamps.
+  Explicit new-mode 1080p/4K hardware checks also passed with exact CPU parity.
+  For one dither effect, persistent/staging estimates are 74,652,672 / 99,535,872
+  bytes at 1080p and 298,601,472 / 398,134,272 at 4K (driver overhead excluded).
+- Inspected `target/stylization/chromatic-contact.png`,
+  `chromatic-4k-contact.png` and `chromatic-ember-video-contact.png`. RGB and hue
+  modes preserve visible silhouettes, highlights and fine lines. Hue-aware
+  matching can move midtone brightness substantially, especially with a saturated
+  palette; it is an artistic HSV metric, not a perceptual-lightness guarantee.
+  Two generated ember previews have 48 H.264 frames each and animated palette
+  phase over the periodic moving source. Full motion/mask/loop-seam acceptance
+  for every new mode remains pending.
+- Editable examples accept `--mode nearest|nearest_rgb|nearest_hue`. Added
+  dedicated `chromatic-dither-smoke`/`chromatic-dither-1080p` suites comparing
+  control/luminance/RGB/hue over identical FFV1 inputs without changing old suites.
+  Benchmark-tool tests **26 passed**, focused Ruff passed, docs links **308/0**.
+  Full contributor/Python checks and source-stable 1080p measurements are still
+  being completed; their outcomes are not implied by these focused checks.
+
+- Chromatic contributor checkpoint completed: `VESTRA_WGPU_BACKEND=gl just
+  check` **passed** (1046 Rust tests passed, 17 ignored), including workspace
+  all-target/all-feature Clippy, schema validation/freshness and docs checks.
+  `just python-test` **765 passed**, compileall passed. Ignored full-resolution
+  tests are distinct from the explicit new-mode 1080p/4K run recorded above.
+- Source-stable serial chromatic benchmarks completed with one release binary:
+  source `c4ee7e62c027…`, executable `54affc699424…`. Reports are under
+  `target/benchmark-results/chromatic-dither-{cpu,hardware}-20261009/`. Same
+  original FFV1 input, 1920×1080/30 fps, 90 frames, one warmup and three samples.
+
+  | Workload | CPU median wall ms (range) | Hardware GL median wall ms (range) |
+  | --- | --- | --- |
+  | No-effect FFV1 control | 3441 (3380–3444) | 2532 (2389–2534) |
+  | Luminance blue noise | 4243 (4188–4260) | 2448 (2444–2519) |
+  | RGB blue noise | 4913 (4846–5003) | 2489 (2434–2495) |
+  | Hue-aware blue noise | 5133 (5093–5237) | 2506 (2430–2536) |
+
+  All hardware samples selected GL D3D12/NVIDIA GTX 1650 SUPER, classified
+  `discrete_gpu`, without fallback. RGB/hue matching cost approximately 16%/21%
+  more CPU wall time than luminance in this capture. Hardware ranges overlap;
+  aggregate GPU frame-work medians are 860/950/959/941 ms respectively per
+  90 frames. These include preparation, decoding and H.264 encoding, are not
+  isolated shader measurements, and make no general real-time guarantee.
+- Remaining work: channel-count/perceptual matching, uneven stops/interpolation,
+  tone/detail and independent analysis controls; then Milestone 6 extensions and
+  the full Milestone 7 per-mode motion/mask/loop/performance acceptance. Dedicated
+  full `just wgpu-software`/`just wgpu-hardware` recipes remain pending. No broader
+  milestone checkbox was closed on the strength of this increment alone.
+
+### RGB channel-count increment — 2026-10-09
+
+- Added `rgb_channels` / `PaletteMode.RGB_CHANNELS` to Palette Map and Ordered
+  Dither, with static `levels=4`, bounded to integer 2–256. Channels are quantized
+  independently in encoded byte space to a uniform RGB cube; the same stationary
+  rank drives each channel. Palette/phase/period are ignored in this mode but
+  retain normal validation. Other modes ignore levels and keep legacy behavior.
+  Nearest rounding, Q12 dither probabilities, final byte rounding and alpha
+  policy are specified in the effects reference. At 256 levels, all strengths
+  preserve source bytes exactly.
+- Canonical Rust/JSON, descriptors, validation, compiled/evaluated passes, CPU,
+  WGSL and both Python authoring APIs propagate levels. The advanced-builder
+  regression caught missing convenience-method arguments; updated both methods
+  and verified atomic editing/rejection. The integer is stored in an existing
+  padding word; parameter record remains 176 bytes inside the 256-byte allocation.
+  There are no added passes, bindings, frame textures, readbacks or allocations.
+- Focused verification passed: **322 core tests**, **89 Python palette/API/type
+  tests**, workspace all-target/all-feature Clippy, schema validation/freshness,
+  Ruff and **308 docs links / zero missing**. CPU coverage checks validate the
+  blue-noise channel means, zero/full strength, 256-level identity, alpha and
+  hidden transparent RGB. Invalid levels and defaults are tested for both effects.
+- Actual GL/D3D12 NVIDIA and software Vulkan llvmpipe rendered-frame comparisons
+  pass with **zero byte error** for 2/4/8/256 levels with mapping, Bayer8 and blue
+  noise. Repeated timestamps are identical; 256 levels equal the original source.
+  Explicit 1080p/4K hardware checks pass at both 2 and 256 levels. Single-effect
+  resource estimates remain 74,652,672 / 99,535,872 persistent/staging bytes at
+  1080p and 298,601,472 / 398,134,272 at 4K, excluding driver overhead.
+- Inspected `target/stylization/channel-contact.png` (source vs 2/4/8 levels) and
+  `channel-video-frame.png`. All levels retain recognizable shapes, highlights,
+  fine lines and source hue, with visibly different coarseness. Editable examples
+  accept `--mode rgb_channels --levels N`. The generated moving-preview artifact
+  `target/stylized-showcase/smoke/dither-blue-noise-rgb_channels-4-cpu.mp4` contains
+  48 H.264 frames at 320×180 over eight seconds. Full motion/loop/mask/stacking
+  acceptance is still open rather than inferred from these sample frames.
+- Source-stable serial `channel-dither-1080p` measurements used the same release
+  executable and 90-frame 1920×1080/30 fps FFV1 input, with one warmup and three
+  measured samples. Source `4990a890b82f…`, executable `8751da62e324…`; reports
+  under `target/benchmark-results/channel-dither-{cpu,hardware}-20261009/`.
+
+  | Workload | CPU median wall ms (range) | Hardware GL median wall ms (range) |
+  | --- | --- | --- |
+  | Luminance blue noise | 4245 (4222–4271) | 2530 (2491–2544) |
+  | Four-level RGB channels | 4726 (4697–4742) | 2483 (2472–2522) |
+
+  CPU wall cost is about 11.3% higher; hardware ranges overlap and aggregate GPU
+  frame work is 938/940 ms per 90 frames. Every hardware sample selected the
+  GL D3D12/NVIDIA GTX 1650 SUPER adapter, classified `discrete_gpu`, without
+  fallback. These end-to-end measurements include decoding/preparation/H.264
+  encoding and do not isolate shader cost or promise real-time performance.
+- Perceptual quantization remains the next missing quantizer. The original
+  [Oklab definition and linear-sRGB conversion](https://bottosson.github.io/posts/oklab/)
+  was inspected as its primary mathematical source. A bounded integer conversion
+  is being considered to make discrete color selection reproducible across CPU
+  and WGSL; approximation precision and tie behavior must be verified before
+  exposing it. No perceptual mode is implemented or claimed yet. Uneven stops,
+  tone/detail/analysis controls and Milestones 6–7 remain open. The full branch
+  contributor/Python and dedicated GPU acceptance recipes must be rerun after
+  the remaining changes; the prior full checkpoint predates channel controls.
+
+### Perceptual quantization increment — 2026-10-09
+
+- Added `nearest_oklab` / `PaletteMode.NEAREST_OKLAB` to both palette effects and
+  all canonical Rust/JSON/descriptors/Python/CPU/WGPU paths. It uses squared
+  Euclidean distance in an explicitly documented fixed-point Oklab approximation
+  of sRGB/D65 input. The original Oklab and CSS Color 4 definitions are linked
+  in the effects reference, generator and third-party notices.
+- A 256-entry sRGB Q16 table and normalized Q15 matrices are generated once with
+  60-decimal arithmetic by `scripts/generate-oklab.py`, for Rust and WGSL from
+  the same numeric source. Cube roots use bounded integer binary search and
+  Q10 rounding; Lab uses 1/1024 coordinates with ties away from zero. Packing
+  is widened to 11/10/10 bits inside the same 64-byte feature array and existing
+  176-byte parameter record. No frame textures, bindings, passes or readbacks
+  are added. Source alpha, palette order and legacy modes remain unchanged.
+- Exact RGB palette matches take priority over rounded feature ties. A cyan
+  pair differing by one red byte shares Q10 features; dedicated CPU and actual
+  GPU partial-alpha tests prove that each exact authored color survives. Other
+  ties choose the first entry. Dither uses existing two-nearest Q12 probabilities;
+  CPU uses a 64-bit numerator and WGSL bounded long division to prevent overflow.
+- Independent float-reference tests cover a 16³ full-range grid, a 16³ shadow
+  cube, every grayscale byte and all 65,537 Q16 cube-root inputs. Maximum sampled
+  component error was **0.0034671877**, under the 0.004 regression limit; this is
+  a sampled result, not an exhaustive global error bound. Every gray stays
+  neutral and lightness monotonic. A separate release test checked packing bounds
+  for **all 16,777,216 RGB triples**: component minima `[0,272,193]`, maxima
+  `[1024,796,715]`; all fit the fixed record, no gamut-feature clipping required.
+- Shader parsing initially rejected the reserved WGSL name `target`; renamed
+  the local and reran parser/runtime checks. The first full Python run loaded an
+  extension built before that fix and reproduced the stale shader error in normal
+  WGPU mask/text/runtime paths. Stopped that run, rebuilt the extension from the
+  corrected sources, and verified the previously failing mask case (**passed**).
+  That interrupted run is not a passing checkpoint; the rebuilt full suite is
+  being verified separately.
+- Focused public palette tests: **62 passed**, including exact authored colors
+  and a literal gray-104 example choosing white in Oklab versus black in encoded
+  RGB. Actual hardware GL/D3D12 NVIDIA and software Vulkan llvmpipe frame tests
+  pass with **zero byte error** for map/Bayer8/blue-noise metric comparisons,
+  literal lightness and rounded-feature ties with partial alpha, and repeated
+  timestamps. Explicit 1080p/4K comparisons now include RGB, hue and Oklab and
+  pass exactly. Resource estimates remain those of one ordinary dither pass.
+- Hardware visual checks use monochrome plus ember/ocean palettes on the same
+  scene, comparing mapping, Bayer8 and blue noise. Figure/background brightness
+  contrast and surviving moon highlights are asserted, alongside exact parity.
+  Inspected `target/stylization/oklab-contact.png`, `oklab-three-palette-contact.png`
+  and `oklab-video-frame.png`. The saturated primary palette reveals a meaningful
+  difference: Oklab retains the figure where encoded RGB mapping selects black.
+  A coarse five-stop monochrome nearest map merged the figure/background into
+  one stop; this is expected quantization, not a conversion defect. The mapping
+  acceptance fixture uses nine monochrome stops. Palette granularity, dither and
+  upcoming tone/detail controls remain necessary artistic choices.
+- Editable examples expose `--mode nearest_oklab`; the generated eight-second
+  ember moving preview uses ordinary editable palette phase/amount animation.
+  Added separate perceptual-dither smoke/1080p workloads comparing luminance,
+  encoded RGB and Oklab with identical source/palette/seed/sample settings.
+  Workspace Clippy, focused Ruff and docs checks passed. Complete contributor
+  and rebuilt Python checkpoints are running; source-stable 1080p performance
+  capture follows after those competing workloads finish. The quantization
+  checkbox remains open until these remaining gates are recorded.
+
+- Perceptual contributor checkpoint finished: `VESTRA_WGPU_BACKEND=gl just check`
+  **passed** (1053 Rust tests passed, 19 ignored). The exhaustive conversion and
+  explicit 1080p/4K tests recorded above were separate runs. After rebuilding the
+  native extension, `just python-test` **785 passed**, compileall passed. No stale
+  extension failures were dismissed or counted as passed. The quantization
+  implementation item is now closed; broader per-mode motion/stack/mask acceptance
+  and the remaining Milestone 5 controls are still open.
+- Source-stable serial `perceptual-dither-1080p` captures completed with source
+  `e5b76dc30907…` and release executable `bdf66b9e2cfe…`. Same generated FFV1
+  input, 1920×1080/30 fps, 90 frames, one warmup and three measured samples;
+  reports under `target/benchmark-results/perceptual-dither-{cpu,hardware}-20261009/`.
+
+  | Workload | CPU median wall ms (range) | Hardware GL median wall ms (range) |
+  | --- | --- | --- |
+  | Luminance blue noise | 4184 (4082–4215) | 2720 (2681–2798) |
+  | RGB blue noise | 4788 (4735–4847) | 2718 (2681–2743) |
+  | Oklab blue noise | 6031 (5950–6108) | 2742 (2740–2795) |
+
+  Oklab's opt-in CPU wall cost is about 26% above RGB and 44% above luminance in
+  this capture. Hardware ranges overlap; aggregate GPU frame work medians are
+  859/873/879 ms per 90 frames respectively. Every hardware sample selected
+  GL D3D12/NVIDIA GTX 1650 SUPER, classified `discrete_gpu`, without fallback.
+  End-to-end timings include preparation, decoding and H.264 encoding and do not
+  isolate shader cost or guarantee real-time performance. The legacy pattern
+  mode remains the default; no expensive perceptual conversion is forced on CPU
+  pixels in other modes.
+- Next: nonuniform tonal stops and interpolation spaces, then tone/detail and
+  independent analysis controls, before the Milestone 6 family extensions.
+  Dedicated full software/hardware GPU recipes and complete Milestone 7 acceptance
+  remain pending. No overall milestone or goal completion is claimed.
+
+### Nonuniform tonal-stop increment — 2026-10-09
+
+- Added optional static `stops` to PaletteMap/OrderedDither across canonical
+  JSON/schema/descriptors, compilation/evaluation/pass operations and both Python
+  APIs. Positions retain authored order and stay fixed while phase animates colors.
+  `None` keeps the original uniform arithmetic. Custom positions apply only to
+  gradient/nearest tonal modes; rainbow/chromatic/channel combinations fail with
+  `VESTRA-PALETTE-STOPS` rather than silently ignoring the control.
+- Positions round half up to the existing encoded-luminance grid `0..65280`.
+  Validation requires matching cardinality, endpoints 0/1 and strictly increasing
+  quantized positions, rejecting collapsed intervals. Gradient uses interval-local
+  RGB interpolation; nearest chooses the upper stop at an exact midpoint. Dither
+  uses interval-local Q12 fractions blended with the nearest choice by Q12 strength,
+  selecting the upper stop when the rank threshold is at least `1-probability`.
+  Source alpha/transparent RGB retain their existing policy.
+- Kept the shared EvaluatedPalette (also used by ASCII) unchanged. Compiled/evaluated
+  palette effects carry an optional 16-entry u16 position array. Packing expands
+  the GPU parameter data from 176 to 240 bytes inside the existing 256-byte record:
+  no additional pass, texture, allocation per pixel or readback. An initial shared
+  array layout enlarged unrelated ASCII operations and failed the enum-size lint;
+  moving positions onto the two relevant operations fixed that without disabling
+  any checks or boxing render operations.
+- Literal fixtures check black/red/white endpoints, gray-32 midpoint interpolation,
+  nearest midpoint ties, half-tile Bayer/blue-noise coverage, strength zero and alpha.
+  A first GPU assertion incorrectly expected every blue-noise column to contain
+  half of each color. The corrected test measures the entire rank tile (512/1024
+  red pixels); exact CPU/WGPU ramp parity is still required.
+- Actual NVIDIA hardware GL and llvmpipe software Vulkan each passed both focused
+  tests with byte-exact RGBA parity. Three nonuniform mono/ember/ocean scenes preserve
+  figure contrast and repeat exactly at out-of-order times 0, .777s, 2s and 0.
+  Explicit hardware 1080p/4K test passed both sizes with exact RGBA parity. Resource
+  estimates remain 74,652,672/99,535,872 persistent/staging bytes at 1080p and
+  298,601,472/398,134,272 at 4K, excluding driver metadata/padding.
+- Inspected `target/stylization/nonuniform-three-palette-contact.png` and
+  `target/stylization/nonuniform-video-frame.png`. Public generated-media example:
+  `target/stylized-showcase/smoke/dither-blue-noise-ember-nonuniform-cpu.mp4`
+  (320×180, 6fps, 8s), reproduced with `--stops 0 0.18 0.55 1`.
+- Verification so far: core 323 passed/1 ignored; palette, high-level, advanced
+  authoring and typing Python checks 174 passed; workspace/all-target/all-feature
+  Clippy, schema checks and `just style` passed. A broad GL test invocation with
+  default parallel test threads crashed with SIGSEGV. The canonical Rust test
+  script already sets `RUST_TEST_THREADS=1`. The serial rerun logged passing
+  cases through the final uniform-threshold test, but has no final result and
+  is **unverified** as a complete run. No test process remains at handoff.
+- Remaining: interpolation spaces, tone/detail and independent analysis-resolution
+  controls, then Milestones 6–7. The combined stops/interpolation checkbox remains
+  open; no whole-milestone or full-suite acceptance is claimed for this increment.
+
+- Work paused at user request to commit the current worktree. The new
+  tonal-stop benchmark scenarios build in release mode, but their timing runs
+  have not been executed. Full final verification and remaining milestone work
+  are still outstanding.

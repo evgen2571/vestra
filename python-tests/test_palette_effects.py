@@ -291,3 +291,141 @@ def test_palette_effects_render_deterministic_moving_video(tmp_path, name):
     baseline_project.root.add(vestra.sources.Video(str(path)), duration=1)
     baseline = baseline_project.prepare(backend="cpu").render_frame_number(2).to_bytes()
     assert identity == baseline
+
+
+def test_blue_noise_seed_round_trips_through_both_authoring_apis():
+    effect = effects.OrderedDither(matrix="blue_noise", seed=37)
+    assert effect.to_canonical()["matrix"] == "blue_noise"
+    assert effect.to_canonical()["seed"] == 37
+    effect.seed = 4294967295
+    assert effect.copy().seed == 4294967295
+    with pytest.raises(ValueError):
+        effect.seed = -1
+    with pytest.raises(ValueError):
+        effect.seed = 4294967296
+    builder = ProjectBuilder(
+        width=32, height=32, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4"
+    )
+    attached = builder.post_effects.add_ordered_dither(matrix="blue_noise", seed=37)
+    assert attached.to_canonical()["seed"] == 37
+    attached.seed = 5
+    assert attached.to_canonical()["seed"] == 5
+
+
+@pytest.mark.parametrize("mode", ["nearest_rgb", "nearest_hue", "nearest_oklab"])
+@pytest.mark.parametrize("effect_class", [effects.PaletteMap, effects.OrderedDither])
+def test_chromatic_quantization_preserves_literal_palette_colors(mode, effect_class):
+    project = vestra.Project(size=(4, 4), fps=1, duration=1)
+    layer = project.root.add(vestra.sources.Color("#00ff00"), duration=1)
+    layer.effects.add(effect_class(("#ff0000", "#00ff00", "#0000ff"), mode=mode))
+    pixels = project.render_frame(0, backend="cpu").to_bytes()
+    assert pixels == bytes([0, 255, 0, 255]) * 16
+
+
+def test_hue_metric_retains_dark_red_hue_when_rgb_prefers_gray():
+    def render(mode):
+        project = vestra.Project(size=(2, 2), fps=1, duration=1)
+        layer = project.root.add(vestra.sources.Color("#320000"), duration=1)
+        layer.effects.add(effects.PaletteMap(("#323232", "#ff0000"), mode=mode))
+        return project.render_frame(0, backend="cpu").to_bytes()
+    assert render("nearest_rgb") == bytes([50, 50, 50, 255]) * 4
+    assert render("nearest_hue") == bytes([255, 0, 0, 255]) * 4
+
+
+@pytest.mark.parametrize("effect_class", [effects.PaletteMap, effects.OrderedDither])
+@pytest.mark.parametrize("levels,expected", [(2, [0, 0, 255, 255]), (4, [85, 85, 170, 255]), (256, [63, 127, 191, 255])])
+def test_channel_count_quantization_has_defined_byte_rounding(effect_class, levels, expected):
+    project = vestra.Project(size=(4, 4), fps=1, duration=1)
+    layer = project.root.add(vestra.sources.Color("#3f7fbf"), duration=1)
+    kwargs = {"strength": 0} if effect_class is effects.OrderedDither else {}
+    effect = layer.effects.add(effect_class(mode="rgb_channels", levels=levels, **kwargs))
+    assert effect.levels == levels
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes(expected) * 16
+
+
+@pytest.mark.parametrize("levels", [1, 257, 4.5, True, -1])
+@pytest.mark.parametrize("effect_class", [effects.PaletteMap, effects.OrderedDither])
+def test_channel_levels_are_bounded_discrete_integers(effect_class, levels):
+    with pytest.raises((TypeError, ValueError)):
+        effect_class(mode="rgb_channels", levels=levels)
+
+
+def test_channel_levels_edit_atomically_through_both_authoring_apis():
+    effect = effects.OrderedDither(mode=effects.PaletteMode.RGB_CHANNELS, levels=8)
+    for invalid in (1, 257, True, 4.5):
+        with pytest.raises((ValueError, TypeError)):
+            effect.levels = invalid
+        assert effect.levels == 8
+    builder = ProjectBuilder(width=32, height=32, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4")
+    for attached in (builder.post_effects.add_palette_map(mode="rgb_channels", levels=4),
+                     builder.post_effects.add_ordered_dither(mode="rgb_channels", levels=4)):
+        assert attached.levels == 4
+        attached.levels = 256
+        assert attached.to_canonical()["levels"] == 256
+        with pytest.raises(ValueError):
+            attached.levels = 257
+        assert attached.levels == 256
+
+
+def test_perceptual_mapping_uses_lightness_instead_of_encoded_rgb_distance():
+    outputs = []
+    for mode in ("nearest_rgb", "nearest_oklab"):
+        project = vestra.Project(size=(4, 4), fps=1, duration=1)
+        layer = project.root.add(vestra.sources.Color("#686868"), duration=1)
+        layer.effects.add(effects.PaletteMap(mode=mode))
+        outputs.append(project.render_frame(0, backend="cpu").to_bytes())
+    assert outputs[0] == bytes([0, 0, 0, 255]) * 16
+    assert outputs[1] == bytes([255, 255, 255, 255]) * 16
+
+
+@pytest.mark.parametrize("name", ["PaletteMap", "OrderedDither"])
+def test_nonuniform_stops_are_copied_editable_and_render_literal_tones(name):
+    stops = [0, 64 / 255, 1]
+    options = {"mode": "gradient"} if name == "PaletteMap" else {"strength": 0}
+    effect = effect_class(name)(["#000000", "#ff0000", "#ffffff"], stops=stops, **options)
+    stops[1] = 0.5
+    assert effect.stops == (0.0, 64 / 255, 1.0)
+    canonical = effect.to_canonical()
+    canonical["stops"][1] = 0.5
+    assert effect.stops[1] == 64 / 255
+    project = vestra.Project(size=(4, 4), fps=2, duration=1)
+    layer = project.root.add(vestra.sources.Color("#202020"), duration=1)
+    layer.effects.add(effect)
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes([128, 0, 0, 255] if name == "PaletteMap" else [255, 0, 0, 255]) * 16
+    effect.stops = None
+    assert "stops" not in effect.to_canonical()
+
+
+@pytest.mark.parametrize("name", ["PaletteMap", "OrderedDither"])
+@pytest.mark.parametrize("stops", [[], [0], [0, 0.2, 0.1, 1], [0.1, 1], [0, 0.9], [0, 0, 1], [0, 0.000001, 1], [0, float("nan"), 1], [0, float("inf"), 1], [False, 1], "0,1"])
+def test_nonuniform_stop_inputs_fail_predictably(name, stops):
+    with pytest.raises((ValueError, TypeError)):
+        effect_class(name)(stops=stops)
+
+
+@pytest.mark.parametrize("mode", ["rainbow", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"])
+def test_nonuniform_stops_reject_modes_without_tonal_positions(mode):
+    project = vestra.Project(size=(4, 4), fps=2, duration=1)
+    layer = project.root.add(vestra.sources.Color("#808080"), duration=1)
+    layer.effects.add(effects.OrderedDither(mode=mode, stops=(0, 1)))
+    assert not project.validate().is_valid
+
+
+@pytest.mark.parametrize("factory,kind", [("add_palette_map", "palette_map"), ("add_ordered_dither", "ordered_dither")])
+def test_advanced_nonuniform_stops_match_generic_and_native_validation(factory, kind):
+    builder = ProjectBuilder(width=4, height=4, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4", duration=1)
+    builder.add_solid_color_clip(colour="#808080", start=0, duration=1, layer=0)
+    options = {"palette": ["#000000", "#ff0000", "#ffffff"], "mode": "nearest", "stops": [0, 0.25, 1]}
+    typed = getattr(builder.post_effects, factory)(**options)
+    generic_options = {**options, "amount": 1, "phase": 0}
+    if kind == "ordered_dither":
+        generic_options.update(strength=1, scale=1)
+    generic = builder.post_effects.add_effect(kind, **generic_options)
+    assert typed.stops == (0, 0.25, 1)
+    assert typed.to_canonical()["stops"] == generic.to_canonical()["stops"]
+    assert builder.validate().is_valid
+    typed.stops = (0, 1)
+    assert not builder.validate().is_valid
+    typed.stops = None
+    assert "stops" not in typed.to_canonical()
+    assert builder.validate().is_valid

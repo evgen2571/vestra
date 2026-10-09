@@ -53,11 +53,14 @@ effect_parameters!(PaletteParameters {
     amount: u32,
     strength: f32,
     count: u32,
-    nearest: u32,
+    mode: u32,
     bits: u32,
     scale: u32,
-    _padding1: [u32; 2],
-    colours: [u32; 16]
+    seed: u32,
+    levels: u32,
+    colours: [u32; 16],
+    features: [u32; 16],
+    stops: [u32; 16]
 });
 // WGSL layout: colour_row0 @ 16, colour_offset @ 64, size = 80 bytes.
 effect_parameters!(ColourTransformParameters {
@@ -282,34 +285,54 @@ pub(in crate::wgpu) fn effect_parameters(
             EffectKernelParameters::Crt(p)
         }
         EffectOperation::PaletteMap {
+            stops,
             palette,
             amount,
-            nearest,
+            mode,
+            levels,
         } => EffectKernelParameters::PaletteMap(palette_parameters(
-            width, height, &palette, amount, 0.0, nearest, 0, 1,
+            width,
+            height,
+            &palette,
+            stops.as_ref(),
+            amount,
+            0.0,
+            mode,
+            0,
+            1,
+            levels,
         )),
         EffectOperation::OrderedDither {
+            stops,
+            mode,
+            levels,
             palette,
             amount,
             strength,
             matrix,
             scale,
+            seed,
         } => {
             let bits = match matrix {
                 vestra_core::project::DitherMatrix::Bayer2 => 1,
                 vestra_core::project::DitherMatrix::Bayer4 => 2,
                 vestra_core::project::DitherMatrix::Bayer8 => 3,
+                vestra_core::project::DitherMatrix::BlueNoise => 5,
             };
-            EffectKernelParameters::OrderedDither(palette_parameters(
+            let mut parameters = palette_parameters(
                 width,
                 height,
                 &palette,
+                stops.as_ref(),
                 amount,
                 strength,
-                true,
+                mode,
                 bits,
                 u32::from(scale),
-            ))
+                levels,
+            );
+            parameters.seed = seed;
+            EffectKernelParameters::OrderedDither(parameters)
         }
         EffectOperation::ApplyColourTransform { transform } => {
             EffectKernelParameters::ColourTransform(ColourTransformParameters {
@@ -509,24 +532,40 @@ fn palette_parameters(
     width: u32,
     height: u32,
     palette: &vestra_core::stylization::EvaluatedPalette,
+    stops: Option<&[u16; 16]>,
     amount: f64,
     strength: f64,
-    nearest: bool,
+    mode: vestra_core::project::PaletteMode,
     bits: u32,
     scale: u32,
+    levels: u16,
 ) -> PaletteParameters {
     PaletteParameters {
         canvas_width: width,
         canvas_height: height,
-        _padding: [0; 2],
+        _padding: [u32::from(stops.is_some()), 0],
+        stops: stops.copied().unwrap_or([0; 16]).map(u32::from),
         amount: (amount * 65535.0).round() as u32,
         strength: strength as f32,
         count: palette.len,
-        nearest: u32::from(nearest),
+        mode: match mode {
+            vestra_core::project::PaletteMode::Gradient
+            | vestra_core::project::PaletteMode::Rainbow => 0,
+            vestra_core::project::PaletteMode::Nearest => 1,
+            vestra_core::project::PaletteMode::NearestRgb => 3,
+            vestra_core::project::PaletteMode::NearestHue => 4,
+            vestra_core::project::PaletteMode::RgbChannels => 2,
+            vestra_core::project::PaletteMode::NearestOklab => 5,
+        },
         bits,
         scale,
-        _padding1: [0; 2],
+        seed: 0,
+        levels: u32::from(levels),
         colours: palette.colours.map(u32::from_le_bytes),
+        features: palette.colours.map(|p| {
+            let f = vestra_core::stylization::chromatic_features(p, mode);
+            f[0] | (f[1] << 11) | (f[2] << 21)
+        }),
     }
 }
 
@@ -657,14 +696,25 @@ mod effect_parameter_layout_tests {
         assert_eq!(offset_of!(PaletteParameters, amount), 16);
         assert_eq!(offset_of!(PaletteParameters, bits), 32);
         assert_eq!(offset_of!(PaletteParameters, colours), 48);
-        assert_eq!(size_of::<PaletteParameters>(), 112);
+        assert_eq!(size_of::<PaletteParameters>(), 240);
         assert_eq!(align_of::<PaletteParameters>(), 16);
         assert!(size_of::<PaletteParameters>() <= PARAMETER_RECORD_BYTES as usize);
         let palette = vestra_core::stylization::EvaluatedPalette {
             colours: [[17, 34, 51, 255]; 16],
             len: 2,
         };
-        let packed = palette_parameters(32, 24, &palette, 0.5, 1.0, true, 3, 2);
+        let packed = palette_parameters(
+            32,
+            24,
+            &palette,
+            None,
+            0.5,
+            1.0,
+            vestra_core::project::PaletteMode::Nearest,
+            3,
+            2,
+            4,
+        );
         assert_eq!(packed.colours[0], 0xff332211);
         assert_eq!(packed.count, 2);
     }

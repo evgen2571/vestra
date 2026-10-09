@@ -119,6 +119,42 @@ pub(super) fn validate_colour_points(
     }
 }
 
+fn validate_channel_levels(levels: u16, path: &str, errors: &mut Vec<Diagnostic>) {
+    if !(2..=256).contains(&levels) {
+        invalid_effect(
+            errors,
+            "VESTRA-CHANNEL-LEVELS",
+            "channel levels must be between 2 and 256",
+            path,
+            "levels",
+        );
+    }
+}
+
+fn validate_palette_stops(
+    stops: Option<&[f64]>,
+    count: usize,
+    mode: crate::project::PaletteMode,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if let Some(stops) = stops
+        && (crate::stylization::compile_stops(stops, count).is_none()
+            || !matches!(
+                mode,
+                crate::project::PaletteMode::Gradient | crate::project::PaletteMode::Nearest
+            ))
+    {
+        invalid_effect(
+            errors,
+            "VESTRA-PALETTE-STOPS",
+            "stops require gradient or nearest mode, one increasing position per color, endpoints 0 and 1, and distinct positions after rounding to 1/65280",
+            path,
+            "stops",
+        );
+    }
+}
+
 fn validate_palette(
     palette: &[String],
     period: Option<f64>,
@@ -503,12 +539,17 @@ pub(super) fn validate_parameters(
         }
         crate::project::Effect::PaletteMap {
             palette,
+            stops,
+            mode,
+            levels,
             amount,
             phase,
             period,
             ..
         } => {
             validate_palette(palette, *period, path, errors);
+            validate_channel_levels(*levels, path, errors);
+            validate_palette_stops(stops.as_deref(), palette.len(), *mode, path, errors);
             track(
                 amount,
                 "amount",
@@ -524,6 +565,9 @@ pub(super) fn validate_parameters(
         }
         crate::project::Effect::OrderedDither {
             palette,
+            stops,
+            mode,
+            levels,
             amount,
             phase,
             period,
@@ -532,6 +576,8 @@ pub(super) fn validate_parameters(
             ..
         } => {
             validate_palette(palette, *period, path, errors);
+            validate_channel_levels(*levels, path, errors);
+            validate_palette_stops(stops.as_deref(), palette.len(), *mode, path, errors);
             track(
                 amount,
                 "amount",
@@ -1090,6 +1136,18 @@ mod tests {
             ("period", serde_json::json!(-1.0), "VESTRA-EFFECT-PERIOD"),
             ("scale", serde_json::json!(0), "VESTRA-DITHER-SCALE"),
             ("scale", serde_json::json!(33), "VESTRA-DITHER-SCALE"),
+            ("levels", serde_json::json!(1), "VESTRA-CHANNEL-LEVELS"),
+            ("levels", serde_json::json!(257), "VESTRA-CHANNEL-LEVELS"),
+            (
+                "stops",
+                serde_json::json!([0.0, 0.5, 1.0]),
+                "VESTRA-PALETTE-STOPS",
+            ),
+            (
+                "stops",
+                serde_json::json!([0.1, 1.0]),
+                "VESTRA-PALETTE-STOPS",
+            ),
             (
                 "amount",
                 serde_json::json!({"base_value": 1.1}),
@@ -1121,6 +1179,31 @@ mod tests {
                     .iter()
                     .any(|error| error.code == "VESTRA-EFFECT-PERIOD")
             );
+        }
+    }
+
+    #[test]
+    fn channel_levels_default_and_bounds_apply_to_both_effects() {
+        for kind in ["palette_map", "ordered_dither"] {
+            let mut authored = serde_json::json!({"type": kind, "id": "channels",
+                "palette": ["#000000", "#ffffff"], "mode": "rgb_channels",
+                "amount": {"base_value": 1.0}, "phase": {"base_value": 0.0}});
+            if kind == "ordered_dither" {
+                authored["strength"] = serde_json::json!({"base_value": 1.0});
+                authored["scale"] = serde_json::json!(1);
+            }
+            let effect: Effect = serde_json::from_value(authored.clone()).unwrap();
+            assert!(validation_errors(&effect).is_empty());
+            assert_eq!(serde_json::to_value(&effect).unwrap()["levels"], 4);
+            for levels in [1, 257] {
+                authored["levels"] = serde_json::json!(levels);
+                let effect: Effect = serde_json::from_value(authored.clone()).unwrap();
+                assert!(
+                    validation_errors(&effect)
+                        .iter()
+                        .any(|d| d.code == "VESTRA-CHANNEL-LEVELS")
+                );
+            }
         }
     }
 

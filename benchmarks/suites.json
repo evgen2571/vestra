@@ -78,6 +78,114 @@
         "sort_vertical_video",
         "crt_video"
       ]
+    },
+    "dither-patterns-smoke": {
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "stylization_baseline",
+        "dither_video",
+        "blue_noise_video"
+      ]
+    },
+    "dither-patterns-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "stylization_baseline",
+        "dither_video",
+        "blue_noise_video"
+      ]
+    },
+    "chromatic-dither-smoke": {
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "stylization_baseline",
+        "blue_noise_video",
+        "rgb_dither_video",
+        "hue_dither_video"
+      ]
+    },
+    "chromatic-dither-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "stylization_baseline",
+        "blue_noise_video",
+        "rgb_dither_video",
+        "hue_dither_video"
+      ]
+    },
+    "channel-dither-smoke": {
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "blue_noise_video",
+        "channel_dither_video"
+      ]
+    },
+    "channel-dither-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "blue_noise_video",
+        "channel_dither_video"
+      ]
+    },
+    "perceptual-dither-smoke": {
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "blue_noise_video",
+        "rgb_dither_video",
+        "oklab_dither_video"
+      ]
+    },
+    "perceptual-dither-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "blue_noise_video",
+        "rgb_dither_video",
+        "oklab_dither_video"
+      ]
+    },
+    "tonal-stops-smoke": {
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "blue_noise_video",
+        "nonuniform_dither_video"
+      ]
+    },
+    "tonal-stops-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "blue_noise_video",
+        "nonuniform_dither_video"
+      ]
     }
   }
 }

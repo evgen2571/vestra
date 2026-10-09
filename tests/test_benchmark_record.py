@@ -13,7 +13,7 @@ import pytest
     "VESTRA_BENCH_EXECUTABLE" not in os.environ, reason="requires release executable"
 )
 @pytest.mark.parametrize(
-    "suite_name,expected_count", [("smoke", 10), ("stylization-smoke", 3)]
+    "suite_name,expected_count", [("smoke", 10), ("stylization-smoke", 3), ("stylized-effects-smoke", 8)]
 )
 def test_smoke_suite_records_every_workload(
     tmp_path: Path, suite_name: str, expected_count: int
@@ -44,6 +44,8 @@ def test_smoke_suite_records_every_workload(
         if suite_name == "smoke"
         else {"stylization_baseline", "palette_video", "dither_video"}
     )
+    if suite_name == "stylized-effects-smoke":
+        expected |= {"ascii_video", "halftone_video", "sort_horizontal_video", "sort_vertical_video", "crt_video"}
     assert {item["scenario"] for item in suite["records"]} >= expected
     result = subprocess.run(
         [

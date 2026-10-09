@@ -61,9 +61,21 @@ and [the license](https://creativecommons.org/licenses/by/3.0/). The video inclu
 a short on-screen credit; provide the source/license links in its accompanying
 caption or description as well. No author endorsement is implied.
 
+## Stylized effects synthetic inputs
+
+The [stylized effects scene](stylized-effects/README.md) generates its moving
+video and 440 Hz sine soundtrack locally with FFmpeg. The analytic image and
+motion expressions are original project work distributed under MIT; no external
+footage or audio is downloaded. Generated media remains under `target/`.
+The custom ASCII example uses `tests/assets/VestraTest-Regular.ttf` (DejaVu
+Sans), with its complete Bitstream Vera/DejaVu notice in
+[the adjacent license](../../tests/assets/VestraTest-Regular.ttf.license).
+Preserve that notice when redistributing the font; rendered glyph images are
+distinct from the font source file.
+
 ## Rendered outputs
 
-Each showcase includes a `render.mp4`, `poster.jpg` and compact animated
+Each of the four original showcases includes a `render.mp4`, `poster.jpg` and compact animated
 `preview.gif` (silent). These are actual CPU renders of the accompanying Python projects
 at 1280×720 and 30 fps. They may be viewed or downloaded directly on GitHub.
 The README demo and media edit (including their previews/posters) contain the

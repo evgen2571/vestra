@@ -48,7 +48,14 @@ fn main() {
         .join(format!("{scenario}-{width}x{height}.json"));
     let mut project = if matches!(
         scenario.as_str(),
-        "stylization_baseline" | "palette_video" | "dither_video"
+        "stylization_baseline"
+            | "palette_video"
+            | "dither_video"
+            | "ascii_video"
+            | "halftone_video"
+            | "sort_horizontal_video"
+            | "sort_vertical_video"
+            | "crt_video"
     ) {
         create_stylization_benchmark_project(&scenario, output.path(), width, height)
     } else if matches!(scenario.as_str(), "production_edit" | "video_heavy") {
@@ -96,6 +103,11 @@ fn main() {
             | "stylization_baseline"
             | "palette_video"
             | "dither_video"
+            | "ascii_video"
+            | "halftone_video"
+            | "sort_horizontal_video"
+            | "sort_vertical_video"
+            | "crt_video"
     ) {
         let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../")
@@ -368,22 +380,52 @@ fn create_stylization_benchmark_project(
         "3",
         &["-an", "-c:v", "ffv1"],
     );
-    let mut effects = Vec::new();
-    if scenario != "stylization_baseline" {
-        let mut effect = json!({
-            "id": "stylization",
-            "type": if scenario == "palette_video" { "palette_map" } else { "ordered_dither" },
-            "palette": ["#071827", "#27565d", "#69b49c", "#fff0c0"],
-            "mode": if scenario == "palette_video" { "gradient" } else { "nearest" },
-            "amount": {"base_value": 1}, "phase": {"base_value": 0}, "period": 3
-        });
-        if scenario == "dither_video" {
-            effect["strength"] = json!({"base_value": 1});
-            effect["matrix"] = json!("bayer8");
-            effect["scale"] = json!(1);
+    let palette = json!(["#071827", "#27565d", "#69b49c", "#fff0c0"]);
+    let effect = match scenario {
+        "stylization_baseline" => None,
+        "palette_video" | "dither_video" => {
+            let mut effect = json!({
+                "id": "stylization",
+                "type": if scenario == "palette_video" { "palette_map" } else { "ordered_dither" },
+                "palette": palette,
+                "mode": if scenario == "palette_video" { "gradient" } else { "nearest" },
+                "amount": {"base_value": 1}, "phase": {"base_value": 0}, "period": 3
+            });
+            if scenario == "dither_video" {
+                effect["strength"] = json!({"base_value": 1});
+                effect["matrix"] = json!("bayer8");
+                effect["scale"] = json!(1);
+            }
+            Some(effect)
         }
-        effects.push(effect);
-    }
+        "ascii_video"
+        | "halftone_video"
+        | "sort_horizontal_video"
+        | "sort_vertical_video"
+        | "crt_video" => {
+            let name = match scenario {
+                "ascii_video" => "ascii",
+                "halftone_video" => "halftone",
+                "sort_horizontal_video" => "pixel-sort-horizontal",
+                "sort_vertical_video" => "pixel-sort-vertical",
+                "crt_video" => "crt",
+                _ => unreachable!(),
+            };
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../../examples/effects/{name}.json"));
+            let fixture: serde_json::Value =
+                serde_json::from_slice(&fs::read(path).expect("read canonical stylization effect"))
+                    .expect("parse canonical stylization effect");
+            let mut effect = fixture["visual"]["clips"][0]["effects"][0].clone();
+            effect["id"] = json!("stylization");
+            if effect.get("period").is_some() {
+                effect["period"] = json!(3);
+            }
+            Some(effect)
+        }
+        _ => unreachable!("known stylization workload"),
+    };
+    let effects = effect.into_iter().collect::<Vec<_>>();
     json!({
         "schema_version": 1, "name": format!("{scenario} benchmark"),
         "output": {"path": "benchmark.mp4", "width": width, "height": height,

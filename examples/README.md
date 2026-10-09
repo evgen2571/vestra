@@ -20,13 +20,14 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 
 | Directory | What it demonstrates |
 | --- | --- |
-| `effects/` | Individual visual effects, including blur, glow, and camera shake. |
+| `effects/` | Individual visual effects, including ASCII/pseudo-ASCII, palette/dither, halftone, both pixel-sort directions, CRT, blur, glow, and camera shake. |
 | `transitions/` | Crossfade and directional-push transitions. |
 | `presets/` | Timeline presets and flashes. |
 | `compositing/` | Blend modes and global post-effects. |
 | `python/high-level/11_masks.py` | Layer-owned geometric masks and mask coverage. |
 | `python/high-level/12_effect_expansion_stress.py` | Motion Tile, directional/radial blur, RGB split, transforms, masks, mattes, and a nested group. |
 | `python/high-level/13_palette_dither.py` | Asset-free fine Bayer dithering, three custom palettes, and a looping rainbow phase. |
+| [Stylized effects showcase](showcase/stylized-effects/README.md) | Reproducible periodic moving footage, custom glyphs/fonts, all effect families, and a repeating synthesized soundtrack. |
 | `projects/` | Complete projects, including animation, audio mixing, and `track-matte.json`. |
 | `particles/` | Deterministic ParticleSystem configurations, including audio-reactive appearance. |
 | `python/high-level/` | The normal `Project`, `Composition`, `Layer`, and source API, including shape and text rendering. |

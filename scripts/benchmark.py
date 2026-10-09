@@ -26,7 +26,9 @@ def source_identity() -> str:
     digest = hashlib.sha256()
     for name in sorted(set(paths)):
         if name and (
-            name.startswith(("crates/", ".cargo/", "benchmarks/projects/"))
+            name.startswith(
+                ("crates/", ".cargo/", "benchmarks/projects/", "examples/effects/")
+            )
             or name
             in {
                 "Cargo.toml",

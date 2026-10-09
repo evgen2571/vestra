@@ -16,6 +16,23 @@ benchmark = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(benchmark)
 
 
+def test_effect_fixture_changes_invalidate_benchmark_source_identity(
+    tmp_path, monkeypatch
+):
+    fixture = tmp_path / "examples/effects/ascii.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text('{"cell_width":8}')
+    monkeypatch.setattr(benchmark, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        benchmark.subprocess,
+        "check_output",
+        lambda *args, **kwargs: b"examples/effects/ascii.json\0",
+    )
+    before = benchmark.source_identity()
+    fixture.write_text('{"cell_width":12}')
+    assert benchmark.source_identity() != before
+
+
 def record() -> dict:
     """Return a small complete comparison record with two samples."""
     return {

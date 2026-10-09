@@ -13,6 +13,7 @@
 
 pub use vestra_core::{Category, Diagnostic, Severity, animation, domain};
 mod ascii;
+mod crt;
 mod halftone;
 mod kernel;
 

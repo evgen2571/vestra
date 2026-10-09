@@ -1,6 +1,6 @@
 # Stylized video effects
 
-Status: in progress — technical contracts recorded; color/dither implementation underway and acceptance pending.
+Status: in progress — all effect families implemented; comprehensive validation, hardware quality and performance acceptance underway.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
 Decisions finalized: 2026-10-08
@@ -213,7 +213,7 @@ in authored dark-to-light order; colors never determine pattern geometry.
 | `PaletteMap` / `palette_map` | Palette; `mode=gradient\|nearest\|rainbow`; bindable `amount` [0,1], `phase` in cycles; optional positive finite `period` in seconds | Single Current→Current pass; 16 packed RGBA colors in uniform record; no persistent/frame assets |
 | `OrderedDither` / `ordered_dither` | Palette/color animation as above; bindable `strength` [0,1]; `matrix=bayer2\|bayer4\|bayer8`; integer `scale` [1,32] pixels; amount [0,1] | Single Current→Current pass; integer Bayer indexing anchored at (0,0), no random/time-varying threshold pattern |
 | `Ascii` / `ascii` | Built-in/custom character sequences and optional Font asset; cell dimensions/density; luminance/edge/hybrid selection; mono/source/palette/rainbow coloring; glyph/background intensity and source mix; explicit palette period | Cell analysis Current→Temporary0; resolve OriginalAnd(Temporary0)→Current; retain original in existing auxiliary slot; prepared atlas binding, no readback/history |
-| `Halftone` / `halftone` | Bindable cell size [2,64] px, finite screen angle, amount [0,1], softness [0,2] px; luminance/source/RGB screens; opaque foreground/background; invert | Single pass; rotated pixel-center lattice and alpha-aware sampled cell tone; analytic dots |
+| `Halftone` / `halftone` | Bindable cell size [2,64] px, finite screen angle, amount [0,1], softness [0,2] px; luminance/source/RGB screens; opaque foreground/background; invert | Rotated-cell analysis Current→Temporary0; resolve OriginalAnd(Temporary0)→Current; alpha-weighted exact cell sums, byte-quantized means and analytic dots |
 | `PixelSort` / `pixel_sort` | Horizontal/vertical; ascending/descending; bindable lower/upper thresholds [0,1]; block length [2,256], amount [0,1] | Single pass; CPU stable bounded runs; GPU shared-memory segmented bitonic sort, kernel-specific block/line dispatch, ≤8 KiB shared storage |
 | `Crt` / `crt` | Curvature, scanline/phosphor strengths and spacing, grain, jitter, flicker, rolling-band width/strength; bindable amount/phase; optional positive finite period and fixed seed | Single pass; alpha-aware inverse sampling; periodic sinusoidal/hash-coefficient motion; no history textures |
 
@@ -496,10 +496,91 @@ tests, examples and benchmark suite definitions. Milestone 2 remains unchecked:
 visual quality, complete validation, actual 1080p/4K measurements and hardware
 evidence have not been confirmed by this documentation update.
 
-Next action: finish Milestone 2 verification and temporal diagnostics, then
-apply the requirements in this plan to Milestones 3–5 as each effect lands.
-This update changes planning requirements only; no rendering code or test
-results are implied.
+### Current implementation session (2026-10-08)
+
+- Clean starting revision `2b42f0e`; work remains exclusively on
+  `feat/stylized-video-effects`. ASCII and the remaining stylization families
+  are being implemented in parallel with narrow edits to shared registries.
+- Adapter discovery (`just wgpu-list`): Vulkan llvmpipe is **software**;
+  GL `D3D12 (NVIDIA GeForce GTX 1650 SUPER)` is classified **discrete GPU**.
+  Use `VESTRA_WGPU_BACKEND=gl`; Vestra does not read `WGPU_BACKEND`.
+- Actual GL palette/dither test run: seven passed, one composed-mask test
+  initially failed, one explicit resolution test ignored. The failure exists
+  in the **unstyled control**, where three near-transparent pixels lose alpha
+  at device UNORM conversion. Explicit byte rounding in the mask shader is
+  under regression verification; retain control-based composed tolerances.
+- Explicit ignored `gpu_stylization_1080p_and_4k` test executed on GL:
+  **passed**, exact CPU/WGPU frames at both 1920×1080 and 3840×2160.
+- Visual skill comparison of the 640×360 ember pair: raw RGBA MAE **0**, max
+  error **0**, mismatch fraction **0**. Inspected source/monochrome/ember/ocean
+  contact sheet under `target/stylization/contact.png`: readable silhouette,
+  fine line contours, calm dark regions, structured midtone dithering; palette
+  changes retain identical index geometry. This synthetic evidence does not
+  substitute for the remaining moving-footage and complete suite acceptance.
+- Temporal tests/tooling are being added for stationary controls, moving
+  transforms, monotonic threshold sweeps, procedural seams and random access.
+- Performance records are in `target/benchmark-results/stylization-initial/`;
+  final source-stable suites will be measured after implementation settles.
+- `uv run --no-project python scripts/check-docs.py`: **passed**, 292 links.
+
+### Restricted-environment continuation (2026-10-09)
+
+- The session changed to a read-only `.git` and restricted network/device
+  environment. Commits/pushes and CI on the new working tree cannot be made
+  under those permissions; no approval escalation or workaround is attempted.
+- Hardware GL adapter creation now fails with EGL `failed to create dri2
+  screen` and `no compatible adapter`, including a previously passing literal
+  ramp test binary. Earlier GL results above are valid only for the initial
+  palette/dither code; **new-family hardware verification is blocked**.
+- Vulkan llvmpipe remains available. A strict rendered literal ramp test
+  executed successfully on that **software** adapter. New effects will use
+  this path for actual software WGPU parity until hardware access is restored.
+- `cargo test -p vestra-core --lib`: **314 passed**, no failures.
+- Benchmark/diagnostic tooling tests: **22 passed**. Added complete-effect
+  smoke/1080p suites and source fingerprinting of canonical effect fixtures.
+- Added asset-free canonical examples for all new families and an original
+  periodic FFV1/sine showcase. Its FFmpeg source-generation step ran at 64×48
+  / 8 fps; public authoring and render acceptance are still pending integration.
+
+Milestone checkboxes remain open until all relevant implementation, visual,
+public-contract and performance acceptance has run. Comprehensive checks,
+CI and native Windows backend-specific validation are **unverified** so far.
+
+### Remaining stylization implementation evidence (2026-10-09)
+
+- Added Halftone, PixelSort and Crt end to end across canonical descriptors,
+  validation, compilation/evaluation, Rust CPU/WGPU passes and both public
+  Python authoring layers. Their bindable controls reuse existing properties,
+  signals and keyframes. Enum/color/integer changes remain discrete.
+- Halftone uses exact alpha-weighted pixel-area statistics in rotated cells,
+  including partial borders; one metadata temporary and one resolve pass.
+  RGB screens analyze independently rotated channel lattices. Metadata uses
+  shared integer half-up quantization, avoiding CPU/WGPU float rounding ties.
+  CPU sums are O(pixels), with sparse populated-cell statistics and cached
+  representatives; GPU cell sums require no readback or extra full-frame blur.
+- PixelSort has stable ascending/descending ties, horizontal/vertical runs,
+  inclusive thresholds and bounded partial blocks. Its 64-lane GPU bitonic
+  sort uses 7 KiB shared storage and next-power-of-two block work; input is
+  intentionally not blurred. Dispatch and device/storage limits are checked.
+- Crt uses alpha-aware inverse sampling, antialiased borders, analytically
+  integrated scanlines, output-pixel phosphor masks and seeded continuous
+  owner-time sine/cosine motion. Explicit period and modulo-normalized phase
+  repeat independently of source/audio. Pure black/white halftone endpoints
+  and default alternating CRT scanlines have focused quality regressions.
+- Added ordinary effect recipes `halftone_print`, `analog_monitor` and
+  `sorted_neon`, plus reference/guide updates. No separate preset engine.
+- Focused evidence: CPU analog **6 tests passed**; huge authored CRT phase
+  periodicity and invalid canonical-contract regressions passed; public Python
+  analog **8 tests passed**;
+  effect typing and full-package Ruff passed; core/render all-target Clippy
+  with warnings denied passed.
+- Actual Vulkan llvmpipe **software** WGPU tests passed: all-family intensity
+  sweep/random-access frames, CRT seed/period seams and both sort directions/
+  orders with literal ties and threshold membership. Refreshed visual skill
+  diagnostics and inspected halftone/CRT contact sheets. Halftone intensity
+  sequences had max channel error **1**, worst RGBA MAE **0.09327**; six CRT
+  seam frames matched exactly. Full temporal coverage, 1080p/4K measurements
+  and new-family hardware verification remain separate acceptance work.
 
 ## Decisions and discoveries
 
@@ -527,8 +608,47 @@ results are implied.
 
 ## Completion / handoff
 
-Not complete. Technical design is documented and an initial color/dither
-implementation has landed; the remaining acceptance, effect families and
-showcase work are pending. Proceed with Milestone 2 verification and the
-new quality requirements before treating it as finished, then continue
-through the existing Milestones 3–5.
+Not complete. All planned families and public interfaces are implemented.
+Finish hardware quality/resource checks, comprehensive checks and serial
+1080p measurements before closing acceptance and moving this plan.
+
+### Restored environment and public examples (2026-10-09)
+
+- Filesystem/network restrictions were removed. Git writes are available;
+  GL adapter discovery again identifies D3D12 on NVIDIA GeForce GTX 1650 SUPER
+  as hardware. The preceding restricted-environment blockers are historical.
+- Twelve public showcase variants now pass random-access and four-second
+  repeat checks, including custom-font ASCII and three composed recipes.
+  Custom-font preparation exposed a font reference in the wrong asset collector;
+  corrected it in `collect_fonts` and added a compiler regression.
+- Rendered the complete custom-font ASCII smoke scene on hardware WGPU:
+  320×180, 48 H.264 frames over eight seconds, AAC at 48 kHz. Inputs are original
+  periodic FFV1 footage and a generated periodic soundtrack.
+- Device requirements tests: **22 passed**, including atlas dimensions/mips,
+  sampled texture/binding limits, and 64-lane/7 KiB sorting workgroups.
+- Documentation link check: **307 links, zero missing**. Broader checks found
+  a stale public export expectation and an existing SDK test with an empty
+  visual timeline; updated the export contract and supplied a four-second
+  source clip in the test. Focused public tests **23 passed**, SDK test passed.
+
+### PR checkpoint (2026-10-09)
+
+- CI at `eff57dd` passed Style, Rust, Python and CI Success:
+  https://github.com/evgen2571/vestra/actions/runs/37892264547.
+- Fixed composed mask/matte restoration validation for `EffectB`; all 28
+  frame-plan tests and all eight composed hardware effect families passed.
+- Custom-font registration and validation now cover transition presentations
+  and owned mask groups. Focused Python tests: 68 passed; Rust transition
+  tests: 16 passed, plus all-scope font regression.
+- All eight families passed actual 1080p comparison; seven passed 4K before
+  CRT exposed transparent-border arithmetic differences. The CRT fix uses
+  bounded shared Q15 inverse coordinates and prepared jitter coefficients,
+  a 1/256-pixel sampling lattice, explicit half-up byte rounding and zero RGB
+  when final alpha is zero. The focused hardware CRT test now passes at both
+  1080p and 4K with the original raw RGBA tolerance (confirmed final run).
+  Unit sampling regression, eight CPU analog tests and renderer Clippy passed.
+- CRT 4K resource estimates: persistent 298601472 bytes, working textures
+  165888000 bytes, staging 398134272 bytes. Estimates exclude driver overhead.
+- PR opened as draft at the user's request while final canonical checks and
+  source-stable serial CPU/hardware 1080p benchmark captures remain pending.
+  No final acceptance or performance claim is made at this checkpoint.

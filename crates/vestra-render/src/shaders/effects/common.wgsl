@@ -3,7 +3,8 @@
 @group(0) @binding(2) var output: texture_storage_2d<rgba8unorm, write>;
 
 fn round_byte(pixel: vec4<f32>) -> vec4<f32> {
-    return round(clamp(pixel, vec4<f32>(0.0), vec4<f32>(1.0)) * 255.0) / 255.0;
+    // Rust byte conversion rounds nonnegative half-byte ties upward.
+    return floor(clamp(pixel, vec4<f32>(0.0), vec4<f32>(1.0)) * 255.0 + vec4<f32>(0.5)) / 255.0;
 }
 
 fn load_edge(texture: texture_2d<f32>, coordinate: vec2<i32>) -> vec4<f32> {

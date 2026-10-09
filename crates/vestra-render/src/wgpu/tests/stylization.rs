@@ -903,31 +903,47 @@ fn gpu_stylization_all_families_1080p_and_4k_resource_validation() {
     for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
         let source = rich_source(width, height);
         for (family, effect) in remaining_families() {
-            let name = format!("{resolution}-{family}");
-            let Some(mut backends) = Backends::new(fixture(
-                &name,
-                &source,
-                &project(width, height, vec![image_clip(vec![])], vec![effect]),
-            )) else {
-                return;
-            };
-            let (cpu, gpu, difference) = backends.render_pair(&name, 250_000_000, 3);
-            assert_eq!(cpu.dimensions(), (width, height));
-            assert_eq!(gpu.dimensions(), (width, height));
-            assert!(
-                difference.maximum_absolute_channel_error <= 3,
-                "{name}: {difference:?}"
-            );
-            assert_ne!(cpu, source, "{name} must exercise actual stylization");
-            let resources = backends.gpu.resource_estimates();
-            eprintln!(
-                "STYLIZATION_RESOURCES fixture={name} persistent_bytes={} working_bytes={} staging_bytes={}",
-                resources.total_persistent_bytes,
-                resources.working_texture_bytes,
-                resources.total_staging_bytes
-            );
+            verify_resolution_case(&format!("{resolution}-{family}"), &source, effect);
         }
     }
+}
+
+#[test]
+#[ignore = "explicit CRT transparent-border quantization at 1080p/4K"]
+fn gpu_stylization_crt_1080p_and_4k_transparent_border_parity() {
+    for (resolution, width, height) in [("1080p", 1920, 1080), ("4k", 3840, 2160)] {
+        verify_resolution_case(
+            &format!("{resolution}-crt"),
+            &rich_source(width, height),
+            crt_effect(),
+        );
+    }
+}
+
+fn verify_resolution_case(name: &str, source: &RgbaImage, effect: Value) {
+    let (width, height) = source.dimensions();
+    let Some(mut backends) = Backends::new(fixture(
+        name,
+        source,
+        &project(width, height, vec![image_clip(vec![])], vec![effect]),
+    )) else {
+        return;
+    };
+    let (cpu, gpu, difference) = backends.render_pair(name, 250_000_000, 3);
+    assert_eq!(cpu.dimensions(), (width, height));
+    assert_eq!(gpu.dimensions(), (width, height));
+    assert!(
+        difference.maximum_absolute_channel_error <= 3,
+        "{name}: {difference:?}"
+    );
+    assert_ne!(&cpu, source, "{name} must exercise actual stylization");
+    let resources = backends.gpu.resource_estimates();
+    eprintln!(
+        "STYLIZATION_RESOURCES fixture={name} persistent_bytes={} working_bytes={} staging_bytes={}",
+        resources.total_persistent_bytes,
+        resources.working_texture_bytes,
+        resources.total_staging_bytes
+    );
 }
 
 #[test]

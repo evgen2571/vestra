@@ -74,6 +74,9 @@ struct CropKey {
 }
 
 impl PreparedAssets {
+    pub(crate) fn glyph_atlases(&self) -> &[Arc<crate::ascii::PreparedGlyphAtlas>] {
+        self.decoded.glyph_atlases()
+    }
     #[cfg(test)]
     pub fn build(plan: &RenderPlan) -> Result<Self, Diagnostic> {
         let decoded = DecodedAssets::build(plan)?;

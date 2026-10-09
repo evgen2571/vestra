@@ -1,5 +1,6 @@
 from vestra import Project, ScalarProperty
 from vestra.effects import (
+    Halftone, PixelSort, Crt, HalftoneMode, PixelSortDirection, PixelSortOrder,
     Bloom,
     Brightness,
     CameraShake,
@@ -44,3 +45,7 @@ layer.effects.add(MotionBlur(1, 180, 2, 2))
 
 layer.effects.add(PaletteMap(["#000000", "#ffffff"], mode=PaletteMode.GRADIENT, period=2)).phase.bind(signal)
 layer.effects.add(OrderedDither(matrix=DitherMatrix.BAYER4, scale=2)).strength.keyframe(1, 0.5)
+
+layer.effects.add(Halftone(mode=HalftoneMode.SOURCE)).cell_size.bind(signal)
+layer.effects.add(PixelSort(direction=PixelSortDirection.VERTICAL, order=PixelSortOrder.DESCENDING)).amount.keyframe(0, 0.5)
+project.post_effects.add(Crt(period=2)).phase.bind(signal)

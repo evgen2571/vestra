@@ -86,6 +86,32 @@ pub const MIN_POSITIVE_PROPERTY_VALUE: f64 = 1e-6;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScalarPropertyTarget {
+    AsciiAmount,
+    AsciiPhase,
+    AsciiCellWidth,
+    AsciiCellHeight,
+    AsciiEdgeThreshold,
+    AsciiEdgeStrength,
+    AsciiSourceMix,
+
+    HalftoneCellSize,
+    HalftoneAngleDegrees,
+    HalftoneSoftness,
+    HalftoneAmount,
+    PixelSortLowerThreshold,
+    PixelSortUpperThreshold,
+    PixelSortAmount,
+    CrtAmount,
+    CrtCurvature,
+    CrtScanlineStrength,
+    CrtScanlineSpacing,
+    CrtMaskStrength,
+    CrtGrain,
+    CrtJitter,
+    CrtFlicker,
+    CrtRollingStrength,
+    CrtRollingWidth,
+    CrtPhase,
     PaletteMapAmount,
     PaletteMapPhase,
     OrderedDitherAmount,
@@ -149,7 +175,172 @@ impl ScalarPropertyTarget {
             NonNegative as RuntimeNonNegative, PositiveFloor,
         };
         match self {
-            Self::PaletteMapPhase
+            Self::HalftoneCellSize => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange {
+                    min: 2.0,
+                    max: 64.0,
+                },
+                authored_validation: Range {
+                    min: Some(2.0),
+                    max: Some(64.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::HalftoneAngleDegrees => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeFinite,
+                authored_validation: Finite,
+            },
+            Self::HalftoneSoftness => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 2.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(2.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::HalftoneAmount => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::PixelSortLowerThreshold => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::PixelSortUpperThreshold => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::PixelSortAmount => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtAmount => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtCurvature => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 0.5 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(0.5),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtScanlineStrength => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtScanlineSpacing => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 1.0, max: 8.0 },
+                authored_validation: Range {
+                    min: Some(1.0),
+                    max: Some(8.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtMaskStrength => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtGrain => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange {
+                    min: 0.0,
+                    max: 0.25,
+                },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(0.25),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtJitter => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 8.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(8.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtFlicker => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange {
+                    min: 0.0,
+                    max: 0.25,
+                },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(0.25),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtRollingStrength => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 1.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtRollingWidth => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange {
+                    min: 0.01,
+                    max: 1.0,
+                },
+                authored_validation: Range {
+                    min: Some(0.01),
+                    max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::CrtPhase => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeFinite,
+                authored_validation: Finite,
+            },
+            Self::AsciiPhase
+            | Self::PaletteMapPhase
             | Self::OrderedDitherPhase
             | Self::BrightnessAmount
             | Self::ContrastAmount
@@ -160,7 +351,10 @@ impl ScalarPropertyTarget {
                 runtime_constraint: RuntimeFinite,
                 authored_validation: Finite,
             },
-            Self::PaletteMapAmount
+            Self::AsciiAmount
+            | Self::AsciiEdgeThreshold
+            | Self::AsciiSourceMix
+            | Self::PaletteMapAmount
             | Self::OrderedDitherAmount
             | Self::OrderedDitherStrength
             | Self::TintAmount
@@ -170,6 +364,39 @@ impl ScalarPropertyTarget {
                 authored_validation: Range {
                     min: Some(0.0),
                     max: Some(1.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::AsciiCellWidth => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange {
+                    min: 2.0,
+                    max: 64.0,
+                },
+                authored_validation: Range {
+                    min: Some(2.0),
+                    max: Some(64.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::AsciiCellHeight => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange {
+                    min: 2.0,
+                    max: 128.0,
+                },
+                authored_validation: Range {
+                    min: Some(2.0),
+                    max: Some(128.0),
+                    min_exclusive: false,
+                    max_exclusive: false,
+                },
+            },
+            Self::AsciiEdgeStrength => ScalarPropertyDefinition {
+                runtime_constraint: RuntimeRange { min: 0.0, max: 4.0 },
+                authored_validation: Range {
+                    min: Some(0.0),
+                    max: Some(4.0),
                     min_exclusive: false,
                     max_exclusive: false,
                 },
@@ -341,6 +568,8 @@ pub enum EffectParameterKind {
     Boolean,
     Enum,
     ActiveInterval,
+    String,
+    Font,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -479,6 +708,31 @@ impl ScalarPropertyTarget {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::AsciiAmount => "amount",
+            Self::AsciiPhase => "phase",
+            Self::AsciiCellWidth => "cell_width",
+            Self::AsciiCellHeight => "cell_height",
+            Self::AsciiEdgeThreshold => "edge_threshold",
+            Self::AsciiEdgeStrength => "edge_strength",
+            Self::AsciiSourceMix => "source_mix",
+            Self::HalftoneCellSize => "cell_size",
+            Self::HalftoneAngleDegrees => "angle_degrees",
+            Self::HalftoneSoftness => "softness",
+            Self::HalftoneAmount => "amount",
+            Self::PixelSortLowerThreshold => "lower_threshold",
+            Self::PixelSortUpperThreshold => "upper_threshold",
+            Self::PixelSortAmount => "amount",
+            Self::CrtAmount => "amount",
+            Self::CrtCurvature => "curvature",
+            Self::CrtScanlineStrength => "scanline_strength",
+            Self::CrtScanlineSpacing => "scanline_spacing",
+            Self::CrtMaskStrength => "mask_strength",
+            Self::CrtGrain => "grain",
+            Self::CrtJitter => "jitter",
+            Self::CrtFlicker => "flicker",
+            Self::CrtRollingStrength => "rolling_strength",
+            Self::CrtRollingWidth => "rolling_width",
+            Self::CrtPhase => "phase",
             Self::PaletteMapAmount | Self::OrderedDitherAmount => "amount",
             Self::PaletteMapPhase | Self::OrderedDitherPhase => "phase",
             Self::OrderedDitherStrength => "strength",
@@ -640,6 +894,16 @@ visual_effect_catalog! {
         temporal: FromProperties, retains_original: false,
         scalar_properties: [], plain_tracks: [], parameters: []
     },
+    Ascii => {
+        id: "ascii",
+        class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2,
+        temporal: FromProperties, retains_original: true,
+        scalar_properties: [AsciiAmount, AsciiPhase, AsciiCellWidth, AsciiCellHeight, AsciiEdgeThreshold, AsciiEdgeStrength, AsciiSourceMix], plain_tracks: [],
+        parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiPhase), EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiCellWidth), EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiCellHeight), EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiEdgeThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiEdgeStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::AsciiSourceMix), EffectParameterDescriptor::simple("characters", EffectParameterKind::String), EffectParameterDescriptor::simple("edge_characters", EffectParameterKind::String), EffectParameterDescriptor::optional("font", EffectParameterKind::Font), EffectParameterDescriptor::optional_enum_default("glyph_style", &["characters", "geometric"], "characters"), EffectParameterDescriptor::optional_enum_default("mode", &["fill", "edges", "hybrid"], "hybrid"), EffectParameterDescriptor::optional_enum_default("color_mode", &["monochrome", "source", "palette", "rainbow"], "monochrome"), EffectParameterDescriptor::simple("foreground", EffectParameterKind::Colour), EffectParameterDescriptor::simple("background", EffectParameterKind::Colour), EffectParameterDescriptor::palette(), EffectParameterDescriptor::simple("invert", EffectParameterKind::Boolean), EffectParameterDescriptor::period()]
+    },
+    Halftone => { id: "halftone", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2, temporal: FromProperties, retains_original: true, scalar_properties: [HalftoneCellSize, HalftoneAngleDegrees, HalftoneSoftness, HalftoneAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneCellSize), EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneAngleDegrees), EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneSoftness), EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneAmount), EffectParameterDescriptor::optional_enum_default("mode", &["luminance", "source", "rgb"], "luminance"), EffectParameterDescriptor::simple("foreground", EffectParameterKind::Colour), EffectParameterDescriptor::simple("background", EffectParameterKind::Colour), EffectParameterDescriptor::simple("invert", EffectParameterKind::Boolean)] },
+    PixelSort => { id: "pixel_sort", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1, temporal: FromProperties, retains_original: false, scalar_properties: [PixelSortLowerThreshold, PixelSortUpperThreshold, PixelSortAmount], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::PixelSortLowerThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PixelSortUpperThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PixelSortAmount), EffectParameterDescriptor::optional_enum_default("direction", &["horizontal", "vertical"], "horizontal"), EffectParameterDescriptor::optional_enum_default("order", &["ascending", "descending"], "ascending"), EffectParameterDescriptor::integer("segment_length", 2, 256)] },
+    Crt => { id: "crt", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1, temporal: FromProperties, retains_original: false, scalar_properties: [CrtAmount, CrtCurvature, CrtScanlineStrength, CrtScanlineSpacing, CrtMaskStrength, CrtGrain, CrtJitter, CrtFlicker, CrtRollingStrength, CrtRollingWidth, CrtPhase], plain_tracks: [], parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtCurvature), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtScanlineStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtScanlineSpacing), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtMaskStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtGrain), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtJitter), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtFlicker), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtRollingStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtRollingWidth), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtPhase), EffectParameterDescriptor::integer("mask_spacing", 1, 6), EffectParameterDescriptor::period(), EffectParameterDescriptor::integer("seed", 0, 18446744073709551615)] },
     PaletteMap => {
         id: "palette_map",
         class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -770,6 +1034,10 @@ impl crate::project::Effect {
     #[must_use]
     pub(crate) const fn kind(&self) -> VisualEffectKind {
         match self {
+            Self::Ascii { .. } => VisualEffectKind::Ascii,
+            Self::Halftone { .. } => VisualEffectKind::Halftone,
+            Self::PixelSort { .. } => VisualEffectKind::PixelSort,
+            Self::Crt { .. } => VisualEffectKind::Crt,
             Self::PaletteMap { .. } => VisualEffectKind::PaletteMap,
             Self::OrderedDither { .. } => VisualEffectKind::OrderedDither,
             Self::Brightness { .. } => VisualEffectKind::Brightness,
@@ -899,6 +1167,14 @@ mod tests {
                     EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack => {
                         serde_json::json!({"base_value": number})
                     }
+                    EffectParameterKind::String => {
+                        serde_json::json!(if parameter.name == "edge_characters" {
+                            "-|/\\"
+                        } else {
+                            " .:-=+*#%@"
+                        })
+                    }
+                    EffectParameterKind::Font => serde_json::json!("font"),
                     EffectParameterKind::Colour => serde_json::json!("#ffffff"),
                     EffectParameterKind::Palette => serde_json::json!(["#000000", "#ffffff"]),
                     EffectParameterKind::Period => serde_json::json!(number),

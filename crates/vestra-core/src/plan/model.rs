@@ -31,6 +31,7 @@ pub struct RenderPlan {
     pub shapes: Vec<crate::project::ShapeSource>,
     pub texts: Vec<crate::project::TextSource>,
     pub fonts: Vec<FontAsset>,
+    pub glyph_atlases: Vec<crate::ascii::GlyphAtlasSpec>,
     pub layers: Vec<CompiledLayer>,
     pub post_effects: Vec<TimedEffect>,
     /// Whether the complete post-effect result can vary with project time.
@@ -366,9 +367,56 @@ impl TransformContribution {
 
 #[derive(Clone, Debug)]
 pub enum CompiledEffect {
+    Ascii {
+        glyphs: crate::ascii::GlyphAtlasSpec,
+        parameters: crate::ascii::AsciiParameters,
+        period: Option<f64>,
+        amount: CompiledScalarProperty,
+        phase: CompiledScalarProperty,
+        cell_width: CompiledScalarProperty,
+        cell_height: CompiledScalarProperty,
+        edge_threshold: CompiledScalarProperty,
+        edge_strength: CompiledScalarProperty,
+        source_mix: CompiledScalarProperty,
+    },
+
     /// A compiler-fused contiguous static basic-colour chain.
     ColourTransform {
         transform: ColourTransform,
+    },
+    Halftone {
+        cell_size: CompiledScalarProperty,
+        angle_degrees: CompiledScalarProperty,
+        softness: CompiledScalarProperty,
+        amount: CompiledScalarProperty,
+        mode: crate::project::HalftoneMode,
+        foreground: [u8; 4],
+        background: [u8; 4],
+        invert: bool,
+    },
+    PixelSort {
+        lower_threshold: CompiledScalarProperty,
+        upper_threshold: CompiledScalarProperty,
+        amount: CompiledScalarProperty,
+        direction: crate::project::PixelSortDirection,
+        order: crate::project::PixelSortOrder,
+        segment_length: u16,
+    },
+    Crt {
+        amount: CompiledScalarProperty,
+        curvature: CompiledScalarProperty,
+        scanline_strength: CompiledScalarProperty,
+        scanline_spacing: CompiledScalarProperty,
+        mask_strength: CompiledScalarProperty,
+        grain: CompiledScalarProperty,
+        jitter: CompiledScalarProperty,
+        flicker: CompiledScalarProperty,
+        rolling_strength: CompiledScalarProperty,
+        rolling_width: CompiledScalarProperty,
+        phase: CompiledScalarProperty,
+        mask_spacing: u8,
+        period: Option<f64>,
+        seed: u64,
     },
     PaletteMap {
         palette: crate::stylization::EvaluatedPalette,
@@ -478,6 +526,10 @@ impl CompiledEffect {
             Self::ColourTransform { .. } => {
                 crate::effect_definition::VisualEffectKind::ColourTransform
             }
+            Self::Ascii { .. } => crate::effect_definition::VisualEffectKind::Ascii,
+            Self::Halftone { .. } => crate::effect_definition::VisualEffectKind::Halftone,
+            Self::PixelSort { .. } => crate::effect_definition::VisualEffectKind::PixelSort,
+            Self::Crt { .. } => crate::effect_definition::VisualEffectKind::Crt,
             Self::PaletteMap { .. } => crate::effect_definition::VisualEffectKind::PaletteMap,
             Self::OrderedDither { .. } => crate::effect_definition::VisualEffectKind::OrderedDither,
             Self::Brightness { .. } => crate::effect_definition::VisualEffectKind::Brightness,
@@ -527,6 +579,78 @@ impl CompiledEffect {
         };
         match self {
             Self::ColourTransform { .. } => {}
+            Self::Ascii {
+                amount,
+                phase,
+                cell_width,
+                cell_height,
+                edge_threshold,
+                edge_strength,
+                source_mix,
+                ..
+            } => {
+                visit(ScalarPropertyTarget::AsciiAmount, amount);
+                visit(ScalarPropertyTarget::AsciiPhase, phase);
+                visit(ScalarPropertyTarget::AsciiCellWidth, cell_width);
+                visit(ScalarPropertyTarget::AsciiCellHeight, cell_height);
+                visit(ScalarPropertyTarget::AsciiEdgeThreshold, edge_threshold);
+                visit(ScalarPropertyTarget::AsciiEdgeStrength, edge_strength);
+                visit(ScalarPropertyTarget::AsciiSourceMix, source_mix);
+            }
+            Self::Halftone {
+                cell_size,
+                angle_degrees,
+                softness,
+                amount,
+                ..
+            } => {
+                visit(ScalarPropertyTarget::HalftoneCellSize, cell_size);
+                visit(ScalarPropertyTarget::HalftoneAngleDegrees, angle_degrees);
+                visit(ScalarPropertyTarget::HalftoneSoftness, softness);
+                visit(ScalarPropertyTarget::HalftoneAmount, amount);
+            }
+            Self::PixelSort {
+                lower_threshold,
+                upper_threshold,
+                amount,
+                ..
+            } => {
+                visit(
+                    ScalarPropertyTarget::PixelSortLowerThreshold,
+                    lower_threshold,
+                );
+                visit(
+                    ScalarPropertyTarget::PixelSortUpperThreshold,
+                    upper_threshold,
+                );
+                visit(ScalarPropertyTarget::PixelSortAmount, amount);
+            }
+            Self::Crt {
+                amount,
+                curvature,
+                scanline_strength,
+                scanline_spacing,
+                mask_strength,
+                grain,
+                jitter,
+                flicker,
+                rolling_strength,
+                rolling_width,
+                phase,
+                ..
+            } => {
+                visit(ScalarPropertyTarget::CrtAmount, amount);
+                visit(ScalarPropertyTarget::CrtCurvature, curvature);
+                visit(ScalarPropertyTarget::CrtScanlineStrength, scanline_strength);
+                visit(ScalarPropertyTarget::CrtScanlineSpacing, scanline_spacing);
+                visit(ScalarPropertyTarget::CrtMaskStrength, mask_strength);
+                visit(ScalarPropertyTarget::CrtGrain, grain);
+                visit(ScalarPropertyTarget::CrtJitter, jitter);
+                visit(ScalarPropertyTarget::CrtFlicker, flicker);
+                visit(ScalarPropertyTarget::CrtRollingStrength, rolling_strength);
+                visit(ScalarPropertyTarget::CrtRollingWidth, rolling_width);
+                visit(ScalarPropertyTarget::CrtPhase, phase);
+            }
             Self::PaletteMap { amount, phase, .. } => {
                 visit(ScalarPropertyTarget::PaletteMapAmount, amount);
                 visit(ScalarPropertyTarget::PaletteMapPhase, phase);

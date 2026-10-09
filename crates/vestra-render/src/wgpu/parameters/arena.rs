@@ -107,6 +107,12 @@ pub(in crate::wgpu) fn push_effect_parameters(
     parameters: EffectKernelParameters,
 ) -> Result<u32, crate::Diagnostic> {
     match parameters {
+        EffectKernelParameters::AsciiAnalyze(value)
+        | EffectKernelParameters::AsciiResolve(value) => arena.push(&value),
+        EffectKernelParameters::HalftoneAnalyze(value) => arena.push(&value),
+        EffectKernelParameters::Halftone(value) => arena.push(&value),
+        EffectKernelParameters::PixelSort(value) => arena.push(&value),
+        EffectKernelParameters::Crt(value) => arena.push(&value),
         EffectKernelParameters::PaletteMap(value)
         | EffectKernelParameters::OrderedDither(value) => arena.push(&value),
         EffectKernelParameters::ColourTransform(value) => arena.push(&value),

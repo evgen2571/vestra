@@ -7,6 +7,8 @@ use crate::{Diagnostic, project::Project};
 pub(super) fn add_unused_assets(project: &Project, warnings: &mut Vec<Diagnostic>) {
     let mut used_assets = BTreeSet::new();
     collect_used_visual_assets(&project.visual.clips, &mut used_assets);
+    collect_effect_fonts(&project.visual.post_effects, &mut used_assets);
+    collect_transition_fonts(&project.visual.transitions, &mut used_assets);
     used_assets.extend(
         project
             .audio
@@ -34,6 +36,7 @@ fn collect_used_visual_assets<'a>(
     used_assets: &mut BTreeSet<&'a str>,
 ) {
     for clip in clips {
+        collect_effect_fonts(&clip.effects, used_assets);
         collect_used_visual_source_assets(&clip.source, used_assets);
         for mask in &clip.masks {
             collect_used_mask_assets(&mask.input, used_assets);
@@ -55,6 +58,7 @@ fn collect_used_visual_source_assets<'a>(
         }
         crate::project::VisualSource::Group(group) => {
             collect_used_visual_assets(&group.clips, used_assets);
+            collect_transition_fonts(&group.transitions, used_assets);
         }
         crate::project::VisualSource::SolidColor { .. }
         | crate::project::VisualSource::Shape(_)
@@ -75,5 +79,25 @@ fn collect_used_mask_assets<'a>(
             collect_used_visual_source_assets(source, used_assets);
         }
         crate::project::MaskInput::Shape(_) => {}
+    }
+}
+
+fn collect_effect_fonts<'a>(effects: &'a [crate::project::Effect], assets: &mut BTreeSet<&'a str>) {
+    for effect in effects {
+        if let crate::project::Effect::Ascii {
+            font: Some(font), ..
+        } = effect
+        {
+            assets.insert(font);
+        }
+    }
+}
+fn collect_transition_fonts<'a>(
+    transitions: &'a [crate::project::TransitionPlacement],
+    assets: &mut BTreeSet<&'a str>,
+) {
+    for transition in transitions {
+        collect_effect_fonts(&transition.definition.outgoing.effects, assets);
+        collect_effect_fonts(&transition.definition.incoming.effects, assets);
     }
 }

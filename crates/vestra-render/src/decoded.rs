@@ -24,6 +24,7 @@ pub struct DecodedAssets {
     images: Vec<Arc<RgbaImage>>,
     shapes: Vec<PreparedShape>,
     texts: Vec<PreparedText>,
+    glyph_atlases: Vec<Arc<crate::ascii::PreparedGlyphAtlas>>,
     videos: Vec<vestra_core::plan::VideoAsset>,
     video_factory: Option<Arc<dyn VideoDecoderFactory>>,
     stats: PreparationStats,
@@ -197,7 +198,11 @@ impl DecodedAssets {
             shapes.push(crate::shape_raster::prepare(shape));
         }
         let mut font_systems = BTreeMap::new();
-        for font in &plan.fonts {
+        for font in plan
+            .fonts
+            .iter()
+            .filter(|font| plan.texts.iter().any(|text| text.font == font.id))
+        {
             font_systems.insert(font.id.clone(), crate::text::load_font(&font.path)?);
         }
         let mut glyph_caches = font_systems
@@ -245,6 +250,13 @@ impl DecodedAssets {
             })?;
             texts.push(prepared);
         }
+        let mut glyph_atlases = Vec::with_capacity(plan.glyph_atlases.len());
+        for spec in &plan.glyph_atlases {
+            let atlas =
+                crate::ascii::prepare(spec, &plan.fonts, decoded_source_bytes, &plan.limits)?;
+            decoded_source_bytes += atlas.byte_len();
+            glyph_atlases.push(atlas);
+        }
         Ok(Arc::new(Self {
             stats: PreparationStats {
                 decoded_image_count: decoded.len(),
@@ -256,6 +268,7 @@ impl DecodedAssets {
             images: decoded,
             shapes,
             texts,
+            glyph_atlases,
             videos: plan.videos.clone(),
             video_factory,
             timings: PreparationTimings {
@@ -266,6 +279,10 @@ impl DecodedAssets {
     }
 
     #[must_use]
+    pub(crate) fn glyph_atlases(&self) -> &[Arc<crate::ascii::PreparedGlyphAtlas>] {
+        &self.glyph_atlases
+    }
+
     pub fn image(&self, asset: usize) -> &RgbaImage {
         self.images[asset].as_ref()
     }

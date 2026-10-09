@@ -70,5 +70,7 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         base_alpha = current.a;
     }
     let next_coverage = combine(current_coverage, value);
-    textureStore(output, coord, vec4<f32>(current.rgb, base_alpha * next_coverage));
+    // Match CPU byte rounding at half-alpha edges instead of device UNORM ties.
+    let alpha = floor(base_alpha * next_coverage * 255.0 + 0.5) / 255.0;
+    textureStore(output, coord, vec4<f32>(current.rgb, alpha));
 }

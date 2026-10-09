@@ -91,8 +91,23 @@ pub(super) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
         dynamic |= !static_track(track);
     });
     dynamic |= match effect {
-        CompiledEffect::PaletteMap { period, .. }
+        CompiledEffect::Ascii { period, .. }
+        | CompiledEffect::PaletteMap { period, .. }
         | CompiledEffect::OrderedDither { period, .. } => period.is_some(),
+        CompiledEffect::Crt {
+            period,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            ..
+        } => {
+            period.is_some()
+                || grain.base_value > 0.0
+                || jitter.base_value > 0.0
+                || flicker.base_value > 0.0
+                || rolling_strength.base_value > 0.0
+        }
         CompiledEffect::MotionTile { tile_center, .. }
         | CompiledEffect::RadialBlur {
             center: tile_center,

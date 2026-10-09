@@ -1,5 +1,7 @@
 //! CPU compositor, assets, rasterization, and effect algorithms.
 
+pub(super) mod analog;
+mod ascii;
 pub(super) mod assets;
 pub(super) mod backend;
 pub(super) mod chromatic;

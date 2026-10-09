@@ -216,6 +216,7 @@ impl GpuPipelines {
             entries: &[
                 sampled(0),
                 sampled(1),
+                sampled(4),
                 storage_texture(2),
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
@@ -308,6 +309,12 @@ fn supported_kernels() -> impl Iterator<Item = EffectKernel> {
 impl EffectKernel {
     const fn label(self) -> &'static str {
         match self {
+            Self::HalftoneAnalyze => "vestra.effect.halftoneanalyze",
+            Self::Halftone => "vestra.effect.halftone",
+            Self::PixelSort => "vestra.effect.pixelsort",
+            Self::Crt => "vestra.effect.crt",
+            Self::AsciiAnalyze => "vestra.effect.ascii-analyze",
+            Self::AsciiResolve => "vestra.effect.ascii-resolve",
             Self::PaletteMap => "vestra.effect.palette-map",
             Self::OrderedDither => "vestra.effect.ordered-dither",
             Self::ColourTransform => "vestra.effect.colour-transform",
@@ -325,6 +332,38 @@ impl EffectKernel {
 
     pub(super) const fn source(self) -> &'static str {
         match self {
+            Self::HalftoneAnalyze => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/analog_common.wgsl"),
+                include_str!("../shaders/effects/halftone_common.wgsl"),
+                include_str!("../shaders/effects/halftone_analyze.wgsl")
+            ),
+            Self::Halftone => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/analog_common.wgsl"),
+                include_str!("../shaders/effects/halftone_common.wgsl"),
+                include_str!("../shaders/effects/halftone.wgsl")
+            ),
+            Self::PixelSort => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/analog_common.wgsl"),
+                include_str!("../shaders/effects/pixel_sort.wgsl")
+            ),
+            Self::Crt => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/analog_common.wgsl"),
+                include_str!("../shaders/effects/crt.wgsl")
+            ),
+            Self::AsciiAnalyze => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/ascii_common.wgsl"),
+                include_str!("../shaders/effects/ascii_analyze.wgsl")
+            ),
+            Self::AsciiResolve => concat!(
+                include_str!("../shaders/effects/common.wgsl"),
+                include_str!("../shaders/effects/ascii_common.wgsl"),
+                include_str!("../shaders/effects/ascii_resolve.wgsl")
+            ),
             Self::PaletteMap => concat!(
                 include_str!("../shaders/effects/common.wgsl"),
                 include_str!("../shaders/effects/palette_common.wgsl"),

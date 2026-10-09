@@ -35,6 +35,7 @@ pub(super) struct PreparedRasterTexture {
 
 pub(super) struct SourceResources {
     pub(super) raster_textures: Vec<PreparedRasterTexture>,
+    pub(super) glyph_atlases: Vec<PreparedRasterTexture>,
     pub(super) solid_texture: PreparedRasterTexture,
     pub(super) uploaded_texture_bytes: u64,
 }
@@ -260,6 +261,61 @@ impl SourceResources {
                 intrinsic_size: IntrinsicSize::new(image.width(), image.height()),
             });
         }
+        let mut glyph_atlases = Vec::with_capacity(plan.glyph_atlases.len());
+        for atlas in decoded.glyph_atlases() {
+            let image = &atlas.levels[0];
+            if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
+            {
+                return Err(Diagnostic::error(
+                    "WGPU-SOURCE-DIMENSIONS",
+                    Category::Backend,
+                    "glyph atlas exceeds adapter texture dimensions",
+                    "",
+                ));
+            }
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("vestra glyph atlas"),
+                size: wgpu::Extent3d {
+                    width: image.width(),
+                    height: image.height(),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 5,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            for (level, image) in atlas.levels.iter().enumerate() {
+                queue.write_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &texture,
+                        mip_level: level as u32,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    image.as_raw(),
+                    wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(image.width() * 4),
+                        rows_per_image: Some(image.height()),
+                    },
+                    wgpu::Extent3d {
+                        width: image.width(),
+                        height: image.height(),
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+            uploaded_texture_bytes += atlas.byte_len();
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            glyph_atlases.push(PreparedRasterTexture {
+                _texture: texture,
+                view,
+                intrinsic_size: IntrinsicSize::new(image.width(), image.height()),
+            });
+        }
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("vestra solid source"),
             size: wgpu::Extent3d {
@@ -277,6 +333,7 @@ impl SourceResources {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Ok(Self {
             raster_textures: textures,
+            glyph_atlases,
             solid_texture: PreparedRasterTexture {
                 _texture: texture,
                 view,

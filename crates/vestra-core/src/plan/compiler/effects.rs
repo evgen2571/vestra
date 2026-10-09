@@ -14,6 +14,150 @@ pub(super) fn compile(
         };
     }
     Ok(match effect {
+        crate::project::Effect::Ascii {
+            characters,
+            edge_characters,
+            font,
+            glyph_style,
+            mode,
+            color_mode,
+            foreground,
+            background,
+            palette,
+            invert,
+            period,
+            amount,
+            phase,
+            cell_width,
+            cell_height,
+            edge_threshold,
+            edge_strength,
+            source_mix,
+            ..
+        } => crate::plan::CompiledEffect::Ascii {
+            glyphs: crate::ascii::GlyphAtlasSpec {
+                font: font.clone(),
+                characters: characters.clone(),
+                edge_characters: edge_characters.clone(),
+            },
+            parameters: crate::ascii::AsciiParameters {
+                atlas: usize::MAX,
+                glyph_count: characters.chars().count() as u32,
+                glyph_style: *glyph_style,
+                mode: *mode,
+                color_mode: *color_mode,
+                foreground: parse_colour(foreground).expect("validated ASCII foreground"),
+                background: parse_colour(background).expect("validated ASCII background"),
+                palette: crate::stylization::compile_palette(palette)
+                    .expect("validated ASCII palette"),
+                invert: *invert,
+                cell_width: 8,
+                cell_height: 12,
+                edge_threshold: 0.15,
+                edge_strength: 1.0,
+                source_mix: 0.0,
+                amount: 1.0,
+            },
+            period: *period,
+            amount: scalar!(amount, ScalarPropertyTarget::AsciiAmount),
+            phase: scalar!(phase, ScalarPropertyTarget::AsciiPhase),
+            cell_width: scalar!(cell_width, ScalarPropertyTarget::AsciiCellWidth),
+            cell_height: scalar!(cell_height, ScalarPropertyTarget::AsciiCellHeight),
+            edge_threshold: scalar!(edge_threshold, ScalarPropertyTarget::AsciiEdgeThreshold),
+            edge_strength: scalar!(edge_strength, ScalarPropertyTarget::AsciiEdgeStrength),
+            source_mix: scalar!(source_mix, ScalarPropertyTarget::AsciiSourceMix),
+        },
+        crate::project::Effect::Halftone {
+            cell_size,
+            angle_degrees,
+            softness,
+            amount,
+            mode,
+            foreground,
+            background,
+            invert,
+            ..
+        } => crate::plan::CompiledEffect::Halftone {
+            cell_size: scalar!(cell_size, ScalarPropertyTarget::HalftoneCellSize),
+            angle_degrees: scalar!(angle_degrees, ScalarPropertyTarget::HalftoneAngleDegrees),
+            softness: scalar!(softness, ScalarPropertyTarget::HalftoneSoftness),
+            amount: scalar!(amount, ScalarPropertyTarget::HalftoneAmount),
+            mode: *mode,
+            foreground: parse_colour(foreground).ok_or_else(|| {
+                Diagnostic::error(
+                    "VESTRA-PLAN-EFFECT-COLOUR",
+                    Category::Internal,
+                    "validated halftone color is invalid",
+                    "",
+                )
+            })?,
+            background: parse_colour(background).ok_or_else(|| {
+                Diagnostic::error(
+                    "VESTRA-PLAN-EFFECT-COLOUR",
+                    Category::Internal,
+                    "validated halftone color is invalid",
+                    "",
+                )
+            })?,
+            invert: *invert,
+        },
+        crate::project::Effect::PixelSort {
+            lower_threshold,
+            upper_threshold,
+            amount,
+            direction,
+            order,
+            segment_length,
+            ..
+        } => crate::plan::CompiledEffect::PixelSort {
+            lower_threshold: scalar!(
+                lower_threshold,
+                ScalarPropertyTarget::PixelSortLowerThreshold
+            ),
+            upper_threshold: scalar!(
+                upper_threshold,
+                ScalarPropertyTarget::PixelSortUpperThreshold
+            ),
+            amount: scalar!(amount, ScalarPropertyTarget::PixelSortAmount),
+            direction: *direction,
+            order: *order,
+            segment_length: *segment_length,
+        },
+        crate::project::Effect::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            mask_spacing,
+            period,
+            seed,
+            ..
+        } => crate::plan::CompiledEffect::Crt {
+            amount: scalar!(amount, ScalarPropertyTarget::CrtAmount),
+            curvature: scalar!(curvature, ScalarPropertyTarget::CrtCurvature),
+            scanline_strength: scalar!(
+                scanline_strength,
+                ScalarPropertyTarget::CrtScanlineStrength
+            ),
+            scanline_spacing: scalar!(scanline_spacing, ScalarPropertyTarget::CrtScanlineSpacing),
+            mask_strength: scalar!(mask_strength, ScalarPropertyTarget::CrtMaskStrength),
+            grain: scalar!(grain, ScalarPropertyTarget::CrtGrain),
+            jitter: scalar!(jitter, ScalarPropertyTarget::CrtJitter),
+            flicker: scalar!(flicker, ScalarPropertyTarget::CrtFlicker),
+            rolling_strength: scalar!(rolling_strength, ScalarPropertyTarget::CrtRollingStrength),
+            rolling_width: scalar!(rolling_width, ScalarPropertyTarget::CrtRollingWidth),
+            phase: scalar!(phase, ScalarPropertyTarget::CrtPhase),
+            mask_spacing: *mask_spacing,
+            period: *period,
+            seed: *seed,
+        },
         crate::project::Effect::PaletteMap {
             palette,
             mode,

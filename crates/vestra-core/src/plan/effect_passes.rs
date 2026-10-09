@@ -82,9 +82,53 @@ pub enum CompositeMode {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EffectOperation {
+    AsciiAnalyze {
+        parameters: crate::ascii::AsciiParameters,
+    },
+    AsciiResolve {
+        parameters: crate::ascii::AsciiParameters,
+    },
     /// An affine RGB transform in the renderer's existing encoded byte space.
     ApplyColourTransform {
         transform: ColourTransform,
+    },
+    HalftoneAnalyze {
+        cell_size: f64,
+        angle_degrees: f64,
+        mode: crate::project::HalftoneMode,
+    },
+    Halftone {
+        cell_size: f64,
+        angle_degrees: f64,
+        softness: f64,
+        amount: f64,
+        mode: crate::project::HalftoneMode,
+        foreground: [u8; 4],
+        background: [u8; 4],
+        invert: bool,
+    },
+    PixelSort {
+        lower_threshold: f64,
+        upper_threshold: f64,
+        amount: f64,
+        direction: crate::project::PixelSortDirection,
+        order: crate::project::PixelSortOrder,
+        segment_length: u16,
+    },
+    Crt {
+        amount: f64,
+        curvature: f64,
+        scanline_strength: f64,
+        scanline_spacing: f64,
+        mask_strength: f64,
+        grain: f64,
+        jitter: f64,
+        flicker: f64,
+        rolling_strength: f64,
+        rolling_width: f64,
+        phase: f64,
+        mask_spacing: u8,
+        seed: u64,
     },
     PaletteMap {
         palette: crate::stylization::EvaluatedPalette,
@@ -240,6 +284,48 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
 pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
     let current = EffectResource::Current;
     match effect {
+        CompiledEffect::Ascii { parameters, .. } => ascii_pass_plan(*parameters),
+        CompiledEffect::PixelSort { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::PixelSort {
+                lower_threshold: 0.15,
+                upper_threshold: 0.9,
+                amount: 1.0,
+                direction: crate::project::PixelSortDirection::Horizontal,
+                order: crate::project::PixelSortOrder::Ascending,
+                segment_length: 64,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::Crt { .. } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::Crt {
+                amount: 1.0,
+                curvature: 0.08,
+                scanline_strength: 0.2,
+                scanline_spacing: 2.0,
+                mask_strength: 0.15,
+                grain: 0.025,
+                jitter: 0.35,
+                flicker: 0.025,
+                rolling_strength: 0.06,
+                rolling_width: 0.12,
+                phase: 0.0,
+                mask_spacing: 1,
+                seed: 0,
+            },
+            current,
+            current,
+        )]),
+        CompiledEffect::Halftone { .. } => effect_pass_plan(&EvaluatedEffect::Halftone {
+            cell_size: 6.0,
+            angle_degrees: 15.0,
+            softness: 0.5,
+            amount: 1.0,
+            mode: crate::project::HalftoneMode::Luminance,
+            foreground: [255; 4],
+            background: [0, 0, 0, 255],
+            invert: false,
+        }),
         CompiledEffect::PaletteMap { palette, mode, .. } => {
             EffectPassPlan::new(&[EffectPass::new(
                 EffectOperation::PaletteMap {
@@ -437,6 +523,93 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
     }
     let current = EffectResource::Current;
     match effect {
+        EvaluatedEffect::Ascii { parameters } => ascii_pass_plan(*parameters),
+        EvaluatedEffect::PixelSort {
+            lower_threshold,
+            upper_threshold,
+            amount,
+            direction,
+            order,
+            segment_length,
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::PixelSort {
+                lower_threshold: *lower_threshold,
+                upper_threshold: *upper_threshold,
+                amount: *amount,
+                direction: *direction,
+                order: *order,
+                segment_length: *segment_length,
+            },
+            current,
+            current,
+        )]),
+        EvaluatedEffect::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            mask_spacing,
+            seed,
+        } => EffectPassPlan::new(&[EffectPass::new(
+            EffectOperation::Crt {
+                amount: *amount,
+                curvature: *curvature,
+                scanline_strength: *scanline_strength,
+                scanline_spacing: *scanline_spacing,
+                mask_strength: *mask_strength,
+                grain: *grain,
+                jitter: *jitter,
+                flicker: *flicker,
+                rolling_strength: *rolling_strength,
+                rolling_width: *rolling_width,
+                phase: *phase,
+                mask_spacing: *mask_spacing,
+                seed: *seed,
+            },
+            current,
+            current,
+        )]),
+        EvaluatedEffect::Halftone {
+            cell_size,
+            angle_degrees,
+            softness,
+            amount,
+            mode,
+            foreground,
+            background,
+            invert,
+        } => EffectPassPlan::new(&[
+            EffectPass::new(
+                EffectOperation::HalftoneAnalyze {
+                    cell_size: *cell_size,
+                    angle_degrees: *angle_degrees,
+                    mode: *mode,
+                },
+                current,
+                EffectResource::Temporary0,
+            ),
+            EffectPass {
+                operation: EffectOperation::Halftone {
+                    cell_size: *cell_size,
+                    angle_degrees: *angle_degrees,
+                    softness: *softness,
+                    amount: *amount,
+                    mode: *mode,
+                    foreground: *foreground,
+                    background: *background,
+                    invert: *invert,
+                },
+                inputs: EffectPassInputs::OriginalAnd(EffectResource::Temporary0),
+                output: current,
+            },
+        ]),
         EvaluatedEffect::PaletteMap {
             palette,
             amount,
@@ -622,6 +795,21 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
         )]),
         EvaluatedEffect::CameraShake { .. } => EffectPassPlan::new(&[]),
     }
+}
+
+fn ascii_pass_plan(parameters: crate::ascii::AsciiParameters) -> EffectPassPlan {
+    EffectPassPlan::new(&[
+        EffectPass::new(
+            EffectOperation::AsciiAnalyze { parameters },
+            EffectResource::Current,
+            EffectResource::Temporary0,
+        ),
+        EffectPass {
+            operation: EffectOperation::AsciiResolve { parameters },
+            inputs: EffectPassInputs::OriginalAnd(EffectResource::Temporary0),
+            output: EffectResource::Current,
+        },
+    ])
 }
 
 #[cfg(test)]

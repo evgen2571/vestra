@@ -34,6 +34,10 @@ PUBLIC_NAMES = {
     "ParticleBurst", "ScalarRange", "ParticlePrimitive", "ParticleBlendMode", "ParticleLifetimeStyle",
     "ScalarLifetimeStop", "ColourLifetimeStop", "ParticleAudioReactive", "ambient_stars", "snow",
     "embers", "sparks", "radial_burst",
+    "HalftoneEffect", "PixelSortEffect", "CrtEffect", "HalftoneMode",
+    "PixelSortDirection", "PixelSortOrder", "AsciiEffect", "AsciiMode",
+    "AsciiColorMode", "AsciiGlyphStyle", "PaletteMapEffect", "OrderedDitherEffect",
+    "PaletteMode", "DitherMatrix",
 }
 
 

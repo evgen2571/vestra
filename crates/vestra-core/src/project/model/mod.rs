@@ -26,7 +26,10 @@ pub use audio::{
     AudioGainKeyframe, AudioTimeline, AudioTrack,
 };
 pub use colour::parse_colour;
-pub use effects::{DitherMatrix, Effect, PaletteMode, ZoomBlurDirection};
+pub use effects::{
+    AsciiColorMode, AsciiGlyphStyle, AsciiMode, DitherMatrix, Effect, HalftoneMode, PaletteMode,
+    PixelSortDirection, PixelSortOrder, ZoomBlurDirection,
+};
 pub use masks::{
     MASK_FEATHER_PASSES, MAX_MASK_FEATHER_PX, Mask, MaskCoverageMode, MaskInput, MaskOperation,
     apply_mask_operation, mask_coverage, mask_feather_box_half_width,

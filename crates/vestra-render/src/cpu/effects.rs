@@ -19,6 +19,7 @@ pub(super) fn apply_chain(
     effects: &[EvaluatedEffect],
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
+    atlases: &[std::sync::Arc<crate::ascii::PreparedGlyphAtlas>],
 ) {
     for effect in effects {
         let plan = effect_pass_plan(effect);
@@ -32,6 +33,7 @@ pub(super) fn apply_chain(
                 EvaluatedEffect::Glow { .. } | EvaluatedEffect::Bloom { .. }
             ),
             matches!(effect, EvaluatedEffect::Sharpen { .. }),
+            atlases,
         );
         if let Some(started) = started {
             let elapsed = started.elapsed();
@@ -62,6 +64,7 @@ fn execute_effect_pass_sequence(
     mut timings: Option<&mut CpuHotPathTimings>,
     profile_bloom_passes: bool,
     profile_sharpen_passes: bool,
+    atlases: &[std::sync::Arc<crate::ascii::PreparedGlyphAtlas>],
 ) {
     if passes.is_empty() {
         return;
@@ -80,7 +83,9 @@ fn execute_effect_pass_sequence(
             pass.inputs.primary(),
             pass.inputs.secondary(),
             pass.output,
-            |source, secondary, target| execute_effect_pass(source, secondary, target, pass),
+            |source, secondary, target| {
+                execute_effect_pass(source, secondary, target, pass, atlases)
+            },
         );
         if let Some(started) = started
             && let Some(timings) = timings.as_deref_mut()
@@ -142,8 +147,34 @@ fn execute_effect_pass(
     secondary: Option<&RgbaImage>,
     target: &mut RgbaImage,
     pass: &EffectPass,
+    atlases: &[std::sync::Arc<crate::ascii::PreparedGlyphAtlas>],
 ) {
     match pass.operation {
+        EffectOperation::AsciiAnalyze { parameters } => {
+            super::ascii::analyze(source, target, parameters)
+        }
+        EffectOperation::AsciiResolve { parameters } => super::ascii::resolve(
+            source,
+            secondary.expect("ASCII analysis"),
+            target,
+            &atlases[parameters.atlas],
+            parameters,
+        ),
+        EffectOperation::HalftoneAnalyze {
+            cell_size,
+            angle_degrees,
+            mode,
+        } => super::analog::analyze(source, target, cell_size, angle_degrees, mode),
+        EffectOperation::Halftone { .. } => super::analog::halftone(
+            source,
+            secondary.expect("halftone analysis"),
+            target,
+            pass.operation,
+        ),
+        EffectOperation::PixelSort { .. } => {
+            super::analog::pixel_sort(source, target, pass.operation)
+        }
+        EffectOperation::Crt { .. } => super::analog::crt(source, target, pass.operation),
         EffectOperation::PaletteMap {
             palette,
             amount,
@@ -303,6 +334,7 @@ pub(super) fn apply_to(
     effects: &[EvaluatedEffect],
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
+    atlases: &[std::sync::Arc<crate::ascii::PreparedGlyphAtlas>],
 ) {
     if effects
         .iter()
@@ -316,7 +348,7 @@ pub(super) fn apply_to(
         timings.surface_copy += started.elapsed();
     }
     let started = profiling_enabled.then(Instant::now);
-    apply_chain(surfaces, effects, timings, profiling_enabled);
+    apply_chain(surfaces, effects, timings, profiling_enabled, atlases);
     if let Some(started) = started {
         timings.global_post_effect += started.elapsed();
     }
@@ -742,7 +774,7 @@ mod tests {
         let mut surfaces = EffectSurfacePool::new(source.width(), source.height());
         surfaces.begin_from(source);
         let mut timings = CpuHotPathTimings::default();
-        apply_chain(&mut surfaces, &[effect], &mut timings, true);
+        apply_chain(&mut surfaces, &[effect], &mut timings, true, &[]);
         let mut output = RgbaImage::new(source.width(), source.height());
         surfaces.copy_to(&mut output);
         output
@@ -1033,7 +1065,7 @@ mod tests {
         let mut surfaces = EffectSurfacePool::new(1, 1);
         surfaces.begin_from(&source);
 
-        execute_effect_pass_sequence(&mut surfaces, &passes, None, false, false);
+        execute_effect_pass_sequence(&mut surfaces, &passes, None, false, false, &[]);
 
         assert_eq!(surfaces.current().get_pixel(0, 0), &Rgba([42, 17, 67, 255]));
         assert_eq!(surfaces.stats().reuses, 5);
@@ -1057,6 +1089,7 @@ mod tests {
             }],
             &mut CpuHotPathTimings::default(),
             true,
+            &[],
         );
 
         assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);

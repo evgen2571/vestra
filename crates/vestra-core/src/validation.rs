@@ -159,6 +159,14 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         &mut errors,
         has_authored_audio,
     );
+    for (index, effect) in project.visual.post_effects.iter().enumerate() {
+        effects::validate_assets(
+            effect,
+            &asset_kinds,
+            &format!("/visual/post_effects/{index}"),
+            &mut errors,
+        );
+    }
     let frame_rate = project.output.frame_rate.rational().unwrap_or((1, 1));
     let frame_count = match crate::timeline::frame_count(
         crate::timeline::seconds_to_nanos(visual_duration).unwrap_or(0),

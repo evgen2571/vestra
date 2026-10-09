@@ -310,6 +310,72 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
     let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
     let track = |value: &mut crate::project::Track<f64>| map_project_track(value, duration);
     match effect {
+        Effect::Ascii {
+            amount,
+            phase,
+            cell_width,
+            cell_height,
+            edge_threshold,
+            edge_strength,
+            source_mix,
+            ..
+        } => {
+            scalar(amount);
+            scalar(phase);
+            scalar(cell_width);
+            scalar(cell_height);
+            scalar(edge_threshold);
+            scalar(edge_strength);
+            scalar(source_mix);
+        }
+        Effect::Halftone {
+            cell_size,
+            angle_degrees,
+            softness,
+            amount,
+            ..
+        } => {
+            scalar(cell_size);
+            scalar(angle_degrees);
+            scalar(softness);
+            scalar(amount);
+        }
+        Effect::PixelSort {
+            lower_threshold,
+            upper_threshold,
+            amount,
+            ..
+        } => {
+            scalar(lower_threshold);
+            scalar(upper_threshold);
+            scalar(amount);
+        }
+        Effect::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            ..
+        } => {
+            scalar(amount);
+            scalar(curvature);
+            scalar(scanline_strength);
+            scalar(scanline_spacing);
+            scalar(mask_strength);
+            scalar(grain);
+            scalar(jitter);
+            scalar(flicker);
+            scalar(rolling_strength);
+            scalar(rolling_width);
+            scalar(phase);
+        }
         Effect::PaletteMap { amount, phase, .. } => {
             scalar(amount);
             scalar(phase);

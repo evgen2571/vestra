@@ -417,6 +417,7 @@ fn validate_with_depth(
                 ));
             }
             let effect_path = format!("{path}/effects/{effect_index}");
+            super::effects::validate_assets(effect, assets, &effect_path, errors);
             super::effects::validate_parameters(
                 effect,
                 clip.duration,

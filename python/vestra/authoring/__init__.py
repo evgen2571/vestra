@@ -24,7 +24,9 @@ from .effects import (
     ClipEffectCollection, ColorAdjustEffect, ContrastEffect, DirectionalBlurEffect,
     Effect, GenericEffect, GaussianBlurEffect, GlowEffect, MotionBlurEffect, PostEffectCollection,
     SaturationEffect, SharpenEffect, TintEffect, VignetteEffect, ZoomBlurDirection,
+    HalftoneEffect, PixelSortEffect, CrtEffect, HalftoneMode, PixelSortDirection, PixelSortOrder,
     ZoomBlurEffect, PaletteMapEffect, OrderedDitherEffect, PaletteMode, DitherMatrix,
+    AsciiEffect, AsciiMode, AsciiColorMode, AsciiGlyphStyle,
     available_effects, effect_definition,
 )
 from .flashes import Flash, FlashCollection
@@ -115,6 +117,8 @@ __all__ = [
     "VignetteEffect",
     "ZoomBlurDirection",
     "ZoomBlurEffect",
+    "HalftoneEffect", "PixelSortEffect", "CrtEffect", "HalftoneMode", "PixelSortDirection", "PixelSortOrder",
+    "AsciiEffect", "AsciiMode", "AsciiColorMode", "AsciiGlyphStyle",
     "PaletteMapEffect", "OrderedDitherEffect", "PaletteMode", "DitherMatrix",
     "available_effects",
     "effect_definition",

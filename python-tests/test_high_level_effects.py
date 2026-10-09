@@ -38,6 +38,10 @@ def _effect_values() -> dict[str, object]:
         "color_adjust": ColorAdjust(0, 1, 0.2, 0.8),
         "camera_shake": CameraShake(1, 1, 0.1, 1, 1, 0, 1),
         "motion_blur": MotionBlur(1, 180, 2, 2),
+        "ascii": vestra.Ascii(),
+        "halftone": vestra.Halftone(),
+        "pixel_sort": vestra.PixelSort(),
+        "crt": vestra.Crt(),
         "palette_map": vestra.PaletteMap(),
         "ordered_dither": vestra.OrderedDither(),
     }
@@ -47,7 +51,7 @@ def test_public_catalog_has_one_descriptor_for_each_native_effect() -> None:
     native = {str(item["id"]) for item in vestra.authoring.available_effects()}
     public = {str(item["id"]) for item in available_effects()}
     assert public == native
-    assert len(public) == 19
+    assert len(public) == 23
 
 
 def test_catalog_parameters_have_the_declared_public_property_kinds() -> None:

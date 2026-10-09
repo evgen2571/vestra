@@ -190,7 +190,7 @@ class LoweringContext:
             self._lower_transitions(layer.child.transitions, group_clip)
             _lower_presentation(layer, group_clip, include_transform=True)
             group_clip._set_masks(self._lower_masks(layer))
-            _lower_visual_effects(layer.effects, group_clip.effects)
+            _lower_visual_effects(layer.effects, group_clip.effects, self)
             self.layer_clips[layer] = group_clip
             return group_clip
 
@@ -230,7 +230,7 @@ class LoweringContext:
                 layer, clip, include_transform=capabilities.supports_direct_transform
             )
             clip._set_masks(self._lower_masks(layer))
-        _lower_visual_effects(layer.effects, clip.effects)
+        _lower_visual_effects(layer.effects, clip.effects, self)
         _lower_preset(layer, clip)
         self.layer_clips[layer] = clip
         return clip
@@ -381,7 +381,7 @@ class LoweringContext:
 
     def lower_post_effects(self, effects: EffectStack) -> None:
         """Lower root visual post-effects independently from the audio graph."""
-        _lower_visual_effects(effects, self.builder.post_effects)
+        _lower_visual_effects(effects, self.builder.post_effects, self)
 
 
 def _lower_audio_effects(source: AudioEffectStack, target: Any) -> None:
@@ -390,12 +390,19 @@ def _lower_audio_effects(source: AudioEffectStack, target: Any) -> None:
         target.add_effect(effect.type, **effect.parameters())
 
 
-def _lower_visual_effects(source: EffectStack, target: Any) -> None:
+def _lower_visual_effects(source: EffectStack, target: Any, context: LoweringContext) -> None:
     """Lower high-level effect descriptors into fresh native-owned tracks."""
     for effect in source.items:
-        native = target.add_effect(
-            effect.type, id=effect.id, **effect._native_parameters()
-        )
+        parameters = effect._native_parameters()
+        if effect.type == "ascii" and parameters.get("font") is not None:
+            path = cast(str, parameters["font"])
+            key = os.path.normpath(path)
+            font = context._font_asset_ids.get(key)
+            if font is None:
+                font = context.builder.add_font_asset(path)
+                context._font_asset_ids[key] = font
+            parameters["font"] = font
+        native = target.add_effect(effect.type, id=effect.id, **parameters)
         for name, property_value in effect._property_items():
             _lower_scalar_property(property_value, native.parameter_track(name))
         for name, property_value in effect._point_property_items():

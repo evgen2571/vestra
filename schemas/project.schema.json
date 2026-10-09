@@ -18,6 +18,270 @@
       ],
       "type": "object"
     },
+    "ascii_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "background": {
+          "$ref": "#/$defs/colour"
+        },
+        "cell_height": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 128.0,
+                  "minimum": 2.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 128.0,
+                        "minimum": 2.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "cell_width": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 64.0,
+                  "minimum": 2.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 64.0,
+                        "minimum": 2.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "characters": {
+          "maxLength": 256,
+          "minLength": 1,
+          "not": {
+            "pattern": "[\\u0000-\\u001F\\u007F-\\u009F]"
+          },
+          "type": "string"
+        },
+        "color_mode": {
+          "default": "monochrome",
+          "enum": [
+            "monochrome",
+            "source",
+            "palette",
+            "rainbow"
+          ]
+        },
+        "edge_characters": {
+          "maxLength": 4,
+          "minLength": 4,
+          "not": {
+            "pattern": "[\\u0000-\\u001F\\u007F-\\u009F]"
+          },
+          "type": "string"
+        },
+        "edge_strength": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 4.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 4.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "edge_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "font": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "foreground": {
+          "$ref": "#/$defs/colour"
+        },
+        "glyph_style": {
+          "default": "characters",
+          "enum": [
+            "characters",
+            "geometric"
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "invert": {
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "hybrid",
+          "enum": [
+            "fill",
+            "edges",
+            "hybrid"
+          ]
+        },
+        "palette": {
+          "items": {
+            "pattern": "^#[0-9A-Fa-f]{6}([fF]{2})?$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": "array"
+        },
+        "period": {
+          "exclusiveMinimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "source_mix": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "ascii"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount",
+        "phase",
+        "cell_width",
+        "cell_height",
+        "edge_threshold",
+        "edge_strength",
+        "source_mix",
+        "characters",
+        "edge_characters",
+        "foreground",
+        "background",
+        "palette",
+        "invert"
+      ],
+      "type": "object"
+    },
     "asset": {
       "additionalProperties": false,
       "properties": {
@@ -975,6 +1239,326 @@
       ],
       "type": "object"
     },
+    "crt_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "curvature": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 0.5,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 0.5,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "flicker": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 0.25,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 0.25,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "grain": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 0.25,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 0.25,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "jitter": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 8.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 8.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "mask_spacing": {
+          "maximum": 6,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mask_strength": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "period": {
+          "exclusiveMinimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "rolling_strength": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "rolling_width": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.01,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "scanline_spacing": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 8.0,
+                  "minimum": 1.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 8.0,
+                        "minimum": 1.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "scanline_strength": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "seed": {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "crt"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "amount",
+        "curvature",
+        "scanline_strength",
+        "scanline_spacing",
+        "mask_strength",
+        "grain",
+        "jitter",
+        "flicker",
+        "rolling_strength",
+        "rolling_width",
+        "phase",
+        "mask_spacing",
+        "seed"
+      ],
+      "type": "object"
+    },
     "directional_blur_effect": {
       "additionalProperties": false,
       "properties": {
@@ -1026,6 +1610,18 @@
     },
     "effect": {
       "oneOf": [
+        {
+          "$ref": "#/$defs/ascii_effect"
+        },
+        {
+          "$ref": "#/$defs/halftone_effect"
+        },
+        {
+          "$ref": "#/$defs/pixel_sort_effect"
+        },
+        {
+          "$ref": "#/$defs/crt_effect"
+        },
         {
           "$ref": "#/$defs/palette_map_effect"
         },
@@ -1302,6 +1898,131 @@
       "required": [
         "type",
         "clips"
+      ],
+      "type": "object"
+    },
+    "halftone_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "angle_degrees": {
+          "$ref": "#/$defs/scalar_property"
+        },
+        "background": {
+          "$ref": "#/$defs/colour"
+        },
+        "cell_size": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 64.0,
+                  "minimum": 2.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 64.0,
+                        "minimum": 2.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "foreground": {
+          "$ref": "#/$defs/colour"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "invert": {
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "luminance",
+          "enum": [
+            "luminance",
+            "source",
+            "rgb"
+          ]
+        },
+        "softness": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 2.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 2.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "type": {
+          "const": "halftone"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "cell_size",
+        "angle_degrees",
+        "softness",
+        "amount",
+        "foreground",
+        "background",
+        "invert"
       ],
       "type": "object"
     },
@@ -2397,6 +3118,127 @@
       },
       "required": [
         "type"
+      ],
+      "type": "object"
+    },
+    "pixel_sort_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "direction": {
+          "default": "horizontal",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "lower_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "order": {
+          "default": "ascending",
+          "enum": [
+            "ascending",
+            "descending"
+          ]
+        },
+        "segment_length": {
+          "maximum": 256,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "type": {
+          "const": "pixel_sort"
+        },
+        "upper_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/scalar_property"
+            },
+            {
+              "properties": {
+                "base_value": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "keyframes": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "lower_threshold",
+        "upper_threshold",
+        "amount",
+        "segment_length"
       ],
       "type": "object"
     },

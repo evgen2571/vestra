@@ -9,6 +9,7 @@
 extern crate self as vestra_core;
 
 pub mod animation;
+pub mod ascii;
 pub mod audio_effect_definition;
 pub mod deterministic;
 pub mod diagnostic;

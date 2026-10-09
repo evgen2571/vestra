@@ -1,0 +1,490 @@
+{
+  "assets": [],
+  "output": {
+    "audio": false,
+    "background": "#000000",
+    "duration": 4.0,
+    "duration_mode": "explicit",
+    "frame_rate": "30/1",
+    "height": 180,
+    "path": "../output/pixel-sort-horizontal.mp4",
+    "quality": "balanced",
+    "width": 320
+  },
+  "schema_version": 1,
+  "visual": {
+    "clips": [
+      {
+        "blend_mode": "normal",
+        "duration": 4.0,
+        "effects": [
+          {
+            "id": "effect-000001",
+            "amount": {
+              "base_value": 1,
+              "keyframes": []
+            },
+            "type": "pixel_sort",
+            "lower_threshold": {
+              "base_value": 0.15,
+              "keyframes": []
+            },
+            "upper_threshold": {
+              "base_value": 0.9,
+              "keyframes": []
+            },
+            "direction": "horizontal",
+            "order": "ascending",
+            "segment_length": 64
+          }
+        ],
+        "id": "layer-000001",
+        "layer": 0,
+        "masks": [],
+        "opacity": {
+          "base_value": 1.0,
+          "keyframes": []
+        },
+        "source": {
+          "clips": [
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000001",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#000000",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.0625,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000002",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#242424",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.1875,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000003",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#494949",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.3125,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000004",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#6d6d6d",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.4375,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000005",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#929292",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.5625,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000006",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#b6b6b6",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.6875,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000007",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#dbdbdb",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.8125,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            },
+            {
+              "blend_mode": "normal",
+              "duration": 4.0,
+              "effects": [],
+              "id": "layer-000001/layer-000008",
+              "layer": 0,
+              "masks": [],
+              "opacity": {
+                "base_value": 1.0,
+                "keyframes": []
+              },
+              "source": {
+                "fill": "#ffffff",
+                "geometry": {
+                  "height": 180.0,
+                  "type": "rectangle",
+                  "width": 40.0
+                },
+                "type": "shape"
+              },
+              "start": 0.0,
+              "transform": {
+                "anchor": {
+                  "base_value": {
+                    "x": 0.5,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "position": {
+                  "base_value": {
+                    "x": 0.9375,
+                    "y": 0.5
+                  },
+                  "keyframes": []
+                },
+                "rotation_degrees": {
+                  "base_value": 0.0,
+                  "keyframes": []
+                },
+                "scale": {
+                  "base_value": {
+                    "x": 1.0,
+                    "y": 1.0
+                  },
+                  "keyframes": []
+                }
+              },
+              "visible": true
+            }
+          ],
+          "transitions": [],
+          "type": "group"
+        },
+        "start": 0.0,
+        "transform": {
+          "anchor": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "keyframes": []
+          },
+          "position": {
+            "base_value": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "keyframes": []
+          },
+          "rotation_degrees": {
+            "base_value": 0.0,
+            "keyframes": []
+          },
+          "scale": {
+            "base_value": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "keyframes": []
+          }
+        },
+        "visible": true
+      }
+    ],
+    "flashes": [],
+    "post_effects": [],
+    "transitions": []
+  },
+  "name": "Ordered Dither"
+}

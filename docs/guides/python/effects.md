@@ -70,3 +70,61 @@ An explicit `period` loops procedural palette phase; the source clip and audio
 continue on their normal timelines. See the [effect reference](../../reference/effects.md)
 for exact ranges and the [palette example](../../../examples/python/high-level/13_palette_dither.py)
 for an asset-free recipe.
+
+Halftone, sorting and CRT can be attached to video layers, groups or the global
+stack. Numeric properties support the same keyframes and signals:
+
+```python
+from vestra.effects import Halftone, PixelSort, Crt
+from vestra.effects.recipes import analog_monitor
+
+print_effect = layer.effects.add(Halftone(mode="source", cell_size=6, softness=0.5))
+print_effect.amount.keyframe(0, 0)
+print_effect.amount.keyframe(1, 1)
+layer.effects.add(PixelSort(direction="vertical", segment_length=64, amount=0.4))
+project.post_effects.add(Crt(period=4, seed=7, jitter=0.2))
+
+# An optional reusable chain, with independently editable ordinary effects.
+for effect in analog_monitor(period=4):
+    project.post_effects.add(effect)
+```
+
+Halftone analyzes whole rotated cells with alpha-aware area means. Sorting uses
+bounded runs, stable equal-luminance ties and deliberate hard threshold changes.
+CRT grain and jitter evolve continuously, so evaluating frames out of order
+preserves their animation. A procedural CRT period does not loop footage/audio.
+Modes, colors and integer block sizes are discrete configuration choices;
+animate intensity to introduce a look smoothly. See the
+[synthetic looping showcase](../../../examples/showcase/stylized-effects/README.md)
+and the [effect reference](../../reference/effects.md) for parameter bounds.
+
+For cinematic ASCII, choose dark-to-light characters, output-pixel cell sizes
+and optional colors/source blending. The same effect works on images, footage,
+compositions and global output:
+
+```python
+from vestra.effects import Ascii, PseudoAscii, CHARACTER_SETS
+
+ascii_effect = layer.effects.add(Ascii(
+    CHARACTER_SETS["dense"], cell_width=8, cell_height=12,
+    mode="hybrid", color_mode="source", background="#00000000",
+    source_mix=.15,
+))
+ascii_effect.amount.keyframe(0, 0)
+ascii_effect.amount.keyframe(1, 1)
+project.post_effects.add(PseudoAscii(color_mode="rainbow", period=4))
+
+# Explicit portable font resource; no system-font fallback.
+layer.effects.add(Ascii(" .oO#", font="assets/MyFont.ttf", mode="fill"))
+```
+
+`font=None` uses the bundled licensed font. Custom font glyph coverage is
+validated during preparation; unsupported or invisible characters fail with a
+resource diagnostic. Each Unicode scalar is independent, so this effect does
+not shape ligatures or combining sequences. Use `background="#00000000"` to
+retain glyph-only alpha; `source_mix` blends footage detail in premultiplied
+space. Cell sizes, amount, source mix, edge controls and phase support the
+existing keyframe/audio-signal properties. Palette/rainbow periods repeat the
+effect's colors, while footage/audio must separately align for a looping video.
+See the [ASCII reference](../../reference/effects.md#cinematic-ascii-and-pseudo-ascii)
+for area filtering, anchoring, prepared glyph resources and discrete controls.

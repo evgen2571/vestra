@@ -156,6 +156,26 @@ fn validate_palette(
     }
 }
 
+pub(super) fn validate_assets(
+    effect: &crate::project::Effect,
+    assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if let crate::project::Effect::Ascii {
+        font: Some(font), ..
+    } = effect
+        && assets.get(font) != Some(&crate::project::AssetType::Font)
+    {
+        errors.push(Diagnostic::error(
+            "VESTRA-ASCII-FONT",
+            Category::Semantic,
+            format!("ASCII font '{font}' must refer to a Font asset"),
+            format!("{path}/font"),
+        ));
+    }
+}
+
 pub(super) fn validate_global(
     effects: &[crate::project::Effect],
     duration: f64,
@@ -233,6 +253,254 @@ pub(super) fn validate_parameters(
         );
     };
     match effect {
+        crate::project::Effect::Ascii {
+            characters,
+            edge_characters,
+            foreground,
+            background,
+            palette,
+            period,
+            amount,
+            phase,
+            cell_width,
+            cell_height,
+            edge_threshold,
+            edge_strength,
+            source_mix,
+            ..
+        } => {
+            validate_palette(palette, *period, path, errors);
+            if !(1..=256).contains(&characters.chars().count())
+                || characters
+                    .chars()
+                    .chain(edge_characters.chars())
+                    .any(char::is_control)
+                || edge_characters.chars().count() != 4
+            {
+                invalid_effect(
+                    errors,
+                    "VESTRA-ASCII-CHARACTERS",
+                    "ASCII requires 1–256 non-control fill characters and exactly four edge characters",
+                    path,
+                    "characters",
+                );
+            }
+            for (name, colour) in [("foreground", foreground), ("background", background)] {
+                if parse_colour(colour).is_none() {
+                    invalid_effect(
+                        errors,
+                        "VESTRA-ASCII-COLOUR",
+                        "ASCII colors must be valid RGBA colors",
+                        path,
+                        name,
+                    );
+                }
+            }
+            track(amount, "amount", ScalarPropertyTarget::AsciiAmount, errors);
+            track(phase, "phase", ScalarPropertyTarget::AsciiPhase, errors);
+            track(
+                cell_width,
+                "cell_width",
+                ScalarPropertyTarget::AsciiCellWidth,
+                errors,
+            );
+            track(
+                cell_height,
+                "cell_height",
+                ScalarPropertyTarget::AsciiCellHeight,
+                errors,
+            );
+            track(
+                edge_threshold,
+                "edge_threshold",
+                ScalarPropertyTarget::AsciiEdgeThreshold,
+                errors,
+            );
+            track(
+                edge_strength,
+                "edge_strength",
+                ScalarPropertyTarget::AsciiEdgeStrength,
+                errors,
+            );
+            track(
+                source_mix,
+                "source_mix",
+                ScalarPropertyTarget::AsciiSourceMix,
+                errors,
+            );
+        }
+        crate::project::Effect::Halftone {
+            cell_size,
+            angle_degrees,
+            softness,
+            amount,
+            foreground,
+            background,
+            ..
+        } => {
+            track(
+                cell_size,
+                "cell_size",
+                ScalarPropertyTarget::HalftoneCellSize,
+                errors,
+            );
+            track(
+                angle_degrees,
+                "angle_degrees",
+                ScalarPropertyTarget::HalftoneAngleDegrees,
+                errors,
+            );
+            track(
+                softness,
+                "softness",
+                ScalarPropertyTarget::HalftoneSoftness,
+                errors,
+            );
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::HalftoneAmount,
+                errors,
+            );
+            if !matches!(parse_colour(foreground), Some([_, _, _, 255])) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-HALFTONE-COLOUR",
+                    "halftone colors must be opaque",
+                    path,
+                    "foreground",
+                );
+            }
+            if !matches!(parse_colour(background), Some([_, _, _, 255])) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-HALFTONE-COLOUR",
+                    "halftone colors must be opaque",
+                    path,
+                    "background",
+                );
+            }
+        }
+        crate::project::Effect::PixelSort {
+            lower_threshold,
+            upper_threshold,
+            amount,
+            segment_length,
+            ..
+        } => {
+            track(
+                lower_threshold,
+                "lower_threshold",
+                ScalarPropertyTarget::PixelSortLowerThreshold,
+                errors,
+            );
+            track(
+                upper_threshold,
+                "upper_threshold",
+                ScalarPropertyTarget::PixelSortUpperThreshold,
+                errors,
+            );
+            track(
+                amount,
+                "amount",
+                ScalarPropertyTarget::PixelSortAmount,
+                errors,
+            );
+            if !(2..=256).contains(segment_length) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-STYLIZATION-LIMIT",
+                    "stylization integer exceeds its supported range",
+                    path,
+                    "segment_length",
+                );
+            }
+            if lower_threshold.track.base_value > upper_threshold.track.base_value {
+                invalid_effect(
+                    errors,
+                    "VESTRA-SORT-THRESHOLDS",
+                    "lower threshold must not exceed upper threshold",
+                    path,
+                    "lower_threshold",
+                );
+            }
+        }
+        crate::project::Effect::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            mask_spacing,
+            period,
+            ..
+        } => {
+            track(amount, "amount", ScalarPropertyTarget::CrtAmount, errors);
+            track(
+                curvature,
+                "curvature",
+                ScalarPropertyTarget::CrtCurvature,
+                errors,
+            );
+            track(
+                scanline_strength,
+                "scanline_strength",
+                ScalarPropertyTarget::CrtScanlineStrength,
+                errors,
+            );
+            track(
+                scanline_spacing,
+                "scanline_spacing",
+                ScalarPropertyTarget::CrtScanlineSpacing,
+                errors,
+            );
+            track(
+                mask_strength,
+                "mask_strength",
+                ScalarPropertyTarget::CrtMaskStrength,
+                errors,
+            );
+            track(grain, "grain", ScalarPropertyTarget::CrtGrain, errors);
+            track(jitter, "jitter", ScalarPropertyTarget::CrtJitter, errors);
+            track(flicker, "flicker", ScalarPropertyTarget::CrtFlicker, errors);
+            track(
+                rolling_strength,
+                "rolling_strength",
+                ScalarPropertyTarget::CrtRollingStrength,
+                errors,
+            );
+            track(
+                rolling_width,
+                "rolling_width",
+                ScalarPropertyTarget::CrtRollingWidth,
+                errors,
+            );
+            track(phase, "phase", ScalarPropertyTarget::CrtPhase, errors);
+            if !(1..=6).contains(mask_spacing) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-STYLIZATION-LIMIT",
+                    "stylization integer exceeds its supported range",
+                    path,
+                    "mask_spacing",
+                );
+            }
+            if period.is_some_and(|v| !positive(v)) {
+                invalid_effect(
+                    errors,
+                    "VESTRA-EFFECT-PERIOD",
+                    "period must be finite and positive",
+                    path,
+                    "period",
+                );
+            }
+        }
         crate::project::Effect::PaletteMap {
             palette,
             amount,
@@ -717,6 +985,75 @@ mod tests {
         let mut errors = Vec::new();
         validate_parameters(effect, 2.0, "/effect", 16, &mut errors, true);
         errors
+    }
+
+    #[test]
+    fn analog_contracts_reject_invalid_bounds_colours_and_thresholds() {
+        let halftone: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../examples/effects/halftone.json"))
+                .unwrap();
+        let sorting: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../examples/effects/pixel-sort-horizontal.json"
+        ))
+        .unwrap();
+        let crt: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../examples/effects/crt.json")).unwrap();
+        for project in [&halftone, &sorting, &crt] {
+            let effect: Effect =
+                serde_json::from_value(project["visual"]["clips"][0]["effects"][0].clone())
+                    .unwrap();
+            assert!(validation_errors(&effect).is_empty());
+        }
+        for (project, field, value, code) in [
+            (
+                &halftone,
+                "foreground",
+                serde_json::json!("#ffffff80"),
+                "VESTRA-HALFTONE-COLOUR",
+            ),
+            (
+                &halftone,
+                "cell_size",
+                serde_json::json!({"base_value":1.0}),
+                "VESTRA-TRACK-VALUE",
+            ),
+            (
+                &sorting,
+                "lower_threshold",
+                serde_json::json!({"base_value":1.0}),
+                "VESTRA-SORT-THRESHOLDS",
+            ),
+            (
+                &sorting,
+                "segment_length",
+                serde_json::json!(257),
+                "VESTRA-STYLIZATION-LIMIT",
+            ),
+            (
+                &crt,
+                "period",
+                serde_json::json!(0.0),
+                "VESTRA-EFFECT-PERIOD",
+            ),
+            (
+                &crt,
+                "mask_spacing",
+                serde_json::json!(0),
+                "VESTRA-STYLIZATION-LIMIT",
+            ),
+            (
+                &crt,
+                "grain",
+                serde_json::json!({"base_value":0.5}),
+                "VESTRA-TRACK-VALUE",
+            ),
+        ] {
+            let mut authored = project["visual"]["clips"][0]["effects"][0].clone();
+            authored[field] = value;
+            let effect: Effect = serde_json::from_value(authored).unwrap();
+            let errors = validation_errors(&effect);
+            assert!(errors.iter().any(|e| e.code == code), "{field}: {errors:?}");
+        }
     }
 
     #[test]

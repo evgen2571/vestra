@@ -131,7 +131,13 @@ pub(super) struct FrameBindGroups {
     mask_raster_source_layer: Option<wgpu::BindGroup>,
     surface_layers: Vec<(TextureSlot, wgpu::BindGroup)>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
-    effects: Vec<(TextureSlot, TextureSlot, TextureSlot, wgpu::BindGroup)>,
+    effects: Vec<(
+        TextureSlot,
+        TextureSlot,
+        TextureSlot,
+        Option<usize>,
+        wgpu::BindGroup,
+    )>,
     masks: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
     persistent_created: usize,
 }
@@ -313,19 +319,28 @@ impl FrameBindGroups {
                         if auxiliary == destination {
                             continue;
                         }
-                        effects.push((
-                            source,
-                            destination,
-                            auxiliary,
-                            effect_group(
-                                device,
-                                &pipelines.effect_bindings,
-                                &frame.working.get(source).view,
-                                &frame.working.get(auxiliary).view,
-                                &frame.working.get(destination).view,
-                                parameters,
-                            ),
-                        ));
+                        for atlas_index in
+                            std::iter::once(None).chain((0..sources.glyph_atlases.len()).map(Some))
+                        {
+                            let atlas = atlas_index.map_or(&sources.solid_texture.view, |index| {
+                                &sources.glyph_atlases[index].view
+                            });
+                            effects.push((
+                                source,
+                                destination,
+                                auxiliary,
+                                atlas_index,
+                                effect_group(
+                                    device,
+                                    &pipelines.effect_bindings,
+                                    &frame.working.get(source).view,
+                                    &frame.working.get(auxiliary).view,
+                                    &frame.working.get(destination).view,
+                                    parameters,
+                                    atlas,
+                                ),
+                            ));
+                        }
                     }
                 }
             }
@@ -475,16 +490,18 @@ impl FrameBindGroups {
         source: TextureSlot,
         destination: TextureSlot,
         auxiliary: Option<TextureSlot>,
+        atlas: Option<usize>,
     ) -> Result<&wgpu::BindGroup, Diagnostic> {
         let auxiliary = auxiliary.unwrap_or(source);
         self.effects
             .iter()
-            .find(|(cached_source, cached_destination, cached_auxiliary, _)| {
+            .find(|(cached_source, cached_destination, cached_auxiliary, cached_atlas, _)| {
                 *cached_source == source
                     && *cached_destination == destination
                     && *cached_auxiliary == auxiliary
+                    && *cached_atlas == atlas
             })
-            .map(|(_, _, _, group)| group)
+            .map(|(_, _, _, _, group)| group)
             .ok_or_else(|| {
                 Diagnostic::error(
                     "WGPU-BIND-GROUP",
@@ -907,6 +924,7 @@ pub(super) fn encode_and_submit(
                 destination,
                 auxiliary,
                 parameters_index,
+                pass,
                 ..
             } => {
                 if !supports_kernel(RenderBackendKind::Wgpu, *kernel) {
@@ -917,7 +935,21 @@ pub(super) fn encode_and_submit(
                         "",
                     ));
                 }
-                let group = bind_groups.effect(*source, *destination, *auxiliary)?;
+                let atlas = match pass.operation {
+                    vestra_core::plan::EffectOperation::AsciiAnalyze { parameters }
+                    | vestra_core::plan::EffectOperation::AsciiResolve { parameters } => {
+                        Some(parameters.atlas)
+                    }
+                    _ => None,
+                };
+                let group = bind_groups.effect(*source, *destination, *auxiliary, atlas)?;
+                let (dispatch_width, dispatch_height) = match pass.operation {
+                    vestra_core::plan::EffectOperation::AsciiAnalyze { parameters } => (
+                        width.div_ceil(parameters.cell_width),
+                        height.div_ceil(parameters.cell_height),
+                    ),
+                    _ => pixel_sort_dispatch_extent(&pass.operation, width, height),
+                };
                 let pipeline = pipelines.effect(*kernel).ok_or_else(|| {
                     Diagnostic::error(
                         "RENDER-UNSUPPORTED-KERNEL",
@@ -931,8 +963,8 @@ pub(super) fn encode_and_submit(
                     pipeline,
                     group,
                     parameters.offset(*parameters_index)?,
-                    width,
-                    height,
+                    dispatch_width,
+                    dispatch_height,
                 );
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
@@ -963,7 +995,7 @@ pub(super) fn encode_and_submit(
                 parameters_index,
                 ..
             } => {
-                let group = bind_groups.effect(*source, *destination, None)?;
+                let group = bind_groups.effect(*source, *destination, None, None)?;
                 dispatch(
                     &mut encoder,
                     &pipelines.mask_feather,
@@ -985,6 +1017,7 @@ pub(super) fn encode_and_submit(
                     *source,
                     TextureSlot::MaskCoverage,
                     Some(TextureSlot::Auxiliary),
+                    None,
                 )?;
                 dispatch(
                     &mut encoder,
@@ -1038,11 +1071,16 @@ fn effect_group<'a>(
     auxiliary: &'a wgpu::TextureView,
     output: &'a wgpu::TextureView,
     parameters: &'a wgpu::Buffer,
+    atlas: &'a wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("vestra effect operation"),
         layout,
         entries: &[
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(atlas),
+            },
             wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::TextureView(source),
@@ -1282,6 +1320,28 @@ fn resolve_particle_group(
             },
         ],
     })
+}
+
+fn pixel_sort_dispatch_extent(
+    operation: &vestra_core::plan::EffectOperation,
+    width: u32,
+    height: u32,
+) -> (u32, u32) {
+    if let vestra_core::plan::EffectOperation::PixelSort {
+        direction,
+        segment_length,
+        ..
+    } = operation
+    {
+        let (extent, lines) = if *direction == vestra_core::project::PixelSortDirection::Vertical {
+            (height, width)
+        } else {
+            (width, height)
+        };
+        (extent.div_ceil(u32::from(*segment_length)) * 8, lines * 8)
+    } else {
+        (width, height)
+    }
 }
 
 #[cfg(test)]

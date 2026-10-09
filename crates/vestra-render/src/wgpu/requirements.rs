@@ -54,6 +54,8 @@ pub(super) struct GpuRequirements {
     parameter_record_count: u32,
     parameter_buffer_bytes: u64,
     particle_buffer_bytes: u64,
+    dispatch_groups: u32,
+    sort_workgroup_bytes: u32,
     resource_estimates: ResourceEstimates,
 }
 
@@ -111,6 +113,12 @@ impl GpuRequirements {
                 let image = decoded.text(text).pixels.as_ref();
                 [image.width(), image.height()]
             }))
+            .chain(
+                decoded
+                    .glyph_atlases()
+                    .iter()
+                    .flat_map(|atlas| [atlas.levels[0].width(), atlas.levels[0].height()]),
+            )
             .chain(
                 plan.videos
                     .iter()
@@ -217,6 +225,11 @@ impl GpuRequirements {
                 .checked_add(image_bytes(image.width(), image.height())?)
                 .ok_or_else(|| resource_overflow("source texture total overflow"))?;
         }
+        for atlas in decoded.glyph_atlases() {
+            source_texture_bytes = source_texture_bytes
+                .checked_add(atlas.byte_len())
+                .ok_or_else(|| resource_overflow("glyph atlas texture total overflow"))?;
+        }
         // Validated media dimensions are carried into the compiled asset
         // table. Missing dimensions are only possible in renderer-internal
         // tests, where the canvas remains a conservative fallback.
@@ -245,6 +258,7 @@ impl GpuRequirements {
                 .checked_add(plan.shapes.len())
                 .and_then(|count| count.checked_add(plan.texts.len()))
                 .and_then(|count| count.checked_add(plan.video_slot_count()))
+                .and_then(|count| count.checked_add(decoded.glyph_atlases().len()))
                 .ok_or_else(|| resource_overflow("source texture count overflow"))?,
         )
         .map_err(|_| resource_overflow("source texture count overflow"))?;
@@ -310,6 +324,25 @@ impl GpuRequirements {
             parameter_record_count,
             parameter_buffer_bytes,
             particle_buffer_bytes: particles.instance_bytes.max(particles.upload_bytes),
+            dispatch_groups: if crate::kernel::required_effect_kernels(plan)
+                .iter()
+                .any(|k| k == crate::kernel::EffectKernel::PixelSort)
+            {
+                plan.canvas.width.max(plan.canvas.height)
+            } else {
+                plan.canvas
+                    .width
+                    .div_ceil(8)
+                    .max(plan.canvas.height.div_ceil(8))
+            },
+            sort_workgroup_bytes: if crate::kernel::required_effect_kernels(plan)
+                .iter()
+                .any(|k| k == crate::kernel::EffectKernel::PixelSort)
+            {
+                7168
+            } else {
+                0
+            },
             resource_estimates,
         })
     }
@@ -317,7 +350,7 @@ impl GpuRequirements {
     pub(super) fn validate(
         self,
         limits: &wgpu::Limits,
-        plan: &RenderPlan,
+        _plan: &RenderPlan,
     ) -> Result<(), Diagnostic> {
         if self.max_texture_dimension_2d > limits.max_texture_dimension_2d {
             return Err(limit_error(
@@ -360,8 +393,8 @@ impl GpuRequirements {
             ));
         }
         if limits.max_bind_groups < 1
-            || limits.max_bindings_per_bind_group < 4
-            || limits.max_sampled_textures_per_shader_stage < 2
+            || limits.max_bindings_per_bind_group < 5
+            || limits.max_sampled_textures_per_shader_stage < 3
             || limits.max_storage_textures_per_shader_stage < 1
             || limits.max_uniform_buffers_per_shader_stage < 1
             || limits.max_dynamic_uniform_buffers_per_pipeline_layout < 1
@@ -373,11 +406,11 @@ impl GpuRequirements {
                 "",
             ));
         }
-        if limits.max_compute_workgroup_size_x < 8
+        if limits.max_compute_workgroup_size_x < self.workgroup_width()
             || limits.max_compute_workgroup_size_y < 8
             || limits.max_compute_invocations_per_workgroup < 64
-            || plan.canvas.width.div_ceil(8) > limits.max_compute_workgroups_per_dimension
-            || plan.canvas.height.div_ceil(8) > limits.max_compute_workgroups_per_dimension
+            || self.dispatch_groups > limits.max_compute_workgroups_per_dimension
+            || self.sort_workgroup_bytes > limits.max_compute_workgroup_storage_size
         {
             return Err(Diagnostic::error(
                 "WGPU-DISPATCH-LIMIT",
@@ -405,8 +438,8 @@ impl GpuRequirements {
         Ok(wgpu::Limits {
             max_texture_dimension_2d: self.max_texture_dimension_2d,
             max_bind_groups: 1,
-            max_bindings_per_bind_group: 4,
-            max_sampled_textures_per_shader_stage: 2,
+            max_bindings_per_bind_group: 5,
+            max_sampled_textures_per_shader_stage: 3,
             max_storage_textures_per_shader_stage: 1,
             max_uniform_buffers_per_shader_stage: 1,
             max_dynamic_uniform_buffers_per_pipeline_layout: 1,
@@ -419,16 +452,17 @@ impl GpuRequirements {
                     .min(adapter_limits.max_buffer_size),
             ),
             max_compute_invocations_per_workgroup: 64,
-            max_compute_workgroup_size_x: 8,
+            max_compute_workgroup_size_x: self.workgroup_width(),
             max_compute_workgroup_size_y: 8,
             max_compute_workgroup_size_z: 1,
-            max_compute_workgroups_per_dimension: plan
-                .canvas
-                .width
-                .div_ceil(8)
-                .max(plan.canvas.height.div_ceil(8)),
+            max_compute_workgroups_per_dimension: self.dispatch_groups,
+            max_compute_workgroup_storage_size: self.sort_workgroup_bytes,
             ..wgpu::Limits::default()
         })
+    }
+
+    fn workgroup_width(self) -> u32 {
+        if self.sort_workgroup_bytes > 0 { 64 } else { 8 }
     }
 
     pub(super) fn parameter_buffer_bytes(self, alignment: u32) -> Result<u64, Diagnostic> {

@@ -178,6 +178,7 @@ pub fn compile(
         });
     compilation.effect_count_after_normalization =
         count_local_effects(&layers) + post_effects.len();
+    let glyph_atlases = finalize_glyph_atlases(&mut layers, &mut post_effects, &image_table.fonts)?;
     metrics::record(&mut compilation, &layers, &post_effects);
     let audio_mix = audio::compile(&validated)?;
     let scalar_signals = scalar_signal_interner.finish();
@@ -218,6 +219,7 @@ pub fn compile(
         shapes,
         texts,
         fonts: image_table.fonts,
+        glyph_atlases,
         layers,
         post_effects,
         post_effect_dependency,
@@ -376,6 +378,69 @@ pub(super) fn effective_matte_dependency(
     } else {
         TemporalDependency::Dynamic
     }
+}
+
+fn finalize_glyph_atlases(
+    layers: &mut [crate::plan::CompiledLayer],
+    post: &mut [crate::plan::TimedEffect],
+    fonts: &[crate::plan::FontAsset],
+) -> Result<Vec<crate::ascii::GlyphAtlasSpec>, Diagnostic> {
+    fn effects(
+        effects: &mut [crate::plan::TimedEffect],
+        specs: &mut Vec<crate::ascii::GlyphAtlasSpec>,
+        fonts: &[crate::plan::FontAsset],
+    ) -> Result<(), Diagnostic> {
+        for effect in effects {
+            if let crate::plan::CompiledEffect::Ascii {
+                glyphs, parameters, ..
+            } = &mut effect.effect
+            {
+                if let Some(id) = &glyphs.font
+                    && !fonts.iter().any(|font| &font.id == id)
+                {
+                    return Err(Diagnostic::error(
+                        "VESTRA-ASCII-FONT",
+                        Category::Semantic,
+                        format!("ASCII font asset '{id}' does not exist or is not a Font asset"),
+                        "",
+                    ));
+                }
+                parameters.atlas =
+                    specs
+                        .iter()
+                        .position(|spec| spec == glyphs)
+                        .unwrap_or_else(|| {
+                            specs.push(glyphs.clone());
+                            specs.len() - 1
+                        });
+            }
+        }
+        Ok(())
+    }
+    fn visit(
+        layers: &mut [crate::plan::CompiledLayer],
+        specs: &mut Vec<crate::ascii::GlyphAtlasSpec>,
+        fonts: &[crate::plan::FontAsset],
+    ) -> Result<(), Diagnostic> {
+        for layer in layers {
+            effects(&mut layer.effects, specs, fonts)?;
+            if let crate::plan::CompiledVisualSource::Group(group) = &mut layer.source {
+                visit(&mut std::sync::Arc::make_mut(group).layers, specs, fonts)?;
+            }
+            for mask in &mut layer.masks {
+                if let crate::plan::CompiledMaskInput::Source { source, .. } = &mut mask.input
+                    && let crate::plan::CompiledVisualSource::Group(group) = source.as_mut()
+                {
+                    visit(&mut std::sync::Arc::make_mut(group).layers, specs, fonts)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut specs = Vec::new();
+    visit(layers, &mut specs, fonts)?;
+    effects(post, &mut specs, fonts)?;
+    Ok(specs)
 }
 
 #[cfg(test)]

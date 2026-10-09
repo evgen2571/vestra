@@ -14,8 +14,44 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub enum EvaluatedEffect {
+    Ascii {
+        parameters: crate::ascii::AsciiParameters,
+    },
     ColourTransform {
         transform: ColourTransform,
+    },
+    Halftone {
+        cell_size: f64,
+        angle_degrees: f64,
+        softness: f64,
+        amount: f64,
+        mode: crate::project::HalftoneMode,
+        foreground: [u8; 4],
+        background: [u8; 4],
+        invert: bool,
+    },
+    PixelSort {
+        lower_threshold: f64,
+        upper_threshold: f64,
+        amount: f64,
+        direction: crate::project::PixelSortDirection,
+        order: crate::project::PixelSortOrder,
+        segment_length: u16,
+    },
+    Crt {
+        amount: f64,
+        curvature: f64,
+        scanline_strength: f64,
+        scanline_spacing: f64,
+        mask_strength: f64,
+        grain: f64,
+        jitter: f64,
+        flicker: f64,
+        rolling_strength: f64,
+        rolling_width: f64,
+        phase: f64,
+        mask_spacing: u8,
+        seed: u64,
     },
     PaletteMap {
         palette: crate::stylization::EvaluatedPalette,
@@ -125,6 +161,9 @@ impl EvaluatedEffect {
     #[must_use]
     pub fn is_identity(&self) -> bool {
         match self {
+            Self::Ascii { parameters } => {
+                effect_amount_is_identity(parameters.amount) || parameters.source_mix == 1.0
+            }
             Self::ColourTransform { transform } => *transform == ColourTransform::default(),
             Self::Brightness { amount } => *amount == 0.0,
             Self::Contrast { amount } | Self::Saturation { amount } => *amount == 1.0,
@@ -133,6 +172,9 @@ impl EvaluatedEffect {
             | Self::Tint { amount, .. }
             | Self::ChromaticAberration { amount, .. }
             | Self::Vignette { amount, .. } => effect_amount_is_identity(*amount),
+            Self::Halftone { amount, .. } => effect_amount_is_identity(*amount),
+            Self::PixelSort { amount, .. } => effect_amount_is_identity(*amount),
+            Self::Crt { amount, .. } => effect_amount_is_identity(*amount),
             Self::GaussianBlur { radius } => gaussian_radius_is_identity(*radius),
             Self::MotionTile {
                 output_width_percent,
@@ -182,6 +224,121 @@ pub fn evaluate(
     Ok(match effect {
         CompiledEffect::ColourTransform { transform } => EvaluatedEffect::ColourTransform {
             transform: *transform,
+        },
+        CompiledEffect::Ascii {
+            parameters,
+            period,
+            amount,
+            phase,
+            cell_width,
+            cell_height,
+            edge_threshold,
+            edge_strength,
+            source_mix,
+            ..
+        } => {
+            let mut parameters = *parameters;
+            parameters.amount = amount.evaluate(authored_time, project_time, context)?;
+            parameters.cell_width = cell_width
+                .evaluate(authored_time, project_time, context)?
+                .round() as u32;
+            parameters.cell_height = cell_height
+                .evaluate(authored_time, project_time, context)?
+                .round() as u32;
+            parameters.edge_threshold =
+                edge_threshold.evaluate(authored_time, project_time, context)?;
+            parameters.edge_strength =
+                edge_strength.evaluate(authored_time, project_time, context)?;
+            parameters.source_mix = source_mix.evaluate(authored_time, project_time, context)?;
+
+            let palette_mode = if parameters.color_mode == crate::project::AsciiColorMode::Rainbow {
+                crate::project::PaletteMode::Rainbow
+            } else {
+                crate::project::PaletteMode::Gradient
+            };
+            parameters.palette = crate::stylization::evaluate_palette(
+                &parameters.palette,
+                palette_mode,
+                phase.evaluate(authored_time, project_time, context)?,
+                *period,
+                authored_time,
+            );
+            EvaluatedEffect::Ascii { parameters }
+        }
+        CompiledEffect::Halftone {
+            cell_size,
+            angle_degrees,
+            softness,
+            amount,
+            mode,
+            foreground,
+            background,
+            invert,
+        } => EvaluatedEffect::Halftone {
+            cell_size: cell_size.evaluate(authored_time, project_time, context)?,
+            angle_degrees: angle_degrees
+                .evaluate(authored_time, project_time, context)?
+                .rem_euclid(360.0),
+            softness: softness.evaluate(authored_time, project_time, context)?,
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            mode: *mode,
+            foreground: *foreground,
+            background: *background,
+            invert: *invert,
+        },
+        CompiledEffect::PixelSort {
+            lower_threshold,
+            upper_threshold,
+            amount,
+            direction,
+            order,
+            segment_length,
+        } => EvaluatedEffect::PixelSort {
+            lower_threshold: lower_threshold.evaluate(authored_time, project_time, context)?,
+            upper_threshold: upper_threshold.evaluate(authored_time, project_time, context)?,
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            direction: *direction,
+            order: *order,
+            segment_length: *segment_length,
+        },
+        CompiledEffect::Crt {
+            amount,
+            curvature,
+            scanline_strength,
+            scanline_spacing,
+            mask_strength,
+            grain,
+            jitter,
+            flicker,
+            rolling_strength,
+            rolling_width,
+            phase,
+            mask_spacing,
+            period,
+            seed,
+        } => EvaluatedEffect::Crt {
+            amount: amount.evaluate(authored_time, project_time, context)?,
+            curvature: curvature.evaluate(authored_time, project_time, context)?,
+            scanline_strength: scanline_strength.evaluate(authored_time, project_time, context)?,
+            scanline_spacing: scanline_spacing.evaluate(authored_time, project_time, context)?,
+            mask_strength: mask_strength.evaluate(authored_time, project_time, context)?,
+            grain: grain.evaluate(authored_time, project_time, context)?,
+            jitter: jitter.evaluate(authored_time, project_time, context)?,
+            flicker: flicker.evaluate(authored_time, project_time, context)?,
+            rolling_strength: rolling_strength.evaluate(authored_time, project_time, context)?,
+            rolling_width: rolling_width.evaluate(authored_time, project_time, context)?,
+            phase: (phase
+                .evaluate(authored_time, project_time, context)?
+                .rem_euclid(1.0)
+                + if let Some(p) = period {
+                    (authored_time as f64 / 1e9).rem_euclid(*p) / p
+                } else {
+                    (authored_time as f64 / 1e9).rem_euclid(1.0)
+                })
+            .rem_euclid(1.0)
+                * std::f64::consts::TAU,
+            mask_spacing: *mask_spacing,
+            seed: *seed,
         },
         CompiledEffect::PaletteMap {
             palette,
@@ -433,6 +590,37 @@ mod tests {
             }],
             constraint,
         }
+    }
+
+    #[test]
+    fn crt_phase_is_finite_and_periodic_for_large_authored_values() {
+        let effect = CompiledEffect::Crt {
+            amount: CompiledScalarProperty::authored(Track::new(1.0)),
+            curvature: CompiledScalarProperty::authored(Track::new(0.08)),
+            scanline_strength: CompiledScalarProperty::authored(Track::new(0.2)),
+            scanline_spacing: CompiledScalarProperty::authored(Track::new(2.0)),
+            mask_strength: CompiledScalarProperty::authored(Track::new(0.15)),
+            grain: CompiledScalarProperty::authored(Track::new(0.025)),
+            jitter: CompiledScalarProperty::authored(Track::new(0.35)),
+            flicker: CompiledScalarProperty::authored(Track::new(0.025)),
+            rolling_strength: CompiledScalarProperty::authored(Track::new(0.06)),
+            rolling_width: CompiledScalarProperty::authored(Track::new(0.12)),
+            phase: CompiledScalarProperty::authored(Track::new(1e300)),
+            mask_spacing: 1,
+            period: Some(2.0),
+            seed: 0,
+        };
+        let signals = PreparedScalarSignals::empty();
+        let context = EvaluationContext::new(&signals);
+        let a = evaluate(&effect, 250_000_000, 250_000_000, &context).unwrap();
+        let b = evaluate(&effect, 2_250_000_000, 2_250_000_000, &context).unwrap();
+        let (EvaluatedEffect::Crt { phase: a, .. }, EvaluatedEffect::Crt { phase: b, .. }) = (a, b)
+        else {
+            panic!("CRT")
+        };
+        assert!(a.is_finite());
+        assert_eq!(a, b);
+        assert_eq!(a, std::f64::consts::TAU / 8.0);
     }
 
     #[test]

@@ -119,6 +119,7 @@ from .properties import (
 )
 from .signals import MasterAudioSignals, ScalarSignal
 from .effects import (
+    Halftone, PixelSort, Crt, HalftoneMode, PixelSortDirection, PixelSortOrder,
     ActiveInterval,
     Bloom,
     Brightness,
@@ -133,6 +134,7 @@ from .effects import (
     Glow,
     MotionBlur,
     MotionTile,
+    Ascii, PseudoAscii, AsciiMode, AsciiColorMode, AsciiGlyphStyle, CHARACTER_SETS,
     PaletteMap,
     OrderedDither,
     PaletteMode,
@@ -297,6 +299,8 @@ __all__ = [
     "MotionBlur",
     "MotionTile",
     "RadialBlur",
+    "Halftone", "PixelSort", "Crt", "HalftoneMode", "PixelSortDirection", "PixelSortOrder",
+    "Ascii", "PseudoAscii", "AsciiMode", "AsciiColorMode", "AsciiGlyphStyle", "CHARACTER_SETS",
     "PaletteMap",
     "OrderedDither",
     "PaletteMode",

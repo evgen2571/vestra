@@ -7,7 +7,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Iterable, Mapping, Self, TypeVar, cast
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, DitherMatrix, _palette
+from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, DitherMatrix, HalftoneMode, PixelSortDirection, PixelSortOrder, AsciiMode, AsciiColorMode, AsciiGlyphStyle, _palette
 from ..authoring.effects import available_effects as _native_effects
 from ..authoring.effects import effect_definition
 from ..authoring.values import Color, Point, color_to_canonical
@@ -185,6 +185,19 @@ class Effect:
         if kind in {"scalar_property", "plain_track"}:
             self._set_property(name, value)
             return
+        if kind == "string":
+            if not isinstance(value, str) or not value or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
+                raise ValueError(f"{name} must be a nonempty string without control characters")
+            if name == "characters" and not 1 <= len(value) <= 256 or name == "edge_characters" and len(value) != 4:
+                raise ValueError(f"{name} has an invalid character count")
+            self._values[name] = value
+            return
+        if kind == "font":
+            from os import fspath
+            self._values[name] = None if value is None else fspath(value)
+            if self._values[name] == "":
+                raise ValueError("font path must not be empty")
+            return
         if kind == "colour":
             self._values[name] = color_to_canonical(cast(Color | str, value))
             return
@@ -224,7 +237,7 @@ class Effect:
             self._values[name] = _enum(
                 value,
                 name,
-                PaletteMode if name == "mode" else DitherMatrix if name == "matrix" else ZoomBlurDirection,
+                AsciiGlyphStyle if name == "glyph_style" else AsciiColorMode if name == "color_mode" else AsciiMode if self.effect_type == "ascii" and name == "mode" else HalftoneMode if self.effect_type == "halftone" and name == "mode" else PixelSortOrder if self.effect_type == "pixel_sort" and name == "order" else PixelSortDirection if self.effect_type == "pixel_sort" and name == "direction" else PaletteMode if name == "mode" else DitherMatrix if name == "matrix" else ZoomBlurDirection,
                 tuple(cast(tuple[object, ...], parameter["enum_values"])),
             )
             return
@@ -333,7 +346,7 @@ class Effect:
                 )
             elif name == "palette":
                 data[name] = list(cast(tuple[str, ...], value))
-            elif name == "period" and value is None:
+            elif name in {"period", "font"} and value is None:
                 data.pop(name)
         return data
 

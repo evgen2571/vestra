@@ -9,6 +9,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Callable, Literal, Mapping, Self, TypeVar, cast
 
+from .assets import FontAsset
 from ._internal import _IdAllocator, _Owner, _number
 from .signals import ScalarSignal
 from .tracks import ModulatableScalarTrack, PointTrack, ScalarModifierTarget, ScalarTrack
@@ -47,10 +48,44 @@ class ZoomBlurDirection(Enum):
     CENTERED = "centered"
 
 
+class AsciiGlyphStyle(Enum):
+    CHARACTERS = "characters"
+    GEOMETRIC = "geometric"
+
+
+class AsciiMode(Enum):
+    FILL = "fill"
+    EDGES = "edges"
+    HYBRID = "hybrid"
+
+
+class AsciiColorMode(Enum):
+    MONOCHROME = "monochrome"
+    SOURCE = "source"
+    PALETTE = "palette"
+    RAINBOW = "rainbow"
+
+
 class PaletteMode(Enum):
     GRADIENT = "gradient"
     NEAREST = "nearest"
     RAINBOW = "rainbow"
+
+
+class HalftoneMode(Enum):
+    LUMINANCE = "luminance"
+    SOURCE = "source"
+    RGB = "rgb"
+
+
+class PixelSortDirection(Enum):
+    HORIZONTAL = "horizontal"
+    VERTICAL = "vertical"
+
+
+class PixelSortOrder(Enum):
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
 
 
 class DitherMatrix(Enum):
@@ -150,6 +185,19 @@ def _canonical_parameter(
             for keyframe in track.keyframes:
                 _validate_descriptor_value(parameter, keyframe.value)
         return track.to_canonical()
+    if kind == "string":
+        if not isinstance(value, str) or not value or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
+            raise ValueError(f"{name} must be a nonempty string without control characters")
+        if name == "characters" and not 1 <= len(value) <= 256 or name == "edge_characters" and len(value) != 4:
+            raise ValueError(f"{name} has an invalid character count")
+        return value
+    if kind == "font":
+        from .assets import FontAsset
+        if value is None:
+            return None
+        if not isinstance(value, FontAsset) or value._owner is not owner:
+            raise ValueError("font must be a FontAsset belonging to this builder")
+        return value.id
     if kind == "colour":
         return color_to_canonical(cast(Color | str, value))
     if kind == "palette":
@@ -218,7 +266,7 @@ def _build_registered_effect(
         )
         if parameter["kind"] == "active_interval":
             values.update(cast(Mapping[str, object], canonical))
-        elif parameter["kind"] == "period" and canonical is None:
+        elif parameter["kind"] in {"period", "font"} and canonical is None:
             continue
         else:
             values[name] = canonical
@@ -914,6 +962,244 @@ class MotionBlurEffect(Effect):
 EffectType = TypeVar("EffectType", bound=Effect)
 
 
+class HalftoneEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = "halftone"
+
+    @classmethod
+    def _create_stylized(cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object]) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(cls._effect_type, owner, scope, identifier, parameters, validate_descriptor_values=True)
+        values.pop("id")
+        values.pop("type")
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def cell_size(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("cell_size"))
+
+    @property
+    def angle_degrees(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("angle_degrees"))
+
+    @property
+    def softness(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("softness"))
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
+
+    @property
+    def mode(self) -> HalftoneMode:
+        return HalftoneMode(self._data["mode"])
+
+    @mode.setter
+    def mode(self, value: HalftoneMode | str) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "mode")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("mode", None)
+        else:
+            self._data["mode"] = canonical
+
+    @property
+    def foreground(self) -> str:
+        return cast(str, self._data["foreground"])
+
+    @foreground.setter
+    def foreground(self, value: Color | str) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "foreground")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("foreground", None)
+        else:
+            self._data["foreground"] = canonical
+
+    @property
+    def background(self) -> str:
+        return cast(str, self._data["background"])
+
+    @background.setter
+    def background(self, value: Color | str) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "background")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("background", None)
+        else:
+            self._data["background"] = canonical
+
+    @property
+    def invert(self) -> bool:
+        return cast(bool, self._data["invert"])
+
+    @invert.setter
+    def invert(self, value: bool) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "invert")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("invert", None)
+        else:
+            self._data["invert"] = canonical
+
+class PixelSortEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = "pixel_sort"
+
+    @classmethod
+    def _create_stylized(cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object]) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(cls._effect_type, owner, scope, identifier, parameters, validate_descriptor_values=True)
+        values.pop("id")
+        values.pop("type")
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def lower_threshold(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("lower_threshold"))
+
+    @property
+    def upper_threshold(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("upper_threshold"))
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
+
+    @property
+    def direction(self) -> PixelSortDirection:
+        return PixelSortDirection(self._data["direction"])
+
+    @direction.setter
+    def direction(self, value: PixelSortDirection | str) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "direction")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("direction", None)
+        else:
+            self._data["direction"] = canonical
+
+    @property
+    def order(self) -> PixelSortOrder:
+        return PixelSortOrder(self._data["order"])
+
+    @order.setter
+    def order(self, value: PixelSortOrder | str) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "order")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("order", None)
+        else:
+            self._data["order"] = canonical
+
+    @property
+    def segment_length(self) -> int:
+        return cast(int, self._data["segment_length"])
+
+    @segment_length.setter
+    def segment_length(self, value: int) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "segment_length")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("segment_length", None)
+        else:
+            self._data["segment_length"] = canonical
+
+class CrtEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = "crt"
+
+    @classmethod
+    def _create_stylized(cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object]) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(cls._effect_type, owner, scope, identifier, parameters, validate_descriptor_values=True)
+        values.pop("id")
+        values.pop("type")
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
+
+    @property
+    def curvature(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("curvature"))
+
+    @property
+    def scanline_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("scanline_strength"))
+
+    @property
+    def scanline_spacing(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("scanline_spacing"))
+
+    @property
+    def mask_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("mask_strength"))
+
+    @property
+    def grain(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("grain"))
+
+    @property
+    def jitter(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("jitter"))
+
+    @property
+    def flicker(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("flicker"))
+
+    @property
+    def rolling_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("rolling_strength"))
+
+    @property
+    def rolling_width(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("rolling_width"))
+
+    @property
+    def phase(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("phase"))
+
+    @property
+    def mask_spacing(self) -> int:
+        return cast(int, self._data["mask_spacing"])
+
+    @mask_spacing.setter
+    def mask_spacing(self, value: int) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "mask_spacing")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("mask_spacing", None)
+        else:
+            self._data["mask_spacing"] = canonical
+
+    @property
+    def period(self) -> float | None:
+        return cast(float | None, self._data.get("period"))
+
+    @period.setter
+    def period(self, value: int | float | None) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "period")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("period", None)
+        else:
+            self._data["period"] = canonical
+
+    @property
+    def seed(self) -> int:
+        return cast(int, self._data["seed"])
+
+    @seed.setter
+    def seed(self, value: int) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), "seed")
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if canonical is None:
+            self._data.pop("seed", None)
+        else:
+            self._data["seed"] = canonical
+
 class PaletteMapEffect(GenericEffect):
     """Palette coloring with builder-owned animatable amount and phase tracks."""
 
@@ -936,7 +1222,7 @@ class PaletteMapEffect(GenericEffect):
     def _set_parameter(self, name: str, value: object) -> None:
         parameter = _parameter_descriptor(effect_definition(self.kind), name)
         canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if parameter["kind"] == "period" and canonical is None:
+        if parameter["kind"] in {"period", "font"} and canonical is None:
             self._data.pop(name, None)
         else:
             self._data[name] = canonical
@@ -975,6 +1261,100 @@ class OrderedDitherEffect(PaletteMapEffect):
     def scale(self) -> int: return cast(int, self._data["scale"])
     @scale.setter
     def scale(self, value: int) -> None: self._set_parameter("scale", value)
+
+
+class AsciiEffect(PaletteMapEffect):
+    """Builder-owned ASCII controls and reusable prepared glyph resources."""
+    __slots__ = ()
+    _effect_type = "ascii"
+
+    @property
+    def cell_width(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("cell_width"))
+    @property
+    def cell_height(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("cell_height"))
+    @property
+    def edge_threshold(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("edge_threshold"))
+    @property
+    def edge_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("edge_strength"))
+    @property
+    def source_mix(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("source_mix"))
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
+    @property
+    def phase(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track("phase"))
+    @property
+    def characters(self) -> str:
+        return cast(str, self._data.get("characters"))
+    @characters.setter
+    def characters(self, value: str) -> None:
+        self._set_parameter("characters", value)
+    @property
+    def edge_characters(self) -> str:
+        return cast(str, self._data.get("edge_characters"))
+    @edge_characters.setter
+    def edge_characters(self, value: str) -> None:
+        self._set_parameter("edge_characters", value)
+    @property
+    def glyph_style(self) -> AsciiGlyphStyle:
+        return AsciiGlyphStyle(self._data["glyph_style"])
+    @glyph_style.setter
+    def glyph_style(self, value: AsciiGlyphStyle | str) -> None:
+        self._set_parameter("glyph_style", value)
+    @property
+    def mode(self) -> AsciiMode:
+        return AsciiMode(self._data["mode"])
+    @mode.setter
+    def mode(self, value: AsciiMode | str) -> None:
+        self._set_parameter("mode", value)
+    @property
+    def color_mode(self) -> AsciiColorMode:
+        return AsciiColorMode(self._data["color_mode"])
+    @color_mode.setter
+    def color_mode(self, value: AsciiColorMode | str) -> None:
+        self._set_parameter("color_mode", value)
+    @property
+    def foreground(self) -> str:
+        return cast(str, self._data.get("foreground"))
+    @foreground.setter
+    def foreground(self, value: Color | str) -> None:
+        self._set_parameter("foreground", value)
+    @property
+    def background(self) -> str:
+        return cast(str, self._data.get("background"))
+    @background.setter
+    def background(self, value: Color | str) -> None:
+        self._set_parameter("background", value)
+    @property
+    def palette(self) -> tuple[str, ...]:
+        return tuple(cast(list[str], self._data["palette"]))
+    @palette.setter
+    def palette(self, value: Sequence[Color | str]) -> None:
+        self._set_parameter("palette", value)
+    @property
+    def invert(self) -> bool:
+        return cast(bool, self._data.get("invert"))
+    @invert.setter
+    def invert(self, value: bool) -> None:
+        self._set_parameter("invert", value)
+    @property
+    def period(self) -> float | None:
+        return cast(float | None, self._data.get("period"))
+    @period.setter
+    def period(self, value: int | float | None) -> None:
+        self._set_parameter("period", value)
+    @property
+    def font(self) -> str | None:
+        return cast(str | None, self._data.get("font"))
+    @font.setter
+    def font(self, value: FontAsset | None) -> None:
+        self._set_parameter("font", value)
 
 
 class _EffectCollection:
@@ -1032,6 +1412,68 @@ class _EffectCollection:
     def add_vignette(self, *, amount: int | float, radius: int | float, softness: int | float, colour: Color | str, id: str | None = None) -> VignetteEffect: return self._append(VignetteEffect._create, id, amount, radius, softness, colour)
     def add_sharpen(self, *, amount: int | float, radius: int | float, id: str | None = None) -> SharpenEffect: return self._append(SharpenEffect._create, id, amount, radius)
     def add_color_adjust(self, *, exposure: int | float, gamma: int | float, black_point: int | float, white_point: int | float, id: str | None = None) -> ColorAdjustEffect: return self._append(ColorAdjustEffect._create, id, exposure, gamma, black_point, white_point)
+
+    def add_halftone(self, *,
+        cell_size: int | float | ScalarTrack = 6,
+        angle_degrees: int | float | ScalarTrack = 15,
+        softness: int | float | ScalarTrack = 0.5,
+        amount: int | float | ScalarTrack = 1,
+        mode: HalftoneMode | str = HalftoneMode.LUMINANCE,
+        foreground: Color | str = '#ffffff',
+        background: Color | str = '#000000',
+        invert: bool = False,
+        id: str | None = None,
+    ) -> HalftoneEffect:
+        return self._append(HalftoneEffect._create_stylized, id, {"cell_size": cell_size, "angle_degrees": angle_degrees, "softness": softness, "amount": amount, "mode": mode, "foreground": foreground, "background": background, "invert": invert})
+
+    def add_pixel_sort(self, *,
+        lower_threshold: int | float | ScalarTrack = 0.15,
+        upper_threshold: int | float | ScalarTrack = 0.9,
+        amount: int | float | ScalarTrack = 1,
+        direction: PixelSortDirection | str = PixelSortDirection.HORIZONTAL,
+        order: PixelSortOrder | str = PixelSortOrder.ASCENDING,
+        segment_length: int = 64,
+        id: str | None = None,
+    ) -> PixelSortEffect:
+        return self._append(PixelSortEffect._create_stylized, id, {"lower_threshold": lower_threshold, "upper_threshold": upper_threshold, "amount": amount, "direction": direction, "order": order, "segment_length": segment_length})
+
+    def add_crt(self, *,
+        amount: int | float | ScalarTrack = 1,
+        curvature: int | float | ScalarTrack = 0.08,
+        scanline_strength: int | float | ScalarTrack = 0.2,
+        scanline_spacing: int | float | ScalarTrack = 2,
+        mask_strength: int | float | ScalarTrack = 0.15,
+        grain: int | float | ScalarTrack = 0.025,
+        jitter: int | float | ScalarTrack = 0.35,
+        flicker: int | float | ScalarTrack = 0.025,
+        rolling_strength: int | float | ScalarTrack = 0.06,
+        rolling_width: int | float | ScalarTrack = 0.12,
+        phase: int | float | ScalarTrack = 0,
+        mask_spacing: int = 1,
+        period: int | float | None = None,
+        seed: int = 0,
+        id: str | None = None,
+    ) -> CrtEffect:
+        return self._append(CrtEffect._create_stylized, id, {"amount": amount, "curvature": curvature, "scanline_strength": scanline_strength, "scanline_spacing": scanline_spacing, "mask_strength": mask_strength, "grain": grain, "jitter": jitter, "flicker": flicker, "rolling_strength": rolling_strength, "rolling_width": rolling_width, "phase": phase, "mask_spacing": mask_spacing, "period": period, "seed": seed})
+
+    def add_ascii(self, *, characters: str = " .:-=+*#%@", edge_characters: str = "-|/\\",
+        font: FontAsset | None = None, glyph_style: AsciiGlyphStyle | str = AsciiGlyphStyle.CHARACTERS,
+        mode: AsciiMode | str = AsciiMode.HYBRID, color_mode: AsciiColorMode | str = AsciiColorMode.MONOCHROME,
+        foreground: Color | str = "#ffffff", background: Color | str = "#000000",
+        palette: Sequence[Color | str] = ("#000000", "#ffffff"), invert: bool = False,
+        cell_width: int | float | ScalarTrack = 8, cell_height: int | float | ScalarTrack = 12,
+        edge_threshold: int | float | ScalarTrack = .15, edge_strength: int | float | ScalarTrack = 1,
+        source_mix: int | float | ScalarTrack = 0, amount: int | float | ScalarTrack = 1,
+        phase: int | float | ScalarTrack = 0, period: int | float | None = None, id: str | None = None,
+    ) -> AsciiEffect:
+        return self._append(AsciiEffect._create_palette, id, {
+            "characters": characters, "edge_characters": edge_characters, "font": font,
+            "glyph_style": glyph_style, "mode": mode, "color_mode": color_mode,
+            "foreground": foreground, "background": background, "palette": palette, "invert": invert,
+            "cell_width": cell_width, "cell_height": cell_height, "edge_threshold": edge_threshold,
+            "edge_strength": edge_strength, "source_mix": source_mix, "amount": amount,
+            "phase": phase, "period": period,
+        })
 
     def add_palette_map(
         self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),

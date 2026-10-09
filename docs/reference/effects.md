@@ -197,7 +197,11 @@ ligatures, grapheme, bidirectional or contextual shaping. Missing/control or
 invisible non-space glyphs fail preparation with `VESTRA-ASCII-GLYPH` diagnostics.
 The fixed glyph tile must contain the rasterized glyph; a font/glyph outside
 that rasterization scope fails explicitly. Relative custom font paths resolve
-against the project's base directory. The bundled font's complete notice is
+against the project's base directory. High-level Python registers and shares
+font assets across clip/global effects, transition presentations and owned
+mask Group child effects. Canonical transition `font` fields use Font asset
+IDs; missing or wrong-kind assets report the effect's `/font` validation path.
+The bundled font's complete notice is
 in [DejaVuSans.txt](../../licenses/DejaVuSans.txt).
 
 Enums, glyph strings/font and palette cardinality are discrete configurations.

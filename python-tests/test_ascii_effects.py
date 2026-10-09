@@ -76,3 +76,52 @@ def test_ascii_missing_or_invisible_glyphs_fail_preparation(characters):
     project.root.add(Color("#ffffff"), duration=1).effects.add(Ascii(characters))
     with pytest.raises(Exception, match="glyph"):
         project.prepare(backend="cpu")
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_custom_ascii_transition_fonts_lower_to_shared_assets_and_prepare(nested):
+    from vestra import Image
+    from vestra.transitions import CustomTransition, TransitionLayer
+
+    root = Path(__file__).resolve().parents[1]
+    font = root / "tests/assets/VestraTest-Regular.ttf"
+    project = Project(size=(26, 20), fps=10, duration=5)
+    composition = project.root.group(start=0, duration=5).child if nested else project.root
+    first = composition.add(Image(root / "examples/assets/red.png"), start=0, duration=3)
+    second = composition.add(Image(root / "examples/assets/blue.png"), start=2, duration=3)
+    composition.transitions.add(first, second, CustomTransition(
+        outgoing=TransitionLayer(effects=[Ascii(" .#", font=font, cell_width=4, cell_height=6)]),
+        incoming=TransitionLayer(effects=[Ascii(" .#", font=font, cell_width=4, cell_height=6)]),
+    ), start=2, duration=1)
+    snapshot = project.snapshot().to_dict()
+    fonts = [asset for asset in snapshot["assets"] if asset["type"] == "font"]
+    assert len(fonts) == 1
+    visual = snapshot["visual"]["clips"][0]["source"] if nested else snapshot["visual"]
+    definition = visual["transitions"][0]["definition"]
+    assert definition["outgoing"]["effects"][0]["font"] == fonts[0]["id"]
+    assert definition["incoming"]["effects"][0]["font"] == fonts[0]["id"]
+    assert project.validate().is_valid
+    prepared = project.prepare(backend="cpu")
+    frame = prepared.render_frame_seconds(2.25).to_bytes()
+    prepared.render_frame_seconds(4.5)
+    assert prepared.render_frame_seconds(2.25).to_bytes() == frame
+
+
+def test_custom_ascii_font_in_owned_mask_group_is_registered_and_prepared():
+    from vestra.sources import Group, Rectangle
+
+    font = Path(__file__).resolve().parents[1] / "tests/assets/VestraTest-Regular.ttf"
+    project = Project(size=(26, 20), fps=10, duration=2)
+    layer = project.root.add(Color("#b0a090"), duration=2)
+    mask = Group()
+    child = mask.add(Rectangle(width=26, height=20, fill="#ffffff"), duration=2)
+    child.effects.add(Ascii(" .#", font=font, background="#00000000"))
+    layer.masks.add(mask)
+    snapshot = project.snapshot().to_dict()
+    fonts = [asset for asset in snapshot["assets"] if asset["type"] == "font"]
+    assert len(fonts) == 1
+    owned = snapshot["visual"]["clips"][0]["masks"][0]["input"]["source"]
+    assert owned["clips"][0]["effects"][0]["font"] == fonts[0]["id"]
+    assert project.validate().is_valid
+    prepared = project.prepare(backend="cpu")
+    assert len(prepared.render_frame_seconds(0.25).to_bytes()) == 26 * 20 * 4

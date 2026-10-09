@@ -136,4 +136,101 @@ mod tests {
         assert_eq!(plan.glyph_atlases.len(), 1);
         assert_eq!(plan.glyph_atlases[0].font.as_deref(), Some("custom"));
     }
+    #[test]
+    fn ascii_transition_fonts_validate_at_exact_paths_and_compile_in_all_scopes() {
+        use crate::plan::{CompileOptions, PlanCompileInput, compile};
+        use serde_json::json;
+        use std::{
+            collections::BTreeMap,
+            path::{Path, PathBuf},
+        };
+        for scope in ["root", "group", "mask"] {
+            for endpoint in ["outgoing", "incoming"] {
+                let mut value: serde_json::Value = serde_json::from_str(include_str!(
+                    "../../../examples/transitions/zoom-crossfade.json"
+                ))
+                .unwrap();
+                let ascii: serde_json::Value =
+                    serde_json::from_str(include_str!("../../../examples/effects/ascii.json"))
+                        .unwrap();
+                let mut effect = ascii["visual"]["clips"][0]["effects"][0].clone();
+                effect["font"] = json!("custom");
+                value["visual"]["transitions"][0]["definition"][endpoint]["effects"] =
+                    json!([effect]);
+                let nested = json!({"type":"group", "clips":value["visual"]["clips"], "transitions":value["visual"]["transitions"]});
+                let prefix = match scope {
+                    "group" => {
+                        value["visual"] = json!({"clips":[{"id":"parent", "source":nested, "start":0, "duration":5, "layer":0, "opacity":{"base_value":1}}]});
+                        "/visual/clips/0/source"
+                    }
+                    "mask" => {
+                        value["visual"] = json!({"clips":[{"id":"parent", "source":{"type":"solid_color","colour":"#ffffff"}, "start":0, "duration":5, "layer":0, "opacity":{"base_value":1}, "masks":[{"id":"coverage", "input":{"type":"source", "source":nested, "mode":"alpha"}}]}]});
+                        "/visual/clips/0/masks/0/input/source"
+                    }
+                    _ => "/visual",
+                };
+                let mut project: Project = serde_json::from_value(value).unwrap();
+                let expected =
+                    format!("{prefix}/transitions/0/definition/{endpoint}/effects/0/font");
+                let invalid = validate(&project, ResourceLimits::default());
+                assert!(
+                    invalid
+                        .diagnostics()
+                        .iter()
+                        .any(|d| d.code == "VESTRA-ASCII-FONT"
+                            && d.pointer.as_deref() == Some(&expected)),
+                    "{scope}/{endpoint}: {:?}",
+                    invalid.diagnostics()
+                );
+                project.assets.push(Asset {
+                    id: "custom".into(),
+                    kind: AssetType::Image,
+                    source: "custom.ttf".into(),
+                });
+                assert!(
+                    validate(&project, ResourceLimits::default())
+                        .diagnostics()
+                        .iter()
+                        .any(|d| d.code == "VESTRA-ASCII-FONT"
+                            && d.pointer.as_deref() == Some(&expected))
+                );
+                project.assets.last_mut().unwrap().kind = AssetType::Font;
+                let valid = validate(&project, ResourceLimits::default());
+                assert!(
+                    valid.is_valid(),
+                    "{scope}/{endpoint}: {:?}",
+                    valid.diagnostics()
+                );
+                let paths = project
+                    .assets
+                    .iter()
+                    .map(|asset| {
+                        (
+                            asset.id.clone(),
+                            PathBuf::from(format!("/resolved/{}", asset.id)),
+                        )
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                let durations = BTreeMap::new();
+                let plan = compile(
+                    PlanCompileInput::new(
+                        &project,
+                        ResourceLimits::default(),
+                        Path::new("/projects"),
+                        &paths,
+                        &durations,
+                        5.0,
+                        (30, 1),
+                        150,
+                        &[],
+                    ),
+                    CompileOptions::default(),
+                )
+                .expect("custom transition font compiles");
+                assert_eq!(plan.fonts.len(), 1);
+                assert_eq!(plan.glyph_atlases.len(), 1);
+                assert_eq!(plan.glyph_atlases[0].font.as_deref(), Some("custom"));
+            }
+        }
+    }
 }

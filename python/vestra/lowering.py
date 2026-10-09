@@ -268,12 +268,14 @@ class LoweringContext:
         for placement in transitions.items:
             outgoing = cast(TransitionCapableClip, self.layer_clips[placement.outgoing])
             incoming = cast(TransitionCapableClip, self.layer_clips[placement.incoming])
+            definition = placement.definition.to_canonical()
+            self._register_transition_effect_fonts(definition)
             collection.add_transition(
                 outgoing=outgoing,
                 incoming=incoming,
                 start=placement.start,
                 duration=placement.duration,
-                definition=placement.definition.to_canonical(),
+                definition=definition,
                 id=placement.id,
             )
 
@@ -315,8 +317,11 @@ class LoweringContext:
         elif isinstance(source, Text):
             value["font"] = self.font_asset(source).id
         elif isinstance(source, Group):
+            for transition in cast(list[dict[str, object]], value.get("transitions", [])):
+                self._register_transition_effect_fonts(cast(dict[str, object], transition["definition"]))
             clips = cast(list[dict[str, object]], value.get("clips", []))
             for child, clip in zip(source.children, clips):
+                self._register_canonical_effect_fonts(cast(list[dict[str, object]], clip.get("effects", [])))
                 child_value = cast(dict[str, object], clip["source"])
                 self._register_mask_source_assets(child.source, child_value)
                 for child_mask, child_mask_value in zip(
@@ -337,12 +342,25 @@ class LoweringContext:
         return asset
 
     def font_asset(self, source: Text) -> FontAsset:
-        key = os.path.normpath(source.font)
+        return self._font_path_asset(source.font)
+
+    def _font_path_asset(self, path: str) -> FontAsset:
+        key = os.path.normpath(path)
         asset = self._font_asset_ids.get(key)
         if asset is None:
-            asset = self.builder.add_font_asset(source.font)
+            asset = self.builder.add_font_asset(path)
             self._font_asset_ids[key] = asset
         return asset
+
+    def _register_canonical_effect_fonts(self, effects: list[dict[str, object]]) -> None:
+        for effect in effects:
+            if effect.get("type") == "ascii" and effect.get("font") is not None:
+                effect["font"] = self._font_path_asset(cast(str, effect["font"])).id
+
+    def _register_transition_effect_fonts(self, definition: dict[str, object]) -> None:
+        for endpoint in ("outgoing", "incoming"):
+            presentation = cast(dict[str, object], definition.get(endpoint, {}))
+            self._register_canonical_effect_fonts(cast(list[dict[str, object]], presentation.get("effects", [])))
 
     def audio_asset(self, path: str) -> AudioAsset:
         """Register each normalized audio path once for this snapshot."""
@@ -396,12 +414,7 @@ def _lower_visual_effects(source: EffectStack, target: Any, context: LoweringCon
         parameters = effect._native_parameters()
         if effect.type == "ascii" and parameters.get("font") is not None:
             path = cast(str, parameters["font"])
-            key = os.path.normpath(path)
-            font = context._font_asset_ids.get(key)
-            if font is None:
-                font = context.builder.add_font_asset(path)
-                context._font_asset_ids[key] = font
-            parameters["font"] = font
+            parameters["font"] = context._font_path_asset(path)
         native = target.add_effect(effect.type, id=effect.id, **parameters)
         for name, property_value in effect._property_items():
             _lower_scalar_property(property_value, native.parameter_track(name))

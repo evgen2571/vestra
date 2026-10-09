@@ -144,6 +144,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
     );
     transitions::validate(
         &project.visual,
+        &asset_kinds,
         limits_config.maximum_keyframes_per_track,
         limits_config.maximum_effects_per_clip,
         &mut errors,

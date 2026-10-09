@@ -419,6 +419,7 @@ pub enum CompiledEffect {
         seed: u64,
     },
     PaletteMap {
+        interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         mode: crate::project::PaletteMode,
@@ -428,6 +429,7 @@ pub enum CompiledEffect {
         period: Option<f64>,
     },
     OrderedDither {
+        interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         mode: crate::project::PaletteMode,

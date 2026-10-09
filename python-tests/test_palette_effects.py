@@ -429,3 +429,37 @@ def test_advanced_nonuniform_stops_match_generic_and_native_validation(factory, 
     typed.stops = None
     assert "stops" not in typed.to_canonical()
     assert builder.validate().is_valid
+
+
+@pytest.mark.parametrize("name", ["PaletteMap", "OrderedDither"])
+def test_oklab_interpolation_animates_palette_with_explicit_public_control(name):
+    project = vestra.Project(size=(4, 4), fps=2, duration=2)
+    layer = project.root.add(vestra.sources.Color("#000000"), duration=2)
+    effect = layer.effects.add(effect_class(name)(["#000000", "#ffffff"], phase=0.25, interpolation="oklab"))
+    assert effect.interpolation is effects.PaletteInterpolation.OKLAB
+    assert effect.to_canonical()["interpolation"] == "oklab"
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes([99, 99, 99, 255]) * 16
+    effect.interpolation = effects.PaletteInterpolation.RGB
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes([128, 128, 128, 255]) * 16
+    with pytest.raises(ValueError):
+        effect.interpolation = "hsv"
+
+
+def test_oklab_gradient_interpolation_has_distinct_literal_gray_response():
+    project = vestra.Project(size=(4, 4), fps=2, duration=1)
+    layer = project.root.add(vestra.sources.Color("#404040"), duration=1)
+    layer.effects.add(effects.PaletteMap(["#000000", "#ffffff", "#ff0000"], stops=(0, 128 / 255, 1), interpolation="oklab"))
+    assert project.render_frame(0, backend="cpu").to_bytes() == bytes([99, 99, 99, 255]) * 16
+
+
+@pytest.mark.parametrize("factory", ["add_palette_map", "add_ordered_dither"])
+def test_advanced_interpolation_control_is_editable_and_validates(factory):
+    builder = ProjectBuilder(width=4, height=4, frame_rate=vestra.FrameRate(2, 1), output_path="out.mp4", duration=1)
+    builder.add_solid_color_clip(colour="#808080", start=0, duration=1, layer=0)
+    effect = getattr(builder.post_effects, factory)(interpolation="oklab")
+    assert effect.interpolation.value == "oklab"
+    assert builder.validate().is_valid
+    effect.interpolation = "rgb"
+    assert effect.to_canonical()["interpolation"] == "rgb"
+    with pytest.raises(ValueError):
+        effect.interpolation = "hsv"

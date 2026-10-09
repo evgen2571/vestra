@@ -2582,6 +2582,13 @@
           "minLength": 1,
           "type": "string"
         },
+        "interpolation": {
+          "default": "rgb",
+          "enum": [
+            "rgb",
+            "oklab"
+          ]
+        },
         "levels": {
           "default": 4,
           "maximum": 256,
@@ -2790,6 +2797,13 @@
         "id": {
           "minLength": 1,
           "type": "string"
+        },
+        "interpolation": {
+          "default": "rgb",
+          "enum": [
+            "rgb",
+            "oklab"
+          ]
         },
         "levels": {
           "default": 4,

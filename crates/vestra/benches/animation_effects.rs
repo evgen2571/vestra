@@ -52,6 +52,7 @@ fn main() {
         scenario.as_str(),
         "stylization_baseline"
             | "palette_video"
+            | "oklab_palette_video"
             | "dither_video"
             | "blue_noise_video"
             | "rgb_dither_video"
@@ -110,6 +111,7 @@ fn main() {
             | "video_heavy"
             | "stylization_baseline"
             | "palette_video"
+            | "oklab_palette_video"
             | "dither_video"
             | "blue_noise_video"
             | "rgb_dither_video"
@@ -398,6 +400,7 @@ fn create_stylization_benchmark_project(
     let effect = match scenario {
         "stylization_baseline" => None,
         "palette_video"
+        | "oklab_palette_video"
         | "dither_video"
         | "blue_noise_video"
         | "rgb_dither_video"
@@ -407,10 +410,10 @@ fn create_stylization_benchmark_project(
         | "nonuniform_dither_video" => {
             let mut effect = json!({
                 "id": "stylization",
-                "type": if scenario == "palette_video" { "palette_map" } else { "ordered_dither" },
+                "type": if matches!(scenario, "palette_video" | "oklab_palette_video") { "palette_map" } else { "ordered_dither" },
                 "palette": palette,
                 "mode": match scenario {
-                    "palette_video" => "gradient",
+                    "palette_video" | "oklab_palette_video" => "gradient",
                     "rgb_dither_video" => "nearest_rgb",
                     "hue_dither_video" => "nearest_hue",
                     "channel_dither_video" => "rgb_channels",
@@ -419,7 +422,7 @@ fn create_stylization_benchmark_project(
                 },
                 "amount": {"base_value": 1}, "phase": {"base_value": 0}, "period": 3
             });
-            if scenario != "palette_video" {
+            if !matches!(scenario, "palette_video" | "oklab_palette_video") {
                 effect["strength"] = json!({"base_value": 1});
                 effect["matrix"] = json!(if matches!(
                     scenario,
@@ -446,6 +449,9 @@ fn create_stylization_benchmark_project(
                     effect["seed"] = json!(37);
                 }
                 effect["scale"] = json!(1);
+            }
+            if scenario == "oklab_palette_video" {
+                effect["interpolation"] = json!("oklab");
             }
             if scenario == "nonuniform_dither_video" {
                 effect["stops"] = json!([0.0, 0.18, 0.55, 1.0]);

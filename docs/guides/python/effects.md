@@ -172,3 +172,17 @@ control. Positions are static, one per color, strictly increasing with endpoints
 zero and one, and distinct after rounding to `1/65280`. Native project validation
 checks palette cardinality and restricts stops to `gradient`/`nearest` modes.
 Phase remains bindable and animates colors through those fixed positions.
+
+Palette interpolation is independently selectable:
+
+```python
+from vestra.effects import PaletteMap, PaletteInterpolation
+
+look = PaletteMap(("#ff0000", "#0000ff", "#ffffff"), interpolation="oklab")
+look.interpolation = PaletteInterpolation.RGB
+```
+
+`OrderedDither` and advanced `add_palette_map`/`add_ordered_dither` expose the same
+static control. RGB is the compatible default; Oklab affects gradient mapping and
+animated authored palette colors. Dither output remains discrete palette colors.
+Amounts and phase continue to support keyframes and signal binding.

@@ -480,12 +480,12 @@ change the behavior of projects authored against the existing defaults.
   - [x] Luminance, RGB nearest-palette and integer hue-aware matching.
   - [x] Independent RGB channel-count quantization, 2–256 levels per channel.
   - [x] Perceptual nearest-palette matching.
-- [ ] Support **nonuniform tonal palette stops** and controllable palette
+- [x] Support **nonuniform tonal palette stops** and controllable palette
   interpolation in an appropriate color space (e.g. RGB and OKLab); preserve
   stops/order under animation and document chromatic vs luminance modes.
   - [x] Static nonuniform positions for tonal gradient/nearest mapping and dithering,
     preserved through phase animation; legacy uniform output retained.
-  - [ ] Controllable interpolation space.
+  - [x] Controllable encoded RGB/Oklab interpolation space.
   Permit carefully bounded deterministic palette generation only if useful.
 - [ ] Add **tone response and detail controls** that operate on the signal
   *entering quantization*: gamma/curves or shadow-mid-highlight shaping,
@@ -1171,3 +1171,94 @@ measurements before closing acceptance and moving this plan.
   tonal-stop benchmark scenarios build in release mode, but their timing runs
   have not been executed. Full final verification and remaining milestone work
   are still outstanding.
+
+### Resumed measurement acceptance — 2026-10-09
+
+- Resumed after commit `779f149`. Completed the previously pending
+  `tonal-stops-1080p` suite on CPU and confirmed NVIDIA hardware GL, sequentially
+  with no other render/test workload running during capture. Each scenario has
+  one warmup and three samples, 90 frames at 1920×1080/30fps with FFV1 output.
+- End-to-end wall medians/ranges (milliseconds): CPU uniform blue noise
+  **5213 (4858–5229)**, nonuniform **4866 (4698–5048)**; hardware GL uniform
+  **3271 (3053–3373)**, nonuniform **3154 (3100–3320)**. Ranges overlap, so these
+  measurements do not establish a speed difference. Changed output colors can
+  affect encoding cost; this is not an isolated shader-pass benchmark.
+- Reports are `target/benchmark-results/tonal-stops-{cpu,hardware}-20261009/suite.json`.
+  Both captured clean revision `779f149fd87edab50b22d598f3a60332be077727`, source
+  SHA256 `45c8f1b33e112a5bf693d03d25cb9a05396ec4e2137a9f4cac39e5ff02b6995e`.
+  Release executable SHA256: CPU
+  `50890b27aec3a5e43bd40876954f888c78121b6fdbe65e91464c031085529336`, hardware
+  `f1883cb813fb3c50e7a4e744ed14d8d4e9bcf4a87a387ea07cbdae2087948b73`.
+  All hardware samples selected `wgpu`, GL, DiscreteGpu, adapter
+  `D3D12 (NVIDIA GeForce GTX 1650 SUPER)`; no software performance claim.
+- Next implementation remains interpolation spaces, followed by signal tone/detail
+  controls and independent analysis resolution. Milestones 5–7 remain incomplete.
+- Re-ran the previously unfinished final uniform-threshold diagnostic in isolation
+  on hardware GL with `--test-threads=1 --nocapture`: **1 passed**, all six stages
+  have zero RGBA channel differences, including fractional mapping/dithering and
+  their chain. This proves that diagnostic independently; the earlier interrupted
+  broad run still lacks a complete suite result and remains unverified as a run.
+
+
+### RGB/Oklab palette interpolation increment — 2026-10-09
+
+- Added `PaletteInterpolation::{Rgb,Oklab}`, canonical `interpolation` strings
+  `rgb`/`oklab`, matching Python enums/properties and advanced convenience methods.
+  The static control applies to PaletteMap gradient segments and authored palette
+  color motion for both effects. RGB remains the default and retains original phase
+  arithmetic. Nearest modes only use it for palette motion; dither remains discrete.
+  Rainbow keeps generated HSV phase behavior but supports Oklab gradient segments;
+  channel quantization ignores palette/interpolation as documented.
+- Shared forward integer Oklab features are prepared once per evaluated gradient
+  palette. Weighted biased Q10 coordinates round half up; inverse coefficients
+  use Q15 Lab-to-LMS-root and Q12 LMS-to-linear-RGB matrices generated from the
+  original Oklab coefficients. Signed rounds are half away from zero. Cubed roots
+  produce Q16 LMS, linear RGB is clipped channel by channel, and encoding selects
+  the nearest shared sRGB-table entry with upward ties. Generator assertions prove
+  the inverse RGB sums fit signed 32-bit arithmetic at the conservative root bound.
+  Exact endpoints and identical neighbor colors return authored bytes directly.
+  This explicitly uses gamut clipping, not chroma-preserving gamut compression.
+- Renderer controls reuse a padding word and the existing 16 packed feature entries.
+  The parameter data remains 240 bytes in the existing 256-byte record; no extra
+  pass, texture, binding, per-pixel allocation or readback. ASCII's palette evaluation
+  explicitly retains RGB interpolation. Phase fractions for Oklab round to 1/65280.
+- Actual GL/NVIDIA and Vulkan/llvmpipe tests passed independently with exact RGBA
+  parity for uniform/nonuniform red-blue-white ramps and ember map/Bayer/blue-noise
+  animation at times 0, .777s, 2s and 0. Explicit hardware 1080p/4K gradient validation
+  also passed both sizes exactly, with persistent resources under 512MiB at 4K.
+- Core checks: 324 passed/1 ignored. Independent black-to-white Oklab lightness
+  formula agrees within one encoded byte across all 256 sample fractions; red-blue
+  midpoint has a visible green component absent from RGB interpolation. Duplicate
+  colors, authored endpoints and partial/hidden alpha are covered. CPU stylization
+  checks: 7 passed. Legacy literal RGB ramp and six-stage threshold diagnostics pass
+  after the shader change. Public API/typing checks after native rebuild: 179 passed.
+  Workspace all-target/all-feature Clippy, schema and style checks passed; Clippy
+  and style were refreshed successfully after the final alpha/4K fixtures.
+- Inspected `target/stylization/oklab-interpolation-ramp-contact.png` and
+  `target/stylization/palette-interpolation-video-contact.png`. New public example
+  `target/stylized-showcase/smoke/dither-blue-noise-ember-nonuniform-oklab-cpu.mp4`
+  uses `--stops 0 0.18 0.55 1 --interpolation oklab`; warm palette differences are
+  subtle, while the red-blue ramp and grayscale lightness cases are distinctly
+  different. Full temporal playback acceptance remains a Milestone 7 item.
+- New `palette-interpolation-{smoke,1080p}` benchmark suites compare RGB/Oklab
+  gradient mapping on the existing animated four-color video. Full 1080p capture
+  completed on CPU and confirmed hardware GL; measured results follow.
+- Milestones 5–7 remain incomplete. Next: entering-signal tone/detail controls and
+  independent analysis resolution, followed by all-family customization and final
+  visual/temporal/performance acceptance. No full verification gate is claimed here.
+
+- Interpolation performance capture: one warmup/three samples, 90 frames at
+  1920×1080/30fps, sequential CPU/hardware runs with frozen source inputs.
+  CPU RGB **4671ms (4650–4742)** versus Oklab **6871ms (6790–6899)**:
+  Oklab is approximately **47% slower end to end** on CPU and remains opt-in.
+  Hardware GL RGB **3057ms (3007–3135)** versus Oklab **2948ms (2936–3151)**;
+  ranges overlap and no GPU speed difference is established. These measurements
+  include decoding/encoding; changed color output can change encoding work.
+- Reports: `target/benchmark-results/palette-interpolation-{cpu,hardware}-20261009/suite.json`.
+  Source SHA256 `7daa69089fc19752ba5962ec15cb5f6f4cec9fb987c6cbf4066351f7db8c1015`
+  matches both captures and the final implementation inputs. Release executable
+  SHA256 CPU `cc86939d55e0f1b04fbecef2f83d5f5ec434b98246bde6db99d684ad475f5126`,
+  hardware `16c9e184b0fe00bda603172944f4d59e027d5130f2382ccc6028edb55a689d46`.
+  Verified every sample's workload and backend; hardware selected NVIDIA GL
+  DiscreteGpu throughout. 4K resource estimates remain 298,601,472 persistent
+  and 398,134,272 staging bytes, excluding driver metadata/padding.

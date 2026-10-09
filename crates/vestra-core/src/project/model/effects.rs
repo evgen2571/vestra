@@ -101,6 +101,8 @@ pub enum Effect {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stops: Option<Vec<f64>>,
         #[serde(default)]
+        interpolation: PaletteInterpolation,
+        #[serde(default)]
         mode: PaletteMode,
         #[serde(default = "default_channel_levels")]
         levels: u16,
@@ -114,6 +116,8 @@ pub enum Effect {
         palette: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stops: Option<Vec<f64>>,
+        #[serde(default)]
+        interpolation: PaletteInterpolation,
         #[serde(default = "default_dither_palette_mode")]
         mode: PaletteMode,
         #[serde(default = "default_channel_levels")]
@@ -372,6 +376,15 @@ pub enum PaletteMode {
     NearestHue,
     RgbChannels,
     NearestOklab,
+}
+
+/// Color space used for gradient mapping and cyclic authored palette motion.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaletteInterpolation {
+    #[default]
+    Rgb,
+    Oklab,
 }
 
 /// Deterministic, screen-anchored ordered-dither matrix.

@@ -27,8 +27,8 @@ pub use audio::{
 };
 pub use colour::parse_colour;
 pub use effects::{
-    AsciiColorMode, AsciiGlyphStyle, AsciiMode, DitherMatrix, Effect, HalftoneMode, PaletteMode,
-    PixelSortDirection, PixelSortOrder, ZoomBlurDirection,
+    AsciiColorMode, AsciiGlyphStyle, AsciiMode, DitherMatrix, Effect, HalftoneMode,
+    PaletteInterpolation, PaletteMode, PixelSortDirection, PixelSortOrder, ZoomBlurDirection,
 };
 pub use masks::{
     MASK_FEATHER_PASSES, MAX_MASK_FEATHER_PX, Mask, MaskCoverageMode, MaskInput, MaskOperation,

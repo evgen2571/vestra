@@ -103,6 +103,7 @@ def build_project(
     mode: str = "nearest",
     levels: int = 4,
     stops: tuple[float, ...] | None = None,
+    interpolation: str = "rgb",
 ) -> Project:
     project = Project(size=size, fps=fps, duration=2 * PERIOD, base_directory=directory)
     for start in (0, PERIOD):
@@ -132,13 +133,16 @@ def build_project(
         elif look == "crt":
             effect = Crt(period=PERIOD, seed=37)
         elif look == "palette":
-            effect = PaletteMap(mode="rainbow", period=PERIOD)
+            effect = PaletteMap(
+                mode="rainbow", period=PERIOD, interpolation=interpolation
+            )
         elif look in {"dither", "dither-blue-noise"}:
             effect = OrderedDither(
                 palette,
                 mode=mode,
                 levels=levels,
                 stops=stops,
+                interpolation=interpolation,
                 matrix="blue_noise" if look == "dither-blue-noise" else "bayer8",
                 seed=37,
                 scale=1,
@@ -181,6 +185,7 @@ def main() -> None:
         default="nearest",
     )
     parser.add_argument("--levels", type=int, default=4)
+    parser.add_argument("--interpolation", choices=("rgb", "oklab"), default="rgb")
     parser.add_argument(
         "--stops",
         type=float,
@@ -201,6 +206,7 @@ def main() -> None:
         mode=args.mode,
         levels=args.levels,
         stops=None if args.stops is None else tuple(args.stops),
+        interpolation=args.interpolation,
     )
     name = args.look if args.palette == "ocean" else f"{args.look}-{args.palette}"
     if args.look in {"dither", "dither-blue-noise"} and args.mode != "nearest":
@@ -209,6 +215,8 @@ def main() -> None:
         name += f"-{args.levels}"
     if args.stops is not None:
         name += "-nonuniform"
+    if args.interpolation != "rgb":
+        name += f"-{args.interpolation}"
     project.snapshot().save(directory / f"{name}.json")
     output = args.output or directory / f"{name}-{args.backend}.mp4"
     project.render(str(output), backend=args.backend, overwrite=True)

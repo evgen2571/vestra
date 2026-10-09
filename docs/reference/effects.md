@@ -82,7 +82,30 @@ the nearest choice's probability using strength rounded to `1/4096`, and rounds
 again. It chooses the upper color when the existing threshold is at least
 `1-probability`. Thus zero strength gives nearest mapping and full strength
 preserves the local tonal fraction spatially. Endpoints retain authored bytes;
-source alpha remains unchanged. Interpolation is currently encoded RGB.
+source alpha remains unchanged.
+
+`PaletteInterpolation.RGB` (`interpolation="rgb"`, the default) retains encoded
+RGB interpolation and the original phase arithmetic. `PaletteInterpolation.OKLAB`
+(`"oklab"`) interpolates in the same deterministic Q10 Oklab space used for
+perceptual matching. It applies to Palette Map's gradient segments (uniform or
+custom stops) and to authored palette color motion in both effects. Dither still
+selects discrete evaluated palette colors; nearest modes use interpolation only
+for palette motion. Rainbow retains its generated HSV phase behavior, while
+Palette Map can interpolate its generated segments in Oklab. Channel quantization
+ignores interpolation along with palette/phase.
+
+Oklab interpolation rounds weighted biased Q10 coordinates half up. The inverse
+Lab-to-LMS-root matrix uses Q15 coefficients; signed matrix rounding is half away
+from zero. Roots use a conservative signed `±1100/1024` arithmetic bound, then
+cube to Q16 LMS with the same signed rounding. The inverse linear RGB matrix uses
+Q12 coefficients with normalized row sums. Linear RGB channels are clipped to
+`0..1`; each channel selects the nearest entry in the shared 256-entry sRGB decode
+table, resolving encoding ties upward. This is channel gamut clipping rather
+than chroma-preserving gamut compression. Exact segment endpoints and identical
+neighbor colors return authored bytes directly. Phase fractions round to
+`1/65280` before Oklab mixing; RGB phase evaluation keeps its original arithmetic.
+Source alpha and blend amount retain their existing semantics. Integer conversion
+can introduce small rounding steps; interpolation adds no passes or textures.
 
 `PaletteMode.GRADIENT` interpolates adjacent palette stops and
 `PaletteMode.NEAREST` chooses the nearest tonal stop. `PaletteMode.RAINBOW`

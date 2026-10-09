@@ -131,6 +131,7 @@ pub enum EffectOperation {
         seed: u64,
     },
     PaletteMap {
+        interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
@@ -138,6 +139,7 @@ pub enum EffectOperation {
         levels: u16,
     },
     OrderedDither {
+        interpolation: crate::project::PaletteInterpolation,
         stops: Option<[u16; 16]>,
         palette: crate::stylization::EvaluatedPalette,
         amount: f64,
@@ -333,6 +335,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             invert: false,
         }),
         CompiledEffect::PaletteMap {
+            interpolation,
             stops,
             palette,
             mode,
@@ -340,6 +343,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             ..
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::PaletteMap {
+                interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
                 amount: 1.0,
@@ -350,6 +354,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             current,
         )]),
         CompiledEffect::OrderedDither {
+            interpolation,
             stops,
             mode,
             levels,
@@ -360,6 +365,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             ..
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::OrderedDither {
+                interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
                 amount: 1.0,
@@ -631,6 +637,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             },
         ]),
         EvaluatedEffect::PaletteMap {
+            interpolation,
             stops,
             palette,
             amount,
@@ -638,6 +645,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             levels,
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::PaletteMap {
+                interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
                 amount: *amount,
@@ -648,6 +656,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             current,
         )]),
         EvaluatedEffect::OrderedDither {
+            interpolation,
             stops,
             mode,
             levels,
@@ -659,6 +668,7 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             seed,
         } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::OrderedDither {
+                interpolation: *interpolation,
                 stops: *stops,
                 palette: *palette,
                 amount: *amount,

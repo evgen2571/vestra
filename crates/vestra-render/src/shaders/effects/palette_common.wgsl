@@ -78,6 +78,57 @@ fn signed_q15_round(value: i32) -> i32 {
     return select(magnitude, -magnitude, value < 0);
 }
 
+fn palette_feature(index: u32) -> vec3<u32> {
+    let packed = params.features[index / 4u][index % 4u];
+    return vec3<u32>(packed & 2047u, (packed >> 11u) & 1023u, (packed >> 21u) & 1023u);
+}
+
+fn encode_linear(value: i32) -> u32 {
+    let key = u32(clamp(value, 0, 65536));
+    var lower = 0u;
+    var upper = 256u;
+    while (lower < upper) {
+        let middle = (lower + upper) / 2u;
+        if (SRGB_LINEAR[middle] < key) { lower = middle + 1u; }
+        else { upper = middle; }
+    }
+    upper = min(upper, 255u);
+    lower = select(0u, upper - 1u, upper > 0u);
+    let a = SRGB_LINEAR[lower];
+    let b = SRGB_LINEAR[upper];
+    return select(upper, lower, max(key, a) - min(key, a) < max(key, b) - min(key, b));
+}
+
+fn signed_q12_round(value: i32) -> i32 {
+    let magnitude = (abs(value) + 2048) / 4096;
+    return select(magnitude, -magnitude, value < 0);
+}
+
+fn inverse_lms_root(value: i32) -> i32 {
+    let root = clamp(signed_q15_round(value), -1100, 1100);
+    let cube = root * root * root;
+    let magnitude = (abs(cube) + 8192) / 16384;
+    return select(magnitude, -magnitude, cube < 0);
+}
+
+fn gradient_colour(lower: u32, upper: u32, fraction: u32, span: u32) -> vec3<u32> {
+    if (fraction == 0u || all(palette_bytes(lower) == palette_bytes(upper))) { return palette_bytes(lower); }
+    if (fraction == span) { return palette_bytes(upper); }
+    if (params._padding.y == 0u) {
+        return (palette_bytes(lower) * (span - fraction) + palette_bytes(upper) * fraction + vec3<u32>(span / 2u)) / span;
+    }
+    let feature = (palette_feature(lower) * (span - fraction) + palette_feature(upper) * fraction + vec3<u32>(span / 2u)) / span;
+    let lab = vec3<i32>(feature) - vec3<i32>(0, 512, 512);
+    let l = lab * LAB_TO_LMS_0;
+    let m = lab * LAB_TO_LMS_1;
+    let s = lab * LAB_TO_LMS_2;
+    let linear = vec3<i32>(inverse_lms_root(l.x + l.y + l.z), inverse_lms_root(m.x + m.y + m.z), inverse_lms_root(s.x + s.y + s.z));
+    let red = linear * LMS_TO_RGB_0;
+    let green = linear * LMS_TO_RGB_1;
+    let blue = linear * LMS_TO_RGB_2;
+    return vec3<u32>(encode_linear(signed_q12_round(red.x + red.y + red.z)), encode_linear(signed_q12_round(green.x + green.y + green.z)), encode_linear(signed_q12_round(blue.x + blue.y + blue.z)));
+}
+
 fn oklab_features(rgb: vec3<u32>) -> vec3<u32> {
     let linear = vec3<u32>(SRGB_LINEAR[rgb.r], SRGB_LINEAR[rgb.g], SRGB_LINEAR[rgb.b]);
     let l = linear * RGB_TO_LMS_0;

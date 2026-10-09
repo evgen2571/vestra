@@ -159,6 +159,7 @@ pub(super) fn compile(
             seed: *seed,
         },
         crate::project::Effect::PaletteMap {
+            interpolation,
             palette,
             stops,
             mode,
@@ -168,6 +169,7 @@ pub(super) fn compile(
             period,
             ..
         } => crate::plan::CompiledEffect::PaletteMap {
+            interpolation: *interpolation,
             stops: stops
                 .as_deref()
                 .map(|values| {
@@ -196,6 +198,7 @@ pub(super) fn compile(
             period: *period,
         },
         crate::project::Effect::OrderedDither {
+            interpolation,
             palette,
             stops,
             mode,
@@ -209,6 +212,7 @@ pub(super) fn compile(
             seed,
             ..
         } => crate::plan::CompiledEffect::OrderedDither {
+            interpolation: *interpolation,
             stops: stops
                 .as_deref()
                 .map(|values| {
@@ -495,6 +499,7 @@ mod stylization_tests {
         )
         .unwrap();
         let EvaluatedEffect::OrderedDither {
+            interpolation: _,
             stops,
             palette,
             amount,

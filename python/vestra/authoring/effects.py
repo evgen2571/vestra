@@ -66,6 +66,11 @@ class AsciiColorMode(Enum):
     RAINBOW = "rainbow"
 
 
+class PaletteInterpolation(Enum):
+    RGB = "rgb"
+    OKLAB = "oklab"
+
+
 class PaletteMode(Enum):
     GRADIENT = "gradient"
     NEAREST = "nearest"
@@ -1267,6 +1272,11 @@ class PaletteMapEffect(GenericEffect):
     def mode(self, value: PaletteMode | str) -> None: self._set_parameter("mode", value)
 
     @property
+    def interpolation(self) -> PaletteInterpolation: return PaletteInterpolation(self._data["interpolation"])
+    @interpolation.setter
+    def interpolation(self, value: PaletteInterpolation | str) -> None: self._set_parameter("interpolation", value)
+
+    @property
     def stops(self) -> tuple[float, ...] | None:
         value = self._data.get("stops")
         return None if value is None else tuple(cast(list[float], value))
@@ -1519,10 +1529,11 @@ class _EffectCollection:
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.GRADIENT,
         levels: int = 4, stops: Sequence[int | float] | None = None,
+        interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
         id: str | None = None,
     ) -> PaletteMapEffect:
         return self._append(PaletteMapEffect._create_palette, id, {
-            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops,
+            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
         })
 
     def add_ordered_dither(
@@ -1530,11 +1541,12 @@ class _EffectCollection:
         amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
         period: int | float | None = None, mode: PaletteMode | str = PaletteMode.NEAREST,
         levels: int = 4, stops: Sequence[int | float] | None = None,
+        interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
         strength: int | float | ScalarTrack = 1, matrix: DitherMatrix | str = DitherMatrix.BAYER8,
         scale: int = 1, seed: int = 0, id: str | None = None,
     ) -> OrderedDitherEffect:
         return self._append(OrderedDitherEffect._create_palette, id, {
-            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops,
+            "palette": palette, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
             "strength": strength, "matrix": matrix, "scale": scale, "seed": seed,
         })
 

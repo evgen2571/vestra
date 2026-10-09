@@ -92,7 +92,11 @@ Continuous numeric controls are bindable scalar properties. The rotated lattice
 starts at the composition canvas origin, after the layer transform. RGB screens
 have fixed 60-degree channel offsets. Each screen cell uses the alpha-weighted
 mean of **all actual pixel centers** inside that rotated cell, including clipped
-border cells; fully transparent RGB contributes nothing. One analysis pass
+border cells; fully transparent RGB contributes nothing. Cell membership uses
+shared Q16 lattice coefficients and integer pixel-center coordinates, preventing
+GPU fused floating-point arithmetic from changing diagonal boundary ties. Cell
+size and direction coefficients use 16 fractional bits; antialiased dots remain
+floating-point geometry. One analysis pass
 stores byte-quantized means in a bounded temporary; one resolve pass draws dots
 with the original pixel alpha. No blur pass or frame history is used. Dot radius
 is proportional to the square root of tone and reaches cell corners at white.

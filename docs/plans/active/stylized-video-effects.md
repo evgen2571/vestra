@@ -1,20 +1,21 @@
 # Stylized video effects
 
-Status: in progress — all effect families implemented; comprehensive validation, hardware quality and performance acceptance underway.
+Status: in progress — initial effect families implemented; advanced artistic controls, visual regression, hardware quality and performance acceptance underway.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
-Decisions finalized: 2026-10-08
+Initial decisions finalized: 2026-10-08; advanced-customization extension approved: 2026-10-09
 Working instructions: [AGENTS.md](../../../AGENTS.md) and [PLANS.md](../../../PLANS.md)
 
 ## Objective
 
 Deliver a general-purpose, composable suite of cinematic video stylization
 effects in Vestra, with music-mix backgrounds as an example rather than a
-special-case API. The branch includes **all** planned families: cinematic ASCII,
+special-case API. The branch includes initial implementations of **all** originally planned families: cinematic ASCII,
 pseudo-ASCII/hybrid rendering, palette mapping and animated/rainbow color,
 ordered dithering, halftone, bounded horizontal/vertical pixel sorting, and
 CRT/analog styling. Reuse existing Bloom, Glow, ChromaticAberration and
-ColorAdjust instead of duplicating them.
+ColorAdjust instead of duplicating them. The 2026-10-09 extension adds artist-facing
+controls and regression acceptance before declaring the branch complete.
 
 ## Verified starting point and references
 
@@ -421,8 +422,133 @@ images, with no per-frame font/atlas rebuilds or GPU-to-CPU roundtrips.
 Completion: every agreed effect family exists with matching public behavior
 and known resource/performance limits.
 
-### 5. Showcase, regression and documentation
+### Advanced artistic-control extension (approved 2026-10-09)
 
+The technical contracts and default algorithms above describe the **existing
+first implementation**, not the final intended feature set. Milestones 5–7
+extend these contracts; new parameter names/ranges, schema changes and pass
+topology require explicit design/validation before coding. Do not silently
+change the behavior of projects authored against the existing defaults.
+
+- **Composable first:** use existing `ColorAdjust`, contrast, bloom and
+  ordered effect chains where their scope suffices; add effect-local controls
+  only when they change *analysis* independently from final image appearance
+  (for example, pre-quantization tone response or edge-preserving sampling).
+  Reuse shared color/analysis helpers where worthwhile, without rewriting the
+  renderer or introducing an independent preset engine.
+- **Dither is not palette mapping:** retain the existing luminance-to-palette
+  ordered-dither mode. Add distinct noise-pattern, quantization/color-space,
+  nonuniform palette-position and input-analysis options with documented
+  semantics. `scale` currently enlarges threshold cells; it is **not**
+  downsampling or an analysis-resolution control. Color selection and spatial
+  pattern should be independently configurable.
+- **Temporal stability:** fixed Bayer and seeded blue-noise patterns are
+  deterministic and spatially anchored by default. Any optional temporal
+  variation must be explicitly selected, reproducible at arbitrary/out-of-order
+  project timestamps and checked for objectionable crawling/sparkle. Never
+  rely on previous-frame state, wall clock or random per-frame seeds.
+- **Video-ready alpha/color:** account for straight/premultiplied alpha,
+  transparent borders, source-color luminance, interpolation gamut handling,
+  scaling/crops, nested groups/masks, arbitrary palette hue, and CPU/WGPU
+  tolerances. Give unambiguous names/units and test invalid combinations.
+- **Reference is a quality target:** AcerolaFX example4 inspires fine texture,
+  clear silhouettes and controlled shadows across user-chosen palettes, not
+  a hardcoded crimson look, an exact shader port or an automatic pixel-perfect
+  comparison against different footage. Use repository-generated fixtures
+  and inspect renders in addition to numerical assertions.
+- **Validation gates:** for each meaningful new control, prove a distinct
+  visual effect, CPU/WGPU consistency, reasonable 1080p cost and 4K resource
+  behavior before marking it complete. Existing 1–4 checkboxes remain open
+  until their documented verification is finished; extension work does not
+  retroactively mark them done.
+
+### 5. Advanced dithering and palette mapping
+
+- [ ] Establish baseline renders from repository-generated source footage and
+  the existing `OrderedDither`/`PaletteMap` API. Capture gaps against the
+  [fine-detail reference](../../development/stylization/dithered-palette-look.md)
+  rather than assuming an exact reference shader configuration.
+- [ ] Add reproducible **blue-noise dithering** alongside Bayer, with authored
+  selection, seed/tile/origin policy and optional validated custom threshold
+  textures if resource contracts can be kept portable. Preserve original
+  Bayer behavior; no accidental temporal re-randomization.
+- [ ] Support distinct **quantization modes**: current luminance-indexed
+  palette, RGB/channel-count quantization, at least one hue-aware mode and
+  perceptual nearest-palette matching. Specify color-space conversions,
+  rounding, tie-breaking, gamut treatment and alpha policy consistently
+  across CPU/WGPU.
+- [ ] Support **nonuniform tonal palette stops** and controllable palette
+  interpolation in an appropriate color space (e.g. RGB and OKLab); preserve
+  stops/order under animation and document chromatic vs luminance modes.
+  Permit carefully bounded deterministic palette generation only if useful.
+- [ ] Add **tone response and detail controls** that operate on the signal
+  *entering quantization*: gamma/curves or shadow-mid-highlight shaping,
+  local contrast and optional edge/detail preservation. Share existing
+  `ColorAdjust` where sufficient; don't alter original source colors
+  unintentionally to change threshold eligibility.
+- [ ] Make filtered input/analysis resolution **independent** of threshold
+  pattern size. Define nearest/linear/area filtering, lattice alignment,
+  aspect ratio/partial borders and texture-budget limits. Keep true
+  output-pixel fine dithering available at `scale=1`.
+- [ ] Validate public Rust/JSON/Python descriptors, type hints, animation
+  bindings, defaults, invalid inputs and legacy behavior; implement both CPU
+  and WGPU with no readbacks or unbounded frame allocations.
+- [ ] Compare Bayer/blue noise, tonal settings, quantization modes and
+  resolution/detail trade-offs on the **same** grayscale/texture/silhouette
+  fixtures in monochrome plus two chromatic palettes. Inspect contact sheets,
+  moving previews, 1080p performance and 4K resource estimates.
+
+Completion: nuanced, fine-detail and coarse creative dither styles are
+reachable through documented controls, across arbitrary user palettes, with
+provable visible quality and preserved legacy defaults.
+
+### 6. Advanced customization of ASCII, halftone, sorting, CRT and looks
+
+- [ ] **ASCII/PseudoASCII:** diagnose dark/unreadable source-color output using
+  repository synthetic/video fixtures; distinguish expected low tone from
+  defects. Add independent glyph-selection tonal response, coverage-calibrated
+  density where justified, source-color brightness/luminance compensation,
+  glyph scale/spacing and finer fill-versus-edge control. Preserve deliberate
+  dark-space rendering and custom font/character compatibility.
+- [ ] **Halftone:** add selectable dot geometry (at least circle, ellipse and
+  line), independent angle/channel-screen controls and print-response/dot-gain
+  options. Assess a CMYK-style mode only with explicitly defined conversions,
+  resource accounting and testable printed appearance. Retain original RGB
+  modes and analytic antialiasing.
+- [ ] **PixelSort:** allow additional sort measures (such as luminance, hue,
+  saturation and selected channel), explicit run-selection/segment behavior
+  and useful bounded region/mask constraints. Preserve stable ties, segment
+  bounds, thresholds and intentional discontinuities; reject unsupported
+  state or unconstrained whole-frame sorting.
+- [ ] **CRT:** add selectable phosphor masks (stripe, grille, shadow-mask),
+  scanline profile/width and restrained color bleed/distortion controls. Keep
+  noise periodic when requested and geometry/filtering alpha-safe; verify
+  that advanced modes remain visibly distinct at 1080p.
+- [ ] Extend **composable, editable looks** using existing effect-recipe
+  infrastructure (e.g. cinematic dither, retro terminal, comic print, VHS
+  monitor). Do not create a second presets system; users can still edit every
+  underlying ordinary effect and use it on videos/global stacks.
+- [ ] Define ergonomic defaults, explicit opt-in for expensive options,
+  backward-compatible serialization and bindable-vs-discrete controls.
+  Verify all options on CPU and WGPU, with visual source detail, transparency,
+  deterministic temporal behavior, 1080p performance and 4K resource checks.
+
+Completion: each effect family offers materially useful artistic controls and
+combinations without sacrificing deterministic rendering or existing behavior.
+
+### 7. Showcase, regression and documentation
+
+- [ ] Add a per-mode **visual acceptance matrix** covering new patterns,
+  quantizers, palette stops, calibrated glyph/edge controls, halftone shapes,
+  sorting metrics, phosphor masks and composed looks. Compare real rendered
+  frames (not merely successful jobs or CPU/WGPU parity) against source detail.
+- [ ] Use repository-generated FFV1 showcase footage and deterministic
+  grayscale, shadow/highlight, edge, alpha and moving-shape fixtures; do not
+  depend on a user's private video. Reject unexpectedly uniform/black output
+  on appropriately exposed source, even when both backends agree.
+- [ ] Publish editable reference-inspired recipes and contact sheets with
+  **three palettes**, Bayer vs blue noise, tonal mappings, detail settings
+  and distinct analysis resolutions, with source-based side-by-side results.
 - [ ] Add licensed/synthetic deterministic examples for advanced ASCII,
   custom font/characters, rainbow loops, both pixel-sort directions,
   halftone/CRT and composed preset/recipe looks.
@@ -467,6 +593,16 @@ Completion: reproducible visual showcase and honest CPU/WGPU capability claims.
 - [ ] Dithered palette styling matches the visual detail and tonal structure
   of its design reference with at least three meaningfully different palettes;
   reject coarse/noisy low-detail outputs regardless of color choice.
+- [ ] Advanced dither modes (Bayer/blue noise; luminance, channel and
+  perceptual palette quantization), uneven palette stops, independent analysis
+  resolution, and tone/detail controls have explicit semantics and distinct
+  visually verified results on all supported renderers.
+- [ ] ASCII tonal/density/color compensation, halftone dot/screen variants,
+  bounded sorting metrics, CRT phosphor/scanline variants and reusable looks
+  cover documented examples without changing legacy project defaults.
+- [ ] Generated video and grayscale/alpha fixtures guard against apparently
+  uniform-black output on well-exposed input; tests evaluate actual output
+  structure, not solely successful encoding or CPU/WGPU numerical parity.
 - [ ] Dither/ASCII/halftone/CRT patterns obey documented spatial anchoring
   and pixel/border rules under scaling/transforms, with area-based analysis
   and antialiased geometry where required; intentional crispness remains.
@@ -489,12 +625,13 @@ Completion: reproducible visual showcase and honest CPU/WGPU capability claims.
 
 ## Progress and verification
 
-All **product choices** are finalized. Milestone 1 technical contracts are
-recorded in this plan. The branch contains an initial PaletteMap/OrderedDither
-implementation across core, CPU, WGPU and public authoring, with focused
-tests, examples and benchmark suite definitions. Milestone 2 remains unchecked:
-visual quality, complete validation, actual 1080p/4K measurements and hardware
-evidence have not been confirmed by this documentation update.
+The initial **product choices** and Milestone 1 technical contracts were
+recorded on 2026-10-08. The following historical checkpoints describe staged
+implementation evidence; later dated entries supersede earlier limitations.
+As of the 2026-10-09 advanced-customization extension, all original families
+have first implementations but Milestones 2–7 still need their respective
+verification and expanded artistic-control acceptance. Do not infer completion
+from the earlier 'initial palette/dither' checkpoint or passing CI alone.
 
 ### Current implementation session (2026-10-08)
 
@@ -584,6 +721,14 @@ CI and native Windows backend-specific validation are **unverified** so far.
 
 ## Decisions and discoveries
 
+- 2026-10-09: Extend this feature branch with artistic customization across
+  all families, centered on reproducing fine-reference dithering through
+  blue noise, quantization/color-space modes, nonuniform palette stops,
+  independent analysis resolution and tone/detail preservation. Add advanced
+  ASCII, halftone, PixelSort and CRT controls plus ordinary editable looks.
+  Gate acceptance on actual source-specific visual quality and deterministic
+  repository-generated video tests, not parity or encoding success alone.
+  Preserve backwards-compatible defaults and both renderers.
 - 2026-10-08: Add effect-specific temporal-stability and visual-quality
   requirements throughout Milestones 2–5: pattern anchoring, appropriate
   prefiltering and area averages, antialiasing, selective threshold stability,
@@ -608,9 +753,11 @@ CI and native Windows backend-specific validation are **unverified** so far.
 
 ## Completion / handoff
 
-Not complete. All planned families and public interfaces are implemented.
-Finish hardware quality/resource checks, comprehensive checks and serial
-1080p measurements before closing acceptance and moving this plan.
+Not complete. Initial families and their public interfaces are implemented;
+Milestones 5–6 add approved advanced controls and Milestone 7 integrates
+visual/temporal/performance acceptance. Finish feature-specific verification,
+hardware quality/resource checks, comprehensive checks and serial 1080p
+measurements before closing acceptance and moving this plan.
 
 ### Restored environment and public examples (2026-10-09)
 

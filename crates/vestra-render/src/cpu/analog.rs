@@ -110,11 +110,18 @@ pub(super) fn pixel_sort(source: &RgbaImage, target: &mut RgbaImage, operation: 
 }
 
 fn cell(x: f32, y: f32, size: f32, s: f32, c: f32) -> [i32; 2] {
+    // Integer pixel centers keep GPU fused arithmetic from changing cell membership.
+    let x = (x * 2.0) as i32;
+    let y = (y * 2.0) as i32;
+    let s = (s * crate::halftone::GRID_SCALE) as i32;
+    let c = (c * crate::halftone::GRID_SCALE) as i32;
+    let denominator = (size * crate::halftone::GRID_SCALE) as i32 * 2;
     [
-        ((x * c - y * s) / size).floor() as i32,
-        ((x * s + y * c) / size).floor() as i32,
+        (x * c - y * s).div_euclid(denominator),
+        (x * s + y * c).div_euclid(denominator),
     ]
 }
+
 fn bounds(id: [i32; 2], size: f32, s: f32, c: f32, width: u32, height: u32) -> [i32; 4] {
     let mut lo = [f32::INFINITY; 2];
     let mut hi = [f32::NEG_INFINITY; 2];
@@ -122,7 +129,8 @@ fn bounds(id: [i32; 2], size: f32, s: f32, c: f32, width: u32, height: u32) -> [
         for dy in 0..=1 {
             let u = (id[0] + dx) as f32 * size;
             let v = (id[1] + dy) as f32 * size;
-            let p = [u * c + v * s, -u * s + v * c];
+            let norm = s * s + c * c;
+            let p = [(u * c + v * s) / norm, (-u * s + v * c) / norm];
             for k in 0..2 {
                 lo[k] = lo[k].min(p[k]);
                 hi[k] = hi[k].max(p[k]);
@@ -179,12 +187,11 @@ pub(super) fn analyze(
     angle: f64,
     mode: HalftoneMode,
 ) {
-    let size = size as f32;
-    let angle = angle.rem_euclid(360.0) as f32 * std::f32::consts::PI / 180.0;
+    let (size, orientations) = crate::halftone::grid_parameters(size, angle);
     target.fill(0);
     let count = if mode == HalftoneMode::Rgb { 3 } else { 1 };
     for channel in 0..count {
-        let (s, c) = (angle + channel as f32 * std::f32::consts::PI / 3.0).sin_cos();
+        let [s, c] = orientations[channel];
         let mut cells = HashMap::<[i32; 2], ([u32; 2], [u64; 4])>::new();
         for (x, y, p) in source.enumerate_pixels() {
             let id = cell(x as f32 + 0.5, y as f32 + 0.5, size, s, c);
@@ -226,9 +233,9 @@ fn dot(
     let [s, c] = orientation;
     let u = (x * c - y * s) / size;
     let v = (x * s + y * c) / size;
-    let cx = (u.floor() + 0.5) * size;
-    let cy = (v.floor() + 0.5) * size;
-    let id = [u.floor() as i32, v.floor() as i32];
+    let id = cell(x, y, size, s, c);
+    let cx = (id[0] as f32 + 0.5) * size;
+    let cy = (id[1] as f32 + 0.5) * size;
     let rep = *reps
         .entry((id[0], id[1], channel.map_or(0, |ch| ch + 1)))
         .or_insert_with(|| representative(id, size, s, c, analysis.width(), analysis.height()));
@@ -276,11 +283,7 @@ pub(super) fn halftone(
     let mut reps = HashMap::new();
     let foreground = rgba(Rgba(foreground));
     let background = rgba(Rgba(background));
-    let angle = angle_degrees.rem_euclid(360.0) as f32 * std::f32::consts::PI / 180.0;
-    let orientations = std::array::from_fn::<_, 3, _>(|ch| {
-        let (s, c) = (angle + ch as f32 * std::f32::consts::PI / 3.0).sin_cos();
-        [s, c]
-    });
+    let (cell_size, orientations) = crate::halftone::grid_parameters(cell_size, angle_degrees);
     for (x, y, out) in target.enumerate_pixels_mut() {
         let original = rgba(*source.get_pixel(x, y));
         if original[3] == 0.0 {
@@ -290,7 +293,7 @@ pub(super) fn halftone(
         let (mut screen, col) = dot(
             analysis,
             [x as f32 + 0.5, y as f32 + 0.5],
-            [cell_size as f32, softness as f32],
+            [cell_size, softness as f32],
             orientations[0],
             None,
             invert,
@@ -302,7 +305,7 @@ pub(super) fn halftone(
                 screen = dot(
                     analysis,
                     [x as f32 + 0.5, y as f32 + 0.5],
-                    [cell_size as f32, softness as f32],
+                    [cell_size, softness as f32],
                     orientations[ch],
                     Some(ch),
                     invert,
@@ -426,6 +429,16 @@ mod tests {
         }
     }
     #[test]
+    fn diagonal_grid_membership_is_exact_at_output_limits() {
+        let (size, [[s, c], ..]) = crate::halftone::grid_parameters(2.0, 45.0);
+        for pixel in [0, 1, 100, 4095, 8191] {
+            let center = pixel as f32 + 0.5;
+            assert_eq!(cell(center, center, size, s, c)[0], 0);
+            assert!(cell(center + 1.0, center, size, s, c)[0] >= 0);
+            assert!(cell(center, center + 1.0, size, s, c)[0] < 0);
+        }
+    }
+    #[test]
     fn analysis_ignores_hidden_colour_and_clips_borders() {
         let mut src = RgbaImage::new(2, 1);
         src.put_pixel(0, 0, Rgba([255, 0, 0, 0]));
@@ -444,7 +457,11 @@ mod tests {
                 std::f32::consts::FRAC_PI_2,
                 2.3561945,
             ] {
-                let (s, c) = angle.sin_cos();
+                let [s, c] = crate::halftone::grid_parameters(
+                    6.0,
+                    f64::from(angle) * 180.0 / f64::from(std::f32::consts::PI),
+                )
+                .1[0];
                 for y in 0..h {
                     for x in 0..w {
                         let id = cell(x as f32 + 0.5, y as f32 + 0.5, 6.0, s, c);

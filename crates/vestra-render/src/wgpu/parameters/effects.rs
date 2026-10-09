@@ -608,15 +608,12 @@ fn halftone_parameters(
             ),
             _ => unreachable!(),
         };
-    let size = cell_size;
-    let angle = angle_degrees;
+    let (size, orientations) = crate::halftone::grid_parameters(cell_size, angle_degrees);
     let mut p = AnalogParameters::zeroed();
     p.canvas_width = width;
     p.canvas_height = height;
-    p.values[0] = size as f32;
-    let angle = angle.rem_euclid(360.0) as f32 * std::f32::consts::PI / 180.0;
-    for ch in 0..3 {
-        let (s, c) = (angle + ch as f32 * std::f32::consts::PI / 3.0).sin_cos();
+    p.values[0] = size;
+    for (ch, [s, c]) in orientations.into_iter().enumerate() {
         p.values[1 + ch * 2] = s;
         p.values[2 + ch * 2] = c;
     }

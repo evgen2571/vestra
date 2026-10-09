@@ -1,7 +1,12 @@
-fn cell(p:vec2<f32>,s:f32,c:f32)->vec2<i32>{return vec2<i32>(floor(vec2<f32>(p.x*c-p.y*s,p.x*s+p.y*c)/value(0u)));}
+fn floor_div(n:i32,d:i32)->i32{if(n<0){return (n-d+1)/d;}return n/d;}
+fn cell(p:vec2<f32>,s:f32,c:f32)->vec2<i32>{
+ let centers=vec2<i32>(p*2.0);let si=i32(s*65536.0);let co=i32(c*65536.0);let denominator=i32(value(0u)*65536.0)*2;
+ return vec2<i32>(floor_div(centers.x*co-centers.y*si,denominator),floor_div(centers.x*si+centers.y*co,denominator));
+}
+
 fn cell_bounds(id:vec2<i32>,s:f32,c:f32)->vec4<i32>{
  var lo=vec2<f32>(1e20);var hi=vec2<f32>(-1e20);
- for(var dx=0;dx<=1;dx++){for(var dy=0;dy<=1;dy++){let uv=vec2<f32>(id+vec2<i32>(dx,dy))*value(0u);let p=vec2<f32>(uv.x*c+uv.y*s,-uv.x*s+uv.y*c);lo=min(lo,p);hi=max(hi,p);}}
+ for(var dx=0;dx<=1;dx++){for(var dy=0;dy<=1;dy++){let uv=vec2<f32>(id+vec2<i32>(dx,dy))*value(0u);let p=vec2<f32>(uv.x*c+uv.y*s,-uv.x*s+uv.y*c)/(s*s+c*c);lo=min(lo,p);hi=max(hi,p);}}
  return vec4<i32>(vec2<i32>(max(floor(lo-vec2<f32>(0.5)),vec2<f32>(0.0))),vec2<i32>(min(ceil(hi-vec2<f32>(0.5)),vec2<f32>(f32(params.canvas_width)-1.0,f32(params.canvas_height)-1.0))));
 }
 fn interval(lo:f32,hi:f32,a:f32,b:f32)->vec2<f32>{if(abs(a)<0.000001){if(b>=lo && b<hi){return vec2<f32>(-1e20,1e20);}return vec2<f32>(1e20,-1e20);}let x=(lo-b)/a;let y=(hi-b)/a;return vec2<f32>(min(x,y),max(x,y));}

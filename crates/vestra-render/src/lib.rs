@@ -13,6 +13,7 @@
 
 pub use vestra_core::{Category, Diagnostic, Severity, animation, domain};
 mod ascii;
+mod halftone;
 mod kernel;
 
 pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {

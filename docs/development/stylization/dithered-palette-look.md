@@ -1,9 +1,8 @@
 # Detailed dithered-palette stylization
 
-Status: **implemented controls with a reproducible synthetic example**; final
-branch acceptance is recorded separately in the execution plan.
-See the [completed plan](../../plans/completed/stylized-video-effects.md) and
-[effect architecture](../architecture/effect-pipeline.md).
+Use the [effect reference](../../reference/effects.md) for implemented controls
+and the [effect architecture](../architecture/effect-pipeline.md) for resource
+and renderer constraints.
 
 ## Reference and desired visual quality
 
@@ -21,8 +20,8 @@ authored palette (monochrome, cool/warm, complementary, custom gradients,
 neon and so on). Never hardcode a crimson palette or special-case hues.
 This look is not inherently ASCII and needs no glyph atlas or custom font.
 
-This is a *quality target* for the independently composable palette and
-dithering effects in the current plan, not a new mandatory shader category.
+This quality target guides the independently composable palette and
+dithering effects.
 
 ## Essential visual behavior
 
@@ -43,44 +42,21 @@ dithering effects in the current plan, not a new mandatory shader category.
 - Respect transparent pixels, alpha edges, masks, mattes, source transforms
   and layer/global effect stacking.
 
-## Proposed customization (names/defaults remain Milestone 1 decisions)
+## Choosing controls
 
-| Control | Intended behavior |
-| --- | --- |
-| Palette | User-defined ordered color stops/colors or compatible palette mapping; no fixed palette |
-| Tonal/color mapping | Luminance-mapped palette levels and/or per-channel quantization, explicitly documented |
-| Color resolution | Adjustable number/distribution of usable tone/color levels |
-| Pattern mode | Ordered Bayer (for example 2x2, 4x4, 8x8); investigate optional blue noise |
-| Detail level | Fine through coarse pattern/pixel scale, independently of palette selection |
-| Dither strength | Control threshold spread and how much patterned midtone is retained |
-| Tonal response | Tunable shadows, midtones and highlights, leveraging existing color/contrast effects wherever possible |
-| Blending | Optional mixing with original footage or composition by ordinary effect semantics |
-| Timing | Static deterministic pattern by default; if animated, use project time and an explicit loop period |
-| Placement | Individual layer and global post-effects when semantically valid |
+Use `OrderedDither` with authored palettes and tonal stops for fine structured
+texture. Bayer matrices provide regular patterns; seeded blue noise provides
+an irregular fixed pattern. `scale` controls threshold size, while `input_scale`
+and `input_filter` control analysis independently. Keep both scales at 1 to
+retain output-pixel detail.
 
-This table describes the **capability**, not a fixed Python constructor
-signature. Let the implementation agent choose exact parameter types,
-bounds, algorithms and naming consistently with the descriptor catalog.
-Do not duplicate existing ColorAdjust/Contrast effects unnecessarily.
-
-## Algorithm and renderer guidance
-
-A candidate approach combines tonal adjustment, quantization with a
-deterministic spatial threshold pattern, and palette mapping. Determine the
-correct order of mapping/quantization/dither by testing fidelity rather
-than assuming one ordering works in every color mode.
-
-Investigate optional resolution scaling, nearest-neighbor appearance,
-reliable pixel anchoring, luminance/color-space behavior, hard shadow
-thresholds, anti-aliased edges, and retaining detail in textured areas.
-Edge/local-contrast preservation is worth evaluating if naive quantization
-loses recognizability, but it need not become a separate required effect.
-
-Both CPU and WGPU must use consistent indexing, thresholds, alpha rules,
-color math and border behavior. Prefer cheap and bounded shader resources,
-cached static patterns, and no unnecessary full-frame intermediate buffers
-or CPU/GPU readbacks per frame. Benchmark representative 1080p footage and
-verify 4K device/resource behavior.
+Adjust entering-signal exposure/gamma and detail/radius before quantization to
+shape midtones and preserve local texture. Choose luminance, RGB, hue, Oklab or
+channel quantization deliberately: chromatic matching depends on palette colors,
+while tonal modes preserve index geometry across equal-length palettes. Use
+`amount` for source blending and `phase`/`period` for repeatable palette motion.
+See the [reference](../../reference/effects.md)
+for ranges, rounding, alpha and mode compatibility.
 
 Useful algorithm references:
 [AcerolaFX Dither](https://github.com/GarrettGunnell/AcerolaFX/blob/main/Shaders/AcerolaFX_Dither.fx)
@@ -115,7 +91,7 @@ Additional checks:
 readable dithered image across arbitrary palettes. A coarse posterization
 or noisy low-detail image should not pass just because unit tests pass.
 
-Once implemented, publish a reproducible example and update the
+When changing these controls, update the
 [effects guide](../../guides/python/effects.md),
 [reference](../../reference/effects.md),
 [support matrix](../../reference/feature-support.md) and, for footage or
@@ -133,4 +109,4 @@ The generated contact images and short videos live under
 `target/stylized-reference/`; inspect full-resolution PNGs as well as playback.
 The original photographic scene is not reproduced; the quality comparison is
 texture, tonal structure and recognizable source detail on generated footage.
-Unimplemented optional customization is deferred under the release scope.
+See the [support matrix](../../reference/feature-support.md) for current limitations.

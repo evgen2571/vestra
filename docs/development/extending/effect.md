@@ -52,7 +52,7 @@ separated by a full period. Do not promise source video/audio loops.
 When exposing convenient looks, remember existing cinematic presets are
 Image-only and one per image layer. Use composable effect recipes for video
 and global effects instead of inventing a second incompatible preset engine.
-See the [completed feature decisions](../../plans/completed/stylized-video-effects.md).
+See the [effect recipes](../../reference/effects.md).
 
 ## Acceptance checklist
 

@@ -96,17 +96,24 @@ noise; for halftone define dot/channel geometry; for pixel sorting define
 bounded segments, comparator, stable ties and GPU memory/time cost.
 Unbounded arbitrary full-frame sorting is not a reasonable default.
 
-## Approved behavior for stylization work
+## Stylization contracts
 
-The [completed stylization plan](../../plans/completed/stylized-video-effects.md)
-records 13 approved product decisions. For this work the public contract
-requires both **CPU and WGPU**, clip/global applicability when meaningful,
-advanced ASCII controls, built-in and **custom characters/fonts**, animated
-source/mono/palette/rainbow colors, deterministic periodic effects with an
-explicit **positive loop period**, and 1080p-first performance with 4K
-correctness/resource handling. Bounded pixel sorting must support both
-horizontal and vertical segments. This list describes *planned requirements*;
-it is not current feature-support evidence.
+The [effect reference](../../reference/effects.md) defines current controls,
+coordinate/alpha rules and timing; the [support matrix](../../reference/feature-support.md)
+records backend support and limitations. Stylization uses the shared CPU/WGPU
+pipeline for layers, groups and global output. Horizontal/vertical pixel sorting
+is bounded; glyph assets are prepared once; procedural motion uses explicit
+owner-local time and optional positive finite periods.
+
+### Palette input analysis resources
+
+Palette mapping and dithering reuse Gaussian/unsharp passes for detail, then
+ColorAdjust for tone, optional cell analysis and final quantization. Final
+amount blending retains the original input. Tone writes logical `Current` so
+analysis can reuse the bounded CPU surface pool. Sparse cell representatives
+occupy an existing full-resolution temporary; coarser analysis does not reduce
+texture allocation. Neutral controls retain one pass; animated/bound controls
+conservatively reserve the resources their active frames need.
 
 ### Custom font and glyph assets
 

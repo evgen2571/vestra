@@ -140,8 +140,25 @@ the final palette amount still blends against the original image.
 
 Active detail adds three full-resolution passes: four including quantization,
 or five with active tone. These controls are opt-in; animated/bound properties
-conservatively reserve their resources. Independent analysis filtering remains
-pending.
+conservatively reserve their resources.
+
+`input_scale` (default `1`, range 1–256 output pixels) is bindable and rounds
+to an integer square-cell span. It controls analysis independently of dither
+threshold `scale`. The lattice is anchored at output `(0,0)`; partial right/bottom
+cells use their actual in-bounds extent. Scale 1 preserves the legacy input
+for every filter. Analysis runs after detail and tone, before quantization.
+
+`input_filter` is static: `"area"` (default), `"nearest"` or `"linear"`. Nearest
+selects the cell-center pixel, choosing the right/bottom pixel at even-span ties.
+Linear samples the geometric center using alpha-aware bilinear averaging; area
+uses alpha-weighted means over all covered pixels. Encoded-byte means round
+half up; hidden transparent RGB contributes nothing, and fully transparent
+analysis cells produce zero RGBA. Final amount blending still uses the original
+pixel RGB/alpha, independently of analysis-cell alpha.
+
+Active analysis adds one pass using a sparse cell representative in an existing
+full-resolution temporary surface. A coarser lattice does not reduce physical
+texture storage. Animated/bound scale conservatively reserves analysis resources.
 
 `PaletteMode.GRADIENT` interpolates adjacent palette stops and
 `PaletteMode.NEAREST` chooses the nearest tonal stop. `PaletteMode.RAINBOW`

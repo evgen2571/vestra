@@ -9,7 +9,8 @@ Follow [AGENTS.md](../../../AGENTS.md) and, for complex work,
 [PLANS.md](../../../PLANS.md). Read the
 [effect extension guide](../../../docs/development/extending/effect.md)
 and [effect pipeline](../../../docs/development/architecture/effect-pipeline.md).
-For stylization, use the [completed feature plan](../../../docs/plans/completed/stylized-video-effects.md).
+For stylization, use the [effect reference](../../../docs/reference/effects.md)
+and [dithered-palette guide](../../../docs/development/stylization/dithered-palette-look.md).
 
 ## Workflow
 

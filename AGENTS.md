@@ -52,7 +52,8 @@ specialized, repeatable workflows. Don't load unrelated skill guides.
 - For new features: define contract -> compile/evaluate -> renderer(s) ->
   authoring/serialization -> tests -> user docs/examples.
 - Keep durable decisions, progress and blockers in the active plan where
-  required by [PLANS.md](PLANS.md).
+  required by [PLANS.md](PLANS.md). Before merging, transfer lasting knowledge
+  into permanent documentation and remove completed plans.
 - Use `nix develop` or an equivalent native environment. Start with focused
   `cargo test -p <crate> <filter>` / focused Python tests; finish with the
   relevant `just check`, `just python-test` and `just docs-check`.

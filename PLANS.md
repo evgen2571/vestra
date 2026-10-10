@@ -4,11 +4,22 @@ Use an execution plan for large features, resource/architecture changes,
 cross-component refactors or work spanning multiple sessions. Small fixes
 need no special plan. This convention makes work resumable without chat history.
 
-Plans live under `docs/plans/active/<topic>.md` until complete. Move finished
-plans to `docs/plans/completed/<topic>.md` and update links. Do not keep
+## Lifecycle
+
+Substantial features and refactors use `docs/plans/active/<feature>.md`.
+Maintain the plan during implementation so work remains resumable; avoid
 conflicting active plans for the same work.
 
-Completed feature plan: [stylized video effects](docs/plans/completed/stylized-video-effects.md).
+Before merging, transfer important architectural decisions, API contracts,
+limitations and reusable technical knowledge into the appropriate permanent
+architecture, reference, guide or contributor documentation. Check what is
+already documented and link it rather than duplicating it. Keep progress
+reports, temporary acceptance evidence and implementation logs out of permanent
+documentation.
+
+Remove completed execution plans before merging; do not archive them in the
+repository. Git history and pull requests preserve historical implementation
+context.
 
 ## Required sections
 

@@ -9,7 +9,7 @@ Follow [AGENTS.md](../../../AGENTS.md) and, for complex work,
 [PLANS.md](../../../PLANS.md). Read the
 [effect extension guide](../../../docs/development/extending/effect.md)
 and [effect pipeline](../../../docs/development/architecture/effect-pipeline.md).
-For this branch, use the [active plan](../../../docs/plans/active/stylized-video-effects.md).
+For stylization, use the [completed feature plan](../../../docs/plans/completed/stylized-video-effects.md).
 
 ## Workflow
 

@@ -2,7 +2,7 @@
 
 Status: **implemented controls with a reproducible synthetic example**; final
 branch acceptance is recorded separately in the execution plan.
-See the [active plan](../../plans/active/stylized-video-effects.md) and
+See the [completed plan](../../plans/completed/stylized-video-effects.md) and
 [effect architecture](../architecture/effect-pipeline.md).
 
 ## Reference and desired visual quality

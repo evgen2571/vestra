@@ -4,7 +4,7 @@ Start with the root [contribution guide](../../CONTRIBUTING.md) for setup and
 pull request guidance. Use [Testing](testing.md) to choose checks for your change,
 and the [architecture overview](architecture/overview.md) to find your way
 around the codebase. Agents should also consult [AGENTS.md](../../AGENTS.md),
-[PLANS.md](../../PLANS.md) and relevant [active plans](../plans/active/stylized-video-effects.md).
+[PLANS.md](../../PLANS.md) and the [completed stylization plan](../plans/completed/stylized-video-effects.md).
 
 ## Testing and performance
 

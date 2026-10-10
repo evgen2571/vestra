@@ -1070,9 +1070,9 @@ fn palette_input_pass_plan(
                 white_point: 1.0,
             },
             input,
-            EffectResource::Temporary0,
+            EffectResource::Current,
         ));
-        input = EffectResource::Temporary0;
+        input = EffectResource::Current;
     }
     if scale > 1 {
         plan.passes.push(EffectPass::new(

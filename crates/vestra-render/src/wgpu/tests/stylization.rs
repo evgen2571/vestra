@@ -20,6 +20,143 @@ const OCEAN: [&str; 5] = ["#040b19", "#18324c", "#277d89", "#88c1bc", "#eef8d9"]
 const VIOLET: [&str; 5] = ["#090714", "#34234f", "#7d528a", "#ca95bd", "#f7eddf"];
 
 #[test]
+fn gpu_stylization_input_analysis_filters_have_literal_results_and_keep_original_alpha() {
+    let source = RgbaImage::from_fn(6, 2, |x, y| {
+        let value = [0, 40, 100, 200, 20, 80][x as usize] + 10 * y as u8;
+        Rgba([value, value, value, 128])
+    });
+    for (filter, expected, border) in [
+        ("nearest", 110_u8, 55),
+        ("linear", 75, 38),
+        ("area", 90, 38),
+    ] {
+        let name = format!("input-analysis-literal-{filter}");
+        let mut effect = palette(&MONO, "gradient");
+        effect["input_scale"] = json!({"base_value": 4});
+        effect["input_filter"] = json!(filter);
+        effect["amount"] = json!({"base_value": 0.5});
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(6, 2, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let output = backends.render(&name, 0, 0);
+        assert_eq!(
+            output.get_pixel(0, 0).0,
+            [
+                expected.div_ceil(2),
+                expected.div_ceil(2),
+                expected.div_ceil(2),
+                128
+            ]
+        );
+        assert_eq!(output.get_pixel(4, 0).0, [border, border, border, 128]);
+        assert!(output.pixels().all(|p| p[3] == 128));
+        drop(backends);
+        let source = RgbaImage::from_fn(6, 4, |x, y| {
+            if x == 0 && y == 0 {
+                Rgba([20, 40, 60, 128])
+            } else {
+                Rgba([255, 0, 0, 0])
+            }
+        });
+        let name = format!("input-analysis-hidden-{filter}");
+        let mut effect = palette(&MONO, "gradient");
+        effect["input_scale"] = json!({"base_value": 2});
+        effect["input_filter"] = json!(filter);
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(6, 4, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let output = backends.render(&name, 0, 0);
+        let value = if filter == "nearest" { 0 } else { 37 };
+        assert_eq!(output.get_pixel(0, 0).0, [value, value, value, 128]);
+        assert!(
+            output
+                .enumerate_pixels()
+                .filter(|(x, y, _)| *x != 0 || *y != 0)
+                .all(|(_, _, p)| p.0 == [0; 4])
+        );
+    }
+}
+
+#[test]
+fn gpu_stylization_input_analysis_is_identity_at_one_and_repeatable_with_tone_detail() {
+    let source = rich_source(98, 56);
+    for (kind, base) in [
+        ("map", palette(&EMBER, "gradient")),
+        ("dither", dither(&OCEAN, "blue_noise", 1)),
+    ] {
+        let control_name = format!("input-analysis-control-{kind}");
+        let Some(mut control) = Backends::new(fixture(
+            &control_name,
+            &source,
+            &project(98, 56, vec![image_clip(vec![])], vec![base.clone()]),
+        )) else {
+            return;
+        };
+        let original = control.render(&control_name, 0, 0);
+        drop(control);
+        for filter in ["nearest", "linear", "area"] {
+            let name = format!("input-analysis-{kind}-{filter}");
+            let mut effect = base.clone();
+            effect["input_filter"] = json!(filter);
+            let Some(mut neutral) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(98, 56, vec![image_clip(vec![])], vec![effect.clone()]),
+            )) else {
+                return;
+            };
+            assert_eq!(neutral.render(&name, 0, 0), original);
+            drop(neutral);
+            effect["input_scale"] = json!({"base_value": 3, "keyframes": [{"time": 0, "value": 3, "interpolation": "linear"}, {"time": 2, "value": 7, "interpolation": "linear"}]});
+            effect["input_detail"] = json!({"base_value": 0.5});
+            effect["input_detail_radius"] = json!({"base_value": 8});
+            effect["input_gamma"] = json!({"base_value": 1.5});
+            effect["amount"] = json!({"base_value": 0.75});
+            let Some(mut backends) = Backends::new(fixture(
+                &name,
+                &source,
+                &project(98, 56, vec![image_clip(vec![])], vec![effect]),
+            )) else {
+                return;
+            };
+            let first = backends.render(&name, 0, 0);
+            assert_ne!(first, original);
+            backends.render(&name, 777_000_000, 0);
+            assert_ne!(first, backends.render(&name, 2_000_000_000, 0));
+            assert_eq!(first, backends.render(&name, 0, 0));
+            assert!(
+                first
+                    .pixels()
+                    .zip(original.pixels())
+                    .all(|(a, b)| a[3] == b[3])
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "explicit input-analysis 1080p/4K correctness and resource acceptance"]
+fn gpu_stylization_input_analysis_1080p_and_4k() {
+    for (width, height) in [(1920, 1080), (3840, 2160)] {
+        let source = rich_source(width, height);
+        for (filter, scale) in [("nearest", 7), ("linear", 7), ("area", 256)] {
+            let mut effect = dither(&EMBER, "blue_noise", 1);
+            effect["input_scale"] = json!({"base_value": scale});
+            effect["input_filter"] = json!(filter);
+            verify_resolution_case(&format!("input-analysis-{filter}-{width}"), &source, effect);
+        }
+    }
+}
+
+#[test]
 fn gpu_stylization_input_exposure_negative_stop_keeps_upward_half_byte_ties() {
     let source = RgbaImage::from_fn(256, 4, |x, _| Rgba([x as u8, x as u8, x as u8, 128]));
     let mut effect = palette(&MONO, "gradient");

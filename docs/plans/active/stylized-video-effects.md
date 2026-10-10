@@ -1,6 +1,6 @@
 # Stylized video effects
 
-Status: in progress — initial effect families implemented; advanced artistic controls, visual regression, hardware quality and performance acceptance underway.
+Status: in progress — feature freeze; release validation and reference-quality demonstration remaining.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
 Initial decisions finalized: 2026-10-08; advanced-customization extension approved: 2026-10-09
@@ -16,6 +16,49 @@ ordered dithering, halftone, bounded horizontal/vertical pixel sorting, and
 CRT/analog styling. Reuse existing Bloom, Glow, ChromaticAberration and
 ColorAdjust instead of duplicating them. The 2026-10-09 extension adds artist-facing
 controls and regression acceptance before declaring the branch complete.
+
+## Release scope decision — 2026-10-10
+
+The user has stopped feature expansion and superseded the unfinished optional
+2026-10-09 customization extension. Preserve the original family requirements
+and all historical evidence below; unchecked optional work is **deferred**, not
+complete. Finish the currently implemented palette input-analysis functionality
+(`f39ae45`) and validate the existing controls. Add a capability only if actual
+reference comparisons establish the smallest concrete blocker to convincing
+fine-detail dithering. Do not begin another phase or change the architecture.
+
+Remaining release work, in order:
+
+- [ ] Synchronize input-analysis schema; resolve Clippy; verify public contracts,
+  CPU/software/hardware parity, borders/alpha and regression coverage.
+- [ ] Reproduce reference-inspired fine-detail dithering on repository-generated
+  footage using existing controls and arbitrary authored palettes.
+- [ ] Render a short demonstration and source/comparison images for monochrome
+  and two chromatic palettes; inspect detail, silhouettes, spatial and temporal
+  artifacts. Implement only a demonstrated essential missing capability.
+- [ ] Reproduce the reported ASCII black-output issue deterministically; fix
+  confirmed defects and verify readable output without optional customization.
+- [ ] Run regressions for every original family and fix release blockers.
+- [ ] Finish canonical CI, Python/schema/docs, strict software and hardware WGPU,
+  targeted 1080p rendering and resource checks. Reuse valid unchanged expensive
+  acceptance evidence rather than repeat it without cause.
+- [ ] Update documentation, examples, acceptance status and draft PR; commit
+  changes as `type: short description`; stop when the branch is ready to merge.
+
+Explicitly deferred optional work: custom threshold textures; automatic palette
+creation; extra ASCII tone/density/brightness/spacing/fill-edge controls; new
+halftone geometry, print/CMYK/dot-gain modes; additional sorting metrics/regions;
+new CRT phosphor/scanline/color-bleed modes; expanded look catalogs and acceptance
+for those unimplemented modes. Existing built-in/custom glyphs, all original
+families, horizontal/vertical sorting, original animation/scope/alpha/resource
+contracts and reference quality remain required. Input-scale/filter controls
+already implemented are release work, not deferred proposals.
+
+Milestones 5–7 and the extended checklist below remain as historical requirements.
+Their optional unfinished entries are **deferred** under this decision, not merge
+gates and not checked complete. The original-family acceptance checklist remains
+a gate; its advanced other-family customization entry is deferred. The release
+checklist above is the authoritative remaining scope.
 
 ## Verified starting point and references
 
@@ -424,8 +467,9 @@ and known resource/performance limits.
 
 ### Advanced artistic-control extension (approved 2026-10-09)
 
-The technical contracts and default algorithms above describe the **existing
-first implementation**, not the final intended feature set. Milestones 5–7
+Historical extension: unfinished optional additions are **deferred** by the
+2026-10-10 release scope decision. The technical contracts and default algorithms
+above describe the **existing first implementation**. Milestones 5–7
 extend these contracts; new parameter names/ranges, schema changes and pass
 topology require explicit design/validation before coding. Do not silently
 change the behavior of projects authored against the existing defaults.
@@ -763,11 +807,11 @@ CI and native Windows backend-specific validation are **unverified** so far.
 
 ## Completion / handoff
 
-Not complete. Initial families and their public interfaces are implemented;
-Milestones 5–6 add approved advanced controls and Milestone 7 integrates
-visual/temporal/performance acceptance. Finish feature-specific verification,
-hardware quality/resource checks, comprehensive checks and serial 1080p
-measurements before closing acceptance and moving this plan.
+Not complete. All original families and their public interfaces are implemented.
+Finish the 2026-10-10 release checklist above: input-analysis verification,
+reference demonstration, ASCII diagnosis, final checks and PR/documentation.
+Unfinished optional extension work is deferred; historical entries retain the
+scope and evidence that applied when they were written.
 
 ### Restored environment and public examples (2026-10-09)
 
@@ -1447,7 +1491,10 @@ measurements before closing acceptance and moving this plan.
   expanded analysis-resolution combinations, all-palette moving previews, full
   playback and complete final Milestone 7 gates remain separate open requirements.
 
-### Next unit: independent quantization input lattice
+### Independent quantization input lattice — historical proposal
+
+Implemented in checkpoint `f39ae45`; schema, Clippy and rendered acceptance
+remain unverified at the start of the 2026-10-10 release closure.
 
 - Proposed contract: optional bindable `input_scale` in output pixels, default 1,
   bounded to 1–256 and rounded to integer cell spans; discrete `input_filter`
@@ -1473,3 +1520,34 @@ measurements before closing acceptance and moving this plan.
   on identical detail/alpha/moving fixtures with fine threshold scale, 1080p
   timing and 4K limits. This is a proposed next implementation unit, not a checked
   feature or accepted performance claim.
+
+
+### Release closure: input-analysis verification — 2026-10-10
+
+- Scope is frozen under the release decision above; optional new artistic modes
+  are deferred. The working tree started clean at `f39ae45`.
+- Reproduced CI run `37992110029` failures: Rust Clippy rejected manually
+  checked division; Python rejected stale generated schema fields. Regenerated
+  the schema and represented nonzero alpha with `NonZeroU32`, preserving the
+  literal rounding/transparent-cell behavior without disabling lints.
+- New actual-frame combination regression exposed a CPU surface-pool panic
+  with detail + tone + filtered input. Tone now writes logical `Current` so
+  analysis can reuse the bounded three-surface pool; no new surface or renderer
+  architecture. Updated the two planner expectations for this resource flow.
+- Focused core palette tests: **3 passed**. Palette/analog/high-level/public
+  Python contracts after forced native rebuild: **145 passed**. The initial
+  full Python attempt used a stale extension and was terminated; it is not
+  passing evidence. Rebuilt full Python verification is running.
+- CPU/filter and actual WGPU checks: **6 passed, 1 explicitly ignored** on
+  both GL/D3D12 NVIDIA GTX 1650 SUPER (**DiscreteGpu**) and Vulkan llvmpipe
+  (**Software**). Literal nearest/linear/area values, partial border cells,
+  original half-alpha blending, scale-1 identity, tone/detail combinations,
+  animated scale and out-of-order repeats all compare with zero byte error.
+- Explicit input-analysis **1080p/4K** test: **1 passed**, all three filters,
+  including maximum 256-pixel area cells, exact CPU/hardware parity. Persistent /
+  staging estimates: **91,242,240 / 116,125,440 bytes** at 1080p and
+  **364,957,440 / 464,490,240 bytes** at 4K; excludes driver overhead.
+- Canonical checks, strict GPU recipes and reference/ASCII demonstration remain
+  running or pending. No whole-branch acceptance or merge readiness claimed.
+  Logs are under `target/release-closure/`; frame evidence under the existing
+  `target/stylization/frames/{gl,vulkan}/input-analysis-*` directories.

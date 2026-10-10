@@ -1,5 +1,7 @@
 //! Sparse palette-input lattice with alpha-aware encoded-byte filtering.
 
+use std::num::NonZeroU32;
+
 use image::{Rgba, RgbaImage};
 use vestra_core::project::PaletteInputFilter;
 
@@ -42,15 +44,15 @@ pub(super) fn analyze(
                     }
                 }
             }
-            let pixel = if sum[3] == 0 {
-                Rgba([0; 4])
-            } else {
+            let pixel = if let Some(alpha) = NonZeroU32::new(sum[3]) {
                 Rgba([
-                    ((sum[0] + sum[3] / 2) / sum[3]) as u8,
-                    ((sum[1] + sum[3] / 2) / sum[3]) as u8,
-                    ((sum[2] + sum[3] / 2) / sum[3]) as u8,
+                    ((sum[0] + sum[3] / 2) / alpha) as u8,
+                    ((sum[1] + sum[3] / 2) / alpha) as u8,
+                    ((sum[2] + sum[3] / 2) / alpha) as u8,
                     ((sum[3] + count / 2) / count) as u8,
                 ])
+            } else {
+                Rgba([0; 4])
             };
             target.put_pixel(x, y, pixel);
         }

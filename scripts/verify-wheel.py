@@ -8,6 +8,7 @@ from importlib.metadata import distribution, version as distribution_version
 import math
 import struct
 import subprocess
+import tomllib
 import tempfile
 import wave
 from contextlib import nullcontext
@@ -89,8 +90,11 @@ def verify(output_dir: Path) -> None:
     )
 
     package_path = Path(vestra.__file__).resolve()
-    assert distribution_version("vestra") == "0.1.1"
-    assert vestra.__version__ == "0.1.1"
+    workspace_manifest = Path(__file__).resolve().parents[1] / "Cargo.toml"
+    workspace = tomllib.loads(workspace_manifest.read_text())
+    expected_version = workspace["workspace"]["package"]["version"]
+    assert distribution_version("vestra") == expected_version
+    assert vestra.__version__ == expected_version
     installed = distribution("vestra")
     assert installed.metadata["License-Expression"] == "MIT"
     requirement = installed.metadata["Requires-Python"].replace(" ", "")

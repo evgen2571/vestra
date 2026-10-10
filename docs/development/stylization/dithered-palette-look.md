@@ -1,7 +1,7 @@
 # Detailed dithered-palette stylization
 
-Status: **planned visual reference** for the Milestone 2 color/dithering work;
-not an implemented feature or a dedicated hardcoded palette preset.
+Status: **implemented controls with a reproducible synthetic example**; final
+branch acceptance is recorded separately in the execution plan.
 See the [active plan](../../plans/active/stylized-video-effects.md) and
 [effect architecture](../architecture/effect-pipeline.md).
 
@@ -120,3 +120,17 @@ Once implemented, publish a reproducible example and update the
 [reference](../../reference/effects.md),
 [support matrix](../../reference/feature-support.md) and, for footage or
 other external assets, [license ledger](../../../examples/showcase/ASSETS.md).
+
+
+## Reproducible reference-inspired example
+
+Run [the synthetic portrait demonstration](../../../examples/showcase/stylized-effects/reference.py)
+as described in [its guide](../../../examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis).
+Bayer8 at one output pixel, full-resolution entering input, nonuniform stops,
+gamma .9 and radius-1 detail preserve fine cloth/hair bands, facial features
+and calm shadows with three authored palettes. No new artistic mode was needed.
+The generated contact images and short videos live under
+`target/stylized-reference/`; inspect full-resolution PNGs as well as playback.
+The original photographic scene is not reproduced; the quality comparison is
+texture, tonal structure and recognizable source detail on generated footage.
+Unimplemented optional customization is deferred under the release scope.

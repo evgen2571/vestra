@@ -35,12 +35,12 @@ not reduced renderer support.
 | Directional Blur | `DirectionalBlur`, dynamic scalar properties | `directional_blur` | post-transform | supported | supported |
 | Radial Blur | `RadialBlur`, dynamic scalar and point properties | `radial_blur` | post-transform | supported | supported |
 | Chromatic Aberration | `ChromaticAberration`, dynamic scalar properties | `chromatic_aberration` | post-transform | supported | supported |
-| Palette mapping | `PaletteMap`, luminance/RGB/hue/Oklab/channel modes, uneven tonal stops, RGB/Oklab interpolation, bindable input exposure/gamma/detail/radius, animatable amount/phase | `palette_map` | layer post-transform/global post-composition; optional local-time color loop | not fully verified | not fully verified |
-| Ordered dithering | `OrderedDither`, Bayer/seeded blue-noise matrices, luminance/RGB/hue/Oklab/channel modes, uneven tonal stops, RGB/Oklab palette motion, bindable input exposure/gamma/detail/radius, palette and scale | `ordered_dither` | layer post-transform/global post-composition; fixed output-pixel pattern | not fully verified | not fully verified |
+| Palette mapping | `PaletteMap`, luminance/RGB/hue/Oklab/channel modes, uneven tonal stops, RGB/Oklab interpolation, bindable input exposure/gamma/detail/radius/scale, nearest/linear/area input filters, animatable amount/phase | `palette_map` | layer post-transform/global post-composition; optional local-time color loop | supported; literal tone/filter/alpha and legacy regressions | verified on software Vulkan and hardware GL/D3D12 NVIDIA; exact focused frame parity, 1080p/4K resource checks |
+| Ordered dithering | `OrderedDither`, Bayer/seeded blue-noise matrices, luminance/RGB/hue/Oklab/channel modes, uneven tonal stops, RGB/Oklab palette motion, bindable input exposure/gamma/detail/radius/scale, nearest/linear/area input filters, palette and threshold scale | `ordered_dither` | layer post-transform/global post-composition; fixed output-pixel pattern | supported; literal tone/filter/alpha and legacy regressions | verified on software Vulkan and hardware GL/D3D12 NVIDIA; exact focused frame parity, 1080p/4K resource checks |
 | ASCII / pseudo-ASCII | `Ascii`, `PseudoAscii`, characters/custom fonts, bindable controls | `ascii`, character/geometric glyph style | clip/global, fixed composition grid; area analysis and prepared font coverage | supported by focused alpha/partial/tiny-cell tests | verified on software Vulkan and hardware GL/D3D12 NVIDIA for random-access periodic colors and tonal threshold fixtures |
-| Halftone | `Halftone`, luminance/source/RGB, bindable geometry/intensity | `halftone` | layer/group post-transform and global; rotated area-analysis cells | supported, focused visual/alpha tests | implemented; software Vulkan frame parity verified, hardware acceptance pending |
-| Bounded pixel sorting | `PixelSort`, both directions/orders, bindable thresholds/intensity | `pixel_sort` | layer/group post-transform and global; sharp stable segmented runs | supported, tie/threshold tests | implemented; software Vulkan literal ties/threshold parity verified, hardware acceptance pending |
-| CRT styling | `Crt`, continuous seeded noise and explicit period | `crt` | layer/group post-transform and global; inverse-sampled alpha | supported, scanline/phase tests | implemented; software Vulkan period/random-access frame parity verified, hardware acceptance pending |
+| Halftone | `Halftone`, luminance/source/RGB, bindable geometry/intensity | `halftone` | layer/group post-transform and global; rotated area-analysis cells | supported, focused visual/alpha tests | verified on software Vulkan and hardware GL/D3D12 NVIDIA; temporal/alpha parity and 1080p/4K checks |
+| Bounded pixel sorting | `PixelSort`, both directions/orders, bindable thresholds/intensity | `pixel_sort` | layer/group post-transform and global; sharp stable segmented runs | supported, tie/threshold tests | verified on software Vulkan and hardware GL/D3D12 NVIDIA; temporal/alpha parity and 1080p/4K checks |
+| CRT styling | `Crt`, continuous seeded noise and explicit period | `crt` | layer/group post-transform and global; inverse-sampled alpha | supported, scanline/phase tests | verified on software Vulkan and hardware GL/D3D12 NVIDIA; temporal/alpha parity and 1080p/4K checks |
 | Transitions | supported catalog | transition placements | direct endpoints and adapter-mediated Python endpoints | supported | not fully verified visually |
 | Audio clips | supported | `audio` | not applicable | not applicable, media execution is shared | not applicable, media execution is shared |
 
@@ -51,3 +51,10 @@ where the current tests do not establish parity.
 `direct` means the canonical clip itself can carry ordinary presentation and be
 a transition endpoint. `adapter-mediated` means the high-level Python API can
 provide that presentation, while the canonical source cannot carry it directly.
+
+
+Stylization release examples include [a generated moving portrait](../../examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
+with three palette-independent dither looks and zero-source-mix ASCII checks.
+Verification uses the actual adapters named above; native Windows D3D12/Vulkan
+is unverified. Optional new ASCII calibration, halftone shapes, sorting metrics
+and CRT mask modes are deferred and are not exposed as supported controls.

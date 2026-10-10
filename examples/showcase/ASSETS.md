@@ -67,6 +67,9 @@ The [stylized effects scene](stylized-effects/README.md) generates its moving
 video and periodic harmonic soundtrack locally with FFmpeg. The analytic image and
 motion expressions are original project work distributed under MIT; no external
 footage or audio is downloaded. Generated media remains under `target/`.
+The [fine-detail/ASCII reference example](stylized-effects/reference.py) also
+generates an original synthetic portrait, including hair/cloth texture and
+periodic subject motion. It does not redistribute the AcerolaFX screenshot.
 The blue-noise threshold tile is also original MIT-licensed project work,
 reproducible with `scripts/generate-blue-noise.py`; it contains no downloaded
 texture or third-party shader code.

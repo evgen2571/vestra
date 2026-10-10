@@ -29,14 +29,14 @@ fine-detail dithering. Do not begin another phase or change the architecture.
 
 Remaining release work, in order:
 
-- [ ] Synchronize input-analysis schema; resolve Clippy; verify public contracts,
+- [x] Synchronize input-analysis schema; resolve Clippy; verify public contracts,
   CPU/software/hardware parity, borders/alpha and regression coverage.
-- [ ] Reproduce reference-inspired fine-detail dithering on repository-generated
+- [x] Reproduce reference-inspired fine-detail dithering on repository-generated
   footage using existing controls and arbitrary authored palettes.
-- [ ] Render a short demonstration and source/comparison images for monochrome
+- [x] Render a short demonstration and source/comparison images for monochrome
   and two chromatic palettes; inspect detail, silhouettes, spatial and temporal
   artifacts. Implement only a demonstrated essential missing capability.
-- [ ] Reproduce the reported ASCII black-output issue deterministically; fix
+- [x] Reproduce the reported ASCII black-output issue deterministically; fix
   confirmed defects and verify readable output without optional customization.
 - [ ] Run regressions for every original family and fix release blockers.
 - [ ] Finish canonical CI, Python/schema/docs, strict software and hardware WGPU,
@@ -557,6 +557,10 @@ reachable through documented controls, across arbitrary user palettes, with
 provable visible quality and preserved legacy defaults.
 
 ### 6. Advanced customization of ASCII, halftone, sorting, CRT and looks
+
+**Deferred under the 2026-10-10 feature freeze.** The ASCII defect investigation
+remains a release requirement; additional artistic controls below are not
+implemented, not marked complete and not required for merge.
 
 - [ ] **ASCII/PseudoASCII:** diagnose dark/unreadable source-color output using
   repository synthetic/video fixtures; distinguish expected low tone from
@@ -1551,3 +1555,41 @@ remain unverified at the start of the 2026-10-10 release closure.
   running or pending. No whole-branch acceptance or merge readiness claimed.
   Logs are under `target/release-closure/`; frame evidence under the existing
   `target/stylization/frames/{gl,vulkan}/input-analysis-*` directories.
+
+
+### Release closure: reference and ASCII demonstration — 2026-10-10
+
+- Added `examples/showcase/stylized-effects/reference.py`: original moving
+  synthetic portrait FFV1 with shaded face, eyes/mouth, thin hair and cloth
+  bands, plus source/dither and source-colored ASCII four-second MP4s.
+  Reuses ordinary effect controls and existing monochrome/ember/ocean palettes.
+  Bayer8 scale1, entering scale1, stops 0/.22/.6/1, gamma .9, detail1/radius1
+  reproduce fine ordered texture with readable features and calm shadows.
+  No missing essential renderer capability was demonstrated or added.
+- CPU and GL/NVIDIA demonstration self-checks pass: same stationary first three
+  frames, visible subject motion, repeated .25s timestamps, tonal structure and
+  exactly identical palette-index geometry across all three authored palettes.
+  Visual-regression comparator: **56 actual frame pairs passed**, dither/source
+  exact; ASCII maximum channel error **1** (tolerance 2). Native PNGs and comparison
+  sheet inspected for feature/texture preservation; no random crawling in static
+  controls. Source motion at discrete pixel steps intentionally changes boundary
+  coverage. This is a synthetic stylistic counterpart, not photographic fidelity
+  to the reference's different footage.
+- ASCII with zero source mixing produces visible glyphs for mono/source/palette
+  modes. Source-color maximum red is **154**, 134 distinct red values, **3.34%**
+  of pixels above red32 on the portrait; monochrome is brighter. Dark output is
+  expected sparse coverage against black, not uniform-black failure. Existing
+  source blending, foreground/color mode, characters/cells and ColorAdjust suffice;
+  new compensation/density modes remain deferred. Added generated-video regression
+  for all three modes: showcase tests **15 passed** (including three new cases).
+- Forced native rebuild followed by complete Python suite: **833 passed**, plus
+  compileall. The three added cases pass independently; CI will include all 836.
+  Style/schema/docs checks pass; **315 local links**, zero missing.
+- Re-inspected retained 1080p/4K images, metrics and NVIDIA adapter/resource reports
+  for every unchanged family: ASCII/pseudo/three halftones/CRT max error1, both
+  sort directions exact. Reuse this expensive verified size acceptance; current
+  strict software/hardware recipes refresh all-family regression behavior.
+- Generated reference assets: `target/stylized-reference/{640-cpu,640-wgpu}/`,
+  `comparison.png`, `ascii-comparison.png`, `parity.json` and decoded moving-video
+  contact sheets. Final 1080p demonstration, canonical contributor/strict GPU
+  gates and CI remain in progress; no merge-readiness claim yet.

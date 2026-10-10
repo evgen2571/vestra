@@ -92,8 +92,9 @@ comparison, including RGB values in pixels whose alpha rounds to zero.
 
 ## Advanced-control visual acceptance matrix
 
-The active plan's Milestones 5–7 remain in progress. This matrix separates
-actual new-control evidence from pending implementation/acceptance.
+The branch is frozen for release under the active plan's 2026-10-10 decision.
+Unfinished optional customization is deferred; this matrix preserves historical
+evidence and distinguishes it from current release checks.
 
 | Control or mode | Fixture / rendered evidence | Status |
 | --- | --- | --- |
@@ -106,12 +107,12 @@ actual new-control evidence from pending implementation/acceptance.
 | Channel-count quantization | `gpu_stylization_channel_levels_preserve_detail_and_match_cpu_exactly`: 2/4/8/256 levels, map/Bayer8/blue noise, exact GL/Vulkan parity and 256-level identity; explicit 1080p/4K extrema test | Inspected source/2/4/8 contact sheet; broader motion/mask acceptance pending |
 | Perceptual quantization | Q10 Oklab: literal lightness/rounded-tie/partial-alpha cases; source/metric contact sheet; three-palette figure/highlight checks; exact GL/Vulkan parity and explicit 1080p/4K checks | Inspected contact sheet and moving-preview sample; broader motion/stack/mask acceptance pending |
 | Uneven palette stops and interpolation spaces | Nonuniform literal ramp/blue-noise coverage, three-palette scene contrast and periodic out-of-order GL/Vulkan parity | Stops and Oklab ramps/animated preview inspected; broader motion/mask acceptance pending |
-| Tone, local detail and independent analysis resolution | Fine texture, edges, partial borders and moving subjects required | Pending |
-| Calibrated ASCII tone/color/coverage and glyph geometry | Well-exposed FFV1 footage with zero source mixing; custom glyph/font fixture required | Pending |
-| Halftone circle/ellipse/line and screen response | Grayscale, edges, channel angles and printed appearance required | Advanced controls pending |
-| Bounded sorting measures/run/region controls | Both directions, stable ties, threshold transitions and masks required | Advanced controls pending |
-| CRT mask/scanline/bleed controls | Distinct 1080p masks, alpha-safe geometry and procedural loops required | Advanced controls pending |
-| Editable advanced looks | Source side-by-side scenes, effect stacking and music-background loop required | Pending |
+| Tone, local detail and independent analysis resolution | `gpu_stylization_input_analysis*`: literal filters, alpha, border cells, animated scales, tone/detail, exact GL/Vulkan parity and 1080p/4K resources; generated portrait demonstration | Implemented; final gates tracked in plan |
+| ASCII readability | Generated portrait FFV1 with zero source mixing, mono/source/palette colors and random-access frames; custom font regression fixtures | Existing controls checked; optional calibration/geometry deferred |
+| Halftone circle/ellipse/line and screen response | Grayscale, edges, channel angles and printed appearance required | Deferred |
+| Bounded sorting measures/run/region controls | Both directions, stable ties, threshold transitions and masks required | Deferred |
+| CRT mask/scanline/bleed controls | Distinct 1080p masks, alpha-safe geometry and procedural loops required | Deferred |
+| Expanded look catalog | Existing editable recipes and periodic footage/music showcase retained | Optional catalog expansion deferred |
 
 To reproduce the three-palette pattern comparison, run the fine-dither test
 above with strict WGPU and create a two-column sheet from

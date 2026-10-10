@@ -595,7 +595,7 @@ mod stylization_tests {
             ));
             assert_eq!(
                 plan.as_slice()[4].inputs,
-                crate::plan::EffectPassInputs::OriginalAnd(crate::plan::EffectResource::Temporary0)
+                crate::plan::EffectPassInputs::OriginalAnd(crate::plan::EffectResource::Current)
             );
         }
     }
@@ -640,7 +640,7 @@ mod stylization_tests {
             ));
             assert_eq!(
                 passes.as_slice()[1].inputs,
-                crate::plan::EffectPassInputs::OriginalAnd(crate::plan::EffectResource::Temporary0)
+                crate::plan::EffectPassInputs::OriginalAnd(crate::plan::EffectResource::Current)
             );
             assert!(crate::plan::compiled_effect_pass_requirements(&compiled).retains_original());
             let mut neutral = authored;

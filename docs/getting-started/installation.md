@@ -47,7 +47,7 @@ For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
 
 ## Supported Python versions and platforms
 
-Vestra 0.1.1 supports CPython 3.11–3.14. Published wheels cover Linux x86_64
+Vestra 0.1.2 supports CPython 3.11–3.14. Published wheels cover Linux x86_64
 and aarch64 (glibc 2.28+), macOS Intel and Apple Silicon, and Windows x64.
 The `ve` CLI is built separately from the Rust checkout.
 

@@ -218,3 +218,10 @@ look.input_detail.keyframe(2, 1.5)
 
 Detail runs before exposure/gamma and adds three full-resolution passes when
 active. Its default zero amount preserves existing output.
+
+
+For a complete fine-detail dither video and ASCII readability comparison, run
+[the generated portrait example](../../../examples/showcase/stylized-effects/reference.py).
+Its [guide](../../../examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
+explains editable tone/detail/filter settings, three arbitrary palettes and the
+expected darkness of source-colored ASCII with zero source mixing.

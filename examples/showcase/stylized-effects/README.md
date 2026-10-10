@@ -95,3 +95,43 @@ For broader local contrast, use `--input-detail 0.5 --input-detail-radius 8`.
 Try the same settings with `--palette mono` and `--palette ocean`. Detail adds
 three full-resolution passes and defaults to zero; all controls remain editable
 ordinary effect properties in Python.
+
+
+## Fine-detail reference and ASCII diagnosis
+
+[reference.py](reference.py) generates an original moving synthetic portrait
+with facial features, thin hair bands, shaded cloth and a calm dark background.
+It renders a four-second source/dither demonstration for each of the existing
+monochrome, ember and ocean palettes, plus source-colored ASCII. All effects
+are ordinary editable controls; no reference palette or image is embedded.
+
+```bash
+uv run python examples/showcase/stylized-effects/reference.py
+VESTRA_WGPU_BACKEND=gl uv run python examples/showcase/stylized-effects/reference.py --backend wgpu
+```
+
+Add `--full-hd` for 1920×1080. Output is under
+`target/stylized-reference/<width>-<backend>/`: lossless sampled frames,
+canonical projects, source FFV1, short MP4s and `report.json`. The script checks
+stationary frame equality, subject motion, repeated timestamps, visible tonal
+structure and identical palette-index geometry across the three palettes.
+Inspect native PNGs for one-pixel texture; reduced images and H.264 chroma
+subsampling can soften it. This is a reproducible synthetic counterpart to the
+reference's texture/tonal structure, not an exact reconstruction of different
+photographic footage.
+
+The dither example uses Bayer8, threshold `scale=1`, `input_scale=1`, stops
+`(0, .22, .6, 1)`, input gamma `.9`, detail `1` and detail radius `1`.
+Edit the palette colors freely while retaining dark-to-light order. Raise
+`input_scale` with `input_filter="area"`, `"linear"` or `"nearest"` to compare
+coarser input analysis independently of threshold scale; leave it at 1 for
+fine source detail. Blue noise is available through the existing `matrix`
+control when a less regular texture is wanted.
+
+ASCII checks use zero source mixing with monochrome, source and palette colors.
+Source coloring multiplies representative source color by sparse glyph coverage
+against the authored background, so it can look much darker than its source.
+Use existing `source_mix`, monochrome foreground, cell size/characters or an
+ordinary preceding `ColorAdjust` for a brighter look. The script rejects
+uniform/black output on its well-exposed source; a dark aesthetic alone does
+not imply a failed renderer. Optional new brightness/density modes are deferred.

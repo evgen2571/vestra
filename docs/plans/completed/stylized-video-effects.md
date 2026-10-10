@@ -1,6 +1,6 @@
 # Stylized video effects
 
-Status: in progress — feature freeze; release validation and reference-quality demonstration remaining.
+Status: completed — frozen release scope accepted on 2026-10-10; optional expansion deferred.
 Branch: `feat/stylized-video-effects`
 Baseline: `6ec571f6282456d0a595fd9a1aa3ca1f2359c092`
 Initial decisions finalized: 2026-10-08; advanced-customization extension approved: 2026-10-09
@@ -38,11 +38,11 @@ Remaining release work, in order:
   artifacts. Implement only a demonstrated essential missing capability.
 - [x] Reproduce the reported ASCII black-output issue deterministically; fix
   confirmed defects and verify readable output without optional customization.
-- [ ] Run regressions for every original family and fix release blockers.
-- [ ] Finish canonical CI, Python/schema/docs, strict software and hardware WGPU,
+- [x] Run regressions for every original family and fix release blockers.
+- [x] Finish canonical CI, Python/schema/docs, strict software and hardware WGPU,
   targeted 1080p rendering and resource checks. Reuse valid unchanged expensive
   acceptance evidence rather than repeat it without cause.
-- [ ] Update documentation, examples, acceptance status and draft PR; commit
+- [x] Update documentation, examples, acceptance status and draft PR; commit
   changes as `type: short description`; stop when the branch is ready to merge.
 
 Explicitly deferred optional work: custom threshold textures; automatic palette
@@ -392,22 +392,22 @@ renderer rewrite.
 
 ### 2. Color and foundational primitives
 
-- [ ] Reproduce the [palette-agnostic fine-detail dither target](../../development/stylization/dithered-palette-look.md),
+- [x] Reproduce the [palette-agnostic fine-detail dither target](../../development/stylization/dithered-palette-look.md),
   preserving outlines, midtone texture, shadow clarity and temporal stability
   with user-selected colors and adjustable fine/coarse pixel structure.
-- [ ] Verify fixed output-pixel Bayer anchoring and deterministic threshold
+- [x] Verify fixed output-pixel Bayer anchoring and deterministic threshold
   coverage on both backends; control edge/tonal threshold chatter without
   softening intentional crisp dither pixels or making patterns color-dependent.
-- [ ] Verify continuous keyframed/audio-modulated/periodic palette evolution,
+- [x] Verify continuous keyframed/audio-modulated/periodic palette evolution,
   including loop seams and random-access evaluation; introduce reproducible
   short-sequence temporal flicker diagnostics and a stable-scene control.
-- [ ] Implement palette mapping, custom gradient/palette color modes and
+- [x] Implement palette mapping, custom gradient/palette color modes and
   deterministic ordered dithering on both CPU/WGPU.
-- [ ] Expose time-dependent palette/rainbow controls and explicit loop periods;
+- [x] Expose time-dependent palette/rainbow controls and explicit loop periods;
   support appropriate keyframe/signal binding via canonical evaluation.
-- [ ] Extend intermediate-resource support only for concrete needs; verify
+- [x] Extend intermediate-resource support only for concrete needs; verify
   resource limits and time-dependent cache correctness.
-- [ ] Add API/schema/typing tests, deterministic frame fixtures, public docs
+- [x] Add API/schema/typing tests, deterministic frame fixtures, public docs
   and 1080p baseline measurements.
 
 Completion: useful composable color/dither effects with verified periodic
@@ -415,20 +415,20 @@ behavior, public API and both backends.
 
 ### 3. ASCII and pseudo-ASCII
 
-- [ ] Implement a bundled licensed glyph set, custom characters/fonts,
+- [x] Implement a bundled licensed glyph set, custom characters/fonts,
   validation/preflight and reusable glyph assets.
-- [ ] Deliver density/cell controls, luminance and edge modes, monochrome,
+- [x] Deliver density/cell controls, luminance and edge modes, monochrome,
   source-color and animated palette coloring, and hybrid source blending.
-- [ ] Use alpha-aware **area-averaged cell statistics**, appropriate spatial
+- [x] Use alpha-aware **area-averaged cell statistics**, appropriate spatial
   prefiltering/multi-resolution sampling and antialiased glyph coverage.
   Specify intentional cell anchoring, partial-cell behavior and stable
   selection near glyph/edge thresholds without forcing blurred characters.
-- [ ] Verify glyph/edge choices and spatial detail on static and moving
+- [x] Verify glyph/edge choices and spatial detail on static and moving
   footage across cell sizes, transforms and 1080p/4K resolutions, with
   controlled-input-change and short-sequence flicker diagnostics.
-- [ ] Implement and verify equivalent CPU/WGPU paths, transparent/partial
+- [x] Implement and verify equivalent CPU/WGPU paths, transparent/partial
   cell behavior, signal/keyframe support and applicable loop periods.
-- [ ] Verify nonsequential frames, moving footage, typical 1080p throughput
+- [x] Verify nonsequential frames, moving footage, typical 1080p throughput
   and 4K correctness/resources on available adapters.
 
 Completion: advanced, deterministic cinematic ASCII usable on footage and
@@ -436,30 +436,30 @@ images, with no per-frame font/atlas rebuilds or GPU-to-CPU roundtrips.
 
 ### 4. Remaining stylization and reusable looks
 
-- [ ] Implement halftone and CRT/analog styling on CPU/WGPU, including
+- [x] Implement halftone and CRT/analog styling on CPU/WGPU, including
   applicable periodic/animated parameters.
-- [ ] For halftone, use representative alpha-aware **area-averaged** cell
+- [x] For halftone, use representative alpha-aware **area-averaged** cell
   analysis, scale-appropriate spatial prefilter/multi-resolution sampling,
   stable lattice anchoring and antialiased procedural dot edges. Test tonal
   boundary behavior while preserving optional crisp graphic patterns.
-- [ ] For CRT, anchor spatial scanlines/masks consistently, antialias generated
+- [x] For CRT, anchor spatial scanlines/masks consistently, antialias generated
   geometry where appropriate, and use seeded **continuous project-time noise**
   for animated grain/jitter. Verify smooth modulation and repeatable periods.
-- [ ] Verify stable segmented sorting with deterministic ties and threshold
+- [x] Verify stable segmented sorting with deterministic ties and threshold
   boundaries on moving inputs; keep intentional sharp glitches. Optional input
   prefiltering must not silently change the authored sort style.
-- [ ] Implement **both** horizontal and vertical bounded segmented pixel
+- [x] Implement **both** horizontal and vertical bounded segmented pixel
   sorting with explicit thresholds, stable ties and resource-limit behavior;
   optional exotic variants may be deferred, not either required direction.
-- [ ] Supply a small set of optional curated looks using current presets
+- [x] Supply a small set of optional curated looks using current presets
   where valid and composable ordered effect recipes elsewhere. No parallel
   preset engine.
-- [ ] Animate continuous effect intensity/parameters through existing
+- [x] Animate continuous effect intensity/parameters through existing
   keyframes and blending. Assess configuration changes between discrete
   styles; offer explicit crossfading where worthwhile and affordable, or
   document their step-change behavior without adding a general transition
   subsystem.
-- [ ] Verify order, global/clip scope, stacking, masks/mattes, color/alpha
+- [x] Verify order, global/clip scope, stacking, masks/mattes, color/alpha
   parity and error paths for each effect.
 
 Completion: every agreed effect family exists with matching public behavior
@@ -540,14 +540,14 @@ change the behavior of projects authored against the existing defaults.
     the original retained for blending; focused tonal CPU/WGPU acceptance.
   - [x] Local contrast and optional edge/detail preservation, with focused
     CPU/software/hardware parity, nested-alpha, 1080p performance and 4K evidence.
-- [ ] Make filtered input/analysis resolution **independent** of threshold
+- [x] Make filtered input/analysis resolution **independent** of threshold
   pattern size. Define nearest/linear/area filtering, lattice alignment,
   aspect ratio/partial borders and texture-budget limits. Keep true
   output-pixel fine dithering available at `scale=1`.
-- [ ] Validate public Rust/JSON/Python descriptors, type hints, animation
+- [x] Validate public Rust/JSON/Python descriptors, type hints, animation
   bindings, defaults, invalid inputs and legacy behavior; implement both CPU
   and WGPU with no readbacks or unbounded frame allocations.
-- [ ] Compare Bayer/blue noise, tonal settings, quantization modes and
+- [ ] **Deferred expanded comparison catalog:** Compare Bayer/blue noise, tonal settings, quantization modes and
   resolution/detail trade-offs on the **same** grayscale/texture/silhouette
   fixtures in monochrome plus two chromatic palettes. Inspect contact sheets,
   moving previews, 1080p performance and 4K resource estimates.
@@ -596,11 +596,16 @@ combinations without sacrificing deterministic rendering or existing behavior.
 
 ### 7. Showcase, regression and documentation
 
+**Feature-freeze scope:** release verification, implemented examples and docs
+remain required. The expanded acceptance matrix and example catalog for
+unimplemented optional modes are deferred; their unchecked items below are
+historical proposals, not claims of support.
+
 - [ ] Add a per-mode **visual acceptance matrix** covering new patterns,
   quantizers, palette stops, calibrated glyph/edge controls, halftone shapes,
   sorting metrics, phosphor masks and composed looks. Compare real rendered
   frames (not merely successful jobs or CPU/WGPU parity) against source detail.
-- [ ] Use repository-generated FFV1 showcase footage and deterministic
+- [x] Use repository-generated FFV1 showcase footage and deterministic
   grayscale, shadow/highlight, edge, alpha and moving-shape fixtures; do not
   depend on a user's private video. Reject unexpectedly uniform/black output
   on appropriately exposed source, even when both backends agree.
@@ -610,74 +615,74 @@ combinations without sacrificing deterministic rendering or existing behavior.
 - [ ] Add licensed/synthetic deterministic examples for advanced ASCII,
   custom font/characters, rainbow loops, both pixel-sort directions,
   halftone/CRT and composed preset/recipe looks.
-- [ ] Demonstrate a repeating music-background scene; separately note
+- [x] Demonstrate a repeating music-background scene; separately note
   footage/audio-loop requirements.
-- [ ] Produce short deterministic image/frame-sequence temporal diagnostics
+- [x] Produce short deterministic image/frame-sequence temporal diagnostics
   across static controls, moving subjects, slow tonal threshold sweeps,
   procedural loops, effect transitions and intentionally discontinuous
   effects. Record visual/contact-sheet inspection, appropriate metrics,
   expected-vs-unwanted changes and actual CPU/WGPU adapter results.
-- [ ] Run focused/full Rust/Python/schema/docs checks, software WGPU tests,
+- [x] Run focused/full Rust/Python/schema/docs checks, software WGPU tests,
   hardware WGPU tests where available, and compare measured 1080p workloads
   and 4K/resource-limit behavior against baselines.
-- [ ] Update [effect guide](../../guides/python/effects.md),
+- [x] Update [effect guide](../../guides/python/effects.md),
   [effect reference](../../reference/effects.md),
   [feature support](../../reference/feature-support.md), API examples and
   [asset ledger](../../../examples/showcase/ASSETS.md).
-- [ ] Record test results and any blocked hardware-only checks; move plan
+- [x] Record test results and any blocked hardware-only checks; move plan
   to `completed/` only when all implementation acceptance is fulfilled.
 
 Completion: reproducible visual showcase and honest CPU/WGPU capability claims.
 
 ## Feature acceptance checklist
 
-- [ ] All agreed families and modes exist in Python/Rust/JSON as applicable,
+- [x] All agreed families and modes exist in Python/Rust/JSON as applicable,
   with defaults, bounds, documented scope and invalid-input tests.
-- [ ] Built-in characters plus arbitrary user character strings/custom font
+- [x] Built-in characters plus arbitrary user character strings/custom font
   resources validate, render and fail sensibly across both backends.
-- [ ] CPU and actual WGPU frames compare with reasoned tolerances, including
+- [x] CPU and actual WGPU frames compare with reasoned tolerances, including
   transparency, edge/cell boundaries, masks, groups and effect stacking.
-- [ ] Positive finite explicit loop periods work for supported procedural
+- [x] Positive finite explicit loop periods work for supported procedural
   animation; output at times separated by one period matches with nonsequential
   evaluation; source/audio looping is a separate concern.
-- [ ] Animated palettes/rainbow/color modes and supported audio-reactivity
+- [x] Animated palettes/rainbow/color modes and supported audio-reactivity
   use authored project-time signals/parameters deterministically.
-- [ ] Both horizontal and vertical segmented pixel sorts have bounded
+- [x] Both horizontal and vertical segmented pixel sorts have bounded
   resources, deterministic ties and CPU/WGPU coverage.
-- [ ] 1080p representative performance and memory are measured; 4K rendering
+- [x] 1080p representative performance and memory are measured; 4K rendering
   is tested where supported, with clear device-limit diagnostics otherwise.
-- [ ] Optional looks reuse existing image-only presets where valid and
+- [x] Optional looks reuse existing image-only presets where valid and
   composable effect chains for footage/global output.
-- [ ] Dithered palette styling matches the visual detail and tonal structure
+- [x] Dithered palette styling matches the visual detail and tonal structure
   of its design reference with at least three meaningfully different palettes;
   reject coarse/noisy low-detail outputs regardless of color choice.
-- [ ] Advanced dither modes (Bayer/blue noise; luminance, channel and
+- [x] Advanced dither modes (Bayer/blue noise; luminance, channel and
   perceptual palette quantization), uneven palette stops, independent analysis
   resolution, and tone/detail controls have explicit semantics and distinct
   visually verified results on all supported renderers.
-- [ ] ASCII tonal/density/color compensation, halftone dot/screen variants,
+- [ ] **Deferred:** ASCII tonal/density/color compensation, halftone dot/screen variants,
   bounded sorting metrics, CRT phosphor/scanline variants and reusable looks
   cover documented examples without changing legacy project defaults.
-- [ ] Generated video and grayscale/alpha fixtures guard against apparently
+- [x] Generated video and grayscale/alpha fixtures guard against apparently
   uniform-black output on well-exposed input; tests evaluate actual output
   structure, not solely successful encoding or CPU/WGPU numerical parity.
-- [ ] Dither/ASCII/halftone/CRT patterns obey documented spatial anchoring
+- [x] Dither/ASCII/halftone/CRT patterns obey documented spatial anchoring
   and pixel/border rules under scaling/transforms, with area-based analysis
   and antialiased geometry where required; intentional crispness remains.
-- [ ] Interpolable parameters and applicable procedural noise evolve
+- [x] Interpolable parameters and applicable procedural noise evolve
   continuously under project-time and loop-period tests; random-access
   frame evaluation is repeatable. Discrete configuration transitions are
   either intentionally stepped or given documented compatible blending.
-- [ ] Pixel sorting maintains stable ties/segmentation with both directions;
+- [x] Pixel sorting maintains stable ties/segmentation with both directions;
   threshold-edge changes are deterministic and distinguishable from expected
   source-driven glitch motion.
-- [ ] Reproducible automated temporal diagnostic sequences and human-reviewed
+- [x] Reproducible automated temporal diagnostic sequences and human-reviewed
   render comparisons cover stable/animated footage and known discontinuities;
   unintended flicker is investigated with CPU/WGPU evidence, not declared
   absent solely from aggregate metrics.
-- [ ] Licenses/attribution for code, fonts, glyphs and showcase footage are
+- [x] Licenses/attribution for code, fonts, glyphs and showcase footage are
   preserved, with reproducible example inputs.
-- [ ] Targeted tests plus `just check`, `just python-test`,
+- [x] Targeted tests plus `just check`, `just python-test`,
   `just docs-check`, `just wgpu-software` and
   hardware verification where available are reported accurately.
 
@@ -811,11 +816,23 @@ CI and native Windows backend-specific validation are **unverified** so far.
 
 ## Completion / handoff
 
-Not complete. All original families and their public interfaces are implemented.
-Finish the 2026-10-10 release checklist above: input-analysis verification,
-reference demonstration, ASCII diagnosis, final checks and PR/documentation.
-Unfinished optional extension work is deferred; historical entries retain the
-scope and evidence that applied when they were written.
+The frozen release scope is complete. All original families and public interfaces
+are implemented and accepted. Input-analysis schema/Clippy and the combined
+detail/tone/filter CPU surface-pool crash are fixed. The generated portrait
+recipe provides fine-detail three-palette demonstrations at 640×360 and 1080p;
+ASCII visibility is covered by deterministic zero-source-mix video regressions.
+
+Contributor, Python, schema/docs and strict software/hardware/CLI checks pass;
+implementation CI run `38023579160` is green. The documentation-only closure
+commit must also have green PR checks before merge; no new rendering acceptance
+is required for the plan move and link updates. No merge is performed here.
+
+Deferred: optional customization and expanded catalogs listed in the release
+scope decision. Native Windows D3D12/Vulkan remains unverified; hardware evidence
+is WSL Mesa GL/D3D12 on NVIDIA. Historical benchmarks are retained rather than
+represented as final-revision timings; no real-time promise. Sparse dark ASCII
+coverage and deterministic moving-edge threshold changes remain intentional.
+Historical progress below records the scope and evidence at each checkpoint.
 
 ### Restored environment and public examples (2026-10-09)
 
@@ -1586,10 +1603,53 @@ remain unverified at the start of the 2026-10-10 release closure.
   compileall. The three added cases pass independently; CI will include all 836.
   Style/schema/docs checks pass; **315 local links**, zero missing.
 - Re-inspected retained 1080p/4K images, metrics and NVIDIA adapter/resource reports
-  for every unchanged family: ASCII/pseudo/three halftones/CRT max error1, both
+  for every unchanged family: ASCII/pseudo/three halftones/CRT max error 1, both
   sort directions exact. Reuse this expensive verified size acceptance; current
   strict software/hardware recipes refresh all-family regression behavior.
 - Generated reference assets: `target/stylized-reference/{640-cpu,640-wgpu}/`,
   `comparison.png`, `ascii-comparison.png`, `parity.json` and decoded moving-video
   contact sheets. Final 1080p demonstration, canonical contributor/strict GPU
   gates and CI remain in progress; no merge-readiness claim yet.
+
+
+### Release closure: full-HD and contributor acceptance — 2026-10-10
+
+- The same portrait recipe passes at native **1920×1080** on CPU and actual
+  GL/NVIDIA hardware. All **56 frame pairs plus four native detail crops** pass
+  comparison; maximum channel error 1, exact dither/source. Four-second MP4s
+  have 120 frames at 30 fps. Inspected native detail and decoded moving-video
+  sheets for facial silhouette, hair/cloth texture, shadow structure and
+  fixed Bayer anchoring; expected moving-edge threshold changes are documented.
+- `VESTRA_WGPU_BACKEND=gl just check`: **passed**, exit 0; **1075 workspace
+  tests passed, 25 explicitly ignored**, including refreshed original-family
+  clip/global/order/mask/matte and temporal regressions. Explicit relevant
+  size checks were run separately or retained as described above. Formatting,
+  build, all-target Clippy, schema validation/freshness and **316 local links**
+  also pass. No warning/test was disabled to obtain this result.
+- Audited 16 retained source-fingerprinted CPU/hardware 1080p benchmark captures
+  for eight unchanged palette/detail suites: frozen executable/source hashes,
+  90-frame scenes, one warmup and three samples. These are historical stage
+  measurements, not timings of the final revision or a real-time claim.
+  Summary: `target/release-closure/retained-benchmarks.json`.
+- `VESTRA_WGPU_BACKEND=vulkan just wgpu-software`: **passed**, exit 0;
+  full workspace plus **90 strict GPU tests passed, 11 explicitly ignored**
+  (702.29 seconds for strict phase). Runtime reports llvmpipe as Software;
+  this is correctness evidence, not GPU performance.
+- `VESTRA_WGPU_BACKEND=gl just wgpu-hardware`: **passed**, exit 0;
+  full workspace, **90 strict GPU tests passed, 11 explicitly ignored**, and
+  **1 strict encoded CLI parity test passed**. Runtime/adapter metadata confirms
+  NVIDIA GTX 1650 SUPER as DiscreteGpu through WSL Mesa GL/D3D12.
+- GitHub CI run [38023579160](https://github.com/evgen2571/vestra/actions/runs/38023579160)
+  at implementation revision `e4391f1`: **Style, Rust, Python and CI Success all
+  passed**. Complete Python suite **836 passed**; schema validation, 40 canonical
+  examples, offline showcase smoke and tooling checks passed (33 tooling tests
+  passed, 12 benchmark-record cases skipped). CI strict software GPU phase:
+  **90 passed, 11 ignored**. No test/warning/check was weakened.
+- Original milestones 2–4 and feature acceptance are checked against the
+  accumulated actual-source/test, frame, temporal and measurement evidence.
+  Implemented input-analysis work is checked; unimplemented optional artistic
+  extensions and their expanded acceptance catalogs remain explicitly deferred.
+- Plan archived to `completed/`; documentation links and PR description reflect
+  actual controls, reproducible examples, verified adapters and limitations.
+  Final documentation closure is checked locally and must receive green checks
+  on its own PR head before the PR is marked ready for review.

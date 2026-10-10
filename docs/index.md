@@ -51,4 +51,4 @@ See [Contributing](../CONTRIBUTING.md) for setup and contribution guidance, and
 the [development documentation](development/README.md) for testing, architecture,
 performance, extensions and release procedures. Agent contributors can start
 with [AGENTS.md](../AGENTS.md), use [PLANS.md](../PLANS.md) for larger tasks,
-and consult the [active stylization plan](plans/active/stylized-video-effects.md).
+and consult the [completed stylization plan](plans/completed/stylized-video-effects.md).

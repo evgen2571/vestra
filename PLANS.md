@@ -8,7 +8,7 @@ Plans live under `docs/plans/active/<topic>.md` until complete. Move finished
 plans to `docs/plans/completed/<topic>.md` and update links. Do not keep
 conflicting active plans for the same work.
 
-Current active plan: [stylized video effects](docs/plans/active/stylized-video-effects.md).
+Completed feature plan: [stylized video effects](docs/plans/completed/stylized-video-effects.md).
 
 ## Required sections
 

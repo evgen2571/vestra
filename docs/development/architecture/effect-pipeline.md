@@ -98,7 +98,7 @@ Unbounded arbitrary full-frame sorting is not a reasonable default.
 
 ## Approved behavior for stylization work
 
-The [active stylization plan](../../plans/active/stylized-video-effects.md)
+The [completed stylization plan](../../plans/completed/stylized-video-effects.md)
 records 13 approved product decisions. For this work the public contract
 requires both **CPU and WGPU**, clip/global applicability when meaningful,
 advanced ASCII controls, built-in and **custom characters/fonts**, animated

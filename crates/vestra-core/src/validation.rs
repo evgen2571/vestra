@@ -20,8 +20,8 @@ mod warnings;
 /// Enforces the configured project-timeline limits after environment-dependent
 /// preflight has resolved the final duration and frame count.
 ///
-/// Pure validation invokes the same authority for visual-only values; callers
-/// that probe media must invoke this with their final resolved values.
+/// Pure validation invokes the same authority for the known output span;
+/// callers that probe media must invoke this with their final resolved values.
 pub fn enforce_final_timeline_limits(
     frame_count: u64,
     duration: f64,
@@ -173,12 +173,15 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
             &mut errors,
         );
     }
+    let duration = match project.output.duration_mode {
+        crate::project::DurationMode::Explicit => project.output.duration.unwrap_or(0.0),
+        crate::project::DurationMode::Automatic => visual_duration,
+    };
     let frame_rate = project.output.frame_rate.rational().unwrap_or((1, 1));
-    let frame_count = match crate::timeline::frame_count(
-        crate::timeline::seconds_to_nanos(visual_duration).unwrap_or(0),
-        frame_rate.0,
-        frame_rate.1,
-    ) {
+    let mut checked_frame_count = |duration| match crate::timeline::seconds_to_nanos(duration)
+        .ok_or(crate::timeline::TimelineError::Overflow)
+        .and_then(|nanos| crate::timeline::frame_count(nanos, frame_rate.0, frame_rate.1))
+    {
         Ok(count) => count,
         Err(_) => {
             errors.push(Diagnostic::error(
@@ -190,11 +193,16 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
             0
         }
     };
+    let frame_count = checked_frame_count(duration);
+    if project.output.duration_mode == crate::project::DurationMode::Explicit {
+        // Clipping changes resource budgets, not authored-time representability.
+        checked_frame_count(visual_duration);
+    }
     limits::enforce(
         &project.output,
         total_visual_clip_count(&project.visual.clips),
         frame_count,
-        visual_duration,
+        duration,
         limits_config,
         &mut errors,
     );

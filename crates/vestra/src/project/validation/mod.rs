@@ -75,7 +75,7 @@ pub(crate) fn preflight(
             0
         }
     };
-    // Core validation already enforced visual-only limits. Once media probing
+    // Core validation already enforced the known output limits. Once media probing
     // resolves audio placement, apply that same authority to the final project
     // timeline so a late audio clip cannot bypass either limit.
     if validation.is_valid() {
@@ -190,6 +190,93 @@ mod tests {
             diagnostics: core_validate(project.canonical(), limits).into_diagnostics(),
         };
         preflight(project, &validation, &ValidationOptions { limits })
+    }
+
+    #[test]
+    fn custom_timeline_budgets_use_output_span_after_audio_resolution() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let tone = directory.path().join("tone.wav");
+        assert!(
+            std::process::Command::new("ffmpeg")
+                .args([
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "anullsrc=r=8000:cl=mono",
+                    "-t",
+                    "1"
+                ])
+                .arg(&tone)
+                .status()
+                .expect("generate audio fixture")
+                .success()
+        );
+        for (explicit, output_duration, visual_duration, accepted, truncated) in [
+            (true, 1.0, 7201.0, true, true),
+            (true, 7201.0, 1.0, false, false),
+            (true, 2.0, 1.0, true, true),
+            (false, 1.0, 1.0, false, false),
+        ] {
+            let mut value = json!({
+                "schema_version": 1,
+                "output": {"path": "out.mp4", "width": 2, "height": 2,
+                    "frame_rate": "30000/1001", "background": "#000000",
+                    "quality": "preview", "audio": false,
+                    "duration_mode": "explicit", "duration": output_duration},
+                "assets": [{"id": "tone", "type": "audio", "source": tone}],
+                "visual": {"clips": [{"id": "solid", "source": {"type": "solid_color", "colour": "#ff0000"},
+                    "start": 0.0, "duration": visual_duration, "layer": 0, "opacity": {"base_value": 1.0}}]},
+                "audio": {"tracks": [{"id": "music", "mute": true, "clips": [{
+                    "id": "late", "asset": "tone", "start": 3.0, "trim_start": 0.0}]}]}
+            });
+            if !explicit {
+                value["output"]["duration_mode"] = "automatic".into();
+                value["output"].as_object_mut().unwrap().remove("duration");
+            }
+            let project = Project::from_value(value, directory.path()).expect("project");
+            for limits in [
+                ResourceLimits {
+                    maximum_duration_seconds: 2.0,
+                    maximum_frames: 300_000,
+                    ..ResourceLimits::default()
+                },
+                ResourceLimits {
+                    maximum_duration_seconds: 8000.0,
+                    maximum_frames: 60,
+                    ..ResourceLimits::default()
+                },
+            ] {
+                let outcome = run(&project, limits);
+                assert_eq!(
+                    outcome.resolved.is_some(),
+                    accepted,
+                    "{:?}",
+                    outcome.diagnostics
+                );
+                assert_eq!(
+                    outcome
+                        .diagnostics
+                        .iter()
+                        .any(|item| item.code == "VESTRA-LIMIT-TIMELINE"),
+                    !accepted
+                );
+                if accepted {
+                    assert_eq!(
+                        outcome
+                            .diagnostics
+                            .iter()
+                            .any(|item| item.code == "VESTRA-DURATION-TRUNCATED"),
+                        truncated
+                    );
+                    assert_eq!(
+                        outcome.resolved.unwrap().frame_count,
+                        if output_duration == 1.0 { 30 } else { 60 }
+                    );
+                }
+            }
+        }
     }
 
     #[test]

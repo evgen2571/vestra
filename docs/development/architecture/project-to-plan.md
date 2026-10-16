@@ -70,10 +70,11 @@ when an audio end depends on media probing, it defers the upper bound while
 still checking track structure and values. Preflight rechecks global effects
 against the final resolved project duration before preparation.
 
-Pure validation still uses visual/flash span for its initial timeline budget
-check; [effective-output budgets](https://github.com/evgen2571/vestra/issues/9)
-tracks that separate inconsistency. Default limits
-still include 216,000 frames and 7,200 seconds; the
+Timeline duration and frame budgets apply to the explicit output span, including
+any background/silent tail, rather than content clipped beyond that span. In
+automatic mode, pure validation budgets the visual/flash span; preflight
+rechecks the final span including media-resolved audio. Authored timing remains
+validated even when content is clipped. Default limits still include 216,000 frames and 7,200 seconds; the
 [cap-removal ticket](https://github.com/evgen2571/vestra/issues/7) is future work.
 Finite resource checks and representability remain separate concerns.
 

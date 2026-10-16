@@ -1535,3 +1535,94 @@ fn preflight_preserves_pure_warnings_when_asset_resolution_fails() {
             .any(|item| item.code == "VESTRA-ASSET-UNUSED")
     );
 }
+
+#[test]
+fn global_effects_use_resolved_project_time_in_prepared_frames() {
+    let directory = tempdir().expect("temporary directory");
+    let tone = directory.path().join("tone.wav");
+    assert!(
+        std::process::Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=8000:cl=mono",
+                "-t",
+                "1"
+            ])
+            .arg(&tone)
+            .status()
+            .expect("generate audio fixture")
+            .success()
+    );
+    for (automatic, empty, trimmed) in [
+        (false, false, false),
+        (false, true, false),
+        (true, false, false),
+        (true, false, true),
+    ] {
+        let mut value = serde_json::json!({
+            "schema_version": 1,
+            "output": {"path": "out.mp4", "width": 2, "height": 2,
+                "frame_rate": "30000/1001", "background": "#204060",
+                "quality": "preview", "audio": false,
+                "duration_mode": "explicit", "duration": 10.0},
+            "assets": [],
+            "visual": {"clips": [{"id": "short", "source": {"type": "solid_color", "colour": "#000000"},
+                "start": 0.0, "duration": 1.0, "layer": 0, "opacity": {"base_value": 1.0}}],
+                "post_effects": [{"id": "brightness", "type": "brightness", "amount": {
+                    "base_value": 0.0, "keyframes": [{"time": 5.0, "value": 0.25, "interpolation": "linear"}]
+                }}]}
+        });
+        if empty {
+            value["visual"]["clips"] = serde_json::json!([]);
+        }
+        if automatic {
+            value["output"]["duration_mode"] = "automatic".into();
+            value["output"].as_object_mut().unwrap().remove("duration");
+            value["assets"] =
+                serde_json::json!([{"id": "tone", "type": "audio", "source": "tone.wav"}]);
+            value["audio"] = serde_json::json!({"tracks": [{"id": "music", "mute": true, "clips": [
+                {"id": "tone", "asset": "tone", "start": 9.0, "trim_start": 0.0}
+            ]}]});
+            if trimmed {
+                value["audio"]["tracks"][0]["clips"][0]["trim_end"] = 1.0.into();
+            }
+        }
+        let editor = Editor::new();
+        let project =
+            vestra::Project::from_value(value.clone(), directory.path()).expect("project");
+        assert!(editor.validate(&project).is_valid());
+        assert!(
+            editor
+                .preflight(&project, PreflightOptions::for_inspection())
+                .is_ready()
+        );
+        let mut prepared = editor
+            .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+            .expect("prepare");
+        assert_eq!(
+            prepared.preparation_report().duration(),
+            Duration::from_secs(10)
+        );
+        assert_eq!(prepared.preparation_report().frame_count(), 300);
+        let tail = prepared.render_frame_number(299).expect("last frame");
+        assert_eq!(&tail.as_bytes()[..4], &[96, 128, 160, 255]);
+        assert!(prepared.render_frame_number(300).is_err());
+
+        value["visual"]["post_effects"][0]["amount"]["keyframes"][0]["time"] = 10.1.into();
+        let invalid =
+            vestra::Project::from_value(value, directory.path()).expect("invalid timing project");
+        let report = editor.preflight(&invalid, PreflightOptions::for_inspection());
+        assert!(!report.is_ready());
+        assert!(
+            report
+                .errors()
+                .any(|item| item.code == "VESTRA-KEYFRAME-TIME"
+                    && item.pointer.as_deref()
+                        == Some("/visual/post_effects/0/amount/keyframes/0/time"))
+        );
+    }
+}

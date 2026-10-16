@@ -1696,8 +1696,8 @@ fn explicit_clipping_preserves_local_time_and_prepared_frame_bounds() {
             "assets": [],
             "visual": {"clips": [{"id": "group", "source": {"type": "group", "clips": [{
                 "id": "child", "source": {"type": "solid_color", "colour": "#ff0000"},
-                "start": 0.25, "duration": 7201.0, "layer": 0, "opacity": {"base_value": 1.0}
-            }]}, "start": 0.25, "duration": 7201.0, "layer": 0, "opacity": {"base_value": 1.0}}]}
+                "start": 0.25, "duration": 20_000_000_000.0, "layer": 0, "opacity": {"base_value": 1.0}
+            }]}, "start": 0.25, "duration": 20_000_000_000.0, "layer": 0, "opacity": {"base_value": 1.0}}]}
         }),
         directory.path(),
     )

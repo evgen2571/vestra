@@ -182,9 +182,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         crate::project::DurationMode::Automatic => visual_duration,
     };
     let frame_rate = project.output.frame_rate.rational().unwrap_or((1, 1));
-    let mut checked_frame_count = |duration| match crate::timeline::seconds_to_nanos(duration)
-        // Prepared-project duration and frame timestamps use u64 nanoseconds.
-        .filter(|nanos| u64::try_from(*nanos).is_ok())
+    let mut checked_frame_count = |duration_nanos: Option<u128>| match duration_nanos
         .ok_or(crate::timeline::TimelineError::Overflow)
         .and_then(|nanos| crate::timeline::frame_count(nanos, frame_rate.0, frame_rate.1))
     {
@@ -199,10 +197,13 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
             0
         }
     };
-    let frame_count = checked_frame_count(duration);
+    // Prepared output timestamps use u64 nanoseconds; authored clip times are wider.
+    let frame_count = checked_frame_count(
+        crate::timeline::seconds_to_nanos(duration).filter(|nanos| u64::try_from(*nanos).is_ok()),
+    );
     if project.output.duration_mode == crate::project::DurationMode::Explicit {
         // Clipping changes resource budgets, not authored-time representability.
-        checked_frame_count(visual_duration);
+        checked_frame_count(crate::timeline::seconds_to_nanos(visual_duration));
     }
     limits::enforce(
         &project.output,

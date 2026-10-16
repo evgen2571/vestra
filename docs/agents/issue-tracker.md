@@ -3,6 +3,14 @@
 Issues and specs live in GitHub Issues for `evgen2571/vestra`.
 Use the `gh` CLI from this checkout.
 
+## Development roadmap
+
+The [Vestra development roadmap](https://github.com/evgen2571/vestra/issues/63)
+links the workstream specs and prioritized delivery tickets. Before starting a
+ticket, read its owning spec, agent brief and native blocking relationships.
+Accepted research/prototype results require a separately reviewed implementation
+ticket before production adoption.
+
 ## Operations
 
 - Create: `gh issue create --title "..." --body-file <file>`.

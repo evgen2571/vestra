@@ -1626,3 +1626,52 @@ fn global_effects_use_resolved_project_time_in_prepared_frames() {
         );
     }
 }
+
+#[test]
+fn explicit_clipping_preserves_local_time_and_prepared_frame_bounds() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_value(
+        serde_json::json!({
+            "schema_version": 1,
+            "output": {"path": "out.mp4", "width": 2, "height": 2,
+                "frame_rate": "30000/1001", "background": "#000000", "quality": "preview",
+                "audio": false, "duration_mode": "explicit", "duration": 1.0},
+            "assets": [],
+            "visual": {"clips": [{"id": "group", "source": {"type": "group", "clips": [{
+                "id": "child", "source": {"type": "solid_color", "colour": "#ff0000"},
+                "start": 0.25, "duration": 7201.0, "layer": 0, "opacity": {"base_value": 1.0}
+            }]}, "start": 0.25, "duration": 7201.0, "layer": 0, "opacity": {"base_value": 1.0}}]}
+        }),
+        directory.path(),
+    )
+    .expect("project");
+    let editor = Editor::new();
+    assert!(editor.validate(&project).is_valid());
+    let report = editor.preflight(&project, PreflightOptions::for_inspection());
+    assert!(report.is_ready());
+    assert!(
+        report
+            .warnings()
+            .any(|item| item.code == "VESTRA-DURATION-TRUNCATED")
+    );
+    let mut prepared = editor
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare");
+    assert_eq!(prepared.preparation_report().frame_count(), 30);
+    assert_eq!(
+        prepared.render_frame_number(14).unwrap().as_bytes(),
+        [0, 0, 0, 255].repeat(4)
+    );
+    assert_eq!(
+        prepared.render_frame_number(15).unwrap().as_bytes(),
+        [255, 0, 0, 255].repeat(4)
+    );
+    assert_eq!(
+        prepared.render_frame_number(29).unwrap().as_bytes(),
+        [255, 0, 0, 255].repeat(4)
+    );
+    assert_eq!(
+        prepared.render_frame_number(30).unwrap_err().diagnostics()[0].code,
+        "VESTRA-FRAME-RANGE"
+    );
+}

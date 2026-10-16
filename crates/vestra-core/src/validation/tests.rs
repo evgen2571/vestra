@@ -1664,3 +1664,80 @@ fn global_effect_fix_preserves_clip_local_keyframe_bounds() {
             && item.pointer.as_deref() == Some("/visual/clips/0/effects/0/amount/keyframes/0/time")
     }));
 }
+
+#[test]
+fn timeline_budgets_use_effective_output_duration() {
+    for (output_duration, clip_duration, automatic, allowed) in [
+        (1.0, 7201.0, false, true),
+        (7201.0, 1.0, false, false),
+        (2.0, 1.0, false, true),
+        (1.0, 7201.0, true, false),
+        (1.0, 2.0, true, true),
+    ] {
+        let mut project = project(json!({"tracks": []}));
+        project.assets.clear();
+        project.visual.clips =
+            serde_json::from_value(json!([solid_clip("content", 0.0, clip_duration)])).unwrap();
+        project.output.frame_rate = serde_json::from_value(json!("30000/1001")).unwrap();
+        project.output.duration = Some(output_duration);
+        if automatic {
+            project.output.duration_mode = crate::project::DurationMode::Automatic;
+            project.output.duration = None;
+        }
+        for limits in [
+            ResourceLimits {
+                maximum_duration_seconds: 2.0,
+                maximum_frames: 300_000,
+                ..ResourceLimits::default()
+            },
+            ResourceLimits {
+                maximum_duration_seconds: 8000.0,
+                maximum_frames: 60,
+                ..ResourceLimits::default()
+            },
+        ] {
+            let report = validate(&project, limits);
+            assert_eq!(
+                report.is_valid(),
+                allowed,
+                "duration={output_duration}, clip={clip_duration}, automatic={automatic}: {:?}",
+                report.diagnostics()
+            );
+            assert_eq!(
+                report
+                    .diagnostics()
+                    .iter()
+                    .any(|item| item.code == "VESTRA-LIMIT-TIMELINE"),
+                !allowed
+            );
+        }
+    }
+}
+
+#[test]
+fn explicit_clipping_does_not_hide_invalid_authored_times() {
+    let mut project = project(json!({"tracks": []}));
+    project.assets.clear();
+    project.visual.clips =
+        serde_json::from_value(json!([solid_clip("content", 0.0, 7201.0)])).unwrap();
+    for invalid in [-1.0, f64::NAN, f64::INFINITY] {
+        project.visual.clips[0].start = invalid;
+        assert!(has(&project, "VESTRA-CLIP-TIME"));
+        project.visual.clips[0].start = 0.0;
+        project.visual.clips[0].duration = invalid;
+        assert!(has(&project, "VESTRA-CLIP-TIME"));
+        project.visual.clips[0].duration = 7201.0;
+        project.output.duration = Some(invalid);
+        assert!(has(&project, "VESTRA-DURATION-EXPLICIT"));
+        project.output.duration = Some(1.0);
+    }
+    project.visual.clips[0].duration = 0.0;
+    assert!(has(&project, "VESTRA-CLIP-TIME"));
+    for duration in [1e20, f64::MAX] {
+        project.visual.clips[0].duration = duration;
+        assert!(has(&project, "VESTRA-TIMELINE-OVERFLOW"));
+    }
+    project.visual.clips[0].duration = 1.0;
+    project.output.duration = Some(f64::MAX);
+    assert!(has(&project, "VESTRA-TIMELINE-OVERFLOW"));
+}

@@ -36,7 +36,11 @@ pub fn enforce_final_timeline_limits(
 pub struct ResourceLimits {
     pub maximum_width: u32,
     pub maximum_height: u32,
+    /// Optional caller budget; defaults to `u64::MAX`. Checked timeline
+    /// arithmetic still rejects unrepresentable frame counts.
     pub maximum_frames: u64,
+    /// Optional caller budget in seconds; defaults to `f64::MAX`.
+    /// Timeline representability checks apply independently of this budget.
     pub maximum_duration_seconds: f64,
     pub maximum_source_pixels: u64,
     pub maximum_decoded_asset_bytes: u64,
@@ -63,8 +67,8 @@ impl Default for ResourceLimits {
         Self {
             maximum_width: 8192,
             maximum_height: 8192,
-            maximum_frames: 216_000,
-            maximum_duration_seconds: 7_200.0,
+            maximum_frames: u64::MAX,
+            maximum_duration_seconds: f64::MAX,
             maximum_source_pixels: 100_000_000,
             maximum_decoded_asset_bytes: 400 * 1024 * 1024,
             maximum_total_decoded_bytes: 1024 * 1024 * 1024,
@@ -178,7 +182,7 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         crate::project::DurationMode::Automatic => visual_duration,
     };
     let frame_rate = project.output.frame_rate.rational().unwrap_or((1, 1));
-    let mut checked_frame_count = |duration| match crate::timeline::seconds_to_nanos(duration)
+    let mut checked_frame_count = |duration_nanos: Option<u128>| match duration_nanos
         .ok_or(crate::timeline::TimelineError::Overflow)
         .and_then(|nanos| crate::timeline::frame_count(nanos, frame_rate.0, frame_rate.1))
     {
@@ -193,10 +197,13 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
             0
         }
     };
-    let frame_count = checked_frame_count(duration);
+    // Prepared output timestamps use u64 nanoseconds; authored clip times are wider.
+    let frame_count = checked_frame_count(
+        crate::timeline::seconds_to_nanos(duration).filter(|nanos| u64::try_from(*nanos).is_ok()),
+    );
     if project.output.duration_mode == crate::project::DurationMode::Explicit {
         // Clipping changes resource budgets, not authored-time representability.
-        checked_frame_count(visual_duration);
+        checked_frame_count(crate::timeline::seconds_to_nanos(visual_duration));
     }
     limits::enforce(
         &project.output,

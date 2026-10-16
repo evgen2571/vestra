@@ -83,6 +83,76 @@ fn solid_clip(id: &str, start: f64, duration: f64) -> Value {
     })
 }
 
+#[test]
+fn default_limits_accept_long_visual_timelines() {
+    for (rate, duration) in [
+        ("30/1", 7_201.0),
+        ("30000/1001", 8_008.0),
+        ("60/1", 3_601.0),
+        ("30/1", 18_446_744_073.0),
+    ] {
+        let mut project = grouped_project(vec![solid_clip("long", 0.0, duration)]);
+        project.output.duration_mode = crate::project::DurationMode::Automatic;
+        project.output.duration = None;
+        project.output.frame_rate = crate::project::FrameRate::Rational(rate.to_owned());
+        assert!(accepted(&project, ResourceLimits::default()));
+    }
+}
+
+#[test]
+fn custom_timeline_budgets_remain_inclusive() {
+    let mut project = grouped_project(vec![solid_clip("long", 0.0, 7_201.0)]);
+    project.output.duration_mode = crate::project::DurationMode::Automatic;
+    project.output.duration = None;
+    for (frames, seconds, valid) in [
+        (7_201, 7_201.0, true),
+        (7_200, 7_201.0, false),
+        (7_201, 7_200.0, false),
+        (1, 1.0, false),
+    ] {
+        let report = validate(
+            &project,
+            ResourceLimits {
+                maximum_frames: frames,
+                maximum_duration_seconds: seconds,
+                ..ResourceLimits::default()
+            },
+        );
+        assert_eq!(report.is_valid(), valid, "{:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn explicit_clipping_preserves_wide_authored_timing() {
+    let project = grouped_project(vec![solid_clip("clipped", 0.0, 20_000_000_000.0)]);
+    assert!(accepted(&project, ResourceLimits::default()));
+}
+
+#[test]
+fn default_limits_reject_unrepresentable_visual_timelines() {
+    for duration in [18_446_744_074.0, 20_000_000_000.0, 1e20, 1e30, f64::MAX] {
+        let mut project = grouped_project(vec![solid_clip("overflow", 0.0, duration)]);
+        project.output.duration_mode = crate::project::DurationMode::Automatic;
+        project.output.duration = None;
+        assert!(
+            has(&project, "VESTRA-TIMELINE-OVERFLOW"),
+            "duration={duration}"
+        );
+    }
+}
+
+#[test]
+fn default_limits_reject_nonfinite_clip_timing() {
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let mut project = grouped_project(vec![solid_clip("invalid", 0.0, 1.0)]);
+        project.visual.clips[0].duration = value;
+        assert!(has(&project, "VESTRA-CLIP-TIME"));
+        project.visual.clips[0].duration = 1.0;
+        project.visual.clips[0].start = value;
+        assert!(has(&project, "VESTRA-CLIP-TIME"));
+    }
+}
+
 fn group_clip(id: &str, clips: Vec<Value>) -> Value {
     json!({
         "id": id,

@@ -109,7 +109,7 @@ def test_unregistered_sources_are_rejected_by_central_lowering() -> None:
         project.snapshot()
 
 
-def test_explicit_output_budgets_clipped_content(tmp_path: Path) -> None:
+def test_explicit_output_preserves_clipped_content_and_long_background_tail(tmp_path: Path) -> None:
     project = vestra.Project(
         size=(2, 2), fps=(30000, 1001), duration=1, base_directory=tmp_path
     )
@@ -118,6 +118,9 @@ def test_explicit_output_budgets_clipped_content(tmp_path: Path) -> None:
     prepared = project.prepare(backend="cpu")
     assert prepared.render_frame_number(29).to_bytes()[:4] == bytes((255, 0, 0, 255))
 
-    project = vestra.Project(size=(2, 2), fps=1, duration=7201)
+    project = vestra.Project(size=(2, 2), fps=1, duration=7201, base_directory=tmp_path)
     project.root.add(Color("#ff0000"), duration=1)
-    assert not project.validate().is_valid
+    assert project.validate().is_valid
+    prepared = project.prepare(backend="cpu")
+    assert prepared.preparation_report.frame_count == 7201
+    assert prepared.render_frame_number(7200).to_bytes() == bytes((0, 0, 0, 255)) * 4

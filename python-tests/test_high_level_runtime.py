@@ -33,7 +33,7 @@ def test_long_timeline_preserves_group_local_time(
     assert prepared.preparation_report.duration_seconds == duration
     assert prepared.render_frame_seconds(7200.5).to_bytes() == bytes([255, 0, 0, 255]) * 4
     assert prepared.render_frame_number(0).to_bytes() == bytes([17, 34, 51, 255]) * 4
-    with pytest.raises(vestra.RenderError):
+    with pytest.raises(vestra.FrameRenderError):
         prepared.render_frame_number(frames)
 
 

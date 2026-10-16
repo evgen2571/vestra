@@ -1516,3 +1516,151 @@ fn playback_speed_is_clip_only_and_uses_declared_bounds() {
         assert!(has(&out_of_range, "VESTRA-AUDIO-EFFECT-PARAMETER"));
     }
 }
+
+fn global_effect_project() -> Project {
+    let mut project = project(json!({"tracks": []}));
+    project.assets.clear();
+    project.output.duration = Some(10.0);
+    project.visual.clips = serde_json::from_value(json!([{
+        "id": "short", "source": {"type": "solid_color", "colour": "#000000"},
+        "start": 0.0, "duration": 1.0, "layer": 0, "opacity": {"base_value": 1.0}
+    }]))
+    .unwrap();
+    project.visual.post_effects = serde_json::from_value(json!([{
+        "id": "brightness", "type": "brightness",
+        "amount": {"base_value": 0.0, "keyframes": [{"time": 5.0, "value": 0.5, "interpolation": "linear"}]}
+    }])).unwrap();
+    project
+}
+
+#[test]
+fn global_effect_keyframes_use_explicit_project_duration() {
+    let project = global_effect_project();
+    let report = validate(&project, ResourceLimits::default());
+    assert!(report.is_valid(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn global_effect_keyframes_allow_audio_extended_automatic_duration() {
+    for trim_end in [Some(10.0), None] {
+        let mut project = global_effect_project();
+        project.output.duration_mode = crate::project::DurationMode::Automatic;
+        project.output.duration = None;
+        project.assets = serde_json::from_value(json!([
+            {"id": "tone", "type": "audio", "source": "does-not-exist.wav"}
+        ]))
+        .unwrap();
+        project.audio = serde_json::from_value(json!({"tracks": [{
+            "id": "music", "mute": true, "clips": [{
+                "id": "tone", "asset": "tone", "start": 2.0, "trim_start": 0.0,
+                "trim_end": trim_end.unwrap_or(10.0)
+            }]
+        }]}))
+        .unwrap();
+        if trim_end.is_none() {
+            project.audio.as_mut().unwrap().tracks[0].clips[0].trim_end = None;
+        }
+        let report = validate(&project, ResourceLimits::default());
+        assert!(
+            report.is_valid(),
+            "{trim_end:?}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn global_effect_bounds_follow_the_project_span() {
+    for (explicit, empty, duration, accepted) in [
+        (true, true, 10.0, true),
+        (true, false, 5.0, true),
+        (true, false, 4.0, false),
+        (false, false, 1.0, false),
+    ] {
+        let mut project = global_effect_project();
+        if empty {
+            project.visual.clips.clear();
+        }
+        if explicit {
+            project.output.duration = Some(duration);
+            if !empty {
+                project.visual.clips[0].duration = 20.0;
+            }
+        } else {
+            project.output.duration_mode = crate::project::DurationMode::Automatic;
+            project.output.duration = None;
+        }
+        assert_eq!(has(&project, "VESTRA-KEYFRAME-TIME"), !accepted);
+    }
+}
+
+#[test]
+fn global_effect_unknown_audio_span_still_rejects_malformed_tracks() {
+    let mut project = global_effect_project();
+    project.output.duration_mode = crate::project::DurationMode::Automatic;
+    project.output.duration = None;
+    project.assets = serde_json::from_value(json!([
+        {"id": "tone", "type": "audio", "source": "does-not-exist.wav"}
+    ]))
+    .unwrap();
+    project.audio = serde_json::from_value(json!({"tracks": [{"id": "music", "clips": [
+        {"id": "tone", "asset": "tone", "start": 0.0, "trim_start": 0.0}
+    ]}]}))
+    .unwrap();
+    for time in [-1.0, f64::NAN, f64::INFINITY] {
+        let mut invalid = project.clone();
+        let Effect::Brightness { amount, .. } = &mut invalid.visual.post_effects[0] else {
+            unreachable!()
+        };
+        amount.track.keyframes[0].time = time;
+        assert!(has(&invalid, "VESTRA-KEYFRAME-TIME"));
+    }
+    let Effect::Brightness { amount, .. } = &mut project.visual.post_effects[0] else {
+        unreachable!()
+    };
+    amount
+        .track
+        .keyframes
+        .push(amount.track.keyframes[0].clone());
+    assert!(has(&project, "VESTRA-KEYFRAME-TIME"));
+}
+
+#[test]
+fn global_effect_audio_bounds_use_processed_sample_duration() {
+    for (trim_end, rate, keyframe, accepted) in [
+        (1.0, 0.25, 4.0, true),
+        (1.0, 2.0, 0.6, false),
+        (0.000_015, 1.0, 0.000_02, true),
+    ] {
+        let mut project = global_effect_project();
+        project.visual.clips.clear();
+        project.output.duration_mode = crate::project::DurationMode::Automatic;
+        project.output.duration = None;
+        project.assets = serde_json::from_value(json!([
+            {"id": "tone", "type": "audio", "source": "does-not-exist.wav"}
+        ]))
+        .unwrap();
+        project.audio = serde_json::from_value(json!({"tracks": [{"id": "music", "clips": [{
+            "id": "tone", "asset": "tone", "start": 0.0, "trim_start": 0.0, "trim_end": trim_end,
+            "effects": [{"id": "speed", "type": "playback_speed", "rate": rate}]
+        }]}]}))
+        .unwrap();
+        let Effect::Brightness { amount, .. } = &mut project.visual.post_effects[0] else {
+            unreachable!()
+        };
+        amount.track.keyframes[0].time = keyframe;
+        assert_eq!(has(&project, "VESTRA-KEYFRAME-TIME"), !accepted);
+    }
+}
+
+#[test]
+fn global_effect_fix_preserves_clip_local_keyframe_bounds() {
+    let mut project = global_effect_project();
+    project.visual.clips[0].start = 4.0;
+    project.visual.clips[0].effects = project.visual.post_effects.clone();
+    let report = validate(&project, ResourceLimits::default());
+    assert!(report.diagnostics().iter().any(|item| {
+        item.code == "VESTRA-KEYFRAME-TIME"
+            && item.pointer.as_deref() == Some("/visual/clips/0/effects/0/amount/keyframes/0/time")
+    }));
+}

@@ -41,6 +41,16 @@ pub(crate) fn preflight(
     );
     let duration =
         duration::resolve(canonical, audio_end, &mut warnings, &mut errors).unwrap_or(0.0);
+    if validation.is_valid() {
+        errors.extend(
+            vestra_core::validation::validate_resolved_global_effects(
+                canonical,
+                duration,
+                options.limits,
+            )
+            .into_diagnostics(),
+        );
+    }
     let duration_nanos = match seconds_to_nanos(duration) {
         Some(duration_nanos) => duration_nanos,
         None => {

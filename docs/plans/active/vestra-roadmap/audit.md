@@ -1,5 +1,8 @@
 # Backlog audit evidence
 
+Status: historical audit snapshot retained after successful publication.
+See [publication status and issue map](README.md); GitHub Issues is the authoritative backlog.
+
 Baseline: `develop` at `4c77b44431c355322c5fcaf0481bf02fa0e18356`, 2026-10-16.
 This audit changed no production code. Source-confirmed facts are distinguished
 from executed reproductions and unverified hypotheses.

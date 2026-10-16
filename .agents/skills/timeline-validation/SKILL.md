@@ -31,7 +31,7 @@ for existing regression seams.
 
 Current modes are automatic and explicit. Minimum duration, inferred child-group
 duration, fill-to-end intent and selected-range video output are proposals, not
-existing contracts. Keep finite caller/resource and representability checks;
-the default timeline caps still exist until their implementation changes.
+existing contracts. Keep caller-selected timeline budgets, other resource limits
+and representability checks; default frame/duration budgets use type maxima.
 Report the reproducer, actual versus expected result, time domain and any
 unverified media/backend path. Do not fix a boundary by adding an unexplained epsilon.

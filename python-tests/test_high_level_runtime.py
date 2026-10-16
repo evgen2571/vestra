@@ -20,6 +20,23 @@ def _animated_project(tmp_path: Path) -> vestra.Project:
     return project
 
 
+@pytest.mark.parametrize("fps,duration,frames", [(30, 7201, 216030), ((30000, 1001), 8008, 240000)])
+def test_long_timeline_preserves_group_local_time(
+    tmp_path: Path, fps: int | tuple[int, int], duration: int, frames: int,
+) -> None:
+    project = vestra.Project(size=(2, 2), fps=fps, base_directory=tmp_path)
+    project.root.add(Color("#112233"), duration=duration)
+    group = project.root.group(start=7200, duration=1, z=1)
+    group.add(Color("#ff0000"), start=0, duration=1)
+    prepared = project.prepare(backend="cpu")
+    assert prepared.preparation_report.frame_count == frames
+    assert prepared.preparation_report.duration_seconds == duration
+    assert prepared.render_frame_seconds(7200.5).to_bytes() == bytes([255, 0, 0, 255]) * 4
+    assert prepared.render_frame_number(0).to_bytes() == bytes([17, 34, 51, 255]) * 4
+    with pytest.raises(vestra.RenderError):
+        prepared.render_frame_number(frames)
+
+
 def test_prepare_returns_native_session_with_reports_and_random_access_frames(
     tmp_path: Path,
 ) -> None:

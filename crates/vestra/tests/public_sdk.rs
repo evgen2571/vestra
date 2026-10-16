@@ -1164,6 +1164,63 @@ fn stable_sdk_enum_strings_match_report_names() {
 }
 
 #[test]
+fn long_timelines_validate_preflight_and_prepare_with_default_limits() {
+    let directory = tempdir().expect("temporary directory");
+    for (rate, duration, frames) in [
+        ("30/1", 7_201, 216_030),
+        ("30000/1001", 8_008, 240_000),
+        ("60/1", 3_601, 216_060),
+    ] {
+        let project = vestra::Project::from_value(
+            serde_json::json!({
+                "schema_version": 1,
+                "output": {"path": "unused.mp4", "width": 2, "height": 2,
+                    "frame_rate": rate, "background": "#000000", "quality": "preview",
+                    "audio": false, "duration_mode": "automatic"},
+                "assets": [],
+                "visual": {"clips": [{"id": "long", "start": 0, "duration": duration,
+                    "source": {"type": "solid_color", "colour": "#112233"},
+                    "layer": 0, "opacity": {"base_value": 1}}]}
+            }),
+            directory.path(),
+        )
+        .expect("project");
+        let editor = Editor::new();
+        assert!(editor.validate(&project).is_valid());
+        assert!(
+            editor
+                .preflight(&project, PreflightOptions::default())
+                .is_valid()
+        );
+        let mut prepared = editor
+            .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+            .expect("long timeline preparation");
+        assert_eq!(prepared.preparation_report().frame_count(), frames);
+        assert_eq!(
+            prepared.preparation_report().duration(),
+            Duration::from_secs(duration)
+        );
+        let last = prepared
+            .render_frame_number(frames - 1)
+            .expect("last frame");
+        assert_eq!(last.as_bytes(), [0x11, 0x22, 0x33, 0xff].repeat(4));
+        assert_eq!(
+            prepared
+                .render_frame(last.timestamp())
+                .expect("timestamp access")
+                .frame_number(),
+            frames - 1
+        );
+        assert!(prepared.render_frame_number(frames).is_err());
+        assert!(
+            prepared
+                .render_frame(Duration::from_secs(duration))
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(

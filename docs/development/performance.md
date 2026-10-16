@@ -103,6 +103,9 @@ instrumentation can change timings.
 
 ## Hardware WGPU
 
+For allocation and sustained-load investigations, use the
+[profiling procedure](#allocation-and-sustained-render-profiling) below.
+
 After the platform preflight in [GPU validation](gpu-validation.md), run:
 
 ```bash
@@ -133,3 +136,36 @@ scenario selection is recorded explicitly in `suite.json`; comparisons reject
 changed scenario sets, dimensions, or sample/warmup counts. A 4K correctness
 check can override dimensions when running the same benchmark directly, but
 must be reported separately from the versioned 1080p measurements.
+
+## Allocation and sustained-render profiling
+
+Use the existing opt-in `VESTRA_CPU_PROFILE` hot-path timings and an external
+allocation/CPU profiler to locate work, rather than inferring it from cache hits.
+Record the profiling tool, version, invocation and overhead separately from
+uninstrumented paired measurements. Engine allocation/copy counters cover named
+operations, not every allocator call. Distinguish allocation churn from retained
+capacity and peaks; fewer allocations can retain more memory.
+
+For process-memory measurements, include the renderer and owned FFmpeg child
+processes, name the platform metric (for example RSS/high-water RSS), sampling
+interval and collection method, and state whether peaks are simultaneous or
+per-process maxima. GPU working-set counters are estimates, not device-resident
+memory measurements. The benchmark runner currently records engine counters;
+process-memory captures need external tooling and must not be presented as a
+built-in report field. Missing measurements are unavailable, not zero.
+
+Separate preparation/evaluation/command encoding, shader/device work, upload,
+readback and row repacking before calling a workload GPU-bound. Include decoder
+seeks/conversions, encoder backpressure/finalization and disk/publication in
+end-to-end investigations. Existing frame-write overlap means summed stage
+times need not equal wall time; see [media concurrency](media-pipeline.md).
+
+For sustained rendering, sample early, steady and late intervals and repeated
+prepare/render/abort cycles. Track throughput alongside process memory, file
+handles, decoder contexts, worker scratch, cache reservations and in-flight
+buffers. Streamed master PCM avoids retaining the whole waveform, but prepared
+signal/analysis data can still scale with duration; growth is not automatically
+a leak. Respect current timeline/resource limits when choosing workloads.
+Report actual duration/frame count and output bytes: short smoke runs prove
+execution, not multi-hour stability or large-file behavior. Changes involving
+encoded output also need [media verification](media-pipeline.md#verify-encoded-output).

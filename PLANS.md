@@ -4,6 +4,13 @@ Use an execution plan for large features, resource/architecture changes,
 cross-component refactors or work spanning multiple sessions. Small fixes
 need no special plan. This convention makes work resumable without chat history.
 
+GitHub Issues owns specs, acceptance criteria and blocking dependencies; an
+execution plan records implementation decisions, progress and evidence for that
+scope. Link the owning issue rather than maintaining a second backlog. A retained
+planning snapshot is historical, not an implementation tracker; follow an explicit
+retention request until its agreed cleanup point. This does not change the
+pre-merge cleanup lifecycle below.
+
 ## Lifecycle
 
 Substantial features and refactors use `docs/plans/active/<feature>.md`.

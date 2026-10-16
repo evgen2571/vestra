@@ -54,6 +54,52 @@ command builds the benchmark automatically and renders every suite workload.
 Neither smoke timings nor test timings are a performance baseline. Use the
 [canonical suite](performance.md) for measurements.
 
+The task-specific local workflows are indexed in
+[Vestra skills](../../.agents/skills/README.md); their visual tools also have
+four isolated self-tests. `just docs-check` checks public Markdown file targets,
+not skill metadata, links under `.agents/` or Markdown anchors. Validate those
+explicitly when changing skills, and execute the existing tool self-tests.
+
+## Timeline and media checks
+
+Use [project-to-plan](architecture/project-to-plan.md#time-domains-and-frame-boundaries)
+for time domains/duration authority and
+[media output verification](media-pipeline.md#verify-encoded-output) for probe,
+AV-sync and failure criteria. Prefer existing seams:
+
+- Core timeline/validation/compiler tests for rational arithmetic, half-open
+  activity, transition endpoints and nested schedules.
+- SDK project preflight and public prepared-frame tests for media-resolved
+  duration, exact frame access, diagnostics, owned pixels and output lifecycle.
+- High-level Python project/group/video tests for omitted durations and lowering;
+  schema/typing/CLI tests when public contracts change.
+- Media cursor/cache/VFR and sink/output tests for timestamp selection, EOF,
+  ordered writes, failure cleanup and destination publication.
+
+For each boundary, distinguish authored end, effective clipping and source EOF;
+test adjacent frames/timestamps and exclusive output end at rational rates.
+Pure validation must remain independent of filesystem/media availability.
+Use a focused regression to reproduce the defect before changing a contract;
+roadmap acceptance criteria do not describe features already available.
+
+## Rendered sequences and references
+
+Compare a short deterministic sequence before/at/after effect and transition
+boundaries, with nested offsets, masks/mattes and fractional FPS as relevant.
+Repeat timestamps in forward/backward order and fresh/prepared sessions to
+expose request-order state or cache invalidation. Retain per-frame metrics and
+contact sheets; a sequence average can hide a bad boundary frame.
+
+Backend parity is one reference, not independent proof: also use expected
+literal pixels, a known fixture/reference or a cache-disabled path as suitable.
+Inspect transparent hidden RGB, alpha, semitransparent edges and composition
+over a visible backdrop. Justify tolerances for the operation and encoded/raw
+format rather than copying broad thresholds. Fix seeds/fonts/assets/time and
+investigate nondeterminism instead of widening tolerances. Keep CPU, strict
+software-WGPU and named hardware-WGPU evidence separate.
+
+## CI coverage
+
 CI has three validation jobs followed by the required `CI Success` gate:
 
 - Style runs `just style` in `nix develop .#ci` to check Rust formatting, the maintained Python format/lint surface, and public documentation file links, and showcase/script formatting and lint. Rust and Python jobs start only after it passes.

@@ -51,18 +51,19 @@ pub(crate) fn preflight(
             .into_diagnostics(),
         );
     }
-    let duration_nanos = match seconds_to_nanos(duration) {
-        Some(duration_nanos) => duration_nanos,
-        None => {
-            errors.push(crate::Diagnostic::error(
-                "VESTRA-TIMELINE-OVERFLOW",
-                crate::Category::Semantic,
-                "project duration cannot be represented safely",
-                "/output/duration",
-            ));
-            0
-        }
-    };
+    let duration_nanos =
+        match seconds_to_nanos(duration).filter(|nanos| u64::try_from(*nanos).is_ok()) {
+            Some(duration_nanos) => duration_nanos,
+            None => {
+                errors.push(crate::Diagnostic::error(
+                    "VESTRA-TIMELINE-OVERFLOW",
+                    crate::Category::Semantic,
+                    "project duration cannot be represented safely",
+                    "/output/duration",
+                ));
+                0
+            }
+        };
     let total_frames = match frame_count(duration_nanos, frame_rate.0, frame_rate.1) {
         Ok(count) => count,
         Err(_) => {
@@ -280,6 +281,28 @@ mod tests {
     }
 
     #[test]
+    fn default_limits_accept_late_audio_but_reject_timeline_overflow() {
+        let outcome = run(
+            &audio_project(8_008.0, "30000/1001"),
+            ResourceLimits::default(),
+        );
+        let resolved = outcome.resolved.expect("late audio resolves with defaults");
+        assert!(resolved.duration > 8_008.0);
+        assert!(resolved.frame_count > 240_000);
+
+        for start in [18_446_744_074.0, 1e30] {
+            let outcome = run(&audio_project(start, "30/1"), ResourceLimits::default());
+            assert!(outcome.resolved.is_none());
+            assert!(
+                outcome
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "VESTRA-TIMELINE-OVERFLOW")
+            );
+        }
+    }
+
+    #[test]
     fn final_audio_duration_limit_is_inclusive_and_cannot_be_bypassed() {
         let defaults = ResourceLimits::default();
         let source_duration =
@@ -287,6 +310,7 @@ mod tests {
                 .expect("tone duration");
         let limits = ResourceLimits {
             maximum_frames: u64::MAX,
+            maximum_duration_seconds: 7_200.0,
             ..defaults
         };
 
@@ -319,6 +343,7 @@ mod tests {
                 .expect("tone duration");
         let limits = ResourceLimits {
             maximum_duration_seconds: f64::MAX,
+            maximum_frames: 216_000,
             ..defaults
         };
         let frame_seconds = limits.maximum_frames as f64 / 30.0;

@@ -133,6 +133,15 @@ extend scalar tracks with ordered `modifiers`.
 
 ## Validation layers
 
+Default validation and preparation accept timelines beyond two hours and
+216,000 frames. Duration and frame counts must still be finite and safely
+representable by the engine's checked timeline arithmetic, including the
+`u64` nanosecond duration used for prepared projects. Rust callers using
+`ResourceLimits` can set `maximum_frames` and `maximum_duration_seconds` to
+enforce smaller budgets; their defaults are `u64::MAX` and `f64::MAX`.
+Dimension, decoded-memory, cache, complexity and active-layer limits remain
+in force.
+
 JSON Schema provides machine-readable structural validation: field names,
 types, tags, and basic ranges. Canonical semantic validation checks cross-field
 and engine invariants such as IDs, timing, endpoint ownership, effect scope,

@@ -16,7 +16,9 @@ Read [testing](../../../docs/development/testing.md),
    licensed/synthetic input.
 2. Render **corresponding frames** with CPU and WGPU. Prefer direct frame APIs
    over lossy MP4 comparison; when needed, extract matching decoded frames
-   with FFmpeg using consistent positions.
+   with FFmpeg using frame indices/PTS, not rounded display FPS. Include a
+   short sequence before, at and after clip/effect/transition boundaries,
+   with fractional FPS and nested composition-local offsets where relevant.
 3. Record the actual backend, graphics API, adapter and classification.
    Software WGPU is not hardware GPU verification.
 4. Run the comparison script for metrics and a visible difference PNG, then
@@ -24,6 +26,9 @@ Read [testing](../../../docs/development/testing.md),
 5. Check edge cases: fully/partly transparent pixels, thin contours,
    gradients, masks/mattes, nested groups, 1080p/4K, and moving footage.
    Verify periodic effects at out-of-order timestamps separated by a cycle.
+   Repeat the same timestamps in sequential, backward and fresh-preparation
+   orders; compare cached versus uncached references to expose stale state
+   or nondeterminism. A single matching frame cannot establish temporal parity.
 6. Keep generated assets under `target/`; don't commit third-party media or
    performance claims without provenance.
 
@@ -65,4 +70,9 @@ uv run --no-project --with 'Pillow>=10,<13' python -m unittest discover \
 ```
 
 Metrics cannot replace judgment of aesthetic quality. Inspect rendered
-frames with multiple palettes and actual motion where applicable.
+frames with multiple palettes and actual motion where applicable. Keep an
+independent expected/reference image as well as backend parity: two backends
+can agree on the same defect. Justify tolerances per operation, inspect alpha
+and compositing on visible backdrops, and retain hidden-RGB differences in the
+raw report. Record per-frame failures and request order, not just an average
+over the sequence. See [testing](../../../docs/development/testing.md#rendered-sequences-and-references).

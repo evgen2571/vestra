@@ -26,13 +26,22 @@ and [dithered-palette guide](../../../docs/development/stylization/dithered-pale
    the bounded planner only for a demonstrated need.
 4. **Implement end to end:** Rust CPU operation, WGSL kernels/parameters/
    WGPU dispatch, Rust SDK and Python authoring/lowering, and JSON schema.
-   Ensure deterministic evaluation at arbitrary timestamps.
+   Evaluate from owner-local time and explicit seeds, independent of request
+   order. Update core temporal-dependency classification for keyframes,
+   signals, procedural time and timed activation; propagate through groups,
+   masks/mattes and global effects. Compare cached and uncached output across
+   interval boundaries; a constant parameter does not imply static content.
 5. **Verify actual renders:** compare CPU/WGPU frames using
    [visual-regression](../visual-regression/SKILL.md). Test color/alpha,
    masks, groups, transforms, effect order, animation and resource failures.
 6. **Complete public contracts:** validation errors, round trips, exports,
    typing, [effect reference](../../../docs/reference/effects.md), examples
    and [feature support](../../../docs/reference/feature-support.md).
+
+Keep per-submission buffers, retained originals and pending cache textures
+alive until GPU completion; use [wgpu-validation](../wgpu-validation/SKILL.md)
+when resource ownership changes. Preserve existing pass order, rounding and
+encoded-byte/alpha semantics rather than applying a generic colour convention.
 
 ## Verification
 

@@ -1,9 +1,9 @@
 ---
 name: api-contract-sync
-description: "Use when changing Vestra canonical JSON models or schemas, effect descriptors, Rust SDK exports, Python/PyO3 APIs, public typing, validation, or authoring/lowering behavior."
+description: "Use when changing Vestra canonical JSON models or schemas, effect descriptors, Rust SDK exports, Python/PyO3 APIs, CLI requests/reports, public typing, validation, or authoring/lowering behavior."
 ---
 
-# Synchronize Rust, JSON and Python contracts
+# Synchronize Rust, Python, JSON and CLI contracts
 
 Read [project-to-plan](../../../docs/development/architecture/project-to-plan.md),
 [Python bindings](../../../docs/development/architecture/python-bindings.md),
@@ -22,12 +22,17 @@ and [testing](../../../docs/development/testing.md).
 | High-level Python | `python/vestra/effects/`, `python/vestra/lowering.py` |
 | Native binding and typing | `crates/vestra-python/` and relevant `.pyi` files |
 | Rust public SDK | `crates/vestra/` |
+| CLI requests and reports | `crates/vestra-cli/` |
 | Public docs | `docs/reference/` and `docs/guides/python/` |
 
 ## Procedure
 
 1. Specify the canonical tag, required/optional fields, type/range, units,
    defaults, scope and diagnostics before writing public constructors.
+   Separate authored intent from preflight-resolved values in inspection,
+   prepared reports and render requests. For duration changes, use
+   [timeline-validation](../timeline-validation/SKILL.md): automatic/explicit
+   modes, output clipping and media-derived ends are distinct contracts.
 2. Change model and descriptor metadata, semantic validation and
    core compile/evaluate logic together. Do not duplicate authored
    defaults or special cases in each frontend.
@@ -36,6 +41,10 @@ and [testing](../../../docs/development/testing.md).
    actually change.
 4. Regenerate and validate the canonical schema, test positive/negative
    JSON, round trips, high-level API, Rust SDK and typing failure cases.
+   Cover CLI flags/JSON reports too. Preserve unknown-field/null rejection,
+   existing defaults and diagnostic codes/severity/pointers unless the
+   compatibility change is intentional. Schema evolution must account for
+   old projects and all frontends, not merely generate a new schema file.
 5. Update [reference](../../../docs/reference/effects.md),
    [support matrix](../../../docs/reference/feature-support.md) and
    runnable examples. Serialization alone is not evidence of renderer support.

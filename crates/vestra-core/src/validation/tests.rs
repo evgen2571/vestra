@@ -123,8 +123,14 @@ fn custom_timeline_budgets_remain_inclusive() {
 }
 
 #[test]
+fn explicit_clipping_preserves_wide_authored_timing() {
+    let project = grouped_project(vec![solid_clip("clipped", 0.0, 20_000_000_000.0)]);
+    assert!(accepted(&project, ResourceLimits::default()));
+}
+
+#[test]
 fn default_limits_reject_unrepresentable_visual_timelines() {
-    for duration in [18_446_744_074.0, 1e20, 1e30, f64::MAX] {
+    for duration in [18_446_744_074.0, 20_000_000_000.0, 1e20, 1e30, f64::MAX] {
         let mut project = grouped_project(vec![solid_clip("overflow", 0.0, duration)]);
         project.output.duration_mode = crate::project::DurationMode::Automatic;
         project.output.duration = None;

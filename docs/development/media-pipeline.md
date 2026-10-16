@@ -44,6 +44,11 @@ within that image's presentation interval reuse it even when optional RGBA
 caching is disabled. At EOF, the final frame can be held. Returned RGBA frames
 own their storage; the decoder can safely advance afterward.
 
+Decoder EOF holding does not authorize an authored clip to exceed its media:
+preflight currently checks the full authored source span, even when output
+clipping would shorten execution. Diagnose those as separate boundaries; see
+[timeline validation authority](architecture/project-to-plan.md#duration-resolution-and-validation-authority).
+
 The optional LRU cache is bounded by retained RGBA bytes. A cache entry records
 its observed successor timestamp: neighbouring cache entries alone cannot prove
 coverage, because sparse requests and seeks leave gaps. The current image,
@@ -129,3 +134,44 @@ Use [render lifecycle](../concepts/rendering-lifecycle.md) for the public contra
 [performance](performance.md) for measurements. Correctness checks should include
 sparse/backward/VFR frame requests, cache boundaries, same-asset offsets,
 mask/matte dependencies, ordered completion, cancellation, and encoder failures.
+
+## Verify encoded output
+
+Reuse generated moving-frame and audio-marker fixtures from the media/SDK tests
+and benchmark workloads. Fix source dimensions, rational frame rate, seeds and
+audio placement; use lossless input where exact source pixels matter. Avoid
+downloaded footage or new fixture generators when existing helpers cover the case.
+
+Probe the published target, not just the encoder's temporary file. For example:
+
+```bash
+ffprobe -v error -select_streams v:0 -count_frames \
+  -show_entries stream=codec_name,pix_fmt,width,height,r_frame_rate,avg_frame_rate,time_base,start_time,duration,nb_read_frames \
+  -of json target/media-check/output.mp4
+```
+
+Compare decoded frame count with the resolved plan, not just `nb_frames` or
+rounded container duration. Inspect `-show_frames`/`-show_packets` timestamps
+when diagnosing drift, discontinuities or missing tails. Compare presentation
+order: B-frame PTS and packet DTS need not be equal. Decode audio markers at
+early/middle/final positions to measure AV alignment, allowing justified codec
+delay and container/sample rounding. Matching stream durations alone cannot
+prove sync. Raw frame fidelity and encoded-media correctness are separate checks.
+
+Current output is MP4 with libx264 H264/yuv420p; quality controls CRF and an
+internal x264 preset. Hardware WGPU rendering does not imply hardware decode,
+hardware encoding or direct GPU-to-encoder transfer. Record actual renderer,
+adapter and encoder separately. Selected-range video, resumability and alternate
+output codecs remain proposals rather than established test targets.
+
+For long-duration/large-file tests, state actual timeline length, frame count,
+encoded bytes, disk budget and timestamp coverage. Current default timeline
+caps still apply; low-cost sparse boundary tests do not prove sustained encoding
+or >4 GiB container behavior. Keep expensive runs explicit and outputs temporary;
+combine with [sustained resource profiling](performance.md#allocation-and-sustained-render-profiling).
+
+Use existing sink/publication fault tests for decode, write, finalization,
+publication and cancellation failures. Check stage/error context, joins and
+temporary cleanup, and that a prior good destination survives failed work.
+Only successful publication permits terminal success; the callback/cancellation
+edge cases are defined by [render lifecycle](../concepts/rendering-lifecycle.md).

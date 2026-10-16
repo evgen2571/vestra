@@ -13,6 +13,9 @@ and working contract, not as a duplicate of architecture documentation.
 
 Use the relevant [Vestra repository skill](.agents/skills/README.md) for
 specialized, repeatable workflows. Don't load unrelated skill guides.
+For duration/boundary work use `timeline-validation`; for encoded output or
+publication failures use `media-output-validation`. Shared `rust-skills` guidance
+is selective background; Vestra's contracts and measured constraints take precedence.
 
 ## Task routing
 
@@ -70,6 +73,7 @@ specialized, repeatable workflows. Don't load unrelated skill guides.
 
 Issues and specs live in GitHub Issues for `evgen2571/vestra`.
 See `docs/agents/issue-tracker.md`.
+Read the owning spec, agent brief and native blockers before starting a ticket.
 
 ### Triage labels
 

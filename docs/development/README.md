@@ -6,6 +6,10 @@ and the [architecture overview](architecture/overview.md) to find your way
 around the codebase. Agents should also consult [AGENTS.md](../../AGENTS.md)
 and [PLANS.md](../../PLANS.md).
 
+The [Vestra skill index](../../.agents/skills/README.md) routes agent work to
+task-specific verification. GitHub [issue workflow](../agents/issue-tracker.md)
+owns specs and dependencies; implementation plans track work on a selected issue.
+
 ## Testing and performance
 
 - [Testing](testing.md)
@@ -13,6 +17,7 @@ and [PLANS.md](../../PLANS.md).
 - [Performance](performance.md)
 - [CPU rendering and work reuse](cpu-efficiency.md)
 - [Media pipeline and concurrency](media-pipeline.md)
+- [Timeline domains and validation](architecture/project-to-plan.md#time-domains-and-frame-boundaries)
 
 ## Architecture
 

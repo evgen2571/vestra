@@ -28,6 +28,13 @@ of building a competing adapter validation framework.
    alignment, pass ordering, texture-slot aliasing, limits, staging,
    readback and GPU completion lifetimes. Add focused negative tests
    and actionable diagnostics.
+   Trace acquire → submit → map/complete → copy/unmap → reuse for each slot;
+   keep parameters, uploads and pending cache reservations tied to their
+   submission token/generation. Exercise multiple in-flight frames, eviction,
+   abort and failed mapping; CPU submission is not GPU completion.
+   Check padded-row sizes, host conversions and buffer growth against the
+   requested device limits, not just adapter maxima. Returned frames must
+   own pixels after readback slots are reused.
 6. Use [visual-regression](../visual-regression/SKILL.md) to compare
    **actual rendered** CPU/WGPU frames when fidelity matters.
 
@@ -36,4 +43,6 @@ of building a competing adapter validation framework.
 Give requested graphics API, selected adapter, classification, commands,
 pass/fail results and remaining unverified environments. Never describe
 llvmpipe/Lavapipe or any software adapter as GPU-hardware validation.
-If hardware is unavailable, mark hardware validation **blocked**, not passed.
+If hardware is unavailable, report hardware validation **unverified** with
+the adapter/environment limitation; shader parsing and software results do
+not establish hardware correctness or speed.

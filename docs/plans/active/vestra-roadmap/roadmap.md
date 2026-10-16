@@ -1,8 +1,10 @@
 # Vestra next development stages
 
-Draft master issue. Publication awaits approval of the linked ticket breakdown.
-This draft uses local IDs; publication substitutes actual issue links and native
-hierarchy/blocking relationships.
+Status: historical pre-publication master draft. Published roadmap: [#63](https://github.com/evgen2571/vestra/issues/63).
+
+Original draft priorities and local IDs below are retained for review traceability.
+GitHub Issues is authoritative; see [publication status and approved issue map](README.md).
+This snapshot does not track current issue state or implementation progress.
 
 ## Objective and established direction
 

@@ -1,6 +1,10 @@
 # Vestra roadmap: proposed ticket breakdown
 
-Status: draft, awaiting ticket/spec publication approval. Test seams approved in the conversation.
+Status: historical pre-publication ticket draft. Publication and verification completed.
+
+The original breakdown below is preserved, including its superseded P0 priorities
+and review prompts. It is not a second tracker. See [publication status and issue map](README.md)
+for approved changes and the authoritative GitHub issues. Do not update implementation progress here.
 Baseline: `develop` at `4c77b44431c355322c5fcaf0481bf02fa0e18356` (2026-10-16).
 
 This file is a review artifact, not a second issue tracker. GitHub Issues remains authoritative after publication.

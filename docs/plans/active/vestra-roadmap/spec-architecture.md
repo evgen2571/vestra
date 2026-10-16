@@ -1,6 +1,10 @@
 # Spec: Architecture and maintainability
 
-Status: draft; test seams approved, awaiting publication approval.
+Status: historical pre-publication spec snapshot. Published spec: [#60](https://github.com/evgen2571/vestra/issues/60).
+
+GitHub Issues is authoritative. This original draft is retained for traceability,
+not implementation tracking. See [publication status and approved changes](README.md)
+for the final priorities and research-to-implementation review gate.
 
 ## Problem Statement
 

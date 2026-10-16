@@ -325,7 +325,7 @@ pub fn compile(
         })
 }
 
-fn seconds_to_samples(seconds: f64) -> Option<u64> {
+pub(crate) fn seconds_to_samples(seconds: f64) -> Option<u64> {
     let samples = (seconds * MASTER_AUDIO_SAMPLE_RATE as f64).round();
     (seconds.is_finite() && seconds >= 0.0 && samples.is_finite() && samples <= u64::MAX as f64)
         .then_some(samples as u64)

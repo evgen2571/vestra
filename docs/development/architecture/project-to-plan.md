@@ -74,9 +74,10 @@ Timeline duration and frame budgets apply to the explicit output span, including
 any background/silent tail, rather than content clipped beyond that span. In
 automatic mode, pure validation budgets the visual/flash span; preflight
 rechecks the final span including media-resolved audio. Authored timing remains
-validated even when content is clipped. Default limits still include 216,000 frames and 7,200 seconds; the
-[cap-removal ticket](https://github.com/evgen2571/vestra/issues/7) is future work.
-Finite resource checks and representability remain separate concerns.
+validated even when content is clipped. Defaults impose no arbitrary frame or
+duration budget; caller-selected finite budgets still apply. Checked arithmetic
+and the prepared project's `u64` nanosecond duration bound remain enforced
+independently of those budgets. See [validation limits](../../reference/project-format.md#validation-layers).
 
 Minimum duration, automatic child-group inference, fill-to-end intent and
 selected-range video output are not established APIs. For timing changes,

@@ -63,3 +63,20 @@ specialized, repeatable workflows. Don't load unrelated skill guides.
   Report tests that could not run as **unverified**.
 - Use meaningful commits formatted `type: short description` without phase
   numbers. At handoff state changes, tests/results, limitations and next work.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `evgen2571/vestra`.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage labels.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context layout: root `GLOSSARY.md` and `docs/adr/`.
+See `docs/agents/domain.md`.

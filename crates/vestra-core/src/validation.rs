@@ -154,7 +154,12 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
     let visual_duration = visual_duration(project);
     effects::validate_global(
         &project.visual.post_effects,
-        visual_duration,
+        match project.output.duration_mode {
+            crate::project::DurationMode::Explicit => project.output.duration.unwrap_or(0.0),
+            crate::project::DurationMode::Automatic => {
+                global_effect_duration(project, visual_duration)
+            }
+        },
         limits_config.maximum_effects_per_clip,
         limits_config.maximum_keyframes_per_track,
         &mut errors,
@@ -218,6 +223,52 @@ pub fn validate_transition_placement(
     let mut errors = Vec::new();
     transitions::validate_placement(placement, "/transition", &mut errors);
     ValidationReport::new(errors)
+}
+
+/// Rechecks global post-effects against the final project duration supplied by
+/// media preflight. Pure validation defers bounds that require source probing.
+#[must_use]
+pub fn validate_resolved_global_effects(
+    project: &Project,
+    duration: f64,
+    limits: ResourceLimits,
+) -> ValidationReport {
+    let mut errors = Vec::new();
+    effects::validate_global(
+        &project.visual.post_effects,
+        duration,
+        limits.maximum_effects_per_clip,
+        limits.maximum_keyframes_per_track,
+        &mut errors,
+        project
+            .audio
+            .as_ref()
+            .is_some_and(|audio| audio.tracks.iter().any(|track| !track.clips.is_empty())),
+    );
+    ValidationReport::new(errors)
+}
+
+fn global_effect_duration(project: &Project, visual_duration: f64) -> f64 {
+    project
+        .audio
+        .iter()
+        .flat_map(|audio| &audio.tracks)
+        .flat_map(|track| &track.clips)
+        .map(|clip| {
+            let duration = clip.trim_end.and_then(|end| {
+                let samples = crate::plan_audio::seconds_to_samples(end - clip.trim_start)?;
+                let processed = crate::plan_audio::compile_effects(&clip.effects)
+                    .transform_duration_samples(samples)
+                    .ok()?;
+                Some(
+                    clip.start
+                        + processed as f64 / crate::plan_audio::MASTER_AUDIO_SAMPLE_RATE as f64,
+                )
+            });
+            // Unresolved audio needs preflight; defer only the upper timing bound.
+            duration.unwrap_or(f64::MAX)
+        })
+        .fold(visual_duration, f64::max)
 }
 
 fn visual_duration(project: &Project) -> f64 {

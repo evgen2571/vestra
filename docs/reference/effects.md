@@ -12,7 +12,12 @@ source sizing/crop → pre-transform effects → layer transform
 Motion Tile is the only pre-transform effect. Other effects execute after the
 layer transform in declaration order. The public effect list remains one
 ordered list; the compiler routes each canonical effect to its intrinsic
-stage. Global post-effects remain post-composition.
+stage. Global post-effects remain post-composition. Their keyframe times use
+the project span, including explicit background tails and automatic audio
+extensions. For example, a ten-second explicit project can have one second of
+visual content and a global brightness keyframe at five seconds. Bounds that
+need audio probing are checked by preflight; pure validation still rejects
+malformed tracks without reading media.
 
 The authored order is still the public order. For example, a canonical list
 `[MotionTile, DirectionalBlur, ChromaticAberration]` samples the virtual tiles,

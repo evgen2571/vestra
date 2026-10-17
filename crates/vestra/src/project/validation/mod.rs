@@ -36,6 +36,7 @@ pub(crate) fn preflight(
     );
     validate_video_layers(
         &canonical.visual.clips,
+        "/visual/clips",
         &assets.video_durations,
         &mut errors,
     );
@@ -123,10 +124,12 @@ pub(crate) fn preflight(
 
 fn validate_video_layers(
     clips: &[vestra_core::project::Clip],
+    clips_path: &str,
     durations: &std::collections::BTreeMap<String, f64>,
     errors: &mut Vec<Diagnostic>,
 ) {
     for (index, clip) in clips.iter().enumerate() {
+        let path = format!("{clips_path}/{index}");
         if let vestra_core::project::VisualSource::Video { asset } = &clip.source
             && let Some(&duration) = durations.get(asset)
         {
@@ -136,12 +139,17 @@ fn validate_video_layers(
                     "VESTRA-VIDEO-TIMING",
                     crate::Category::Semantic,
                     format!("video layer '{}' exceeds available source media", clip.id),
-                    format!("/visual/clips/{index}"),
+                    &path,
                 ));
             }
         }
         if let vestra_core::project::VisualSource::Group(group) = &clip.source {
-            validate_video_layers(&group.clips, durations, errors);
+            validate_video_layers(
+                &group.clips,
+                &format!("{path}/source/clips"),
+                durations,
+                errors,
+            );
         }
     }
 }

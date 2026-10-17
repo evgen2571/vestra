@@ -1221,6 +1221,92 @@ fn long_timelines_validate_preflight_and_prepare_with_default_limits() {
 }
 
 #[test]
+fn long_rational_timelines_preserve_random_access_boundaries() {
+    let directory = tempdir().expect("temporary directory");
+    // Exact 1,001-second blocks, plus a partial final frame at each rate.
+    for (rate, duration, frames, last_ns) in [
+        ("24000/1001", 90_090.0, 2_160_000, 90_089_958_291_667),
+        ("30000/1001", 90_090.0, 2_700_000, 90_089_966_633_334),
+        ("60000/1001", 90_090.0, 5_400_000, 90_089_983_316_667),
+        ("24000/1001", 90_090.125, 2_160_003, 90_090_083_416_667),
+        ("30000/1001", 90_090.125, 2_700_004, 90_090_100_100_000),
+        ("60000/1001", 90_090.125, 5_400_008, 90_090_116_783_334),
+    ] {
+        let project = vestra::Project::from_value(
+            serde_json::json!({
+                "schema_version": 1,
+                "output": {"path": "unused.mp4", "width": 2, "height": 2,
+                    "frame_rate": rate, "background": "#102030", "quality": "preview",
+                    "audio": false, "duration_mode": "explicit", "duration": duration},
+                "assets": [], "visual": {"clips": []}
+            }),
+            directory.path(),
+        )
+        .expect("project");
+        let editor = Editor::new();
+        assert!(editor.validate(&project).is_valid());
+        assert!(
+            editor
+                .preflight(&project, PreflightOptions::default())
+                .is_valid()
+        );
+        let inspection = editor.inspect(&project, false).expect("inspection");
+        assert_eq!(inspection.output.total_frames, frames);
+        let mut prepared = editor
+            .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+            .expect("preparation");
+        let end = Duration::from_secs_f64(duration);
+        assert_eq!(prepared.preparation_report().duration(), end);
+        assert_eq!(prepared.preparation_report().frame_count(), frames);
+        let last = prepared
+            .render_frame_number(frames - 1)
+            .expect("last frame");
+        assert_eq!(last.timestamp(), Duration::from_nanos(last_ns));
+        assert_eq!(last.as_bytes(), [0x10, 0x20, 0x30, 0xff].repeat(4));
+        for (timestamp, expected) in [
+            (Duration::ZERO, 0),
+            (Duration::from_nanos(1), 0),
+            (last.timestamp() - Duration::from_nanos(1), frames - 2),
+            (last.timestamp(), frames - 1),
+            (last.timestamp() + Duration::from_nanos(1), frames - 1),
+            (end - Duration::from_nanos(1), frames - 1),
+        ] {
+            assert_eq!(
+                prepared
+                    .render_frame(timestamp)
+                    .expect("timestamp access")
+                    .frame_number(),
+                expected,
+                "rate={rate} duration={duration} timestamp={timestamp:?}"
+            );
+        }
+        for timestamp in [end, end + Duration::from_nanos(1)] {
+            assert_eq!(
+                prepared
+                    .render_frame(timestamp)
+                    .expect_err("exclusive end")
+                    .diagnostics()[0]
+                    .code,
+                "VESTRA-FRAME-RANGE"
+            );
+        }
+        assert_eq!(
+            prepared
+                .render_frame_number(frames)
+                .expect_err("exclusive frame count")
+                .diagnostics()[0]
+                .code,
+            "VESTRA-FRAME-RANGE"
+        );
+        let first = prepared
+            .render_frame_number(0)
+            .expect("first frame after range errors");
+        assert_eq!(first.timestamp(), Duration::ZERO);
+        assert_eq!(first.as_bytes(), last.as_bytes());
+    }
+}
+
+#[test]
 fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(

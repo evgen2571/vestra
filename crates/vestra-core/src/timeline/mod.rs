@@ -197,6 +197,101 @@ mod tests {
     }
 
     #[test]
+    fn long_rational_boundaries_have_independent_integer_expectations() {
+        // 90,090 seconds is 90 blocks of 1,001 seconds, hence 90 * rate frames.
+        let end = 90_090_000_000_000;
+        for (rate, frames, last_floor, last_start) in [
+            (24_000, 2_160_000, 90_089_958_291_666, 90_089_958_291_667),
+            (30_000, 2_700_000, 90_089_966_633_333, 90_089_966_633_334),
+            (60_000, 5_400_000, 90_089_983_316_666, 90_089_983_316_667),
+        ] {
+            assert_eq!(frame_count(end.into(), rate, 1_001), Ok(frames));
+            assert_eq!(frame_count((end - 1).into(), rate, 1_001), Ok(frames));
+            assert_eq!(frame_count((end + 1).into(), rate, 1_001), Ok(frames + 1));
+            assert_eq!(frame_time_nanos(0, rate, 1_001), Ok(0));
+            assert_eq!(frame_start_duration(0, rate, 1_001), Ok(Duration::ZERO));
+            assert_eq!(frame_time_nanos(frames - 1, rate, 1_001), Ok(last_floor));
+            assert_eq!(
+                frame_start_duration(frames - 1, rate, 1_001),
+                Ok(Duration::from_nanos(last_start))
+            );
+            assert_eq!(
+                frame_start_duration(frames, rate, 1_001),
+                Ok(Duration::from_nanos(end))
+            );
+            for (timestamp, expected) in [
+                (0, 0),
+                (1, 0),
+                (last_start - 1, frames - 2),
+                (last_start, frames - 1),
+                (last_start + 1, frames - 1),
+                (end - 1, frames - 1),
+                (end, frames),
+                (end + 1, frames),
+            ] {
+                assert_eq!(
+                    frame_at_duration(Duration::from_nanos(timestamp), rate, 1_001),
+                    Ok(expected),
+                    "rate={rate}/1001 timestamp={timestamp}"
+                );
+            }
+            assert!(active(u128::from(end) - 1, 0, end.into()));
+            assert!(!active(end.into(), 0, end.into()));
+            assert!(!active(u128::from(end) + 1, 0, end.into()));
+        }
+    }
+
+    #[test]
+    fn checked_frame_arithmetic_rejects_invalid_rates_and_overflow() {
+        for (numerator, denominator) in [(0, 1), (1, 0), (0, 0)] {
+            assert_eq!(
+                frame_count(1, numerator, denominator),
+                Err(TimelineError::InvalidFrameRate)
+            );
+            assert_eq!(
+                frame_time_nanos(1, numerator, denominator),
+                Err(TimelineError::InvalidFrameRate)
+            );
+            assert_eq!(
+                frame_start_duration(1, numerator, denominator),
+                Err(TimelineError::InvalidFrameRate)
+            );
+            assert_eq!(
+                frame_at_duration(Duration::ZERO, numerator, denominator),
+                Err(TimelineError::InvalidFrameRate)
+            );
+        }
+        assert_eq!(
+            frame_count(u128::MAX, 60_000, 1_001),
+            Err(TimelineError::Overflow)
+        );
+        assert_eq!(
+            frame_count(u128::from(u64::MAX) + 1, 1_000_000_000, 1),
+            Err(TimelineError::Overflow)
+        );
+        assert_eq!(
+            frame_time_nanos(u64::MAX, 1, u64::MAX),
+            Err(TimelineError::Overflow)
+        );
+        assert_eq!(
+            frame_start_duration(u64::MAX, 1, u64::MAX),
+            Err(TimelineError::Overflow)
+        );
+        assert_eq!(
+            frame_start_duration(u64::MAX, 24_000, 1_001),
+            Err(TimelineError::Overflow)
+        );
+        assert_eq!(
+            frame_at_duration(Duration::MAX, u64::MAX, 1),
+            Err(TimelineError::Overflow)
+        );
+        assert_eq!(
+            frame_at_duration(Duration::MAX, 60_000, 1_001),
+            Err(TimelineError::Overflow)
+        );
+    }
+
+    #[test]
     fn easing_has_exact_endpoints() {
         for easing in [
             Easing::Linear,

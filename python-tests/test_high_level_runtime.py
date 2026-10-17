@@ -72,6 +72,49 @@ def test_prepared_project_is_isolated_from_later_editor_mutations(
     assert project.prepare(backend="cpu").render_frame_number(0).to_bytes() != original
 
 
+@pytest.mark.parametrize("rate,frames,last_ns", [
+    (24_000, 2_160_000, 90_089_958_291_667),
+    (30_000, 2_700_000, 90_089_966_633_334),
+    (60_000, 5_400_000, 90_089_983_316_667),
+])
+def test_long_rational_timeline_keeps_nested_time_local(
+    tmp_path: Path, rate: int, frames: int, last_ns: int,
+) -> None:
+    project = vestra.Project(
+        size=(2, 2), fps=(rate, 1_001), duration=90_090, base_directory=tmp_path,
+    )
+    project.root.add(Color("#000000"))
+    group = project.root.group(start=90_089, duration=1)
+    group.add(Color("#00ff00"), start=0.5, duration=0.5)
+    assert project.validate().is_valid
+    prepared = project.prepare(backend="cpu")
+    report = prepared.preparation_report
+    assert (report.frame_rate.numerator, report.frame_rate.denominator) == (rate, 1_001)
+    assert report.frame_count == frames
+    assert report.duration_ns == 90_090_000_000_000
+
+    last = prepared.render_frame_number(frames - 1)
+    assert last.timestamp_ns == last_ns
+    assert last.to_bytes() == bytes((0, 255, 0, 255)) * 4
+    first = prepared.render_frame_number(0)
+    assert first.timestamp_ns == 0
+    assert first.to_bytes() == bytes((0, 0, 0, 255)) * 4
+    assert prepared.render_frame_ns(90_089_250_000_000).to_bytes() == first.to_bytes()
+    assert prepared.render_frame_ns(90_089_750_000_000).to_bytes() == last.to_bytes()
+    for timestamp, expected in [
+        (last_ns - 1, frames - 2), (last_ns, frames - 1),
+        (last_ns + 1, frames - 1), (report.duration_ns - 1, frames - 1),
+    ]:
+        assert prepared.render_frame_ns(timestamp).frame_number == expected
+    for timestamp in (report.duration_ns, report.duration_ns + 1):
+        with pytest.raises(vestra.FrameRenderError) as raised:
+            prepared.render_frame_ns(timestamp)
+        assert raised.value.diagnostics[0].code == "VESTRA-FRAME-RANGE"
+    with pytest.raises(vestra.FrameRenderError):
+        prepared.render_frame_number(frames)
+    assert prepared.render_frame_number(0).to_bytes() == first.to_bytes()
+
+
 def test_high_level_lowering_reaches_wgpu_and_matches_cpu_when_available(
     tmp_path: Path,
 ) -> None:

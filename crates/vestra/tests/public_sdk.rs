@@ -1433,6 +1433,95 @@ fn project_parse_time_stays_separate_from_sdk_operation_time() {
 }
 
 #[test]
+fn preflight_video_timing_preserves_nested_locations_and_clip_identity() {
+    use serde_json::json;
+
+    let directory = tempdir().expect("temporary directory");
+    let status = std::process::Command::new("ffmpeg")
+        .args([
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=2x2:r=10:d=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+        ])
+        .arg(directory.path().join("clip.mp4"))
+        .status()
+        .expect("generate video fixture");
+    assert!(status.success());
+
+    let video = |id: &str| {
+        json!({
+            "id": id, "source": {"type": "video", "asset": "video"},
+            "start": 0.5, "duration": 0.25, "layer": 0, "opacity": {"base_value": 1.0},
+            "source_start": 0.5, "playback_rate": 2.0
+        })
+    };
+    let mut value = json!({
+        "schema_version": 1,
+        "output": {"path": "out.mp4", "width": 2, "height": 2,
+            "frame_rate": "30000/1001", "background": "#000000",
+            "quality": "preview", "audio": false,
+            "duration_mode": "explicit", "duration": 10},
+        "assets": [{"id": "video", "type": "video", "source": "clip.mp4"}],
+        "visual": {"clips": [video("root-video"), {
+            "id": "outer", "start": 3, "duration": 5, "layer": 0, "opacity": {"base_value": 1.0},
+            "source": {"type": "group", "clips": [video("outer-video"), {
+                "id": "inner", "start": 1, "duration": 2, "layer": 0, "opacity": {"base_value": 1.0},
+                "source": {"type": "group", "clips": [
+                    video("valid-sibling"), video("inner-first"), video("inner-second")
+                ]}
+            }]}
+        }]}
+    });
+    let editor = Editor::new();
+    let project = vestra::Project::from_value(value.clone(), directory.path()).expect("project");
+    let report = editor.preflight(&project, PreflightOptions::for_inspection());
+    assert!(
+        report.is_valid(),
+        "source end is inclusive: {:?}",
+        report.diagnostics()
+    );
+
+    for (pointer, id, source_start) in [
+        ("/visual/clips/0", "root-video", 0.75),
+        ("/visual/clips/1/source/clips/0", "outer-video", 0.75),
+        (
+            "/visual/clips/1/source/clips/1/source/clips/1",
+            "inner-first",
+            0.75,
+        ),
+        (
+            "/visual/clips/1/source/clips/1/source/clips/2",
+            "inner-second",
+            1.0,
+        ),
+    ] {
+        value.pointer_mut(pointer).expect("clip")["source_start"] = json!(source_start);
+        let project =
+            vestra::Project::from_value(value.clone(), directory.path()).expect("project");
+        assert!(editor.validate(&project).is_valid());
+        let report = editor.preflight(&project, PreflightOptions::for_inspection());
+        assert!(!report.is_valid());
+        let diagnostics = report.diagnostics();
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        let diagnostic = &diagnostics[0];
+        assert_eq!(diagnostic.code, "VESTRA-VIDEO-TIMING");
+        assert_eq!(diagnostic.category, vestra::Category::Semantic);
+        assert_eq!(diagnostic.severity, vestra::Severity::Fatal);
+        assert_eq!(diagnostic.pointer.as_deref(), Some(pointer));
+        assert_eq!(value.pointer(pointer).expect("owning clip")["id"], id);
+        assert!(diagnostic.message.contains(&format!("'{id}'")));
+        value.pointer_mut(pointer).expect("clip")["source_start"] = json!(0.5);
+    }
+}
+
+#[test]
 fn project_loading_keeps_relative_paths_and_does_not_preflight() {
     let directory = tempdir().expect("temporary directory");
     let json = r##"{

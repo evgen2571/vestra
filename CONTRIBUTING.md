@@ -98,7 +98,7 @@ in detail.
 
 ## 5. Open a pull request
 
-Push your branch to your fork and open a pull request against `main`. Include a
+Push your branch to your fork and open a pull request against `develop`. Include a
 short description of the problem, what changed, any related issue and the checks
 you ran. For example:
 

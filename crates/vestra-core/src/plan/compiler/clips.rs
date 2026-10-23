@@ -14,7 +14,7 @@ use crate::{
     project::{Clip, VisualSource, parse_colour},
 };
 
-use crate::{plan_time, plan_tracks};
+use crate::plan::{time as plan_time, tracks as plan_tracks};
 
 use super::{assets, effects, output};
 

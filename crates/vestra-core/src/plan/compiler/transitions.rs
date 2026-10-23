@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use crate::plan_time::to_nanos;
+use crate::plan::time::to_nanos;
 
 #[derive(Clone)]
 struct TransitionSegment<T> {
@@ -171,7 +171,7 @@ pub(super) fn compile_transition_placements_with_interner(
                     layer.start_nanos,
                 )?;
                 contribution.rotation_radians_offset =
-                    crate::plan_tracks::degrees_to_radians(degrees);
+                    crate::plan::tracks::degrees_to_radians(degrees);
             }
             layer.transform_contributions.push(contribution);
         }

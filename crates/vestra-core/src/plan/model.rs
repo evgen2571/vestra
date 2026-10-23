@@ -21,7 +21,7 @@ pub struct RenderPlan {
     pub frame_rate: (u64, u64),
     pub frame_count: u64,
     pub encoder: EncoderSettings,
-    pub audio_mix: crate::plan_audio::AudioMixPlan,
+    pub audio_mix: crate::plan::audio::AudioMixPlan,
     pub scalar_signals: CompiledScalarSignals,
     pub audio_analysis_requirements: AudioAnalysisRequirements,
     pub audio_output_enabled: bool,

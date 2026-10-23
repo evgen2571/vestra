@@ -1,5 +1,6 @@
 //! Deterministic compilation and per-frame evaluation for renderer backends.
 
+pub mod audio;
 mod compiler;
 mod effect_passes;
 mod evaluation;
@@ -7,8 +8,11 @@ mod input;
 mod model;
 mod particles;
 mod scalar_property;
-mod schedule;
+pub(crate) mod schedule;
 mod signals;
+pub mod sizing;
+pub mod time;
+pub mod tracks;
 
 pub use crate::stylization::EvaluatedPalette;
 pub use compiler::{CompileOptions, compile};

@@ -951,13 +951,13 @@ fn stage_layer_from_five_to_six_seconds(layer: &mut super::CompiledLayer) {
 }
 
 fn stage_layer(layer: &mut super::CompiledLayer, start_seconds: f64, end_seconds: f64) {
-    let start = crate::plan_time::to_nanos(start_seconds, "test layer").expect("start time");
-    let end = crate::plan_time::to_nanos(end_seconds, "test layer").expect("end time");
+    let start = crate::plan::time::to_nanos(start_seconds, "test layer").expect("start time");
+    let end = crate::plan::time::to_nanos(end_seconds, "test layer").expect("end time");
     layer.start_nanos = start;
     layer.duration_nanos = end - start;
     layer.start_frame =
-        crate::plan_time::first_frame_at_or_after(start, (24, 1)).expect("start frame");
-    layer.end_frame = crate::plan_time::first_frame_at_or_after(end, (24, 1)).expect("end frame");
+        crate::plan::time::first_frame_at_or_after(start, (24, 1)).expect("start frame");
+    layer.end_frame = crate::plan::time::first_frame_at_or_after(end, (24, 1)).expect("end frame");
     layer.draw_key.start_nanos = start;
 }
 

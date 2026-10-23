@@ -1,3 +1,7 @@
+//! Active-layer schedules and half-open interval event construction.
+
+pub mod intervals;
+
 use crate::plan::{CompiledLayer, RenderPlan, ScheduledItem};
 
 /// The sole compositing-order policy for active scheduled items.  The
@@ -38,7 +42,7 @@ pub struct ScheduleCursor<'schedule> {
 
 impl ActiveSchedule {
     pub(crate) fn compile_layers(layers: &[CompiledLayer]) -> Self {
-        let events = crate::plan_schedule::compile(
+        let events = intervals::compile(
             layers
                 .iter()
                 .map(|layer| (layer.start_frame, layer.end_frame)),
@@ -47,8 +51,8 @@ impl ActiveSchedule {
         .map(|event| ScheduleEvent {
             frame: event.frame,
             action: match event.action {
-                crate::plan_schedule::ScheduleAction::Deactivate => ScheduleAction::Deactivate,
-                crate::plan_schedule::ScheduleAction::Activate => ScheduleAction::Activate,
+                intervals::ScheduleAction::Deactivate => ScheduleAction::Deactivate,
+                intervals::ScheduleAction::Activate => ScheduleAction::Activate,
             },
             item: ScheduledItem(event.item_index),
         })

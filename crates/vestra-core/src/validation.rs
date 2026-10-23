@@ -271,13 +271,13 @@ fn global_effect_duration(project: &Project, visual_duration: f64) -> f64 {
         .flat_map(|track| &track.clips)
         .map(|clip| {
             let duration = clip.trim_end.and_then(|end| {
-                let samples = crate::plan_audio::seconds_to_samples(end - clip.trim_start)?;
-                let processed = crate::plan_audio::compile_effects(&clip.effects)
+                let samples = crate::plan::audio::seconds_to_samples(end - clip.trim_start)?;
+                let processed = crate::plan::audio::compile_effects(&clip.effects)
                     .transform_duration_samples(samples)
                     .ok()?;
                 Some(
                     clip.start
-                        + processed as f64 / crate::plan_audio::MASTER_AUDIO_SAMPLE_RATE as f64,
+                        + processed as f64 / crate::plan::audio::MASTER_AUDIO_SAMPLE_RATE as f64,
                 )
             });
             // Unresolved audio needs preflight; defer only the upper timing bound.

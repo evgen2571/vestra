@@ -405,7 +405,7 @@ pub(super) fn compile(
         } => crate::plan::CompiledEffect::Vignette {
             amount: scalar!(amount, ScalarPropertyTarget::VignetteAmount),
             radius: scalar!(radius, ScalarPropertyTarget::VignetteRadius),
-            softness: crate::plan_tracks::compile(softness, id)?,
+            softness: crate::plan::tracks::compile(softness, id)?,
             colour: parse_colour(colour).ok_or_else(|| {
                 Diagnostic::error(
                     "VESTRA-PLAN-EFFECT-COLOUR",
@@ -430,8 +430,8 @@ pub(super) fn compile(
         } => crate::plan::CompiledEffect::ColorAdjust {
             exposure: scalar!(exposure, ScalarPropertyTarget::ColorAdjustExposure),
             gamma: scalar!(gamma, ScalarPropertyTarget::ColorAdjustGamma),
-            black_point: crate::plan_tracks::compile(black_point, id)?,
-            white_point: crate::plan_tracks::compile(white_point, id)?,
+            black_point: crate::plan::tracks::compile(black_point, id)?,
+            white_point: crate::plan::tracks::compile(white_point, id)?,
         },
         crate::project::Effect::CameraShake {
             position_amount,
@@ -478,7 +478,7 @@ fn compile_point(
     interner: &mut ScalarSignalInterner,
 ) -> Result<crate::plan::CompiledPointProperty, Diagnostic> {
     Ok(crate::plan::CompiledPointProperty {
-        authored_track: crate::plan_tracks::compile(&property.track, id)?,
+        authored_track: crate::plan::tracks::compile(&property.track, id)?,
         modifiers: super::signals::compile_modifiers(&property.modifiers, interner)?,
         x_modifiers: super::signals::compile_modifiers(&property.component_modifiers.x, interner)?,
         y_modifiers: super::signals::compile_modifiers(&property.component_modifiers.y, interner)?,
@@ -492,9 +492,9 @@ pub(super) fn compile_timed(
     interner: &mut ScalarSignalInterner,
 ) -> Result<crate::plan::TimedEffect, Diagnostic> {
     let timing = effect.timing();
-    let start = crate::plan_time::to_nanos(timing.start, id)?;
+    let start = crate::plan::time::to_nanos(timing.start, id)?;
     let duration =
-        crate::plan_time::to_nanos(timing.duration.unwrap_or(owner_duration - timing.start), id)?;
+        crate::plan::time::to_nanos(timing.duration.unwrap_or(owner_duration - timing.start), id)?;
     Ok(crate::plan::TimedEffect {
         start,
         end: start.saturating_add(duration),

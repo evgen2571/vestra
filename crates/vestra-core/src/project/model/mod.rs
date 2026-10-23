@@ -11,9 +11,11 @@ mod effects;
 mod masks;
 mod mattes;
 mod output;
+mod particles;
 mod presets;
 mod project;
 mod signals;
+mod spectrum2d;
 mod transitions;
 mod visual;
 
@@ -37,24 +39,30 @@ pub use masks::{
 };
 pub use mattes::{MatteMode, TrackMatte};
 pub use output::{DurationMode, FrameRate, Output, Quality};
+pub use particles::{
+    ColourLifetimeStop, ParticleAudioReactive, ParticleBlendMode, ParticleBurst,
+    ParticleDefinition, ParticleEmission, ParticleEmitter, ParticleLifetimeStyle,
+    ParticlePrimitive, ParticleSystem, ScalarLifetimeStop, ScalarRange,
+};
 pub use presets::Preset;
 pub use project::Project;
 pub use signals::{
     AudioAnalysisTap, AudioScalarFeature, PointComponentModifiers, PointProperty, ScalarModifier,
     ScalarModifierOperation, ScalarProperty, ScalarSignal, ScalarSignalSource, SignalTransform,
 };
+pub use spectrum2d::{
+    SPECTRUM2D_DEFAULT_BAND_COUNT, SPECTRUM2D_MAX_BAND_COUNT, SPECTRUM2D_MIN_BAND_COUNT,
+    Spectrum2D, Spectrum2DBandMapping, Spectrum2DGradient, Spectrum2DGradientDirection,
+    Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Spectrum2DRadialDirection,
+    Spectrum2DRadialLayout,
+};
 pub use transitions::{
     Flash, NormalizedKeyframe, NormalizedTrack, TransitionDefinition, TransitionPlacement,
     TransitionPresentation,
 };
 pub use visual::{
-    BlendMode, Clip, ColourLifetimeStop, Group, ParticleAudioReactive, ParticleBlendMode,
-    ParticleBurst, ParticleDefinition, ParticleEmission, ParticleEmitter, ParticleLifetimeStyle,
-    ParticlePrimitive, ParticleSystem, SPECTRUM2D_DEFAULT_BAND_COUNT, SPECTRUM2D_MAX_BAND_COUNT,
-    SPECTRUM2D_MIN_BAND_COUNT, ScalarLifetimeStop, ScalarRange, ShapeGeometry, ShapeSource, Sizing,
-    Spectrum2D, Spectrum2DBandMapping, Spectrum2DGradient, Spectrum2DGradientDirection,
-    Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Spectrum2DRadialDirection,
-    Spectrum2DRadialLayout, TextAlignment, TextSource, Transform, Visual, VisualSource,
+    BlendMode, Clip, Group, ShapeGeometry, ShapeSource, Sizing, TextAlignment, TextSource,
+    Transform, Visual, VisualSource,
 };
 
 pub use crate::domain::{Crop, Point};

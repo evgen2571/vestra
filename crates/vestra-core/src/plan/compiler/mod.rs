@@ -22,12 +22,11 @@ mod dependency;
 mod effects;
 mod flashes;
 mod limits;
+mod mattes;
 mod metrics;
 mod optimization;
 mod output;
-mod particles {
-    pub(super) use crate::plan::particles::compile_with_signals;
-}
+use super::particles;
 mod presets;
 pub(crate) mod signals;
 pub(crate) mod transitions;
@@ -98,7 +97,7 @@ pub fn compile(
             (0, project_duration_nanos),
         )?);
     }
-    finalize_text_indices(&mut layers, image_table.images.len() + shapes.len());
+    assets::finalize_text_indices(&mut layers, image_table.images.len() + shapes.len());
     compilation.rendered_clip_count = layers
         .iter()
         .filter(|layer| layer.start_frame < layer.end_frame)
@@ -118,7 +117,7 @@ pub fn compile(
     compilation.compiled_transition_association_count = compilation
         .compiled_transition_association_count
         .saturating_add(project.visual.transitions.len() as u64 * 2);
-    resolve_mattes(&mut layers)?;
+    mattes::resolve(&mut layers)?;
     for flash in &project.visual.flashes {
         layers.push(flashes::compile(
             flash,
@@ -178,7 +177,8 @@ pub fn compile(
         });
     compilation.effect_count_after_normalization =
         count_local_effects(&layers) + post_effects.len();
-    let glyph_atlases = finalize_glyph_atlases(&mut layers, &mut post_effects, &image_table.fonts)?;
+    let glyph_atlases =
+        assets::finalize_glyph_atlases(&mut layers, &mut post_effects, &image_table.fonts)?;
     metrics::record(&mut compilation, &layers, &post_effects);
     let audio_mix = audio::compile(&validated)?;
     let scalar_signals = scalar_signal_interner.finish();
@@ -229,27 +229,6 @@ pub fn compile(
     })
 }
 
-fn finalize_text_indices(layers: &mut [crate::plan::CompiledLayer], offset: usize) {
-    fn resolve(source: &mut crate::plan::CompiledVisualSource, offset: usize) {
-        match source {
-            crate::plan::CompiledVisualSource::Text { text_index } => *text_index += offset,
-            crate::plan::CompiledVisualSource::Group(group) => {
-                finalize_text_indices(&mut std::sync::Arc::make_mut(group).layers, offset);
-            }
-            _ => {}
-        }
-    }
-
-    for layer in layers {
-        resolve(&mut layer.source, offset);
-        for mask in &mut layer.masks {
-            if let crate::plan::CompiledMaskInput::Source { source, .. } = &mut mask.input {
-                resolve(source, offset);
-            }
-        }
-    }
-}
-
 fn count_local_effects(layers: &[crate::plan::CompiledLayer]) -> usize {
     layers
         .iter()
@@ -279,7 +258,7 @@ pub(super) fn finalize_composition_layers(
     effective_window: ActiveLayerWindow,
 ) -> Result<(), Diagnostic> {
     optimization::normalize(layers, post_effects, composition_duration, compilation);
-    propagate_matte_dependencies(layers);
+    mattes::propagate_dependencies(layers);
     limits::enforce_active_layer_limit(
         layers,
         composition_end_frame,
@@ -287,212 +266,4 @@ pub(super) fn finalize_composition_layers(
         effective_window.start_frame,
         effective_window.end_frame,
     )
-}
-
-pub(super) fn resolve_mattes(layers: &mut [crate::plan::CompiledLayer]) -> Result<(), Diagnostic> {
-    let identities = layers
-        .iter()
-        .map(|layer| (layer.id.clone(), layer.compiled_identity))
-        .collect::<BTreeMap<_, _>>();
-    for layer in layers.iter_mut() {
-        if let Some(matte) = &mut layer.matte
-            && matte.source_layer_identity == usize::MAX
-        {
-            matte.source_layer_identity =
-                *identities.get(&matte.source_layer_id).ok_or_else(|| {
-                    Diagnostic::error(
-                        "VESTRA-PLAN-MATTE-SOURCE",
-                        Category::Semantic,
-                        "validated track matte source could not be resolved",
-                        format!("/visual/clips/{}/matte/source_layer", layer.id),
-                    )
-                })?;
-        }
-    }
-    Ok(())
-}
-
-fn propagate_matte_dependencies(layers: &mut [crate::plan::CompiledLayer]) {
-    for _ in 0..layers.len() {
-        let dependencies = layers
-            .iter()
-            .map(|layer| (layer.compiled_identity, layer.content_dependency))
-            .collect::<BTreeMap<_, _>>();
-        let intervals = layers
-            .iter()
-            .map(|layer| {
-                (
-                    layer.compiled_identity,
-                    (layer.start_nanos, layer.duration_nanos),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let mut changed = false;
-        for layer in layers.iter_mut() {
-            if let Some(matte) = &layer.matte
-                && let Some(&(source_start, source_duration)) =
-                    intervals.get(&matte.source_layer_identity)
-            {
-                let dependency = effective_matte_dependency(
-                    layer.start_nanos,
-                    layer.duration_nanos,
-                    source_start,
-                    source_duration,
-                    *dependencies
-                        .get(&matte.source_layer_identity)
-                        .expect("matte source dependency exists"),
-                );
-                let combined = layer.content_dependency.combine(dependency);
-                changed |= combined != layer.content_dependency;
-                layer.content_dependency = combined;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-}
-
-/// Classifies the time-varying contribution of a matte to one consumer.
-/// Layer content dependencies intentionally exclude activity; this relationship
-/// must account for activity because inactive matte coverage is transparent.
-pub(super) fn effective_matte_dependency(
-    consumer_start: u128,
-    consumer_duration: u128,
-    matte_start: u128,
-    matte_duration: u128,
-    matte_content_dependency: TemporalDependency,
-) -> TemporalDependency {
-    let consumer_end = consumer_start.saturating_add(consumer_duration);
-    let matte_end = matte_start.saturating_add(matte_duration);
-    if consumer_start >= consumer_end || matte_start >= matte_end {
-        return TemporalDependency::Static;
-    }
-
-    let overlap_start = consumer_start.max(matte_start);
-    let overlap_end = consumer_end.min(matte_end);
-    if overlap_start >= overlap_end {
-        TemporalDependency::Static
-    } else if matte_start <= consumer_start && matte_end >= consumer_end {
-        matte_content_dependency
-    } else {
-        TemporalDependency::Dynamic
-    }
-}
-
-fn finalize_glyph_atlases(
-    layers: &mut [crate::plan::CompiledLayer],
-    post: &mut [crate::plan::TimedEffect],
-    fonts: &[crate::plan::FontAsset],
-) -> Result<Vec<crate::ascii::GlyphAtlasSpec>, Diagnostic> {
-    fn effects(
-        effects: &mut [crate::plan::TimedEffect],
-        specs: &mut Vec<crate::ascii::GlyphAtlasSpec>,
-        fonts: &[crate::plan::FontAsset],
-    ) -> Result<(), Diagnostic> {
-        for effect in effects {
-            if let crate::plan::CompiledEffect::Ascii {
-                glyphs, parameters, ..
-            } = &mut effect.effect
-            {
-                if let Some(id) = &glyphs.font
-                    && !fonts.iter().any(|font| &font.id == id)
-                {
-                    return Err(Diagnostic::error(
-                        "VESTRA-ASCII-FONT",
-                        Category::Semantic,
-                        format!("ASCII font asset '{id}' does not exist or is not a Font asset"),
-                        "",
-                    ));
-                }
-                parameters.atlas =
-                    specs
-                        .iter()
-                        .position(|spec| spec == glyphs)
-                        .unwrap_or_else(|| {
-                            specs.push(glyphs.clone());
-                            specs.len() - 1
-                        });
-            }
-        }
-        Ok(())
-    }
-    fn visit(
-        layers: &mut [crate::plan::CompiledLayer],
-        specs: &mut Vec<crate::ascii::GlyphAtlasSpec>,
-        fonts: &[crate::plan::FontAsset],
-    ) -> Result<(), Diagnostic> {
-        for layer in layers {
-            effects(&mut layer.effects, specs, fonts)?;
-            if let crate::plan::CompiledVisualSource::Group(group) = &mut layer.source {
-                visit(&mut std::sync::Arc::make_mut(group).layers, specs, fonts)?;
-            }
-            for mask in &mut layer.masks {
-                if let crate::plan::CompiledMaskInput::Source { source, .. } = &mut mask.input
-                    && let crate::plan::CompiledVisualSource::Group(group) = source.as_mut()
-                {
-                    visit(&mut std::sync::Arc::make_mut(group).layers, specs, fonts)?;
-                }
-            }
-        }
-        Ok(())
-    }
-    let mut specs = Vec::new();
-    visit(layers, &mut specs, fonts)?;
-    effects(post, &mut specs, fonts)?;
-    Ok(specs)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::effective_matte_dependency;
-    use crate::plan::TemporalDependency;
-
-    #[test]
-    fn matte_dependency_is_static_when_intervals_match() {
-        assert_eq!(
-            effective_matte_dependency(0, 5, 0, 5, TemporalDependency::Static),
-            TemporalDependency::Static
-        );
-    }
-
-    #[test]
-    fn matte_dependency_is_static_when_matte_fully_covers_consumer() {
-        assert_eq!(
-            effective_matte_dependency(2, 2, 0, 10, TemporalDependency::Static),
-            TemporalDependency::Static
-        );
-    }
-
-    #[test]
-    fn matte_dependency_is_dynamic_when_matte_activity_changes() {
-        assert_eq!(
-            effective_matte_dependency(0, 5, 2, 2, TemporalDependency::Static),
-            TemporalDependency::Dynamic
-        );
-    }
-
-    #[test]
-    fn matte_dependency_is_static_when_intervals_do_not_overlap() {
-        assert_eq!(
-            effective_matte_dependency(0, 2, 3, 2, TemporalDependency::Static),
-            TemporalDependency::Static
-        );
-    }
-
-    #[test]
-    fn matte_dependency_uses_half_open_interval_boundaries() {
-        assert_eq!(
-            effective_matte_dependency(0, 2, 2, 2, TemporalDependency::Static),
-            TemporalDependency::Static
-        );
-    }
-
-    #[test]
-    fn matte_dependency_preserves_dynamic_matte_content() {
-        assert_eq!(
-            effective_matte_dependency(0, 5, 0, 5, TemporalDependency::Dynamic),
-            TemporalDependency::Dynamic
-        );
-    }
 }

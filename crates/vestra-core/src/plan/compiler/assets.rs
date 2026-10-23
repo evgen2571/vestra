@@ -1,9 +1,9 @@
-//! Stable image-asset table construction for compiled render plans.
+//! Stable source-asset tables and compiled text/glyph resource resolution.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    Diagnostic,
+    Category, Diagnostic,
     plan::PlanCompileInput,
     plan::{FontAsset, ImageAsset, VideoAsset},
     project::Project,
@@ -273,4 +273,88 @@ pub(super) fn lookup_video(
             "",
         )
     })
+}
+
+pub(super) fn finalize_text_indices(layers: &mut [crate::plan::CompiledLayer], offset: usize) {
+    fn resolve(source: &mut crate::plan::CompiledVisualSource, offset: usize) {
+        match source {
+            crate::plan::CompiledVisualSource::Text { text_index } => *text_index += offset,
+            crate::plan::CompiledVisualSource::Group(group) => {
+                finalize_text_indices(&mut std::sync::Arc::make_mut(group).layers, offset);
+            }
+            _ => {}
+        }
+    }
+
+    for layer in layers {
+        resolve(&mut layer.source, offset);
+        for mask in &mut layer.masks {
+            if let crate::plan::CompiledMaskInput::Source { source, .. } = &mut mask.input {
+                resolve(source, offset);
+            }
+        }
+    }
+}
+
+pub(super) fn finalize_glyph_atlases(
+    layers: &mut [crate::plan::CompiledLayer],
+    post: &mut [crate::plan::TimedEffect],
+    fonts: &[crate::plan::FontAsset],
+) -> Result<Vec<crate::ascii::GlyphAtlasSpec>, Diagnostic> {
+    fn effects(
+        effects: &mut [crate::plan::TimedEffect],
+        specs: &mut Vec<crate::ascii::GlyphAtlasSpec>,
+        fonts: &[crate::plan::FontAsset],
+    ) -> Result<(), Diagnostic> {
+        for effect in effects {
+            if let crate::plan::CompiledEffect::Ascii {
+                glyphs, parameters, ..
+            } = &mut effect.effect
+            {
+                if let Some(id) = &glyphs.font
+                    && !fonts.iter().any(|font| &font.id == id)
+                {
+                    return Err(Diagnostic::error(
+                        "VESTRA-ASCII-FONT",
+                        Category::Semantic,
+                        format!("ASCII font asset '{id}' does not exist or is not a Font asset"),
+                        "",
+                    ));
+                }
+                parameters.atlas =
+                    specs
+                        .iter()
+                        .position(|spec| spec == glyphs)
+                        .unwrap_or_else(|| {
+                            specs.push(glyphs.clone());
+                            specs.len() - 1
+                        });
+            }
+        }
+        Ok(())
+    }
+    fn visit(
+        layers: &mut [crate::plan::CompiledLayer],
+        specs: &mut Vec<crate::ascii::GlyphAtlasSpec>,
+        fonts: &[crate::plan::FontAsset],
+    ) -> Result<(), Diagnostic> {
+        for layer in layers {
+            effects(&mut layer.effects, specs, fonts)?;
+            if let crate::plan::CompiledVisualSource::Group(group) = &mut layer.source {
+                visit(&mut std::sync::Arc::make_mut(group).layers, specs, fonts)?;
+            }
+            for mask in &mut layer.masks {
+                if let crate::plan::CompiledMaskInput::Source { source, .. } = &mut mask.input
+                    && let crate::plan::CompiledVisualSource::Group(group) = source.as_mut()
+                {
+                    visit(&mut std::sync::Arc::make_mut(group).layers, specs, fonts)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut specs = Vec::new();
+    visit(layers, &mut specs, fonts)?;
+    effects(post, &mut specs, fonts)?;
+    Ok(specs)
 }

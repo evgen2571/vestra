@@ -32,6 +32,10 @@ of building a competing adapter validation framework.
    keep parameters, uploads and pending cache reservations tied to their
    submission token/generation. Exercise multiple in-flight frames, eviction,
    abort and failed mapping; CPU submission is not GPU completion.
+   For structural refactors, follow the module ownership map in
+   [WGPU architecture](../../../docs/development/architecture/wgpu-renderer.md).
+   Compare complete frame operations/parameter indices and resource counters
+   against a pre-change capture, including cache miss/populate/hit paths.
    Check padded-row sizes, host conversions and buffer growth against the
    requested device limits, not just adapter maxima. Returned frames must
    own pixels after readback slots are reused.

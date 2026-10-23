@@ -6,6 +6,7 @@
 )]
 
 mod backend;
+mod bind_groups;
 mod context;
 mod diagnostics;
 mod executor;

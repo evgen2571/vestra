@@ -488,7 +488,7 @@ fn compile_group(
         &mut layers,
         scalar_signal_interner,
     )?;
-    super::resolve_mattes(&mut layers)?;
+    super::mattes::resolve(&mut layers)?;
     compilation.compiled_transition_association_count = compilation
         .compiled_transition_association_count
         .saturating_add(group.transitions.len() as u64 * 2);

@@ -37,6 +37,13 @@ the category map and media-dependent example.
 
 For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
 
+For renderer feature isolation, run `cargo test -p vestra-render
+--no-default-features --features cpu` and the same command with `--features wgpu`.
+`cargo test -p vestra-render --no-default-features` checks the shared renderer
+contracts consumed by media. CPU/WGPU parity suites require both features;
+WGPU-only tests retain planning, parameter, upload and resource-limit coverage.
+The adapter-list example requires the WGPU feature.
+
 Schema changes need both `ve generate-schema --output PATH` and the schema-validation test. CLI changes need current help and CLI integration tests. Rendering changes need CPU tests and source/effect-specific tests. Media tests need working native FFmpeg development libraries; runtime workflows may also need `ffmpeg`/`ffprobe` on `PATH`.
 
 Benchmark tooling has focused tests independent of the Python extension:

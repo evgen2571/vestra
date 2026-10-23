@@ -27,7 +27,7 @@ Python / Rust / canonical JSON authoring
 | Logical operations and resource relationships | `crates/vestra-core/src/plan/effect_passes/mod.rs` |
 | Conservative compiled topology and evaluated pass construction | `crates/vestra-core/src/plan/effect_passes/compiled.rs`, `evaluated.rs` |
 | CPU | `crates/vestra-render/src/cpu/effects.rs` and surface pools |
-| WGPU | `crates/vestra-render/src/wgpu/frame_plan.rs`, `parameters/effects.rs`, `pipeline.rs`, `executor.rs` |
+| WGPU | `crates/vestra-render/src/wgpu/frame_plan/effects.rs`, `parameters/effects.rs`, `pipeline.rs`, `bind_groups.rs`, `executor.rs` |
 | Shader source | `crates/vestra-render/src/shaders/effects/` and kernel registration |
 | High-level Python | `python/vestra/effects/`, authoring and lowering |
 | Generated project schema | `schemas/project.schema.json` |

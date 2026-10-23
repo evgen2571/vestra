@@ -1,7 +1,17 @@
 use super::*;
+use crate::{
+    kernel::{EffectKernel, kernel_for_operation},
+    render::effects::EffectPass,
+};
+use std::collections::BTreeSet;
 use vestra_core::plan::{CompositeMode, EffectOperation, EffectResource};
+use vestra_core::plan::{EvaluatedEffect, EvaluatedFrame, EvaluatedSource};
 
-fn pass(operation: EffectOperation, primary: EffectResource, output: EffectResource) -> EffectPass {
+pub(super) fn pass(
+    operation: EffectOperation,
+    primary: EffectResource,
+    output: EffectResource,
+) -> EffectPass {
     EffectPass {
         operation,
         inputs: vestra_core::plan::EffectPassInputs::Single(primary),
@@ -9,117 +19,12 @@ fn pass(operation: EffectOperation, primary: EffectResource, output: EffectResou
     }
 }
 
-fn composite(mode: CompositeMode, amount: f64) -> EffectPass {
+pub(super) fn composite(mode: CompositeMode, amount: f64) -> EffectPass {
     EffectPass {
         operation: EffectOperation::Composite { mode, amount },
         inputs: vestra_core::plan::EffectPassInputs::OriginalAnd(EffectResource::Temporary0),
         output: EffectResource::Current,
     }
-}
-
-#[test]
-fn liveness_allocator_keeps_simultaneous_temporaries_in_distinct_slots() {
-    let passes = [
-        pass(
-            EffectOperation::GaussianHorizontal {
-                integer: false,
-                radius: 1.0,
-            },
-            EffectResource::Current,
-            EffectResource::Temporary0,
-        ),
-        pass(
-            EffectOperation::GaussianVertical {
-                integer: false,
-                radius: 1.0,
-            },
-            EffectResource::Current,
-            EffectResource::Temporary1,
-        ),
-        pass(
-            EffectOperation::ColorAdjust {
-                exposure: 0.0,
-                gamma: 1.0,
-                black_point: 0.0,
-                white_point: 1.0,
-            },
-            EffectResource::Temporary0,
-            EffectResource::Current,
-        ),
-    ];
-    let mut bindings = EffectResourceBindings {
-        current: TextureSlot::Layer,
-        original: None,
-        temporary0: None,
-        temporary1: None,
-    };
-    let mut destinations = Vec::new();
-    for (pass_index, pass) in passes.iter().enumerate() {
-        let source = bindings.slot(pass.inputs.primary());
-        let destination =
-            bindings.assign_destination(&passes, pass_index, pass.output, [source, source]);
-        bindings.bind(pass.output, destination);
-        destinations.push(destination);
-        if pass_index == 1 {
-            assert_ne!(bindings.temporary0, bindings.temporary1);
-        }
-    }
-    assert_eq!(
-        destinations,
-        [
-            TextureSlot::EffectA,
-            TextureSlot::EffectB,
-            TextureSlot::EffectB
-        ]
-    );
-}
-
-#[test]
-fn liveness_allocator_preserves_original_while_later_pass_reads_it() {
-    let passes = [
-        pass(
-            EffectOperation::HighlightExtract {
-                threshold: 0.5,
-                colour: [255, 255, 255, 255],
-            },
-            EffectResource::Original,
-            EffectResource::Temporary0,
-        ),
-        pass(
-            EffectOperation::GaussianVertical {
-                integer: false,
-                radius: 1.0,
-            },
-            EffectResource::Temporary0,
-            EffectResource::Temporary1,
-        ),
-        composite(CompositeMode::Additive, 1.0),
-    ];
-    let mut bindings = EffectResourceBindings {
-        current: TextureSlot::Layer,
-        original: Some(TextureSlot::Auxiliary),
-        temporary0: None,
-        temporary1: None,
-    };
-    for (pass_index, pass) in passes.iter().enumerate() {
-        let primary = bindings.slot(pass.inputs.primary());
-        if pass_index == 2 {
-            assert_eq!(primary, TextureSlot::Auxiliary);
-        }
-        let secondary = pass
-            .inputs
-            .secondary()
-            .map(|resource| bindings.slot(resource));
-        let destination = bindings.assign_destination(
-            &passes,
-            pass_index,
-            pass.output,
-            [primary, secondary.unwrap_or(primary)],
-        );
-        assert_ne!(destination, TextureSlot::Auxiliary);
-        bindings.bind(pass.output, destination);
-    }
-    assert_eq!(bindings.original, None);
 }
 
 use crate::test_support::{ValidationOptions, load_and_validate};

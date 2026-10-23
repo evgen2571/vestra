@@ -24,9 +24,10 @@ use crate::{
 };
 
 use super::{
+    bind_groups::FrameBindGroups,
     context::GpuContext,
     diagnostics::finish_error_scopes,
-    executor::{FrameBindGroups, FrameExecutionMetrics, encode_and_submit},
+    executor::{FrameExecutionMetrics, encode_and_submit},
     frame_plan::{GpuFramePlan, GpuOperation},
     parameters::{self, FrameParameterArena, encode_parameters},
     particles::ParticleUpload,

@@ -30,7 +30,9 @@ fn analyze_cell(input_texture: texture_2d<f32>, cell: vec2<u32>) -> array<vec4<u
         let side_x=select(0u,1u,2u*(x-start.x)>=end.x-start.x);
         let side_y=select(2u,3u,2u*(y-start.y)>=end.y-start.y);
         let pair=vec2<u32>(luma*pixel.a,pixel.a);
-        halves[side_x]+=pair; halves[side_y]+=pair;
+        // Fixed indices avoid misaccumulated half-cell sums on NVIDIA Vulkan.
+        if side_x==0u {halves[0]+=pair;} else {halves[1]+=pair;}
+        if side_y==2u {halves[2]+=pair;} else {halves[3]+=pair;}
     }}
     var color=vec4<u32>(0u);
     let count=(end.x-start.x)*(end.y-start.y);

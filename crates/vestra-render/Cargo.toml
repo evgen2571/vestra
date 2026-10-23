@@ -11,6 +11,10 @@ default = ["cpu", "wgpu"]
 cpu = []
 wgpu = ["dep:bytemuck", "dep:naga", "dep:pollster", "dep:wgpu"]
 
+[[example]]
+name = "wgpu_adapters"
+required-features = ["wgpu"]
+
 [dependencies]
 vestra-core = { path = "../vestra-core" }
 bytemuck = { version = "1", features = ["derive"], optional = true }

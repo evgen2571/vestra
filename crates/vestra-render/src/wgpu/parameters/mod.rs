@@ -2,6 +2,7 @@
 
 mod arena;
 mod effects;
+mod frame;
 mod source;
 
 pub(super) use arena::{FrameParameterArena, push_effect_parameters};
@@ -12,6 +13,7 @@ pub(super) use effects::{
     CompositeParameters, GaussianBlurParameters, HighlightExtractParameters, LineBlurParameters,
     PaletteParameters, VignetteParameters, ZoomBlurParameters, effect_parameters,
 };
+pub(super) use frame::encode_parameters;
 pub(super) use source::{
     LayerParameters, MaskFeatherParameters, MaskParameters, ParticleParameters,
     Spectrum2DParameters, mask, mask_feather, motion_tile, particles, raster, spectrum2d, surface,

@@ -18,6 +18,8 @@ mod crt;
 mod gaussian;
 mod halftone;
 mod kernel;
+#[cfg(any(feature = "cpu", feature = "wgpu"))]
+mod particle_raster;
 
 pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)

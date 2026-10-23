@@ -3,7 +3,8 @@
 use image::{Rgba, RgbaImage};
 use vestra_core::plan::ColourTransform;
 
-use crate::render::{blend::source_over, cpu::raster};
+use super::raster;
+use crate::blend::{apply_colour_transform, source_over};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn rasterize(
@@ -43,7 +44,7 @@ pub(super) fn rasterize(
     // across-band path likewise depends only on the analysis index, not on
     // the covered pixel, so cache its transformed colours once per source.
     let solid_source = (gradient_direction.is_none())
-        .then(|| raster::apply_colour_transform(Rgba(colour), colour_transform));
+        .then(|| apply_colour_transform(Rgba(colour), colour_transform));
     let effective = |value: f32| {
         f64::from(value).clamp(0.0, 1.0) * (1.0 - min_bar_height_ratio) + min_bar_height_ratio
     };
@@ -83,7 +84,7 @@ pub(super) fn rasterize(
                 } else {
                     0.5
                 };
-                raster::apply_colour_transform(colour_at(t), colour_transform)
+                apply_colour_transform(colour_at(t), colour_transform)
             })
             .collect::<Vec<_>>()
     });
@@ -143,7 +144,7 @@ pub(super) fn rasterize(
                         } else if let Some(sources) = &across_band_sources {
                             sources[index]
                         } else {
-                            raster::apply_colour_transform(
+                            apply_colour_transform(
                                 colour_at(distance / region_height),
                                 colour_transform,
                             )
@@ -223,7 +224,7 @@ pub(super) fn rasterize(
                             }
                             _ => (radius - inner) / span,
                         };
-                        raster::apply_colour_transform(colour_at(t), colour_transform)
+                        apply_colour_transform(colour_at(t), colour_transform)
                     };
                     let destination = target.get_pixel_mut(px, py);
                     *destination = source_over(*destination, source, opacity);

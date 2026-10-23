@@ -61,8 +61,7 @@ pub(crate) fn rasterize_instances(
         let Some((min_y, max_y)) = pixel_bounds(cy - half_y, cy + half_y, height) else {
             continue;
         };
-        let source =
-            crate::cpu::raster::apply_colour_transform(Rgba(particle.colour), colour_transform);
+        let source = crate::blend::apply_colour_transform(Rgba(particle.colour), colour_transform);
         let (sin, cos) = if matches!(primitive, ParticlePrimitive::Square) {
             let radians = particle.rotation_degrees.to_radians();
             (radians.sin(), radians.cos())

@@ -1,5 +1,6 @@
 //! Shared-core particle evaluation and the compact WGPU instance boundary.
 
+use crate::Diagnostic;
 use bytemuck::{Pod, Zeroable};
 
 use vestra_core::plan::{CompiledParticleSystem, EvaluatedParticleAppearance};
@@ -71,6 +72,84 @@ pub(super) fn pack_into(
     Ok(start..destination.len())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ParticleUpload {
+    pub(super) offset: wgpu::BufferAddress,
+    pub(super) bytes_per_row: u32,
+}
+
+pub(super) fn append_particle_upload(
+    arena: &mut Vec<u8>,
+    source: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<ParticleUpload, Diagnostic> {
+    if width == 0 || height == 0 {
+        return Err(Diagnostic::error(
+            "WGPU-PARTICLE-UPLOAD",
+            crate::Category::Backend,
+            "particle upload dimensions must be non-zero",
+            "",
+        ));
+    }
+    let row_bytes = width.checked_mul(4).ok_or_else(|| {
+        Diagnostic::error(
+            "WGPU-PARTICLE-UPLOAD",
+            crate::Category::Backend,
+            "particle row size overflow",
+            "",
+        )
+    })?;
+    let bytes_per_row = u64::from(row_bytes)
+        .div_ceil(u64::from(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
+        .checked_mul(u64::from(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-PARTICLE-UPLOAD",
+                crate::Category::Backend,
+                "particle padded row size overflow",
+                "",
+            )
+        })?;
+    let source_len = usize::try_from(row_bytes)
+        .ok()
+        .and_then(|row| {
+            usize::try_from(height)
+                .ok()
+                .and_then(|rows| row.checked_mul(rows))
+        })
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "WGPU-PARTICLE-UPLOAD",
+                crate::Category::Backend,
+                "particle source size overflow",
+                "",
+            )
+        })?;
+    if source.len() != source_len {
+        return Err(Diagnostic::error(
+            "WGPU-PARTICLE-UPLOAD",
+            crate::Category::Backend,
+            "particle source has an unexpected size",
+            "",
+        ));
+    }
+    let offset = arena.len().div_ceil(wgpu::COPY_BUFFER_ALIGNMENT as usize)
+        * wgpu::COPY_BUFFER_ALIGNMENT as usize;
+    arena.resize(offset, 0);
+    let padded_row = usize::try_from(bytes_per_row).expect("WGPU row alignment fits usize");
+    let row = usize::try_from(row_bytes).expect("validated row size fits usize");
+    for source_row in source.chunks_exact(row) {
+        arena.extend_from_slice(source_row);
+        arena.resize(arena.len() + padded_row - row, 0);
+    }
+    Ok(ParticleUpload {
+        offset: offset as wgpu::BufferAddress,
+        bytes_per_row,
+    })
+}
+
 #[cfg(test)]
 fn clip_position(normalized: [f32; 2]) -> [f32; 2] {
     [normalized[0] * 2.0 - 1.0, 1.0 - normalized[1] * 2.0]
@@ -93,6 +172,50 @@ fn square_extent(size: f32, rotation_degrees: f32, width: u32, height: u32) -> [
 mod tests {
     use super::*;
     use std::mem::{align_of, size_of};
+    #[test]
+    fn particle_upload_pads_each_row_and_preserves_row_order() {
+        let source: Vec<u8> = (0..24).collect();
+        let mut arena = Vec::new();
+        let upload = append_particle_upload(&mut arena, &source, 3, 2).expect("packed upload");
+
+        assert_eq!(
+            upload,
+            ParticleUpload {
+                offset: 0,
+                bytes_per_row: 256,
+            }
+        );
+        assert_eq!(&arena[..12], &source[..12]);
+        assert_eq!(&arena[256..268], &source[12..]);
+        assert!(arena[12..256].iter().all(|byte| *byte == 0));
+        assert!(arena[280..].iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn particle_upload_regions_are_distinct_and_aligned() {
+        for width in [1, 2, 63, 64, 65, 100, 128, 1920] {
+            let source_a = vec![0x11; width * 4];
+            let source_b = vec![0x22; width * 4];
+            let mut arena = Vec::new();
+            let first = append_particle_upload(&mut arena, &source_a, width as u32, 1)
+                .expect("first packed upload");
+            let second = append_particle_upload(&mut arena, &source_b, width as u32, 1)
+                .expect("second packed upload");
+            assert_eq!(first.offset % 4, 0);
+            assert_eq!(second.offset % 4, 0);
+            assert_eq!(first.bytes_per_row % 256, 0);
+            assert_eq!(second.bytes_per_row % 256, 0);
+            assert!(second.offset >= first.offset + u64::from(first.bytes_per_row));
+            assert_eq!(arena[first.offset as usize], 0x11);
+            assert_eq!(arena[second.offset as usize], 0x22);
+        }
+    }
+
+    #[test]
+    fn particle_upload_rejects_zero_dimensions_and_wrong_source_size() {
+        assert!(append_particle_upload(&mut Vec::new(), &[], 0, 1).is_err());
+        assert!(append_particle_upload(&mut Vec::new(), &[0; 4], 2, 1).is_err());
+    }
 
     #[test]
     fn gpu_particle_instance_has_explicit_pod_layout() {

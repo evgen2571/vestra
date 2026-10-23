@@ -312,7 +312,7 @@ fn particle_requirements(
 }
 
 fn particle_project(count: usize) -> serde_json::Value {
-    super::parity_gpu_tests::particle_upload_project(count)
+    super::fixture_tests::particle_upload_project(count)
 }
 
 #[test]

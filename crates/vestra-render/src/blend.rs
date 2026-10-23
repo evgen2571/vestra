@@ -1,5 +1,26 @@
 use image::{Rgba, RgbaImage};
 
+#[cfg(any(feature = "cpu", feature = "wgpu"))]
+use vestra_core::plan::ColourTransform;
+
+#[cfg(any(feature = "cpu", feature = "wgpu"))]
+pub(crate) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rgba<u8> {
+    let input = [
+        f64::from(pixel[0]),
+        f64::from(pixel[1]),
+        f64::from(pixel[2]),
+    ];
+    for channel in 0..3 {
+        pixel[channel] = (transform.matrix[channel][0] * input[0]
+            + transform.matrix[channel][1] * input[1]
+            + transform.matrix[channel][2] * input[2]
+            + transform.offset[channel])
+            .round()
+            .clamp(0.0, 255.0) as u8;
+    }
+    pixel
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CompositionCaseCounts {
     pub(crate) source_alpha_zero: u64,

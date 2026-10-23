@@ -5,9 +5,9 @@ use vestra_core::plan::{ColourTransform, EvaluatedEffect, EvaluatedLayer, Evalua
 
 use crate::{
     domain::Crop,
+    particle_raster as particles,
     render::{
-        blend::source_over,
-        cpu::particles,
+        blend::{apply_colour_transform, source_over},
         cpu::{assets::PreparedAssets, spectrum2d},
         geometry,
         metrics::CpuHotPathTimings,
@@ -602,23 +602,6 @@ pub(crate) fn sample_edge(image: &RgbaImage, x: f64, y: f64) -> Rgba<u8> {
         x.clamp(0.5, f64::from(image.width()) - 0.5),
         y.clamp(0.5, f64::from(image.height()) - 0.5),
     )
-}
-
-pub(super) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rgba<u8> {
-    let input = [
-        f64::from(pixel[0]),
-        f64::from(pixel[1]),
-        f64::from(pixel[2]),
-    ];
-    for channel in 0..3 {
-        pixel[channel] = (transform.matrix[channel][0] * input[0]
-            + transform.matrix[channel][1] * input[1]
-            + transform.matrix[channel][2] * input[2]
-            + transform.offset[channel])
-            .round()
-            .clamp(0.0, 255.0) as u8;
-    }
-    pixel
 }
 
 #[cfg(test)]

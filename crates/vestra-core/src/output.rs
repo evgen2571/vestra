@@ -1,6 +1,6 @@
 //! Backend-neutral output settings produced by render-plan compilation.
 
-use crate::plan_audio::AudioMixPlan;
+use crate::plan::audio::AudioMixPlan;
 
 #[derive(Clone, Debug)]
 pub struct EncoderSettings {

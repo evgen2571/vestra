@@ -1,3 +1,6 @@
+use crate::plan::audio::{
+    MASTER_AUDIO_SAMPLE_RATE, master_audio_nyquist_hz, master_audio_nyquist_hz as plan_nyquist,
+};
 use crate::plan::signals::{
     AudioAnalysisTap, AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal,
     AudioSignalContractError, ClampTransform, CompiledScalarSignal, CompiledSignalTransform,
@@ -5,9 +8,6 @@ use crate::plan::signals::{
     PreparedScalarSignalError, RawScalarSignal, RemapTransform, ScalarSignalInterner,
     SignalPreparationError, SignalTransformContractError, prepare_scalar_signals,
     prepare_transformed_scalar_signal,
-};
-use crate::plan_audio::{
-    MASTER_AUDIO_SAMPLE_RATE, master_audio_nyquist_hz, master_audio_nyquist_hz as plan_nyquist,
 };
 
 fn signal(start: u128, interval: u128, samples: &[f64]) -> PreparedScalarSignal {

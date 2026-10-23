@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use crate::plan_audio::MASTER_AUDIO_NYQUIST_HZ;
+use crate::plan::audio::MASTER_AUDIO_NYQUIST_HZ;
 
 pub const BASS_BOOST_DEFAULT_GAIN_DB: f64 = 6.0;
 pub const BASS_BOOST_DEFAULT_FREQUENCY_HZ: f64 = 100.0;
@@ -277,14 +277,14 @@ mod tests {
     #[test]
     fn catalog_duration_behavior_matches_primitive_lowering() {
         let definitions = audio_effect_descriptors().collect::<Vec<_>>();
-        let eq = crate::plan_audio::CompiledAudioEffect::ParametricEq {
+        let eq = crate::plan::audio::CompiledAudioEffect::ParametricEq {
             frequency_hz: 1_000.0,
             gain_db: 6.0,
             q: 1.0,
         }
         .lower();
-        let speed = crate::plan_audio::CompiledAudioEffect::PlaybackSpeed { rate: 2.0 }.lower();
-        let bass_boost = crate::plan_audio::CompiledAudioEffect::BassBoost {
+        let speed = crate::plan::audio::CompiledAudioEffect::PlaybackSpeed { rate: 2.0 }.lower();
+        let bass_boost = crate::plan::audio::CompiledAudioEffect::BassBoost {
             gain_db: BASS_BOOST_DEFAULT_GAIN_DB,
             frequency_hz: BASS_BOOST_DEFAULT_FREQUENCY_HZ,
         }

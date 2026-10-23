@@ -12,7 +12,7 @@ use crate::{
     project,
 };
 
-use crate::{plan_time, plan_tracks};
+use crate::plan::{time as plan_time, tracks as plan_tracks};
 
 pub(crate) fn compile_property(
     property: &project::ScalarProperty,

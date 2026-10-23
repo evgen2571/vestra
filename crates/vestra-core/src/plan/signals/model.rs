@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, fmt};
 
-use crate::plan_audio::master_audio_nyquist_hz;
+use crate::plan::audio::master_audio_nyquist_hz;
 
 /// Compact direct-index identity for a prepared scalar signal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -15,12 +15,12 @@ pub(super) fn resolve_path(validated: &PlanCompileInput<'_>) -> std::path::PathB
 }
 
 pub(super) fn compile_sizing(sizing: &Sizing) -> CompiledSizing {
-    match crate::plan_sizing::normalize(sizing) {
-        crate::plan_sizing::SizingMode::Original => CompiledSizing::Original,
-        crate::plan_sizing::SizingMode::Fit => CompiledSizing::Fit,
-        crate::plan_sizing::SizingMode::Cover => CompiledSizing::Cover,
-        crate::plan_sizing::SizingMode::Scale(scale) => CompiledSizing::Scale(scale),
-        crate::plan_sizing::SizingMode::Stretch { width, height } => {
+    match crate::plan::sizing::normalize(sizing) {
+        crate::plan::sizing::SizingMode::Original => CompiledSizing::Original,
+        crate::plan::sizing::SizingMode::Fit => CompiledSizing::Fit,
+        crate::plan::sizing::SizingMode::Cover => CompiledSizing::Cover,
+        crate::plan::sizing::SizingMode::Scale(scale) => CompiledSizing::Scale(scale),
+        crate::plan::sizing::SizingMode::Stretch { width, height } => {
             CompiledSizing::Stretch { width, height }
         }
     }

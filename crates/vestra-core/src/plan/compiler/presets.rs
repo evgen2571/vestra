@@ -9,7 +9,7 @@ use crate::{
     project::Preset,
 };
 
-use crate::plan_time::to_nanos;
+use crate::plan::time::to_nanos;
 
 fn scalar(track: Track<f64>, target: ScalarPropertyTarget) -> CompiledScalarProperty {
     CompiledScalarProperty::constrained(track, target.constraint())

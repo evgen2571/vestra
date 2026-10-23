@@ -38,7 +38,7 @@ pub(super) struct ActiveLayerWindow {
     pub(super) end_frame: u64,
 }
 
-use crate::plan_time::{effective_dimensions, to_nanos};
+use crate::plan::time::{effective_dimensions, to_nanos};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,

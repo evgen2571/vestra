@@ -27,14 +27,12 @@ pub mod media {
 pub mod camera_shake;
 pub mod motion_bounds;
 pub mod plan;
-pub mod plan_audio;
-pub mod plan_schedule;
-pub mod plan_sizing;
-/// Deterministic frame/time and preview-dimension conversion used by plan
-/// compilation. No project loading or rendering dependency is involved.
-pub mod plan_time;
-/// Project-track normalization used by plan compilation.
-pub mod plan_tracks;
+/// Compatibility path for half-open interval scheduling primitives.
+pub use plan::schedule::intervals as plan_schedule;
+/// Compatibility paths for the helpers owned by plan compilation.
+pub use plan::{
+    audio as plan_audio, sizing as plan_sizing, time as plan_time, tracks as plan_tracks,
+};
 pub mod timeline;
 pub mod validation;
 

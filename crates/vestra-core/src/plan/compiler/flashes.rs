@@ -7,7 +7,7 @@ use crate::{
     project::{BlendMode, Flash, parse_colour},
 };
 
-use crate::plan_time::{first_frame_at_or_after, to_nanos};
+use crate::plan::time::{first_frame_at_or_after, to_nanos};
 
 use super::{clips::canvas_transform, transitions::insert_keyframe};
 

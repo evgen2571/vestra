@@ -18,7 +18,8 @@ and [dithered-palette guide](../../../docs/development/stylization/dithered-pale
    parameter types/defaults/ranges, ordering, timing/signals, coordinate
    units, color/alpha behavior, identity and failure modes.
 2. **Find canonical ownership:** descriptors in
-   `crates/vestra-core/src/effect_definition.rs`, tagged project model,
+   `crates/vestra-core/src/effect_definition/catalog.rs` and sibling property
+   constraints/descriptors, tagged project model,
    validation, compile/evaluate and backend-neutral pass IR.
    Keep semantics in core; don't duplicate defaults across languages.
 3. **Map resources before coding:** identify input/output passes, retained

@@ -17,10 +17,15 @@ Python / Rust / canonical JSON authoring
 
 | Responsibility | Implementation |
 | --- | --- |
-| Canonical descriptors / validation | `crates/vestra-core/src/effect_definition.rs` |
+| Authoritative effect catalog, scope, stage and temporal policy | `crates/vestra-core/src/effect_definition/catalog.rs` and `mod.rs` |
+| Property targets and constraints | `crates/vestra-core/src/effect_definition/properties.rs` |
+| Serializable descriptors and parameter builders | `crates/vestra-core/src/effect_definition/descriptors.rs` |
 | Canonical effects | `crates/vestra-core/src/project/model/effects.rs` |
+| Attachment and parameter validation | `crates/vestra-core/src/validation/effects/` |
+| Compiled effects and property visitation | `crates/vestra-core/src/plan/model/effects.rs` |
 | Compile/evaluate | `crates/vestra-core/src/plan/compiler/effects.rs`, `plan/evaluation/effects.rs` |
-| Logical operations and resource needs | `crates/vestra-core/src/plan/effect_passes.rs` |
+| Logical operations and resource relationships | `crates/vestra-core/src/plan/effect_passes/mod.rs` |
+| Conservative compiled topology and evaluated pass construction | `crates/vestra-core/src/plan/effect_passes/compiled.rs`, `evaluated.rs` |
 | CPU | `crates/vestra-render/src/cpu/effects.rs` and surface pools |
 | WGPU | `crates/vestra-render/src/wgpu/frame_plan.rs`, `parameters/effects.rs`, `pipeline.rs`, `executor.rs` |
 | Shader source | `crates/vestra-render/src/shaders/effects/` and kernel registration |
@@ -28,6 +33,11 @@ Python / Rust / canonical JSON authoring
 | Generated project schema | `schemas/project.schema.json` |
 
 Core owns authored/evaluated semantics; backends must not reinterpret defaults.
+The `effect_definition` and `plan` facades preserve existing Rust paths. Keep
+catalog entries authoritative: descriptors derive scalar bounds from property
+targets, and validation and compilation consume those same definitions. The
+compile/evaluate dispatches remain exhaustive matches over authored/compiled
+effects; their private test modules live in adjacent directories.
 
 ## Ordering and spaces
 

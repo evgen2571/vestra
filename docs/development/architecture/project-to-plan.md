@@ -17,6 +17,38 @@ Evaluation remains time-dependent. For each frame it uses the checked frame time
 
 Transitions lower to generic outgoing/incoming presentation channels. Effects lower through the descriptor/catalog representation and retain ordered attachment scope. Both mechanisms stay in core planning/evaluation so CPU and WGPU apply the same meaning. Planning diagnostics retain canonical JSON pointers; preflight diagnostics add the environment or media fact that failed.
 
+## Core source ownership
+
+Paths below are relative to `crates/vestra-core/src/`. Public types remain
+available through the existing `project`, `plan` and descriptor exports;
+private child modules organize their implementations.
+
+| Responsibility | Location |
+| --- | --- |
+| Authored hierarchy and presentation | `project/model/visual.rs` |
+| Authored particle and spectrum sources | `project/model/particles.rs`, `project/model/spectrum2d.rs` |
+| Ordered semantic validation | `validation.rs`, `validation/visual.rs`, `validation/effects.rs` |
+| Visual source, transform and mask/matte rules | `validation/visual/` |
+| Effect attachment, parameter and property rules | `validation/effects/` |
+| Compilation coordination and source/resource tables | `plan/compiler/mod.rs`, `plan/compiler/assets.rs` |
+| Matte identities and temporal dependencies | `plan/compiler/mattes.rs` |
+| Compiled plan/layers and compiled effects | `plan/model/mod.rs`, `plan/model/effects.rs` |
+| Particle models, compilation and random-access evaluation | `plan/particles/` |
+| Audio planning, time conversions, sizing and track lowering | `plan/audio.rs`, `plan/time.rs`, `plan/sizing.rs`, `plan/tracks.rs` |
+| Active-layer schedules and raw interval events | `plan/schedule/` |
+
+The root `plan_audio`, `plan_time`, `plan_sizing`, `plan_tracks` and
+`plan_schedule` paths are compatibility aliases. Raw interval events retain
+their index-based representation; active-layer schedules use `ScheduledItem`.
+Validation's hierarchy walk controls diagnostic order, including nested error
+rebasing and the composition-wide matte checks after all clips. Extracted rule
+modules append to the same diagnostic list in that order.
+
+Particle compilation builds immutable models and lifetime curves. Evaluation
+derives identities, motion and appearance from local time and explicit seeds;
+it keeps no frame-order state. Tests live beside the owning implementation,
+while `plan/tests.rs` exercises compilation and evaluation together.
+
 ## Time domains and frame boundaries
 
 The [authoring timeline guide](../../concepts/timeline-and-time.md) describes

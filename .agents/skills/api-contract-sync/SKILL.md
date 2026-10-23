@@ -15,7 +15,7 @@ and [testing](../../../docs/development/testing.md).
 | Layer | Starting point |
 | --- | --- |
 | Canonical tagged model | `crates/vestra-core/src/project/model/` |
-| Effect metadata and constraints | `crates/vestra-core/src/effect_definition.rs` |
+| Effect metadata and constraints | `crates/vestra-core/src/effect_definition/{catalog,properties,descriptors}.rs` |
 | Validation, compilation, evaluation | `crates/vestra-core/src/validation/`, `src/plan/` |
 | JSON schema | `schemas/project.schema.json` and `scripts/check-schema.sh` |
 | Advanced authoring | `python/vestra/authoring/` |

@@ -11,9 +11,11 @@ shader or changing working resources, read the
    bounds, time/signal support, color and alpha behavior, and identity values.
    For larger features record decisions in an [execution plan](../../../PLANS.md).
 2. **Define the canonical contract.** Update
-   `crates/vestra-core/src/effect_definition.rs` and
+   `crates/vestra-core/src/effect_definition/catalog.rs` and
    `crates/vestra-core/src/project/model/effects.rs`. Centralize
-   validation and schema generation through descriptors. Do not copy
+   scalar constraints in `effect_definition/properties.rs`; descriptor builders
+   in `effect_definition/descriptors.rs` feed validation and schema generation.
+   Do not copy
    defaults into independent Python, CPU and WGSL tables.
 3. **Compile and evaluate.** Extend the core effect compiler/evaluator
    and ordered pass IR in `crates/vestra-core/src/plan/`.

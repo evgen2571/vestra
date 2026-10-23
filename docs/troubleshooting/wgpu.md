@@ -23,6 +23,13 @@ Read adapter name, graphics backend and classification in the preparation/render
 
 On some WSL systems Vulkan resolves to llvmpipe while GL/GLES reaches NVIDIA through D3D12. Verify each machine with adapter discovery; use `VESTRA_WGPU_BACKEND=gl` only when it exposes the desired hardware. See [GPU validation](../development/gpu-validation.md) for the required hardware procedure.
 
+## ASCII differs from CPU on NVIDIA Vulkan
+
+ASCII glyph rendering has a known parity issue on NVIDIA GeForce GTX 1650 SUPER
+with Vulkan driver 595.71.05. Small-cell and animated glyph comparisons can
+exceed the renderer's CPU/WGPU parity tolerance. Use CPU for consistent ASCII
+output on this configuration. The same cases pass with llvmpipe software Vulkan.
+
 ## Fallback, in-flight work, and recovery
 
 With an automatic renderer preference, WGPU unavailability may result in CPU fallback plus `VESTRA-WGPU-FALLBACK`. An explicit WGPU request follows preflight policy and can fail instead. `VESTRA_WGPU_IN_FLIGHT` is internal tuning, accepts only 1 through 3 and should not be set to solve adapter selection. Use the public [backend contract](../reference/backends.md) and [environment variables](../reference/environment-variables.md) for scope.

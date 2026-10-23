@@ -1813,6 +1813,39 @@ fn gpu_stylization_remaining_families_clip_global_masks_matte_and_order() {
 }
 
 #[test]
+fn gpu_stylization_ascii_half_cell_gradients_select_literal_edge_orientations() {
+    for alpha in [255, 128] {
+        let name = format!("ascii-half-cell-gradients-{alpha}");
+        // The first cell has a horizontal gradient, the second a vertical one.
+        let source = RgbaImage::from_fn(16, 12, |x, y| {
+            let white = if x < 8 { x >= 4 } else { y >= 6 };
+            let tone = if white { 255 } else { 0 };
+            Rgba([tone, tone, tone, alpha])
+        });
+        let effect = ascii_effect("geometric", "edges", "monochrome");
+        let Some(mut backends) = Backends::new(fixture(
+            &name,
+            &source,
+            &project(16, 12, vec![image_clip(vec![])], vec![effect]),
+        )) else {
+            return;
+        };
+        let (cpu, gpu, _) = backends.render_pair(&name, 0, 0);
+        let expected = RgbaImage::from_fn(16, 12, |x, y| {
+            let ink = if x < 8 {
+                x == 3 || x == 4
+            } else {
+                y == 5 || y == 6
+            };
+            let tone = if ink { 64 } else { 0 };
+            Rgba([tone, tone, tone, alpha])
+        });
+        assert_eq!(cpu, expected, "CPU literal edge bins at alpha {alpha}");
+        assert_eq!(gpu, expected, "WGPU literal edge bins at alpha {alpha}");
+    }
+}
+
+#[test]
 fn gpu_stylization_ascii_min_max_cells_custom_characters_and_font() {
     let source = rich_source(130, 130);
     for (name, width, height, custom_font) in [

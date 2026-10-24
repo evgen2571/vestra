@@ -198,6 +198,110 @@ fn public_wgpu_prepared_frames_are_reusable_and_owned_when_an_adapter_is_availab
     assert_eq!(first.as_bytes(), retained);
 }
 
+fn run_concurrent_wgpu_lifecycles(workers: usize, rounds: usize) {
+    let directory = tempdir().expect("temporary directory");
+    let project = background_project(directory.path());
+    let probe = match prepare_wgpu_environment(&project) {
+        WgpuTestEnvironment::Available(prepared) => prepared,
+        WgpuTestEnvironment::Unavailable { .. } => return,
+    };
+    let adapter = probe
+        .preparation_report()
+        .adapter()
+        .expect("WGPU adapter")
+        .clone();
+    let metadata = vestra_render::AdapterMetadata {
+        adapter_name: adapter.adapter_name.clone(),
+        device_type: adapter.device_type.as_str().into(),
+        graphics_backend: adapter.graphics_backend.as_str().into(),
+        driver_name: adapter.driver_name.clone(),
+        driver_info: adapter.driver_info.clone(),
+        vendor_id: adapter.vendor_id,
+        device_id: adapter.device_id,
+    };
+    let class = metadata.performance_class();
+    eprintln!(
+        "WGPU_LIFECYCLES adapter={adapter:?} classification={} rounds={rounds}",
+        class.as_str()
+    );
+    if std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some() {
+        assert!(class.is_proven_hardware());
+    }
+    // WSL/Mesa GL permits only one active EGL context, independently of queue IDs.
+    let workers = if adapter.graphics_backend == vestra::GraphicsBackend::Gl {
+        eprintln!("WGPU_LIFECYCLES workers=1 reason=GL-context-ownership");
+        1
+    } else {
+        workers
+    };
+    drop(probe);
+    let start = std::sync::Barrier::new(workers);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers)
+            .map(|worker| {
+                let start = &start;
+                let project = &project;
+                let adapter = &adapter;
+                scope.spawn(move || {
+                    let mut retained = Vec::new();
+                    start.wait();
+                    for round in 0..rounds {
+                        let colour = [
+                            u8::try_from(worker + 1).expect("worker fits colour"),
+                            u8::try_from(round + 1).expect("round fits colour"),
+                            0x30,
+                            0xff,
+                        ];
+                        let mut value = project.to_value().expect("project value");
+                        value["output"]["background"] = serde_json::json!(format!(
+                            "#{:02x}{:02x}{:02x}",
+                            colour[0], colour[1], colour[2]
+                        ));
+                        let project = vestra::Project::from_value(value, project.base_directory())
+                            .expect("worker project");
+                        let mut prepared = Editor::new()
+                            .prepare(&project, PrepareOptions::new(BackendPreference::Wgpu))
+                            .expect("concurrent WGPU preparation");
+                        assert_eq!(
+                            prepared.preparation_report().selected_backend(),
+                            vestra::BackendKind::Wgpu
+                        );
+                        assert_eq!(prepared.preparation_report().adapter(), Some(adapter));
+                        for number in [0, 12, 4, 0] {
+                            let frame = prepared.render_frame_number(number).expect("WGPU frame");
+                            assert_eq!(frame.frame_number(), number);
+                            assert_eq!(frame.as_bytes(), colour.repeat(4));
+                            retained.push((frame, colour));
+                        }
+                        drop(prepared);
+                        for (frame, colour) in &retained {
+                            assert_eq!(frame.as_bytes(), colour.repeat(4));
+                        }
+                    }
+                    retained
+                })
+            })
+            .collect();
+        for handle in handles {
+            for (frame, colour) in handle.join().expect("WGPU lifecycle worker") {
+                assert_eq!(frame.as_bytes(), colour.repeat(4));
+            }
+        }
+    });
+    eprintln!("WGPU_LIFECYCLES completed workers={workers} rounds={rounds}");
+}
+
+#[test]
+fn public_wgpu_concurrent_prepare_render_drop_preserves_owned_frames() {
+    run_concurrent_wgpu_lifecycles(4, 3);
+}
+
+#[test]
+#[ignore = "explicit repeated concurrent device/pipeline lifecycle stress"]
+fn public_wgpu_concurrent_lifecycle_stress() {
+    run_concurrent_wgpu_lifecycles(12, 30);
+}
+
 #[test]
 fn public_wgpu_frame_video_cross_reuse_keeps_metrics_operation_local_when_an_adapter_is_available()
 {

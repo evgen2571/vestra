@@ -490,7 +490,7 @@ fn particle_pipeline(
         layout: Some(&layout),
         vertex: wgpu::VertexState {
             module: shader,
-            entry_point: "vertex",
+            entry_point: Some("vertex"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             buffers: &[wgpu::VertexBufferLayout {
                 array_stride: 32,
@@ -511,7 +511,7 @@ fn particle_pipeline(
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
-            entry_point: "fragment",
+            entry_point: Some("fragment"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format: super::texture_pool::WORKING_FORMAT,
@@ -541,7 +541,7 @@ fn pipeline(
         label: Some(label),
         layout: Some(&layout),
         module: shader,
-        entry_point: "compose",
+        entry_point: Some("compose"),
         compilation_options: wgpu::PipelineCompilationOptions::default(),
         cache: None,
     })

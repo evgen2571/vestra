@@ -38,3 +38,7 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 examples. `python/high-level/09_video_source.py` intentionally requires a
 user-supplied `examples/assets/clip.mp4`; it is not part of the bulk render
 run.
+
+[Code → Video](code-to-video/README.md) is a short Python scene with a native
+recording placeholder and a matching canonical JSON export. It uses a configurable
+local asset collection and keeps all generated media under `target/`.

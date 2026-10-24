@@ -165,3 +165,62 @@ impl GpuContext {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn gpu_queue_identity_survives_a_retained_device() {
+        use crate::wgpu::diagnostics::{instance_for_backends, requested_backends};
+
+        let instance = instance_for_backends(requested_backends());
+        let options = wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: std::env::var_os("VESTRA_WGPU_FORCE_FALLBACK").is_some(),
+            compatible_surface: None,
+        };
+        let Some(adapter) = pollster::block_on(instance.request_adapter(&options)) else {
+            assert!(
+                std::env::var_os("VESTRA_REQUIRE_WGPU").is_none()
+                    && std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_none(),
+                "strict WGPU verification requires an adapter"
+            );
+            eprintln!("WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter queue-lifecycle");
+            return;
+        };
+        let info = adapter.get_info();
+        let metadata = crate::AdapterMetadata {
+            adapter_name: info.name,
+            device_type: format!("{:?}", info.device_type).to_lowercase(),
+            graphics_backend: format!("{:?}", info.backend).to_lowercase(),
+            driver_name: info.driver,
+            driver_info: info.driver_info,
+            vendor_id: info.vendor,
+            device_id: info.device,
+        };
+        let class = metadata.performance_class();
+        eprintln!(
+            "WGPU_RUNTIME_EXECUTED queue-lifecycle adapter={metadata:?} classification={}",
+            class.as_str()
+        );
+        if std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some() {
+            assert!(class.is_proven_hardware());
+        }
+        let (retained_device, dropped_queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .expect("first device");
+        drop(dropped_queue);
+
+        // The device and queue registries now have different free lists.
+        let adapter =
+            pollster::block_on(instance.request_adapter(&options)).expect("second adapter");
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .expect("second device");
+        let submission = queue.submit(std::iter::empty());
+        // Polling must also use decoupled identity, as the renderer does.
+        device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission));
+        drop(queue);
+        drop(device);
+        drop(retained_device);
+    }
+}

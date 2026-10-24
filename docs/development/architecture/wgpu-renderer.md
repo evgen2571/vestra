@@ -2,6 +2,17 @@
 
 The WGPU backend is a `RenderBackend` implementation that keeps GPU state inside one prepared render. It creates a WGPU instance, selects an adapter under the requested graphics API, requests the device and queue, then builds pipelines, textures, buffers, source resources and readback state. `AdapterInfo` records the actual graphics backend and device classification so the SDK can distinguish a hardware adapter from software WGPU.
 
+Root instances are process-owned and shared by backend selection. This preserves
+WSL/Mesa GL's EGL instance lifetime; each prepared renderer still owns its device,
+queue and resources. WGPU 23.0.1 includes the upstream
+[device/queue identity correction](https://github.com/gfx-rs/wgpu/commit/8c7c5c4974717414d49ffbd19e91a337f2db7861),
+first released in WGPU 23.0.0. WGPU 22.1.0 derived a queue's public identity from
+its device even though their registry lifetimes can differ. The complete fix
+also decouples submission-index polling from device identity; changing only the
+returned queue handle would leave readback waits affected. The adjacent release
+keeps the same default graphics backends and requires only explicit optional
+pipeline entry points in Vestra, with matching Naga 23 shader validation.
+
 Preparation uploads static image/font/source data and creates reusable GPU resources. Frame evaluation still happens outside the backend. For each evaluated frame, the backend uploads changed video data, builds source/effect/composite passes from the evaluated layer tree, renders nested groups recursively, submits commands and schedules a readback of the completed RGBA frame. The readback path accounts for row alignment and repacks rows into the public tightly packed frame format.
 
 The backend has bounded in-flight work. `VESTRA_WGPU_IN_FLIGHT` controls the implementation pipeline depth only when valid; it is not a semantic setting. Texture pools, source caches, staging buffers, pending static layers and readback slots are retained across a prepared operation. Release them only when their GPU completion token makes them safe to reuse. This is why a `PreparedProject` owns one backend instance and is not freely concurrent.

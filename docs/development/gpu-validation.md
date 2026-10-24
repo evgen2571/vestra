@@ -27,9 +27,33 @@ selection and strict hardware requirements. CI uses `nix develop .#wgpu-software
 
 On some WSL installations, `vulkan` exposes llvmpipe while `gl`/GLES reaches NVIDIA through D3D12. That is an environment-specific result, not a universal rule. Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available, then trust adapter discovery. Set Vestra's `VESTRA_WGPU_BACKEND=gl` when the discovered GL path exposes the required hardware. Vestra does not read `WGPU_BACKEND` as a backend-selection variable.
 
+GL rendering requires compute shaders and storage buffers; discovery of a desktop
+GL 3.3 adapter alone does not establish a usable Vestra renderer. WGPU 23 also
+creates a native indirect-call validator during device creation, so an
+incompatible GL adapter can fail before Vestra creates its own compute pipelines.
+The shared root-instance lifetime and GL context restrictions remain required.
+Validate a compatible GL/GLES runtime on WSL separately from Vulkan; Vulkan
+results do not establish GL/WSL, DX12, Metal or browser runtime compatibility.
+
 llvmpipe and Lavapipe are useful software fallback/correctness adapters. They cannot support a hardware-performance or hardware-correctness claim. If discovery exposes only software adapters, report hardware validation as blocked. User selection details are in [Backends](../reference/backends.md).
 
-Software verification runs Rust tests sequentially because wgpu 22 can mispair
-device and queue IDs during concurrent device allocation on a shared instance.
-All workspace and strict WGPU assertions still run; this verifies rendering
-correctness, without establishing concurrent prepared-context safety.
+Software verification currently runs Rust tests sequentially as a retained
+workaround from WGPU 22. The WGPU 23 dependency corrects queue identity;
+the explicit concurrent lifecycle regression runs its own preparation/render/drop
+workers even under a sequential test runner. GL keeps one active context for
+WSL/Mesa compatibility and exercises the same ownership checks serially.
+
+Run the longer lifecycle stress explicitly, with strict adapter requirements and
+the appropriate graphics API/environment from above:
+
+```bash
+VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_WGPU=1 \
+  cargo test -p vestra --test public_sdk --all-features \
+  public_wgpu_concurrent_lifecycle_stress -- --ignored --exact --nocapture
+```
+
+It creates 12 workers with 30 prepare/render/drop rounds each, retaining returned
+frames across subsequent preparations and worker teardown. Add
+`VESTRA_REQUIRE_HARDWARE_WGPU=1` for hardware validation. The ordinary suite keeps
+a smaller concurrent regression and the deterministic retained-device/dropped-queue
+regression, including submission-index polling.

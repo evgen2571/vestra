@@ -14,6 +14,12 @@ pub struct VideoDecoderMetrics {
     pub cache_hits: u64,
     pub cache_misses: u64,
     pub decode_time_us: u64,
+    /// Native providers report RGBA capacities and accessible native plane spans.
+    /// Providers that do not measure memory leave these fields zero.
+    pub cache_bytes_retained: u64,
+    pub cache_bytes_peak: u64,
+    pub current_frame_bytes_retained: u64,
+    pub working_buffer_bytes_retained: u64,
 }
 
 #[derive(Clone, Debug)]

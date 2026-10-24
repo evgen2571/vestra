@@ -505,6 +505,22 @@ pub(crate) struct PyRenderPerformance {
     bitmap_cache_misses: u64,
     #[pyo3(get)]
     uploaded_texture_count: usize,
+    #[pyo3(get)]
+    video_cache_bytes_retained: u64,
+    #[pyo3(get)]
+    video_cache_bytes_peak: u64,
+    #[pyo3(get)]
+    video_current_frame_bytes_retained: u64,
+    #[pyo3(get)]
+    video_decoder_buffer_bytes_retained: u64,
+    #[pyo3(get)]
+    cpu_scratch_buffers_retained: usize,
+    #[pyo3(get)]
+    cpu_scratch_bytes_retained: u64,
+    #[pyo3(get)]
+    cpu_worker_memory_estimate_bytes: u64,
+    #[pyo3(get)]
+    cpu_output_frame_bytes_estimated: u64,
 }
 impl From<&NativeRenderPerformance> for PyRenderPerformance {
     fn from(v: &NativeRenderPerformance) -> Self {
@@ -515,6 +531,14 @@ impl From<&NativeRenderPerformance> for PyRenderPerformance {
             bitmap_cache_hits: v.bitmap_cache_hits,
             bitmap_cache_misses: v.bitmap_cache_misses,
             uploaded_texture_count: v.uploaded_texture_count,
+            video_cache_bytes_retained: v.video_cache_bytes_retained,
+            video_cache_bytes_peak: v.video_cache_bytes_peak,
+            video_current_frame_bytes_retained: v.video_current_frame_bytes_retained,
+            video_decoder_buffer_bytes_retained: v.video_decoder_buffer_bytes_retained,
+            cpu_scratch_buffers_retained: v.cpu_scratch_buffers_retained,
+            cpu_scratch_bytes_retained: v.cpu_scratch_bytes_retained,
+            cpu_worker_memory_estimate_bytes: v.cpu_worker_memory_estimate_bytes,
+            cpu_output_frame_bytes_estimated: v.cpu_output_frame_bytes_estimated,
         }
     }
 }

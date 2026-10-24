@@ -54,6 +54,21 @@ impl FfmpegVideoCursor {
         self.draining
     }
 
+    /// Accessible stride-inclusive planes; codec/scaler internals are opaque.
+    pub(super) fn buffer_bytes(&self) -> u64 {
+        std::iter::once(&self.rgba)
+            .chain(self.pending.iter().filter_map(|frame| frame.as_ref().ok()))
+            .map(|frame| {
+                (0..frame.planes())
+                    .map(|plane| {
+                        let stride = (frame.stride(plane) as isize).unsigned_abs() as u64;
+                        stride.saturating_mul(u64::from(frame.plane_height(plane)))
+                    })
+                    .sum::<u64>()
+            })
+            .sum()
+    }
+
     pub(super) fn seek(&mut self, target: i64, time_base: MediaRational) -> Result<(), MediaError> {
         let raw_seconds = time_base.ticks_to_seconds(target);
         let micros = (raw_seconds * 1_000_000.0).round();

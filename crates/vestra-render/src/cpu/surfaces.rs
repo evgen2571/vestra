@@ -5,6 +5,7 @@ use image::{GenericImage, Rgba, RgbaImage};
 use vestra_core::plan::EffectResource;
 
 const SURFACE_COUNT: usize = 3;
+pub(super) const SCRATCH_BUFFER_COUNT: usize = SURFACE_COUNT + 2 + 3;
 
 /// Worker-local full-frame surfaces used for isolated nested compositions.
 ///
@@ -58,9 +59,15 @@ impl CompositionSurfacePool {
         *slot = Some(surface);
     }
 
-    #[cfg(test)]
-    pub(crate) fn stats(&self) -> (u64, u64, usize) {
-        (self.allocations, self.reuses, self.surfaces.len())
+    pub(super) fn stats(&self) -> SurfacePoolStats {
+        let retained = self.surfaces.iter().flatten();
+        SurfacePoolStats {
+            allocations: self.allocations,
+            reuses: self.reuses,
+            retained_buffers: retained.clone().count(),
+            retained_bytes: retained.map(image_capacity_bytes).sum(),
+            copy_bytes: 0,
+        }
     }
 }
 
@@ -92,7 +99,7 @@ impl EffectSurfacePool {
             current_slot: 0,
             original_slot: None,
             temporary_slots: [None; 2],
-            allocations: SURFACE_COUNT as u64,
+            allocations: SCRATCH_BUFFER_COUNT as u64,
             reuses: 0,
             copy_bytes: 0,
         }
@@ -109,7 +116,7 @@ impl EffectSurfacePool {
             self.current_slot = 0;
             self.original_slot = None;
             self.temporary_slots = [None; 2];
-            self.allocations += SURFACE_COUNT as u64;
+            self.allocations += SCRATCH_BUFFER_COUNT as u64;
         }
     }
 
@@ -421,8 +428,14 @@ impl EffectSurfacePool {
         SurfacePoolStats {
             allocations: self.allocations,
             reuses: self.reuses,
-            retained_buffers: SURFACE_COUNT,
-            retained_bytes: image_bytes(&self.surfaces[0]) * SURFACE_COUNT as u64,
+            retained_buffers: SCRATCH_BUFFER_COUNT,
+            retained_bytes: self.surfaces.iter().map(image_capacity_bytes).sum::<u64>()
+                + image_capacity_bytes(&self.mask_local_surface)
+                + image_capacity_bytes(&self.mask_surface)
+                + ((self.mask_coverage.capacity()
+                    + self.mask_feather_scratch.capacity()
+                    + self.mask_feather_scratch_b.capacity())
+                    * std::mem::size_of::<f32>()) as u64,
             copy_bytes: self.copy_bytes,
         }
     }
@@ -464,9 +477,31 @@ fn image_bytes(image: &RgbaImage) -> u64 {
     u64::from(image.width()) * u64::from(image.height()) * 4
 }
 
+fn image_capacity_bytes(image: &RgbaImage) -> u64 {
+    image.as_raw().capacity() as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scratch_capacity_includes_mask_and_coverage_buffers_across_resize() {
+        let mut pool = EffectSurfacePool::new(4, 3);
+        assert_eq!(pool.stats().retained_buffers, 8);
+        assert_eq!(pool.stats().retained_bytes, 8 * 4 * 3 * 4);
+        assert_eq!(pool.stats().allocations, 8);
+        pool.resize(4, 3);
+        assert_eq!(pool.stats().allocations, 8);
+        pool.resize(2, 2);
+        assert_eq!(pool.stats().retained_bytes, 8 * 2 * 2 * 4);
+        assert_eq!(pool.stats().allocations, 16);
+        pool.mask_coverage.reserve(100);
+        assert_eq!(
+            pool.stats().retained_bytes,
+            7 * 2 * 2 * 4 + pool.mask_coverage.capacity() as u64 * 4
+        );
+    }
 
     #[test]
     fn composition_surfaces_clear_on_reuse_and_grow_by_depth() {
@@ -480,10 +515,14 @@ mod tests {
 
         let reused = pool.acquire(0, 2, 2);
         assert_eq!(reused.get_pixel(0, 0), &Rgba([0, 0, 0, 0]));
-        let (allocations, reuses, retained_depths) = pool.stats();
-        assert_eq!(allocations, 2);
-        assert_eq!(reuses, 1);
-        assert_eq!(retained_depths, 2);
+        let stats = pool.stats();
+        assert_eq!(stats.allocations, 2);
+        assert_eq!(stats.reuses, 1);
+        assert_eq!(stats.retained_buffers, 1);
+        assert_eq!(stats.retained_bytes, 16);
+        pool.release(0, reused);
+        assert_eq!(pool.stats().retained_buffers, 2);
+        assert_eq!(pool.stats().retained_bytes, 32);
     }
 
     fn copy_pass(pool: &mut EffectSurfacePool, input: EffectResource, output: EffectResource) {
@@ -573,14 +612,14 @@ mod tests {
         pool.begin_effect(false);
         copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
         copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
-        assert_eq!(pool.stats().allocations, 3);
+        assert_eq!(pool.stats().allocations, 8);
         assert_eq!(pool.stats().reuses, 2);
 
         let cached = pool.take_current();
         assert_eq!(cached.dimensions(), (4, 2));
-        assert_eq!(pool.stats().allocations, 4);
-        assert_eq!(pool.stats().retained_buffers, 3);
-        assert_eq!(pool.stats().retained_bytes, 96);
+        assert_eq!(pool.stats().allocations, 9);
+        assert_eq!(pool.stats().retained_buffers, 8);
+        assert_eq!(pool.stats().retained_bytes, 256);
     }
 
     #[test]

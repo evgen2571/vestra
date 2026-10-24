@@ -561,7 +561,7 @@ mod tests {
         assert_eq!(first.static_cache_population_renders, 1);
         assert_eq!(first.static_layers_rendered, 1);
         assert_eq!(first.cpu_scratch_allocations, 1);
-        assert_eq!(first.cpu_scratch_buffers_retained, 3 * first.pipeline_depth);
+        assert_eq!(first.cpu_scratch_buffers_retained, 8 * first.pipeline_depth);
         assert_eq!(
             (first.static_cache_entries, first.static_cached_bytes),
             (1, 64 * 64 * 4),
@@ -577,7 +577,7 @@ mod tests {
         assert_eq!(second.cpu_scratch_allocations, 0);
         assert_eq!(
             second.cpu_scratch_buffers_retained,
-            3 * second.pipeline_depth
+            8 * second.pipeline_depth
         );
         assert_eq!(
             (second.static_cache_entries, second.static_cached_bytes),

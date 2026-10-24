@@ -20,7 +20,7 @@ fmt-check:
     uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py
 
 # Run the inexpensive CI style checks.
-style: fmt-check lint-python showcase-style docs-check
+style: fmt-check lint-python showcase-style comparison-style docs-check
 
 # Lint Rust and Python.
 lint: lint-rust lint-python
@@ -109,6 +109,15 @@ benchmark-compare before after:
 showcase-style:
     uvx --from 'ruff>=0.12,<0.13' ruff check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
     uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
+
+# Check the external comparison and Code to Video authoring tools.
+comparison-style:
+    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+
+# Script regression tests; Pillow is isolated from Vestra's runtime dependencies.
+comparison-test:
+    uv run --with 'Pillow==11.3.0' pytest tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
 
 # Reproduce the licensed footage selections and original soundtrack.
 showcase-assets:

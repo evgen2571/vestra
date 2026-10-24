@@ -32,7 +32,7 @@
             ffmpeg
           ];
 
-          mkVestraShell = { softwareWgpu ? false }:
+          mkVestraShell = { softwareWgpu ? false, comparison ? false }:
             pkgs.mkShell {
               packages = nativePackages
                 ++ lib.optionals softwareWgpu [
@@ -46,7 +46,8 @@
               # libraries remain available for native diagnostics.
               PKG_CONFIG_PATH = lib.makeSearchPath "lib/pkgconfig" [ ffmpegDev ];
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-              LD_LIBRARY_PATH = lib.makeLibraryPath [ ffmpegLib ];
+              LD_LIBRARY_PATH = lib.makeLibraryPath ([ ffmpegLib ]
+                ++ lib.optionals comparison [ pkgs.stdenv.cc.cc.lib pkgs.zlib pkgs.vulkan-loader pkgs.libglvnd ]);
 
               shellHook = lib.optionalString softwareWgpu ''
                 export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.vulkan-loader pkgs.mesa ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -60,6 +61,7 @@
         in {
           default = mkVestraShell {};
           ci = mkVestraShell {};
+          comparison = mkVestraShell { comparison = true; };
           wgpu-software = mkVestraShell { softwareWgpu = true; };
         });
     };

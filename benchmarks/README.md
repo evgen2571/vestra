@@ -128,3 +128,7 @@ measurements include decode/encode and output-dependent encoding cost.
 The latter two include three additional full-resolution preparation passes.
 The 1080p suite uses one warmup and three measured samples per scenario; compare
 sample ranges and actual adapter metadata before drawing performance conclusions.
+
+The [MoviePy v2 comparison](comparisons/moviepy/README.md) adds three matched
+local-footage workloads with CPU/hardware runs, process-tree measurements and
+decoded-output validation through `scripts/benchmark.py moviepy`.

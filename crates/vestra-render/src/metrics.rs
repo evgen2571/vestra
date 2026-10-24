@@ -41,6 +41,13 @@ pub struct PreparationStats {
     pub video_cache_hits: u64,
     pub video_cache_misses: u64,
     pub video_decode_time_us: u64,
+    /// Native-video RGBA capacities. The current gauge excludes cache aliases.
+    pub video_cache_bytes_retained: u64,
+    /// Sum of session cache high-water marks, not a simultaneous process peak.
+    pub video_cache_bytes_peak: u64,
+    pub video_current_frame_bytes_retained: u64,
+    /// Stride-inclusive scaler/lookahead planes; excludes opaque codec state.
+    pub video_decoder_buffer_bytes_retained: u64,
     pub bitmap_cache_hits: u64,
     pub bitmap_cache_misses: u64,
     pub bitmap_cache_requests: u64,
@@ -74,13 +81,19 @@ pub struct PreparationStats {
     pub encoder_video_frames_pushed_from_rust: u64,
     /// Renderer-owned CPU output buffers allocated for independently owned completed frames.
     pub cpu_full_frame_allocations: u64,
-    /// New mutable CPU scratch images allocated by the fixed renderer pool.
+    /// Cumulative effect/mask/coverage/composition backing-buffer allocations.
     pub cpu_scratch_allocations: u64,
-    /// Effect passes served by existing CPU scratch images.
+    /// Effect passes and composition acquisitions served by existing scratch.
     pub cpu_scratch_reuses: u64,
-    /// Current fixed CPU scratch-pool capacity and logical RGBA bytes.
+    /// Current effect/mask/coverage/composition backing capacity at idle snapshot.
     pub cpu_scratch_buffers_retained: usize,
     pub cpu_scratch_bytes_retained: u64,
+    /// Per-worker storage used by the 512 MiB automatic concurrency heuristic.
+    /// Excludes shared decoded assets, configured caches and opaque native state.
+    pub cpu_worker_memory_estimate_bytes: u64,
+    /// Two tight RGBA output payloads per worker in the SDK scheduler, estimated.
+    /// Caller-retained frames after ownership transfer are outside this estimate.
+    pub cpu_output_frame_bytes_estimated: u64,
     /// Explicit full-frame CPU copies for post-effect input/output transfers.
     pub cpu_full_frame_copy_bytes: u64,
     pub cpu_opaque_copy_fast_path_hits: u64,
@@ -203,6 +216,10 @@ impl PreparationStats {
         self.video_cache_hits = backend.video_cache_hits;
         self.video_cache_misses = backend.video_cache_misses;
         self.video_decode_time_us = backend.video_decode_time_us;
+        self.video_cache_bytes_retained = backend.video_cache_bytes_retained;
+        self.video_cache_bytes_peak = backend.video_cache_bytes_peak;
+        self.video_current_frame_bytes_retained = backend.video_current_frame_bytes_retained;
+        self.video_decoder_buffer_bytes_retained = backend.video_decoder_buffer_bytes_retained;
         self.bitmap_cache_hits = backend.bitmap_cache_hits;
         self.bitmap_cache_misses = backend.bitmap_cache_misses;
         self.bitmap_cache_requests = backend.bitmap_cache_requests;
@@ -224,6 +241,8 @@ impl PreparationStats {
         // and copy event counters are set as deltas by the render runner.
         self.cpu_scratch_buffers_retained = backend.cpu_scratch_buffers_retained;
         self.cpu_scratch_bytes_retained = backend.cpu_scratch_bytes_retained;
+        self.cpu_worker_memory_estimate_bytes = backend.cpu_worker_memory_estimate_bytes;
+        self.cpu_output_frame_bytes_estimated = backend.cpu_output_frame_bytes_estimated;
         self.wgpu_temporary_texture_estimated_bytes =
             backend.wgpu_temporary_texture_estimated_bytes;
         self.wgpu_temporary_textures_retained = backend.wgpu_temporary_textures_retained;

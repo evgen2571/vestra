@@ -42,6 +42,13 @@ pub struct VideoDecoderMetrics {
     pub cache_hits: u64,
     pub cache_misses: u64,
     pub decode_time_us: u64,
+    /// Owned RGBA cache capacity; current-frame aliases are counted only here.
+    pub cache_bytes_retained: u64,
+    pub cache_bytes_peak: u64,
+    /// Current RGBA capacity not also retained by the cache.
+    pub current_frame_bytes_retained: u64,
+    /// Visible scaler/lookahead plane spans, excluding opaque native state.
+    pub working_buffer_bytes_retained: u64,
 }
 
 /// An exact rational used for media time-base and rate metadata.
@@ -397,7 +404,20 @@ impl VideoDecoder {
 
     #[must_use]
     pub fn metrics(&self) -> VideoDecoderMetrics {
-        self.metrics
+        let (cache_bytes_retained, cache_bytes_peak) = self.cache.bytes();
+        VideoDecoderMetrics {
+            cache_bytes_retained,
+            cache_bytes_peak,
+            current_frame_bytes_retained: self.current.as_ref().map_or(0, |frame| {
+                if self.cache.contains_pixels(frame) {
+                    0
+                } else {
+                    frame.pixels.as_raw().capacity() as u64
+                }
+            }),
+            working_buffer_bytes_retained: self.cursor.buffer_bytes(),
+            ..self.metrics
+        }
     }
 }
 
@@ -619,6 +639,50 @@ mod tests {
         let frame = decoder.frame_at(0.1).expect("first frame");
         assert_eq!((frame.width, frame.height), (16, 16));
         assert_eq!(*frame.pixels.get_pixel(8, 8), image::Rgba([254, 0, 0, 255]));
+    }
+
+    #[test]
+    fn memory_gauges_count_current_cache_alias_once_and_exclude_transferred_frames() {
+        let (_directory, path) = fixture();
+        let bytes = 16 * 16 * 4;
+        for budget in [0, bytes, 2 * bytes] {
+            let mut decoder = VideoDecoder::open_with_options(
+                &path,
+                VideoDecoderOptions {
+                    cache_budget_bytes: budget,
+                    ..VideoDecoderOptions::default()
+                },
+            )
+            .expect("decoder");
+            assert_eq!(decoder.metrics().cache_bytes_retained, 0);
+            assert_eq!(decoder.metrics().working_buffer_bytes_retained, 0);
+            let first = decoder.frame_at(0.1).expect("first");
+            let metrics = decoder.metrics();
+            assert_eq!(metrics.cache_bytes_retained, budget.min(bytes));
+            assert_eq!(
+                metrics.current_frame_bytes_retained,
+                if budget == 0 { bytes } else { 0 }
+            );
+            assert!(metrics.working_buffer_bytes_retained >= bytes);
+            let _second = decoder.frame_at(1.1).expect("second");
+            decoder.prefetch();
+            let metrics = decoder.metrics();
+            assert_eq!(metrics.cache_bytes_retained, budget.min(2 * bytes));
+            assert_eq!(metrics.cache_bytes_peak, metrics.cache_bytes_retained);
+            assert_eq!(
+                metrics.current_frame_bytes_retained,
+                if budget == 0 { bytes } else { 0 }
+            );
+            assert!(metrics.working_buffer_bytes_retained > bytes);
+            assert_eq!(first.pixels.as_raw().len() as u64, bytes);
+            let _seek = decoder.frame_at(0.1).expect("seek or cache hit");
+            let after = decoder.metrics();
+            assert!(after.cache_bytes_peak >= after.cache_bytes_retained);
+            assert_eq!(
+                after.current_frame_bytes_retained,
+                if budget == 0 { bytes } else { 0 }
+            );
+        }
     }
 
     #[test]

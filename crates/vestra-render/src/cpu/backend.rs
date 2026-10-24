@@ -27,7 +27,6 @@ use super::worker::{
 };
 
 pub(crate) const MAX_AUTO_CPU_WORKERS: usize = 8;
-pub(crate) const ESTIMATED_LIVE_RGBA_FRAMES_PER_WORKER: u64 = 6;
 pub(crate) const AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
 struct WorkerHandle {
@@ -45,6 +44,8 @@ pub struct CpuBackend {
     worker_timings: PreparationTimings,
     worker_hot_path_timings: CpuHotPathTimings,
     configured_cache_budget_bytes: u64,
+    worker_memory_estimate_bytes: u64,
+    output_frame_bytes_estimated: u64,
     profiling_enabled: bool,
     profile_reported: bool,
     #[cfg(test)]
@@ -135,6 +136,13 @@ impl CpuBackend {
             worker_timings: PreparationTimings::default(),
             worker_hot_path_timings: CpuHotPathTimings::default(),
             configured_cache_budget_bytes: plan.limits.maximum_cache_bytes,
+            worker_memory_estimate_bytes: super::memory::estimated_worker_bytes(plan),
+            output_frame_bytes_estimated: super::memory::frame_bytes(
+                plan.canvas.width,
+                plan.canvas.height,
+            )
+            .saturating_mul(2)
+            .saturating_mul(worker_count as u64),
             profiling_enabled,
             profile_reported: false,
             #[cfg(test)]
@@ -374,6 +382,8 @@ impl RenderBackend for CpuBackend {
         }
         let mut stats = aggregate_snapshots(&snapshots);
         stats.cache_budget_bytes = self.configured_cache_budget_bytes;
+        stats.cpu_worker_memory_estimate_bytes = self.worker_memory_estimate_bytes;
+        stats.cpu_output_frame_bytes_estimated = self.output_frame_bytes_estimated;
         self.worker_timings = aggregate_timings(&snapshots);
         self.worker_hot_path_timings = aggregate_hot_path_timings(&snapshots);
         if self.profiling_enabled
@@ -489,6 +499,10 @@ fn aggregate_snapshots(snapshots: &[WorkerSnapshot]) -> PreparationStats {
         result.video_cache_hits += stats.video_cache_hits;
         result.video_cache_misses += stats.video_cache_misses;
         result.video_decode_time_us += stats.video_decode_time_us;
+        result.video_cache_bytes_retained += stats.video_cache_bytes_retained;
+        result.video_cache_bytes_peak += stats.video_cache_bytes_peak;
+        result.video_current_frame_bytes_retained += stats.video_current_frame_bytes_retained;
+        result.video_decoder_buffer_bytes_retained += stats.video_decoder_buffer_bytes_retained;
     }
     result.bitmap_cache_hit_rate = (result.bitmap_cache_requests > 0)
         .then(|| result.bitmap_cache_hits as f64 / result.bitmap_cache_requests as f64);
@@ -588,13 +602,6 @@ fn layer_has_non_video_source(layer: &vestra_core::plan::CompiledLayer) -> bool 
     }
 }
 
-fn estimated_frame_bytes(plan: &RenderPlan) -> u64 {
-    u64::from(plan.canvas.width)
-        .checked_mul(u64::from(plan.canvas.height))
-        .and_then(|pixels| pixels.checked_mul(4))
-        .unwrap_or(u64::MAX)
-}
-
 pub(crate) fn automatic_worker_count(plan: &RenderPlan, available_parallelism: usize) -> usize {
     // The SDK renders a static visual plan once and reuses that frame.
     if plan.visual_dependency == vestra_core::plan::TemporalDependency::Static {
@@ -602,8 +609,7 @@ pub(crate) fn automatic_worker_count(plan: &RenderPlan, available_parallelism: u
     }
     let available = available_parallelism.max(1);
     let cpu_limit = if available > 1 { available - 1 } else { 1 };
-    let estimated_worker_bytes =
-        estimated_frame_bytes(plan).saturating_mul(ESTIMATED_LIVE_RGBA_FRAMES_PER_WORKER);
+    let estimated_worker_bytes = super::memory::estimated_worker_bytes(plan);
     let memory_limit = AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES
         .checked_div(estimated_worker_bytes)
         .unwrap_or(0)

@@ -441,8 +441,8 @@ fn original_dependent_passes_pin_retained_storage_without_extra_frame_copy() {
 
     assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);
     assert_eq!(surfaces.stats().reuses, 4);
-    assert_eq!(surfaces.stats().allocations, 3);
-    assert_eq!(surfaces.stats().retained_buffers, 3);
+    assert_eq!(surfaces.stats().allocations, 8);
+    assert_eq!(surfaces.stats().retained_buffers, 8);
 }
 
 fn convolve_reference(

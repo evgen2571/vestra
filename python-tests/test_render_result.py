@@ -63,6 +63,16 @@ def assert_full_result(result: vestra.RenderResult, output: Path, *, scope: vest
     assert result.timing_scope is scope
     assert isinstance(result.timings, vestra.RenderTimings)
     assert isinstance(result.performance, vestra.RenderPerformance)
+    memory = result.performance
+    assert memory.cpu_scratch_buffers_retained >= 8
+    assert memory.cpu_scratch_bytes_retained > 0
+    frame_bytes = result.width * result.height * 4
+    assert memory.cpu_worker_memory_estimate_bytes >= 10 * frame_bytes
+    assert memory.cpu_output_frame_bytes_estimated >= 2 * frame_bytes
+    assert memory.video_cache_bytes_retained == 0
+    assert memory.video_cache_bytes_peak == 0
+    assert memory.video_current_frame_bytes_retained == 0
+    assert memory.video_decoder_buffer_bytes_retained == 0
     assert result.requested_backend is vestra.BackendPreference.CPU
     assert result.selected_backend == "cpu"
     assert result.encoder_backend == "ffmpeg"

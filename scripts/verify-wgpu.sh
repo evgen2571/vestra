@@ -63,10 +63,6 @@ selected_backend=$backend
 if [[ "$selected_backend" == "gles" ]]; then
   selected_backend=gl
 fi
-# shortcut: wgpu 22 can mispair concurrent device/queue IDs; remove after its queue-ID fix.
-if [[ "$mode" == "--software" ]]; then
-  export RUST_TEST_THREADS=1
-fi
 selected_adapter=$(grep -E "^backend=${selected_backend} " <<<"$adapters" | sed -n '1p' || true)
 if [[ -z "$selected_adapter" ]]; then
   echo "requested backend '$backend' exposed no adapter in discovery" >&2

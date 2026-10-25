@@ -37,11 +37,10 @@ results do not establish GL/WSL, DX12, Metal or browser runtime compatibility.
 
 llvmpipe and Lavapipe are useful software fallback/correctness adapters. They cannot support a hardware-performance or hardware-correctness claim. If discovery exposes only software adapters, report hardware validation as blocked. User selection details are in [Backends](../reference/backends.md).
 
-Software verification currently runs Rust tests sequentially as a retained
-workaround from WGPU 22. The WGPU 23 dependency corrects queue identity;
-the explicit concurrent lifecycle regression runs its own preparation/render/drop
-workers even under a sequential test runner. GL keeps one active context for
-WSL/Mesa compatibility and exercises the same ownership checks serially.
+Software and hardware verification use normal Rust test parallelism after the
+WGPU 23 queue-identity correction. GL keeps one active context for WSL/Mesa
+compatibility and exercises the same ownership checks serially. The explicit
+concurrent lifecycle regression retains its own preparation/render/drop workers.
 
 Run the longer lifecycle stress explicitly, with strict adapter requirements and
 the appropriate graphics API/environment from above:

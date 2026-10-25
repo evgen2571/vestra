@@ -86,3 +86,24 @@ Performance acceptance remains coordinator work and has not been claimed. Parent
 
 ## Decisions and handoff
 Use the existing issue as the authoritative design and repository-native active-plan path. User authorization permits #75 implementation now, while #79, #76 and #77 remain gated as stated. Coordinator schedules all heavy work and will preserve measured source/native identities and unresolved acceptance decisions.
+
+
+## Review follow-up: scratch reuse metrics
+October 25: final source review found that a first-use effect destination was
+counted as both allocation and reuse, contrary to the existing public metric
+contract. A baseline RED test observed reuse 1 versus expected 0 after the first
+allocating copy. The minimal correction counts reuse only for an existing
+destination; the second copy reports one reuse. Updated the affected pass-chain,
+Glow and 100-frame Gaussian expectations while preserving all pixel assertions.
+Focused CPU release tests passed 232 / 9 ignored; SDK report/JSON tests passed 2,
+prepared-operation metrics passed 1, formatting and renderer all-feature/all-target
+warning-denying Clippy passed. Forced optimized native reinstall and loaded
+artifact verification completed; candidate comparison packages were restored.
+No broad workspace/GPU/Python reruns were needed for this counter-only correction.
+Exact commands, final identities and commit are in the ignored Task 1 fix report.
+
+Coordinator reports original candidate `9b9f9bb` did not meet #75 acceptance:
+layered wall time was about 6.8% higher and 4K PSS about 2.8% higher. These are
+coordinator results, not new worker measurements. Final-candidate captures and
+acceptance remain coordinator work; #79 stays unmerged and #76/#77 blocked.
+No worker-budget, reserve, cap, cache, decoder or encoder policy was tuned.

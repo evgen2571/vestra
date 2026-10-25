@@ -1561,7 +1561,7 @@ fn dynamic_effect_scratch_allocations_stabilize_after_warmup() {
     let stats = backend.stats();
     assert_eq!(stats.cpu_full_frame_allocations, 100);
     assert_eq!(stats.cpu_scratch_allocations, 2);
-    assert_eq!(stats.cpu_scratch_reuses, 200);
+    assert_eq!(stats.cpu_scratch_reuses, 199);
     assert_eq!(stats.cpu_scratch_buffers_retained, 2);
     assert_eq!(stats.cpu_scratch_bytes_retained, 128);
 }

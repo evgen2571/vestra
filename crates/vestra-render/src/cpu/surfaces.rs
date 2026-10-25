@@ -313,8 +313,9 @@ impl EffectSurfacePool {
         let secondary_slot = secondary.map(|resource| self.resolve_slot(resource));
         let destination = self.destination_slot(output, primary_slot, secondary_slot);
 
-        self.allocations += ensure_image(&mut self.surfaces[destination], self.extent);
-        self.reuses += 1;
+        let allocated = ensure_image(&mut self.surfaces[destination], self.extent);
+        self.allocations += allocated;
+        self.reuses += u64::from(allocated == 0);
         with_sources_and_target(
             &mut self.surfaces,
             primary_slot,
@@ -725,9 +726,11 @@ mod tests {
         let mut pool = EffectSurfacePool::new(4, 2);
         pool.begin_effect(false);
         copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
+        assert_eq!(pool.stats().allocations, 2);
+        assert_eq!(pool.stats().reuses, 0);
         copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
         assert_eq!(pool.stats().allocations, 2);
-        assert_eq!(pool.stats().reuses, 2);
+        assert_eq!(pool.stats().reuses, 1);
 
         let cached = pool.take_current();
         assert_eq!(cached.dimensions(), (4, 2));

@@ -415,7 +415,7 @@ fn arbitrary_five_pass_sequence_executes_each_pass_in_order() {
     execute_effect_pass_sequence(&mut surfaces, &passes, None, false, false, &[]);
 
     assert_eq!(surfaces.current().get_pixel(0, 0), &Rgba([42, 17, 67, 255]));
-    assert_eq!(surfaces.stats().reuses, 5);
+    assert_eq!(surfaces.stats().reuses, 4);
 }
 
 #[test]
@@ -440,7 +440,7 @@ fn original_dependent_passes_pin_retained_storage_without_extra_frame_copy() {
     );
 
     assert_eq!(surfaces.stats().copy_bytes, copied_before_effect);
-    assert_eq!(surfaces.stats().reuses, 4);
+    assert_eq!(surfaces.stats().reuses, 2);
     assert_eq!(surfaces.stats().allocations, 3);
     assert_eq!(surfaces.stats().retained_buffers, 3);
 }

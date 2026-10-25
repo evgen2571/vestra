@@ -88,7 +88,7 @@ pub struct PreparationStats {
     /// Current effect/mask/coverage/composition backing capacity at idle snapshot.
     pub cpu_scratch_buffers_retained: usize,
     pub cpu_scratch_bytes_retained: u64,
-    /// Per-worker storage used by the 512 MiB automatic concurrency heuristic.
+    /// Plan-based per-worker pixel storage, independent of worker selection.
     /// Excludes shared decoded assets, configured caches and opaque native state.
     pub cpu_worker_memory_estimate_bytes: u64,
     /// Two tight RGBA output payloads per worker in the SDK scheduler, estimated.

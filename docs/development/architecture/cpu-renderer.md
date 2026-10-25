@@ -54,26 +54,59 @@ thread stacks, allocator-retained freed memory, audio preparation and encoder
 processes are outside these pixel-storage gauges. Use external process sampling
 for resident memory; see [performance](../performance.md).
 
-Dynamic automatic worker selection retains the existing 512 MiB heuristic,
-one reserved CPU when possible, and maximum eight workers. Its per-worker
-`cpu_worker_memory_estimate_bytes` is calculated from:
+## Resource estimates
+
+`cpu_worker_memory_estimate_bytes` reports plan-based per-worker pixel storage.
+It is independent of automatic worker selection and includes:
 
 - Eight eager scratch buffers and two SDK output payloads at output dimensions.
 - Distinct retained composition pool depths reachable through visible groups
-  and active matte chains, the peak simultaneous matte-cache images, and maximum
+  and active matte chains, peak simultaneous matte-cache images, and maximum
   overlapping group-mask owner/group temporaries. Hidden sources are reached
   through active consumers; unused hidden and out-of-output layers add no storage.
-- Three source-sized RGBA images per independent video cursor: current, incoming
-  converted pixels and scaler output. Per-asset peak overlapping source clocks
-  cover extra cursors; serial clips reuse the primary, which remains retained
-  after the asset leaves view. Matching local origins and source start/rate share
-  a cursor. Group and source-mask intervals use composition-local offsets and
-  parent/output clipping. This conservatively ignores opacity, frame sampling and cache
-  hits, and sums each asset's peak. Native row padding, YUV/lookahead and opaque
-  codec state are excluded from the estimate.
+- Two source-sized RGBA images per independent native video cursor: current
+  and scaler output, plus one incoming conversion at the largest reachable
+  source size. CPU requests are serial within a worker; native prefetch decodes
+  lookahead planes without converting RGBA. Retained current/scaler storage
+  remains allowed with zero cache. Per-asset peak overlapping source clocks
+  cover extra cursors; serial clips reuse the primary, retained after the asset
+  leaves view. Matching local origins and source start/rate share a cursor.
+  Group and source-mask intervals use composition-local offsets and parent/output
+  clipping. Opacity, frame sampling and cache hits are conservatively ignored.
 
-All estimate arithmetic saturates on overflow and selection always permits at
-least one worker. Shared decoded assets and configured cache budgets are
-separate; the 512 MiB heuristic is not a total-memory guarantee. Static visual
-plans still use one worker. Corrected accounting alone does not release memory;
-any concurrency change needs paired throughput and process-memory measurements.
+Estimate arithmetic saturates on overflow. Shared decoded assets and configured
+cache budgets are separate. Native row padding, YUV/lookahead and opaque codec
+state are excluded; custom decoder providers can retain additional internal
+storage. This estimate is not a total-memory bound or a sum of resident bytes.
+Accounting alone releases no memory.
+
+## Worker selection and memory limits
+
+Automatic selection deliberately preserves the original compatibility policy:
+static visual plans use one worker; dynamic plans reserve one CPU when possible,
+cap at eight, and divide 512 MiB by six output-sized RGBA frames per worker,
+always permitting at least one. This legacy calculation depends only on canvas
+size and CPU availability, not effects, sources, measured capacities or the
+reported resource estimate. Correcting accounting or making scratch lazy must
+not indirectly change concurrency. Performance and memory comparisons must use
+matching worker counts; claim resident-memory savings only where demonstrated.
+
+The legacy heuristic is not reliable whole-render admission. It does not query
+host memory, cgroup pressure/hard limits or process allocation limits, and it
+reserves nothing across prepared projects. Reducing concurrency to one cannot
+guarantee that an encoded render fits. Existing OOM and simultaneous-render
+limitations remain; neither accounting nor lazy scratch fixes them.
+
+Whole-operation memory admission is deferred. Shared assets/audio analysis are
+prepared before backend selection; an encoder starts later for a video operation,
+while prepared-frame requests need no encoder. Native codec storage and thread
+stacks depend on formats, encoder settings and hardware. An available-memory
+snapshot cannot reserve future allocations, and OS-enforced kills do not provide
+graceful admission errors or guaranteed output cleanup.
+
+A future policy needs preparation/video costs, reservations owned for actual
+resource lifetimes, and a structured failure when even the minimum operation
+cannot fit. It must distinguish resident storage from outstanding allocations,
+physical headroom from virtual/commit limits, and cgroup hard limits from reclaim
+pressure. Process-local reservations cannot coordinate unrelated processes.
+Platform discovery and isolation belong to that separate work.

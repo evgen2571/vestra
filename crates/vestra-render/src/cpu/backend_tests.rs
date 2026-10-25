@@ -1070,7 +1070,7 @@ fn automatic_worker_policy_uses_one_worker_for_static_visuals() {
 }
 
 #[test]
-fn automatic_worker_policy_reserves_cpu_and_applies_frame_memory_limit() {
+fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
@@ -1085,14 +1085,14 @@ fn automatic_worker_policy_reserves_cpu_and_applies_frame_memory_limit() {
     assert_eq!(automatic_worker_count(&plan, 1), 1);
     assert_eq!(automatic_worker_count(&plan, 2), 1);
     assert_eq!(automatic_worker_count(&plan, 4), 3);
-    assert_eq!(automatic_worker_count(&plan, 64), 6);
+    assert_eq!(automatic_worker_count(&plan, 64), 8);
 
     plan.canvas.width = 2_560;
     plan.canvas.height = 1_440;
-    assert_eq!(automatic_worker_count(&plan, 64), 3);
+    assert_eq!(automatic_worker_count(&plan, 64), 6);
     plan.canvas.width = 3_840;
     plan.canvas.height = 2_160;
-    assert_eq!(automatic_worker_count(&plan, 64), 1);
+    assert_eq!(automatic_worker_count(&plan, 64), 2);
 }
 
 #[test]

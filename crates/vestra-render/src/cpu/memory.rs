@@ -1,4 +1,4 @@
-//! Storage estimates for the CPU concurrency heuristic, not process memory.
+//! Pixel storage estimates for reporting, not worker selection or process memory.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,20 +22,20 @@ pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
         .saturating_add(composition.temporary_frames);
     let mut bytes =
         frame_bytes(plan.canvas.width, plan.canvas.height).saturating_mul(canvas_buffers);
-    // Independent cursors retain current + incoming RGBA + scaler output.
+    // Cursors retain current RGBA and scaler output; layer requests are serial,
+    // so only one incoming RGBA conversion overlaps those retained buffers.
     // Native YUV/lookahead/codec state has no format-independent bound here.
     // Cache budgets and shared decoded assets are separate.
+    let mut incoming_bytes = 0;
     for (asset, events) in composition.videos {
         let cursors = peak_distinct(events).max(1);
         if let Some(video) = plan.videos.get(asset) {
-            bytes = bytes.saturating_add(
-                frame_bytes(video.width, video.height)
-                    .saturating_mul(3)
-                    .saturating_mul(cursors),
-            );
+            let source_bytes = frame_bytes(video.width, video.height);
+            bytes = bytes.saturating_add(source_bytes.saturating_mul(2).saturating_mul(cursors));
+            incoming_bytes = incoming_bytes.max(source_bytes);
         }
     }
-    bytes
+    bytes.saturating_add(incoming_bytes)
 }
 
 // Matching origins and source clocks produce exactly the same requested time.
@@ -345,6 +345,30 @@ mod tests {
     }
 
     #[test]
+    fn resource_estimates_do_not_change_legacy_worker_selection() {
+        let mut plan = video_plan();
+        for (width, height, workers) in [(1_920, 1_080, 8), (2_560, 1_440, 6), (3_840, 2_160, 2)] {
+            plan.canvas.width = width;
+            plan.canvas.height = height;
+            plan.videos[0].width = 17;
+            plan.videos[0].height = 9;
+            let small = estimated_worker_bytes(&plan);
+            assert_eq!(
+                super::super::backend::automatic_worker_count(&plan, 64),
+                workers
+            );
+            plan.videos[0].width = u32::MAX;
+            plan.videos[0].height = u32::MAX;
+            assert!(small < estimated_worker_bytes(&plan));
+            assert_eq!(estimated_worker_bytes(&plan), u64::MAX);
+            assert_eq!(
+                super::super::backend::automatic_worker_count(&plan, 64),
+                workers
+            );
+        }
+    }
+
+    #[test]
     fn video_estimate_reuses_serial_cursors_and_counts_distinct_overlapping_times() {
         let mut plan = video_plan();
         plan.frame_count = 300;
@@ -373,7 +397,7 @@ mod tests {
             *source_start = 0.5;
         }
         let video_bytes = frame_bytes(plan.videos[0].width, plan.videos[0].height);
-        assert_eq!(estimated_worker_bytes(&plan), one + 3 * video_bytes);
+        assert_eq!(estimated_worker_bytes(&plan), one + 2 * video_bytes);
         let nested = group(&plan, plan.layers.clone());
         layer.source = nested;
         layer.start_nanos = 5_000_000_000;
@@ -394,6 +418,39 @@ mod tests {
         );
         plan.layers = vec![layer];
         assert!(storage_for_plan(&plan).videos.is_empty());
+    }
+
+    #[test]
+    fn video_estimate_counts_only_one_incoming_conversion_across_sources() {
+        let mut plan = video_plan();
+        plan.canvas.width = 1_920;
+        plan.canvas.height = 1_080;
+        plan.videos[0].width = 1_280;
+        plan.videos[0].height = 720;
+        let layer = plan.layers[0].clone();
+        for index in 1..3 {
+            plan.videos.push(plan.videos[0].clone());
+            let mut next = layer.clone();
+            next.compiled_identity = index;
+            if let CompiledVisualSource::Video { asset_index, .. } = &mut next.source {
+                *asset_index = index;
+            }
+            plan.layers.push(next);
+        }
+        let canvas = frame_bytes(1_920, 1_080);
+        let source = frame_bytes(1_280, 720);
+        assert_eq!(estimated_worker_bytes(&plan), 10 * canvas + 7 * source);
+        assert_eq!(super::super::backend::automatic_worker_count(&plan, 64), 8);
+        // Keep uncached current frames and every retained scaler in the bound.
+        plan.limits.maximum_cache_bytes = 0;
+        assert_eq!(estimated_worker_bytes(&plan), 10 * canvas + 7 * source);
+        plan.videos[2].width = 2_560;
+        plan.videos[2].height = 1_440;
+        let larger = frame_bytes(2_560, 1_440);
+        assert_eq!(
+            estimated_worker_bytes(&plan),
+            10 * canvas + 4 * source + 3 * larger
+        );
     }
 
     #[test]

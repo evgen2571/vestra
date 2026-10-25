@@ -27,7 +27,8 @@ use super::worker::{
 };
 
 pub(crate) const MAX_AUTO_CPU_WORKERS: usize = 8;
-pub(crate) const AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
+const LEGACY_RGBA_FRAMES_PER_WORKER: u64 = 6;
+pub(crate) const LEGACY_AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
 struct WorkerHandle {
     command_tx: SyncSender<WorkerCommand>,
@@ -609,9 +610,11 @@ pub(crate) fn automatic_worker_count(plan: &RenderPlan, available_parallelism: u
     }
     let available = available_parallelism.max(1);
     let cpu_limit = if available > 1 { available - 1 } else { 1 };
-    let estimated_worker_bytes = super::memory::estimated_worker_bytes(plan);
-    let memory_limit = AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES
-        .checked_div(estimated_worker_bytes)
+    // shortcut: preserve the legacy heuristic until whole-operation admission exists.
+    let legacy_worker_bytes = super::memory::frame_bytes(plan.canvas.width, plan.canvas.height)
+        .saturating_mul(LEGACY_RGBA_FRAMES_PER_WORKER);
+    let memory_limit = LEGACY_AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES
+        .checked_div(legacy_worker_bytes)
         .unwrap_or(0)
         .max(1) as usize;
     cpu_limit.min(memory_limit).clamp(1, MAX_AUTO_CPU_WORKERS)

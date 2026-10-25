@@ -78,15 +78,21 @@ It is independent of automatic worker selection and includes:
   and active matte chains, peak simultaneous matte-cache images, and maximum
   overlapping group-mask owner/group temporaries. Hidden sources are reached
   through active consumers; unused hidden and out-of-output layers add no storage.
-- Two source-sized RGBA images per independent native video cursor: current
-  and scaler output, plus one incoming conversion at the largest reachable
-  source size. CPU requests are serial within a worker; native prefetch decodes
-  lookahead planes without converting RGBA. Retained current/scaler storage
-  remains allowed with zero cache. Per-asset peak overlapping source clocks
-  cover extra cursors; serial clips reuse the primary, retained after the asset
-  leaves view. Matching local origins and source start/rate share a cursor.
-  Group and source-mask intervals use composition-local offsets and parent/output
-  clipping. Opacity, frame sampling and cache hits are conservatively ignored.
+- For native video, two source-sized RGBA images per independent cursor: current
+  and scaler output, plus one incoming conversion at the largest reachable source
+  size.
+  CPU layer requests block until their frame is available, so incoming RGBA
+  conversions do not overlap within a worker; native prefetch only decodes
+  lookahead planes. Current frames remain allowed even with a zero cache budget;
+  cached aliases do not justify removing the uncached allowance. Per-asset peak
+  overlapping source clocks cover extra cursors; serial clips reuse the primary,
+  which remains retained after the asset leaves view. Matching local origins
+  and source start/rate share a cursor. Group and source-mask intervals use
+  composition-local offsets and parent/output clipping. This conservatively
+  ignores opacity, frame sampling and cache
+  hits, and sums each asset's peak. Native row padding, YUV/lookahead and opaque
+  codec state are excluded from the estimate. Custom decoder providers may
+  retain additional internal storage that this native pixel model cannot bound.
 
 Estimate arithmetic saturates on overflow. Shared decoded assets and configured
 cache budgets are separate. Native row padding, YUV/lookahead and opaque codec

@@ -2,7 +2,7 @@
 
 > For agentic workers: use superpowers:subagent-driven-development with a fresh implementer and scoped review. Follow this repository's plan lifecycle and the user's existing execution authorization.
 
-Status: blocked on performance acceptance and parent integration
+Status: performance acceptance failed after lifetime correction; parent integration remains gated
 Branch / baseline: `perf/lazy-cpu-scratch` / `06325fae2e4291da320da879a75d49c6a3b2bc95` (draft PR #79).
 
 ## Objective
@@ -159,3 +159,69 @@ was made. Remove the completed plan only before an actually accepted merge.
 
 Unverified: compatible GL/WSL, Metal, DX12/browser runtime, extra ignored stress,
 multi-hour/large-file soaks. Vulkan evidence does not establish those platforms.
+
+## October 25: controlled layered investigation
+
+User authorized four matched SDK arms (original eight, #79 forced eight,
+previous #75 forced eight and automatic six), followed by a lifetime-backed
+correction and repeated five-workload validation. Temporary overrides live
+only in ignored source snapshots; production defaults remain unchanged.
+Ranked hypotheses: concurrency loss; first-use lazy overhead; overestimated
+overlapping storage. Preserve all previous binaries/reports and record new
+raw timings, worker counts, peak/late RSS/PSS and full output validation.
+No merge, new branch/PR or #76/#77 work is authorized.
+
+### Controlled investigation outcome
+
+The fixed-eight release SDK medians were original 19.507s, #79-only 19.385s
+and previous #75 19.396s; automatic #75 six workers took 22.031s. Outputs
+were identical. The repeatable loss is concurrency, not lazy-allocation overhead.
+
+The estimate summed incoming RGBA conversions that cannot coexist within one
+synchronous CPU worker. Retain current and scaler storage per cursor, but add
+only the largest incoming conversion. Three 720p sources with four 1080p scratch
+owners and two SDK output allowances change 82,944,000 to 75,571,200 bytes per
+worker, permitting seven. Eight still charge 576.56 MiB against the unchanged
+512 MiB heuristic. Mask storage and SDK output ownership are real. Cached current
+aliases do not justify dropping allowances for zero-cache/extra-cursor/provider
+paths; no cache-aware contract or policy increase was invented to restore eight.
+
+A focused RED observed 82,944,000 rather than 75,571,200. Correction passed 170
+focused CPU tests (6 existing ignored), full just check (1,118 Rust / 26 ignored,
+Clippy/build/format/schema/docs), 845 Python plus compileall, canonical smoke,
+strict software Vulkan and NVIDIA Vulkan recipes (92 renderer targets each,
+plus hardware encoded CLI parity). 32 fresh raw-frame comparisons passed:
+CPU exact to original, hardware maximum channel error 1; held ownership passed.
+Independent source and evidence reviews have no remaining findings.
+
+Fresh paired medians (original / previous #75 / corrected):
+
+| Workload | Seconds | Peak PSS MiB | Workers |
+| --- | --- | --- | --- |
+| basic | 9.880 / 9.863 / 9.828 | 1223.6 / 1148.9 / 1146.5 | 8 / 8 / 8 |
+| editing | 13.317 / 13.336 / 13.303 | 1557.6 / 1493.8 / 1485.2 | 8 / 8 / 8 |
+| layered | 19.373 / 21.812 / 20.360 | 1737.6 / 1516.3 / 1593.4 | 8 / 6 / 7 |
+| sequential60s | 57.616 / 57.031 / 57.451 | 1287.5 / 1211.8 / 1203.9 | 8 / 8 / 8 |
+| 4K | 95.773 / 54.978 / 53.638 | 2641.1 / 2637.8 / 2626.8 | 2 / 4 / 4 |
+
+Layered remains 5.09% slower (every corrected sample exceeds every paired
+original); PSS falls 8.29%. Basic/editing/sequential retain throughput and save
+4.7–6.5% PSS. 4K is faster but overlapping PSS ranges establish no reliable
+resident-memory saving. Two fresh five-render Python processes also pass all
+outputs, with peak PSS 1720.7 to 1264.3 MiB and every idle thread count returning
+to one; allocator variation is not a leak diagnosis or #77 completion.
+
+The accepted matrix contains 60 MP4s / 36,720 decoded frames; fixed-worker and
+repeated-process diagnostics bring accepted validation to 86 MP4s / 44,520 frames.
+All files match their original encoded reference hashes. An initial 4K batch
+coincided with unrelated Nix contention and was excluded wholesale, preserved,
+and recaptured after the host settled. Raw timings, peak/late RSS/PSS, hashes,
+commands, exclusions and full report remain outside Git in the worktree sibling
+`reliability-evidence-20261024/cpu75-regression/`. Production sources contain no
+diagnostic override; ignored source snapshots retain the temporary probe.
+
+Keep #79 and #75 unmerged under the unchanged throughput requirement;#79 alone
+previously showed 49.1% layered slowdown under automatic selection. Keep #76/#77
+blocked. No new branch/PR, push, merge or main/develop change was made. The
+validated correction improves accounting and partially recovers throughput, but
+it does not satisfy performance acceptance. Keep this active plan.

@@ -530,17 +530,17 @@ mod tests {
         }
         let canvas = frame_bytes(1_920, 1_080);
         let source = frame_bytes(1_280, 720);
-        assert_eq!(estimated_worker_bytes(&plan), 10 * canvas + 7 * source);
-        assert_eq!(super::super::backend::automatic_worker_count(&plan, 64), 8);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * canvas + 7 * source);
+        assert_eq!(super::super::backend::automatic_worker_count(&plan, 64), 7);
         // Keep uncached current frames and every retained scaler in the bound.
         plan.limits.maximum_cache_bytes = 0;
-        assert_eq!(estimated_worker_bytes(&plan), 10 * canvas + 7 * source);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * canvas + 7 * source);
         plan.videos[2].width = 2_560;
         plan.videos[2].height = 1_440;
         let larger = frame_bytes(2_560, 1_440);
         assert_eq!(
             estimated_worker_bytes(&plan),
-            10 * canvas + 4 * source + 3 * larger
+            6 * canvas + 4 * source + 3 * larger
         );
     }
 

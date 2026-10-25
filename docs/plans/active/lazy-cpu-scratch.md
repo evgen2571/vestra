@@ -2,7 +2,7 @@
 
 > For agentic workers: use superpowers:subagent-driven-development with a fresh implementer and scoped review. Follow this repository's plan lifecycle and the user's existing execution authorization.
 
-Status: in progress
+Status: blocked on performance acceptance and parent integration
 Branch / baseline: `perf/lazy-cpu-scratch` / `06325fae2e4291da320da879a75d49c6a3b2bc95` (draft PR #79).
 
 ## Objective
@@ -51,38 +51,41 @@ Interfaces remain the existing private `EffectSurfacePool` methods and public me
 - [x] Self-review, commit only this task's files using `perf: ...`, and report actual commands/results/limits. Do not push/create a PR or merge; coordinator owns independent reviews and publication.
 
 ## Task 2: coordinator measurements and acceptance
-- [ ] Freeze exact candidate source/native identity after focused/broad correctness checks. Preserve the PR #79 baseline and its binaries; use a new output directory.
-- [ ] Reuse existing benchmark smoke/canonical/MoviePy builders, process-tree sampler and output validator. No new benchmark framework. Compare raw samples and medians, simultaneous tree RSS/PSS, late-window memory, worker counts, decoder/cache metrics and exact input/encoder/runtime identities.
-- [ ] Include basic/editing/layered 1080p, 60-second sequential, relevant 4K and five renders in one process. Use valid preserved controls where comparable; rerun controls if environment or small overlapping differences require it. Explain different instrumentation/build scopes explicitly.
-- [ ] Fully validate published outputs and compare encoded/raw pixels against preserved baselines; inspect representative masked/effect/group frames. No hidden backend fallback or quality/preset reductions.
+- [x] Freeze exact candidate source/native identity after focused/broad correctness checks. Preserve the PR #79 baseline and its binaries; use a new output directory.
+- [x] Reuse existing benchmark smoke/canonical/MoviePy builders, process-tree sampler and output validator. No new benchmark framework. Compare raw samples and medians, simultaneous tree RSS/PSS, late-window memory, worker counts, decoder/cache metrics and exact input/encoder/runtime identities.
+- [x] Include basic/editing/layered 1080p, 60-second sequential, relevant 4K and five renders in one process. Use valid preserved controls where comparable; rerun controls if environment or small overlapping differences require it. Explain different instrumentation/build scopes explicitly.
+- [x] Fully validate published outputs and compare encoded/raw pixels against preserved baselines; inspect representative masked/effect/group frames. No hidden backend fallback or quality/preset reductions.
 - [ ] Require measured actual memory improvement and no meaningful throughput regression, including comparison with the original pre-accounting baseline. If a trade-off remains, leave unmerged and report it; do not silently change the budget policy.
 
 ## Task 3: review and handoff
-- [ ] Coordinator performs scoped spec/quality review, resolves concrete findings and obtains a final whole-branch review. Preserve issue scope; no speculative #76/#77 work.
+- [x] Coordinator performs scoped spec/quality review, resolves concrete findings and obtains a final whole-branch review. Preserve issue scope; no speculative #76/#77 work.
 - [ ] Transfer durable contracts to permanent docs and remove this completed active plan before merge. Keep raw reports outside tracked source.
 - [ ] Publish focused changes to `develop` when prerequisites/integration state permit; never merge without explicit user approval. Avoid including parent changes as unrelated work in a final #75 diff.
 
 ## Progress and verification
-October 25: required RED regression failed at the exact parent with retained
-buffers 8 versus expected 1 (release CPU-only; saved under the ignored SDD task
-workspace). Lazy first-use pool, resize reset, owned transfers, topology-based
-scratch allowance and reachable retained union are implemented. Focused release
-CPU suite now passes: 232 tests, 9 existing ignored. Regression coverage includes
-late evaluated effect/mask/feather activation with fresh-frame equality, random
-phase order, alpha reference pixels, held outputs and optional resize/reuse.
-Full `just check` passed: 1,117 Rust tests / 26 existing ignored, all-feature
-check and warning-denying Clippy, schema validation/freshness and documentation.
-Canonical software Vulkan (llvmpipe LLVM 21.1.8, Mesa 26.1.5) passed its workspace
-and strict 92-test renderer stages. Strict Vulkan hardware (NVIDIA GTX 1650 SUPER,
-driver 595.71.05, discrete GPU) passed its workspace, strict 92-test renderer and
-encoded CLI parity stages. Full `just python-test` passed 845 tests and compileall.
-The final optimized native was force-reinstalled and loaded/hash-verified; recipe
-sync preserved its hash. Candidate comparison packages were restored. Root's
-requested normal merge of `origin/develop` (#73/#80, script/docs only) is retained
-as `0158ef4`, preserving exact #79 ancestry. GL/WSL compatibility, extra ignored
-stress and measurement acceptance remain unverified. Detailed commands, logs,
-source/native/SDK identities and limits are in the ignored Task 1 SDD report.
-Performance acceptance remains coordinator work and has not been claimed. Parent integrated evidence includes all-feature compilation, CPU namespace 165 passed/6 ignored, SDK report 2 passed, prepared-operation 1 passed, focused Python 21 passed and a byte-identical final-native 1080p smoke. These prove the parent only, not #75.
+Implementation `9b9f9bb` passed the scratch baseline RED (8 versus 1), focused
+CPU release tests (232 passed / 9 existing ignored), full `just check` (1,117
+Rust passed / 26 existing ignored, all-feature compilation, Clippy, formatting,
+schema and docs), 845 Python tests/compileall, and canonical strict software and
+NVIDIA hardware Vulkan recipes (92 strict renderer targets each, plus hardware
+encoded CLI parity). The normal develop merge `0158ef4` preserves exact #79
+ancestry and approved #80 integration.
+
+Whole-branch source review found one minor reuse-counter mismatch. Correction
+`3d689f2` captured its own RED, restored first-allocation zero/second-pass one
+reuse, and passed focused CPU 232/9, SDK report/JSON 2 and prepared-operation 1,
+formatting, renderer all-feature/all-target warning-denying Clippy and docs.
+Scoped re-review is clean. Historical broad results remain evidence for `9b`;
+they were not needlessly rerun for the counter-only correction.
+
+Final source fingerprint is
+`58b41f81a4b1d838c4e7f72e26870ce82e1c7dc0f683086fc715fbbe4e0a28a2`;
+loaded optimized native is
+`e4d2a89b57ecb9951aefcacce27f9c74ee70d89e3570892a05eb2f9d66007bf6`.
+Forced reinstall, final SDK identity and matching comparison package versions
+were verified. Actual final-native Python frames/video captures and final
+optimized SDK companions pass; source/native stayed frozen during sampling.
+No open source-review finding remains.
 
 ## Decisions and handoff
 Use the existing issue as the authoritative design and repository-native active-plan path. User authorization permits #75 implementation now, while #79, #76 and #77 remain gated as stated. Coordinator schedules all heavy work and will preserve measured source/native identities and unresolved acceptance decisions.
@@ -104,6 +107,55 @@ Exact commands, final identities and commit are in the ignored Task 1 fix report
 
 Coordinator reports original candidate `9b9f9bb` did not meet #75 acceptance:
 layered wall time was about 6.8% higher and 4K PSS about 2.8% higher. These are
-coordinator results, not new worker measurements. Final-candidate captures and
-acceptance remain coordinator work; #79 stays unmerged and #76/#77 blocked.
+coordinator results, not new worker measurements. Final-candidate captures are now complete; the measured acceptance result below
+supersedes this initial checkpoint. #79 stays unmerged and #76/#77 blocked.
 No worker-budget, reserve, cap, cache, decoder or encoder policy was tuned.
+
+## Final measurement outcome and handoff
+
+Correctness and measurement execution are complete. Performance acceptance is
+**failed**: a fresh paired confirmation shows layered rendering takes 12.6%
+longer with six instead of eight workers. The unchanged 512 MiB heuristic, CPU
+reserve, worker cap, cache policy and encoding settings were not tuned.
+
+| 1080p workload | Median process seconds | Median peak PSS MiB | Workers |
+| --- | --- | --- | --- |
+| basic | 9.946 → 9.890 | 1240.7 → 1170.8 | 8 → 8 |
+| editing | 13.350 → 13.292 | 1568.9 → 1514.3 | 8 → 8 |
+| layered | 19.409 → 21.848 | 1772.8 → 1562.6 | 8 → 6 |
+
+Basic/editing timings overlap baseline variation while PSS falls 5.6%/3.5%.
+Every final measured layered time exceeds every paired baseline time; PSS falls
+11.9% at the throughput cost above. Initial `9b` captures also showed a layered
+slowdown. System timing shifted between batches, so short pairs were repeated
+rather than attributing a gain to the counter-only correction.
+
+The 60-second, 4K and five-render-process cases were also captured on final
+`3d689f2`, reusing compatible fresh original controls. Their timing phase differs,
+so raw wall deltas are observations rather than isolated causal speedup claims.
+Four-K uses four instead of two workers and is much faster in both candidate
+builds, but its final median PSS is about 0.8% higher with overlapping sample
+ranges; no reliable 4K resident-memory improvement is established. All idle
+thread observations in repeated-process diagnostics return to one; allocator
+variation is not a leak/retention diagnosis or a #77 completion claim.
+
+The selected final comparison contains 42 process records, 50 MP4s and 27,480
+fully decoded frames. Every file has the exact baseline encoded hash for its
+workload. Final SDK companion outputs also fully decode and match those bytes.
+Final direct-frame validation covers random/repeated requests and held ownership:
+32 RGBA comparisons, CPU exact and NVIDIA Vulkan max channel error 1. Mask/matte
+contact sheets and final basic/dissolve/layered encoded frames were inspected.
+
+Full report and raw identities/samples are outside tracked source under
+`~/orca/workspaces/vestra/reliability-evidence-20261024/cpu75-handoff.md` and
+`cpu75-final-measurement-summary.json`; initial and final data remain separate.
+
+Keep this active plan: acceptance and parent integration are unresolved. #79
+stays draft/unmerged; no #75 PR was published because acceptance failed and its
+parent remains unmerged. #76/#77 remain blocked under the explicit user choice.
+The remaining material decision is the worker-policy/performance trade-off, not
+a source correctness defect. No speculative policy or decoder/encoder change
+was made. Remove the completed plan only before an actually accepted merge.
+
+Unverified: compatible GL/WSL, Metal, DX12/browser runtime, extra ignored stress,
+multi-hour/large-file soaks. Vulkan evidence does not establish those platforms.

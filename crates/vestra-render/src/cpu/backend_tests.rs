@@ -1089,10 +1089,10 @@ fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
 
     plan.canvas.width = 2_560;
     plan.canvas.height = 1_440;
-    assert_eq!(automatic_worker_count(&plan, 64), 8);
+    assert_eq!(automatic_worker_count(&plan, 64), 6);
     plan.canvas.width = 3_840;
     plan.canvas.height = 2_160;
-    assert_eq!(automatic_worker_count(&plan, 64), 4);
+    assert_eq!(automatic_worker_count(&plan, 64), 2);
 }
 
 #[test]

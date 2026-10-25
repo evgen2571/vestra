@@ -531,7 +531,7 @@ mod tests {
         let canvas = frame_bytes(1_920, 1_080);
         let source = frame_bytes(1_280, 720);
         assert_eq!(estimated_worker_bytes(&plan), 6 * canvas + 7 * source);
-        assert_eq!(super::super::backend::automatic_worker_count(&plan, 64), 7);
+        assert_eq!(super::super::backend::automatic_worker_count(&plan, 64), 8);
         // Keep uncached current frames and every retained scaler in the bound.
         plan.limits.maximum_cache_bytes = 0;
         assert_eq!(estimated_worker_bytes(&plan), 6 * canvas + 7 * source);

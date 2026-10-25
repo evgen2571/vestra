@@ -94,39 +94,45 @@ It is independent of automatic worker selection and includes:
   codec state are excluded from the estimate. Custom decoder providers may
   retain additional internal storage that this native pixel model cannot bound.
 
-Estimate arithmetic saturates on overflow. Shared decoded assets and configured
-cache budgets are separate. Native row padding, YUV/lookahead and opaque codec
-state are excluded; custom decoder providers can retain additional internal
-storage. This estimate is not a total-memory bound or a sum of resident bytes.
-Accounting alone releases no memory.
+All estimate arithmetic saturates on overflow and selection always permits at
+least one worker. Shared decoded assets and configured cache budgets are
+separate; the 512 MiB heuristic is not a total-memory guarantee. Static visual
+plans still use one worker. Corrected accounting alone does not release memory;
+any concurrency change needs paired throughput and process-memory measurements.
 
 ## Worker selection and memory limits
 
-Automatic selection deliberately preserves the original compatibility policy:
-static visual plans use one worker; dynamic plans reserve one CPU when possible,
-cap at eight, and divide 512 MiB by six output-sized RGBA frames per worker,
-always permitting at least one. This legacy calculation depends only on canvas
-size and CPU availability, not effects, sources, measured capacities or the
-reported resource estimate. Correcting accounting or making scratch lazy must
-not indirectly change concurrency. Performance and memory comparisons must use
-matching worker counts; claim resident-memory savings only where demonstrated.
+The selection budget is not an admission check. It does not query available
+host memory, cgroup hard or soft limits, or process address-space limits. Each
+CPU backend selects independently, without reserving future allocations across
+prepared projects. Allowing at least one worker does not guarantee that an
+encoded render fits in memory.
 
-The legacy heuristic is not reliable whole-render admission. It does not query
-host memory, cgroup pressure/hard limits or process allocation limits, and it
-reserves nothing across prepared projects. Reducing concurrency to one cannot
-guarantee that an encoded render fits. Existing OOM and simultaneous-render
-limitations remain; neither accounting nor lazy scratch fixes them.
+Whole-operation admission needs more information than the renderer pixel
+estimate. Shared assets and audio analysis are prepared before backend
+selection; the encoder process starts later. A prepared project can serve frame
+requests without an encoder or execute a subsequent video operation. Those
+operations have different resource requirements. Native codec state, thread
+stacks and encoder buffers also depend on source formats, encoder settings and
+the available hardware.
 
-Whole-operation memory admission is deferred. Shared assets/audio analysis are
-prepared before backend selection; an encoder starts later for a video operation,
-while prepared-frame requests need no encoder. Native codec storage and thread
-stacks depend on formats, encoder settings and hardware. An available-memory
-snapshot cannot reserve future allocations, and OS-enforced kills do not provide
-graceful admission errors or guaranteed output cleanup.
+An available-memory snapshot cannot reserve future allocations for simultaneous
+renders. OS memory limits can enforce isolation by terminating processes; they
+do not provide graceful admission errors or guarantee output cleanup. Keep
+resource accounting separate from selection policy. A future memory-aware
+policy needs an operation-level resource model, ownership of outstanding
+reservations, and a failure path when even the minimum operation cannot fit.
 
-A future policy needs preparation/video costs, reservations owned for actual
-resource lifetimes, and a structured failure when even the minimum operation
-cannot fit. It must distinguish resident storage from outstanding allocations,
-physical headroom from virtual/commit limits, and cgroup hard limits from reclaim
-pressure. Process-local reservations cannot coordinate unrelated processes.
-Platform discovery and isolation belong to that separate work.
+On Linux with cgroup v2, a headroom probe must consider host `MemAvailable` and
+every visible cgroup ancestor's remaining `memory.max` and `memory.high`
+allowances. The latter can trigger reclaim throttling before the hard limit is
+reached. Process address-space/data limits constrain allocations separately from physical
+memory; resident-memory readings cannot replace those checks. Other platforms
+need their own limit discovery and an explicit policy for unavailable probes.
+
+Preparation storage remains owned until the prepared project is dropped;
+video-operation storage must be admitted before starting its encoder. A future
+reservation scheme must distinguish already resident storage from outstanding
+allocations to avoid double counting headroom. A process-local reservation can
+coordinate that process's renders, but cannot reserve memory against unrelated
+processes. External workload isolation remains a separate concern.

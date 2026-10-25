@@ -2,7 +2,7 @@
 
 > For agentic workers: use superpowers:subagent-driven-development with a fresh implementer and scoped review. Follow this repository's plan lifecycle and the user's existing execution authorization.
 
-Status: performance acceptance failed after lifetime correction; parent integration remains gated
+Status: worker-policy research complete; no safe focused replacement justified, performance acceptance and parent integration remain gated
 Branch / baseline: `perf/lazy-cpu-scratch` / `06325fae2e4291da320da879a75d49c6a3b2bc95` (draft PR #79).
 
 ## Objective
@@ -225,3 +225,108 @@ previously showed 49.1% layered slowdown under automatic selection. Keep #76/#77
 blocked. No new branch/PR, push, merge or main/develop change was made. The
 validated correction improves accounting and partially recovers throughput, but
 it does not satisfy performance acceptance. Keep this active plan.
+
+## Memory-aware worker policy investigation
+
+The user authorized reconsidering the fixed 512 MiB policy after 4b04a1b, with
+real host/cgroup/process limits, concurrent renders and full-pipeline memory
+requirements. This supersedes the earlier restriction against any justified
+policy redesign; it does not permit arbitrary budget increases, weaker
+accounting or benchmark-specific production settings. Preserve the current
+policy until a replacement is justified. No new branch/PR, merge, main/develop
+change or #76/#77 work is authorized.
+
+Milestones: audit admission/ownership boundaries; measure original/latest and
+a temporary CPU-throughput ceiling across five existing workloads; exercise
+real constrained cgroups, process limits and simultaneous render admission;
+choose a focused safe implementation or document why the boundary must be
+restructured. Record workers, timing, peak/late RSS/PSS and effective headroom.
+Use existing sampler/workloads/validators and preserve prior evidence.
+
+### Policy decision and evidence
+
+No production policy change. The per-worker estimate remains 75,571,200 bytes
+for layered; seven fit the 512 MiB pixel heuristic, eight do not. A host-memory
+getter or a percentage cannot turn this partial model into whole-render
+admission. Decoded assets/audio analysis precede selection, encoder allocation
+follows it, and independently prepared projects do not reserve future memory.
+The fixed heuristic both leaves throughput unused and fails under real limits.
+
+New medians from fresh release SDK processes in 4 GiB cgroups, swap disabled,
+one warmup plus three measured trials per arm. Each cell is seconds / peak
+process-tree PSS MiB; ceiling uses an ignored diagnostic eight-worker override.
+
+| Workload | Original | Latest 4b04a1b | Diagnostic ceiling | Workers |
+| --- | --- | --- | --- | --- |
+| basic | 11.173 / 1245.4 | 10.981 / 1149.4 | 10.945 / 1170.1 | 8 / 8 / 8 |
+| editing | 15.070 / 1574.6 | 14.734 / 1493.2 | 14.997 / 1500.2 | 8 / 8 / 8 |
+| layered | 21.769 / 1769.1 | 22.431 / 1617.8 | 21.006 / 1773.1 | 8 / 7 / 8 |
+| sequential60s | 64.369 / 1287.4 | 64.788 / 1232.2 | 63.295 / 1237.5 | 8 / 8 / 8 |
+| 4K (contention affected) | 105.092 / 2565.2 | 67.159 / 2693.9 | 39.704 / 3081.3 | 2 / 4 / 8 |
+
+Layered latest remains 3.04% slower, with non-overlapping timing ranges. Eight
+recovers speed at essentially original PSS; it is viable for this fixture in
+the measured 4 GiB scope, not proven safe for arbitrary projects. Basic/editing
+save 7.71%/5.17% peak PSS; sequential saves 4.28%, with overlapping timing ranges.
+An unrelated Nix system build overlapped 4K, with observed CPU/memory pressure.
+Preserve every row, but do not use its precise 4K speed deltas for acceptance;
+the earlier controlled same-source 4K comparison above remains separate.
+
+All 60 matrix outputs / 36,720 frames fully decode and match per-workload
+encoded reference hashes. Summary worker counts use matching SDK pipeline-depth
+and allocated-slot fields: one non-atomic thread-name scan reported nine for
+an eight-worker 4K trial. The raw scan discrepancy is retained.
+
+Real isolated limit diagnostics established:
+
+- Under 1 GiB, layered seven is OOM-killed while one completes in 95.69s
+  at 982.1 MiB peak PSS. 4K is OOM-killed even at one worker.
+- With 1 GiB RLIMIT_AS and 4 GiB physical allowance, layered seven allocator-
+  aborts; one reaches an x264 allocation error returned by the SDK, then the
+  diagnostic driver's unwrap panics. A physical-memory probe misses this limit.
+- Two barrier-synchronized in-process prepared renders select 14 workers while
+  initially using only 37–43 MiB RSS; they are OOM-killed at 2 GiB but both finish
+  at 4 GiB (36.87s, 3274.2 MiB peak PSS, at least 818.6 MiB hard headroom).
+- With memory.high 1408 MiB and memory.max 4096 MiB, seven workers hit the 240s
+  test timeout with 13,998 reclaim events and no OOM, despite at least 2593.8 MiB
+  hard headroom. Four complete in 29.35s without high events, with at least
+  112.2 MiB pressure headroom. More workers can reduce throughput under pressure.
+- Two-CPU affinity plus 1 GiB permits basic at one worker (48.04s, 704.7 MiB PSS),
+  but 4K at one is OOM-killed. This is not validation on different hardware.
+
+Recommend separating #79 resource accounting from worker-selection behavior.
+Whole-operation requirements and owned outstanding reservations belong at the
+SDK preparation/video seams, with a structured cannot-fit error. Keep host,
+cgroup hard/pressure, and virtual limits distinct; avoid double counting already
+resident storage. A process-local reservation cannot coordinate unrelated
+processes. Do not fit encoder reserves or budget percentages to these fixtures.
+No adaptive scheduler, configuration option, dependency or estimate adjustment
+was added. The permanent CPU architecture guide records these constraints.
+
+Full commands, identities, raw timings, peak/late RSS/PSS, launch/minimum/late
+headroom, cgroup events/journals, considered approaches and limitations are in
+the sibling `reliability-evidence-20261024/cpu75-policy/report.md` and its raw
+records. Previous evidence is unchanged. Keep #79/#75 unmerged and #76/#77
+blocked; this investigation does not satisfy performance/admission acceptance.
+
+Fresh verification: just check with explicit Vulkan passes 1,118 Rust tests
+(26 existing ignored), formatting, all-feature build, Clippy, schema and docs;
+full Python passes 845 plus compileall. Raw frames pass 32 exact original/CPU
+comparisons at normal/two-CPU affinity, plus 16 NVIDIA Vulkan comparisons with
+maximum channel error one. Held ownership and random/backward/repeated requests
+pass; the contact sheet was inspected. Five successful constrained outputs add
+1,500 fully decoded frames. The two-CPU encoded basic has a different encoder
+hash, with exact raw frame parity; other successful constrained outputs match.
+
+Retained failed attempts: default graphics caused five EGL BadAccess SDK test
+failures; explicit Vulkan passed. The first Python run omitted the cached Cargo
+target and exhausted disk during its schema build (844 passed / one failed).
+Only artifacts newly generated by that attempt were removed after a timestamp
+check; the cached rerun passed. No production source or installed native change.
+
+The earlier same-source strict software/hardware recipes and canonical smoke
+were not repeated. Different physical hardware, cgroup v1, RLIMIT_DATA enforcement,
+non-Linux memory/commit probes, GL/WSL, Metal/DX12/browser and multi-hour stress
+remain unverified. Documented OOM/pressure failures are current limitations,
+not passing safety tests. Review confirms only architecture and this plan change;
+no new branch/PR, push, merge or main/develop change, and #76/#77 remain blocked.

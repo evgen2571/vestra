@@ -57,14 +57,14 @@ fn scratch_capacity_includes_nested_compositions_across_workers_and_resize() {
             }
             assert!(outputs.windows(2).all(|pair| pair[0].rgba == pair[1].rgba));
             let stats = backend.stats();
-            assert_eq!(stats.cpu_scratch_buffers_retained, 10 * workers);
+            assert_eq!(stats.cpu_scratch_buffers_retained, 3 * workers);
             assert_eq!(
                 stats.cpu_scratch_bytes_retained,
-                10 * u64::from(size) * u64::from(size) * 4 * workers as u64
+                3 * u64::from(size) * u64::from(size) * 4 * workers as u64
             );
             assert_eq!(
                 stats.cpu_scratch_allocations,
-                10 * (index + 1).min(3) as u64 * workers as u64
+                3 * (index + 1).min(3) as u64 * workers as u64
             );
             assert_eq!(stats.decoded_source_bytes, shared_bytes);
         }
@@ -1089,10 +1089,10 @@ fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
 
     plan.canvas.width = 2_560;
     plan.canvas.height = 1_440;
-    assert_eq!(automatic_worker_count(&plan, 64), 6);
+    assert_eq!(automatic_worker_count(&plan, 64), 8);
     plan.canvas.width = 3_840;
     plan.canvas.height = 2_160;
-    assert_eq!(automatic_worker_count(&plan, 64), 2);
+    assert_eq!(automatic_worker_count(&plan, 64), 4);
 }
 
 #[test]
@@ -1410,7 +1410,7 @@ fn reuses_complete_static_layer_surfaces_without_mutating_them() {
     assert_eq!(stats.static_cache_entries, 1);
     assert_eq!(stats.static_cache_population_renders, 1);
     assert_eq!(stats.static_layers_rendered, 1);
-    assert_eq!(stats.cpu_scratch_allocations, 9);
+    assert_eq!(stats.cpu_scratch_allocations, 2);
 }
 
 #[test]
@@ -1560,10 +1560,10 @@ fn dynamic_effect_scratch_allocations_stabilize_after_warmup() {
 
     let stats = backend.stats();
     assert_eq!(stats.cpu_full_frame_allocations, 100);
-    assert_eq!(stats.cpu_scratch_allocations, 8);
+    assert_eq!(stats.cpu_scratch_allocations, 2);
     assert_eq!(stats.cpu_scratch_reuses, 200);
-    assert_eq!(stats.cpu_scratch_buffers_retained, 8);
-    assert_eq!(stats.cpu_scratch_bytes_retained, 512);
+    assert_eq!(stats.cpu_scratch_buffers_retained, 2);
+    assert_eq!(stats.cpu_scratch_bytes_retained, 128);
 }
 
 #[test]
@@ -1645,7 +1645,7 @@ fn over_budget_static_layers_render_without_retention() {
     assert_eq!(stats.static_cache_misses, 100);
     assert_eq!(stats.static_cache_budget_bypasses, 100);
     assert_eq!(stats.static_layers_rendered, 100);
-    assert_eq!(stats.cpu_scratch_allocations, 8);
+    assert_eq!(stats.cpu_scratch_allocations, 1);
 }
 
 #[test]

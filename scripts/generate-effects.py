@@ -108,6 +108,12 @@ def arguments(effect: dict[str, Any]) -> ast.arguments:
                 raise ValueError(f"{effect['id']}.{name}: missing Python enum class")
             annotation = enum + " | str" if kind == "enum" else ANNOTATIONS[kind]
         value = python.get("defaults", {}).get(name, parameter["default"])
+        if kind == "enum" and (
+            enum is None
+            or not enum.isidentifier()
+            or value not in parameter["enum_values"]
+        ):
+            raise ValueError(f"{effect['id']}.{name}: invalid Python enum/default")
         expression = python.get("expressions", {}).get(name)
         if expression is not None:
             default = ast.parse(expression, mode="eval").body
@@ -317,6 +323,7 @@ def render_class(
         access = (
             f"self.{storage}.get({field!r})"
             if kind in {"font", "period", "palette_stops"}
+            or (storage == "_values" and python.get("get_values", False))
             else f"self.{storage}[{field!r}]"
         )
         method = (
@@ -429,13 +436,15 @@ def render_stub(source: str) -> str:
             decorators = "".join(
                 f"{indent}@{ast.unparse(item)}\n" for item in node.decorator_list
             )
-            return (
-                decorators
-                + function_header(
-                    node.name, node.args, ast.unparse(node.returns), indent
-                )
-                + f"\n{indent}    ..."
+            returns = ast.unparse(node.returns)
+            header = function_header(node.name, node.args, returns, indent)
+            signature = ", ".join(
+                line.strip().removesuffix(",") for line in header.splitlines()[1:-1]
             )
+            short = f"{indent}def {node.name}({signature}) -> {returns}: ..."
+            if len(short) <= 100:
+                return decorators + short
+            return decorators + header + f"\n{indent}    ..."
         return textwrap.indent(ast.unparse(node), indent)
 
     return f"# {NOTICE}\n" + "\n\n".join(declaration(node) for node in tree.body) + "\n"

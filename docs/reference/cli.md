@@ -40,6 +40,10 @@ CI, dumb, and unsupported terminals are quiet. `terminal` forces the native
 presentation. WGPU fallback is reported as `VESTRA-WGPU-FALLBACK` where
 applicable.
 
+Render JSON reports include the named CPU capacity gauges and worker/output
+estimates described in [CPU memory accounting](../development/architecture/cpu-renderer.md#memory-accounting).
+These are partial engine counters, not resident process memory.
+
 ## Validation meaning
 
 `ve validate` uses `Editor.preflight` with `PreflightOptions::for_validation()`.

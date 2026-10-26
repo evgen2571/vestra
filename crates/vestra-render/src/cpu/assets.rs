@@ -289,6 +289,7 @@ impl PreparedAssets {
                 retired.cache_hits += metrics.cache_hits;
                 retired.cache_misses += metrics.cache_misses;
                 retired.decode_time_us += metrics.decode_time_us;
+                retired.cache_bytes_peak += metrics.cache_bytes_peak;
                 false
             });
         }
@@ -316,6 +317,10 @@ impl PreparedAssets {
         self.stats.video_cache_hits = self.retired_video_metrics.cache_hits;
         self.stats.video_cache_misses = self.retired_video_metrics.cache_misses;
         self.stats.video_decode_time_us = self.retired_video_metrics.decode_time_us;
+        self.stats.video_cache_bytes_retained = 0;
+        self.stats.video_cache_bytes_peak = self.retired_video_metrics.cache_bytes_peak;
+        self.stats.video_current_frame_bytes_retained = 0;
+        self.stats.video_decoder_buffer_bytes_retained = 0;
         for session in self.video_decoders.values().flatten() {
             let metrics = session.decoder.metrics();
             self.stats.video_frame_requests += metrics.frame_requests;
@@ -324,6 +329,10 @@ impl PreparedAssets {
             self.stats.video_cache_hits += metrics.cache_hits;
             self.stats.video_cache_misses += metrics.cache_misses;
             self.stats.video_decode_time_us += metrics.decode_time_us;
+            self.stats.video_cache_bytes_retained += metrics.cache_bytes_retained;
+            self.stats.video_cache_bytes_peak += metrics.cache_bytes_peak;
+            self.stats.video_current_frame_bytes_retained += metrics.current_frame_bytes_retained;
+            self.stats.video_decoder_buffer_bytes_retained += metrics.working_buffer_bytes_retained;
         }
     }
 

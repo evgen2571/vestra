@@ -8,6 +8,91 @@ use crate::test_support::{ValidationOptions, load_and_validate};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[test]
+fn scratch_capacity_includes_nested_compositions_across_workers_and_resize() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
+    for workers in [1, 3] {
+        plan.canvas.width = 4;
+        plan.canvas.height = 4;
+        let decoded = DecodedAssets::build(&plan).expect("fixture assets");
+        let shared_bytes = decoded.stats().decoded_source_bytes;
+        let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, workers);
+        for (index, size) in [4, 6, 2, 2].into_iter().enumerate() {
+            let mut frame = static_frame();
+            frame.width = size;
+            frame.height = size;
+            let mut child = frame.layers[0].clone();
+            child.content_dependency = TemporalDependency::Dynamic;
+            let mut group = child.clone();
+            group.source = EvaluatedSource::Group {
+                composition: vestra_core::plan::EvaluatedComposition {
+                    layers: vec![child],
+                },
+            };
+            let mut parent = group.clone();
+            parent.source = EvaluatedSource::Group {
+                composition: vestra_core::plan::EvaluatedComposition {
+                    layers: vec![group],
+                },
+            };
+            frame.layers = vec![parent];
+            let mut outputs = Vec::new();
+            for number in 0..workers {
+                backend.submit_frame(number as u64, &frame).expect("submit");
+            }
+            for _ in 0..workers {
+                outputs.push(
+                    backend
+                        .poll_completed(PollMode::WaitForOne)
+                        .expect("poll")
+                        .expect("frame"),
+                );
+            }
+            assert!(outputs.windows(2).all(|pair| pair[0].rgba == pair[1].rgba));
+            let stats = backend.stats();
+            assert_eq!(stats.cpu_scratch_buffers_retained, 10 * workers);
+            assert_eq!(
+                stats.cpu_scratch_bytes_retained,
+                10 * u64::from(size) * u64::from(size) * 4 * workers as u64
+            );
+            assert_eq!(
+                stats.cpu_scratch_allocations,
+                10 * (index + 1).min(3) as u64 * workers as u64
+            );
+            assert_eq!(stats.decoded_source_bytes, shared_bytes);
+        }
+    }
+}
+
+#[test]
+fn snapshot_memory_gauges_sum_worker_owners_but_keep_shared_assets_once() {
+    let snapshot = || WorkerSnapshot {
+        stats: PreparationStats {
+            decoded_source_bytes: 100,
+            video_cache_bytes_retained: 8,
+            video_cache_bytes_peak: 12,
+            video_current_frame_bytes_retained: 4,
+            video_decoder_buffer_bytes_retained: 16,
+            ..PreparationStats::default()
+        },
+        timings: PreparationTimings::default(),
+        hot_path_timings: CpuHotPathTimings::default(),
+    };
+    let stats = aggregate_snapshots(&[snapshot(), snapshot(), snapshot()]);
+    assert_eq!(stats.decoded_source_bytes, 100);
+    assert_eq!(stats.video_cache_bytes_retained, 24);
+    assert_eq!(stats.video_cache_bytes_peak, 36);
+    assert_eq!(stats.video_current_frame_bytes_retained, 12);
+    assert_eq!(stats.video_decoder_buffer_bytes_retained, 48);
+}
+
 struct VideoFixtureFactory {
     frame: crate::VideoFrame,
 }
@@ -72,6 +157,10 @@ impl crate::VideoDecoderSession for TimelineVideoSession {
         crate::VideoDecoderMetrics {
             frame_requests: self.requests,
             seeks: self.seeks,
+            cache_bytes_retained: 8,
+            cache_bytes_peak: 12,
+            current_frame_bytes_retained: 4,
+            working_buffer_bytes_retained: 16,
             ..crate::VideoDecoderMetrics::default()
         }
     }
@@ -443,6 +532,10 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
     );
     assert_eq!(stats.video_decoder_session_count, 2);
     assert_eq!(stats.video_decoder_open_count, 2);
+    assert_eq!(stats.video_cache_bytes_retained, 16);
+    assert_eq!(stats.video_cache_bytes_peak, 24);
+    assert_eq!(stats.video_current_frame_bytes_retained, 8);
+    assert_eq!(stats.video_decoder_buffer_bytes_retained, 32);
 
     let single_requests = single_worker_requests.lock().unwrap();
     let multi_requests = multi_worker_requests.lock().unwrap();
@@ -470,6 +563,10 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
         let stats = single_worker.stats();
         assert_eq!(stats.video_decoder_session_count, 1);
         assert_eq!(stats.video_decoder_open_count, 2);
+        assert_eq!(stats.video_cache_bytes_retained, 8);
+        assert_eq!(stats.video_cache_bytes_peak, 24);
+        assert_eq!(stats.video_current_frame_bytes_retained, 4);
+        assert_eq!(stats.video_decoder_buffer_bytes_retained, 16);
     }
     assert_eq!(single_worker.stats().video_frame_requests, 6);
     let empty =
@@ -973,7 +1070,7 @@ fn automatic_worker_policy_uses_one_worker_for_static_visuals() {
 }
 
 #[test]
-fn automatic_worker_policy_reserves_cpu_and_applies_frame_memory_limit() {
+fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {
@@ -1313,7 +1410,7 @@ fn reuses_complete_static_layer_surfaces_without_mutating_them() {
     assert_eq!(stats.static_cache_entries, 1);
     assert_eq!(stats.static_cache_population_renders, 1);
     assert_eq!(stats.static_layers_rendered, 1);
-    assert_eq!(stats.cpu_scratch_allocations, 4);
+    assert_eq!(stats.cpu_scratch_allocations, 9);
 }
 
 #[test]
@@ -1463,10 +1560,10 @@ fn dynamic_effect_scratch_allocations_stabilize_after_warmup() {
 
     let stats = backend.stats();
     assert_eq!(stats.cpu_full_frame_allocations, 100);
-    assert_eq!(stats.cpu_scratch_allocations, 3);
+    assert_eq!(stats.cpu_scratch_allocations, 8);
     assert_eq!(stats.cpu_scratch_reuses, 200);
-    assert_eq!(stats.cpu_scratch_buffers_retained, 3);
-    assert_eq!(stats.cpu_scratch_bytes_retained, 192);
+    assert_eq!(stats.cpu_scratch_buffers_retained, 8);
+    assert_eq!(stats.cpu_scratch_bytes_retained, 512);
 }
 
 #[test]
@@ -1548,7 +1645,7 @@ fn over_budget_static_layers_render_without_retention() {
     assert_eq!(stats.static_cache_misses, 100);
     assert_eq!(stats.static_cache_budget_bypasses, 100);
     assert_eq!(stats.static_layers_rendered, 100);
-    assert_eq!(stats.cpu_scratch_allocations, 3);
+    assert_eq!(stats.cpu_scratch_allocations, 8);
 }
 
 #[test]

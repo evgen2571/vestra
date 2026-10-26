@@ -151,6 +151,10 @@ impl vestra_render::VideoDecoderFactory for NativeVideoFactory {
                             cache_hits: metrics.cache_hits,
                             cache_misses: metrics.cache_misses,
                             decode_time_us: metrics.decode_time_us,
+                            cache_bytes_retained: metrics.cache_bytes_retained,
+                            cache_bytes_peak: metrics.cache_bytes_peak,
+                            current_frame_bytes_retained: metrics.current_frame_bytes_retained,
+                            working_buffer_bytes_retained: metrics.working_buffer_bytes_retained,
                         };
                         if ended {
                             break;

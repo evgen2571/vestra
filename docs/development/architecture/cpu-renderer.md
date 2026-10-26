@@ -27,3 +27,86 @@ Preserve these boundaries when changing CPU code:
 - Keep I/O, project validation and public-path resolution out of the per-frame loop.
 
 The CPU backend is the direct fallback when WGPU is unavailable under an automatic preference. It is not a reduced semantic mode; a documented limitation needs explicit source/effect/backend evidence.
+
+## Memory accounting
+
+Resource reports describe named engine storage, not process RSS/PSS or a
+whole-process limit. CPU snapshots are taken after worker work has completed.
+
+| Resource | Report and ownership |
+| --- | --- |
+| Shared images, shape/text pixels and glyph atlases | `decoded_source_bytes` reports logical pixel payloads once across workers; excludes spare backing capacity, preparation temporaries and font-system internals. |
+| Effect, mask, coverage and feather buffers | `cpu_scratch_buffers_retained` / `cpu_scratch_bytes_retained` include all five RGBA images and three `f32` vectors per worker, using backing capacity. |
+| Nested composition and matte-save pool | Included in the scratch gauges after surfaces return to the pool; sibling compositions reuse depths. Resize replaces mismatched surfaces. |
+| Crop and static-layer caches | `cache_current_bytes` covers crops; `static_cached_bytes` covers whole-layer pixels. These are logical bytes charged to their budgets, separate from scratch capacity and decoded video. |
+| Native video RGBA cache | `video_cache_bytes_retained`; `video_cache_bytes_peak` sums individual session high-water marks, including retired sessions, rather than measuring one simultaneous peak. |
+| Native video current frame | `video_current_frame_bytes_retained` includes capacity only when its pixels are absent from the cache. Returned `Arc` aliases do not add capacity. Evicted frames retained by callers are outside this gauge. |
+| Native decoder working planes | `video_decoder_buffer_bytes_retained` sums stride-inclusive RGBA scaler and queued lookahead plane spans. It excludes buffer tail padding, codec reference/reorder frames, packets, demux/scaler internals and other opaque native allocations. Custom decoder providers that do not measure memory leave video byte gauges zero. |
+| Output payloads | `cpu_full_frame_allocations` counts cumulative output-buffer allocations. `cpu_output_frame_bytes_estimated` allows two tight RGBA payloads per worker in the SDK scheduler; it does not track arbitrary caller-held frames after transfer. A static final-frame template also has SDK ownership. |
+
+Scratch allocation/reuse counts are cumulative backend events; operation results
+report their deltas. Scratch byte/buffer fields are current capacities, and cache
+peaks are per-owner high-water marks. They cannot be added as if they were
+simultaneous peaks. Per-frame matte-cache images and group-mask owner/group
+temporaries are released before the idle snapshot; the worker estimate includes
+their structural storage allowance. Container bookkeeping, prepared plan copies,
+thread stacks, allocator-retained freed memory, audio preparation and encoder
+processes are outside these pixel-storage gauges. Use external process sampling
+for resident memory; see [performance](../performance.md).
+
+## Resource estimates
+
+`cpu_worker_memory_estimate_bytes` reports plan-based per-worker pixel storage.
+It is independent of automatic worker selection and includes:
+
+- Eight eager scratch buffers and two SDK output payloads at output dimensions.
+- Distinct retained composition pool depths reachable through visible groups
+  and active matte chains, peak simultaneous matte-cache images, and maximum
+  overlapping group-mask owner/group temporaries. Hidden sources are reached
+  through active consumers; unused hidden and out-of-output layers add no storage.
+- Two source-sized RGBA images per independent native video cursor: current
+  and scaler output, plus one incoming conversion at the largest reachable
+  source size. CPU requests are serial within a worker; native prefetch decodes
+  lookahead planes without converting RGBA. Retained current/scaler storage
+  remains allowed with zero cache. Per-asset peak overlapping source clocks
+  cover extra cursors; serial clips reuse the primary, retained after the asset
+  leaves view. Matching local origins and source start/rate share a cursor.
+  Group and source-mask intervals use composition-local offsets and parent/output
+  clipping. Opacity, frame sampling and cache hits are conservatively ignored.
+
+Estimate arithmetic saturates on overflow. Shared decoded assets and configured
+cache budgets are separate. Native row padding, YUV/lookahead and opaque codec
+state are excluded; custom decoder providers can retain additional internal
+storage. This estimate is not a total-memory bound or a sum of resident bytes.
+Accounting alone releases no memory.
+
+## Worker selection and memory limits
+
+Automatic selection deliberately preserves the original compatibility policy:
+static visual plans use one worker; dynamic plans reserve one CPU when possible,
+cap at eight, and divide 512 MiB by six output-sized RGBA frames per worker,
+always permitting at least one. This legacy calculation depends only on canvas
+size and CPU availability, not effects, sources, measured capacities or the
+reported resource estimate. Correcting accounting or making scratch lazy must
+not indirectly change concurrency. Performance and memory comparisons must use
+matching worker counts; claim resident-memory savings only where demonstrated.
+
+The legacy heuristic is not reliable whole-render admission. It does not query
+host memory, cgroup pressure/hard limits or process allocation limits, and it
+reserves nothing across prepared projects. Reducing concurrency to one cannot
+guarantee that an encoded render fits. Existing OOM and simultaneous-render
+limitations remain; neither accounting nor lazy scratch fixes them.
+
+Whole-operation memory admission is deferred. Shared assets/audio analysis are
+prepared before backend selection; an encoder starts later for a video operation,
+while prepared-frame requests need no encoder. Native codec storage and thread
+stacks depend on formats, encoder settings and hardware. An available-memory
+snapshot cannot reserve future allocations, and OS-enforced kills do not provide
+graceful admission errors or guaranteed output cleanup.
+
+A future policy needs preparation/video costs, reservations owned for actual
+resource lifetimes, and a structured failure when even the minimum operation
+cannot fit. It must distinguish resident storage from outstanding allocations,
+physical headroom from virtual/commit limits, and cgroup hard limits from reclaim
+pressure. Process-local reservations cannot coordinate unrelated processes.
+Platform discovery and isolation belong to that separate work.

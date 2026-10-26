@@ -152,6 +152,10 @@ pub struct RenderPerformance {
     pub video_cache_hits: u64,
     pub video_cache_misses: u64,
     pub video_decode_time_us: u64,
+    pub video_cache_bytes_retained: u64,
+    pub video_cache_bytes_peak: u64,
+    pub video_current_frame_bytes_retained: u64,
+    pub video_decoder_buffer_bytes_retained: u64,
     pub bitmap_cache_hits: u64,
     pub bitmap_cache_misses: u64,
     pub bitmap_cache_requests: u64,
@@ -184,6 +188,8 @@ pub struct RenderPerformance {
     pub cpu_scratch_reuses: u64,
     pub cpu_scratch_buffers_retained: usize,
     pub cpu_scratch_bytes_retained: u64,
+    pub cpu_worker_memory_estimate_bytes: u64,
+    pub cpu_output_frame_bytes_estimated: u64,
     pub cpu_full_frame_copy_bytes: u64,
     pub cpu_opaque_copy_fast_path_hits: u64,
     pub cpu_opaque_copy_fast_path_bytes: u64,
@@ -302,6 +308,10 @@ impl From<crate::render::PreparationStats> for RenderPerformance {
             video_cache_hits: value.video_cache_hits,
             video_cache_misses: value.video_cache_misses,
             video_decode_time_us: value.video_decode_time_us,
+            video_cache_bytes_retained: value.video_cache_bytes_retained,
+            video_cache_bytes_peak: value.video_cache_bytes_peak,
+            video_current_frame_bytes_retained: value.video_current_frame_bytes_retained,
+            video_decoder_buffer_bytes_retained: value.video_decoder_buffer_bytes_retained,
             bitmap_cache_hits: value.bitmap_cache_hits,
             bitmap_cache_misses: value.bitmap_cache_misses,
             bitmap_cache_requests: value.bitmap_cache_requests,
@@ -335,6 +345,8 @@ impl From<crate::render::PreparationStats> for RenderPerformance {
             cpu_scratch_reuses: value.cpu_scratch_reuses,
             cpu_scratch_buffers_retained: value.cpu_scratch_buffers_retained,
             cpu_scratch_bytes_retained: value.cpu_scratch_bytes_retained,
+            cpu_worker_memory_estimate_bytes: value.cpu_worker_memory_estimate_bytes,
+            cpu_output_frame_bytes_estimated: value.cpu_output_frame_bytes_estimated,
             cpu_full_frame_copy_bytes: value.cpu_full_frame_copy_bytes,
             cpu_opaque_copy_fast_path_hits: value.cpu_opaque_copy_fast_path_hits,
             cpu_opaque_copy_fast_path_bytes: value.cpu_opaque_copy_fast_path_bytes,
@@ -407,6 +419,30 @@ mod tests {
     }
 
     #[test]
+    fn render_performance_maps_memory_gauges_and_estimates_to_json() {
+        let stats = crate::render::PreparationStats {
+            video_cache_bytes_retained: 11,
+            video_cache_bytes_peak: 12,
+            video_current_frame_bytes_retained: 13,
+            video_decoder_buffer_bytes_retained: 14,
+            cpu_worker_memory_estimate_bytes: 15,
+            cpu_output_frame_bytes_estimated: 16,
+            ..crate::render::PreparationStats::default()
+        };
+        let value = serde_json::to_value(RenderPerformance::from(stats)).expect("performance JSON");
+        for (key, bytes) in [
+            ("video_cache_bytes_retained", 11),
+            ("video_cache_bytes_peak", 12),
+            ("video_current_frame_bytes_retained", 13),
+            ("video_decoder_buffer_bytes_retained", 14),
+            ("cpu_worker_memory_estimate_bytes", 15),
+            ("cpu_output_frame_bytes_estimated", 16),
+        ] {
+            assert_eq!(value[key], bytes);
+        }
+    }
+
+    #[test]
     fn render_performance_preserves_the_report_json_key_set() {
         let expected = [
             "active_item_consideration_count",
@@ -463,6 +499,10 @@ mod tests {
             "video_cache_hits",
             "video_cache_misses",
             "video_decode_time_us",
+            "video_cache_bytes_retained",
+            "video_cache_bytes_peak",
+            "video_current_frame_bytes_retained",
+            "video_decoder_buffer_bytes_retained",
             "video_decoder_session_count",
             "video_decoder_open_count",
             "video_frame_requests",
@@ -492,6 +532,8 @@ mod tests {
             "cpu_scratch_reuses",
             "cpu_scratch_buffers_retained",
             "cpu_scratch_bytes_retained",
+            "cpu_worker_memory_estimate_bytes",
+            "cpu_output_frame_bytes_estimated",
             "cpu_full_frame_copy_bytes",
             "cpu_opaque_copy_fast_path_hits",
             "cpu_opaque_copy_fast_path_bytes",

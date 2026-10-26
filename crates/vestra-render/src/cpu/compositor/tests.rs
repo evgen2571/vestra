@@ -185,6 +185,85 @@ fn group_layer(
 }
 
 #[test]
+fn late_effect_mask_and_feather_activation_matches_fresh_frames_and_keeps_owned_outputs() {
+    let validated = crate::test_support::load_and_validate(
+        std::path::Path::new("examples/projects/geometric-masks.json"),
+        &crate::test_support::ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("fixture validates");
+    let plan = vestra_core::plan::compile(validated, vestra_core::plan::CompileOptions::default())
+        .expect("fixture compiles");
+    let mut assets = crate::cpu::assets::PreparedAssets::build(&plan).expect("assets decode");
+    let mut canvas = RgbaImage::new(16, 16);
+    let mut surfaces = EffectSurfacePool::new(16, 16);
+    let mut compositions = CompositionSurfacePool::new();
+    let mut cache = ByteLruCache::new(0);
+    let mut held = Vec::new();
+    let mut allocations_after_warmup = 0;
+    for (iteration, phase) in [0, 1, 2, 3, 0, 3, 2, 1, 3].into_iter().enumerate() {
+        let mut owner = solid_layer(1, [80, 120, 160, 128]);
+        if phase == 1 {
+            owner.effects = vec![EvaluatedEffect::GaussianBlur { radius: 1.0 }];
+        }
+        if phase >= 2 {
+            owner.masks = vec![vestra_core::plan::EvaluatedMask {
+                input: EvaluatedMaskInput::Source {
+                    source: Box::new(EvaluatedSource::SolidColor {
+                        colour: [255, 255, 255, 128],
+                    }),
+                    mode: crate::project::MaskCoverageMode::Alpha,
+                },
+                operation: crate::project::MaskOperation::Intersect,
+                invert: false,
+                strength: 1.0,
+                feather: if phase == 3 { 2.0 } else { 0.0 },
+                transform: identity_transform(),
+            }];
+        }
+        let frame = frame_with_layers(vec![owner]);
+        let expected = render_frame_with_plan(frame.clone(), &plan);
+        compose(
+            &frame,
+            &mut assets,
+            &mut canvas,
+            &mut surfaces,
+            &mut compositions,
+            &mut cache,
+            &mut CpuHotPathTimings::default(),
+            false,
+        );
+        assert_eq!(canvas, expected, "phase {phase}, iteration {iteration}");
+        if phase == 0 {
+            assert!(
+                canvas
+                    .pixels()
+                    .all(|pixel| *pixel == Rgba([80, 120, 160, 128]))
+            );
+        } else if phase == 2 {
+            assert!(
+                canvas
+                    .pixels()
+                    .all(|pixel| *pixel == Rgba([80, 120, 160, 64]))
+            );
+        }
+        if iteration < 4 {
+            assert_eq!(surfaces.stats().retained_buffers, [1, 2, 5, 7][iteration]);
+            allocations_after_warmup = surfaces.stats().allocations;
+        } else {
+            assert_eq!(surfaces.stats().allocations, allocations_after_warmup);
+        }
+        held.push((canvas.clone(), expected));
+    }
+    drop(surfaces);
+    drop(assets);
+    for (output, expected) in held {
+        assert_eq!(output, expected);
+    }
+}
+
+#[test]
 fn group_matte_does_not_reuse_its_child_scratch_pixels() {
     for x in [2.0, 0.5] {
         for alpha in [64, 128, 255] {

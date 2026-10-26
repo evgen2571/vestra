@@ -36,13 +36,22 @@ whole-process limit. CPU snapshots are taken after worker work has completed.
 | Resource | Report and ownership |
 | --- | --- |
 | Shared images, shape/text pixels and glyph atlases | `decoded_source_bytes` reports logical pixel payloads once across workers; excludes spare backing capacity, preparation temporaries and font-system internals. |
-| Effect, mask, coverage and feather buffers | `cpu_scratch_buffers_retained` / `cpu_scratch_bytes_retained` include all five RGBA images and three `f32` vectors per worker, using backing capacity. |
+| Effect, mask, coverage and feather buffers | `cpu_scratch_buffers_retained` / `cpu_scratch_bytes_retained` count only allocated RGBA images and `f32` vectors per worker, using backing capacity. One current image is always retained; optional storage allocates on first use. |
 | Nested composition and matte-save pool | Included in the scratch gauges after surfaces return to the pool; sibling compositions reuse depths. Resize replaces mismatched surfaces. |
 | Crop and static-layer caches | `cache_current_bytes` covers crops; `static_cached_bytes` covers whole-layer pixels. These are logical bytes charged to their budgets, separate from scratch capacity and decoded video. |
 | Native video RGBA cache | `video_cache_bytes_retained`; `video_cache_bytes_peak` sums individual session high-water marks, including retired sessions, rather than measuring one simultaneous peak. |
 | Native video current frame | `video_current_frame_bytes_retained` includes capacity only when its pixels are absent from the cache. Returned `Arc` aliases do not add capacity. Evicted frames retained by callers are outside this gauge. |
 | Native decoder working planes | `video_decoder_buffer_bytes_retained` sums stride-inclusive RGBA scaler and queued lookahead plane spans. It excludes buffer tail padding, codec reference/reorder frames, packets, demux/scaler internals and other opaque native allocations. Custom decoder providers that do not measure memory leave video byte gauges zero. |
 | Output payloads | `cpu_full_frame_allocations` counts cumulative output-buffer allocations. `cpu_output_frame_bytes_estimated` allows two tight RGBA payloads per worker in the SDK scheduler; it does not track arbitrary caller-held frames after transfer. A static final-frame template also has SDK ownership. |
+
+Effect passes allocate a destination before execution and reuse the existing
+logical resource bindings. Masks first allocate their local image, transformed
+image and coverage vector; positive feathering adds two float vectors. Track
+mattes need only the local mask image unless their source uses other scratch.
+Unused optional buffers have zero backing capacity. Allocated scratch survives
+at the same extent; changing the extent drops all optional storage and resets
+bindings, then allocates it again only if used. Transferring a cached image
+replaces its storage, so caller-held outputs remain independently owned.
 
 Scratch allocation/reuse counts are cumulative backend events; operation results
 report their deltas. Scratch byte/buffer fields are current capacities, and cache
@@ -59,7 +68,12 @@ for resident memory; see [performance](../performance.md).
 `cpu_worker_memory_estimate_bytes` reports plan-based per-worker pixel storage.
 It is independent of automatic worker selection and includes:
 
-- Eight eager scratch buffers and two SDK output payloads at output dimensions.
+- One required scratch image and two SDK output payloads at output dimensions.
+  Reachable compiled effect-pass topology adds one or two scratch images;
+  masks/mattes add their optional images and vectors, with two feather vectors
+  allowed for positive, animated or bound feathering. The estimate covers the
+  retained union across timeline phases, including reachable hidden matte and
+  group-mask sources, rather than only the features active at frame zero.
 - Distinct retained composition pool depths reachable through visible groups
   and active matte chains, peak simultaneous matte-cache images, and maximum
   overlapping group-mask owner/group temporaries. Hidden sources are reached

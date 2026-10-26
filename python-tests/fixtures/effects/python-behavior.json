@@ -1,0 +1,3773 @@
+{
+  "numeric_parameters": {
+    "ascii": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "cell_height": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 128.0,
+        "minimum": 2.0
+      },
+      "cell_width": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 64.0,
+        "minimum": 2.0
+      },
+      "edge_strength": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 4.0,
+        "minimum": 0.0
+      },
+      "edge_threshold": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "phase": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      },
+      "source_mix": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "bloom": {
+      "intensity": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 4.0,
+        "minimum": 0.0
+      },
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      },
+      "threshold": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "brightness": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      }
+    },
+    "camera_shake": {
+      "attack": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "number",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "decay": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "number",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "frequency": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "position_amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "rotation_degrees": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "scale_amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "seed": {
+        "integer_maximum": 18446744073709551615,
+        "integer_minimum": 0,
+        "kind": "integer",
+        "maximum": 1.8446744073709552e+19,
+        "minimum": 0.0
+      }
+    },
+    "chromatic_aberration": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      },
+      "angle_degrees": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      }
+    },
+    "color_adjust": {
+      "black_point": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "plain_track",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "exposure": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": -8.0
+      },
+      "gamma": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": 0.0
+      },
+      "white_point": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "plain_track",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "contrast": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      }
+    },
+    "crt": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "curvature": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 0.5,
+        "minimum": 0.0
+      },
+      "flicker": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 0.25,
+        "minimum": 0.0
+      },
+      "grain": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 0.25,
+        "minimum": 0.0
+      },
+      "jitter": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": 0.0
+      },
+      "mask_spacing": {
+        "integer_maximum": 6,
+        "integer_minimum": 1,
+        "kind": "integer",
+        "maximum": 6.0,
+        "minimum": 1.0
+      },
+      "mask_strength": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "phase": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      },
+      "rolling_strength": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "rolling_width": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.01
+      },
+      "scanline_spacing": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": 1.0
+      },
+      "scanline_strength": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "seed": {
+        "integer_maximum": 18446744073709551615,
+        "integer_minimum": 0,
+        "kind": "integer",
+        "maximum": 1.8446744073709552e+19,
+        "minimum": 0.0
+      }
+    },
+    "directional_blur": {
+      "angle_degrees": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      },
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      }
+    },
+    "gaussian_blur": {
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      }
+    },
+    "glow": {
+      "intensity": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 4.0,
+        "minimum": 0.0
+      },
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      },
+      "threshold": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "halftone": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "angle_degrees": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      },
+      "cell_size": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 64.0,
+        "minimum": 2.0
+      },
+      "softness": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 2.0,
+        "minimum": 0.0
+      }
+    },
+    "motion_blur": {
+      "intensity": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": 0.0
+      },
+      "max_radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      },
+      "samples": {
+        "integer_maximum": 32,
+        "integer_minimum": 2,
+        "kind": "integer",
+        "maximum": 32.0,
+        "minimum": 2.0
+      },
+      "shutter_angle": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 360.0,
+        "minimum": 0.0
+      }
+    },
+    "motion_tile": {
+      "output_height_percent": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 800.0,
+        "minimum": 100.0
+      },
+      "output_width_percent": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 800.0,
+        "minimum": 100.0
+      }
+    },
+    "ordered_dither": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "input_detail": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 4.0,
+        "minimum": 0.0
+      },
+      "input_detail_radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 16.0,
+        "minimum": 0.0
+      },
+      "input_exposure": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": -8.0
+      },
+      "input_gamma": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": 0.0
+      },
+      "input_scale": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 256.0,
+        "minimum": 1.0
+      },
+      "levels": {
+        "integer_maximum": 256,
+        "integer_minimum": 2,
+        "kind": "integer",
+        "maximum": 256.0,
+        "minimum": 2.0
+      },
+      "phase": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      },
+      "scale": {
+        "integer_maximum": 32,
+        "integer_minimum": 1,
+        "kind": "integer",
+        "maximum": 32.0,
+        "minimum": 1.0
+      },
+      "seed": {
+        "integer_maximum": 4294967295,
+        "integer_minimum": 0,
+        "kind": "integer",
+        "maximum": 4294967295.0,
+        "minimum": 0.0
+      },
+      "strength": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "palette_map": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "input_detail": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 4.0,
+        "minimum": 0.0
+      },
+      "input_detail_radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 16.0,
+        "minimum": 0.0
+      },
+      "input_exposure": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": -8.0
+      },
+      "input_gamma": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 8.0,
+        "minimum": 0.0
+      },
+      "input_scale": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 256.0,
+        "minimum": 1.0
+      },
+      "levels": {
+        "integer_maximum": 256,
+        "integer_minimum": 2,
+        "kind": "integer",
+        "maximum": 256.0,
+        "minimum": 2.0
+      },
+      "phase": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      }
+    },
+    "pixel_sort": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "lower_threshold": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "segment_length": {
+        "integer_maximum": 256,
+        "integer_minimum": 2,
+        "kind": "integer",
+        "maximum": 256.0,
+        "minimum": 2.0
+      },
+      "upper_threshold": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "radial_blur": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      }
+    },
+    "saturation": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": null,
+        "minimum": null
+      }
+    },
+    "sharpen": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 4.0,
+        "minimum": 0.0
+      },
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 16.0,
+        "minimum": 0.0
+      }
+    },
+    "tint": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      }
+    },
+    "vignette": {
+      "amount": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 2.0,
+        "minimum": 0.0
+      },
+      "softness": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "plain_track",
+        "maximum": 2.0,
+        "minimum": 0.0
+      }
+    },
+    "zoom_blur": {
+      "radius": {
+        "integer_maximum": null,
+        "integer_minimum": null,
+        "kind": "scalar_property",
+        "maximum": 32.0,
+        "minimum": 0.0
+      },
+      "samples": {
+        "integer_maximum": 32,
+        "integer_minimum": 2,
+        "kind": "integer",
+        "maximum": 32.0,
+        "minimum": 2.0
+      }
+    }
+  },
+  "provenance": {
+    "baseline_sha": "b23c985a623efea14511e25aeb1df93b495beecb",
+    "source": "Phase 0 capture against rebuilt native extension 0.1.3; expected values frozen before generation"
+  },
+  "serialization": {
+    "ascii": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "background": "#ffffff",
+        "cell_height": {
+          "base_value": 65.0
+        },
+        "cell_width": {
+          "base_value": 33.0
+        },
+        "characters": " .:-=+*#%@",
+        "color_mode": "monochrome",
+        "edge_characters": "-|/\\",
+        "edge_strength": {
+          "base_value": 2.0
+        },
+        "edge_threshold": {
+          "base_value": 0.5
+        },
+        "foreground": "#ffffff",
+        "glyph_style": "characters",
+        "id": "effect-000001",
+        "invert": true,
+        "mode": "hybrid",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.5
+        },
+        "source_mix": {
+          "base_value": 0.5
+        },
+        "type": "ascii"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "background": "#000000",
+        "cell_height": {
+          "base_value": 12.0
+        },
+        "cell_width": {
+          "base_value": 8.0
+        },
+        "characters": " .:-=+*#%@",
+        "color_mode": "monochrome",
+        "edge_characters": "-|/\\",
+        "edge_strength": {
+          "base_value": 1.0
+        },
+        "edge_threshold": {
+          "base_value": 0.15
+        },
+        "foreground": "#ffffff",
+        "glyph_style": "characters",
+        "invert": false,
+        "mode": "hybrid",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.0
+        },
+        "source_mix": {
+          "base_value": 0.0
+        },
+        "type": "ascii"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "background": "#000000",
+        "cell_height": {
+          "base_value": 12.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 12.0
+            }
+          ]
+        },
+        "cell_width": {
+          "base_value": 8.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 8.0
+            }
+          ]
+        },
+        "characters": " .:-=+*#%@",
+        "color_mode": "monochrome",
+        "edge_characters": "-|/\\",
+        "edge_strength": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "edge_threshold": {
+          "base_value": 0.15,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.15
+            }
+          ]
+        },
+        "foreground": "#ffffff",
+        "glyph_style": "characters",
+        "invert": false,
+        "mode": "hybrid",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "source_mix": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "type": "ascii"
+      }
+    },
+    "bloom": {
+      "generic": {
+        "id": "effect-000001",
+        "intensity": {
+          "base_value": 2.0
+        },
+        "radius": {
+          "base_value": 16.0
+        },
+        "threshold": {
+          "base_value": 0.5
+        },
+        "type": "bloom"
+      },
+      "high_level": {
+        "intensity": {
+          "base_value": 1.0
+        },
+        "radius": {
+          "base_value": 1.0
+        },
+        "threshold": {
+          "base_value": 0.5
+        },
+        "type": "bloom"
+      },
+      "high_level_animated": {
+        "intensity": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "threshold": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "type": "bloom"
+      }
+    },
+    "brightness": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "type": "brightness"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 0.1
+        },
+        "type": "brightness"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 0.1,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.1
+            }
+          ]
+        },
+        "type": "brightness"
+      }
+    },
+    "camera_shake": {
+      "generic": {
+        "attack": 1.0,
+        "decay": 1.0,
+        "frequency": {
+          "base_value": 1.0
+        },
+        "id": "effect-000001",
+        "position_amount": {
+          "base_value": 1.0
+        },
+        "rotation_degrees": {
+          "base_value": 1.0
+        },
+        "scale_amount": {
+          "base_value": 1.0
+        },
+        "seed": 0,
+        "start": 0.0,
+        "type": "camera_shake"
+      },
+      "high_level": {
+        "attack": 0.0,
+        "decay": 1.0,
+        "frequency": {
+          "base_value": 1.0
+        },
+        "position_amount": {
+          "base_value": 1.0
+        },
+        "rotation_degrees": {
+          "base_value": 1.0
+        },
+        "scale_amount": {
+          "base_value": 0.1
+        },
+        "seed": 1,
+        "start": 0.0,
+        "type": "camera_shake"
+      },
+      "high_level_animated": {
+        "attack": 0.0,
+        "decay": 1.0,
+        "frequency": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "position_amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "rotation_degrees": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "scale_amount": {
+          "base_value": 0.1,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.1
+            }
+          ]
+        },
+        "seed": 1,
+        "start": 0.0,
+        "type": "camera_shake"
+      }
+    },
+    "chromatic_aberration": {
+      "generic": {
+        "amount": {
+          "base_value": 16.0
+        },
+        "angle_degrees": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "type": "chromatic_aberration"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "angle_degrees": {
+          "base_value": 45.0
+        },
+        "type": "chromatic_aberration"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "angle_degrees": {
+          "base_value": 45.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 45.0
+            }
+          ]
+        },
+        "type": "chromatic_aberration"
+      }
+    },
+    "color_adjust": {
+      "generic": {
+        "black_point": {
+          "base_value": 0.25
+        },
+        "exposure": {
+          "base_value": 0.0
+        },
+        "gamma": {
+          "base_value": 4.0
+        },
+        "id": "effect-000001",
+        "type": "color_adjust",
+        "white_point": {
+          "base_value": 0.75
+        }
+      },
+      "high_level": {
+        "black_point": {
+          "base_value": 0.2
+        },
+        "exposure": {
+          "base_value": 0.0
+        },
+        "gamma": {
+          "base_value": 1.0
+        },
+        "type": "color_adjust",
+        "white_point": {
+          "base_value": 0.8
+        }
+      },
+      "high_level_animated": {
+        "black_point": {
+          "base_value": 0.2,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.2
+            }
+          ]
+        },
+        "exposure": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "gamma": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "color_adjust",
+        "white_point": {
+          "base_value": 0.8,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.8
+            }
+          ]
+        }
+      }
+    },
+    "contrast": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "type": "contrast"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "type": "contrast"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "contrast"
+      }
+    },
+    "crt": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "curvature": {
+          "base_value": 0.25
+        },
+        "flicker": {
+          "base_value": 0.125
+        },
+        "grain": {
+          "base_value": 0.125
+        },
+        "id": "effect-000001",
+        "jitter": {
+          "base_value": 4.0
+        },
+        "mask_spacing": 1,
+        "mask_strength": {
+          "base_value": 0.5
+        },
+        "phase": {
+          "base_value": 0.5
+        },
+        "rolling_strength": {
+          "base_value": 0.5
+        },
+        "rolling_width": {
+          "base_value": 0.505
+        },
+        "scanline_spacing": {
+          "base_value": 4.5
+        },
+        "scanline_strength": {
+          "base_value": 0.5
+        },
+        "seed": 0,
+        "type": "crt"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "curvature": {
+          "base_value": 0.08
+        },
+        "flicker": {
+          "base_value": 0.025
+        },
+        "grain": {
+          "base_value": 0.025
+        },
+        "jitter": {
+          "base_value": 0.35
+        },
+        "mask_spacing": 1,
+        "mask_strength": {
+          "base_value": 0.15
+        },
+        "phase": {
+          "base_value": 0.0
+        },
+        "rolling_strength": {
+          "base_value": 0.06
+        },
+        "rolling_width": {
+          "base_value": 0.12
+        },
+        "scanline_spacing": {
+          "base_value": 2.0
+        },
+        "scanline_strength": {
+          "base_value": 0.2
+        },
+        "seed": 0,
+        "type": "crt"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "curvature": {
+          "base_value": 0.08,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.08
+            }
+          ]
+        },
+        "flicker": {
+          "base_value": 0.025,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.025
+            }
+          ]
+        },
+        "grain": {
+          "base_value": 0.025,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.025
+            }
+          ]
+        },
+        "jitter": {
+          "base_value": 0.35,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.35
+            }
+          ]
+        },
+        "mask_spacing": 1,
+        "mask_strength": {
+          "base_value": 0.15,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.15
+            }
+          ]
+        },
+        "phase": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "rolling_strength": {
+          "base_value": 0.06,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.06
+            }
+          ]
+        },
+        "rolling_width": {
+          "base_value": 0.12,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.12
+            }
+          ]
+        },
+        "scanline_spacing": {
+          "base_value": 2.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 2.0
+            }
+          ]
+        },
+        "scanline_strength": {
+          "base_value": 0.2,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.2
+            }
+          ]
+        },
+        "seed": 0,
+        "type": "crt"
+      }
+    },
+    "directional_blur": {
+      "generic": {
+        "angle_degrees": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "radius": {
+          "base_value": 16.0
+        },
+        "type": "directional_blur"
+      },
+      "high_level": {
+        "angle_degrees": {
+          "base_value": 45.0
+        },
+        "radius": {
+          "base_value": 1.0
+        },
+        "type": "directional_blur"
+      },
+      "high_level_animated": {
+        "angle_degrees": {
+          "base_value": 45.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 45.0
+            }
+          ]
+        },
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "directional_blur"
+      }
+    },
+    "gaussian_blur": {
+      "generic": {
+        "id": "effect-000001",
+        "radius": {
+          "base_value": 16.0
+        },
+        "type": "gaussian_blur"
+      },
+      "high_level": {
+        "radius": {
+          "base_value": 1.0
+        },
+        "type": "gaussian_blur"
+      },
+      "high_level_animated": {
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "gaussian_blur"
+      }
+    },
+    "glow": {
+      "generic": {
+        "colour": "#ffffff",
+        "id": "effect-000001",
+        "intensity": {
+          "base_value": 2.0
+        },
+        "radius": {
+          "base_value": 16.0
+        },
+        "threshold": {
+          "base_value": 0.5
+        },
+        "type": "glow"
+      },
+      "high_level": {
+        "colour": "#ffffff",
+        "intensity": {
+          "base_value": 1.0
+        },
+        "radius": {
+          "base_value": 1.0
+        },
+        "threshold": {
+          "base_value": 0.5
+        },
+        "type": "glow"
+      },
+      "high_level_animated": {
+        "colour": "#ffffff",
+        "intensity": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "threshold": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "type": "glow"
+      }
+    },
+    "halftone": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "angle_degrees": {
+          "base_value": 0.5
+        },
+        "background": "#ffffff",
+        "cell_size": {
+          "base_value": 33.0
+        },
+        "foreground": "#ffffff",
+        "id": "effect-000001",
+        "invert": true,
+        "mode": "luminance",
+        "softness": {
+          "base_value": 1.0
+        },
+        "type": "halftone"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "angle_degrees": {
+          "base_value": 15.0
+        },
+        "background": "#000000",
+        "cell_size": {
+          "base_value": 6.0
+        },
+        "foreground": "#ffffff",
+        "invert": false,
+        "mode": "luminance",
+        "softness": {
+          "base_value": 0.5
+        },
+        "type": "halftone"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "angle_degrees": {
+          "base_value": 15.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 15.0
+            }
+          ]
+        },
+        "background": "#000000",
+        "cell_size": {
+          "base_value": 6.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 6.0
+            }
+          ]
+        },
+        "foreground": "#ffffff",
+        "invert": false,
+        "mode": "luminance",
+        "softness": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "type": "halftone"
+      }
+    },
+    "motion_blur": {
+      "generic": {
+        "id": "effect-000001",
+        "intensity": {
+          "base_value": 1.0
+        },
+        "max_radius": {
+          "base_value": 16.0
+        },
+        "samples": 2,
+        "shutter_angle": {
+          "base_value": 180.0
+        },
+        "type": "motion_blur"
+      },
+      "high_level": {
+        "intensity": {
+          "base_value": 1.0
+        },
+        "max_radius": {
+          "base_value": 2.0
+        },
+        "samples": 2,
+        "shutter_angle": {
+          "base_value": 180.0
+        },
+        "type": "motion_blur"
+      },
+      "high_level_animated": {
+        "intensity": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "max_radius": {
+          "base_value": 2.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 2.0
+            }
+          ]
+        },
+        "samples": 2,
+        "shutter_angle": {
+          "base_value": 180.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 180.0
+            }
+          ]
+        },
+        "type": "motion_blur"
+      }
+    },
+    "motion_tile": {
+      "generic": {
+        "id": "effect-000001",
+        "mirror_edges": true,
+        "output_height_percent": {
+          "base_value": 450.0
+        },
+        "output_width_percent": {
+          "base_value": 450.0
+        },
+        "tile_center": {
+          "base_value": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "type": "motion_tile"
+      },
+      "high_level": {
+        "mirror_edges": true,
+        "output_height_percent": {
+          "base_value": 150.0
+        },
+        "output_width_percent": {
+          "base_value": 200.0
+        },
+        "tile_center": {
+          "base_value": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "type": "motion_tile"
+      },
+      "high_level_animated": {
+        "mirror_edges": true,
+        "output_height_percent": {
+          "base_value": 150.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 150.0
+            }
+          ]
+        },
+        "output_width_percent": {
+          "base_value": 200.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 200.0
+            }
+          ]
+        },
+        "tile_center": {
+          "base_value": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "type": "motion_tile"
+      }
+    },
+    "ordered_dither": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "input_detail": {
+          "base_value": 0.0
+        },
+        "input_detail_radius": {
+          "base_value": 1.0
+        },
+        "input_exposure": {
+          "base_value": 0.0
+        },
+        "input_filter": "area",
+        "input_gamma": {
+          "base_value": 1.0
+        },
+        "input_scale": {
+          "base_value": 1.0
+        },
+        "interpolation": "rgb",
+        "levels": 4,
+        "matrix": "bayer8",
+        "mode": "nearest",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.5
+        },
+        "scale": 1,
+        "seed": 0,
+        "strength": {
+          "base_value": 0.5
+        },
+        "type": "ordered_dither"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "input_detail": {
+          "base_value": 0.0
+        },
+        "input_detail_radius": {
+          "base_value": 1.0
+        },
+        "input_exposure": {
+          "base_value": 0.0
+        },
+        "input_filter": "area",
+        "input_gamma": {
+          "base_value": 1.0
+        },
+        "input_scale": {
+          "base_value": 1.0
+        },
+        "interpolation": "rgb",
+        "levels": 4,
+        "matrix": "bayer8",
+        "mode": "nearest",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.0
+        },
+        "scale": 1,
+        "seed": 0,
+        "strength": {
+          "base_value": 1.0
+        },
+        "type": "ordered_dither"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "input_detail": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "input_detail_radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "input_exposure": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "input_filter": "area",
+        "input_gamma": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "input_scale": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "interpolation": "rgb",
+        "levels": 4,
+        "matrix": "bayer8",
+        "mode": "nearest",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "scale": 1,
+        "seed": 0,
+        "strength": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "ordered_dither"
+      }
+    },
+    "palette_map": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "input_detail": {
+          "base_value": 0.0
+        },
+        "input_detail_radius": {
+          "base_value": 1.0
+        },
+        "input_exposure": {
+          "base_value": 0.0
+        },
+        "input_filter": "area",
+        "input_gamma": {
+          "base_value": 1.0
+        },
+        "input_scale": {
+          "base_value": 1.0
+        },
+        "interpolation": "rgb",
+        "levels": 4,
+        "mode": "gradient",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.5
+        },
+        "type": "palette_map"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "input_detail": {
+          "base_value": 0.0
+        },
+        "input_detail_radius": {
+          "base_value": 1.0
+        },
+        "input_exposure": {
+          "base_value": 0.0
+        },
+        "input_filter": "area",
+        "input_gamma": {
+          "base_value": 1.0
+        },
+        "input_scale": {
+          "base_value": 1.0
+        },
+        "interpolation": "rgb",
+        "levels": 4,
+        "mode": "gradient",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.0
+        },
+        "type": "palette_map"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "input_detail": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "input_detail_radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "input_exposure": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "input_filter": "area",
+        "input_gamma": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "input_scale": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "interpolation": "rgb",
+        "levels": 4,
+        "mode": "gradient",
+        "palette": [
+          "#000000",
+          "#ffffff"
+        ],
+        "phase": {
+          "base_value": 0.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.0
+            }
+          ]
+        },
+        "type": "palette_map"
+      }
+    },
+    "pixel_sort": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "direction": "horizontal",
+        "id": "effect-000001",
+        "lower_threshold": {
+          "base_value": 0.5
+        },
+        "order": "ascending",
+        "segment_length": 2,
+        "type": "pixel_sort",
+        "upper_threshold": {
+          "base_value": 0.5
+        }
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "direction": "horizontal",
+        "lower_threshold": {
+          "base_value": 0.15
+        },
+        "order": "ascending",
+        "segment_length": 64,
+        "type": "pixel_sort",
+        "upper_threshold": {
+          "base_value": 0.9
+        }
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "direction": "horizontal",
+        "lower_threshold": {
+          "base_value": 0.15,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.15
+            }
+          ]
+        },
+        "order": "ascending",
+        "segment_length": 64,
+        "type": "pixel_sort",
+        "upper_threshold": {
+          "base_value": 0.9,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.9
+            }
+          ]
+        }
+      }
+    },
+    "radial_blur": {
+      "generic": {
+        "amount": {
+          "base_value": 16.0
+        },
+        "center": {
+          "base_value": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "id": "effect-000001",
+        "type": "radial_blur"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 2.0
+        },
+        "center": {
+          "base_value": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "type": "radial_blur"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 2.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 2.0
+            }
+          ]
+        },
+        "center": {
+          "base_value": {
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "type": "radial_blur"
+      }
+    },
+    "saturation": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "id": "effect-000001",
+        "type": "saturation"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 1.0
+        },
+        "type": "saturation"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "saturation"
+      }
+    },
+    "sharpen": {
+      "generic": {
+        "amount": {
+          "base_value": 2.0
+        },
+        "id": "effect-000001",
+        "radius": {
+          "base_value": 8.0
+        },
+        "type": "sharpen"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "radius": {
+          "base_value": 1.0
+        },
+        "type": "sharpen"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "type": "sharpen"
+      }
+    },
+    "tint": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "colour": "#ffffff",
+        "id": "effect-000001",
+        "type": "tint"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "colour": "#ffffff",
+        "type": "tint"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "colour": "#ffffff",
+        "type": "tint"
+      }
+    },
+    "vignette": {
+      "generic": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "colour": "#ffffff",
+        "id": "effect-000001",
+        "radius": {
+          "base_value": 1.0
+        },
+        "softness": {
+          "base_value": 1.0
+        },
+        "type": "vignette"
+      },
+      "high_level": {
+        "amount": {
+          "base_value": 0.5
+        },
+        "colour": "#000000",
+        "radius": {
+          "base_value": 1.0
+        },
+        "softness": {
+          "base_value": 0.5
+        },
+        "type": "vignette"
+      },
+      "high_level_animated": {
+        "amount": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "colour": "#000000",
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "softness": {
+          "base_value": 0.5,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 0.5
+            }
+          ]
+        },
+        "type": "vignette"
+      }
+    },
+    "zoom_blur": {
+      "generic": {
+        "anchor": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "direction": "centered",
+        "id": "effect-000001",
+        "radius": {
+          "base_value": 16.0
+        },
+        "samples": 2,
+        "type": "zoom_blur"
+      },
+      "high_level": {
+        "anchor": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "direction": "centered",
+        "radius": {
+          "base_value": 1.0
+        },
+        "samples": 2,
+        "type": "zoom_blur"
+      },
+      "high_level_animated": {
+        "anchor": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "direction": "centered",
+        "radius": {
+          "base_value": 1.0,
+          "keyframes": [
+            {
+              "interpolation": "linear",
+              "time": 0.5,
+              "value": 1.0
+            }
+          ]
+        },
+        "samples": 2,
+        "type": "zoom_blur"
+      }
+    }
+  },
+  "validation": {
+    "ascii": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "cell_height:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "cell_height:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "cell_height:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "cell_height:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "cell_width:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "cell_width:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "cell_width:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "cell_width:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "edge_strength:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "edge_strength:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "edge_strength:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "edge_strength:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "edge_threshold:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "edge_threshold:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "edge_threshold:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "edge_threshold:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "source_mix:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "source_mix:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "source_mix:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "source_mix:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "bloom": {
+      "intensity:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "intensity:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "intensity:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "intensity:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "threshold:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "threshold:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "threshold:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "threshold:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "brightness": {},
+    "camera_shake": {
+      "attack:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "attack:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "attack is outside its authored range"
+      },
+      "decay:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "decay is outside its authored range"
+      },
+      "decay:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "decay is outside its authored range"
+      },
+      "frequency:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "frequency:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "position_amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "position_amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "rotation_degrees:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "rotation_degrees:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "scale_amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scale_amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "seed:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "seed:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "seed is outside its authored range"
+      },
+      "seed:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "seed:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "seed is outside its authored range"
+      }
+    },
+    "chromatic_aberration": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "color_adjust": {
+      "black_point:maximum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "black_point:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "black_point:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "black_point:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "exposure:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "exposure:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "exposure:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "exposure:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "gamma:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "gamma:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "gamma:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "gamma:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "white_point:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "white_point:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "white_point:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "white_point:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "contrast": {},
+    "crt": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "curvature:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "curvature:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "curvature:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "curvature:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "flicker:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "flicker:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "flicker:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "flicker:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "grain:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "grain:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "grain:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "grain:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "jitter:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "jitter:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "jitter:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "jitter:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "mask_spacing:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "mask_spacing:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "mask_spacing is outside its authored range"
+      },
+      "mask_spacing:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "mask_spacing:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "mask_spacing is outside its authored range"
+      },
+      "mask_strength:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "mask_strength:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "mask_strength:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "mask_strength:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "rolling_strength:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "rolling_strength:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "rolling_strength:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "rolling_strength:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "rolling_width:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "rolling_width:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "rolling_width:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "rolling_width:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "scanline_spacing:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scanline_spacing:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "scanline_spacing:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scanline_spacing:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "scanline_strength:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scanline_strength:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "scanline_strength:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scanline_strength:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "seed:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "seed:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "seed is outside its authored range"
+      },
+      "seed:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "seed:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "seed is outside its authored range"
+      }
+    },
+    "directional_blur": {
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "exceptions": {
+      "direct_advanced_construction": {
+        "accepted": false,
+        "exception": "TypeError",
+        "message": "VignetteEffect objects must be created by an effect collection"
+      },
+      "generic_camera_shake_eager": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "attack is outside its authored range"
+      },
+      "missing_generic_parameter": {
+        "accepted": false,
+        "exception": "TypeError",
+        "message": "missing required parameter 'amount' for effect 'vignette'"
+      },
+      "typed_camera_shake_deferred": {
+        "accepted": true,
+        "canonical": {
+          "attack": -0.1,
+          "decay": 1.0,
+          "frequency": {
+            "base_value": 1.0
+          },
+          "id": "effect-000001",
+          "position_amount": {
+            "base_value": 0.0
+          },
+          "rotation_degrees": {
+            "base_value": 0.0
+          },
+          "scale_amount": {
+            "base_value": 0.0
+          },
+          "seed": 0,
+          "start": 0.0,
+          "type": "camera_shake"
+        }
+      },
+      "unknown_generic_effect": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "unknown visual effect type: 'unknown'"
+      },
+      "unknown_generic_parameter": {
+        "accepted": false,
+        "exception": "TypeError",
+        "message": "unknown parameter 'unused' for effect 'vignette'; expected: amount, radius, softness, colour"
+      },
+      "vignette_softness_zero": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "softness is outside its authored range"
+      }
+    },
+    "gaussian_blur": {
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "glow": {
+      "intensity:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "intensity:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "intensity:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "intensity:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "threshold:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "threshold:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "threshold:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "threshold:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "halftone": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "cell_size:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "cell_size:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "cell_size:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "cell_size:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "softness:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "softness:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "softness:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "softness:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "motion_blur": {
+      "intensity:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "intensity:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "max_radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "max_radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "max_radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "max_radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "samples:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "samples:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "samples is outside its authored range"
+      },
+      "samples:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "samples:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "samples is outside its authored range"
+      },
+      "shutter_angle:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "shutter_angle:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "shutter_angle:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "shutter_angle:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "motion_tile": {
+      "output_height_percent:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "output_height_percent:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "output_height_percent:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "output_height_percent:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "output_width_percent:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "output_width_percent:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "output_width_percent:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "output_width_percent:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "ordered_dither": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_detail:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_detail:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_detail_radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail_radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_detail_radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail_radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_exposure:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_exposure:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_exposure:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_exposure:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_gamma:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_gamma:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_gamma:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_gamma:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_scale:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_scale:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_scale:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_scale:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "levels:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "levels:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "levels is outside its authored range"
+      },
+      "levels:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "levels:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "levels is outside its authored range"
+      },
+      "scale:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scale:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "scale is outside its authored range"
+      },
+      "scale:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "scale:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "scale is outside its authored range"
+      },
+      "seed:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "seed:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "seed is outside its authored range"
+      },
+      "seed:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "seed:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "seed is outside its authored range"
+      },
+      "strength:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "strength:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "strength:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "strength:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "palette_map": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_detail:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_detail:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_detail_radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail_radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_detail_radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_detail_radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_exposure:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_exposure:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_exposure:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_exposure:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_gamma:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_gamma:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_gamma:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_gamma:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "input_scale:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_scale:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "input_scale:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "input_scale:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "levels:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "levels:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "levels is outside its authored range"
+      },
+      "levels:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "levels:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "levels is outside its authored range"
+      }
+    },
+    "pixel_sort": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "lower_threshold:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "lower_threshold:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "lower_threshold:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "lower_threshold:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "segment_length:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "segment_length:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "segment_length is outside its authored range"
+      },
+      "segment_length:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "segment_length:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "segment_length is outside its authored range"
+      },
+      "upper_threshold:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "upper_threshold:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "upper_threshold:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "upper_threshold:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "radial_blur": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "saturation": {},
+    "sharpen": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "tint": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "vignette": {
+      "amount:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "amount:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "amount:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "softness:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "softness:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "softness:minimum:at": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "softness:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      }
+    },
+    "zoom_blur": {
+      "radius:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is above its maximum"
+      },
+      "radius:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "radius:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "value is below its minimum"
+      },
+      "samples:maximum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "samples:maximum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "samples is outside its authored range"
+      },
+      "samples:minimum:at": {
+        "accepted": true,
+        "canonical": null
+      },
+      "samples:minimum:outside": {
+        "accepted": false,
+        "exception": "ValueError",
+        "message": "samples is outside its authored range"
+      }
+    }
+  }
+}

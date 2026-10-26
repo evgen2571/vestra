@@ -232,11 +232,13 @@ impl CpuWorkerState {
         stats.static_cache_population_renders = self.static_cache_population_renders;
         stats.static_layers_rendered = self.static_layer_renders;
         let scratch = self.effects.stats();
+        let compositions = self.compositions.stats();
         stats.cpu_full_frame_allocations = self.full_frame_allocations;
-        stats.cpu_scratch_allocations = scratch.allocations;
-        stats.cpu_scratch_reuses = scratch.reuses;
-        stats.cpu_scratch_buffers_retained = scratch.retained_buffers;
-        stats.cpu_scratch_bytes_retained = scratch.retained_bytes;
+        stats.cpu_scratch_allocations = scratch.allocations + compositions.allocations;
+        stats.cpu_scratch_reuses = scratch.reuses + compositions.reuses;
+        stats.cpu_scratch_buffers_retained =
+            scratch.retained_buffers + compositions.retained_buffers;
+        stats.cpu_scratch_bytes_retained = scratch.retained_bytes + compositions.retained_bytes;
         stats.cpu_full_frame_copy_bytes = scratch.copy_bytes;
         stats.cpu_opaque_copy_fast_path_hits = self.opaque_copy_fast_path_hits;
         stats.cpu_opaque_copy_fast_path_bytes = self.opaque_copy_fast_path_bytes;

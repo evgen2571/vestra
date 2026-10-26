@@ -80,6 +80,11 @@ dimensions/timing, selected/requested backend, fallback, adapter, warnings,
 detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a
 cancelled operation does not return a `RenderResult`.
 
+`performance` exposes CPU scratch backing capacity, native video cache/current/
+working-buffer bytes, per-session cache peaks, and worker/output memory estimates.
+See [CPU memory accounting](../development/architecture/cpu-renderer.md#memory-accounting)
+for ownership, exclusions and units. These byte fields are not process RSS/PSS.
+
 If a Python progress callback raises, Vestra stops the native render and
 re-raises the original Python exception. No `RenderResult` is returned. If
 cleanup reports a native error, it is attached as

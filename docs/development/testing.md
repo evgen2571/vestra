@@ -11,7 +11,7 @@ just python-sync
 just check
 ```
 
-`just check` delegates to `scripts/check.sh`. It runs `cargo fmt --all -- --check`, workspace `cargo check` and Clippy with all features, workspace Rust tests, `uv run python crates/vestra-cli/tests/schema_validation.py`, and a generated-schema comparison against `schemas/project.schema.json`. The shared `scripts/test-rust.sh` runner serializes Rust tests when `VESTRA_WGPU_BACKEND=gl` or WSL's default adapter path needs one EGL context.
+`just check` delegates to `scripts/check.sh`. It runs `cargo fmt --all -- --check`, effect-generation freshness and generator tests, workspace `cargo check` and Clippy with all features, workspace Rust tests, `uv run python crates/vestra-cli/tests/schema_validation.py`, and a generated-schema comparison against `schemas/project.schema.json`. The shared `scripts/test-rust.sh` runner serializes Rust tests when `VESTRA_WGPU_BACKEND=gl` or WSL's default adapter path needs one EGL context.
 
 | Command | Purpose |
 | --- | --- |
@@ -20,6 +20,7 @@ just check
 | `just test` | Run workspace Rust tests with the platform's thread policy |
 | `just python-test` | Sync/build the native package, run pytest, and compileall |
 | `just schema-check` | Validate schema inputs and check generated-schema freshness |
+| `just gen-effects` / `just gen-effects-check` | Regenerate effect artifacts, or check freshness without writing |
 | `just wheel-smoke` | Build/install a wheel and verify its installed rendering contract |
 | `just examples` | Validate canonical examples |
 | `just docs-check` | Check relative file targets in public Markdown |
@@ -45,6 +46,24 @@ WGPU-only tests retain planning, parameter, upload and resource-limit coverage.
 The adapter-list example requires the WGPU feature.
 
 Schema changes need both `ve generate-schema --output PATH` and the schema-validation test. CLI changes need current help and CLI integration tests. Rendering changes need CPU tests and source/effect-specific tests. Media tests need working native FFmpeg development libraries; runtime workflows may also need `ffmpeg`/`ffprobe` on `PATH`.
+
+Effect generation checks require only the core metadata exporter and Python's
+standard library; they do not build renderers or the native Python extension.
+`just gen-effects-check` checks committed-artifact freshness and runs the stdlib
+generator tests. To run those tests separately and then check the frozen public
+contracts:
+
+```bash
+uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py
+just python-test python-tests/test_effect_generation_compatibility.py
+```
+
+The latter compares imports, signatures, inheritance, serialization, validation
+timing and JSON behavior with frozen pre-generation fixtures. It explicitly
+preserves the Ascii schema/parser mismatch. See the
+[fixture instructions](../../python-tests/fixtures/effects/README.md) to repeat
+the same comparisons against the exact baseline revision. Do not refresh the
+expected values from generated output to make a regression pass.
 
 Benchmark tooling has focused tests independent of the Python extension:
 
@@ -109,7 +128,7 @@ software-WGPU and named hardware-WGPU evidence separate.
 
 CI has three validation jobs followed by the required `CI Success` gate:
 
-- Style runs `just style` in `nix develop .#ci` to check Rust formatting, the maintained Python format/lint surface, and public documentation file links, and showcase/script formatting and lint. Rust and Python jobs start only after it passes.
+- Style runs `just style` in `nix develop .#ci` to check Rust formatting, the maintained Python format/lint surface, public documentation file links, showcase/script formatting and lint, and `just gen-effects-check`. The generation check compiles only the core exporter and runs stdlib generator tests. Rust and Python jobs start only after it passes.
 - Rust runs `just lint-rust`, then `just wgpu-software` in `nix develop .#wgpu-software`. The WGPU recipe delegates to the verification script, which runs workspace tests once, followed by strict renderer WGPU tests. Clippy replaces separate compilation-check jobs. `just cli-smoke schema-freshness` checks CLI help and generated-schema freshness in the same job.
 - The Rust CI job disables debug symbols in Cargo's `dev` and `test` profiles to keep build artifacts within the hosted runner's disk budget. Debug assertions and the local development profiles remain unchanged.
 - Python runs `just python-test` and `just schema-validation` in `nix develop .#wgpu-software`, sharing the native extension build for pytest, schema validation, compileall,

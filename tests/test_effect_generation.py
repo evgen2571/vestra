@@ -145,12 +145,66 @@ class EffectGenerationTests(unittest.TestCase):
             "levels: int | float = 8", generator.render_class(effect, [effect])
         )
 
+    def test_explicit_static_getter_fallback_is_preserved(self):
+        data = metadata()
+        effect = data["effects"][0]
+        effect["python"]["get_values"] = True
+        source = generator.render_class(effect, [effect])
+        self.assertIn("self._values.get('edge_characters')", source)
+
+    def test_invalid_python_enum_override_fails_before_generation(self):
+        data = metadata()
+        effect = data["effects"][0]
+        effect["parameters"][0].update(
+            kind="enum", enum_values=["valid"], default="valid"
+        )
+        effect["python"].update(enums={"edge_characters": "ExampleMode"}, defaults={})
+        generator.validate(data)
+        effect["python"]["defaults"]["edge_characters"] = "missing"
+        with self.assertRaisesRegex(ValueError, "invalid Python enum/default"):
+            generator.validate(data)
+
     def test_python_overrides_must_match_the_canonical_inventory(self):
         data = metadata()
         with self.assertRaisesRegex(ValueError, "must cover the catalog"):
             generator.with_python(data, {})
         with self.assertRaisesRegex(ValueError, "must cover the catalog"):
             generator.with_python(data, {"example": {}, "unknown": {}})
+
+    def test_every_artifact_family_detects_drift_without_rewriting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            module = root / "python/vestra/effects/example.py"
+            module.parent.mkdir(parents=True)
+            module.write_text(generator.BEGIN + "\n" + generator.END + "\n")
+            authoring = root / "python/vestra/authoring/effects.py"
+            authoring.parent.mkdir(parents=True)
+            authoring.write_text(
+                "class Collection:\n"
+                + generator.HELPER_BEGIN
+                + "\n"
+                + generator.HELPER_END
+                + "\nclass ClipCollection:\n"
+                + generator.CLIP_BEGIN
+                + "\n"
+                + generator.CLIP_END
+                + "\n"
+            )
+            expected = generator.outputs(metadata(), root)
+            generator.synchronize(expected, root, check=False)
+            self.assertEqual(generator.outputs(metadata(), root), expected)
+            self.assertEqual(generator.synchronize(expected, root, check=True), [])
+            for path, content in expected.items():
+                with self.subTest(path=str(path)):
+                    stale = root / path
+                    stale.write_text(content + "\n")
+                    modified = stale.stat().st_mtime_ns
+                    self.assertEqual(
+                        generator.synchronize(expected, root, check=True), [path]
+                    )
+                    self.assertEqual(stale.read_text(), content + "\n")
+                    self.assertEqual(stale.stat().st_mtime_ns, modified)
+                    stale.write_text(content)
 
     def test_generated_sections_preserve_handwritten_adapters(self):
         text = "adapter_before\nBEGIN\nold\nEND\nadapter_after\n"

@@ -48,6 +48,7 @@ PALETTE_DEFAULTS = {"palette": ("#000000", "#ffffff"), "amount": 1, "phase": 0}
 PYTHON = {
     "ascii": {
         "module": "ascii",
+        "get_values": True,  # Preserve the original static getter fallback.
         "order": [
             "characters",
             "font",

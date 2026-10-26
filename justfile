@@ -12,15 +12,15 @@ check:
 # Format Rust and the maintained Python format surface.
 fmt:
     cargo fmt --all
-    uvx --from 'ruff>=0.12,<0.13' ruff format python/vestra/sources/base.py python/vestra/sources/__init__.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
 
 # Check formatting without changing files.
 fmt-check:
     cargo fmt --all -- --check
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
 
 # Run the inexpensive CI style checks.
-style: fmt-check lint-python showcase-style comparison-style docs-check
+style: fmt-check lint-python showcase-style comparison-style docs-check gen-effects-check
 
 # Lint Rust and Python.
 lint: lint-rust lint-python
@@ -31,7 +31,7 @@ lint-rust:
 
 # Lint the maintained Python package.
 lint-python:
-    uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra
+    uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
 
 # Run Rust tests; optionally pass Cargo/test arguments.
 test *args:
@@ -57,6 +57,15 @@ schema-validation:
 # Compare the checked-in schema with freshly generated output.
 schema-freshness:
     ./scripts/check-schema.sh
+
+# Regenerate effect declarations, stubs, schema branches and factual reference.
+gen-effects:
+    uv run --no-project python scripts/generate-effects.py
+
+# Check generation without a renderer or native Python build.
+gen-effects-check:
+    uv run --no-project python scripts/generate-effects.py --check
+    uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py
 
 # Check local public documentation links.
 docs-check:

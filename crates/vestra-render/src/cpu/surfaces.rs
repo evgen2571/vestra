@@ -5,7 +5,6 @@ use image::{GenericImage, Rgba, RgbaImage};
 use vestra_core::plan::EffectResource;
 
 const SURFACE_COUNT: usize = 3;
-pub(super) const SCRATCH_BUFFER_COUNT: usize = SURFACE_COUNT + 2 + 3;
 
 /// Worker-local full-frame surfaces used for isolated nested compositions.
 ///
@@ -72,6 +71,7 @@ impl CompositionSurfacePool {
 }
 
 pub(crate) struct EffectSurfacePool {
+    extent: (u32, u32),
     surfaces: [RgbaImage; SURFACE_COUNT],
     mask_local_surface: RgbaImage,
     mask_surface: RgbaImage,
@@ -90,33 +90,35 @@ impl EffectSurfacePool {
     #[must_use]
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
-            surfaces: std::array::from_fn(|_| RgbaImage::new(width, height)),
-            mask_local_surface: RgbaImage::new(width, height),
-            mask_surface: RgbaImage::new(width, height),
-            mask_coverage: vec![1.0; (width as usize) * (height as usize)],
-            mask_feather_scratch: vec![0.0; (width as usize) * (height as usize)],
-            mask_feather_scratch_b: vec![0.0; (width as usize) * (height as usize)],
+            extent: (width, height),
+            surfaces: std::array::from_fn(|index| {
+                if index == 0 {
+                    RgbaImage::new(width, height)
+                } else {
+                    RgbaImage::new(0, 0)
+                }
+            }),
+            mask_local_surface: RgbaImage::new(0, 0),
+            mask_surface: RgbaImage::new(0, 0),
+            mask_coverage: Vec::new(),
+            mask_feather_scratch: Vec::new(),
+            mask_feather_scratch_b: Vec::new(),
             current_slot: 0,
             original_slot: None,
             temporary_slots: [None; 2],
-            allocations: SCRATCH_BUFFER_COUNT as u64,
+            allocations: u64::from(width != 0 && height != 0),
             reuses: 0,
             copy_bytes: 0,
         }
     }
 
     pub(super) fn resize(&mut self, width: u32, height: u32) {
-        if self.surfaces[0].width() != width || self.surfaces[0].height() != height {
-            self.surfaces = std::array::from_fn(|_| RgbaImage::new(width, height));
-            self.mask_local_surface = RgbaImage::new(width, height);
-            self.mask_surface = RgbaImage::new(width, height);
-            self.mask_coverage = vec![1.0; (width as usize) * (height as usize)];
-            self.mask_feather_scratch = vec![0.0; (width as usize) * (height as usize)];
-            self.mask_feather_scratch_b = vec![0.0; (width as usize) * (height as usize)];
-            self.current_slot = 0;
-            self.original_slot = None;
-            self.temporary_slots = [None; 2];
-            self.allocations += SCRATCH_BUFFER_COUNT as u64;
+        if self.extent != (width, height) {
+            let mut resized = Self::new(width, height);
+            resized.allocations += self.allocations;
+            resized.reuses = self.reuses;
+            resized.copy_bytes = self.copy_bytes;
+            *self = resized;
         }
     }
 
@@ -125,10 +127,12 @@ impl EffectSurfacePool {
     }
 
     pub(super) fn mask_local_surface(&mut self) -> &mut RgbaImage {
+        self.allocations += ensure_image(&mut self.mask_local_surface, self.extent);
         &mut self.mask_local_surface
     }
 
     pub(super) fn copy_current_to_mask_local(&mut self) {
+        self.mask_local_surface();
         let current_slot = self.current_slot;
         self.mask_local_surface
             .copy_from(&self.surfaces[current_slot], 0, 0)
@@ -152,6 +156,7 @@ impl EffectSurfacePool {
     }
 
     pub(super) fn reset_mask_coverage(&mut self) {
+        self.allocations += ensure_coverage(&mut self.mask_coverage, self.extent);
         self.mask_coverage.fill(1.0);
     }
 
@@ -183,6 +188,8 @@ impl EffectSurfacePool {
         if radius <= 0.0 {
             return;
         }
+        self.allocations += ensure_coverage(&mut self.mask_feather_scratch, self.extent);
+        self.allocations += ensure_coverage(&mut self.mask_feather_scratch_b, self.extent);
         let width = self.mask_surface.width() as usize;
         let height = self.mask_surface.height() as usize;
         let half_width = crate::project::mask_feather_box_half_width(radius);
@@ -262,6 +269,7 @@ impl EffectSurfacePool {
     }
 
     pub(super) fn compose_mask_surface(&mut self, transform: crate::animation::Transform2D) {
+        self.allocations += ensure_image(&mut self.mask_surface, self.extent);
         for pixel in self.mask_surface.pixels_mut() {
             *pixel = image::Rgba([0, 0, 0, 0]);
         }
@@ -305,7 +313,9 @@ impl EffectSurfacePool {
         let secondary_slot = secondary.map(|resource| self.resolve_slot(resource));
         let destination = self.destination_slot(output, primary_slot, secondary_slot);
 
-        self.reuses += 1;
+        let allocated = ensure_image(&mut self.surfaces[destination], self.extent);
+        self.allocations += allocated;
+        self.reuses += u64::from(allocated == 0);
         with_sources_and_target(
             &mut self.surfaces,
             primary_slot,
@@ -420,7 +430,7 @@ impl EffectSurfacePool {
             self.surfaces[self.current_slot].width(),
             self.surfaces[self.current_slot].height(),
         );
-        self.allocations += 1;
+        self.allocations += u64::from(image_capacity_bytes(&replacement) != 0);
         std::mem::replace(&mut self.surfaces[self.current_slot], replacement)
     }
 
@@ -428,7 +438,20 @@ impl EffectSurfacePool {
         SurfacePoolStats {
             allocations: self.allocations,
             reuses: self.reuses,
-            retained_buffers: SCRATCH_BUFFER_COUNT,
+            retained_buffers: self
+                .surfaces
+                .iter()
+                .chain([&self.mask_local_surface, &self.mask_surface])
+                .filter(|image| image_capacity_bytes(image) != 0)
+                .count()
+                + [
+                    &self.mask_coverage,
+                    &self.mask_feather_scratch,
+                    &self.mask_feather_scratch_b,
+                ]
+                .into_iter()
+                .filter(|values| values.capacity() != 0)
+                .count(),
             retained_bytes: self.surfaces.iter().map(image_capacity_bytes).sum::<u64>()
                 + image_capacity_bytes(&self.mask_local_surface)
                 + image_capacity_bytes(&self.mask_surface)
@@ -439,6 +462,23 @@ impl EffectSurfacePool {
             copy_bytes: self.copy_bytes,
         }
     }
+}
+
+fn ensure_image(image: &mut RgbaImage, extent: (u32, u32)) -> u64 {
+    if image.dimensions() == extent {
+        return 0;
+    }
+    *image = RgbaImage::new(extent.0, extent.1);
+    u64::from(image_capacity_bytes(image) != 0)
+}
+
+fn ensure_coverage(values: &mut Vec<f32>, extent: (u32, u32)) -> u64 {
+    let length = extent.0 as usize * extent.1 as usize;
+    if values.len() == length {
+        return 0;
+    }
+    *values = vec![0.0; length];
+    u64::from(length != 0)
 }
 
 fn with_sources_and_target(
@@ -486,21 +526,96 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scratch_capacity_includes_mask_and_coverage_buffers_across_resize() {
+    fn optional_scratch_allocates_only_on_first_use() {
         let mut pool = EffectSurfacePool::new(4, 3);
-        assert_eq!(pool.stats().retained_buffers, 8);
-        assert_eq!(pool.stats().retained_bytes, 8 * 4 * 3 * 4);
-        assert_eq!(pool.stats().allocations, 8);
-        pool.resize(4, 3);
-        assert_eq!(pool.stats().allocations, 8);
-        pool.resize(2, 2);
-        assert_eq!(pool.stats().retained_bytes, 8 * 2 * 2 * 4);
-        assert_eq!(pool.stats().allocations, 16);
+        assert_eq!(pool.stats().retained_buffers, 1);
+        assert_eq!(pool.stats().retained_bytes, 48);
+        assert_eq!(pool.stats().allocations, 1);
+        assert_eq!(pool.current().dimensions(), (4, 3));
+        assert_eq!(pool.stats().allocations, 1);
+        pool.begin_effect(false);
+        copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
+        assert_eq!(pool.stats().retained_buffers, 2);
+        assert_eq!(pool.stats().retained_bytes, 96);
+        assert_eq!(pool.stats().allocations, 2);
+        assert_eq!(pool.mask_local_surface.as_raw().capacity(), 0);
+        assert_eq!(pool.mask_surface.as_raw().capacity(), 0);
+        assert_eq!(pool.mask_coverage.capacity(), 0);
+        assert_eq!(pool.mask_feather_scratch.capacity(), 0);
+        assert_eq!(pool.mask_feather_scratch_b.capacity(), 0);
+    }
+
+    #[test]
+    fn optional_scratch_is_reused_and_dropped_across_resize() {
+        let mut pool = EffectSurfacePool::new(4, 3);
+        for size in [(4, 3), (2, 2), (6, 5)] {
+            pool.resize(size.0, size.1);
+            assert_eq!(pool.stats().retained_buffers, 1);
+            assert_eq!(pool.stats().retained_bytes, u64::from(size.0 * size.1 * 4));
+            pool.current().fill(255);
+            pool.reset_mask_coverage();
+            assert!(pool.mask_coverage.iter().all(|&coverage| coverage == 1.0));
+            pool.copy_current_to_mask_local();
+            pool.compose_mask_surface(crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ));
+            pool.feather_mask_surface(0.0);
+            assert_eq!(pool.stats().retained_buffers, 4);
+            assert!(pool.mask_feather_scratch.is_empty());
+            assert!(pool.mask_feather_scratch_b.is_empty());
+            pool.feather_mask_surface(1.0);
+            assert_eq!(pool.stats().retained_buffers, 6);
+            assert_eq!(
+                pool.stats().retained_bytes,
+                6 * u64::from(size.0 * size.1 * 4)
+            );
+            let allocations = pool.stats().allocations;
+            let reference = pool.mask_surface.clone();
+            pool.resize(size.0, size.1);
+            pool.reset_mask_coverage();
+            pool.copy_current_to_mask_local();
+            pool.compose_mask_surface(crate::animation::Transform2D::identity(
+                crate::domain::Point { x: 0.5, y: 0.5 },
+                crate::domain::Point { x: 0.5, y: 0.5 },
+            ));
+            pool.feather_mask_surface(1.0);
+            assert_eq!(pool.mask_surface, reference);
+            assert_eq!(pool.stats().allocations, allocations);
+            pool.begin_effect(true);
+            copy_pass(
+                &mut pool,
+                EffectResource::Current,
+                EffectResource::Temporary0,
+            );
+            copy_pass(
+                &mut pool,
+                EffectResource::Temporary0,
+                EffectResource::Current,
+            );
+            assert_eq!(pool.stats().retained_buffers, 8);
+            assert_eq!(pool.current().dimensions(), size);
+        }
         pool.mask_coverage.reserve(100);
         assert_eq!(
             pool.stats().retained_bytes,
-            7 * 2 * 2 * 4 + pool.mask_coverage.capacity() as u64 * 4
+            7 * 6 * 5 * 4 + pool.mask_coverage.capacity() as u64 * 4
         );
+    }
+
+    #[test]
+    fn single_pixel_mask_uses_tight_float_storage() {
+        let mut pool = EffectSurfacePool::new(1, 1);
+        pool.copy_current_to_mask_local();
+        pool.compose_mask_surface(crate::animation::Transform2D::identity(
+            crate::domain::Point { x: 0.5, y: 0.5 },
+            crate::domain::Point { x: 0.5, y: 0.5 },
+        ));
+        pool.reset_mask_coverage();
+        pool.feather_mask_surface(1.0);
+        assert_eq!(pool.stats().retained_buffers, 6);
+        assert_eq!(pool.stats().retained_bytes, 24);
+        assert_eq!(pool.stats().allocations, 6);
     }
 
     #[test]
@@ -611,20 +726,31 @@ mod tests {
         let mut pool = EffectSurfacePool::new(4, 2);
         pool.begin_effect(false);
         copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
+        assert_eq!(pool.stats().allocations, 2);
+        assert_eq!(pool.stats().reuses, 0);
         copy_pass(&mut pool, EffectResource::Current, EffectResource::Current);
-        assert_eq!(pool.stats().allocations, 8);
-        assert_eq!(pool.stats().reuses, 2);
+        assert_eq!(pool.stats().allocations, 2);
+        assert_eq!(pool.stats().reuses, 1);
 
         let cached = pool.take_current();
         assert_eq!(cached.dimensions(), (4, 2));
-        assert_eq!(pool.stats().allocations, 9);
-        assert_eq!(pool.stats().retained_buffers, 8);
-        assert_eq!(pool.stats().retained_bytes, 256);
+        assert_eq!(pool.stats().allocations, 3);
+        assert_eq!(pool.stats().retained_buffers, 2);
+        assert_eq!(pool.stats().retained_bytes, 64);
+        pool.current().fill(255);
+        assert!(cached.as_raw().iter().all(|&value| value == 0));
+        drop(pool);
+        assert!(cached.as_raw().iter().all(|&value| value == 0));
     }
 
     #[test]
     fn mask_feather_blurs_coverage_without_wrapping_edges() {
         let mut pool = EffectSurfacePool::new(5, 1);
+        pool.mask_local_surface();
+        pool.compose_mask_surface(crate::animation::Transform2D::identity(
+            crate::domain::Point { x: 0.5, y: 0.5 },
+            crate::domain::Point { x: 0.5, y: 0.5 },
+        ));
         pool.mask_surface.put_pixel(0, 0, Rgba([0, 0, 0, 255]));
         pool.mask_surface.put_pixel(1, 0, Rgba([0, 0, 0, 255]));
         pool.feather_mask_surface(1.0);
@@ -635,6 +761,11 @@ mod tests {
     #[test]
     fn mask_feather_has_a_smooth_monotonic_edge() {
         let mut pool = EffectSurfacePool::new(65, 65);
+        pool.mask_local_surface();
+        pool.compose_mask_surface(crate::animation::Transform2D::identity(
+            crate::domain::Point { x: 0.5, y: 0.5 },
+            crate::domain::Point { x: 0.5, y: 0.5 },
+        ));
         for y in 0..65 {
             for x in 32..65 {
                 pool.mask_surface.put_pixel(x, y, Rgba([0, 0, 0, 255]));
@@ -653,6 +784,11 @@ mod tests {
     #[test]
     fn large_feather_has_many_distinct_levels_without_secondary_edges() {
         let mut pool = EffectSurfacePool::new(257, 257);
+        pool.mask_local_surface();
+        pool.compose_mask_surface(crate::animation::Transform2D::identity(
+            crate::domain::Point { x: 0.5, y: 0.5 },
+            crate::domain::Point { x: 0.5, y: 0.5 },
+        ));
         for y in 0..257 {
             for x in 128..257 {
                 pool.mask_surface.put_pixel(x, y, Rgba([0, 0, 0, 255]));

@@ -1,6 +1,15 @@
 # Effects
 
-Visual effects are ordered canonical objects with `id`, `type` and descriptor parameters. Python classes in `vestra.effects` lower to them. The Rust descriptor catalog supplies canonical validation and generated-schema branches. No visual-effect constructor has an implicit parameter default unless the table says so: required values must be supplied. A scalar property accepts a number or `ScalarProperty` and may use keyframes/signal bindings; a plain track accepts keyframes but not signal bindings. `MotionTile.tile_center` and `RadialBlur.center` are dynamic point properties with a `base_value`, optional point keyframes, uniform `modifiers`, and independent `component_modifiers.x`/`.y` arrays.
+Visual effects are ordered canonical objects with `id`, `type` and descriptor parameters. Python classes in `vestra.effects` lower to them. The Rust descriptor catalog supplies canonical validation and generated-schema branches. The generated [parameter reference](effect-parameters.md) lists each effect's Python defaults, schema requirements, bounds, units and animation support. Python convenience defaults and omitted JSON fields are separate contracts. A scalar property accepts a number or `ScalarProperty` and may use keyframes/signal bindings; a plain track accepts keyframes but not signal bindings. `MotionTile.tile_center` and `RadialBlur.center` are dynamic point properties with a `base_value`, optional point keyframes, uniform `modifiers`, and independent `component_modifiers.x`/`.y` arrays.
+
+There are 23 canonical authored effects, each with its own JSON `type` and native
+descriptor. The internal catalog also contains `ColourTransform`, an execution
+representation excluded from the authored effect list. Python exports 24
+high-level effect constructors because `PseudoAscii` adapts `Ascii` with
+`glyph_style="geometric"`; both serialize as `type="ascii"`. Advanced authoring
+has 21 typed collection helpers and the generic `add_effect` path for all 23
+effects. `MotionTile` and `RadialBlur` use that generic path in advanced authoring;
+neither has a typed collection helper.
 
 Layer presentation uses two intrinsic effect stages:
 
@@ -23,26 +32,6 @@ The authored order is still the public order. For example, a canonical list
 `[MotionTile, DirectionalBlur, ChromaticAberration]` samples the virtual tiles,
 applies the layer transform, then runs Directional Blur followed by Chromatic
 Aberration. Masks and track mattes consume that presented result.
-
-| Python class / canonical type | Required parameters and limits | Scope |
-| --- | --- | --- |
-| `Brightness`, `Contrast`, `Saturation` | `amount`: finite scalar. | clip/global |
-| `Tint` | `colour`, `amount`: 0..1 scalar. | clip/global |
-| `GaussianBlur` | `radius`: 0..32 px scalar. | clip/global |
-| `MotionTile` | `output_width_percent`, `output_height_percent`: 100..800% scalars; `tile_center`: dynamic normalized point property; `mirror_edges`: boolean. | clip only, pre-transform |
-| `DirectionalBlur` | `radius`: 0..32 px scalar, `angle_degrees`: finite scalar. | clip/global |
-| `ZoomBlur` | `radius`: 0..32 px scalar, `samples`: integer 2..32, `anchor`: normalized point, `direction=ZoomBlurDirection.CENTERED` (`centered`, `inward`, `outward`). | clip/global |
-| `RadialBlur` | `amount`: 0..32 px scalar, `center`: dynamic normalized point property. | clip/global |
-| `Glow` | `threshold`: 0..1, `radius`: 0..32 px, `intensity`: 0..4 scalars, `colour`. | clip/global |
-| `Bloom` | `threshold`: 0..1, `radius`: 0..32 px, `intensity`: 0..4 scalars. | clip/global |
-| `ChromaticAberration` | `amount`: 0..32 px scalar, `angle_degrees`: finite scalar. | clip/global |
-| `Vignette` | `amount`: 0..1 scalar, `radius`: 0..2 scalar, `softness`: plain track in `(0, 2]`, `colour`. | clip/global |
-| `Sharpen` | `amount`: 0..4 scalar, `radius`: 0..16 px scalar. | clip/global |
-| `PaletteMap` / `palette_map` | `palette=("#000000", "#ffffff")`: 2..16 opaque colors; `mode="gradient"`; `amount=1`: 0..1 scalar; `phase=0`: finite scalar in cycles; `period=None`: optional positive seconds. | clip/global |
-| `OrderedDither` / `ordered_dither` | Same palette, amount, phase and period; `mode="nearest"`; `strength=1`: 0..1 scalar; `matrix="bayer8"` (`bayer2`, `bayer4`, `bayer8`, `blue_noise`); `seed=0`: integer 0..4294967295; `scale=1`: integer 1..32 output pixels per threshold cell. | clip/global |
-| `ColorAdjust` | `exposure`: -8..8 scalar, `gamma`: `(0, 8]` scalar, `black_point`: plain track `[0, 1)`, `white_point`: plain track `(0, 1]`. | clip/global |
-| `CameraShake` | `position_amount`, `rotation_degrees`, `scale_amount`: non-negative scalars; `frequency`: positive scalar; `seed`: unsigned integer; `attack`: non-negative seconds; `decay`: positive seconds; `active_interval=ActiveInterval()`. | clip only |
-| `MotionBlur` | `intensity`: non-negative scalar, `shutter_angle`: 0..360 degrees scalar, `max_radius`: 0..32 px scalar, `samples`: integer 2..32. | clip only |
 
 Numbers must be finite. Stack order is execution order within each intrinsic
 stage. Motion Tile is valid only on a clip layer, only one Motion Tile may
@@ -327,6 +316,13 @@ presets: `halftone_print()`, `analog_monitor(period=...)`, and
 global effect. `PseudoAscii` is a Python convenience selecting
 `glyph_style="geometric"`; it uses the same cell analysis, color and alpha
 semantics with antialiased density-ranked dots, lines and crosses.
+
+The v1 JSON contract has a preserved legacy inconsistency: the schema marks
+`glyph_style`, `mode` and `color_mode` optional with defaults, but the Rust parser
+requires all three fields. Include them explicitly in canonical JSON. Python
+authoring supplies them. Compatibility tests assert both the schema's acceptance
+of each omission and the parser's corresponding missing-field error; generation
+does not reconcile this mismatch.
 
 | Control | Python default | Contract |
 | --- | --- | --- |

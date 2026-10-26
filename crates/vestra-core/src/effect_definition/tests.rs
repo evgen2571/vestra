@@ -194,3 +194,20 @@ fn plain_track_constraints_are_owned_by_their_targets() {
         (Some(0.0), Some(1.0), true, false)
     );
 }
+
+#[test]
+fn canonical_catalog_excludes_only_the_internal_colour_transform_kind() {
+    assert_eq!(VisualEffectKind::ALL.len(), 24);
+    let canonical: Vec<_> = super::visual_effect_descriptors().collect();
+    assert_eq!(canonical.len(), 23);
+    assert_eq!(
+        VisualEffectKind::ALL
+            .iter()
+            .filter(|kind| !canonical
+                .iter()
+                .any(|effect| effect.id == kind.descriptor().id))
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![VisualEffectKind::ColourTransform]
+    );
+}

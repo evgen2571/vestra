@@ -141,6 +141,10 @@ representable by the engine's checked timeline arithmetic, including the
 enforce smaller budgets; their defaults are `u64::MAX` and `f64::MAX`.
 Dimension, decoded-memory, cache, complexity and active-layer limits remain
 in force.
+Image preparation checks the projected RGBA byte size against per-asset and
+cumulative decoded-memory limits before decoding pixels, then checks the actual
+decoded dimensions again. These limits do not bound all decoder scratch memory
+or whole-process memory.
 
 JSON Schema provides machine-readable structural validation: field names,
 types, tags, and basic ranges. Canonical semantic validation checks cross-field

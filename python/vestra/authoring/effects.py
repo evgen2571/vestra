@@ -1472,21 +1472,58 @@ class _EffectCollection:
         values.pop("id")
         values.pop("type")
         return self._append(GenericEffect._create, id, definition, values)
-    def add_brightness(self, *, amount: int | float, id: str | None = None) -> BrightnessEffect: return self._append(BrightnessEffect._create, id, "brightness", amount)
-    def add_contrast(self, *, amount: int | float, id: str | None = None) -> ContrastEffect: return self._append(ContrastEffect._create, id, "contrast", amount)
-    def add_saturation(self, *, amount: int | float, id: str | None = None) -> SaturationEffect: return self._append(SaturationEffect._create, id, "saturation", amount)
-    def add_tint(self, *, colour: Color | str, amount: int | float, id: str | None = None) -> TintEffect: return self._append(TintEffect._create, id, colour, amount)
-    def add_gaussian_blur(self, *, radius: int | float, id: str | None = None) -> GaussianBlurEffect: return self._append(GaussianBlurEffect._create, id, radius)
-    def add_directional_blur(self, *, radius: int | float, angle_degrees: int | float, id: str | None = None) -> DirectionalBlurEffect: return self._append(DirectionalBlurEffect._create, id, radius, angle_degrees)
-    def add_zoom_blur(self, *, radius: int | float, samples: int, anchor: Point, direction: ZoomBlurDirection = ZoomBlurDirection.CENTERED, id: str | None = None) -> ZoomBlurEffect: return self._append(ZoomBlurEffect._create, id, radius, samples, anchor, direction)
-    def add_glow(self, *, threshold: int | float, radius: int | float, intensity: int | float, colour: Color | str, id: str | None = None) -> GlowEffect: return self._append(GlowEffect._create, id, threshold, radius, intensity, colour)
-    def add_bloom(self, *, threshold: int | float, radius: int | float, intensity: int | float, id: str | None = None) -> BloomEffect: return self._append(BloomEffect._create, id, threshold, radius, intensity)
-    def add_chromatic_aberration(self, *, amount: int | float, angle_degrees: int | float, id: str | None = None) -> ChromaticAberrationEffect: return self._append(ChromaticAberrationEffect._create, id, amount, angle_degrees)
-    def add_vignette(self, *, amount: int | float, radius: int | float, softness: int | float, colour: Color | str, id: str | None = None) -> VignetteEffect: return self._append(VignetteEffect._create, id, amount, radius, softness, colour)
-    def add_sharpen(self, *, amount: int | float, radius: int | float, id: str | None = None) -> SharpenEffect: return self._append(SharpenEffect._create, id, amount, radius)
-    def add_color_adjust(self, *, exposure: int | float, gamma: int | float, black_point: int | float, white_point: int | float, id: str | None = None) -> ColorAdjustEffect: return self._append(ColorAdjustEffect._create, id, exposure, gamma, black_point, white_point)
+    # BEGIN GENERATED EFFECT HELPERS
+    def add_ascii(
+        self,
+        *,
+        characters: str = ' .:-=+*#%@',
+        edge_characters: str = '-|/\\',
+        font: FontAsset | None = None,
+        glyph_style: AsciiGlyphStyle | str = AsciiGlyphStyle.CHARACTERS,
+        mode: AsciiMode | str = AsciiMode.HYBRID,
+        color_mode: AsciiColorMode | str = AsciiColorMode.MONOCHROME,
+        foreground: Color | str = '#ffffff',
+        background: Color | str = '#000000',
+        palette: Sequence[Color | str] = ('#000000', '#ffffff'),
+        invert: bool = False,
+        cell_width: int | float | ScalarTrack = 8,
+        cell_height: int | float | ScalarTrack = 12,
+        edge_threshold: int | float | ScalarTrack = 0.15,
+        edge_strength: int | float | ScalarTrack = 1,
+        source_mix: int | float | ScalarTrack = 0,
+        amount: int | float | ScalarTrack = 1,
+        phase: int | float | ScalarTrack = 0,
+        period: int | float | None = None,
+        id: str | None = None,
+    ) -> AsciiEffect:
+        return self._append(
+            AsciiEffect._create_palette,
+            id,
+            {
+                'characters': characters,
+                'edge_characters': edge_characters,
+                'font': font,
+                'glyph_style': glyph_style,
+                'mode': mode,
+                'color_mode': color_mode,
+                'foreground': foreground,
+                'background': background,
+                'palette': palette,
+                'invert': invert,
+                'cell_width': cell_width,
+                'cell_height': cell_height,
+                'edge_threshold': edge_threshold,
+                'edge_strength': edge_strength,
+                'source_mix': source_mix,
+                'amount': amount,
+                'phase': phase,
+                'period': period,
+            },
+        )
 
-    def add_halftone(self, *,
+    def add_halftone(
+        self,
+        *,
         cell_size: int | float | ScalarTrack = 6,
         angle_degrees: int | float | ScalarTrack = 15,
         softness: int | float | ScalarTrack = 0.5,
@@ -1497,9 +1534,24 @@ class _EffectCollection:
         invert: bool = False,
         id: str | None = None,
     ) -> HalftoneEffect:
-        return self._append(HalftoneEffect._create_stylized, id, {"cell_size": cell_size, "angle_degrees": angle_degrees, "softness": softness, "amount": amount, "mode": mode, "foreground": foreground, "background": background, "invert": invert})
+        return self._append(
+            HalftoneEffect._create_stylized,
+            id,
+            {
+                'cell_size': cell_size,
+                'angle_degrees': angle_degrees,
+                'softness': softness,
+                'amount': amount,
+                'mode': mode,
+                'foreground': foreground,
+                'background': background,
+                'invert': invert,
+            },
+        )
 
-    def add_pixel_sort(self, *,
+    def add_pixel_sort(
+        self,
+        *,
         lower_threshold: int | float | ScalarTrack = 0.15,
         upper_threshold: int | float | ScalarTrack = 0.9,
         amount: int | float | ScalarTrack = 1,
@@ -1508,9 +1560,22 @@ class _EffectCollection:
         segment_length: int = 64,
         id: str | None = None,
     ) -> PixelSortEffect:
-        return self._append(PixelSortEffect._create_stylized, id, {"lower_threshold": lower_threshold, "upper_threshold": upper_threshold, "amount": amount, "direction": direction, "order": order, "segment_length": segment_length})
+        return self._append(
+            PixelSortEffect._create_stylized,
+            id,
+            {
+                'lower_threshold': lower_threshold,
+                'upper_threshold': upper_threshold,
+                'amount': amount,
+                'direction': direction,
+                'order': order,
+                'segment_length': segment_length,
+            },
+        )
 
-    def add_crt(self, *,
+    def add_crt(
+        self,
+        *,
         amount: int | float | ScalarTrack = 1,
         curvature: int | float | ScalarTrack = 0.08,
         scanline_strength: int | float | ScalarTrack = 0.2,
@@ -1527,63 +1592,358 @@ class _EffectCollection:
         seed: int = 0,
         id: str | None = None,
     ) -> CrtEffect:
-        return self._append(CrtEffect._create_stylized, id, {"amount": amount, "curvature": curvature, "scanline_strength": scanline_strength, "scanline_spacing": scanline_spacing, "mask_strength": mask_strength, "grain": grain, "jitter": jitter, "flicker": flicker, "rolling_strength": rolling_strength, "rolling_width": rolling_width, "phase": phase, "mask_spacing": mask_spacing, "period": period, "seed": seed})
-
-    def add_ascii(self, *, characters: str = " .:-=+*#%@", edge_characters: str = "-|/\\",
-        font: FontAsset | None = None, glyph_style: AsciiGlyphStyle | str = AsciiGlyphStyle.CHARACTERS,
-        mode: AsciiMode | str = AsciiMode.HYBRID, color_mode: AsciiColorMode | str = AsciiColorMode.MONOCHROME,
-        foreground: Color | str = "#ffffff", background: Color | str = "#000000",
-        palette: Sequence[Color | str] = ("#000000", "#ffffff"), invert: bool = False,
-        cell_width: int | float | ScalarTrack = 8, cell_height: int | float | ScalarTrack = 12,
-        edge_threshold: int | float | ScalarTrack = .15, edge_strength: int | float | ScalarTrack = 1,
-        source_mix: int | float | ScalarTrack = 0, amount: int | float | ScalarTrack = 1,
-        phase: int | float | ScalarTrack = 0, period: int | float | None = None, id: str | None = None,
-    ) -> AsciiEffect:
-        return self._append(AsciiEffect._create_palette, id, {
-            "characters": characters, "edge_characters": edge_characters, "font": font,
-            "glyph_style": glyph_style, "mode": mode, "color_mode": color_mode,
-            "foreground": foreground, "background": background, "palette": palette, "invert": invert,
-            "cell_width": cell_width, "cell_height": cell_height, "edge_threshold": edge_threshold,
-            "edge_strength": edge_strength, "source_mix": source_mix, "amount": amount,
-            "phase": phase, "period": period,
-        })
+        return self._append(
+            CrtEffect._create_stylized,
+            id,
+            {
+                'amount': amount,
+                'curvature': curvature,
+                'scanline_strength': scanline_strength,
+                'scanline_spacing': scanline_spacing,
+                'mask_strength': mask_strength,
+                'grain': grain,
+                'jitter': jitter,
+                'flicker': flicker,
+                'rolling_strength': rolling_strength,
+                'rolling_width': rolling_width,
+                'phase': phase,
+                'mask_spacing': mask_spacing,
+                'period': period,
+                'seed': seed,
+            },
+        )
 
     def add_palette_map(
-        self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
-        input_exposure: int | float | ScalarTrack = 0, input_gamma: int | float | ScalarTrack = 1,
-        input_detail: int | float | ScalarTrack = 0, input_detail_radius: int | float | ScalarTrack = 1,
-        input_scale: int | float | ScalarTrack = 1, input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
-        amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
-        period: int | float | None = None, mode: PaletteMode | str = PaletteMode.GRADIENT,
-        levels: int = 4, stops: Sequence[int | float] | None = None,
+        self,
+        *,
+        palette: Sequence[Color | str] = ('#000000', '#ffffff'),
+        input_exposure: int | float | ScalarTrack = 0,
+        input_gamma: int | float | ScalarTrack = 1,
+        input_detail: int | float | ScalarTrack = 0,
+        input_detail_radius: int | float | ScalarTrack = 1,
+        input_scale: int | float | ScalarTrack = 1,
+        input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
+        amount: int | float | ScalarTrack = 1,
+        phase: int | float | ScalarTrack = 0,
+        period: int | float | None = None,
+        mode: PaletteMode | str = PaletteMode.GRADIENT,
+        levels: int = 4,
+        stops: Sequence[int | float] | None = None,
         interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
         id: str | None = None,
     ) -> PaletteMapEffect:
-        return self._append(PaletteMapEffect._create_palette, id, {
-            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "input_scale": input_scale, "input_filter": input_filter, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
-        })
+        return self._append(
+            PaletteMapEffect._create_palette,
+            id,
+            {
+                'palette': palette,
+                'input_exposure': input_exposure,
+                'input_gamma': input_gamma,
+                'input_detail': input_detail,
+                'input_detail_radius': input_detail_radius,
+                'input_scale': input_scale,
+                'input_filter': input_filter,
+                'amount': amount,
+                'phase': phase,
+                'period': period,
+                'mode': mode,
+                'levels': levels,
+                'stops': stops,
+                'interpolation': interpolation,
+            },
+        )
 
     def add_ordered_dither(
-        self, *, palette: Sequence[Color | str] = ("#000000", "#ffffff"),
-        input_exposure: int | float | ScalarTrack = 0, input_gamma: int | float | ScalarTrack = 1,
-        input_detail: int | float | ScalarTrack = 0, input_detail_radius: int | float | ScalarTrack = 1,
-        input_scale: int | float | ScalarTrack = 1, input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
-        amount: int | float | ScalarTrack = 1, phase: int | float | ScalarTrack = 0,
-        period: int | float | None = None, mode: PaletteMode | str = PaletteMode.NEAREST,
-        levels: int = 4, stops: Sequence[int | float] | None = None,
+        self,
+        *,
+        palette: Sequence[Color | str] = ('#000000', '#ffffff'),
+        input_exposure: int | float | ScalarTrack = 0,
+        input_gamma: int | float | ScalarTrack = 1,
+        input_detail: int | float | ScalarTrack = 0,
+        input_detail_radius: int | float | ScalarTrack = 1,
+        input_scale: int | float | ScalarTrack = 1,
+        input_filter: PaletteInputFilter | str = PaletteInputFilter.AREA,
+        amount: int | float | ScalarTrack = 1,
+        phase: int | float | ScalarTrack = 0,
+        period: int | float | None = None,
+        mode: PaletteMode | str = PaletteMode.NEAREST,
+        levels: int = 4,
+        stops: Sequence[int | float] | None = None,
         interpolation: PaletteInterpolation | str = PaletteInterpolation.RGB,
-        strength: int | float | ScalarTrack = 1, matrix: DitherMatrix | str = DitherMatrix.BAYER8,
-        scale: int = 1, seed: int = 0, id: str | None = None,
+        strength: int | float | ScalarTrack = 1,
+        matrix: DitherMatrix | str = DitherMatrix.BAYER8,
+        scale: int = 1,
+        seed: int = 0,
+        id: str | None = None,
     ) -> OrderedDitherEffect:
-        return self._append(OrderedDitherEffect._create_palette, id, {
-            "palette": palette, "input_exposure": input_exposure, "input_gamma": input_gamma, "input_detail": input_detail, "input_detail_radius": input_detail_radius, "input_scale": input_scale, "input_filter": input_filter, "amount": amount, "phase": phase, "period": period, "mode": mode, "levels": levels, "stops": stops, "interpolation": interpolation,
-            "strength": strength, "matrix": matrix, "scale": scale, "seed": seed,
-        })
+        return self._append(
+            OrderedDitherEffect._create_palette,
+            id,
+            {
+                'palette': palette,
+                'input_exposure': input_exposure,
+                'input_gamma': input_gamma,
+                'input_detail': input_detail,
+                'input_detail_radius': input_detail_radius,
+                'input_scale': input_scale,
+                'input_filter': input_filter,
+                'amount': amount,
+                'phase': phase,
+                'period': period,
+                'mode': mode,
+                'levels': levels,
+                'stops': stops,
+                'interpolation': interpolation,
+                'strength': strength,
+                'matrix': matrix,
+                'scale': scale,
+                'seed': seed,
+            },
+        )
+
+    def add_brightness(
+        self,
+        *,
+        amount: int | float,
+        id: str | None = None,
+    ) -> BrightnessEffect:
+        return self._append(
+            BrightnessEffect._create,
+            id,
+            'brightness',
+            amount,
+        )
+
+    def add_contrast(
+        self,
+        *,
+        amount: int | float,
+        id: str | None = None,
+    ) -> ContrastEffect:
+        return self._append(
+            ContrastEffect._create,
+            id,
+            'contrast',
+            amount,
+        )
+
+    def add_saturation(
+        self,
+        *,
+        amount: int | float,
+        id: str | None = None,
+    ) -> SaturationEffect:
+        return self._append(
+            SaturationEffect._create,
+            id,
+            'saturation',
+            amount,
+        )
+
+    def add_tint(
+        self,
+        *,
+        colour: Color | str,
+        amount: int | float,
+        id: str | None = None,
+    ) -> TintEffect:
+        return self._append(
+            TintEffect._create,
+            id,
+            colour,
+            amount,
+        )
+
+    def add_gaussian_blur(
+        self,
+        *,
+        radius: int | float,
+        id: str | None = None,
+    ) -> GaussianBlurEffect:
+        return self._append(
+            GaussianBlurEffect._create,
+            id,
+            radius,
+        )
+
+    def add_directional_blur(
+        self,
+        *,
+        radius: int | float,
+        angle_degrees: int | float,
+        id: str | None = None,
+    ) -> DirectionalBlurEffect:
+        return self._append(
+            DirectionalBlurEffect._create,
+            id,
+            radius,
+            angle_degrees,
+        )
+
+    def add_zoom_blur(
+        self,
+        *,
+        radius: int | float,
+        samples: int,
+        anchor: Point,
+        direction: ZoomBlurDirection = ZoomBlurDirection.CENTERED,
+        id: str | None = None,
+    ) -> ZoomBlurEffect:
+        return self._append(
+            ZoomBlurEffect._create,
+            id,
+            radius,
+            samples,
+            anchor,
+            direction,
+        )
+
+    def add_glow(
+        self,
+        *,
+        threshold: int | float,
+        radius: int | float,
+        intensity: int | float,
+        colour: Color | str,
+        id: str | None = None,
+    ) -> GlowEffect:
+        return self._append(
+            GlowEffect._create,
+            id,
+            threshold,
+            radius,
+            intensity,
+            colour,
+        )
+
+    def add_bloom(
+        self,
+        *,
+        threshold: int | float,
+        radius: int | float,
+        intensity: int | float,
+        id: str | None = None,
+    ) -> BloomEffect:
+        return self._append(
+            BloomEffect._create,
+            id,
+            threshold,
+            radius,
+            intensity,
+        )
+
+    def add_chromatic_aberration(
+        self,
+        *,
+        amount: int | float,
+        angle_degrees: int | float,
+        id: str | None = None,
+    ) -> ChromaticAberrationEffect:
+        return self._append(
+            ChromaticAberrationEffect._create,
+            id,
+            amount,
+            angle_degrees,
+        )
+
+    def add_vignette(
+        self,
+        *,
+        amount: int | float,
+        radius: int | float,
+        softness: int | float,
+        colour: Color | str,
+        id: str | None = None,
+    ) -> VignetteEffect:
+        return self._append(
+            VignetteEffect._create,
+            id,
+            amount,
+            radius,
+            softness,
+            colour,
+        )
+
+    def add_sharpen(
+        self,
+        *,
+        amount: int | float,
+        radius: int | float,
+        id: str | None = None,
+    ) -> SharpenEffect:
+        return self._append(
+            SharpenEffect._create,
+            id,
+            amount,
+            radius,
+        )
+
+    def add_color_adjust(
+        self,
+        *,
+        exposure: int | float,
+        gamma: int | float,
+        black_point: int | float,
+        white_point: int | float,
+        id: str | None = None,
+    ) -> ColorAdjustEffect:
+        return self._append(
+            ColorAdjustEffect._create,
+            id,
+            exposure,
+            gamma,
+            black_point,
+            white_point,
+        )
+    # END GENERATED EFFECT HELPERS
 
 
 class ClipEffectCollection(_EffectCollection):
-    def add_camera_shake(self, *, active_interval: ActiveInterval = ActiveInterval(), position_amount: int | float, rotation_degrees: int | float, scale_amount: int | float, frequency: int | float, seed: int, attack: int | float, decay: int | float, id: str | None = None) -> CameraShakeEffect: return self._append(CameraShakeEffect._create, id, active_interval, position_amount, rotation_degrees, scale_amount, frequency, seed, attack, decay)
-    def add_motion_blur(self, *, intensity: int | float, shutter_angle: int | float, max_radius: int | float, samples: int, id: str | None = None) -> MotionBlurEffect: return self._append(MotionBlurEffect._create, id, intensity, shutter_angle, max_radius, samples)
+    # BEGIN GENERATED CLIP EFFECT HELPERS
+    def add_camera_shake(
+        self,
+        *,
+        active_interval: ActiveInterval = ActiveInterval(),
+        position_amount: int | float,
+        rotation_degrees: int | float,
+        scale_amount: int | float,
+        frequency: int | float,
+        seed: int,
+        attack: int | float,
+        decay: int | float,
+        id: str | None = None,
+    ) -> CameraShakeEffect:
+        return self._append(
+            CameraShakeEffect._create,
+            id,
+            active_interval,
+            position_amount,
+            rotation_degrees,
+            scale_amount,
+            frequency,
+            seed,
+            attack,
+            decay,
+        )
+
+    def add_motion_blur(
+        self,
+        *,
+        intensity: int | float,
+        shutter_angle: int | float,
+        max_radius: int | float,
+        samples: int,
+        id: str | None = None,
+    ) -> MotionBlurEffect:
+        return self._append(
+            MotionBlurEffect._create,
+            id,
+            intensity,
+            shutter_angle,
+            max_radius,
+            samples,
+        )
+    # END GENERATED CLIP EFFECT HELPERS
 
 
 class PostEffectCollection(_EffectCollection):

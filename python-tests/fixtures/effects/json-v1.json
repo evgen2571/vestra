@@ -1,0 +1,6631 @@
+{
+  "cases": [
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "ascii",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: missing field `glyph_style`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "omit": [
+          "color_mode",
+          "glyph_style",
+          "mode",
+          "period"
+        ]
+      },
+      "parse_valid": false,
+      "schema_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "ascii",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "cell_height": {
+            "base_value": 2.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 2.0
+              }
+            ]
+          },
+          "cell_width": {
+            "base_value": 2.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 2.0
+              }
+            ]
+          },
+          "edge_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "edge_threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "source_mix": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "cell_height": {
+            "base_value": 2.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 2.0
+              }
+            ]
+          },
+          "cell_width": {
+            "base_value": 2.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 2.0
+              }
+            ]
+          },
+          "edge_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "edge_threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "source_mix": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "ascii",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `characters`, `edge_characters`, `font`, `glyph_style`, `mode`, `color_mode`, `foreground`, `background`, `palette`, `invert`, `period`, `amount`, `phase`, `cell_width`, `cell_height`, `edge_threshold`, `edge_strength`, `source_mix`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "halftone",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "halftone",
+      "input_delta": {
+        "omit": [
+          "mode"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "halftone",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "angle_degrees": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "cell_size": {
+            "base_value": 2.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 2.0
+              }
+            ]
+          },
+          "softness": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "angle_degrees": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "cell_size": {
+            "base_value": 2.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 2.0
+              }
+            ]
+          },
+          "softness": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_cell_size",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/cell_size/base_value"
+        }
+      ],
+      "effect_id": "halftone",
+      "input_delta": {
+        "set": {
+          "cell_size": {
+            "base_value": 1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "cell_size": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "halftone",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `cell_size`, `angle_degrees`, `softness`, `amount`, `mode`, `foreground`, `background`, `invert`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "pixel_sort",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "pixel_sort",
+      "input_delta": {
+        "omit": [
+          "direction",
+          "order"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "pixel_sort",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "lower_threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "upper_threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "lower_threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "upper_threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_lower_threshold",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/lower_threshold/base_value"
+        }
+      ],
+      "effect_id": "pixel_sort",
+      "input_delta": {
+        "set": {
+          "lower_threshold": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "lower_threshold": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "pixel_sort",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `lower_threshold`, `upper_threshold`, `amount`, `direction`, `order`, `segment_length`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "crt",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "crt",
+      "input_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "crt",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "curvature": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "flicker": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "grain": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "jitter": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "mask_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "rolling_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "rolling_width": {
+            "base_value": 0.01,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.01
+              }
+            ]
+          },
+          "scanline_spacing": {
+            "base_value": 1.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 1.0
+              }
+            ]
+          },
+          "scanline_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "curvature": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "flicker": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "grain": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "jitter": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "mask_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "rolling_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "rolling_width": {
+            "base_value": 0.01,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.01
+              }
+            ]
+          },
+          "scanline_spacing": {
+            "base_value": 1.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 1.0
+              }
+            ]
+          },
+          "scanline_strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "crt",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "crt",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `amount`, `curvature`, `scanline_strength`, `scanline_spacing`, `mask_strength`, `grain`, `jitter`, `flicker`, `rolling_strength`, `rolling_width`, `phase`, `mask_spacing`, `period`, `seed`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_detail",
+          "input_detail_radius",
+          "input_exposure",
+          "input_filter",
+          "input_gamma",
+          "input_scale",
+          "interpolation",
+          "levels",
+          "mode",
+          "period",
+          "stops"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period",
+          "stops"
+        ],
+        "set": {
+          "input_detail_radius": {
+            "base_value": 1.0,
+            "keyframes": []
+          },
+          "input_exposure": {
+            "base_value": 0.0,
+            "keyframes": []
+          },
+          "input_gamma": {
+            "base_value": 1.0,
+            "keyframes": []
+          },
+          "levels": 4
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail_radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_exposure": {
+            "base_value": -8.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": -8.0
+              }
+            ]
+          },
+          "input_gamma": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "input_scale": {
+            "base_value": 1.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 1.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail_radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_exposure": {
+            "base_value": -8.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": -8.0
+              }
+            ]
+          },
+          "input_gamma": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "input_scale": {
+            "base_value": 1.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 1.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_input_exposure",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/input_exposure/base_value"
+        }
+      ],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "set": {
+          "input_exposure": {
+            "base_value": -9.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_exposure": {
+            "base_value": -9.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `palette`, `stops`, `interpolation`, `input_exposure`, `input_gamma`, `input_detail`, `input_detail_radius`, `input_scale`, `input_filter`, `mode`, `levels`, `amount`, `phase`, `period`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_detail",
+          "input_detail_radius",
+          "input_exposure",
+          "input_filter",
+          "input_gamma",
+          "input_scale",
+          "interpolation",
+          "levels",
+          "matrix",
+          "mode",
+          "period",
+          "seed",
+          "stops"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period",
+          "stops"
+        ],
+        "set": {
+          "input_detail_radius": {
+            "base_value": 1.0,
+            "keyframes": []
+          },
+          "input_exposure": {
+            "base_value": 0.0,
+            "keyframes": []
+          },
+          "input_gamma": {
+            "base_value": 1.0,
+            "keyframes": []
+          },
+          "levels": 4
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail_radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_exposure": {
+            "base_value": -8.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": -8.0
+              }
+            ]
+          },
+          "input_gamma": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "input_scale": {
+            "base_value": 1.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 1.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_detail_radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "input_exposure": {
+            "base_value": -8.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": -8.0
+              }
+            ]
+          },
+          "input_gamma": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "input_scale": {
+            "base_value": 1.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 1.0
+              }
+            ]
+          },
+          "phase": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "strength": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_input_exposure",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/input_exposure/base_value"
+        }
+      ],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "set": {
+          "input_exposure": {
+            "base_value": -9.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_exposure": {
+            "base_value": -9.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `palette`, `stops`, `interpolation`, `input_exposure`, `input_gamma`, `input_detail`, `input_detail_radius`, `input_scale`, `input_filter`, `mode`, `levels`, `amount`, `phase`, `period`, `strength`, `matrix`, `scale`, `seed`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "brightness",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "brightness",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "brightness",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "brightness",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected `id` or `amount`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "contrast",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "contrast",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "contrast",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "contrast",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected `id` or `amount`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "saturation",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "saturation",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "saturation",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "saturation",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected `id` or `amount`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "tint",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "tint",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "tint",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "tint",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "tint",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `colour`, `amount`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "gaussian_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "gaussian_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "gaussian_blur",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_radius",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/radius/base_value"
+        }
+      ],
+      "effect_id": "gaussian_blur",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "gaussian_blur",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected `id` or `radius`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "motion_tile",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "motion_tile",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "motion_tile",
+      "input_delta": {
+        "set": {
+          "output_height_percent": {
+            "base_value": 100.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 100.0
+              }
+            ]
+          },
+          "output_width_percent": {
+            "base_value": 100.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 100.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "output_height_percent": {
+            "base_value": 100.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 100.0
+              }
+            ]
+          },
+          "output_width_percent": {
+            "base_value": 100.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 100.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_output_width_percent",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/output_width_percent/base_value"
+        }
+      ],
+      "effect_id": "motion_tile",
+      "input_delta": {
+        "set": {
+          "output_width_percent": {
+            "base_value": 99.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "output_width_percent": {
+            "base_value": 99.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "motion_tile",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `output_width_percent`, `output_height_percent`, `tile_center`, `mirror_edges`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "directional_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "directional_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "directional_blur",
+      "input_delta": {
+        "set": {
+          "angle_degrees": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "angle_degrees": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_radius",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/radius/base_value"
+        }
+      ],
+      "effect_id": "directional_blur",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "directional_blur",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `radius`, `angle_degrees`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "zoom_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "zoom_blur",
+      "input_delta": {
+        "omit": [
+          "direction"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "zoom_blur",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_radius",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/radius/base_value"
+        }
+      ],
+      "effect_id": "zoom_blur",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "zoom_blur",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `radius`, `samples`, `anchor`, `direction`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "radial_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "radial_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "radial_blur",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "radial_blur",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "radial_blur",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `amount`, `center`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_threshold",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/threshold/base_value"
+        }
+      ],
+      "effect_id": "glow",
+      "input_delta": {
+        "set": {
+          "threshold": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "threshold": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `threshold`, `radius`, `intensity`, `colour`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "bloom",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "bloom",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "bloom",
+      "input_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "threshold": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_threshold",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/threshold/base_value"
+        }
+      ],
+      "effect_id": "bloom",
+      "input_delta": {
+        "set": {
+          "threshold": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "threshold": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "bloom",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `threshold`, `radius`, `intensity`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "chromatic_aberration",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "chromatic_aberration",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "chromatic_aberration",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "angle_degrees": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "angle_degrees": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "chromatic_aberration",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "chromatic_aberration",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `amount`, `angle_degrees`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "softness": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "softness": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "vignette",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `amount`, `radius`, `softness`, `colour`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "sharpen",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "sharpen",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "sharpen",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/amount/base_value"
+        }
+      ],
+      "effect_id": "sharpen",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "sharpen",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `amount`, `radius`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "black_point": {
+            "base_value": 0.25,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.25
+              }
+            ]
+          },
+          "exposure": {
+            "base_value": -8.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": -8.0
+              }
+            ]
+          },
+          "gamma": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "white_point": {
+            "base_value": 0.75,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.75
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "black_point": {
+            "base_value": 0.25,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.25
+              }
+            ]
+          },
+          "exposure": {
+            "base_value": -8.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": -8.0
+              }
+            ]
+          },
+          "gamma": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "white_point": {
+            "base_value": 0.75,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.75
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_exposure",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/exposure/base_value"
+        }
+      ],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "exposure": {
+            "base_value": -9.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "exposure": {
+            "base_value": -9.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `exposure`, `gamma`, `black_point`, `white_point`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "camera_shake",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "camera_shake",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "camera_shake",
+      "input_delta": {
+        "set": {
+          "frequency": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "position_amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "rotation_degrees": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "scale_amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "frequency": {
+            "base_value": 0.5,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.5
+              }
+            ]
+          },
+          "position_amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "rotation_degrees": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "scale_amount": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_position_amount",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/position_amount/base_value"
+        }
+      ],
+      "effect_id": "camera_shake",
+      "input_delta": {
+        "set": {
+          "position_amount": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "position_amount": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: unknown field `unexpected`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "explicit",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omitted_optional",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "animated",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "max_radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "shutter_angle": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "max_radius": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          },
+          "shutter_angle": {
+            "base_value": 0.0,
+            "keyframes": [
+              {
+                "interpolation": "linear",
+                "time": 1.0,
+                "value": 0.0
+              }
+            ]
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "invalid_intensity",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/intensity/base_value"
+        }
+      ],
+      "effect_id": "motion_blur",
+      "input_delta": {
+        "set": {
+          "intensity": {
+            "base_value": -1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "intensity": {
+            "base_value": -1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "unknown_field",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: unknown field `unexpected`, expected one of `id`, `intensity`, `shutter_angle`, `max_radius`, `samples`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "unexpected": true
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_font",
+      "diagnostics": [],
+      "effect_id": "ascii",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_font",
+      "diagnostics": [],
+      "effect_id": "ascii",
+      "input_delta": {
+        "set": {
+          "font": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": false,
+      "semantic_valid": true
+    },
+    {
+      "case": "omit_glyph_style",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: missing field `glyph_style`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "omit": [
+          "glyph_style"
+        ]
+      },
+      "parse_valid": false,
+      "schema_valid": true
+    },
+    {
+      "case": "null_glyph_style",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "glyph_style": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_mode",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: missing field `mode`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "omit": [
+          "mode"
+        ]
+      },
+      "parse_valid": false,
+      "schema_valid": true
+    },
+    {
+      "case": "null_mode",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "mode": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_color_mode",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: missing field `color_mode`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "omit": [
+          "color_mode"
+        ]
+      },
+      "parse_valid": false,
+      "schema_valid": true
+    },
+    {
+      "case": "null_color_mode",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "color_mode": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_period",
+      "diagnostics": [],
+      "effect_id": "ascii",
+      "input_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_period",
+      "diagnostics": [],
+      "effect_id": "ascii",
+      "input_delta": {
+        "set": {
+          "period": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "ascii",
+      "exception": "project does not match the canonical format: unknown variant `ascii_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "ascii_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_mode",
+      "diagnostics": [],
+      "effect_id": "halftone",
+      "input_delta": {
+        "omit": [
+          "mode"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_mode",
+      "effect_id": "halftone",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "mode": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "halftone",
+      "exception": "project does not match the canonical format: unknown variant `halftone_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "halftone_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_direction",
+      "diagnostics": [],
+      "effect_id": "pixel_sort",
+      "input_delta": {
+        "omit": [
+          "direction"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_direction",
+      "effect_id": "pixel_sort",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "direction": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_order",
+      "diagnostics": [],
+      "effect_id": "pixel_sort",
+      "input_delta": {
+        "omit": [
+          "order"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_order",
+      "effect_id": "pixel_sort",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "order": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "pixel_sort",
+      "exception": "project does not match the canonical format: unknown variant `pixel_sort_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "pixel_sort_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_period",
+      "diagnostics": [],
+      "effect_id": "crt",
+      "input_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_period",
+      "diagnostics": [],
+      "effect_id": "crt",
+      "input_delta": {
+        "set": {
+          "period": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "crt",
+      "exception": "project does not match the canonical format: unknown variant `crt_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "crt_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_stops",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "stops"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "stops"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_stops",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "set": {
+          "stops": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "stops"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omit_interpolation",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "interpolation"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_interpolation",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "interpolation": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_levels",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "levels"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "levels": 4
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_levels",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected u16",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "levels": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_mode",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "mode"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_mode",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "mode": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_exposure",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_exposure"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_exposure": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_exposure",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_exposure": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_gamma",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_gamma"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_gamma": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_gamma",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_gamma": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_detail",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_detail"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_detail",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_detail": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_detail_radius",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_detail_radius"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_detail_radius": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_detail_radius",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_detail_radius": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_scale",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_scale"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_scale",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_scale": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_filter",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "input_filter"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_filter",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_filter": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_period",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_period",
+      "diagnostics": [],
+      "effect_id": "palette_map",
+      "input_delta": {
+        "set": {
+          "period": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "palette_map",
+      "exception": "project does not match the canonical format: unknown variant `palette_map_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "palette_map_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_stops",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "stops"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "stops"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_stops",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "set": {
+          "stops": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "stops"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omit_interpolation",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "interpolation"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_interpolation",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "interpolation": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_levels",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "levels"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "levels": 4
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_levels",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected u16",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "levels": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_mode",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "mode"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_mode",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "mode": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_exposure",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_exposure"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_exposure": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_exposure",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_exposure": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_gamma",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_gamma"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_gamma": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_gamma",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_gamma": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_detail",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_detail"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_detail",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_detail": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_detail_radius",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_detail_radius"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "input_detail_radius": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_detail_radius",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_detail_radius": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_scale",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_scale"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_scale",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_scale": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_input_filter",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "input_filter"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_input_filter",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "input_filter": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_period",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_period",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "set": {
+          "period": null
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "omit": [
+          "period"
+        ]
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "omit_matrix",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "matrix"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_matrix",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "matrix": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_seed",
+      "diagnostics": [],
+      "effect_id": "ordered_dither",
+      "input_delta": {
+        "omit": [
+          "seed"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_seed",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: invalid type: null, expected u32",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "seed": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "ordered_dither",
+      "exception": "project does not match the canonical format: unknown variant `ordered_dither_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "ordered_dither_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "brightness",
+      "exception": "project does not match the canonical format: unknown variant `brightness_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "brightness_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "contrast",
+      "exception": "project does not match the canonical format: unknown variant `contrast_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "contrast_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "saturation",
+      "exception": "project does not match the canonical format: unknown variant `saturation_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "saturation_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "tint",
+      "exception": "project does not match the canonical format: unknown variant `tint_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "tint_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "gaussian_blur",
+      "exception": "project does not match the canonical format: unknown variant `gaussian_blur_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "gaussian_blur_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "motion_tile",
+      "exception": "project does not match the canonical format: unknown variant `motion_tile_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "motion_tile_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "directional_blur",
+      "exception": "project does not match the canonical format: unknown variant `directional_blur_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "directional_blur_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "omit_direction",
+      "diagnostics": [],
+      "effect_id": "zoom_blur",
+      "input_delta": {
+        "omit": [
+          "direction"
+        ]
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "null_direction",
+      "effect_id": "zoom_blur",
+      "exception": "project does not match the canonical format: invalid type: null, expected string or map",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "direction": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "zoom_blur",
+      "exception": "project does not match the canonical format: unknown variant `zoom_blur_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "zoom_blur_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "radial_blur",
+      "exception": "project does not match the canonical format: unknown variant `radial_blur_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "radial_blur_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "threshold_minimum",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "threshold_maximum",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {
+        "set": {
+          "threshold": {
+            "base_value": 1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "threshold": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "threshold_bare_scalar",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "threshold": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "threshold_null",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "threshold": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "radius_minimum",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "radius_maximum",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": 32.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": 32.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "radius_bare_scalar",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "radius": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "radius_null",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "radius": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "intensity_minimum",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "intensity_maximum",
+      "diagnostics": [],
+      "effect_id": "glow",
+      "input_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 4.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "intensity": {
+            "base_value": 4.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "intensity_bare_scalar",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "intensity": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "intensity_null",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "intensity": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "glow",
+      "exception": "project does not match the canonical format: unknown variant `glow_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "glow_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "bloom",
+      "exception": "project does not match the canonical format: unknown variant `bloom_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "bloom_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "chromatic_aberration",
+      "exception": "project does not match the canonical format: unknown variant `chromatic_aberration_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "chromatic_aberration_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "amount_minimum",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "amount_maximum",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {
+        "set": {
+          "amount": {
+            "base_value": 1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "amount": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "amount_bare_scalar",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "amount": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "amount_null",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "amount": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "radius_minimum",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "radius_maximum",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {
+        "set": {
+          "radius": {
+            "base_value": 2.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "radius": {
+            "base_value": 2.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "radius_bare_scalar",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "radius": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "radius_null",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "radius": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "softness_minimum",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/softness/base_value"
+        }
+      ],
+      "effect_id": "vignette",
+      "input_delta": {
+        "set": {
+          "softness": {
+            "base_value": 0.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "softness": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "softness_maximum",
+      "diagnostics": [],
+      "effect_id": "vignette",
+      "input_delta": {
+        "set": {
+          "softness": {
+            "base_value": 2.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "softness": {
+            "base_value": 2.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "softness_bare_scalar",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct Track",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "softness": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "softness_null",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct Track",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "softness": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "vignette",
+      "exception": "project does not match the canonical format: unknown variant `vignette_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "vignette_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "sharpen",
+      "exception": "project does not match the canonical format: unknown variant `sharpen_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "sharpen_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "exposure_minimum",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "exposure_maximum",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "exposure": {
+            "base_value": 8.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "exposure": {
+            "base_value": 8.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "exposure_bare_scalar",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "exposure": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "exposure_null",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "exposure": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "gamma_minimum",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/gamma/base_value"
+        }
+      ],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "gamma": {
+            "base_value": 0.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "gamma": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "gamma_maximum",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "gamma": {
+            "base_value": 8.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "gamma": {
+            "base_value": 8.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "gamma_bare_scalar",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "gamma": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "gamma_null",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "gamma": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "black_point_minimum",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "black_point": {
+            "base_value": 0.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "black_point": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "black_point_maximum",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/black_point/base_value"
+        },
+        {
+          "code": "VESTRA-COLOR-POINTS",
+          "message": "color adjustment requires black_point < white_point",
+          "pointer": "/visual/clips/0/effects/0/black_point"
+        }
+      ],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "black_point": {
+            "base_value": 1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "black_point": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "black_point_bare_scalar",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct Track",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "black_point": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "black_point_null",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct Track",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "black_point": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "white_point_minimum",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/white_point/base_value"
+        },
+        {
+          "code": "VESTRA-COLOR-POINTS",
+          "message": "color adjustment requires black_point < white_point",
+          "pointer": "/visual/clips/0/effects/0/black_point"
+        }
+      ],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "white_point": {
+            "base_value": 0.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "white_point": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "white_point_maximum",
+      "diagnostics": [],
+      "effect_id": "color_adjust",
+      "input_delta": {
+        "set": {
+          "white_point": {
+            "base_value": 1.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "white_point": {
+            "base_value": 1.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "white_point_bare_scalar",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct Track",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "white_point": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "white_point_null",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct Track",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "white_point": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "color_adjust",
+      "exception": "project does not match the canonical format: unknown variant `color_adjust_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "color_adjust_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "position_amount_minimum",
+      "diagnostics": [],
+      "effect_id": "camera_shake",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "position_amount_bare_scalar",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "position_amount": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "position_amount_null",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "position_amount": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "rotation_degrees_minimum",
+      "diagnostics": [],
+      "effect_id": "camera_shake",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "rotation_degrees_bare_scalar",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "rotation_degrees": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "rotation_degrees_null",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "rotation_degrees": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "scale_amount_minimum",
+      "diagnostics": [],
+      "effect_id": "camera_shake",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "scale_amount_bare_scalar",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "scale_amount": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "scale_amount_null",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "scale_amount": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "frequency_minimum",
+      "diagnostics": [
+        {
+          "code": "VESTRA-TRACK-VALUE",
+          "message": "track base value is invalid",
+          "pointer": "/visual/clips/0/effects/0/frequency/base_value"
+        }
+      ],
+      "effect_id": "camera_shake",
+      "input_delta": {
+        "set": {
+          "frequency": {
+            "base_value": 0.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "frequency": {
+            "base_value": 0.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": false,
+      "semantic_valid": false
+    },
+    {
+      "case": "frequency_bare_scalar",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "frequency": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "frequency_null",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "frequency": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "camera_shake",
+      "exception": "project does not match the canonical format: unknown variant `camera_shake_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "camera_shake_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "intensity_minimum",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "intensity_bare_scalar",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "intensity": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "intensity_null",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "intensity": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "shutter_angle_minimum",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "shutter_angle_maximum",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {
+        "set": {
+          "shutter_angle": {
+            "base_value": 360.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "shutter_angle": {
+            "base_value": 360.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "shutter_angle_bare_scalar",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "shutter_angle": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "shutter_angle_null",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "shutter_angle": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "max_radius_minimum",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {},
+      "parse_valid": true,
+      "roundtrip_delta": {},
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "max_radius_maximum",
+      "diagnostics": [],
+      "effect_id": "motion_blur",
+      "input_delta": {
+        "set": {
+          "max_radius": {
+            "base_value": 32.0
+          }
+        }
+      },
+      "parse_valid": true,
+      "roundtrip_delta": {
+        "set": {
+          "max_radius": {
+            "base_value": 32.0,
+            "keyframes": []
+          }
+        }
+      },
+      "schema_valid": true,
+      "semantic_valid": true
+    },
+    {
+      "case": "max_radius_bare_scalar",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: invalid type: floating point `0.5`, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "max_radius": 0.5
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "max_radius_null",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: invalid type: null, expected struct ScalarProperty",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "max_radius": null
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    },
+    {
+      "case": "unknown_alias_type",
+      "effect_id": "motion_blur",
+      "exception": "project does not match the canonical format: unknown variant `motion_blur_effect`, expected one of `ascii`, `halftone`, `pixel_sort`, `crt`, `palette_map`, `ordered_dither`, `brightness`, `contrast`, `saturation`, `tint`, `gaussian_blur`, `motion_tile`, `directional_blur`, `zoom_blur`, `radial_blur`, `glow`, `bloom`, `chromatic_aberration`, `vignette`, `sharpen`, `color_adjust`, `camera_shake`, `motion_blur`",
+      "exception_type": "ProjectError",
+      "input_delta": {
+        "set": {
+          "type": "motion_blur_effect"
+        }
+      },
+      "parse_valid": false,
+      "schema_valid": false
+    }
+  ],
+  "effects": {
+    "ascii": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "background": "#ffffff",
+      "cell_height": {
+        "base_value": 2.0
+      },
+      "cell_width": {
+        "base_value": 2.0
+      },
+      "characters": " .:-=+*#%@",
+      "color_mode": "monochrome",
+      "edge_characters": "-|/\\",
+      "edge_strength": {
+        "base_value": 0.0
+      },
+      "edge_threshold": {
+        "base_value": 0.0
+      },
+      "foreground": "#ffffff",
+      "glyph_style": "characters",
+      "id": "baseline",
+      "invert": true,
+      "mode": "hybrid",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5
+      },
+      "source_mix": {
+        "base_value": 0.0
+      },
+      "type": "ascii"
+    },
+    "bloom": {
+      "id": "baseline",
+      "intensity": {
+        "base_value": 0.0
+      },
+      "radius": {
+        "base_value": 0.0
+      },
+      "threshold": {
+        "base_value": 0.0
+      },
+      "type": "bloom"
+    },
+    "brightness": {
+      "amount": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "type": "brightness"
+    },
+    "camera_shake": {
+      "attack": 0.0,
+      "decay": 0.5,
+      "frequency": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "position_amount": {
+        "base_value": 0.0
+      },
+      "rotation_degrees": {
+        "base_value": 0.0
+      },
+      "scale_amount": {
+        "base_value": 0.0
+      },
+      "seed": 0,
+      "start": 0.0,
+      "type": "camera_shake"
+    },
+    "chromatic_aberration": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "angle_degrees": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "type": "chromatic_aberration"
+    },
+    "color_adjust": {
+      "black_point": {
+        "base_value": 0.25
+      },
+      "exposure": {
+        "base_value": -8.0
+      },
+      "gamma": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "type": "color_adjust",
+      "white_point": {
+        "base_value": 0.75
+      }
+    },
+    "contrast": {
+      "amount": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "type": "contrast"
+    },
+    "crt": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "curvature": {
+        "base_value": 0.0
+      },
+      "flicker": {
+        "base_value": 0.0
+      },
+      "grain": {
+        "base_value": 0.0
+      },
+      "id": "baseline",
+      "jitter": {
+        "base_value": 0.0
+      },
+      "mask_spacing": 1,
+      "mask_strength": {
+        "base_value": 0.0
+      },
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5
+      },
+      "rolling_strength": {
+        "base_value": 0.0
+      },
+      "rolling_width": {
+        "base_value": 0.01
+      },
+      "scanline_spacing": {
+        "base_value": 1.0
+      },
+      "scanline_strength": {
+        "base_value": 0.0
+      },
+      "seed": 0,
+      "type": "crt"
+    },
+    "directional_blur": {
+      "angle_degrees": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0
+      },
+      "type": "directional_blur"
+    },
+    "gaussian_blur": {
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0
+      },
+      "type": "gaussian_blur"
+    },
+    "glow": {
+      "colour": "#ffffff",
+      "id": "baseline",
+      "intensity": {
+        "base_value": 0.0
+      },
+      "radius": {
+        "base_value": 0.0
+      },
+      "threshold": {
+        "base_value": 0.0
+      },
+      "type": "glow"
+    },
+    "halftone": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "angle_degrees": {
+        "base_value": 0.5
+      },
+      "background": "#ffffff",
+      "cell_size": {
+        "base_value": 2.0
+      },
+      "foreground": "#ffffff",
+      "id": "baseline",
+      "invert": true,
+      "mode": "luminance",
+      "softness": {
+        "base_value": 0.0
+      },
+      "type": "halftone"
+    },
+    "motion_blur": {
+      "id": "baseline",
+      "intensity": {
+        "base_value": 0.0
+      },
+      "max_radius": {
+        "base_value": 0.0
+      },
+      "samples": 2,
+      "shutter_angle": {
+        "base_value": 0.0
+      },
+      "type": "motion_blur"
+    },
+    "motion_tile": {
+      "id": "baseline",
+      "mirror_edges": true,
+      "output_height_percent": {
+        "base_value": 100.0
+      },
+      "output_width_percent": {
+        "base_value": 100.0
+      },
+      "tile_center": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "type": "motion_tile"
+    },
+    "ordered_dither": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "id": "baseline",
+      "input_detail": {
+        "base_value": 0.0
+      },
+      "input_detail_radius": {
+        "base_value": 0.0
+      },
+      "input_exposure": {
+        "base_value": -8.0
+      },
+      "input_filter": "area",
+      "input_gamma": {
+        "base_value": 0.5
+      },
+      "input_scale": {
+        "base_value": 1.0
+      },
+      "interpolation": "rgb",
+      "levels": 2,
+      "matrix": "bayer8",
+      "mode": "nearest",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5
+      },
+      "scale": 1,
+      "seed": 0,
+      "stops": [
+        0.0,
+        1.0
+      ],
+      "strength": {
+        "base_value": 0.0
+      },
+      "type": "ordered_dither"
+    },
+    "palette_map": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "id": "baseline",
+      "input_detail": {
+        "base_value": 0.0
+      },
+      "input_detail_radius": {
+        "base_value": 0.0
+      },
+      "input_exposure": {
+        "base_value": -8.0
+      },
+      "input_filter": "area",
+      "input_gamma": {
+        "base_value": 0.5
+      },
+      "input_scale": {
+        "base_value": 1.0
+      },
+      "interpolation": "rgb",
+      "levels": 2,
+      "mode": "gradient",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5
+      },
+      "stops": [
+        0.0,
+        1.0
+      ],
+      "type": "palette_map"
+    },
+    "pixel_sort": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "direction": "horizontal",
+      "id": "baseline",
+      "lower_threshold": {
+        "base_value": 0.0
+      },
+      "order": "ascending",
+      "segment_length": 2,
+      "type": "pixel_sort",
+      "upper_threshold": {
+        "base_value": 0.0
+      }
+    },
+    "radial_blur": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "center": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "id": "baseline",
+      "type": "radial_blur"
+    },
+    "saturation": {
+      "amount": {
+        "base_value": 0.5
+      },
+      "id": "baseline",
+      "type": "saturation"
+    },
+    "sharpen": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0
+      },
+      "type": "sharpen"
+    },
+    "tint": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "colour": "#ffffff",
+      "id": "baseline",
+      "type": "tint"
+    },
+    "vignette": {
+      "amount": {
+        "base_value": 0.0
+      },
+      "colour": "#ffffff",
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0
+      },
+      "softness": {
+        "base_value": 0.5
+      },
+      "type": "vignette"
+    },
+    "zoom_blur": {
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "direction": "centered",
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0
+      },
+      "samples": 2,
+      "type": "zoom_blur"
+    }
+  },
+  "project": {
+    "assets": [
+      {
+        "id": "red",
+        "source": "../assets/red.png",
+        "type": "image"
+      }
+    ],
+    "name": "Vignette",
+    "output": {
+      "audio": false,
+      "background": "#101018",
+      "duration": 5,
+      "duration_mode": "explicit",
+      "frame_rate": 30,
+      "height": 640,
+      "path": "unused.mp4",
+      "quality": "preview",
+      "width": 360
+    },
+    "schema_version": 1,
+    "visual": {
+      "clips": [
+        {
+          "duration": 5,
+          "effects": [],
+          "id": "clip",
+          "layer": 0,
+          "opacity": {
+            "base_value": 1
+          },
+          "sizing": {
+            "mode": "cover"
+          },
+          "source": {
+            "asset": "red",
+            "type": "image"
+          },
+          "start": 0,
+          "transform": {
+            "anchor": {
+              "base_value": {
+                "x": 0.5,
+                "y": 0.5
+              }
+            },
+            "position": {
+              "base_value": {
+                "x": 0.5,
+                "y": 0.5
+              }
+            },
+            "scale": {
+              "base_value": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          }
+        }
+      ],
+      "transitions": []
+    }
+  },
+  "provenance": {
+    "baseline_sha": "b23c985a623efea14511e25aeb1df93b495beecb",
+    "source": "Phase 0 capture against rebuilt native extension 0.1.3; expected values frozen before generation"
+  },
+  "roundtrip_effects": {
+    "ascii": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "background": "#ffffff",
+      "cell_height": {
+        "base_value": 2.0,
+        "keyframes": []
+      },
+      "cell_width": {
+        "base_value": 2.0,
+        "keyframes": []
+      },
+      "characters": " .:-=+*#%@",
+      "color_mode": "monochrome",
+      "edge_characters": "-|/\\",
+      "edge_strength": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "edge_threshold": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "foreground": "#ffffff",
+      "glyph_style": "characters",
+      "id": "baseline",
+      "invert": true,
+      "mode": "hybrid",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "source_mix": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "ascii"
+    },
+    "bloom": {
+      "id": "baseline",
+      "intensity": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "threshold": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "bloom"
+    },
+    "brightness": {
+      "amount": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "type": "brightness"
+    },
+    "camera_shake": {
+      "attack": 0.0,
+      "decay": 0.5,
+      "frequency": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "position_amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "rotation_degrees": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "scale_amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "seed": 0,
+      "start": 0.0,
+      "type": "camera_shake"
+    },
+    "chromatic_aberration": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "angle_degrees": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "type": "chromatic_aberration"
+    },
+    "color_adjust": {
+      "black_point": {
+        "base_value": 0.25,
+        "keyframes": []
+      },
+      "exposure": {
+        "base_value": -8.0,
+        "keyframes": []
+      },
+      "gamma": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "type": "color_adjust",
+      "white_point": {
+        "base_value": 0.75,
+        "keyframes": []
+      }
+    },
+    "contrast": {
+      "amount": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "type": "contrast"
+    },
+    "crt": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "curvature": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "flicker": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "grain": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "jitter": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "mask_spacing": 1,
+      "mask_strength": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "rolling_strength": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "rolling_width": {
+        "base_value": 0.01,
+        "keyframes": []
+      },
+      "scanline_spacing": {
+        "base_value": 1.0,
+        "keyframes": []
+      },
+      "scanline_strength": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "seed": 0,
+      "type": "crt"
+    },
+    "directional_blur": {
+      "angle_degrees": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "directional_blur"
+    },
+    "gaussian_blur": {
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "gaussian_blur"
+    },
+    "glow": {
+      "colour": "#ffffff",
+      "id": "baseline",
+      "intensity": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "threshold": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "glow"
+    },
+    "halftone": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "angle_degrees": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "background": "#ffffff",
+      "cell_size": {
+        "base_value": 2.0,
+        "keyframes": []
+      },
+      "foreground": "#ffffff",
+      "id": "baseline",
+      "invert": true,
+      "mode": "luminance",
+      "softness": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "halftone"
+    },
+    "motion_blur": {
+      "id": "baseline",
+      "intensity": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "max_radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "samples": 2,
+      "shutter_angle": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "motion_blur"
+    },
+    "motion_tile": {
+      "id": "baseline",
+      "mirror_edges": true,
+      "output_height_percent": {
+        "base_value": 100.0,
+        "keyframes": []
+      },
+      "output_width_percent": {
+        "base_value": 100.0,
+        "keyframes": []
+      },
+      "tile_center": {
+        "base_value": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "keyframes": []
+      },
+      "type": "motion_tile"
+    },
+    "ordered_dither": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "input_detail": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "input_detail_radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "input_exposure": {
+        "base_value": -8.0,
+        "keyframes": []
+      },
+      "input_filter": "area",
+      "input_gamma": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "input_scale": {
+        "base_value": 1.0,
+        "keyframes": []
+      },
+      "interpolation": "rgb",
+      "levels": 2,
+      "matrix": "bayer8",
+      "mode": "nearest",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "scale": 1,
+      "seed": 0,
+      "stops": [
+        0.0,
+        1.0
+      ],
+      "strength": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "ordered_dither"
+    },
+    "palette_map": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "input_detail": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "input_detail_radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "input_exposure": {
+        "base_value": -8.0,
+        "keyframes": []
+      },
+      "input_filter": "area",
+      "input_gamma": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "input_scale": {
+        "base_value": 1.0,
+        "keyframes": []
+      },
+      "interpolation": "rgb",
+      "levels": 2,
+      "mode": "gradient",
+      "palette": [
+        "#000000",
+        "#ffffff"
+      ],
+      "period": 0.5,
+      "phase": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "stops": [
+        0.0,
+        1.0
+      ],
+      "type": "palette_map"
+    },
+    "pixel_sort": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "direction": "horizontal",
+      "id": "baseline",
+      "lower_threshold": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "order": "ascending",
+      "segment_length": 2,
+      "type": "pixel_sort",
+      "upper_threshold": {
+        "base_value": 0.0,
+        "keyframes": []
+      }
+    },
+    "radial_blur": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "center": {
+        "base_value": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "keyframes": []
+      },
+      "id": "baseline",
+      "type": "radial_blur"
+    },
+    "saturation": {
+      "amount": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "type": "saturation"
+    },
+    "sharpen": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "type": "sharpen"
+    },
+    "tint": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "colour": "#ffffff",
+      "id": "baseline",
+      "type": "tint"
+    },
+    "vignette": {
+      "amount": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "colour": "#ffffff",
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "softness": {
+        "base_value": 0.5,
+        "keyframes": []
+      },
+      "type": "vignette"
+    },
+    "zoom_blur": {
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "direction": "centered",
+      "id": "baseline",
+      "radius": {
+        "base_value": 0.0,
+        "keyframes": []
+      },
+      "samples": 2,
+      "type": "zoom_blur"
+    }
+  },
+  "roundtrip_project": {
+    "assets": [
+      {
+        "id": "red",
+        "source": "../assets/red.png",
+        "type": "image"
+      }
+    ],
+    "name": "Vignette",
+    "output": {
+      "audio": false,
+      "background": "#101018",
+      "duration": 5.0,
+      "duration_mode": "explicit",
+      "frame_rate": 30.0,
+      "height": 640,
+      "path": "unused.mp4",
+      "quality": "preview",
+      "width": 360
+    },
+    "schema_version": 1,
+    "visual": {
+      "clips": [
+        {
+          "blend_mode": "normal",
+          "duration": 5.0,
+          "effects": [],
+          "id": "clip",
+          "layer": 0,
+          "masks": [],
+          "opacity": {
+            "base_value": 1.0,
+            "keyframes": []
+          },
+          "sizing": {
+            "mode": "cover"
+          },
+          "source": {
+            "asset": "red",
+            "type": "image"
+          },
+          "start": 0.0,
+          "transform": {
+            "anchor": {
+              "base_value": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "keyframes": []
+            },
+            "position": {
+              "base_value": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "keyframes": []
+            },
+            "rotation_degrees": {
+              "base_value": 0.0,
+              "keyframes": []
+            },
+            "scale": {
+              "base_value": {
+                "x": 1.0,
+                "y": 1.0
+              },
+              "keyframes": []
+            }
+          },
+          "visible": true
+        }
+      ],
+      "flashes": [],
+      "post_effects": [],
+      "transitions": []
+    }
+  },
+  "schema_sha256": "0232910c2f4554ab16b7ff4eaeb88f39ebdf5d50f3bf37af40987cc927180ef5"
+}

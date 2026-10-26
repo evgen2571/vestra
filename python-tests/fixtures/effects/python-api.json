@@ -1,0 +1,2550 @@
+{
+  "class_structure": {
+    "ascii": {
+      "has_dict": false,
+      "mro": [
+        "Ascii",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Ascii": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "bloom": {
+      "has_dict": false,
+      "mro": [
+        "Bloom",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Bloom": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "brightness": {
+      "has_dict": true,
+      "mro": [
+        "Brightness",
+        "_AmountEffect",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "_AmountEffect": []
+      }
+    },
+    "camera_shake": {
+      "has_dict": false,
+      "mro": [
+        "CameraShake",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "CameraShake": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "chromatic_aberration": {
+      "has_dict": false,
+      "mro": [
+        "ChromaticAberration",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "ChromaticAberration": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "color_adjust": {
+      "has_dict": false,
+      "mro": [
+        "ColorAdjust",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "ColorAdjust": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "contrast": {
+      "has_dict": true,
+      "mro": [
+        "Contrast",
+        "_AmountEffect",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "_AmountEffect": []
+      }
+    },
+    "crt": {
+      "has_dict": false,
+      "mro": [
+        "Crt",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Crt": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "directional_blur": {
+      "has_dict": false,
+      "mro": [
+        "DirectionalBlur",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "DirectionalBlur": [],
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ]
+      }
+    },
+    "gaussian_blur": {
+      "has_dict": false,
+      "mro": [
+        "GaussianBlur",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "GaussianBlur": []
+      }
+    },
+    "glow": {
+      "has_dict": false,
+      "mro": [
+        "Glow",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "Glow": []
+      }
+    },
+    "halftone": {
+      "has_dict": false,
+      "mro": [
+        "Halftone",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "Halftone": []
+      }
+    },
+    "motion_blur": {
+      "has_dict": false,
+      "mro": [
+        "MotionBlur",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "MotionBlur": []
+      }
+    },
+    "motion_tile": {
+      "has_dict": false,
+      "mro": [
+        "MotionTile",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "MotionTile": []
+      }
+    },
+    "ordered_dither": {
+      "has_dict": false,
+      "mro": [
+        "OrderedDither",
+        "PaletteMap",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "OrderedDither": [],
+        "PaletteMap": []
+      }
+    },
+    "palette_map": {
+      "has_dict": false,
+      "mro": [
+        "PaletteMap",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "PaletteMap": []
+      }
+    },
+    "pixel_sort": {
+      "has_dict": false,
+      "mro": [
+        "PixelSort",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "PixelSort": []
+      }
+    },
+    "radial_blur": {
+      "has_dict": false,
+      "mro": [
+        "RadialBlur",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "RadialBlur": []
+      }
+    },
+    "saturation": {
+      "has_dict": true,
+      "mro": [
+        "Saturation",
+        "_AmountEffect",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "_AmountEffect": []
+      }
+    },
+    "sharpen": {
+      "has_dict": false,
+      "mro": [
+        "Sharpen",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "Sharpen": []
+      }
+    },
+    "tint": {
+      "has_dict": false,
+      "mro": [
+        "Tint",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "Tint": []
+      }
+    },
+    "vignette": {
+      "has_dict": false,
+      "mro": [
+        "Vignette",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "Vignette": []
+      }
+    },
+    "zoom_blur": {
+      "has_dict": false,
+      "mro": [
+        "ZoomBlur",
+        "Effect",
+        "object"
+      ],
+      "public_module": "vestra.effects",
+      "slots": {
+        "Effect": [
+          "_values",
+          "_properties",
+          "_id"
+        ],
+        "ZoomBlur": []
+      }
+    }
+  },
+  "common_members": {
+    "vestra.authoring.effects": {
+      "id": {
+        "get": "(self) -> 'str'",
+        "set": null
+      },
+      "kind": {
+        "get": "(self) -> 'str'",
+        "set": null
+      },
+      "to_canonical": "(self) -> 'dict[str, object]'"
+    },
+    "vestra.effects": {
+      "copy": "(self) -> 'Self'",
+      "id": {
+        "get": "(self) -> 'str | None'",
+        "set": null
+      },
+      "kind": {
+        "get": "(self) -> 'str'",
+        "set": null
+      },
+      "to_canonical": "(self) -> 'dict[str, object]'",
+      "type": {
+        "get": "(self) -> 'str'",
+        "set": null
+      }
+    }
+  },
+  "helpers": {
+    "clip_only": {
+      "add_camera_shake": "(self, *, active_interval: 'ActiveInterval' = ActiveInterval(start=0.0, duration=None), position_amount: 'int | float', rotation_degrees: 'int | float', scale_amount: 'int | float', frequency: 'int | float', seed: 'int', attack: 'int | float', decay: 'int | float', id: 'str | None' = None) -> 'CameraShakeEffect'",
+      "add_motion_blur": "(self, *, intensity: 'int | float', shutter_angle: 'int | float', max_radius: 'int | float', samples: 'int', id: 'str | None' = None) -> 'MotionBlurEffect'"
+    },
+    "common": {
+      "add_ascii": "(self, *, characters: 'str' = ' .:-=+*#%@', edge_characters: 'str' = '-|/\\\\', font: 'FontAsset | None' = None, glyph_style: 'AsciiGlyphStyle | str' = <AsciiGlyphStyle.CHARACTERS: 'characters'>, mode: 'AsciiMode | str' = <AsciiMode.HYBRID: 'hybrid'>, color_mode: 'AsciiColorMode | str' = <AsciiColorMode.MONOCHROME: 'monochrome'>, foreground: 'Color | str' = '#ffffff', background: 'Color | str' = '#000000', palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), invert: 'bool' = False, cell_width: 'int | float | ScalarTrack' = 8, cell_height: 'int | float | ScalarTrack' = 12, edge_threshold: 'int | float | ScalarTrack' = 0.15, edge_strength: 'int | float | ScalarTrack' = 1, source_mix: 'int | float | ScalarTrack' = 0, amount: 'int | float | ScalarTrack' = 1, phase: 'int | float | ScalarTrack' = 0, period: 'int | float | None' = None, id: 'str | None' = None) -> 'AsciiEffect'",
+      "add_bloom": "(self, *, threshold: 'int | float', radius: 'int | float', intensity: 'int | float', id: 'str | None' = None) -> 'BloomEffect'",
+      "add_brightness": "(self, *, amount: 'int | float', id: 'str | None' = None) -> 'BrightnessEffect'",
+      "add_chromatic_aberration": "(self, *, amount: 'int | float', angle_degrees: 'int | float', id: 'str | None' = None) -> 'ChromaticAberrationEffect'",
+      "add_color_adjust": "(self, *, exposure: 'int | float', gamma: 'int | float', black_point: 'int | float', white_point: 'int | float', id: 'str | None' = None) -> 'ColorAdjustEffect'",
+      "add_contrast": "(self, *, amount: 'int | float', id: 'str | None' = None) -> 'ContrastEffect'",
+      "add_crt": "(self, *, amount: 'int | float | ScalarTrack' = 1, curvature: 'int | float | ScalarTrack' = 0.08, scanline_strength: 'int | float | ScalarTrack' = 0.2, scanline_spacing: 'int | float | ScalarTrack' = 2, mask_strength: 'int | float | ScalarTrack' = 0.15, grain: 'int | float | ScalarTrack' = 0.025, jitter: 'int | float | ScalarTrack' = 0.35, flicker: 'int | float | ScalarTrack' = 0.025, rolling_strength: 'int | float | ScalarTrack' = 0.06, rolling_width: 'int | float | ScalarTrack' = 0.12, phase: 'int | float | ScalarTrack' = 0, mask_spacing: 'int' = 1, period: 'int | float | None' = None, seed: 'int' = 0, id: 'str | None' = None) -> 'CrtEffect'",
+      "add_directional_blur": "(self, *, radius: 'int | float', angle_degrees: 'int | float', id: 'str | None' = None) -> 'DirectionalBlurEffect'",
+      "add_effect": "(self, effect_type: 'str', /, *, id: 'str | None' = None, **parameters: 'object') -> 'GenericEffect'",
+      "add_gaussian_blur": "(self, *, radius: 'int | float', id: 'str | None' = None) -> 'GaussianBlurEffect'",
+      "add_glow": "(self, *, threshold: 'int | float', radius: 'int | float', intensity: 'int | float', colour: 'Color | str', id: 'str | None' = None) -> 'GlowEffect'",
+      "add_halftone": "(self, *, cell_size: 'int | float | ScalarTrack' = 6, angle_degrees: 'int | float | ScalarTrack' = 15, softness: 'int | float | ScalarTrack' = 0.5, amount: 'int | float | ScalarTrack' = 1, mode: 'HalftoneMode | str' = <HalftoneMode.LUMINANCE: 'luminance'>, foreground: 'Color | str' = '#ffffff', background: 'Color | str' = '#000000', invert: 'bool' = False, id: 'str | None' = None) -> 'HalftoneEffect'",
+      "add_ordered_dither": "(self, *, palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), input_exposure: 'int | float | ScalarTrack' = 0, input_gamma: 'int | float | ScalarTrack' = 1, input_detail: 'int | float | ScalarTrack' = 0, input_detail_radius: 'int | float | ScalarTrack' = 1, input_scale: 'int | float | ScalarTrack' = 1, input_filter: 'PaletteInputFilter | str' = <PaletteInputFilter.AREA: 'area'>, amount: 'int | float | ScalarTrack' = 1, phase: 'int | float | ScalarTrack' = 0, period: 'int | float | None' = None, mode: 'PaletteMode | str' = <PaletteMode.NEAREST: 'nearest'>, levels: 'int' = 4, stops: 'Sequence[int | float] | None' = None, interpolation: 'PaletteInterpolation | str' = <PaletteInterpolation.RGB: 'rgb'>, strength: 'int | float | ScalarTrack' = 1, matrix: 'DitherMatrix | str' = <DitherMatrix.BAYER8: 'bayer8'>, scale: 'int' = 1, seed: 'int' = 0, id: 'str | None' = None) -> 'OrderedDitherEffect'",
+      "add_palette_map": "(self, *, palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), input_exposure: 'int | float | ScalarTrack' = 0, input_gamma: 'int | float | ScalarTrack' = 1, input_detail: 'int | float | ScalarTrack' = 0, input_detail_radius: 'int | float | ScalarTrack' = 1, input_scale: 'int | float | ScalarTrack' = 1, input_filter: 'PaletteInputFilter | str' = <PaletteInputFilter.AREA: 'area'>, amount: 'int | float | ScalarTrack' = 1, phase: 'int | float | ScalarTrack' = 0, period: 'int | float | None' = None, mode: 'PaletteMode | str' = <PaletteMode.GRADIENT: 'gradient'>, levels: 'int' = 4, stops: 'Sequence[int | float] | None' = None, interpolation: 'PaletteInterpolation | str' = <PaletteInterpolation.RGB: 'rgb'>, id: 'str | None' = None) -> 'PaletteMapEffect'",
+      "add_pixel_sort": "(self, *, lower_threshold: 'int | float | ScalarTrack' = 0.15, upper_threshold: 'int | float | ScalarTrack' = 0.9, amount: 'int | float | ScalarTrack' = 1, direction: 'PixelSortDirection | str' = <PixelSortDirection.HORIZONTAL: 'horizontal'>, order: 'PixelSortOrder | str' = <PixelSortOrder.ASCENDING: 'ascending'>, segment_length: 'int' = 64, id: 'str | None' = None) -> 'PixelSortEffect'",
+      "add_saturation": "(self, *, amount: 'int | float', id: 'str | None' = None) -> 'SaturationEffect'",
+      "add_sharpen": "(self, *, amount: 'int | float', radius: 'int | float', id: 'str | None' = None) -> 'SharpenEffect'",
+      "add_tint": "(self, *, colour: 'Color | str', amount: 'int | float', id: 'str | None' = None) -> 'TintEffect'",
+      "add_vignette": "(self, *, amount: 'int | float', radius: 'int | float', softness: 'int | float', colour: 'Color | str', id: 'str | None' = None) -> 'VignetteEffect'",
+      "add_zoom_blur": "(self, *, radius: 'int | float', samples: 'int', anchor: 'Point', direction: 'ZoomBlurDirection' = <ZoomBlurDirection.CENTERED: 'centered'>, id: 'str | None' = None) -> 'ZoomBlurEffect'"
+    }
+  },
+  "modules": {
+    "vestra": {
+      "exports": [
+        "__version__",
+        "native_version",
+        "configure_logging",
+        "BackendPreference",
+        "BackendKind",
+        "BackendFallback",
+        "AdapterDeviceType",
+        "AdapterInfo",
+        "GraphicsBackend",
+        "PixelFormat",
+        "Category",
+        "Severity",
+        "Diagnostic",
+        "Editor",
+        "Project",
+        "ProjectSnapshot",
+        "Composition",
+        "CompositionLayer",
+        "Layer",
+        "Source",
+        "Image",
+        "Group",
+        "GroupChild",
+        "Color",
+        "Video",
+        "Shape",
+        "Rectangle",
+        "Ellipse",
+        "Circle",
+        "Line",
+        "Polygon",
+        "Text",
+        "Spectrum2D",
+        "ParticleSystem",
+        "ScalarProperty",
+        "BindableScalarProperty",
+        "BindablePointProperty",
+        "ScalarBindingTarget",
+        "SignalBinding",
+        "SignalOperation",
+        "PointProperty",
+        "CropProperty",
+        "Transform",
+        "ScalarSignal",
+        "MasterAudioSignals",
+        "Interpolation",
+        "CubicBezier",
+        "Point",
+        "Crop",
+        "BlendMode",
+        "Mask",
+        "MaskCollection",
+        "MaskOperation",
+        "MaskCoverageMode",
+        "MatteMode",
+        "PreflightOptions",
+        "ValidationReport",
+        "PreflightReport",
+        "InspectionReport",
+        "InspectOutput",
+        "InspectAssets",
+        "InspectAudio",
+        "InspectAudioEffect",
+        "InspectAudioTrack",
+        "InspectAudioClip",
+        "InspectAudioGainKeyframe",
+        "PrepareOptions",
+        "PreparedProject",
+        "PreparationReport",
+        "PreparationTimings",
+        "FrameRate",
+        "Frame",
+        "VestraError",
+        "ProjectError",
+        "PreparationError",
+        "FrameRenderError",
+        "PreparedProjectBusyError",
+        "RenderError",
+        "CancelledError",
+        "PreparedVideoRenderRequest",
+        "RenderRequest",
+        "CancellationToken",
+        "RenderEvent",
+        "RenderResult",
+        "RenderTimingScope",
+        "RenderTimings",
+        "RenderPerformance",
+        "RenderFailureContext",
+        "RenderFailureStage",
+        "AudioClip",
+        "AudioEffectStack",
+        "AudioFadeCurve",
+        "AudioGainInterpolation",
+        "AudioGainKeyframe",
+        "AudioTimeline",
+        "AudioTrack",
+        "BassBoost",
+        "ParametricEq",
+        "PlaybackSpeed",
+        "Animate",
+        "Crossfade",
+        "CustomTransition",
+        "TransitionLayer",
+        "ZoomCrossfade",
+        "DirectionalPush",
+        "PushLeft",
+        "PushRight",
+        "PushUp",
+        "PushDown",
+        "ZoomIn",
+        "ZoomOut",
+        "BlurCrossfade",
+        "ZoomBlurTransition",
+        "WhipPanLeft",
+        "WhipPanRight",
+        "TransitionDefinition",
+        "TransitionPlacement",
+        "Preset",
+        "PresetCollection",
+        "Flash",
+        "FlashCollection",
+        "TransitionCollection",
+        "Effect",
+        "EffectStack",
+        "ActiveInterval",
+        "Brightness",
+        "Contrast",
+        "Saturation",
+        "Tint",
+        "GaussianBlur",
+        "DirectionalBlur",
+        "ZoomBlur",
+        "ZoomBlurDirection",
+        "Glow",
+        "Bloom",
+        "ChromaticAberration",
+        "Vignette",
+        "Sharpen",
+        "ColorAdjust",
+        "CameraShake",
+        "MotionBlur",
+        "MotionTile",
+        "RadialBlur",
+        "Halftone",
+        "PixelSort",
+        "Crt",
+        "HalftoneMode",
+        "PixelSortDirection",
+        "PixelSortOrder",
+        "Ascii",
+        "PseudoAscii",
+        "AsciiMode",
+        "AsciiColorMode",
+        "AsciiGlyphStyle",
+        "CHARACTER_SETS",
+        "PaletteMap",
+        "OrderedDither",
+        "PaletteMode",
+        "DitherMatrix"
+      ],
+      "surface": {
+        "ActiveInterval": "vestra.authoring.effects.ActiveInterval",
+        "Ascii": "vestra.effects.Ascii",
+        "AsciiColorMode": "enum.AsciiColorMode",
+        "AsciiGlyphStyle": "enum.AsciiGlyphStyle",
+        "AsciiMode": "enum.AsciiMode",
+        "Bloom": "vestra.effects.Bloom",
+        "Brightness": "vestra.effects.Brightness",
+        "CameraShake": "vestra.effects.CameraShake",
+        "ChromaticAberration": "vestra.effects.ChromaticAberration",
+        "ColorAdjust": "vestra.effects.ColorAdjust",
+        "Contrast": "vestra.effects.Contrast",
+        "Crt": "vestra.effects.Crt",
+        "DirectionalBlur": "vestra.effects.DirectionalBlur",
+        "DitherMatrix": "enum.DitherMatrix",
+        "Effect": "vestra.effects.Effect",
+        "GaussianBlur": "vestra.effects.GaussianBlur",
+        "Glow": "vestra.effects.Glow",
+        "Halftone": "vestra.effects.Halftone",
+        "HalftoneMode": "enum.HalftoneMode",
+        "MotionBlur": "vestra.effects.MotionBlur",
+        "MotionTile": "vestra.effects.MotionTile",
+        "OrderedDither": "vestra.effects.OrderedDither",
+        "PaletteMap": "vestra.effects.PaletteMap",
+        "PaletteMode": "enum.PaletteMode",
+        "PixelSort": "vestra.effects.PixelSort",
+        "PixelSortDirection": "enum.PixelSortDirection",
+        "PixelSortOrder": "enum.PixelSortOrder",
+        "PseudoAscii": "vestra.effects.PseudoAscii",
+        "RadialBlur": "vestra.effects.RadialBlur",
+        "Saturation": "vestra.effects.Saturation",
+        "Sharpen": "vestra.effects.Sharpen",
+        "Tint": "vestra.effects.Tint",
+        "Vignette": "vestra.effects.Vignette",
+        "ZoomBlur": "vestra.effects.ZoomBlur",
+        "ZoomBlurDirection": "enum.ZoomBlurDirection"
+      }
+    },
+    "vestra.authoring": {
+      "exports": [
+        "AuthoringError",
+        "ActiveInterval",
+        "AudioAsset",
+        "AudioClip",
+        "AudioFadeCurve",
+        "AudioGainInterpolation",
+        "AudioGainKeyframe",
+        "AudioTimeline",
+        "AudioTrack",
+        "AudioEffect",
+        "AudioEffectCollection",
+        "BassBoostAudioEffect",
+        "ParametricEqAudioEffect",
+        "PlaybackSpeedAudioEffect",
+        "BlendMode",
+        "BrightnessEffect",
+        "BloomEffect",
+        "CameraShakeEffect",
+        "ChromaticAberrationEffect",
+        "ClipEffectCollection",
+        "ColorAdjustEffect",
+        "ContrastEffect",
+        "Color",
+        "Crop",
+        "CropKeyframe",
+        "CropTrack",
+        "CubicBezier",
+        "DurationMode",
+        "DirectionalBlurEffect",
+        "Effect",
+        "GenericEffect",
+        "GaussianBlurEffect",
+        "GlowEffect",
+        "Interpolation",
+        "ImageAsset",
+        "ImageClip",
+        "VideoAsset",
+        "VideoClip",
+        "ShapeClip",
+        "GroupClip",
+        "ParticleSystemClip",
+        "ParticleSystem",
+        "PointEmitter",
+        "RectangleEmitter",
+        "CircleEmitter",
+        "ParticleBurst",
+        "ScalarRange",
+        "ParticlePrimitive",
+        "ParticleBlendMode",
+        "ParticleLifetimeStyle",
+        "ScalarLifetimeStop",
+        "ColourLifetimeStop",
+        "ParticleAudioReactive",
+        "ambient_stars",
+        "snow",
+        "embers",
+        "sparks",
+        "radial_burst",
+        "JsonValue",
+        "Point",
+        "PointKeyframe",
+        "PointTrack",
+        "MotionBlurEffect",
+        "PostEffectCollection",
+        "ProjectBuilder",
+        "Preset",
+        "PresetCollection",
+        "Quality",
+        "ScalarTrack",
+        "ScalarSignal",
+        "SaturationEffect",
+        "SharpenEffect",
+        "ScalarKeyframe",
+        "Sizing",
+        "SolidColorClip",
+        "Spectrum2DClip",
+        "Spectrum2DPreset",
+        "Spectrum2DGradient",
+        "Spectrum2DLinearLayout",
+        "Spectrum2DRadialLayout",
+        "Transform",
+        "Timeline",
+        "TintEffect",
+        "VignetteEffect",
+        "ZoomBlurDirection",
+        "ZoomBlurEffect",
+        "HalftoneEffect",
+        "PixelSortEffect",
+        "CrtEffect",
+        "HalftoneMode",
+        "PixelSortDirection",
+        "PixelSortOrder",
+        "AsciiEffect",
+        "AsciiMode",
+        "AsciiColorMode",
+        "AsciiGlyphStyle",
+        "PaletteMapEffect",
+        "OrderedDitherEffect",
+        "PaletteMode",
+        "PaletteInputFilter",
+        "PaletteInterpolation",
+        "DitherMatrix",
+        "available_effects",
+        "effect_definition",
+        "available_audio_effects",
+        "audio_effect_definition",
+        "TransitionDefinition",
+        "TransitionPlacement",
+        "Flash",
+        "FlashCollection",
+        "TransitionCollection"
+      ],
+      "surface": {
+        "ActiveInterval": "vestra.authoring.effects.ActiveInterval",
+        "AsciiColorMode": "enum.AsciiColorMode",
+        "AsciiEffect": "vestra.authoring.effects.AsciiEffect",
+        "AsciiGlyphStyle": "enum.AsciiGlyphStyle",
+        "AsciiMode": "enum.AsciiMode",
+        "BloomEffect": "vestra.authoring.effects.BloomEffect",
+        "BrightnessEffect": "vestra.authoring.effects.BrightnessEffect",
+        "CameraShakeEffect": "vestra.authoring.effects.CameraShakeEffect",
+        "ChromaticAberrationEffect": "vestra.authoring.effects.ChromaticAberrationEffect",
+        "ClipEffectCollection": "vestra.authoring.effects.ClipEffectCollection",
+        "ColorAdjustEffect": "vestra.authoring.effects.ColorAdjustEffect",
+        "ContrastEffect": "vestra.authoring.effects.ContrastEffect",
+        "CrtEffect": "vestra.authoring.effects.CrtEffect",
+        "DirectionalBlurEffect": "vestra.authoring.effects.DirectionalBlurEffect",
+        "DitherMatrix": "enum.DitherMatrix",
+        "Effect": "vestra.authoring.effects.Effect",
+        "GaussianBlurEffect": "vestra.authoring.effects.GaussianBlurEffect",
+        "GenericEffect": "vestra.authoring.effects.GenericEffect",
+        "GlowEffect": "vestra.authoring.effects.GlowEffect",
+        "HalftoneEffect": "vestra.authoring.effects.HalftoneEffect",
+        "HalftoneMode": "enum.HalftoneMode",
+        "MotionBlurEffect": "vestra.authoring.effects.MotionBlurEffect",
+        "OrderedDitherEffect": "vestra.authoring.effects.OrderedDitherEffect",
+        "PaletteInputFilter": "enum.PaletteInputFilter",
+        "PaletteInterpolation": "enum.PaletteInterpolation",
+        "PaletteMapEffect": "vestra.authoring.effects.PaletteMapEffect",
+        "PaletteMode": "enum.PaletteMode",
+        "PixelSortDirection": "enum.PixelSortDirection",
+        "PixelSortEffect": "vestra.authoring.effects.PixelSortEffect",
+        "PixelSortOrder": "enum.PixelSortOrder",
+        "PostEffectCollection": "vestra.authoring.effects.PostEffectCollection",
+        "SaturationEffect": "vestra.authoring.effects.SaturationEffect",
+        "SharpenEffect": "vestra.authoring.effects.SharpenEffect",
+        "TintEffect": "vestra.authoring.effects.TintEffect",
+        "VignetteEffect": "vestra.authoring.effects.VignetteEffect",
+        "ZoomBlurDirection": "enum.ZoomBlurDirection",
+        "ZoomBlurEffect": "vestra.authoring.effects.ZoomBlurEffect",
+        "available_effects": "function.available_effects",
+        "effect_definition": "function.effect_definition"
+      }
+    },
+    "vestra.authoring.effects": {
+      "exports": [],
+      "surface": {
+        "ActiveInterval": "vestra.authoring.effects.ActiveInterval",
+        "AsciiColorMode": "enum.AsciiColorMode",
+        "AsciiEffect": "vestra.authoring.effects.AsciiEffect",
+        "AsciiGlyphStyle": "enum.AsciiGlyphStyle",
+        "AsciiMode": "enum.AsciiMode",
+        "BloomEffect": "vestra.authoring.effects.BloomEffect",
+        "BrightnessEffect": "vestra.authoring.effects.BrightnessEffect",
+        "CameraShakeEffect": "vestra.authoring.effects.CameraShakeEffect",
+        "ChromaticAberrationEffect": "vestra.authoring.effects.ChromaticAberrationEffect",
+        "ClipEffectCollection": "vestra.authoring.effects.ClipEffectCollection",
+        "ColorAdjustEffect": "vestra.authoring.effects.ColorAdjustEffect",
+        "ContrastEffect": "vestra.authoring.effects.ContrastEffect",
+        "CrtEffect": "vestra.authoring.effects.CrtEffect",
+        "DirectionalBlurEffect": "vestra.authoring.effects.DirectionalBlurEffect",
+        "DitherMatrix": "enum.DitherMatrix",
+        "Effect": "vestra.authoring.effects.Effect",
+        "GaussianBlurEffect": "vestra.authoring.effects.GaussianBlurEffect",
+        "GenericEffect": "vestra.authoring.effects.GenericEffect",
+        "GlowEffect": "vestra.authoring.effects.GlowEffect",
+        "HalftoneEffect": "vestra.authoring.effects.HalftoneEffect",
+        "HalftoneMode": "enum.HalftoneMode",
+        "MotionBlurEffect": "vestra.authoring.effects.MotionBlurEffect",
+        "OrderedDitherEffect": "vestra.authoring.effects.OrderedDitherEffect",
+        "PaletteInputFilter": "enum.PaletteInputFilter",
+        "PaletteInterpolation": "enum.PaletteInterpolation",
+        "PaletteMapEffect": "vestra.authoring.effects.PaletteMapEffect",
+        "PaletteMode": "enum.PaletteMode",
+        "PixelSortDirection": "enum.PixelSortDirection",
+        "PixelSortEffect": "vestra.authoring.effects.PixelSortEffect",
+        "PixelSortOrder": "enum.PixelSortOrder",
+        "PostEffectCollection": "vestra.authoring.effects.PostEffectCollection",
+        "SaturationEffect": "vestra.authoring.effects.SaturationEffect",
+        "SharpenEffect": "vestra.authoring.effects.SharpenEffect",
+        "TintEffect": "vestra.authoring.effects.TintEffect",
+        "VignetteEffect": "vestra.authoring.effects.VignetteEffect",
+        "ZoomBlurDirection": "enum.ZoomBlurDirection",
+        "ZoomBlurEffect": "vestra.authoring.effects.ZoomBlurEffect",
+        "available_effects": "function.available_effects",
+        "effect_definition": "function.effect_definition"
+      }
+    },
+    "vestra.effects": {
+      "exports": [
+        "Ascii",
+        "PseudoAscii",
+        "CHARACTER_SETS",
+        "AsciiGlyphStyle",
+        "AsciiMode",
+        "AsciiColorMode",
+        "ActiveInterval",
+        "Effect",
+        "EffectStack",
+        "Brightness",
+        "Contrast",
+        "Saturation",
+        "Tint",
+        "GaussianBlur",
+        "DirectionalBlur",
+        "MotionTile",
+        "ZoomBlur",
+        "RadialBlur",
+        "ZoomBlurDirection",
+        "Glow",
+        "Bloom",
+        "ChromaticAberration",
+        "Vignette",
+        "Halftone",
+        "PixelSort",
+        "Crt",
+        "HalftoneMode",
+        "PixelSortDirection",
+        "PixelSortOrder",
+        "PaletteMap",
+        "OrderedDither",
+        "PaletteMode",
+        "PaletteInputFilter",
+        "PaletteInterpolation",
+        "DitherMatrix",
+        "Sharpen",
+        "ColorAdjust",
+        "CameraShake",
+        "MotionBlur",
+        "available_effects"
+      ],
+      "surface": {
+        "ActiveInterval": "vestra.authoring.effects.ActiveInterval",
+        "Ascii": "vestra.effects.Ascii",
+        "AsciiColorMode": "enum.AsciiColorMode",
+        "AsciiGlyphStyle": "enum.AsciiGlyphStyle",
+        "AsciiMode": "enum.AsciiMode",
+        "Bloom": "vestra.effects.Bloom",
+        "Brightness": "vestra.effects.Brightness",
+        "CameraShake": "vestra.effects.CameraShake",
+        "ChromaticAberration": "vestra.effects.ChromaticAberration",
+        "ColorAdjust": "vestra.effects.ColorAdjust",
+        "Contrast": "vestra.effects.Contrast",
+        "Crt": "vestra.effects.Crt",
+        "DirectionalBlur": "vestra.effects.DirectionalBlur",
+        "DitherMatrix": "enum.DitherMatrix",
+        "Effect": "vestra.effects.Effect",
+        "GaussianBlur": "vestra.effects.GaussianBlur",
+        "Glow": "vestra.effects.Glow",
+        "Halftone": "vestra.effects.Halftone",
+        "HalftoneMode": "enum.HalftoneMode",
+        "MotionBlur": "vestra.effects.MotionBlur",
+        "MotionTile": "vestra.effects.MotionTile",
+        "OrderedDither": "vestra.effects.OrderedDither",
+        "PaletteInputFilter": "enum.PaletteInputFilter",
+        "PaletteInterpolation": "enum.PaletteInterpolation",
+        "PaletteMap": "vestra.effects.PaletteMap",
+        "PaletteMode": "enum.PaletteMode",
+        "PixelSort": "vestra.effects.PixelSort",
+        "PixelSortDirection": "enum.PixelSortDirection",
+        "PixelSortOrder": "enum.PixelSortOrder",
+        "PseudoAscii": "vestra.effects.PseudoAscii",
+        "RadialBlur": "vestra.effects.RadialBlur",
+        "Saturation": "vestra.effects.Saturation",
+        "Sharpen": "vestra.effects.Sharpen",
+        "Tint": "vestra.effects.Tint",
+        "Vignette": "vestra.effects.Vignette",
+        "ZoomBlur": "vestra.effects.ZoomBlur",
+        "ZoomBlurDirection": "enum.ZoomBlurDirection"
+      }
+    }
+  },
+  "provenance": {
+    "baseline_sha": "b23c985a623efea14511e25aeb1df93b495beecb",
+    "source": "Phase 0 capture against rebuilt native extension 0.1.3; expected values frozen before generation"
+  },
+  "source_modules": {
+    "vestra.effects.analog": {
+      "classes": [
+        "Halftone",
+        "PixelSort",
+        "Crt"
+      ],
+      "exports": null
+    },
+    "vestra.effects.ascii": {
+      "classes": [
+        "Ascii",
+        "PseudoAscii"
+      ],
+      "exports": null
+    },
+    "vestra.effects.blur": {
+      "classes": [
+        "GaussianBlur",
+        "DirectionalBlur",
+        "MotionTile",
+        "ZoomBlur",
+        "RadialBlur"
+      ],
+      "exports": [
+        "DirectionalBlur",
+        "GaussianBlur",
+        "MotionTile",
+        "ZoomBlur",
+        "RadialBlur"
+      ]
+    },
+    "vestra.effects.camera": {
+      "classes": [
+        "CameraShake"
+      ],
+      "exports": [
+        "CameraShake"
+      ]
+    },
+    "vestra.effects.color": {
+      "classes": [
+        "Brightness",
+        "Contrast",
+        "Saturation",
+        "Tint"
+      ],
+      "exports": [
+        "Brightness",
+        "Contrast",
+        "Saturation",
+        "Tint"
+      ]
+    },
+    "vestra.effects.motion": {
+      "classes": [
+        "MotionBlur"
+      ],
+      "exports": [
+        "MotionBlur"
+      ]
+    },
+    "vestra.effects.palette": {
+      "classes": [
+        "PaletteMap",
+        "OrderedDither"
+      ],
+      "exports": null
+    },
+    "vestra.effects.stylize": {
+      "classes": [
+        "Glow",
+        "Bloom",
+        "ChromaticAberration",
+        "Vignette",
+        "Sharpen",
+        "ColorAdjust"
+      ],
+      "exports": [
+        "Bloom",
+        "ChromaticAberration",
+        "Glow",
+        "Sharpen",
+        "Vignette"
+      ]
+    }
+  },
+  "surfaces": {
+    "enum.AsciiColorMode": {
+      "enum": {
+        "MONOCHROME": "monochrome",
+        "PALETTE": "palette",
+        "RAINBOW": "rainbow",
+        "SOURCE": "source"
+      }
+    },
+    "enum.AsciiGlyphStyle": {
+      "enum": {
+        "CHARACTERS": "characters",
+        "GEOMETRIC": "geometric"
+      }
+    },
+    "enum.AsciiMode": {
+      "enum": {
+        "EDGES": "edges",
+        "FILL": "fill",
+        "HYBRID": "hybrid"
+      }
+    },
+    "enum.DitherMatrix": {
+      "enum": {
+        "BAYER2": "bayer2",
+        "BAYER4": "bayer4",
+        "BAYER8": "bayer8",
+        "BLUE_NOISE": "blue_noise"
+      }
+    },
+    "enum.HalftoneMode": {
+      "enum": {
+        "LUMINANCE": "luminance",
+        "RGB": "rgb",
+        "SOURCE": "source"
+      }
+    },
+    "enum.PaletteInputFilter": {
+      "enum": {
+        "AREA": "area",
+        "LINEAR": "linear",
+        "NEAREST": "nearest"
+      }
+    },
+    "enum.PaletteInterpolation": {
+      "enum": {
+        "OKLAB": "oklab",
+        "RGB": "rgb"
+      }
+    },
+    "enum.PaletteMode": {
+      "enum": {
+        "GRADIENT": "gradient",
+        "NEAREST": "nearest",
+        "NEAREST_HUE": "nearest_hue",
+        "NEAREST_OKLAB": "nearest_oklab",
+        "NEAREST_RGB": "nearest_rgb",
+        "RAINBOW": "rainbow",
+        "RGB_CHANNELS": "rgb_channels"
+      }
+    },
+    "enum.PixelSortDirection": {
+      "enum": {
+        "HORIZONTAL": "horizontal",
+        "VERTICAL": "vertical"
+      }
+    },
+    "enum.PixelSortOrder": {
+      "enum": {
+        "ASCENDING": "ascending",
+        "DESCENDING": "descending"
+      }
+    },
+    "enum.ZoomBlurDirection": {
+      "enum": {
+        "CENTERED": "centered",
+        "INWARD": "inward",
+        "OUTWARD": "outward"
+      }
+    },
+    "function.available_effects": "() -> 'tuple[Mapping[str, object], ...]'",
+    "function.effect_definition": "(effect_type: 'str') -> 'Mapping[str, object]'",
+    "vestra.authoring.effects.ActiveInterval": {
+      "members": {
+        "to_canonical": "(self) -> 'dict[str, float]'"
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(start: 'float' = 0.0, duration: 'float | None' = None) -> None"
+    },
+    "vestra.authoring.effects.AsciiEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "background": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "cell_height": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "cell_width": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "characters": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'str') -> 'None'"
+        },
+        "color_mode": {
+          "get": "(self) -> 'AsciiColorMode'",
+          "set": "(self, value: 'AsciiColorMode | str') -> 'None'"
+        },
+        "edge_characters": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'str') -> 'None'"
+        },
+        "edge_strength": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "edge_threshold": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "font": {
+          "get": "(self) -> 'str | None'",
+          "set": "(self, value: 'FontAsset | None') -> 'None'"
+        },
+        "foreground": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "glyph_style": {
+          "get": "(self) -> 'AsciiGlyphStyle'",
+          "set": "(self, value: 'AsciiGlyphStyle | str') -> 'None'"
+        },
+        "input_detail": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_detail_radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_exposure": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_filter": {
+          "get": "(self) -> 'PaletteInputFilter'",
+          "set": "(self, value: 'PaletteInputFilter | str') -> 'None'"
+        },
+        "input_gamma": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_scale": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "interpolation": {
+          "get": "(self) -> 'PaletteInterpolation'",
+          "set": "(self, value: 'PaletteInterpolation | str') -> 'None'"
+        },
+        "invert": {
+          "get": "(self) -> 'bool'",
+          "set": "(self, value: 'bool') -> 'None'"
+        },
+        "levels": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'AsciiMode'",
+          "set": "(self, value: 'AsciiMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'",
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "source_mix": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "stops": {
+          "get": "(self) -> 'tuple[float, ...] | None'",
+          "set": "(self, value: 'Sequence[int | float] | None') -> 'None'"
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.BloomEffect": {
+      "members": {
+        "intensity": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "threshold": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.BrightnessEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.CameraShakeEffect": {
+      "members": {
+        "active_interval": {
+          "get": "(self) -> 'ActiveInterval'",
+          "set": "(self, value: 'ActiveInterval') -> 'None'"
+        },
+        "attack": {
+          "get": "(self) -> 'float'",
+          "set": "(self, value: 'int | float') -> 'None'"
+        },
+        "decay": {
+          "get": "(self) -> 'float'",
+          "set": "(self, value: 'int | float') -> 'None'"
+        },
+        "frequency": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "position_amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "rotation_degrees": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "scale_amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "seed": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.ChromaticAberrationEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "angle_degrees": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.ClipEffectCollection": {
+      "members": {
+        "items": {
+          "get": "(self) -> 'tuple[Effect, ...]'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "() -> 'None'"
+    },
+    "vestra.authoring.effects.ColorAdjustEffect": {
+      "members": {
+        "black_point": {
+          "get": "(self) -> 'ScalarTrack'",
+          "set": null
+        },
+        "exposure": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "gamma": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "white_point": {
+          "get": "(self) -> 'ScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.ContrastEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.CrtEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "curvature": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "flicker": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "grain": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "jitter": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "mask_spacing": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "mask_strength": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'",
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "rolling_strength": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "rolling_width": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "scanline_spacing": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "scanline_strength": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "seed": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.DirectionalBlurEffect": {
+      "members": {
+        "angle_degrees": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.Effect": {
+      "members": {},
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.GaussianBlurEffect": {
+      "members": {
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.GenericEffect": {
+      "members": {
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'"
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.GlowEffect": {
+      "members": {
+        "colour": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "intensity": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "threshold": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.HalftoneEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "angle_degrees": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "background": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "cell_size": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "foreground": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "invert": {
+          "get": "(self) -> 'bool'",
+          "set": "(self, value: 'bool') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'HalftoneMode'",
+          "set": "(self, value: 'HalftoneMode | str') -> 'None'"
+        },
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'",
+        "softness": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.MotionBlurEffect": {
+      "members": {
+        "intensity": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "max_radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "samples": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "shutter_angle": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.OrderedDitherEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_detail": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_detail_radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_exposure": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_filter": {
+          "get": "(self) -> 'PaletteInputFilter'",
+          "set": "(self, value: 'PaletteInputFilter | str') -> 'None'"
+        },
+        "input_gamma": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_scale": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "interpolation": {
+          "get": "(self) -> 'PaletteInterpolation'",
+          "set": "(self, value: 'PaletteInterpolation | str') -> 'None'"
+        },
+        "levels": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "matrix": {
+          "get": "(self) -> 'DitherMatrix'",
+          "set": "(self, value: 'DitherMatrix | str') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'PaletteMode'",
+          "set": "(self, value: 'PaletteMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'",
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "scale": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "seed": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "stops": {
+          "get": "(self) -> 'tuple[float, ...] | None'",
+          "set": "(self, value: 'Sequence[int | float] | None') -> 'None'"
+        },
+        "strength": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.PaletteMapEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_detail": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_detail_radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_exposure": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_filter": {
+          "get": "(self) -> 'PaletteInputFilter'",
+          "set": "(self, value: 'PaletteInputFilter | str') -> 'None'"
+        },
+        "input_gamma": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "input_scale": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "interpolation": {
+          "get": "(self) -> 'PaletteInterpolation'",
+          "set": "(self, value: 'PaletteInterpolation | str') -> 'None'"
+        },
+        "levels": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'PaletteMode'",
+          "set": "(self, value: 'PaletteMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'",
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "stops": {
+          "get": "(self) -> 'tuple[float, ...] | None'",
+          "set": "(self, value: 'Sequence[int | float] | None') -> 'None'"
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.PixelSortEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "direction": {
+          "get": "(self) -> 'PixelSortDirection'",
+          "set": "(self, value: 'PixelSortDirection | str') -> 'None'"
+        },
+        "lower_threshold": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "order": {
+          "get": "(self) -> 'PixelSortOrder'",
+          "set": "(self, value: 'PixelSortOrder | str') -> 'None'"
+        },
+        "parameter_point_component": "(self, name: 'str', component: \"Literal['x', 'y']\")",
+        "parameter_point_track": "(self, name: 'str') -> 'PointTrack'",
+        "parameter_track": "(self, name: 'str') -> 'ScalarTrack'",
+        "segment_length": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "upper_threshold": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.PostEffectCollection": {
+      "members": {
+        "items": {
+          "get": "(self) -> 'tuple[Effect, ...]'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "() -> 'None'"
+    },
+    "vestra.authoring.effects.SaturationEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.SharpenEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.TintEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "colour": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.VignetteEffect": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "colour": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "softness": {
+          "get": "(self) -> 'ScalarTrack'",
+          "set": null
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.authoring.effects.ZoomBlurEffect": {
+      "members": {
+        "anchor": {
+          "get": "(self) -> 'Point'",
+          "set": "(self, value: 'Point') -> 'None'"
+        },
+        "direction": {
+          "get": "(self) -> 'ZoomBlurDirection'",
+          "set": "(self, value: 'ZoomBlurDirection') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'ModulatableScalarTrack'",
+          "set": null
+        },
+        "samples": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        }
+      },
+      "module": "vestra.authoring.effects",
+      "signature": "(*args: 'object', **kwargs: 'object') -> 'None'"
+    },
+    "vestra.effects.Ascii": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "background": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "cell_height": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "cell_width": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "characters": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'str') -> 'None'"
+        },
+        "color_mode": {
+          "get": "(self) -> 'AsciiColorMode'",
+          "set": "(self, value: 'AsciiColorMode | str') -> 'None'"
+        },
+        "edge_characters": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'str') -> 'None'"
+        },
+        "edge_strength": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "edge_threshold": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "font": {
+          "get": "(self) -> 'str | PathLike[str] | None'",
+          "set": "(self, value: 'str | PathLike[str] | None') -> 'None'"
+        },
+        "foreground": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "glyph_style": {
+          "get": "(self) -> 'AsciiGlyphStyle'",
+          "set": "(self, value: 'AsciiGlyphStyle | str') -> 'None'"
+        },
+        "invert": {
+          "get": "(self) -> 'bool'",
+          "set": "(self, value: 'bool') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'AsciiMode'",
+          "set": "(self, value: 'AsciiMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "source_mix": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(characters: 'str' = ' .:-=+*#%@', *, font: 'str | PathLike[str] | None' = None, edge_characters: 'str' = '-|/\\\\', cell_width: 'int | float | ScalarProperty' = 8, cell_height: 'int | float | ScalarProperty' = 12, mode: 'AsciiMode | str' = <AsciiMode.HYBRID: 'hybrid'>, glyph_style: 'AsciiGlyphStyle | str' = <AsciiGlyphStyle.CHARACTERS: 'characters'>, color_mode: 'AsciiColorMode | str' = <AsciiColorMode.MONOCHROME: 'monochrome'>, foreground: 'Color | str' = '#ffffff', background: 'Color | str' = '#000000', palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), phase: 'int | float | ScalarProperty' = 0, period: 'int | float | None' = None, invert: 'bool' = False, edge_threshold: 'int | float | ScalarProperty' = 0.15, edge_strength: 'int | float | ScalarProperty' = 1, source_mix: 'int | float | ScalarProperty' = 0, amount: 'int | float | ScalarProperty' = 1, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Bloom": {
+      "members": {
+        "intensity": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "threshold": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(threshold: 'int | float | ScalarProperty', radius: 'int | float | ScalarProperty', intensity: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Brightness": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.CameraShake": {
+      "members": {
+        "active_interval": {
+          "get": "(self) -> 'ActiveInterval'",
+          "set": "(self, value: 'ActiveInterval') -> 'None'"
+        },
+        "attack": {
+          "get": "(self) -> 'float'",
+          "set": "(self, value: 'int | float') -> 'None'"
+        },
+        "decay": {
+          "get": "(self) -> 'float'",
+          "set": "(self, value: 'int | float') -> 'None'"
+        },
+        "frequency": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "position_amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "rotation_degrees": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "scale_amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "seed": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(position_amount: 'int | float | ScalarProperty', rotation_degrees: 'int | float | ScalarProperty', scale_amount: 'int | float | ScalarProperty', frequency: 'int | float | ScalarProperty', seed: 'int', attack: 'int | float', decay: 'int | float', active_interval: 'ActiveInterval' = ActiveInterval(start=0.0, duration=None), *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.ChromaticAberration": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "angle_degrees": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', angle_degrees: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.ColorAdjust": {
+      "members": {
+        "black_point": {
+          "get": "(self) -> 'ScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "exposure": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "gamma": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "white_point": {
+          "get": "(self) -> 'ScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(exposure: 'int | float | ScalarProperty', gamma: 'int | float | ScalarProperty', black_point: 'int | float | ScalarProperty', white_point: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Contrast": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Crt": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "curvature": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "flicker": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "grain": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "jitter": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "mask_spacing": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "mask_strength": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "rolling_strength": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "rolling_width": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "scanline_spacing": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "scanline_strength": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "seed": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(*, amount: 'int | float | ScalarProperty' = 1, curvature: 'int | float | ScalarProperty' = 0.08, scanline_strength: 'int | float | ScalarProperty' = 0.2, scanline_spacing: 'int | float | ScalarProperty' = 2, mask_strength: 'int | float | ScalarProperty' = 0.15, grain: 'int | float | ScalarProperty' = 0.025, jitter: 'int | float | ScalarProperty' = 0.35, flicker: 'int | float | ScalarProperty' = 0.025, rolling_strength: 'int | float | ScalarProperty' = 0.06, rolling_width: 'int | float | ScalarProperty' = 0.12, phase: 'int | float | ScalarProperty' = 0, mask_spacing: 'int' = 1, period: 'int | float | None' = None, seed: 'int' = 0, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.DirectionalBlur": {
+      "members": {
+        "angle_degrees": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(radius: 'int | float | ScalarProperty', angle_degrees: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Effect": {
+      "members": {},
+      "module": "vestra.effects",
+      "signature": "() -> 'None'"
+    },
+    "vestra.effects.GaussianBlur": {
+      "members": {
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(radius: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Glow": {
+      "members": {
+        "colour": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "intensity": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "threshold": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(threshold: 'int | float | ScalarProperty', radius: 'int | float | ScalarProperty', intensity: 'int | float | ScalarProperty', colour: 'Color | str', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Halftone": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "angle_degrees": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "background": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "cell_size": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "foreground": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "invert": {
+          "get": "(self) -> 'bool'",
+          "set": "(self, value: 'bool') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'HalftoneMode'",
+          "set": "(self, value: 'HalftoneMode | str') -> 'None'"
+        },
+        "softness": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(*, cell_size: 'int | float | ScalarProperty' = 6, angle_degrees: 'int | float | ScalarProperty' = 15, softness: 'int | float | ScalarProperty' = 0.5, amount: 'int | float | ScalarProperty' = 1, mode: 'HalftoneMode | str' = <HalftoneMode.LUMINANCE: 'luminance'>, foreground: 'Color | str' = '#ffffff', background: 'Color | str' = '#000000', invert: 'bool' = False, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.MotionBlur": {
+      "members": {
+        "intensity": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "max_radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "samples": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "shutter_angle": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(intensity: 'int | float | ScalarProperty', shutter_angle: 'int | float | ScalarProperty', max_radius: 'int | float | ScalarProperty', samples: 'int', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.MotionTile": {
+      "members": {
+        "mirror_edges": {
+          "get": "(self) -> 'bool'",
+          "set": "(self, value: 'bool') -> 'None'"
+        },
+        "output_height_percent": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "output_width_percent": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "tile_center": {
+          "get": "(self) -> 'BindablePointProperty'",
+          "set": "(self, value: 'Point | tuple[int | float, int | float]') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(output_width_percent: 'int | float | ScalarProperty', output_height_percent: 'int | float | ScalarProperty', tile_center: 'Point | tuple[int | float, int | float]' = (0.5, 0.5), mirror_edges: 'bool' = True, *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.OrderedDither": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_detail": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_detail_radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_exposure": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_filter": {
+          "get": "(self) -> 'PaletteInputFilter'",
+          "set": "(self, value: 'PaletteInputFilter | str') -> 'None'"
+        },
+        "input_gamma": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_scale": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "interpolation": {
+          "get": "(self) -> 'PaletteInterpolation'",
+          "set": "(self, value: 'PaletteInterpolation | str') -> 'None'"
+        },
+        "levels": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "matrix": {
+          "get": "(self) -> 'DitherMatrix'",
+          "set": "(self, value: 'DitherMatrix | str') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'PaletteMode'",
+          "set": "(self, value: 'PaletteMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "scale": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "seed": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "stops": {
+          "get": "(self) -> 'tuple[float, ...] | None'",
+          "set": "(self, value: 'Sequence[int | float] | None') -> 'None'"
+        },
+        "strength": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), *, mode: 'PaletteMode | str' = <PaletteMode.NEAREST: 'nearest'>, levels: 'int' = 4, stops: 'Sequence[int | float] | None' = None, interpolation: 'PaletteInterpolation | str' = <PaletteInterpolation.RGB: 'rgb'>, input_exposure: 'int | float | ScalarProperty' = 0, input_gamma: 'int | float | ScalarProperty' = 1, input_detail: 'int | float | ScalarProperty' = 0, input_detail_radius: 'int | float | ScalarProperty' = 1, input_scale: 'int | float | ScalarProperty' = 1, input_filter: 'PaletteInputFilter | str' = <PaletteInputFilter.AREA: 'area'>, amount: 'int | float | ScalarProperty' = 1, phase: 'int | float | ScalarProperty' = 0, period: 'int | float | None' = None, strength: 'int | float | ScalarProperty' = 1, matrix: 'DitherMatrix | str' = <DitherMatrix.BAYER8: 'bayer8'>, scale: 'int' = 1, seed: 'int' = 0, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.PaletteMap": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_detail": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_detail_radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_exposure": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_filter": {
+          "get": "(self) -> 'PaletteInputFilter'",
+          "set": "(self, value: 'PaletteInputFilter | str') -> 'None'"
+        },
+        "input_gamma": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "input_scale": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "interpolation": {
+          "get": "(self) -> 'PaletteInterpolation'",
+          "set": "(self, value: 'PaletteInterpolation | str') -> 'None'"
+        },
+        "levels": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'PaletteMode'",
+          "set": "(self, value: 'PaletteMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "stops": {
+          "get": "(self) -> 'tuple[float, ...] | None'",
+          "set": "(self, value: 'Sequence[int | float] | None') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), *, mode: 'PaletteMode | str' = <PaletteMode.GRADIENT: 'gradient'>, levels: 'int' = 4, stops: 'Sequence[int | float] | None' = None, interpolation: 'PaletteInterpolation | str' = <PaletteInterpolation.RGB: 'rgb'>, input_exposure: 'int | float | ScalarProperty' = 0, input_gamma: 'int | float | ScalarProperty' = 1, input_detail: 'int | float | ScalarProperty' = 0, input_detail_radius: 'int | float | ScalarProperty' = 1, input_scale: 'int | float | ScalarProperty' = 1, input_filter: 'PaletteInputFilter | str' = <PaletteInputFilter.AREA: 'area'>, amount: 'int | float | ScalarProperty' = 1, phase: 'int | float | ScalarProperty' = 0, period: 'int | float | None' = None, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.PixelSort": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "direction": {
+          "get": "(self) -> 'PixelSortDirection'",
+          "set": "(self, value: 'PixelSortDirection | str') -> 'None'"
+        },
+        "lower_threshold": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "order": {
+          "get": "(self) -> 'PixelSortOrder'",
+          "set": "(self, value: 'PixelSortOrder | str') -> 'None'"
+        },
+        "segment_length": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        },
+        "upper_threshold": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(*, lower_threshold: 'int | float | ScalarProperty' = 0.15, upper_threshold: 'int | float | ScalarProperty' = 0.9, amount: 'int | float | ScalarProperty' = 1, direction: 'PixelSortDirection | str' = <PixelSortDirection.HORIZONTAL: 'horizontal'>, order: 'PixelSortOrder | str' = <PixelSortOrder.ASCENDING: 'ascending'>, segment_length: 'int' = 64, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.PseudoAscii": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "background": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "cell_height": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "cell_width": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "characters": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'str') -> 'None'"
+        },
+        "color_mode": {
+          "get": "(self) -> 'AsciiColorMode'",
+          "set": "(self, value: 'AsciiColorMode | str') -> 'None'"
+        },
+        "edge_characters": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'str') -> 'None'"
+        },
+        "edge_strength": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "edge_threshold": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "font": {
+          "get": "(self) -> 'str | PathLike[str] | None'",
+          "set": "(self, value: 'str | PathLike[str] | None') -> 'None'"
+        },
+        "foreground": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "glyph_style": {
+          "get": "(self) -> 'AsciiGlyphStyle'",
+          "set": "(self, value: 'AsciiGlyphStyle | str') -> 'None'"
+        },
+        "invert": {
+          "get": "(self) -> 'bool'",
+          "set": "(self, value: 'bool') -> 'None'"
+        },
+        "mode": {
+          "get": "(self) -> 'AsciiMode'",
+          "set": "(self, value: 'AsciiMode | str') -> 'None'"
+        },
+        "palette": {
+          "get": "(self) -> 'tuple[str, ...]'",
+          "set": "(self, value: 'Sequence[Color | str]') -> 'None'"
+        },
+        "period": {
+          "get": "(self) -> 'float | None'",
+          "set": "(self, value: 'int | float | None') -> 'None'"
+        },
+        "phase": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "source_mix": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(characters: 'str' = ' .:-=+*#%@', *, font: 'str | PathLike[str] | None' = None, edge_characters: 'str' = '-|/\\\\', cell_width: 'int | float | ScalarProperty' = 8, cell_height: 'int | float | ScalarProperty' = 12, mode: 'AsciiMode | str' = <AsciiMode.HYBRID: 'hybrid'>, color_mode: 'AsciiColorMode | str' = <AsciiColorMode.MONOCHROME: 'monochrome'>, foreground: 'Color | str' = '#ffffff', background: 'Color | str' = '#000000', palette: 'Sequence[Color | str]' = ('#000000', '#ffffff'), phase: 'int | float | ScalarProperty' = 0, period: 'int | float | None' = None, invert: 'bool' = False, edge_threshold: 'int | float | ScalarProperty' = 0.15, edge_strength: 'int | float | ScalarProperty' = 1, source_mix: 'int | float | ScalarProperty' = 0, amount: 'int | float | ScalarProperty' = 1, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.RadialBlur": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "center": {
+          "get": "(self) -> 'BindablePointProperty'",
+          "set": "(self, value: 'Point | tuple[int | float, int | float]') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', center: 'Point | tuple[int | float, int | float]' = (0.5, 0.5), *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Saturation": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Sharpen": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', radius: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Tint": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "colour": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(colour: 'Color | str', amount: 'int | float | ScalarProperty', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.Vignette": {
+      "members": {
+        "amount": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "colour": {
+          "get": "(self) -> 'str'",
+          "set": "(self, value: 'Color | str') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "softness": {
+          "get": "(self) -> 'ScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(amount: 'int | float | ScalarProperty', radius: 'int | float | ScalarProperty', softness: 'int | float | ScalarProperty', colour: 'Color | str', *, id: 'str | None' = None) -> 'None'"
+    },
+    "vestra.effects.ZoomBlur": {
+      "members": {
+        "anchor": {
+          "get": "(self) -> 'Point'",
+          "set": "(self, value: 'Point | tuple[int | float, int | float]') -> 'None'"
+        },
+        "direction": {
+          "get": "(self) -> 'ZoomBlurDirection'",
+          "set": "(self, value: 'ZoomBlurDirection | str') -> 'None'"
+        },
+        "radius": {
+          "get": "(self) -> 'BindableScalarProperty'",
+          "set": "(self, value: 'int | float | ScalarProperty') -> 'None'"
+        },
+        "samples": {
+          "get": "(self) -> 'int'",
+          "set": "(self, value: 'int') -> 'None'"
+        }
+      },
+      "module": "vestra.effects",
+      "signature": "(radius: 'int | float | ScalarProperty', samples: 'int', anchor: 'Point | tuple[int | float, int | float]', direction: 'ZoomBlurDirection' = <ZoomBlurDirection.CENTERED: 'centered'>, *, id: 'str | None' = None) -> 'None'"
+    }
+  }
+}

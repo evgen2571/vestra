@@ -301,6 +301,44 @@ def test_existing_output_is_preserved_without_overwrite_and_replaced_with_it(tmp
     assert list(tmp_path.iterdir()) == [output]
 
 
+@pytest.mark.parametrize("static", [False, True])
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_late_destination_respects_overwrite_policy(
+    tmp_path: Path, static: bool, overwrite: bool,
+) -> None:
+    project = vestra.Project(size=(2, 2), fps=1, duration=2)
+    layer = project.root.add(vestra.sources.Color("#102030"))
+    if not static:
+        layer.opacity.keyframe(0, 0)
+        layer.opacity.keyframe(1, 1)
+    prepared = project.prepare(backend="cpu")
+    output = tmp_path / "late-destination.mp4"
+    sentinel = b"created by another writer during rendering"
+    events: list[str] = []
+
+    def create_destination(event: vestra.RenderEvent) -> None:
+        events.append(event.kind)
+        if event.kind == "stage_changed" and event.stage == "finalizing":
+            output.write_bytes(sentinel)
+
+    request = vestra.PreparedVideoRenderRequest(output, overwrite=overwrite)
+    if overwrite:
+        result = prepared.render_video(request, on_progress=create_destination)
+        assert result.output_path == output
+        assert output.read_bytes() != sentinel
+        assert events[-1] == "completed"
+        subprocess.run(["ffprobe", "-v", "error", "-show_format", str(output)], check=True)
+    else:
+        with pytest.raises(vestra.RenderError) as raised:
+            prepared.render_video(request, on_progress=create_destination)
+        assert raised.value.diagnostics[0].code == "VESTRA-OUTPUT-PUBLISH"
+        assert raised.value.failure_context.stage is vestra.RenderFailureStage.OUTPUT_PUBLICATION
+        assert raised.value.temporary_removed is True
+        assert output.read_bytes() == sentinel
+        assert "completed" not in events
+    assert list(tmp_path.iterdir()) == [output]
+
+
 def test_callback_cancellation_removes_output_and_invalidates_after_submission(tmp_path: Path) -> None:
     prepared = multi_frame_prepared(tmp_path)
     token = vestra.CancellationToken()

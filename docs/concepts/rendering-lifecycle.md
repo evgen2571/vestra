@@ -63,3 +63,7 @@ Encoding and output publication happen after preparation and frame evaluation.
 Use `overwrite=True` or the corresponding CLI flag when replacing an existing
 file is intentional. A successful render result describes the published output;
 it is not just an indication that preparation succeeded.
+With overwrite disabled, publication atomically refuses an existing destination,
+including one created while rendering. This uses a hard link from the sibling
+temporary file and requires a filesystem that supports hard links; unsupported
+filesystems return a publication error. Explicit overwrite uses a rename.

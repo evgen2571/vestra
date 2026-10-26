@@ -2,9 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use vestra_core::plan::{CompiledLayer, CompiledMaskInput, CompiledVisualSource, RenderPlan};
-
-use super::surfaces::SCRATCH_BUFFER_COUNT;
+use vestra_core::plan::{
+    CompiledLayer, CompiledMaskInput, CompiledVisualSource, EffectResource, RenderPlan,
+    TimedEffect, compiled_effect_pass_plan,
+};
 
 pub(super) fn frame_bytes(width: u32, height: u32) -> u64 {
     u64::from(width)
@@ -15,7 +16,11 @@ pub(super) fn frame_bytes(width: u32, height: u32) -> u64 {
 pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
     let mut composition = storage_for_plan(plan);
     // The SDK retains at most capacity ready frames plus capacity worker frames.
-    let canvas_buffers = (SCRATCH_BUFFER_COUNT as u64)
+    let canvas_buffers = 1_u64
+        .saturating_add(composition.effect_buffers)
+        .saturating_add(u64::from(composition.mask_local))
+        .saturating_add(2 * u64::from(composition.masks))
+        .saturating_add(2 * u64::from(composition.feather))
         .saturating_add(2)
         .saturating_add(composition.depths.len() as u64)
         .saturating_add(peak_distinct(std::mem::take(&mut composition.mattes)))
@@ -77,6 +82,7 @@ fn storage_for_plan(plan: &RenderPlan) -> CompositionStorage {
             .collect(),
         ..CompositionStorage::default()
     };
+    storage.record_effects(&plan.post_effects);
     storage.visit_layers(
         &plan.layers,
         Visit {
@@ -101,6 +107,10 @@ struct Visit {
 
 #[derive(Default)]
 struct CompositionStorage {
+    effect_buffers: u64,
+    mask_local: bool,
+    masks: bool,
+    feather: bool,
     depths: BTreeSet<usize>,
     mattes: Vec<(u128, bool, usize)>,
     videos: VideoEvents,
@@ -110,6 +120,23 @@ struct CompositionStorage {
 }
 
 impl CompositionStorage {
+    fn record_effects(&mut self, effects: &[TimedEffect]) {
+        for effect in effects {
+            let passes = compiled_effect_pass_plan(&effect.effect);
+            if !passes.as_slice().is_empty() {
+                // A pass needs a distinct destination. Retained originals and
+                // two-temporary topologies can pin the third physical image.
+                let third = passes.as_slice().iter().any(|pass| {
+                    pass.inputs.uses_original()
+                        || pass.inputs.primary() == EffectResource::Temporary1
+                        || pass.inputs.secondary() == Some(EffectResource::Temporary1)
+                        || pass.output == EffectResource::Temporary1
+                });
+                self.effect_buffers = self.effect_buffers.max(1 + u64::from(third));
+            }
+        }
+    }
+
     fn visit_layers(&mut self, layers: &[CompiledLayer], visit: Visit) {
         for layer in layers.iter().filter(|layer| layer.visible) {
             self.visit_layer(layer, layers, visit);
@@ -147,6 +174,15 @@ impl CompositionStorage {
             return;
         }
         self.visited.insert(key, visit.temporary);
+        self.record_effects(&layer.effects);
+        // Optional capacities survive between frames, even in disjoint phases.
+        self.mask_local |= !layer.masks.is_empty() || layer.matte.is_some();
+        self.masks |= !layer.masks.is_empty();
+        self.feather |= layer.masks.iter().any(|mask| {
+            mask.feather.authored_track.base_value > 0.0
+                || !mask.feather.authored_track.keyframes.is_empty()
+                || !mask.feather.modifiers.is_empty()
+        });
         self.temporary_frames = self.temporary_frames.max(visit.temporary);
         if let CompiledVisualSource::Group(group) = &layer.source {
             // Normal groups use depth; isolated matte groups use depth + 1.
@@ -266,13 +302,68 @@ mod tests {
     }
 
     #[test]
+    fn estimate_unions_optional_storage_across_timeline_phases_and_global_effects() {
+        use vestra_core::animation::{Interpolation, Keyframe, Track};
+        use vestra_core::plan::{CompiledEffect, CompiledScalarProperty};
+        let mut plan = fixture_plan();
+        let bytes = frame_bytes(plan.canvas.width, plan.canvas.height);
+        let mut plain = plan.layers[0].clone();
+        plain.masks.clear();
+        plan.layers = vec![plain.clone()];
+        assert_eq!(estimated_worker_bytes(&plan), 3 * bytes);
+        let blur = TimedEffect {
+            start: 500_000_000,
+            end: 1_000_000_000,
+            effect: CompiledEffect::GaussianBlur {
+                radius: CompiledScalarProperty::authored(Track::new(2.0)),
+            },
+            dependency: TemporalDependency::Dynamic,
+        };
+        plan.post_effects = vec![blur.clone()];
+        assert_eq!(estimated_worker_bytes(&plan), 4 * bytes);
+        plan.post_effects.clear();
+        plain.effects = vec![blur];
+        plain.duration_nanos = 500_000_000;
+        let mut masked = fixture_plan().layers.remove(0);
+        masked.compiled_identity = 10;
+        masked.start_nanos = 500_000_000;
+        masked.start_frame = 15;
+        masked.duration_nanos = 500_000_000;
+        masked.masks[0].feather.authored_track.keyframes = vec![Keyframe {
+            time: 250_000_000,
+            value: 2.0,
+            interpolation: Interpolation::Linear,
+        }];
+        plan.layers = vec![plain, masked.clone()];
+        assert_eq!(
+            estimated_worker_bytes(&plan),
+            9 * bytes,
+            "effect images, masks and animated feather persist across disjoint phases"
+        );
+        plan.layers[1].visible = false;
+        assert_eq!(estimated_worker_bytes(&plan), 4 * bytes);
+        plan.layers[0].matte = Some(vestra_core::plan::CompiledTrackMatte {
+            source_layer_id: masked.id.clone(),
+            source_layer_identity: 10,
+            mode: crate::project::MatteMode::Alpha,
+            invert: false,
+        });
+        plan.layers[0].duration_nanos = 1_000_000_000;
+        assert_eq!(
+            estimated_worker_bytes(&plan),
+            11 * bytes,
+            "reachable hidden mattes contribute masks/feather and save/cache storage"
+        );
+    }
+
+    #[test]
     fn estimate_reuses_sibling_composition_depths_and_counts_group_mask_temporaries() {
         let mut plan = fixture_plan();
         let bytes = frame_bytes(plan.canvas.width, plan.canvas.height);
         let mut child = plan.layers[0].clone();
         child.compiled_identity = 10;
         child.masks.clear();
-        assert_eq!(estimated_worker_bytes(&plan), 10 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * bytes);
         let mut nested = child.clone();
         nested.compiled_identity = 11;
         nested.source = group(&plan, vec![child.clone()]);
@@ -280,10 +371,10 @@ mod tests {
         parent.compiled_identity = 12;
         parent.source = group(&plan, vec![nested]);
         plan.layers = vec![parent.clone()];
-        assert_eq!(estimated_worker_bytes(&plan), 12 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 5 * bytes);
         parent.compiled_identity = 13;
         plan.layers.push(parent);
-        assert_eq!(estimated_worker_bytes(&plan), 12 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 5 * bytes);
         let mut mask = fixture_plan().layers[0].masks[0].clone();
         mask.input = CompiledMaskInput::Source {
             source: Box::new(group(&plan, vec![child.clone()])),
@@ -291,7 +382,7 @@ mod tests {
         };
         child.masks = vec![mask];
         plan.layers = vec![child];
-        assert_eq!(estimated_worker_bytes(&plan), 12 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 8 * bytes);
     }
 
     #[test]
@@ -306,16 +397,16 @@ mod tests {
         let mut plan =
             vestra_core::plan::compile(validated, CompileOptions::default()).expect("plan");
         let bytes = frame_bytes(plan.canvas.width, plan.canvas.height);
-        assert_eq!(estimated_worker_bytes(&plan), 12 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * bytes);
         let mut consumer = plan.layers[0].clone();
         consumer.compiled_identity = 100;
         plan.layers.push(consumer);
-        assert_eq!(estimated_worker_bytes(&plan), 12 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * bytes);
         let mut child = plan.layers[1].clone();
         child.compiled_identity = 101;
         child.matte = None;
         plan.layers[1].source = group(&plan, vec![child]);
-        assert_eq!(estimated_worker_bytes(&plan), 13 * bytes);
+        assert_eq!(estimated_worker_bytes(&plan), 7 * bytes);
     }
 
     fn video_plan() -> RenderPlan {
@@ -439,17 +530,17 @@ mod tests {
         }
         let canvas = frame_bytes(1_920, 1_080);
         let source = frame_bytes(1_280, 720);
-        assert_eq!(estimated_worker_bytes(&plan), 10 * canvas + 7 * source);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * canvas + 7 * source);
         assert_eq!(super::super::backend::automatic_worker_count(&plan, 64), 8);
         // Keep uncached current frames and every retained scaler in the bound.
         plan.limits.maximum_cache_bytes = 0;
-        assert_eq!(estimated_worker_bytes(&plan), 10 * canvas + 7 * source);
+        assert_eq!(estimated_worker_bytes(&plan), 6 * canvas + 7 * source);
         plan.videos[2].width = 2_560;
         plan.videos[2].height = 1_440;
         let larger = frame_bytes(2_560, 1_440);
         assert_eq!(
             estimated_worker_bytes(&plan),
-            10 * canvas + 4 * source + 3 * larger
+            6 * canvas + 4 * source + 3 * larger
         );
     }
 
@@ -459,12 +550,12 @@ mod tests {
         let canvas_bytes = frame_bytes(plan.canvas.width, plan.canvas.height);
         assert_eq!(
             estimated_worker_bytes(&plan),
-            10 * canvas_bytes + 3 * 17 * 9 * 4
+            6 * canvas_bytes + 3 * 17 * 9 * 4
         );
         plan.limits.maximum_cache_bytes = u64::MAX;
         assert_eq!(
             estimated_worker_bytes(&plan),
-            10 * canvas_bytes + 3 * 17 * 9 * 4
+            6 * canvas_bytes + 3 * 17 * 9 * 4
         );
         plan.videos[0].width = u32::MAX;
         plan.videos[0].height = u32::MAX;

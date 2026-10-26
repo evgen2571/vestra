@@ -109,9 +109,6 @@ def _property(parameter: Mapping[str, object], value: object) -> ScalarProperty:
 
 
 def _copy_property(source: ScalarProperty, target: ScalarProperty) -> None:
-    target._validate(source.value)
-    for frame in source.keyframes:
-        target._validate(frame.value)
     source._copy_to(target)
     if isinstance(target, BindableScalarProperty) and not isinstance(
         source, BindableScalarProperty

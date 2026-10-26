@@ -5,7 +5,8 @@ import pytest
 import vestra
 from vestra.authoring.values import BlendMode, CubicBezier, Crop, Interpolation, Point
 from vestra.lowering import Placement
-from vestra.sources import Color, Image, ParticleSystem, Spectrum2D
+from vestra.properties import PropertyKeyframe
+from vestra.sources import Color, Group, Image, ParticleSystem, Spectrum2D
 
 
 def project(duration: float = 2.0) -> vestra.Project:
@@ -34,6 +35,164 @@ def test_property_handles_and_tuple_assignments_are_mutable_and_atomic() -> None
     assert layer.opacity.value == 0.25
     assert layer.transform.scale.value == Point(1.5, 2.0)
     assert layer.transform.anchor.value == Point(0.4, 0.6)
+
+
+@pytest.mark.parametrize(
+    ("name", "invalid"),
+    [
+        ("strength", -0.1),
+        ("strength", 1.1),
+        ("feather", -1),
+        ("feather", 257),
+        ("opacity", -0.1),
+        ("opacity", 1.1),
+    ],
+)
+@pytest.mark.parametrize("invalid_base", [False, True])
+def test_scalar_property_copy_rejects_invalid_values_atomically(
+    name: str, invalid: float, invalid_base: bool
+) -> None:
+    owner = (
+        Group().add(Color("#ffffff"))
+        if name == "opacity"
+        else vestra.MaskCollection().add(Color("#ffffff"))
+    )
+    target = getattr(owner, name)
+    target.value = 0.25
+    target.keyframe(0.25, 0.5)
+    target.bind(vestra.MasterAudioSignals().rms())
+    before = target.to_canonical()
+    source = vestra.BindableScalarProperty(invalid if invalid_base else 0.75)
+    source.keyframe(0.25, 0.5)
+    source.keyframe(0.5, 0.75 if invalid_base else invalid)
+    source.bind(vestra.MasterAudioSignals().peak(), operation="replace")
+
+    with pytest.raises(ValueError):
+        setattr(owner, name, source)
+
+    assert getattr(owner, name) is target
+    assert target.to_canonical() == before
+
+
+@pytest.mark.parametrize("invalid", [(-0.1, 0.5), (1.1, 0.5), (0.5, -0.1), (0.5, 1.1)])
+def test_anchor_property_copy_rejects_invalid_keyframes_atomically(
+    invalid: tuple[float, float],
+) -> None:
+    transform = vestra.Transform()
+    transform.anchor = (0.25, 0.5)
+    target = transform.anchor
+    target.keyframe(0.25, (0.5, 0.75))
+    before = target.to_canonical()
+    source = vestra.PointProperty(Point(0.75, 0.25))
+    source.keyframe(0.25, (0.5, 0.5))
+    source.keyframe(0.5, invalid)
+
+    with pytest.raises(ValueError):
+        transform.anchor = source
+
+    assert transform.anchor is target
+    assert target.to_canonical() == before
+
+
+@pytest.mark.parametrize("invalid_base", [False, True])
+def test_point_property_copy_failure_preserves_bindings_and_component_handles(
+    invalid_base: bool,
+) -> None:
+    target = vestra.Transform().scale
+    target.value = (1.5, 2)
+    target.keyframe(0.25, (2, 3))
+    signal = vestra.MasterAudioSignals().rms()
+    target.bind(signal)
+    target.x.bind(signal, operation="replace")
+    target.y.bind(signal, operation="multiply")
+    components = (target.x, target.y)
+    before = target.to_canonical()
+    source = vestra.BindablePointProperty((0, 1) if invalid_base else (0.75, 1))
+    source.keyframe(0.25, (1, 1))
+    source.keyframe(0.5, (0.75, 1) if invalid_base else (0, 1))
+    source.bind(vestra.MasterAudioSignals().peak(), operation="replace")
+    source.x.bind(signal)
+    source.y.bind(signal)
+
+    with pytest.raises(ValueError):
+        source._copy_to(target)
+
+    assert (target.x, target.y) == components
+    assert target.to_canonical() == before
+
+
+def test_valid_scalar_copy_keeps_animation_and_bindings_isolated() -> None:
+    mask = vestra.MaskCollection().add(Color("#ffffff"))
+    target = mask.strength
+    target.keyframe(0, 1)
+    source = vestra.BindableScalarProperty(0.25)
+    source.keyframe(0.5, 0.75, interpolation=Interpolation.HOLD)
+    signal = vestra.MasterAudioSignals().rms()
+    source.bind(signal, operation="multiply")
+
+    mask.strength = source
+    source.value = 0.5
+    source.clear_keyframes()
+    source.clear_bindings()
+
+    assert mask.strength is target
+    assert target.value == 0.25
+    assert target.keyframes == (PropertyKeyframe(0.5, 0.75, Interpolation.HOLD),)
+    assert len(target.bindings) == 1
+    assert target.bindings[0].signal is signal
+    assert target.bindings[0].operation == "multiply"
+
+
+def test_valid_point_copy_keeps_bindings_and_components_isolated() -> None:
+    effect = vestra.RadialBlur(2, Point(0.5, 0.5))
+    target = effect.center
+    components = (target.x, target.y)
+    source = vestra.BindablePointProperty((0.25, 0.75))
+    source.keyframe(0.5, (0.75, 0.25), interpolation=Interpolation.HOLD)
+    signal = vestra.MasterAudioSignals().rms()
+    source.bind(signal, operation="multiply")
+    source.x.bind(signal, operation="replace")
+    source.y.bind(signal)
+
+    effect.center = source
+    source.value = (0.5, 0.5)
+    source.clear_keyframes()
+    source.clear_bindings()
+    source.x.clear_bindings()
+    source.y.clear_bindings()
+
+    assert effect.center is target
+    assert (target.x, target.y) == components
+    assert target.value == Point(0.25, 0.75)
+    assert target.keyframes == (
+        PropertyKeyframe(0.5, Point(0.75, 0.25), Interpolation.HOLD),
+    )
+    for bindings, operation in (
+        (target.bindings, "multiply"),
+        (target.x.bindings, "replace"),
+        (target.y.bindings, "add"),
+    ):
+        assert len(bindings) == 1
+        assert bindings[0].signal is signal
+        assert bindings[0].operation == operation
+
+
+@pytest.mark.parametrize("property_type", [vestra.ScalarProperty, vestra.BindableScalarProperty])
+def test_effect_scalar_copy_rejects_invalid_keyframes_atomically(
+    property_type: type[vestra.ScalarProperty],
+) -> None:
+    effect = vestra.Bloom(0.25, 1, 1)
+    effect.threshold.keyframe(0.25, 0.5)
+    effect.threshold.bind(vestra.MasterAudioSignals().rms())
+    before = effect.to_canonical()
+    source = property_type(0.75)
+    source.keyframe(0.5, 2)
+
+    with pytest.raises(ValueError):
+        effect.threshold = source
+    assert effect.to_canonical() == before
+    with pytest.raises(ValueError):
+        vestra.Bloom(source, 1, 1)
 
 
 def test_opacity_keyframes_lower_to_canonical_track() -> None:

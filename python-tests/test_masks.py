@@ -464,6 +464,32 @@ def test_video_mask_uses_owner_local_time_and_cpu_wgpu_parity(tmp_path: Path) ->
     assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 3
 
 
+@pytest.mark.parametrize("nested", [False, True])
+def test_video_mask_preflight_rejects_source_exhaustion(tmp_path: Path, nested: bool) -> None:
+    video_path = tmp_path / "mask.mp4"
+    _write_two_frame_video(video_path)
+    project = Project(size=(16, 16), fps=1, duration=5)
+    layer = project.root.add(Color("#ffffff"), start=1, duration=3, id="owner")
+    if nested:
+        group = Group()
+        child = group.add(Rectangle(width=16, height=16, fill="#ffffff"), start=0.5, duration=2.5)
+        child.masks.add(Video(video_path))
+        layer.masks.add(group)
+        pointer = "/visual/clips/0/masks/0/input/source/clips/0/masks/0/input/source"
+    else:
+        layer.masks.add(Video(video_path))
+        pointer = "/visual/clips/0/masks/0/input/source"
+
+    snapshot = project.snapshot()
+    validation = vestra.Editor().validate(snapshot)
+    assert validation.is_valid, validation.errors
+    report = vestra.Editor().preflight(snapshot, vestra.PreflightOptions.for_inspection())
+    assert not report.is_ready
+    assert len(report.errors) == 1
+    assert report.errors[0].code == "VESTRA-VIDEO-TIMING"
+    assert report.errors[0].pointer == pointer
+
+
 def test_video_track_matte_uses_matte_layer_timing(tmp_path: Path) -> None:
     video_path = tmp_path / "track-matte.mp4"
     _write_two_frame_video(video_path)

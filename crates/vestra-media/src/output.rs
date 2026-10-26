@@ -18,6 +18,7 @@ pub fn effective_parent(path: &Path) -> &Path {
 pub struct OutputTarget {
     pub final_path: PathBuf,
     pub temporary_path: PathBuf,
+    overwrite: bool,
 }
 
 /// Read-only validation of an output destination.  This deliberately shares
@@ -60,28 +61,35 @@ impl OutputTarget {
         Ok(Self {
             final_path: path,
             temporary_path,
+            overwrite,
         })
     }
 
     pub fn publish(&self) -> Result<(), MediaError> {
-        // Encoding stays in the sibling temporary file until FFmpeg has
-        // finalized successfully. Renaming only then prevents a failed or
-        // cancelled render from replacing the destination with partial data.
+        // A hard link atomically refuses replacement, including destinations
+        // created after preparation; the temporary file is on the same volume.
         tracing::debug!(
             target: "vestra.output",
             output = %self.final_path.display(),
             temporary_output_path = %self.temporary_path.display(),
             "output publication started"
         );
-        fs::rename(&self.temporary_path, &self.final_path)
-            .map_err(MediaError::Publication)
-            .inspect(|()| {
-                tracing::info!(
-                    target: "vestra.output",
-                    output = %self.final_path.display(),
-                    "output published"
-                );
+        let publication = if self.overwrite {
+            fs::rename(&self.temporary_path, &self.final_path)
+        } else {
+            fs::hard_link(&self.temporary_path, &self.final_path).inspect(|()| {
+                // The destination is committed; cleanup failure must not turn
+                // a published render into a reported publication failure.
+                let _ = self.cleanup();
             })
+        };
+        publication.map_err(MediaError::Publication).inspect(|()| {
+            tracing::info!(
+                target: "vestra.output",
+                output = %self.final_path.display(),
+                "output published"
+            );
+        })
     }
 
     #[must_use]
@@ -128,6 +136,84 @@ mod tests {
             fs::read_to_string(&output.final_path).expect("published output"),
             "encoded"
         );
+        assert!(!output.temporary_path.exists());
+    }
+
+    #[test]
+    fn preserves_a_destination_created_after_preparation() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let output = OutputTarget::prepare(directory.path().join("output.mp4"), false)
+            .expect("output target");
+        fs::write(&output.temporary_path, "encoded").expect("temporary output");
+        fs::write(&output.final_path, "other writer").expect("late destination");
+
+        assert!(output.publish().is_err());
+        assert_eq!(fs::read(&output.final_path).unwrap(), b"other writer");
+        assert!(output.cleanup());
+        assert!(!output.temporary_path.exists());
+        assert_eq!(fs::read(&output.final_path).unwrap(), b"other writer");
+    }
+
+    #[test]
+    fn explicit_overwrite_replaces_a_late_destination() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let output = OutputTarget::prepare(directory.path().join("output.mp4"), true)
+            .expect("output target");
+        fs::write(&output.temporary_path, "encoded").expect("temporary output");
+        fs::write(&output.final_path, "other writer").expect("late destination");
+
+        output.publish().expect("overwrite destination");
+        assert_eq!(fs::read(&output.final_path).unwrap(), b"encoded");
+        assert!(!output.temporary_path.exists());
+    }
+
+    #[test]
+    fn competing_publishers_without_overwrite_have_one_winner() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let destination = directory.path().join("output.mp4");
+        let first = OutputTarget::prepare(destination.clone(), false).expect("first target");
+        let second = OutputTarget::prepare(destination.clone(), false).expect("second target");
+        fs::write(&first.temporary_path, "first").expect("first output");
+        fs::write(&second.temporary_path, "second").expect("second output");
+        let ready = std::sync::Barrier::new(2);
+
+        let results = std::thread::scope(|scope| {
+            let first_result = scope.spawn(|| {
+                ready.wait();
+                first.publish()
+            });
+            let second_result = scope.spawn(|| {
+                ready.wait();
+                second.publish()
+            });
+            (first_result.join().unwrap(), second_result.join().unwrap())
+        });
+
+        assert_ne!(results.0.is_ok(), results.1.is_ok());
+        assert_eq!(
+            fs::read(&destination).unwrap(),
+            if results.0.is_ok() {
+                b"first".as_slice()
+            } else {
+                b"second".as_slice()
+            }
+        );
+        assert!(first.cleanup());
+        assert!(second.cleanup());
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_publication_preserves_a_late_directory() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let output = OutputTarget::prepare(directory.path().join("output.mp4"), false)
+            .expect("output target");
+        fs::write(&output.temporary_path, "encoded").expect("temporary output");
+        fs::create_dir(&output.final_path).expect("late directory");
+
+        assert!(output.publish().is_err());
+        assert!(output.cleanup());
+        assert!(output.final_path.is_dir());
         assert!(!output.temporary_path.exists());
     }
 

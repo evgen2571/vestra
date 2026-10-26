@@ -126,6 +126,9 @@ to infer wall time or assume a deeper pipeline is always faster.
 Rendering the last frame does not publish a video. The sink finishes the encoder
 and temporary container, then publishes the destination subject to overwrite
 policy. `completed` and a successful `RenderResult` occur only after publication.
+With overwrite disabled, successful hard-link creation commits the destination;
+failure to remove its temporary name is logged without reporting publication
+failure for an already-published output.
 Cancellation and failures drain/join owned work and clean up temporary output;
 reports identify the stage, temporary path and destination where available.
 

@@ -172,13 +172,12 @@ class PaletteMap(Effect):
 
 class OrderedDither(PaletteMap):
     """Quantize source colors using a stationary Bayer or blue-noise pattern."""
-
     __slots__ = ()
-    effect_type = "ordered_dither"
+    effect_type = 'ordered_dither'
 
     def __init__(
         self,
-        palette: Sequence[Color | str] = ("#000000", "#ffffff"),
+        palette: Sequence[Color | str] = ('#000000', '#ffffff'),
         *,
         mode: PaletteMode | str = PaletteMode.NEAREST,
         levels: int = 4,
@@ -202,56 +201,56 @@ class OrderedDither(PaletteMap):
         Effect.__init__(self)
         self._init(
             {
-                "palette": palette,
-                "mode": mode,
-                "levels": levels,
-                "stops": stops,
-                "interpolation": interpolation,
-                "input_exposure": input_exposure,
-                "input_gamma": input_gamma,
-                "input_detail": input_detail,
-                "input_detail_radius": input_detail_radius,
-                "input_scale": input_scale,
-                "input_filter": input_filter,
-                "amount": amount,
-                "phase": phase,
-                "period": period,
-                "strength": strength,
-                "matrix": matrix,
-                "scale": scale,
-                "seed": seed,
+                'palette': palette,
+                'mode': mode,
+                'levels': levels,
+                'stops': stops,
+                'interpolation': interpolation,
+                'input_exposure': input_exposure,
+                'input_gamma': input_gamma,
+                'input_detail': input_detail,
+                'input_detail_radius': input_detail_radius,
+                'input_scale': input_scale,
+                'input_filter': input_filter,
+                'amount': amount,
+                'phase': phase,
+                'period': period,
+                'strength': strength,
+                'matrix': matrix,
+                'scale': scale,
+                'seed': seed,
             },
             id=id,
         )
 
     @property
     def strength(self) -> BindableScalarProperty:
-        return cast(BindableScalarProperty, self._properties["strength"])
+        return cast(BindableScalarProperty, self._properties['strength'])
 
     @strength.setter
     def strength(self, value: int | float | ScalarProperty) -> None:
-        self._set_property("strength", value)
+        self._set_property('strength', value)
 
     @property
     def matrix(self) -> DitherMatrix:
-        return cast(DitherMatrix, self._values["matrix"])
+        return cast(DitherMatrix, self._values['matrix'])
 
     @matrix.setter
     def matrix(self, value: DitherMatrix | str) -> None:
-        self._set_value("matrix", value)
+        self._set_value('matrix', value)
 
     @property
     def scale(self) -> int:
-        return cast(int, self._values["scale"])
+        return cast(int, self._values['scale'])
 
     @scale.setter
     def scale(self, value: int) -> None:
-        self._set_value("scale", value)
+        self._set_value('scale', value)
 
     @property
     def seed(self) -> int:
-        return cast(int, self._values["seed"])
+        return cast(int, self._values['seed'])
 
     @seed.setter
     def seed(self, value: int) -> None:
-        self._set_value("seed", value)
+        self._set_value('seed', value)
